@@ -1,0 +1,108 @@
+.paste-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+}
+
+.paste-modal {
+    background-color: #252526;
+    border: 1px solid #454545;
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    width: 600px;
+    max-width: 90vw;
+    display: flex;
+    flex-direction: column;
+    color: #cccccc;
+}
+
+.paste-modal h3 {
+    margin: 0;
+    padding: 12px 16px;
+    background-color: #333333;
+    border-bottom: 1px solid #3e3e42;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.paste-content-preview {
+    padding: 16px;
+    background-color: #1e1e1e;
+    max-height: 400px;
+    overflow-y: auto;
+    border-bottom: 1px solid #3e3e42;
+}
+
+.paste-content-preview pre {
+    margin: 0;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #d4d4d4;
+}
+
+.paste-warning {
+    background-color: #5a1e1e;
+    color: #ffcccc;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: bold;
+    border-bottom: 1px solid #7a2e2e;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.newline-symbol {
+    color: #ff4444;
+    /* Red-ish for danger */
+    background-color: rgba(255, 68, 68, 0.1);
+    font-weight: bold;
+    font-size: 1.1em;
+    padding: 0 2px;
+    border-radius: 2px;
+    user-select: none;
+}
+
+.paste-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px 16px;
+    gap: 12px;
+    background-color: #252526;
+}
+
+.paste-btn {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 2px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 0.1s;
+}
+
+.paste-btn.cancel {
+    background-color: #3e3e42;
+    color: #ffffff;
+}
+
+.paste-btn.cancel:hover {
+    background-color: #4e4e52;
+}
+
+.paste-btn.confirm {
+    background-color: #007acc;
+    color: #ffffff;
+}
+
+.paste-btn.confirm:hover {
+    background-color: #0062a3;
+}

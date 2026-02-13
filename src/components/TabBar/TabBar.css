@@ -1,0 +1,178 @@
+.tab-bar {
+    display: flex;
+    background-color: #252526;
+    height: 35px;
+    align-items: center;
+    padding-left: 0px;
+    user-select: none;
+    overflow-x: auto;
+}
+
+.tab {
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    height: 100%;
+    background-color: #2d2d2d;
+    color: #969696;
+    border-right: 1px solid #1e1e1e;
+    cursor: pointer;
+    font-size: 13px;
+    min-width: 120px;
+    max-width: 200px;
+    position: relative;
+    transition: background-color 0.2s;
+}
+
+.tab.drag-over-left {
+    z-index: 10;
+    /* Bring to front */
+}
+
+.tab.drag-over-left::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -5px;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #ffcc00;
+    z-index: 102;
+}
+
+.tab.drag-over-left::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: -5px;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 6px solid #ffcc00;
+    z-index: 102;
+}
+
+/* Vertical Line connecting triangles */
+.tab.drag-over-left::after {
+    border-left: 2px solid #ffcc00;
+    /* Use after element for the line? No, after is bottom triangle */
+}
+
+/* Wait, we have before (top) and after (bottom). Where is the line?
+   We can use the element border-left.
+   Let's ensure the border spans full height.
+*/
+.tab.drag-over-left {
+    border-left: 2px solid #ffcc00;
+    margin-left: -1px;
+}
+
+
+/* RIGHT SIDE */
+
+.tab.drag-over-right {
+    z-index: 10;
+}
+
+.tab.drag-over-right::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    right: -5px;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #ffcc00;
+    z-index: 102;
+}
+
+.tab.drag-over-right::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    right: -5px;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 6px solid #ffcc00;
+    z-index: 102;
+}
+
+/* Vertical Line for right side */
+.tab.drag-over-right {
+    border-right: 2px solid #ffcc00;
+    margin-right: -1px;
+}
+
+.tab[draggable="true"] {
+    cursor: grab;
+}
+
+.tab[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+.tab:hover {
+    background-color: #3e3e42;
+}
+
+.tab.active {
+    background-color: #1e1e1e;
+    color: #ffffff;
+}
+
+.tab-title {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 8px;
+}
+
+.tab-close {
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.tab-close:hover {
+    background-color: #4b4b4b;
+    color: #fff;
+}
+
+.new-tab-btn {
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ccc;
+    cursor: pointer;
+    font-size: 18px;
+}
+
+.new-tab-btn:hover {
+    background-color: #3e3e42;
+    color: #fff;
+}
+
+.tab.hidden-tab {
+    background-color: #4a0000;
+    /* Dark Red */
+    color: #cccccc;
+}
+
+.tab.hidden-tab:hover {
+    background-color: #600000;
+}
+
+.tab.hidden-tab.active {
+    background-color: #4a0000;
+}
+
+/* アクティブペインに対応するタブ: 青背景 */
+.tab.active-pane-tab {
+    background-color: #007acc;
+    color: #ffffff;
+}

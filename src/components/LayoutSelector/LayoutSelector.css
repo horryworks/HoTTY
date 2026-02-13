@@ -1,0 +1,32 @@
+.layout-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+}
+
+.layout-option {
+    cursor: pointer;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.5;
+    transition: all 0.2s;
+    color: #888;
+    border-radius: 4px;
+}
+
+.layout-option:hover {
+    opacity: 0.8;
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.layout-option.selected {
+    opacity: 1;
+    color: #007acc;
+    background-color: rgba(0, 122, 204, 0.1);
+}

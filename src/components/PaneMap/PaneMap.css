@@ -1,0 +1,75 @@
+.pane-map {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    padding: 4px 0;
+}
+
+.pane-map-label {
+    font-size: 9px;
+    color: #858585;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.pane-map-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    padding: 0 3px;
+}
+
+.pane-map-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    font-size: 10px;
+    color: #cccccc;
+    padding: 2px 2px;
+    border-radius: 3px;
+    background: #2d2d30;
+    transition: background 0.15s;
+}
+
+.pane-map-item.active {
+    background: #007acc;
+    color: #ffffff;
+}
+
+.pane-map-item.hidden-item {
+    background: #4a0000;
+    color: #999999;
+}
+
+.map-tab-num {
+    font-weight: 600;
+    min-width: 10px;
+    text-align: center;
+}
+
+.map-arrow {
+    color: #858585;
+    font-size: 9px;
+}
+
+.pane-map-item.active .map-arrow {
+    color: #ffffff;
+}
+
+.pane-map-item.hidden-item .map-arrow {
+    color: #666666;
+}
+
+.map-pane-num {
+    font-weight: 600;
+    min-width: 10px;
+    text-align: center;
+}
+
+.map-pane-num.no-pane {
+    color: #666666;
+}

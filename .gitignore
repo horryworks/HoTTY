@@ -1,0 +1,31 @@
+# Build outputs
+dist
+dist-ssr
+dist-electron
+release
+
+# AI Assistant & Metadata
+.gemini
+.agent
+.system_generated
+
+# Environment variables
+*.local
+.env
+.env.*
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
