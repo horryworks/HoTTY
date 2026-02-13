@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TerminalComponent } from '../Terminal/Terminal';
+import { AIChatPane } from '../AIChatPane/AIChatPane';
+import type { Session } from '../../hooks/useSessionManager';
 import './GridLayout.css';
 
 interface GridLayoutProps {
     rows: number;
     cols: number;
-    sessions: any[];
+    sessions: Session[];
+    updateSessionState: (sessionId: string, newState: any) => void;
     paneAllocations: { [paneId: string]: string | null };
     activePaneId: string | null;
     onPaneClick: (paneId: string) => void;
@@ -26,6 +29,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     rows,
     cols,
     sessions,
+    updateSessionState,
     paneAllocations,
     activePaneId,
     onPaneClick,
@@ -164,7 +168,6 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     };
 
     // Construct grid template strings
-    // e.g. "minmax(0, 1fr) 8px minmax(0, 1fr)"
     const gridTemplateColumns = colSizes.map(s => `minmax(0, ${s}fr)`).join(' 8px ');
     const gridTemplateRows = rowSizes.map(s => `minmax(0, ${s}fr)`).join(' 8px ');
 
@@ -207,30 +210,37 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                             gridRow: r * 2 + 1,
                             backgroundColor: paneBackground || '#000200',
                             backgroundImage: paneBackgroundMode === 'image' ? `url(${paneBackgroundImage || '/bg-cyberspace.svg'})` : 'none',
-                            // Default pattern uses 40px/repeat. Custom images use auto/repeat (original size).
                             backgroundSize: (paneBackgroundMode === 'image' && (!paneBackgroundImage || paneBackgroundImage.includes('bg-cyberspace.svg'))) ? '40px 40px' : 'auto',
                             backgroundRepeat: 'repeat',
                             backgroundPosition: 'center',
-                            borderRight: '1px solid #333',
-                            borderBottom: '1px solid #333',
+                            borderRight: '1px solid var(--border-color)',
+                            borderBottom: '1px solid var(--border-color)',
                             boxSizing: 'border-box',
-                            position: 'relative' // Changed from absolute to relative to respect grid flow
+                            position: 'relative'
                         }}
                     >
                         {session ? (
-                            <TerminalComponent
-                                key={session.id}
-                                sessionId={session.id}
-                                onData={onData}
-                                isActive={isActive}
-                                focusTrigger={focusTrigger}
-                                terminalInstance={terminalRegistry[session.id]}
-                                disableFocus={disableFocus}
-                                fontSize={fontSize}
-                                fontFamily={fontFamily}
-                                terminalForeground={terminalForeground}
-                                terminalBackground={terminalBackground}
-                            />
+                            session.type === 'ai' ? (
+                                <AIChatPane
+                                    sessionId={session.id}
+                                    initialState={session.aiChatState}
+                                    onStateChange={(newState) => updateSessionState(session.id, newState)}
+                                />
+                            ) : (
+                                <TerminalComponent
+                                    key={session.id}
+                                    sessionId={session.id}
+                                    onData={onData}
+                                    isActive={isActive}
+                                    focusTrigger={focusTrigger}
+                                    terminalInstance={terminalRegistry[session.id]}
+                                    disableFocus={disableFocus}
+                                    fontSize={fontSize}
+                                    fontFamily={fontFamily}
+                                    terminalForeground={terminalForeground}
+                                    terminalBackground={terminalBackground}
+                                />
+                            )
                         ) : (
                             <div className="empty-pane-placeholder">
                                 <span className="pane-label">Pane {paneIndex + 1}</span>

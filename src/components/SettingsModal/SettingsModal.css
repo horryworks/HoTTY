@@ -4,55 +4,76 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.7);
+    background-color: rgba(0, 0, 0, 0.4);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 2000;
 }
 
+/* ── Modal Container ── */
 .settings-modal {
-    background: #252526;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
     width: 400px;
+    max-height: 90vh;
+    /* Limit height to 90% of viewport */
     border-radius: 8px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    color: #e0e0e0;
+    border: 1px solid var(--border-color);
 }
 
 .settings-header {
-    background: #333;
+    background: var(--bg-tertiary);
     padding: 15px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #1e1e1e;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    /* Prevent header from shrinking */
 }
 
-.settings-header h2 {
-    margin: 0;
-    font-size: 1.2rem;
+.settings-tabs {
+    display: flex;
+    background-color: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    padding: 0 10px;
+    gap: 2px;
+}
+
+.settings-tab {
+    background-color: transparent;
+    color: var(--text-secondary);
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 10px 15px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    border-radius: 4px 4px 0 0;
+    transition: all 0.2s;
+}
+
+.settings-tab:hover {
+    color: var(--text-primary);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.settings-tab.active {
+    color: var(--accent-color);
+    border-bottom-color: var(--accent-color);
     font-weight: 500;
 }
 
-.close-btn {
-    background: transparent;
-    border: none;
-    color: #ccc;
-    font-size: 1.2rem;
-    cursor: pointer;
-    padding: 0;
-    line-height: 1;
-}
-
-.close-btn:hover {
-    color: white;
-}
+/* ... styles ... */
 
 .settings-content {
     padding: 20px;
+    overflow-y: auto;
+    /* Scroll content if it overflows */
 }
 
 .form-group {
@@ -65,25 +86,29 @@
 .form-group label {
     font-weight: 500;
     font-size: 0.9rem;
-    color: #ccc;
+    color: var(--text-secondary);
 }
 
-.settings-select {
-    background: #3c3c3c;
-    color: white;
-    border: 1px solid #555;
+.settings-select,
+.settings-input {
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
     padding: 8px 12px;
     border-radius: 4px;
     font-size: 1rem;
     outline: none;
+    transition: border-color 0.2s;
 }
 
-.settings-select:focus {
-    border-color: #007acc;
+.settings-select:focus,
+.settings-input:focus {
+    border-color: var(--accent-color);
 }
 
 .settings-help {
     margin: 0;
     font-size: 0.8rem;
-    color: #888;
+    color: var(--text-secondary);
+    opacity: 0.8;
 }

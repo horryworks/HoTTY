@@ -5,6 +5,14 @@ import { FitAddon } from '@xterm/addon-fit';
 export interface Session {
     id: string;
     title: string;
+    type: 'ssh' | 'telnet' | 'serial' | 'ai';
+    aiChatState?: {
+        messages: any[]; // ChatMessage[] but avoiding circular dependency or complex imports here
+        inputText: string;
+        selectedModel: string;
+        textareaHeight: number;
+        scrollTop?: number;
+    };
 }
 
 interface UseSessionManagerOptions {
@@ -112,22 +120,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         };
     }, []);
 
-    const createSession = (config: any) => {
-        const sessionId = self.crypto.randomUUID();
-        let title: string;
-        if (config.protocol === 'serial') {
-            title = `Serial ${config.path} (${config.baudRate || 9600})`;
-        } else {
-            title = `${config.protocol === 'telnet' ? 'Telnet' : 'SSH'} ${config.host}`;
-        }
-        const newSession: Session = { id: sessionId, title };
-
-        terminalRegistry.current[sessionId] = createTerminalInstance(sessionId);
-
-        setSessions(prev => [...prev, newSession]);
-        setTabOrder(prev => [...prev, sessionId]);
-
-        // 有効ペイン内で空きを探す。なければ非表示（赤タブ）として開く
+    const allocateToPane = (sessionId: string) => {
         setPaneAllocations(prev => {
             const next = { ...prev };
             const validPanes = Object.keys(next)
@@ -139,10 +132,31 @@ export function useSessionManager(options: UseSessionManagerOptions) {
                 next[firstEmpty] = sessionId;
                 setActivePaneId(firstEmpty);
             }
-            // 空きがなければペインに割り当てない（赤タブとして表示）
-
             return next;
         });
+    };
+
+    const createSession = (config: any) => {
+        const sessionId = self.crypto.randomUUID();
+        let title: string;
+        let type: Session['type'];
+        if (config.protocol === 'serial') {
+            title = `Serial ${config.path} (${config.baudRate || 9600})`;
+            type = 'serial';
+        } else if (config.protocol === 'telnet') {
+            title = `Telnet ${config.host}`;
+            type = 'telnet';
+        } else {
+            title = `SSH ${config.host}`;
+            type = 'ssh';
+        }
+        const newSession: Session = { id: sessionId, title, type };
+
+        terminalRegistry.current[sessionId] = createTerminalInstance(sessionId);
+
+        setSessions(prev => [...prev, newSession]);
+        setTabOrder(prev => [...prev, sessionId]);
+        allocateToPane(sessionId);
 
         const fullConfig = {
             ...config,
@@ -152,13 +166,58 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         window.electronAPI.connectSession(sessionId, fullConfig);
     };
 
-    const closeSession = (sessionId: string) => {
-        window.electronAPI.disconnectSession(sessionId);
+    const createAISession = () => {
+        // Only one AI session allowed
+        const existingAI = sessions.find(s => s.type === 'ai');
+        if (existingAI) {
+            onSessionError('Only one Gemini AI session can be open at a time.');
+            return;
+        }
 
-        const term = terminalRegistry.current[sessionId];
-        if (term) {
-            term.dispose();
-            delete terminalRegistry.current[sessionId];
+        const sessionId = self.crypto.randomUUID();
+        const newSession: Session = {
+            id: sessionId,
+            title: 'Gemini AI',
+            type: 'ai',
+            aiChatState: {
+                messages: [],
+                inputText: '',
+                selectedModel: 'gemini-2.0-flash-exp',
+                textareaHeight: 100,
+                scrollTop: 0
+            }
+        };
+
+        setSessions(prev => [...prev, newSession]);
+        setTabOrder(prev => [...prev, sessionId]);
+        allocateToPane(sessionId);
+    };
+
+    const updateSessionState = (sessionId: string, newState: Partial<Session['aiChatState']>) => {
+        setSessions(prev => prev.map(s => {
+            if (s.id === sessionId && s.aiChatState) {
+                return {
+                    ...s,
+                    aiChatState: { ...s.aiChatState, ...newState }
+                };
+            }
+            return s;
+        }));
+    };
+
+    const closeSession = (sessionId: string) => {
+        const session = sessions.find(s => s.id === sessionId);
+
+        if (session?.type === 'ai') {
+            // AI sessions don't have terminal or backend connection
+            window.electronAPI.geminiChatClear(sessionId);
+        } else {
+            window.electronAPI.disconnectSession(sessionId);
+            const term = terminalRegistry.current[sessionId];
+            if (term) {
+                term.dispose();
+                delete terminalRegistry.current[sessionId];
+            }
         }
 
         setSessions(prev => prev.filter(s => s.id !== sessionId));
@@ -192,6 +251,8 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         tabOrder,
         terminalRegistry,
         createSession,
+        createAISession,
+        updateSessionState,
         closeSession,
         handleTabReorder,
         handleTerminalData,

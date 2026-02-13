@@ -3,15 +3,16 @@
     /* gap property removed as we use explicit tracks for spacing/resizers */
     /* gap: 4px; */
     /* Gutter between panes */
+    /* Gutter between panes */
     padding: 4px;
-    background-color: #000;
+    background-color: transparent;
 }
 
 .grid-pane {
-    background-color: #1e1e1e;
+    background-color: var(--bg-primary);
     position: relative;
     overflow: hidden;
-    border: 1px solid #333;
+    border: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
 }

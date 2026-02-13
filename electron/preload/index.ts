@@ -110,6 +110,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     focusWindow: () => ipcRenderer.send('focus-window'),
     listSerialPorts: () => ipcRenderer.invoke('list-serial-ports'),
     selectImage: () => ipcRenderer.invoke('select-image'),
+    getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
     // New Event Listeners
     onSessionData: (callback: (sessionId: string, data: string) => void) => {
@@ -131,5 +132,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Deprecated single-session methods (shimmed or removed)
     // We strictly move to session-based but keep types valid if needed. 
     // Ideally we remove them.
+
+    // Gemini AI
+    geminiAuthStart: (clientId: string, clientSecret: string) => ipcRenderer.invoke('gemini-auth-start', { clientId, clientSecret }),
+    geminiAuthStatus: () => ipcRenderer.invoke('gemini-auth-status'),
+    geminiAuthLogout: () => ipcRenderer.send('gemini-auth-logout'),
+    geminiChatSend: (sessionId: string, message: string, model: string) => ipcRenderer.send('gemini-chat-send', { sessionId, message, model }),
+    geminiListModels: () => ipcRenderer.invoke('gemini-list-models'),
+    geminiChatCancel: (sessionId: string) => ipcRenderer.send('gemini-chat-cancel', sessionId),
+    geminiChatClear: (sessionId: string) => ipcRenderer.send('gemini-chat-clear', sessionId),
+    onGeminiAuthResult: (callback: (result: { success: boolean }) => void) => {
+        const subscription = (_: any, result: { success: boolean }) => callback(result);
+        ipcRenderer.on('gemini-auth-result', subscription);
+        return () => ipcRenderer.removeListener('gemini-auth-result', subscription);
+    },
+    onGeminiChatResponse: (callback: (data: { sessionId: string, type: string, content: string }) => void) => {
+        const subscription = (_: any, data: { sessionId: string, type: string, content: string }) => callback(data);
+        ipcRenderer.on('gemini-chat-response', subscription);
+        return () => ipcRenderer.removeListener('gemini-chat-response', subscription);
+    },
 })
 

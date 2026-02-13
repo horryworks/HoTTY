@@ -13,6 +13,18 @@ export interface ElectronAPI {
     onSessionError: (callback: (sessionId: string, error: string) => void) => () => void;
     listSerialPorts: () => Promise<{ path: string; manufacturer: string; pnpId: string }[]>;
     selectImage: () => Promise<string | null>;
+    getAppVersion: () => Promise<string>;
+
+    // Gemini AI
+    geminiAuthStart: (clientId: string, clientSecret: string) => Promise<boolean>;
+    geminiAuthStatus: () => Promise<boolean>;
+    geminiAuthLogout: () => void;
+    geminiChatSend: (sessionId: string, message: string, model: string) => void;
+    geminiListModels: () => Promise<{ name: string; displayName: string }[]>;
+    geminiChatCancel: (sessionId: string) => void;
+    geminiChatClear: (sessionId: string) => void;
+    onGeminiAuthResult: (callback: (result: { success: boolean }) => void) => () => void;
+    onGeminiChatResponse: (callback: (data: { sessionId: string, type: string, content: string }) => void) => () => void;
 }
 
 declare global {

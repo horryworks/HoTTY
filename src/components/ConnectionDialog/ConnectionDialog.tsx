@@ -148,11 +148,6 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         setPassword(getCachedPassword(host, newVal));
     }
 
-    const selectStyle = { width: '100%', padding: '8px', background: '#3c3c3c', color: 'white', border: 'none' };
-
-    // ... UI continues ...
-
-
     return (
         <div className="connection-dialog-overlay">
             <div className="connection-dialog" style={{ position: 'relative' }}>
@@ -194,7 +189,6 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                     setUsername('');
                                 }
                             }}
-                            style={selectStyle}
                         >
                             <option value="ssh">SSH</option>
                             <option value="telnet">Telnet</option>
@@ -266,7 +260,6 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                     <select
                                         value={serialPath}
                                         onChange={(e) => setSerialPath(e.target.value)}
-                                        style={selectStyle}
                                     >
                                         {serialPorts.map((p) => (
                                             <option key={p.path} value={p.path}>
@@ -287,7 +280,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             <div className="form-row">
                                 <div className="form-group form-group-half">
                                     <label>Baud Rate</label>
-                                    <select value={baudRate} onChange={(e) => setBaudRate(e.target.value)} style={selectStyle}>
+                                    <select value={baudRate} onChange={(e) => setBaudRate(e.target.value)}>
                                         <option value="9600">9600</option>
                                         <option value="19200">19200</option>
                                         <option value="38400">38400</option>
@@ -297,7 +290,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                 </div>
                                 <div className="form-group form-group-half">
                                     <label>Data Bits</label>
-                                    <select value={dataBits} onChange={(e) => setDataBits(e.target.value)} style={selectStyle}>
+                                    <select value={dataBits} onChange={(e) => setDataBits(e.target.value)}>
                                         <option value="8">8</option>
                                         <option value="7">7</option>
                                         <option value="6">6</option>
@@ -308,7 +301,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             <div className="form-row">
                                 <div className="form-group form-group-half">
                                     <label>Parity</label>
-                                    <select value={parity} onChange={(e) => setParity(e.target.value)} style={selectStyle}>
+                                    <select value={parity} onChange={(e) => setParity(e.target.value)}>
                                         <option value="none">None</option>
                                         <option value="odd">Odd</option>
                                         <option value="even">Even</option>
@@ -318,7 +311,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                 </div>
                                 <div className="form-group form-group-half">
                                     <label>Stop Bits</label>
-                                    <select value={stopBits} onChange={(e) => setStopBits(e.target.value)} style={selectStyle}>
+                                    <select value={stopBits} onChange={(e) => setStopBits(e.target.value)}>
                                         <option value="1">1</option>
                                         <option value="1.5">1.5</option>
                                         <option value="2">2</option>
@@ -327,7 +320,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             </div>
                             <div className="form-group">
                                 <label>Flow Control</label>
-                                <select value={flowControl} onChange={(e) => setFlowControl(e.target.value)} style={selectStyle}>
+                                <select value={flowControl} onChange={(e) => setFlowControl(e.target.value)}>
                                     <option value="none">None</option>
                                     <option value="xon/xoff">XON/XOFF</option>
                                     <option value="rts/cts">RTS/CTS</option>

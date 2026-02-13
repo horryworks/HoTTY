@@ -4,7 +4,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(0, 0, 0, 0.4);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -12,18 +12,20 @@
 }
 
 .connection-dialog {
-    background-color: #252526;
+    background-color: var(--bg-secondary);
     padding: 20px;
     border-radius: 5px;
     width: 300px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    color: #ccccc7;
+    color: var(--text-primary);
+    max-height: 90vh;
+    overflow-y: auto;
 }
 
 .connection-dialog h2 {
     margin-top: 0;
     margin-bottom: 20px;
-    color: #fff;
+    color: var(--text-primary);
     font-size: 18px;
 }
 
@@ -40,15 +42,16 @@
 .form-group input {
     width: 100%;
     padding: 8px;
-    background-color: #3c3c3c;
-    border: 1px solid #3c3c3c;
-    color: #fff;
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
     border-radius: 3px;
     box-sizing: border-box;
+    transition: border-color 0.2s;
 }
 
 .form-group input:focus {
-    border-color: #007acc;
+    border-color: var(--accent-color);
     outline: none;
 }
 
@@ -59,7 +62,7 @@
 }
 
 .btn-primary {
-    background-color: #007acc;
+    background-color: var(--accent-color);
     color: white;
     border: none;
     padding: 8px 16px;
@@ -69,7 +72,7 @@
 }
 
 .btn-primary:hover {
-    background-color: #0062a3;
+    background-color: var(--accent-hover);
 }
 
 /* Two-column layout for serial settings */
@@ -85,14 +88,50 @@
 .form-group select {
     width: 100%;
     padding: 8px;
-    background-color: #3c3c3c;
-    border: 1px solid #3c3c3c;
-    color: #fff;
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
     border-radius: 3px;
     box-sizing: border-box;
+    /* Ensure options inherit correct colors */
+    appearance: none;
+    /* Remove native appearance if needed, but simple color fix might be enough */
+}
+
+.form-group select option {
+    background-color: var(--input-bg);
+    color: var(--text-primary);
 }
 
 .form-group select:focus {
-    border-color: #007acc;
+    border-color: var(--accent-color);
     outline: none;
+}
+
+/* Custom styling for datalist arrow (Host field) */
+/* The input needs to have the indicator always visible if possible, but standard behavior usually hides it until hover/focus */
+/* However, user wants it unified. Ensuring it displays similarly to select arrow */
+.form-group input::-webkit-calendar-picker-indicator {
+    /* appearance: none is crucial to remove default arrow rendering */
+    appearance: none;
+    -webkit-appearance: none;
+    display: block;
+    background-image: var(--select-arrow);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 16px;
+    width: 16px;
+    height: 100%;
+    cursor: pointer;
+    opacity: 1 !important;
+    /* Force opacity */
+    margin-right: 2px;
+    color: transparent;
+    transition: none;
+    /* remove default transition if any */
+}
+
+/* Hover state for the indicator */
+.form-group input:hover::-webkit-calendar-picker-indicator {
+    background-color: transparent;
 }

@@ -6,6 +6,7 @@ import { TelnetService } from './services/telnet';
 import { SerialService } from './services/serial';
 import { SerialPort } from 'serialport';
 import type { ISessionService } from './services/ISessionService';
+import { GeminiService } from './services/gemini';
 
 // Disable GPU Acceleration for Windows 7
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
@@ -19,6 +20,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 let win: BrowserWindow | null = null
+let geminiService: GeminiService | null = null;
 
 const preload = join(__dirname, '../preload/index.js')
 const url = process.env.VITE_DEV_SERVER_URL
@@ -56,6 +58,7 @@ async function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+  geminiService = new GeminiService(win!);
 
   // Register 'media' protocol to serve local files
   const { protocol } = require('electron');
@@ -250,4 +253,40 @@ ipcMain.handle('select-image', async () => {
     return null;
   }
   return filePaths[0];
+});
+
+// ── Gemini AI IPC Handlers ──
+
+ipcMain.handle('gemini-auth-start', async (_, { clientId, clientSecret }) => {
+  if (!geminiService) return false;
+  return await geminiService.startAuth(clientId, clientSecret);
+});
+
+ipcMain.handle('gemini-auth-status', () => {
+  return geminiService?.isAuthenticated() || false;
+});
+
+ipcMain.on('gemini-auth-logout', () => {
+  geminiService?.logout();
+});
+
+ipcMain.on('gemini-chat-send', async (_, { sessionId, message, model }) => {
+  if (!geminiService) return;
+  await geminiService.sendMessage(sessionId, message, model);
+});
+
+ipcMain.on('gemini-chat-cancel', (_, sessionId: string) => {
+  geminiService?.cancelMessage(sessionId);
+});
+
+ipcMain.handle('gemini-list-models', async () => {
+  return await geminiService?.listModels() || [];
+});
+
+ipcMain.on('gemini-chat-clear', (_, sessionId: string) => {
+  geminiService?.clearHistory(sessionId);
+});
+
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
 });

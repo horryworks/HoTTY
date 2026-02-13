@@ -17,6 +17,10 @@ HoTTY (hterm) is a modern, high-performance terminal emulator built with Electro
     - Persistent settings (fonts, encoding, colors) across sessions.
     - **SSH KeepAlive**: Stay connected to remote hosts without timeouts.
     - **Secure Credential Handling**: SSH passwords are cached in memory only and never written to disk.
+- **AI Integration**:
+    - **Gemini Chat**: Built-in AI assistant pane powered by Google Gemini.
+    - **Context Aware**: Helper for coding, debugging, or general questions within the terminal environment.
+    - **Dynamic Models**: Automatically creates a list of available models from your API key.
 - **Modern Tech Stack**: Built on Electron, React, and Vite for performance and stability.
 
 ## Getting Started

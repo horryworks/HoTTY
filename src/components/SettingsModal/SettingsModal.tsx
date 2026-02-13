@@ -24,6 +24,8 @@ interface SettingsModalProps {
     onPaneBackgroundModeChange: (mode: 'color' | 'image') => void;
     paneBackgroundImage: string;
     onPaneBackgroundImageChange: (url: string) => void;
+    theme: 'dark' | 'light' | 'custom';
+    onThemeChange: (theme: 'dark' | 'light' | 'custom') => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -48,8 +50,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     paneBackgroundMode,
     onPaneBackgroundModeChange,
     paneBackgroundImage,
-    onPaneBackgroundImageChange
+    onPaneBackgroundImageChange,
+    theme,
+    onThemeChange
 }) => {
+    const [activeTab, setActiveTab] = React.useState<'appearance' | 'network' | 'about'>('appearance');
+    const [version, setVersion] = React.useState<string>('');
+
+    React.useEffect(() => {
+        if (isOpen) {
+            window.electronAPI.getAppVersion().then(setVersion);
+        }
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
     return (
@@ -59,119 +72,132 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <h2>Settings</h2>
                     <button className="close-btn" onClick={onClose}>✕</button>
                 </div>
+
+                <div className="settings-tabs">
+                    <button
+                        className={`settings-tab ${activeTab === 'appearance' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('appearance')}
+                    >
+                        Appearance
+                    </button>
+                    <button
+                        className={`settings-tab ${activeTab === 'network' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('network')}
+                    >
+                        Network
+                    </button>
+                    <button
+                        className={`settings-tab ${activeTab === 'about' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('about')}
+                    >
+                        About
+                    </button>
+                </div>
+
                 <div className="settings-content">
-                    <div className="form-group">
-                        <label>Font Family</label>
-                        <select
-                            value={fontFamily}
-                            onChange={(e) => onFontFamilyChange(e.target.value)}
-                            className="settings-select"
-                        >
-                            <option value='Consolas, "Courier New", monospace'>Consolas / Courier New</option>
-                            <option value='"Cascadia Code", "Fira Code", monospace'>Cascadia / Fira Code</option>
-                            <option value='"MesloLGS NF", "DejaVu Sans Mono", monospace'>MesloLGS NF / DejaVu</option>
-                            <option value="monospace">System Monospace</option>
-                        </select>
-                    </div>
-
-                    <div className="form-group">
-                        <label>Font Size</label>
-                        <input
-                            type="number"
-                            value={fontSize}
-                            onChange={(e) => onFontSizeChange(parseInt(e.target.value, 10))}
-                            className="settings-input"
-                            min={8}
-                            max={72}
-                            style={{ padding: '8px', borderRadius: '4px', border: '1px solid #444', background: '#222', color: '#eee' }}
-                        />
-                    </div>
-
-                    <div className="form-group">
-                        <label>SSH KeepAlive</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={sshKeepAliveEnabled}
-                                    onChange={(e) => onSshKeepAliveEnabledChange(e.target.checked)}
-                                    style={{ marginRight: '8px' }}
-                                />
-                                Enable
-                            </label>
-                        </div>
-                        {sshKeepAliveEnabled && (
-                            <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '0.9em', color: '#ccc' }}>Interval (seconds):</span>
-                                <input
-                                    type="number"
-                                    value={sshKeepAliveInterval}
-                                    onChange={(e) => onSshKeepAliveIntervalChange(parseInt(e.target.value, 10))}
-                                    className="settings-input"
-                                    min={5}
-                                    max={300}
-                                    style={{ width: '80px', padding: '4px', borderRadius: '4px', border: '1px solid #444', background: '#222', color: '#eee' }}
-                                />
-                            </div>
-                        )}
-                        <p className="settings-help">Sends dummy packets to prevent timeouts.</p>
-                    </div>
-
-                    <div className="form-group">
-                        <label>Colors</label>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                            <div>
-                                <label style={{ fontSize: '0.9em', color: '#ccc' }}>Terminal Text</label>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <input
-                                        type="color"
-                                        value={terminalForeground}
-                                        onChange={(e) => onTerminalForegroundChange(e.target.value)}
-                                        style={{ border: 'none', width: '30px', height: '30px', cursor: 'pointer', padding: 0, backgroundColor: 'transparent' }}
-                                    />
-                                    <input
-                                        type="text"
-                                        value={terminalForeground}
-                                        onChange={(e) => onTerminalForegroundChange(e.target.value)}
-                                        className="settings-input"
-                                        style={{ width: '80px', padding: '4px', fontSize: '12px' }}
-                                    />
+                    {activeTab === 'appearance' && (
+                        <>
+                            <div className="form-group">
+                                <label>Theme</label>
+                                <div style={{ display: 'flex', gap: '15px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
+                                        <input
+                                            type="radio"
+                                            name="theme"
+                                            value="dark"
+                                            checked={theme === 'dark'}
+                                            onChange={() => onThemeChange('dark')}
+                                            style={{ marginRight: '6px' }}
+                                        />
+                                        Dark
+                                    </label>
+                                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
+                                        <input
+                                            type="radio"
+                                            name="theme"
+                                            value="light"
+                                            checked={theme === 'light'}
+                                            onChange={() => onThemeChange('light')}
+                                            style={{ marginRight: '6px' }}
+                                        />
+                                        Light
+                                    </label>
+                                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
+                                        <input
+                                            type="radio"
+                                            name="theme"
+                                            value="custom"
+                                            checked={theme === 'custom'}
+                                            onChange={() => onThemeChange('custom')}
+                                            style={{ marginRight: '6px' }}
+                                        />
+                                        Custom
+                                    </label>
                                 </div>
                             </div>
-                            <div>
-                                <label style={{ fontSize: '0.9em', color: '#ccc' }}>Terminal Background</label>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <input
-                                        type="color"
-                                        value={terminalBackground}
-                                        onChange={(e) => onTerminalBackgroundChange(e.target.value)}
-                                        style={{ border: 'none', width: '30px', height: '30px', cursor: 'pointer', padding: 0, backgroundColor: 'transparent' }}
-                                    />
-                                    <input
-                                        type="text"
-                                        value={terminalBackground}
-                                        onChange={(e) => onTerminalBackgroundChange(e.target.value)}
-                                        className="settings-input"
-                                        style={{ width: '80px', padding: '4px', fontSize: '12px' }}
-                                    />
+
+                            {theme === 'custom' && (
+                                <div className="form-group">
+                                    <label>Colors (Custom Theme)</label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                        <div>
+                                            <label style={{ fontSize: '0.9em', color: '#ccc' }}>Terminal Text</label>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <input
+                                                    type="color"
+                                                    value={terminalForeground}
+                                                    onChange={(e) => onTerminalForegroundChange(e.target.value)}
+                                                    style={{ border: 'none', width: '30px', height: '30px', cursor: 'pointer', padding: 0, backgroundColor: 'transparent' }}
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={terminalForeground}
+                                                    onChange={(e) => onTerminalForegroundChange(e.target.value)}
+                                                    className="settings-input"
+                                                    style={{ width: '80px', padding: '4px', fontSize: '12px' }}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '0.9em', color: '#ccc' }}>Terminal Background</label>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <input
+                                                    type="color"
+                                                    value={terminalBackground}
+                                                    onChange={(e) => onTerminalBackgroundChange(e.target.value)}
+                                                    style={{ border: 'none', width: '30px', height: '30px', cursor: 'pointer', padding: 0, backgroundColor: 'transparent' }}
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={terminalBackground}
+                                                    onChange={(e) => onTerminalBackgroundChange(e.target.value)}
+                                                    className="settings-input"
+                                                    style={{ width: '80px', padding: '4px', fontSize: '12px' }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                            <div>
-                                <label style={{ fontSize: '0.9em', color: '#ccc' }}>Empty Pane Background</label>
+                            )}
+
+                            <div className="form-group">
+                                <label>Empty Pane Background</label>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     <div style={{ display: 'flex', gap: '10px', fontSize: '12px', color: '#ccc' }}>
-                                        <label>
+                                        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
                                             <input
                                                 type="radio"
                                                 checked={paneBackgroundMode === 'image'}
                                                 onChange={() => onPaneBackgroundModeChange('image')}
+                                                style={{ marginRight: '6px' }}
                                             /> Image
                                         </label>
-                                        <label>
+                                        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
                                             <input
                                                 type="radio"
                                                 checked={paneBackgroundMode === 'color'}
                                                 onChange={() => onPaneBackgroundModeChange('color')}
+                                                style={{ marginRight: '6px' }}
                                             /> Color
                                         </label>
                                     </div>
@@ -206,11 +232,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 onClick={async () => {
                                                     const path = await window.electronAPI.selectImage();
                                                     if (path) {
-                                                        // Convert local path to file URL-like format or just use path if valid (browsers might block local file access from http)
-                                                        // But Electron usually handles local files if webSecurity is managed or via protocol
-                                                        // However, easier to just set it. If it fails, we might need a custom protocol.
-                                                        // Use Custom Protocol 'media://' to bypass browser restrictions
-                                                        // Use 3 slashes for better path handling consistency
                                                         const url = `media:///${path.replace(/\\/g, '/')}`;
                                                         onPaneBackgroundImageChange(url);
                                                     }
@@ -223,22 +244,95 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     )}
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div className="form-group">
-                        <label>Default Encoding</label>
-                        <select
-                            value={encoding}
-                            onChange={(e) => onEncodingChange(e.target.value)}
-                            className="settings-select"
-                        >
-                            <option value="utf8">UTF-8</option>
-                            <option value="shift_jis">Shift_JIS</option>
-                            <option value="euc-jp">EUC-JP</option>
-                        </select>
-                        <p className="settings-help">Applies to new connections.</p>
-                    </div>
+                            <div className="form-group">
+                                <label>Font Family</label>
+                                <select
+                                    value={fontFamily}
+                                    onChange={(e) => onFontFamilyChange(e.target.value)}
+                                    className="settings-select"
+                                >
+                                    <option value='Consolas, "Courier New", monospace'>Consolas / Courier New</option>
+                                    <option value='"Cascadia Code", "Fira Code", monospace'>Cascadia / Fira Code</option>
+                                    <option value='"MesloLGS NF", "DejaVu Sans Mono", monospace'>MesloLGS NF / DejaVu</option>
+                                    <option value="monospace">System Monospace</option>
+                                </select>
+                            </div>
+
+                            <div className="form-group">
+                                <label>Font Size</label>
+                                <input
+                                    type="number"
+                                    value={fontSize}
+                                    onChange={(e) => onFontSizeChange(parseInt(e.target.value, 10))}
+                                    className="settings-input"
+                                    min={8}
+                                    max={72}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>Default Encoding</label>
+                                <select
+                                    value={encoding}
+                                    onChange={(e) => onEncodingChange(e.target.value)}
+                                    className="settings-select"
+                                >
+                                    <option value="utf8">UTF-8</option>
+                                    <option value="shift_jis">Shift_JIS</option>
+                                    <option value="euc-jp">EUC-JP</option>
+                                </select>
+                                <p className="settings-help">Applies to new connections.</p>
+                            </div>
+                        </>
+                    )}
+
+                    {activeTab === 'network' && (
+                        <div className="form-group">
+                            <label>SSH KeepAlive</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={sshKeepAliveEnabled}
+                                        onChange={(e) => onSshKeepAliveEnabledChange(e.target.checked)}
+                                        style={{ marginRight: '8px' }}
+                                    />
+                                    Enable
+                                </label>
+                            </div>
+                            {sshKeepAliveEnabled && (
+                                <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontSize: '0.9em', color: '#ccc' }}>Interval (seconds):</span>
+                                    <input
+                                        type="number"
+                                        value={sshKeepAliveInterval}
+                                        onChange={(e) => onSshKeepAliveIntervalChange(parseInt(e.target.value, 10))}
+                                        className="settings-input"
+                                        min={5}
+                                        max={300}
+                                        style={{ width: '80px' }}
+                                    />
+                                </div>
+                            )}
+                            <p className="settings-help">Sends dummy packets to prevent timeouts.</p>
+                        </div>
+                    )}
+
+                    {activeTab === 'about' && (
+                        <div className="about-content" style={{ textAlign: 'center', padding: '20px 0' }}>
+                            <img src="/favicon.ico" alt="HoTTY Logo" width="64" height="64" style={{ marginBottom: '16px' }} />
+                            <h2 style={{ margin: '0 0 8px 0' }}>HoTTY</h2>
+                            <p style={{ color: '#aaa', margin: '0 0 24px 0' }}>v{version}</p>
+                            <p style={{ fontSize: '0.9em', color: '#666' }}>
+                                SSH/Telnet/Serial Terminal Emulator<br />
+                                Built with Electron, React, & TypeScript
+                            </p>
+                            <p style={{ fontSize: '0.8em', color: '#444', marginTop: '32px' }}>
+                                Copyright © 2026 HoTTY Contributors
+                            </p>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

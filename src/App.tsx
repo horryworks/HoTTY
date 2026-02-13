@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { ConnectionDialog } from './components/ConnectionDialog/ConnectionDialog'
 import { TabBar } from './components/TabBar/TabBar'
 import { ResizeGrip } from './components/ResizeGrip/ResizeGrip'
@@ -36,6 +36,22 @@ function App() {
   const [fontFamily, setFontFamily] = useState<string>(() => {
     return localStorage.getItem('hterm_font_family') || 'Consolas, "Courier New", monospace';
   });
+  const [theme, setTheme] = useState<'dark' | 'light' | 'custom'>(() => {
+    return (localStorage.getItem('hterm_theme') as 'dark' | 'light' | 'custom') || 'dark';
+  });
+
+  // Apply theme attributes
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('hterm_theme', theme);
+  }, [theme]);
+
+  // Set Window Title with Version
+  useEffect(() => {
+    window.electronAPI.getAppVersion().then(version => {
+      document.title = `HoTTY v${version}`;
+    });
+  }, []);
 
   // SSH KeepAlive State
   const [sshKeepAliveEnabled, setSshKeepAliveEnabled] = useState<boolean>(() => {
@@ -60,6 +76,14 @@ function App() {
   const [paneBackground, setPaneBackground] = useState<string>(() => {
     return localStorage.getItem('hterm_pane_background') || '#000200';
   });
+
+  // Custom colors cache (to restore when switching back to Custom)
+  const [customColors, setCustomColors] = useState(() => ({
+    foreground: localStorage.getItem('hterm_custom_terminal_foreground') || '#ffffff',
+    background: localStorage.getItem('hterm_custom_terminal_background') || '#1e1e1e',
+    paneBackground: localStorage.getItem('hterm_custom_pane_background') || '#000200',
+  }));
+
   const [paneBackgroundMode, setPaneBackgroundMode] = useState<'color' | 'image'>(() => {
     return (localStorage.getItem('hterm_pane_background_mode') as 'color' | 'image') || 'image';
   });
@@ -132,19 +156,52 @@ function App() {
     localStorage.setItem('hterm_ssh_keepalive_interval', interval.toString());
   };
 
+  // Theme Change Handler
+  const updateTheme = (newTheme: 'dark' | 'light' | 'custom') => {
+    setTheme(newTheme);
+
+    if (newTheme === 'dark') {
+      updateTerminalForeground('#ffffff');
+      updateTerminalBackground('#1e1e1e');
+      updatePaneBackground('#000200');
+    } else if (newTheme === 'light') {
+      updateTerminalForeground('#000000');
+      updateTerminalBackground('#ffffff');
+      updatePaneBackground('#f0f0f0');
+      updatePaneBackgroundMode('color');
+    } else if (newTheme === 'custom') {
+      // Restore custom colors
+      updateTerminalForeground(customColors.foreground);
+      updateTerminalBackground(customColors.background);
+      updatePaneBackground(customColors.paneBackground);
+    }
+  };
+
   const updateTerminalForeground = (color: string) => {
     setTerminalForeground(color);
     localStorage.setItem('hterm_terminal_foreground', color);
+    if (theme === 'custom') {
+      localStorage.setItem('hterm_custom_terminal_foreground', color);
+      setCustomColors(prev => ({ ...prev, foreground: color }));
+    }
   };
 
   const updateTerminalBackground = (color: string) => {
     setTerminalBackground(color);
     localStorage.setItem('hterm_terminal_background', color);
+    if (theme === 'custom') {
+      localStorage.setItem('hterm_custom_terminal_background', color);
+      setCustomColors(prev => ({ ...prev, background: color }));
+    }
   };
 
   const updatePaneBackground = (color: string) => {
     setPaneBackground(color);
     localStorage.setItem('hterm_pane_background', color);
+    if (theme === 'custom') {
+      localStorage.setItem('hterm_custom_pane_background', color);
+      setCustomColors(prev => ({ ...prev, paneBackground: color }));
+    }
   };
 
   const updatePaneBackgroundMode = (mode: 'color' | 'image') => {
@@ -230,6 +287,7 @@ function App() {
             onTabClick={pane.handleTabClick}
             onTabClose={session.closeSession}
             onNewTab={() => setShowDialog(true)}
+            onNewAITab={() => session.createAISession()}
             onTabReorder={session.handleTabReorder}
           />
         </div>
@@ -239,6 +297,7 @@ function App() {
             rows={pane.currentDims.rows}
             cols={pane.currentDims.cols}
             sessions={session.sessions}
+            updateSessionState={session.updateSessionState}
             paneAllocations={pane.paneAllocations}
             activePaneId={pane.activePaneId}
             onPaneClick={pane.setActivePaneId}
@@ -259,16 +318,12 @@ function App() {
       </div>
 
       {showDialog && (
-        <div className="dialog-overlay">
-          <div className="dialog-wrapper">
-            <ConnectionDialog
-              onConnect={(config) => { session.createSession(config); setShowDialog(false); }}
-              onClose={() => setShowDialog(false)}
-              getCachedPassword={getCachedPassword}
-              saveCachedPassword={saveCachedPassword}
-            />
-          </div>
-        </div>
+        <ConnectionDialog
+          onConnect={(config) => { session.createSession(config); setShowDialog(false); }}
+          onClose={() => setShowDialog(false)}
+          getCachedPassword={getCachedPassword}
+          saveCachedPassword={saveCachedPassword}
+        />
       )}
 
       {errorModalMessage && (
@@ -306,6 +361,8 @@ function App() {
         onPaneBackgroundModeChange={updatePaneBackgroundMode}
         paneBackgroundImage={paneBackgroundImage}
         onPaneBackgroundImageChange={updatePaneBackgroundImage}
+        theme={theme}
+        onThemeChange={updateTheme}
       />
       <PaneLines
         paneAllocations={pane.paneAllocations}

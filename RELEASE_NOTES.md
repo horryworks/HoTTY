@@ -1,5 +1,21 @@
 # Release Notes - HoTTY v0.1.0
 
+## [0.1.1] - 2026-02-13
+
+### Added
+- **Dynamic AI Model Loading**: Automatically fetches available Gemini models from your Google account (e.g., Gemini 1.5 Pro, 2.0 Flash).
+- **Theme System**: Full support for Light, Dark, and Custom themes with persistent color settings.
+- **Settings Organization**: Split settings into "Appearance" and "Network" tabs for better navigation.
+
+### Changed
+- **UI Refinements**:
+  - Standardized dropdown arrow sizing and positioning across all dialogs.
+  - Adjusted modal overlay opacity for a more consistent look.
+  - Made Settings and Connection dialogs scrollable for better accessibility on small screens.
+- **AI Chat Experience**:
+  - Chat state (history, input) is now preserved when moving the AI pane between grid slots.
+  - Improved model fallback logic to ensure validity.
+
 ## [0.1.0] - 2026-02-13
 
 ### Added
