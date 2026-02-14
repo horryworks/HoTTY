@@ -30,8 +30,12 @@ interface SettingsModalProps {
     onLoggingPathChange: (path: string) => void;
     scrollback: number;
     onScrollbackChange: (lines: number) => void;
-    theme: 'dark' | 'light' | 'custom';
-    onThemeChange: (theme: 'dark' | 'light' | 'custom') => void;
+    theme: 'dark' | 'light' | 'medium' | 'custom';
+    onThemeChange: (theme: 'dark' | 'light' | 'medium' | 'custom') => void;
+    showSystemPrompt: boolean;
+    onShowSystemPromptChange: (show: boolean) => void;
+    askGeminiCommands?: { id: string; label: string; promptTemplate: string }[];
+    onAskGeminiCommandsChange: (commands: { id: string; label: string; promptTemplate: string }[]) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -64,9 +68,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     scrollback,
     onScrollbackChange,
     theme,
-    onThemeChange
+    onThemeChange,
+    showSystemPrompt,
+    onShowSystemPromptChange,
+    askGeminiCommands,
+    onAskGeminiCommandsChange
 }) => {
-    const [activeTab, setActiveTab] = React.useState<'appearance' | 'network' | 'system' | 'about'>('appearance');
+    const [activeTab, setActiveTab] = React.useState<'appearance' | 'network' | 'system' | 'ai' | 'about'>('appearance');
     const [version, setVersion] = React.useState<string>('');
 
     React.useEffect(() => {
@@ -84,6 +92,65 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         onClose();
     };
 
+    const tabsRef = React.useRef<HTMLDivElement>(null);
+    const isDragging = React.useRef(false);
+    const startX = React.useRef(0);
+    const scrollLeft = React.useRef(0);
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+        isDragging.current = true;
+        if (tabsRef.current) {
+            startX.current = e.pageX - tabsRef.current.offsetLeft;
+            scrollLeft.current = tabsRef.current.scrollLeft;
+        }
+    };
+
+    const handleMouseLeave = () => {
+        isDragging.current = false;
+    };
+
+    const handleMouseUp = () => {
+        isDragging.current = false;
+    };
+
+    const handleMouseMove = (e: React.MouseEvent) => {
+        if (!isDragging.current || !tabsRef.current) return;
+        e.preventDefault();
+        const x = e.pageX - tabsRef.current.offsetLeft;
+        const walk = (x - startX.current) * 2; // Scroll-fast
+        tabsRef.current.scrollLeft = scrollLeft.current - walk;
+    };
+
+    // ── Drag and Drop for Commands ──
+    const [draggedIndex, setDraggedIndex] = React.useState<number | null>(null);
+
+    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+        setDraggedIndex(index);
+        e.dataTransfer.effectAllowed = 'move';
+        // Optional: Set drag image if needed, default is usually fine
+    };
+
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault(); // Necessary to allow dropping
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>, dropIndex: number) => {
+        e.preventDefault();
+        if (draggedIndex === null || draggedIndex === dropIndex || !askGeminiCommands) return;
+
+        const newCommands = [...askGeminiCommands];
+        const [movedItem] = newCommands.splice(draggedIndex, 1);
+        newCommands.splice(dropIndex, 0, movedItem);
+
+        onAskGeminiCommandsChange(newCommands);
+        setDraggedIndex(null);
+    };
+
+    const handleDragEnd = () => {
+        setDraggedIndex(null);
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -94,7 +161,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button className="close-btn" onClick={handleClose}>✕</button>
                 </div>
 
-                <div className="settings-tabs">
+                <div
+                    className="settings-tabs"
+                    ref={tabsRef}
+                    onMouseDown={handleMouseDown}
+                    onMouseLeave={handleMouseLeave}
+                    onMouseUp={handleMouseUp}
+                    onMouseMove={handleMouseMove}
+                >
                     <button
                         className={`settings-tab ${activeTab === 'appearance' ? 'active' : ''}`}
                         onClick={() => setActiveTab('appearance')}
@@ -112,6 +186,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClick={() => setActiveTab('system')}
                     >
                         System
+                    </button>
+                    <button
+                        className={`settings-tab ${activeTab === 'ai' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('ai')}
+                    >
+                        AI
                     </button>
                     <button
                         className={`settings-tab ${activeTab === 'about' ? 'active' : ''}`}
@@ -137,6 +217,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                             style={{ marginRight: '6px' }}
                                         />
                                         Dark
+                                    </label>
+                                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
+                                        <input
+                                            type="radio"
+                                            name="theme"
+                                            value="medium"
+                                            checked={theme === 'medium'}
+                                            onChange={() => onThemeChange('medium')}
+                                            style={{ marginRight: '6px' }}
+                                        />
+                                        Medium
                                     </label>
                                     <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
                                         <input
@@ -403,6 +494,129 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <span style={{ fontSize: '0.9em', color: '#ccc' }}>lines</span>
                                 </div>
                                 <p className="settings-help">Max lines to keep in memory per terminal (Default: 10000).</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'ai' && (
+                        <div className="form-group">
+                            <label>Debugging</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={showSystemPrompt}
+                                        onChange={(e) => onShowSystemPromptChange(e.target.checked)}
+                                        style={{ marginRight: '8px' }}
+                                    />
+                                    Show System Prompt
+                                </label>
+                            </div>
+                            <p className="settings-help">Display hidden system instructions in the chat view.</p>
+
+                            <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid var(--border-color)' }}>
+                                <label style={{ marginBottom: '10px', display: 'block' }}>Ask Gemini Commands</label>
+
+                                <div className="command-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                                    {askGeminiCommands?.map((cmd, index) => (
+                                        <div
+                                            key={cmd.id}
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, index)}
+                                            onDragOver={(e) => handleDragOver(e)}
+                                            onDrop={(e) => handleDrop(e, index)}
+                                            onDragEnd={handleDragEnd}
+                                            style={{
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '4px',
+                                                padding: '10px',
+                                                backgroundColor: 'var(--bg-secondary)',
+                                                borderRadius: '4px',
+                                                border: '1px solid var(--border-color)',
+                                                opacity: draggedIndex === index ? 0.5 : 1,
+                                                cursor: 'grab',
+                                                transition: 'opacity 0.2s, transform 0.2s',
+                                                transform: draggedIndex === index ? 'scale(0.98)' : 'scale(1)'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                <span style={{ cursor: 'grab', color: '#888', fontSize: '16px', userSelect: 'none' }}>☰</span>
+                                                <input
+                                                    type="text"
+                                                    value={cmd.label}
+                                                    onChange={(e) => {
+                                                        const newCommands = [...askGeminiCommands];
+                                                        newCommands[index] = { ...cmd, label: e.target.value };
+                                                        onAskGeminiCommandsChange(newCommands);
+                                                    }}
+                                                    placeholder="Label"
+                                                    className="settings-input"
+                                                    style={{ flex: 1, padding: '4px', fontSize: '13px' }}
+                                                />
+                                                <button
+                                                    onClick={() => {
+                                                        const newCommands = askGeminiCommands.filter((_, i) => i !== index);
+                                                        onAskGeminiCommandsChange(newCommands);
+                                                    }}
+                                                    style={{ padding: '4px 8px', fontSize: '12px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+                                            <textarea
+                                                value={cmd.promptTemplate}
+                                                onChange={(e) => {
+                                                    const newCommands = [...askGeminiCommands];
+                                                    newCommands[index] = { ...cmd, promptTemplate: e.target.value };
+                                                    onAskGeminiCommandsChange(newCommands);
+                                                }}
+                                                placeholder="Prompt Template ({selection} will be replaced)"
+                                                className="settings-input"
+                                                style={{
+                                                    width: '100%',
+                                                    padding: '6px',
+                                                    fontSize: '12px',
+                                                    height: '60px',
+                                                    fontFamily: 'monospace',
+                                                    resize: 'vertical',
+                                                    boxSizing: 'border-box' // Fix overflow
+                                                }}
+                                            />
+                                            <div style={{ fontSize: '10px', color: '#888' }}>
+                                                Use <code>{'{selection}'}</code> placeholder for the selected text.
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    <button
+                                        onClick={() => {
+                                            const id = crypto.randomUUID();
+                                            const newCommand = { id, label: 'New Command', promptTemplate: '{selection}' };
+                                            onAskGeminiCommandsChange([...(askGeminiCommands || []), newCommand]);
+                                        }}
+                                        style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}
+                                    >
+                                        + Add Command
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            if (confirm('Reset to default commands?')) {
+                                                const DEFAULT_COMMANDS = [
+                                                    { id: 'what-is-this', label: 'What is this?', promptTemplate: 'What is this?\n\n{selection}' },
+                                                    { id: 'what-does-it-mean', label: 'What does it mean?', promptTemplate: 'What does this mean?\n\n{selection}' },
+                                                    { id: 'root-cause', label: 'Research root cause', promptTemplate: 'Analyze the potential root cause of this:\n\n{selection}' },
+                                                ];
+                                                onAskGeminiCommandsChange(DEFAULT_COMMANDS);
+                                            }
+                                        }}
+                                        style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}
+                                    >
+                                        Reset Defaults
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}

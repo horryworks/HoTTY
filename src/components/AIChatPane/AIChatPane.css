@@ -6,6 +6,7 @@
     height: 100%;
     background-color: var(--bg-primary);
     overflow: hidden;
+    /* fontSize is set via inline style on the component */
 }
 
 /* ── Header ── */

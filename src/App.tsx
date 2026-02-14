@@ -14,7 +14,20 @@ import { usePaneManager } from './hooks/usePaneManager'
 import '@xterm/xterm/css/xterm.css'
 import './App.css'
 
+export interface AskGeminiCommand {
+  id: string;
+  label: string;
+  promptTemplate: string;
+}
+
+const DEFAULT_GEMINI_COMMANDS: AskGeminiCommand[] = [
+  { id: 'what-is-this', label: 'What is this?', promptTemplate: 'What is this?\n\n{selection}' },
+  { id: 'what-does-it-mean', label: 'What does it mean?', promptTemplate: 'What does this mean?\n\n{selection}' },
+  { id: 'root-cause', label: 'Research root cause', promptTemplate: 'Analyze the potential root cause of this:\n\n{selection}' },
+];
+
 function App() {
+
   // ── UI State ──
   const [showDialog, setShowDialog] = useState(true);
   const [errorModalMessage, setErrorModalMessage] = useState<string | null>(null);
@@ -36,8 +49,8 @@ function App() {
   const [fontFamily, setFontFamily] = useState<string>(() => {
     return localStorage.getItem('hterm_font_family') || 'Consolas, "Courier New", monospace';
   });
-  const [theme, setTheme] = useState<'dark' | 'light' | 'custom'>(() => {
-    return (localStorage.getItem('hterm_theme') as 'dark' | 'light' | 'custom') || 'dark';
+  const [theme, setTheme] = useState<'dark' | 'light' | 'medium' | 'custom'>(() => {
+    return (localStorage.getItem('hterm_theme') as 'dark' | 'light' | 'medium' | 'custom') || 'medium';
   });
 
   // Apply theme attributes
@@ -141,6 +154,8 @@ function App() {
   // ── Pane Manager ──
   const pane = usePaneManager();
 
+
+
   // ── Paste handler (needed by session manager for terminal paste interception) ──
   const handlePasteRequest = (sessionId: string, text: string) => {
     setPasteContent(text);
@@ -162,6 +177,106 @@ function App() {
     setPaneAllocations: pane.setPaneAllocations,
     setActivePaneId: pane.setActivePaneId,
   });
+
+  // Show System Prompt State
+  const [showSystemPrompt, setShowSystemPrompt] = useState<boolean>(() => {
+    return localStorage.getItem('hotty_show_system_prompt') === 'true';
+  });
+
+  const updateShowSystemPrompt = (show: boolean) => {
+    setShowSystemPrompt(show);
+    localStorage.setItem('hotty_show_system_prompt', show.toString());
+  };
+
+  // Ask Gemini Commands State
+  const [askGeminiCommands, setAskGeminiCommands] = useState<AskGeminiCommand[]>(() => {
+    const saved = localStorage.getItem('hotty_ask_gemini_commands');
+    return saved ? JSON.parse(saved) : DEFAULT_GEMINI_COMMANDS;
+  });
+
+  const updateAskGeminiCommands = (commands: AskGeminiCommand[]) => {
+    setAskGeminiCommands(commands);
+    localStorage.setItem('hotty_ask_gemini_commands', JSON.stringify(commands));
+  };
+
+  // ── Ask Gemini Handler ──
+  // Use ref to access latest sessions and functions without re-binding the listener
+  const sessionRef = useRef(session);
+  const paneRef = useRef(pane);
+  const askGeminiCommandsRef = useRef(askGeminiCommands);
+
+  // Update refs on every render
+  useEffect(() => {
+    sessionRef.current = session;
+    paneRef.current = pane;
+    askGeminiCommandsRef.current = askGeminiCommands;
+  });
+
+  useEffect(() => {
+    const removeListener = window.electronAPI.onAskGemini((selection: string, type: string) => {
+      window.electronAPI.logDebug(`[App.tsx] onAskGemini triggered. Type: ${type}, Selection length: ${selection?.length}`);
+
+      if (!selection) {
+        window.electronAPI.logDebug('[App.tsx] Selection is empty, ignoring.');
+        return;
+      }
+
+      const currentSession = sessionRef.current;
+      const currentPane = paneRef.current;
+      const currentCommands = askGeminiCommandsRef.current;
+
+      // Ensure AI Session
+      let aiSessionId: string;
+      const existingAiSession = currentSession.sessions.find(s => s.type === 'ai');
+
+      if (existingAiSession) {
+        aiSessionId = existingAiSession.id;
+        window.electronAPI.logDebug(`[App.tsx] Found existing AI session: ${aiSessionId}`);
+        currentPane.setActivePaneId(aiSessionId);
+      } else {
+        // Create new AI session
+        const newId = currentSession.createAISession();
+        if (newId) {
+          aiSessionId = newId;
+          window.electronAPI.logDebug(`[App.tsx] Created new AI session: ${aiSessionId}`);
+        } else {
+          window.electronAPI.logDebug('[App.tsx] Failed to create AI session (already exists?)');
+          return;
+        }
+      }
+
+      const lang = localStorage.getItem('hotty_gemini_language') || 'English';
+
+      let systemInstruction = '';
+      let userPrompt = '';
+
+      const existingCommand = currentCommands.find(c => c.id === type);
+
+      if (existingCommand) {
+        systemInstruction = `You are a helpful assistant. Answer in ${lang}.`;
+        if (existingCommand.id === 'root-cause') {
+          // Keep specific persona for root cause if desired, or make it generic.
+          // For now, let's make it generic but maybe user wants to customize system prompt too?
+          // The request was just "customize items". Let's stick to prompt template customization.
+          systemInstruction = `You are an expert troubleshooter. Answer in ${lang}.`;
+        }
+        userPrompt = existingCommand.promptTemplate.replace('{selection}', selection);
+      } else {
+        // Fallback
+        systemInstruction = `You are a helpful assistant. Answer in ${lang}.`;
+        userPrompt = `Please explain the following text:\n\n${selection}`;
+      }
+
+      window.electronAPI.logDebug(`[App.tsx] Updating session state. Prompt: ${userPrompt.substring(0, 50)}...`);
+      currentSession.updateSessionState(aiSessionId, {
+        pendingMessage: userPrompt,
+        systemInstruction: systemInstruction
+      });
+      window.electronAPI.logDebug('[App.tsx] Session state updated.');
+    });
+
+    return () => removeListener();
+  }, []); // Empty dependency array ensures listener is bound ONLY ONCE
 
   // ... (rest of the file)
 
@@ -206,26 +321,34 @@ function App() {
     localStorage.setItem('hterm_logging_path', path);
   };
 
-
-
   // Theme Change Handler
-  const updateTheme = (newTheme: 'dark' | 'light' | 'custom') => {
+  const updateTheme = (newTheme: 'dark' | 'light' | 'medium' | 'custom') => {
     setTheme(newTheme);
+
+    const shouldSetColorMode = paneBackgroundMode !== 'image';
 
     if (newTheme === 'dark') {
       updateTerminalForeground('#ffffff');
       updateTerminalBackground('#1e1e1e');
       updatePaneBackground('#000200');
+      if (shouldSetColorMode) updatePaneBackgroundMode('color');
     } else if (newTheme === 'light') {
       updateTerminalForeground('#000000');
       updateTerminalBackground('#ffffff');
       updatePaneBackground('#f0f0f0');
-      updatePaneBackgroundMode('color');
+      if (shouldSetColorMode) updatePaneBackgroundMode('color');
+    } else if (newTheme === 'medium') {
+      updateTerminalForeground('#f0f0f0');
+      updateTerminalBackground('#454545');
+      updatePaneBackground('#383838');
+      if (shouldSetColorMode) updatePaneBackgroundMode('color');
     } else if (newTheme === 'custom') {
       // Restore custom colors
       updateTerminalForeground(customColors.foreground);
       updateTerminalBackground(customColors.background);
       updatePaneBackground(customColors.paneBackground);
+      // Custom theme restoration might want to restore mode too, but for now let's respect image
+      if (shouldSetColorMode) updatePaneBackgroundMode('color');
     }
   };
 
@@ -358,7 +481,7 @@ function App() {
             sessions={session.sessions}
             updateSessionState={session.updateSessionState}
             paneAllocations={pane.paneAllocations}
-            activePaneId={pane.activePaneId}
+            activePaneId={pane.activePaneId || ''}
             onPaneClick={pane.setActivePaneId}
             onDropSession={pane.handleDropSession}
             onData={session.handleTerminalData}
@@ -373,6 +496,8 @@ function App() {
             paneBackgroundMode={paneBackgroundMode}
             paneBackgroundImage={paneBackgroundImage}
             lineWrapEnabled={lineWrapEnabled}
+            showSystemPrompt={showSystemPrompt}
+            askGeminiCommands={askGeminiCommands}
           />
         </div>
       </div>
@@ -429,6 +554,10 @@ function App() {
         onScrollbackChange={updateScrollback}
         theme={theme}
         onThemeChange={updateTheme}
+        showSystemPrompt={showSystemPrompt}
+        onShowSystemPromptChange={updateShowSystemPrompt}
+        askGeminiCommands={askGeminiCommands}
+        onAskGeminiCommandsChange={updateAskGeminiCommands}
       />
       <PaneLines
         paneAllocations={pane.paneAllocations}

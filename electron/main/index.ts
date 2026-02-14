@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, shell, ipcMain, dialog, Menu, MenuItem } from 'electron';
 import { release } from 'node:os';
 import { join } from 'node:path';
 import { SshService } from './services/ssh';
@@ -40,6 +40,7 @@ async function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
     },
+    backgroundColor: '#1e1e1e',
   })
 
   // Hide menu bar
@@ -102,6 +103,19 @@ app.on('activate', () => {
 })
 
 // IPC Handlers
+// IPC Handlers
+import * as fs from 'fs';
+const debugLogPath = join(app.getPath('userData'), 'debug_gemini.log');
+
+ipcMain.on('log-debug', (_, message) => {
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] ${message}\n`;
+  console.log(logMessage);
+  fs.appendFile(debugLogPath, logMessage, (err) => {
+    if (err) console.error('Failed to write request log', err);
+  });
+});
+
 // IPC Handlers
 ipcMain.handle('open-win', (_, arg) => {
   const childWindow = new BrowserWindow({
@@ -279,6 +293,52 @@ ipcMain.handle('select-folder', async () => {
   return filePaths[0];
 });
 
+// ── Context Menu ──
+ipcMain.on('show-context-menu', (event, selection: string, commands?: { id: string; label: string }[]) => {
+  const geminiSubmenu: Electron.MenuItemConstructorOptions[] = [];
+
+  if (commands && commands.length > 0) {
+    commands.forEach(cmd => {
+      geminiSubmenu.push({
+        label: cmd.label,
+        click: () => { event.sender.send('ask-gemini', selection, cmd.id); }
+      });
+    });
+  } else {
+    // Default commands if none provided (for backward compatibility/fallback)
+    geminiSubmenu.push(
+      {
+        label: 'What is this?',
+        click: () => { event.sender.send('ask-gemini', selection, 'what-is-this'); }
+      },
+      {
+        label: 'What does it mean?',
+        click: () => { event.sender.send('ask-gemini', selection, 'what-does-it-mean'); }
+      },
+      {
+        label: 'Research root cause',
+        click: () => { event.sender.send('ask-gemini', selection, 'root-cause'); }
+      }
+    );
+  }
+
+  const template = [
+    {
+      label: 'Ask Gemini',
+      enabled: !!selection,
+      submenu: geminiSubmenu
+    },
+    { type: 'separator' },
+    { role: 'copy' },
+    { role: 'paste' },
+    { type: 'separator' },
+    { role: 'selectAll' }
+  ] as Electron.MenuItemConstructorOptions[];
+
+  const menu = Menu.buildFromTemplate(template);
+  menu.popup({ window: BrowserWindow.fromWebContents(event.sender) || undefined });
+});
+
 // ── Gemini AI IPC Handlers ──
 
 ipcMain.handle('gemini-auth-start', async (_, { clientId, clientSecret }) => {
@@ -294,9 +354,9 @@ ipcMain.on('gemini-auth-logout', () => {
   geminiService?.logout();
 });
 
-ipcMain.on('gemini-chat-send', async (_, { sessionId, message, model }) => {
+ipcMain.on('gemini-chat-send', async (_, { sessionId, message, model, systemInstruction }) => {
   if (!geminiService) return;
-  await geminiService.sendMessage(sessionId, message, model);
+  await geminiService.sendMessage(sessionId, message, model, systemInstruction);
 });
 
 ipcMain.on('gemini-chat-cancel', (_, sessionId: string) => {

@@ -1,6 +1,6 @@
-# HoTTY (Hterm)
+# HoTTY
 
-HoTTY (hterm) is a modern, high-performance terminal emulator built with Electron, React, and TypeScript. It is designed to provide a seamless terminal experience with advanced window management and customization options.
+HoTTY is a modern, high-performance terminal emulator built with Electron, React, and TypeScript. It is designed to provide a seamless terminal experience with advanced window management and customization options.
 
 ## Features
 
@@ -10,7 +10,7 @@ HoTTY (hterm) is a modern, high-performance terminal emulator built with Electro
     - Drag-and-drop tabs to re-organize panes.
     - Intuitive resizing including **2D intersection resizing** (drag the junction between 4 panes to resize all at once).
 - **Customization**:
-    - **Themes**: Independent color settings for terminal foreground/background and empty pane background.
+    - **Themes**: Built-in **Dark**, **Medium**, and **Light** themes, plus a **Custom** mode for independent color settings.
     - **Advanced Backgrounds**: Support for solid colors or tiled image patterns.
     - **File Picker**: Easily select custom local images as your terminal background via a built-in file explorer integration.
 - **Session Management**:

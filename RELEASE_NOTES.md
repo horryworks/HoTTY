@@ -1,4 +1,17 @@
-# Release Notes - HoTTY v0.1.2
+# Release Notes - HoTTY
+
+## [0.1.3] - 2026-02-14
+
+### Changed
+- **Default Theme**: Changed the default theme to "Medium" for a balanced visual experience.
+- **Medium Theme Polishing**:
+  - Fixed CSS variable definitions to ensuring consistent styling across all panes (including Gemini).
+  - Improved color contrast for better readability.
+- **App Icon**: Fixed the application icon configuration to ensure it appears correctly in the Windows taskbar and installer.
+- **Settings UI**:
+  - **Ask Gemini Commands**:
+    - Fixed text area overflow issue.
+    - Added drag-and-drop support for reordering commands.
 
 ## [0.1.2] - 2026-02-14
 

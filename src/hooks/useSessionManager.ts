@@ -9,7 +9,11 @@ export interface Session {
     aiChatState?: {
         messages: any[]; // ChatMessage[] but avoiding circular dependency or complex imports here
         inputText: string;
+        pendingMessage?: string;
+        systemInstruction?: string;
         selectedModel: string;
+        selectedLanguage: string;
+        selectedExpertise?: string;
         textareaHeight: number;
         scrollTop?: number;
     };
@@ -213,7 +217,8 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             aiChatState: {
                 messages: [],
                 inputText: '',
-                selectedModel: 'gemini-2.0-flash-exp',
+                selectedModel: localStorage.getItem('hotty_gemini_model') || 'gemini-2.0-flash-exp',
+                selectedLanguage: localStorage.getItem('hotty_gemini_language') || 'English',
                 textareaHeight: 100,
                 scrollTop: 0
             }
@@ -222,6 +227,8 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         setSessions(prev => [...prev, newSession]);
         setTabOrder(prev => [...prev, sessionId]);
         allocateToPane(sessionId);
+
+        return sessionId;
     };
 
     const updateSessionState = (sessionId: string, newState: Partial<Session['aiChatState']>) => {

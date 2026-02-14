@@ -112,6 +112,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     selectImage: () => ipcRenderer.invoke('select-image'),
     selectFolder: () => ipcRenderer.invoke('select-folder'),
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+    logDebug: (message: string) => ipcRenderer.send('log-debug', message),
+
+    showContextMenu: (selection: string, commands?: { id: string; label: string }[]) => ipcRenderer.send('show-context-menu', selection, commands),
+    onAskGemini: (callback: (selection: string, type: string) => void) => {
+        const subscription = (_: any, selection: string, type: string) => callback(selection, type);
+        ipcRenderer.on('ask-gemini', subscription);
+        return () => ipcRenderer.removeListener('ask-gemini', subscription);
+    },
 
     // New Event Listeners
     onSessionData: (callback: (sessionId: string, data: string) => void) => {
@@ -138,7 +146,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     geminiAuthStart: (clientId: string, clientSecret: string) => ipcRenderer.invoke('gemini-auth-start', { clientId, clientSecret }),
     geminiAuthStatus: () => ipcRenderer.invoke('gemini-auth-status'),
     geminiAuthLogout: () => ipcRenderer.send('gemini-auth-logout'),
-    geminiChatSend: (sessionId: string, message: string, model: string) => ipcRenderer.send('gemini-chat-send', { sessionId, message, model }),
+    geminiChatSend: (sessionId: string, message: string, model: string, systemInstruction?: string) => ipcRenderer.send('gemini-chat-send', { sessionId, message, model, systemInstruction }),
     geminiListModels: () => ipcRenderer.invoke('gemini-list-models'),
     geminiChatCancel: (sessionId: string) => ipcRenderer.send('gemini-chat-cancel', sessionId),
     geminiChatClear: (sessionId: string) => ipcRenderer.send('gemini-chat-clear', sessionId),

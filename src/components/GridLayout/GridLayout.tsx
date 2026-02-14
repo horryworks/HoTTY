@@ -24,6 +24,8 @@ interface GridLayoutProps {
     paneBackgroundMode: 'color' | 'image';
     paneBackgroundImage: string;
     lineWrapEnabled: boolean;
+    showSystemPrompt?: boolean;
+    askGeminiCommands?: { id: string; label: string; promptTemplate: string }[];
 }
 
 export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: string]: any } }> = ({
@@ -46,7 +48,9 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     paneBackground,
     paneBackgroundMode,
     paneBackgroundImage,
-    lineWrapEnabled
+    lineWrapEnabled,
+    showSystemPrompt,
+    askGeminiCommands
 }) => {
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
     const [colSizes, setColSizes] = useState<number[]>([]);
@@ -203,7 +207,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                     <div
                         key={`pane-${paneId}`}
                         data-pane-id={paneId}
-                        className={`grid-pane ${isActive ? 'active-pane' : ''}`}
+                        className={`grid-pane ${isActive && session ? 'active-pane' : ''}`}
                         onClick={() => onPaneClick(paneId)}
                         onDragOver={handleDragOver}
                         onDrop={(e) => handleDrop(e, paneId)}
@@ -227,6 +231,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     sessionId={session.id}
                                     initialState={session.aiChatState}
                                     onStateChange={(newState) => updateSessionState(session.id, newState)}
+                                    showSystemPrompt={showSystemPrompt}
                                 />
                             ) : (
                                 <TerminalComponent
@@ -242,6 +247,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     terminalForeground={terminalForeground}
                                     terminalBackground={terminalBackground}
                                     lineWrapEnabled={lineWrapEnabled}
+                                    askGeminiCommands={askGeminiCommands}
                                 />
                             )
                         ) : (

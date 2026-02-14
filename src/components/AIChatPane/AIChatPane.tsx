@@ -13,6 +13,10 @@ interface AIChatPaneProps {
         messages: ChatMessage[];
         inputText: string;
         selectedModel: string;
+        selectedLanguage: string;
+        selectedExpertise?: string;
+        pendingMessage?: string;
+        systemInstruction?: string;
         textareaHeight: number;
         scrollTop?: number;
     };
@@ -20,12 +24,18 @@ interface AIChatPaneProps {
         messages: ChatMessage[];
         inputText: string;
         selectedModel: string;
+        selectedLanguage: string;
+        selectedExpertise?: string;
+        pendingMessage?: string;
+        systemInstruction?: string;
         textareaHeight: number;
         scrollTop?: number;
     }) => void;
+    showSystemPrompt?: boolean;
+    fontSize?: number;
 }
 
-export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState, onStateChange }) => {
+export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState, onStateChange, showSystemPrompt, fontSize = 14 }) => {
     // Auth state
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isAuthLoading, setIsAuthLoading] = useState(false);
@@ -40,7 +50,20 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
     const [messages, setMessages] = useState<ChatMessage[]>(initialState?.messages || []);
     const [inputText, setInputText] = useState(initialState?.inputText || '');
     const [selectedModel, setSelectedModel] = useState(initialState?.selectedModel || 'gemini-2.0-flash-exp');
+    const [selectedLanguage, setSelectedLanguage] = useState(initialState?.selectedLanguage || 'English');
+    const [selectedExpertise, setSelectedExpertise] = useState(initialState?.selectedExpertise || 'General Helper');
     const [textareaHeight, setTextareaHeight] = useState(initialState?.textareaHeight || 60);
+    const [localSystemInstruction, setLocalSystemInstruction] = useState(initialState?.systemInstruction || 'You are a helpful assistant.');
+
+    // Manage pending message locally to avoid sync race conditions
+    const [localPendingMessage, setLocalPendingMessage] = useState(initialState?.pendingMessage);
+
+    // Sync pending message from props if it arrives later or changes
+    useEffect(() => {
+        if (initialState?.pendingMessage) {
+            setLocalPendingMessage(initialState.pendingMessage);
+        }
+    }, [initialState?.pendingMessage]);
 
     const [isStreaming, setIsStreaming] = useState(false);
     const [streamingContent, setStreamingContent] = useState('');
@@ -50,6 +73,45 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
     const lastSentTextRef = useRef<string>('');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+    const EXPERTISE_OPTIONS = [
+        'General Helper',
+        'Network Expert',
+        'Server Expert',
+        'Cloud Expert',
+        'Coding Expert'
+    ];
+
+    // Real-time System Prompt Update
+    useEffect(() => {
+        let basePrompt = '';
+        switch (selectedExpertise) {
+            case 'Network Expert':
+                basePrompt = 'You are a Network Expert. Provide detailed technical analysis of network protocols, routing, and infrastructure.';
+                break;
+            case 'Server Expert':
+                basePrompt = 'You are a Server Expert. Focus on server administration, OS internals, and system performance.';
+                break;
+            case 'Cloud Expert':
+                basePrompt = 'You are a Cloud Expert. Specialize in cloud architecture, AWS/Azure/GCP services, and cloud-native practices.';
+                break;
+            case 'Coding Expert':
+                basePrompt = 'You are a Coding Expert. Provide efficient, clean code solutions and explain algorithmic complexity.';
+                break;
+            default:
+                basePrompt = 'You are a helpful assistant.';
+                break;
+        }
+
+        let langInstruction = '';
+        if (selectedLanguage !== 'English') {
+            langInstruction = ` Answer in ${selectedLanguage}.`;
+        }
+
+        setLocalSystemInstruction(`${basePrompt}${langInstruction}`);
+
+    }, [selectedExpertise, selectedLanguage]);
+
+
     // Initialize scroll position
     useEffect(() => {
         if (initialState?.scrollTop !== undefined && scrollContainerRef.current) {
@@ -57,25 +119,66 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
         }
     }, []); // Run once on mount
 
+    // Auto-send pending message if authenticated
+    useEffect(() => {
+        if (isAuthenticated && localPendingMessage && !isStreaming) {
+            window.electronAPI.logDebug(`[AIChatPane] Detecting pending message. Auth: ${isAuthenticated}, Streaming: ${isStreaming}`);
+            const text = localPendingMessage;
+            // Use the passed system instruction for the FIRST message if provided, otherwise use local
+            const sysInstr = initialState?.systemInstruction || localSystemInstruction;
+
+            window.electronAPI.logDebug(`[AIChatPane] Sending pending message: ${text.substring(0, 30)}...`);
+
+            // Clear local pending message immediately to prevent re-sending
+            setLocalPendingMessage(undefined);
+
+            // Sync state will handle pushing the 'undefined' back to parent in the next effect cycle
+            // effectively clearing it from the store.
+
+            // Sync local system instruction if one was provided in payload
+            if (initialState?.systemInstruction) {
+                setLocalSystemInstruction(initialState.systemInstruction);
+            }
+
+            // Send message
+            setMessages(prev => [...prev, { role: 'user', content: text }]);
+            lastSentTextRef.current = text;
+            setIsStreaming(true);
+            setStreamingContent('');
+            window.electronAPI.geminiChatSend(sessionId, text, selectedModel, sysInstr);
+        } else if (localPendingMessage) {
+            window.electronAPI.logDebug(`[AIChatPane] Pending message skipped. Auth: ${isAuthenticated}, Streaming: ${isStreaming}`);
+        }
+    }, [isAuthenticated, localPendingMessage, isStreaming, sessionId, selectedModel, initialState?.systemInstruction, localSystemInstruction]);
+
+
+    // Keep ref to onStateChange to avoid effect re-triggering when parent re-renders
+    const onStateChangeRef = useRef(onStateChange);
+    useEffect(() => {
+        onStateChangeRef.current = onStateChange;
+    }, [onStateChange]);
+
     // Sync state back to parent
     useEffect(() => {
-        if (onStateChange) {
-            onStateChange({
+        if (onStateChangeRef.current) {
+            onStateChangeRef.current({
                 messages,
                 inputText,
                 selectedModel,
+                selectedLanguage,
+                selectedExpertise,
                 textareaHeight,
-                scrollTop: scrollContainerRef.current?.scrollTop
+                scrollTop: scrollContainerRef.current?.scrollTop,
+                pendingMessage: localPendingMessage, // Sync local pending msg (preserves it on mount)
+                systemInstruction: localSystemInstruction
             });
         }
-    }, [messages, inputText, selectedModel, textareaHeight]); // Depend on values, not onStateChange to avoid loop if parent doesn't memoize
+    }, [messages, inputText, selectedModel, selectedLanguage, selectedExpertise, textareaHeight, localSystemInstruction, localPendingMessage]);
 
     // Check auth status on mount
     useEffect(() => {
         window.electronAPI.geminiAuthStatus().then(setIsAuthenticated);
     }, []);
-
-
 
     // Listen for chat responses for THIS session
     useEffect(() => {
@@ -117,11 +220,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
 
     // Auto-scroll to bottom
     useEffect(() => {
-        // Only auto-scroll if we are near bottom or if it's a new message
-        // But for simplicity, we can auto-scroll if it's streaming or new message
-        // We need to be careful not to override user scroll if they validly scrolled up
-        // For now, simple behavior: scroll to bottom on new message if we were at bottom?
-        // Or just scroll to bottom always on new message/stream.
         if (scrollContainerRef.current) {
             const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
             const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
@@ -132,11 +230,13 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
     }, [messages, streamingContent, isStreaming]);
 
     const handleScroll = () => {
-        if (onStateChange && scrollContainerRef.current) {
-            onStateChange({
+        if (onStateChangeRef.current && scrollContainerRef.current) {
+            onStateChangeRef.current({
                 messages,
                 inputText,
                 selectedModel,
+                selectedLanguage,
+                selectedExpertise,
                 textareaHeight,
                 scrollTop: scrollContainerRef.current.scrollTop
             });
@@ -152,11 +252,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
             window.electronAPI.geminiListModels().then(models => {
                 if (models.length > 0) {
                     setAvailableModels(models);
-                    // If current selection is not in list, switch to first one or stay if it's custom
-                    // Actually, if list is valid, we prefer to use it.
-                    // But if selectedModel was 'gemini-2.0-flash-exp' and list has 'gemini-2.0-flash', we might want to switch?
-                    // For now, keep user selection if possible, otherwise default to first.
-                    // But we initialize with 'gemini-2.0-flash' which is likely in list.
                 }
             });
         }
@@ -227,21 +322,55 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
         }, 0);
     };
 
+    const LANGUAGES = [
+        'Auto', 'English', 'Japanese', 'Chinese', 'Korean', 'Spanish', 'French', 'German', 'Russian'
+    ];
+
     return (
-        <div className="ai-chat-pane">
+        <div className="ai-chat-pane" style={{ fontSize: `${fontSize}px` }}>
             {/* Header */}
             <div className="ai-chat-header">
                 <div className="ai-chat-header-left">
                     <span className="ai-chat-logo">✦</span>
-                    <span className="ai-chat-title">Gemini AI</span>
+                    <span className="ai-chat-title">Gemini</span>
                 </div>
                 <div className="ai-chat-header-right">
                     {isAuthenticated && (
                         <>
                             <select
                                 className="ai-chat-model-select"
+                                style={{ marginRight: '5px', width: '120px' }}
+                                value={selectedExpertise}
+                                onChange={(e) => setSelectedExpertise(e.target.value)}
+                                disabled={isStreaming}
+                            >
+                                {EXPERTISE_OPTIONS.map(opt => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                            </select>
+                            <select
+                                className="ai-chat-model-select"
+                                style={{ marginRight: '5px', width: '100px' }}
+                                value={selectedLanguage}
+                                onChange={(e) => {
+                                    const lang = e.target.value;
+                                    setSelectedLanguage(lang);
+                                    localStorage.setItem('hotty_gemini_language', lang);
+                                }}
+                                disabled={isStreaming}
+                            >
+                                {LANGUAGES.map(lang => (
+                                    <option key={lang} value={lang}>{lang}</option>
+                                ))}
+                            </select>
+                            <select
+                                className="ai-chat-model-select"
                                 value={selectedModel}
-                                onChange={(e) => setSelectedModel(e.target.value)}
+                                onChange={(e) => {
+                                    const model = e.target.value;
+                                    setSelectedModel(model);
+                                    localStorage.setItem('hotty_gemini_model', model);
+                                }}
                                 disabled={isStreaming}
                             >
                                 {availableModels.length > 0 ? (
@@ -261,7 +390,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
                                 🗑️
                             </button>
                             <button className="ai-chat-header-btn" onClick={handleLogout} title="Logout">
-                                🚪
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style={{ display: 'block' }}>
+                                    <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
+                                </svg>
                             </button>
                         </>
                     )}
@@ -326,18 +457,31 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
             ) : (
                 <div className="ai-chat-body">
                     {/* Messages */}
+                    {showSystemPrompt && localSystemInstruction && (
+                        <div className="ai-chat-message-system" style={{
+                            padding: '10px',
+                            backgroundColor: 'var(--bg-secondary)',
+                            borderBottom: '1px solid var(--border-color)',
+                            fontSize: '0.85rem',
+                            color: 'var(--text-secondary)',
+                            maxHeight: '100px',
+                            overflowY: 'auto',
+                            flexShrink: 0
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontWeight: 'bold' }}>
+                                <span>⚙️</span> System Prompt
+                            </div>
+                            <div style={{ whiteSpace: 'pre-wrap' }}>
+                                {localSystemInstruction}
+                            </div>
+                        </div>
+                    )}
+                    {/* Messages */}
                     <div
                         className="ai-chat-messages"
                         ref={scrollContainerRef}
                         onScroll={handleScroll}
                     >
-                        {messages.length === 0 && !streamingContent && (
-                            <div className="ai-chat-welcome">
-                                <div className="ai-chat-welcome-icon">✦</div>
-                                <h3>Gemini AI</h3>
-                                <p>Ask me anything.</p>
-                            </div>
-                        )}
                         {messages.map((msg, idx) => (
                             <div key={idx} className={`ai-chat-message ai-chat-message-${msg.role}`}>
                                 <div className="ai-chat-message-avatar">

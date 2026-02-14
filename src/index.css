@@ -58,6 +58,30 @@
   color-scheme: light;
 }
 
+[data-theme="medium"] {
+  /* Medium Theme */
+  --bg-primary: #383838;
+  --bg-secondary: #454545;
+  --bg-tertiary: #505050;
+  --text-primary: #eaeaea;
+  --text-secondary: #cccccc;
+  --border-color: #555555;
+  --accent-color: #64b5f6;
+  --accent-hover: #42a5f5;
+  --input-bg: #505050;
+  --success-color: #66bb6a;
+  --error-color: #ef5350;
+  --chat-msg-user-bg: #4a5a7a;
+  --chat-msg-model-bg: #404040;
+  --chat-msg-user-text: #e3f2fd;
+  --chat-msg-model-text: #eaeaea;
+  --code-bg: #2d2d2d;
+  --code-text: #eaeaea;
+  --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23eaeaea' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e");
+
+  color-scheme: dark;
+}
+
 a {
   font-weight: 500;
   color: #646cff;

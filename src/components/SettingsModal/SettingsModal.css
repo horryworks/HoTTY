@@ -12,37 +12,84 @@
 }
 
 /* ── Modal Container ── */
+/* ── Modal Container ── */
 .settings-modal {
     background: var(--bg-secondary);
     color: var(--text-primary);
-    width: 400px;
-    max-height: 90vh;
-    /* Limit height to 90% of viewport */
-    border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    width: 600px;
+    /* Initial width */
+    height: 80vh;
+    /* Initial height: 80% of viewport */
+    min-width: 500px;
+    min-height: 400px;
+    max-width: 95vw;
+    max-height: 95vh;
+    border-radius: 6px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
     overflow: hidden;
     border: 1px solid var(--border-color);
+    resize: both;
+    /* Enable resizing */
 }
 
 .settings-header {
-    background: var(--bg-tertiary);
-    padding: 15px 20px;
+    /* bg-tertiary removed to match ConnectionDialog */
+    padding: 15px 20px 5px 20px;
+    /* Reduced vertical padding */
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--border-color);
+    /* border-bottom removed */
     flex-shrink: 0;
-    /* Prevent header from shrinking */
+}
+
+.settings-header h2 {
+    margin: 0;
+    font-size: 18px;
+    /* Match ConnectionDialog size */
+}
+
+.settings-header .close-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.settings-header .close-btn:hover {
+    color: var(--text-primary);
 }
 
 .settings-tabs {
     display: flex;
-    background-color: var(--bg-tertiary);
+    /* bg-tertiary removed */
     border-bottom: 1px solid var(--border-color);
-    padding: 0 10px;
-    gap: 2px;
+    padding: 0 20px;
+    gap: 10px;
+    flex-shrink: 0;
+    /* Prevent container from shrinking */
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: none;
+    /* Firefox */
+    cursor: grab;
+    user-select: none;
+    /* Prevent text selection while dragging */
+}
+
+.settings-tabs::-webkit-scrollbar {
+    display: none;
+    /* Chrome, Safari, Edge */
+}
+
+.settings-tabs:active {
+    cursor: grabbing;
 }
 
 .settings-tab {
@@ -55,6 +102,8 @@
     cursor: pointer;
     border-radius: 4px 4px 0 0;
     transition: all 0.2s;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .settings-tab:hover {
@@ -73,7 +122,10 @@
 .settings-content {
     padding: 20px;
     overflow-y: auto;
-    /* Scroll content if it overflows */
+    flex: 1;
+    /* Take remaining space */
+    min-height: 0;
+    /* Allow shrinking for scroll */
 }
 
 .form-group {

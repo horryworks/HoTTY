@@ -15,17 +15,22 @@ export interface ElectronAPI {
     selectImage: () => Promise<string | null>;
     selectFolder: () => Promise<string | null>;
     getAppVersion: () => Promise<string>;
+    logDebug: (message: string) => void;
 
     // Gemini AI
     geminiAuthStart: (clientId: string, clientSecret: string) => Promise<boolean>;
     geminiAuthStatus: () => Promise<boolean>;
     geminiAuthLogout: () => void;
-    geminiChatSend: (sessionId: string, message: string, model: string) => void;
+    geminiChatSend: (sessionId: string, message: string, model: string, systemInstruction?: string) => void;
     geminiListModels: () => Promise<{ name: string; displayName: string }[]>;
     geminiChatCancel: (sessionId: string) => void;
     geminiChatClear: (sessionId: string) => void;
     onGeminiAuthResult: (callback: (result: { success: boolean }) => void) => () => void;
     onGeminiChatResponse: (callback: (data: { sessionId: string, type: string, content: string }) => void) => () => void;
+
+    // Context Menu
+    showContextMenu: (selection: string, commands?: { id: string; label: string }[]) => void;
+    onAskGemini: (callback: (selection: string, type: string) => void) => () => void;
 }
 
 declare global {

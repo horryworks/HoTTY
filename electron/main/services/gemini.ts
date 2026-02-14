@@ -193,7 +193,7 @@ export class GeminiService {
 
   // ── Chat ──
 
-  async sendMessage(sessionId: string, message: string, model: string = 'gemini-2.5-flash'): Promise<void> {
+  async sendMessage(sessionId: string, message: string, model: string = 'gemini-2.5-flash', systemInstruction?: string): Promise<void> {
     const token = await this.getValidToken();
     if (!token) {
       this.win.webContents.send('gemini-chat-response', {
@@ -216,7 +216,13 @@ export class GeminiService {
         parts: [{ text: msg.content }],
       }));
 
-      const requestBody = { contents };
+      const requestBody: any = { contents };
+
+      if (systemInstruction) {
+        requestBody.system_instruction = {
+          parts: [{ text: systemInstruction }]
+        };
+      }
 
       const abortController = new AbortController();
       this.abortControllers.set(sessionId, abortController);

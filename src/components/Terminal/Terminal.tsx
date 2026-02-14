@@ -14,6 +14,7 @@ interface TerminalProps {
     terminalForeground: string;
     terminalBackground: string;
     lineWrapEnabled: boolean;
+    askGeminiCommands?: { id: string; label: string; promptTemplate: string }[];
 }
 
 export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?: Terminal }> = ({
@@ -26,7 +27,8 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
     fontFamily,
     terminalForeground,
     terminalBackground,
-    lineWrapEnabled
+    lineWrapEnabled,
+    askGeminiCommands
 }) => {
     const terminalRef = useRef<HTMLDivElement>(null);
     // Initial Attach / Re-attach
@@ -234,6 +236,12 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             }}
             onClick={() => {
                 if (terminalInstance) terminalInstance.focus();
+            }}
+            onContextMenu={() => {
+                if (terminalInstance) {
+                    const selection = terminalInstance.getSelection();
+                    window.electronAPI.showContextMenu(selection, askGeminiCommands);
+                }
             }}
         />
     );
