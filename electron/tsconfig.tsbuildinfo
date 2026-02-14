@@ -1,1 +1,1 @@
-{"root":["./main/index.ts","./main/services/isessionservice.ts","./main/services/gemini.ts","./main/services/serial.ts","./main/services/ssh.ts","./main/services/telnet.ts","./main/types/telnet-client.d.ts","./preload/index.ts"],"version":"5.9.3"}
+{"root":["./main/index.ts","./main/services/isessionservice.ts","./main/services/logmanager.ts","./main/services/gemini.ts","./main/services/serial.ts","./main/services/ssh.ts","./main/services/telnet.ts","./main/types/telnet-client.d.ts","./preload/index.ts"],"version":"5.9.3"}

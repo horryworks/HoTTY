@@ -23,6 +23,7 @@ interface GridLayoutProps {
     paneBackground: string;
     paneBackgroundMode: 'color' | 'image';
     paneBackgroundImage: string;
+    lineWrapEnabled: boolean;
 }
 
 export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: string]: any } }> = ({
@@ -44,7 +45,8 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     terminalBackground,
     paneBackground,
     paneBackgroundMode,
-    paneBackgroundImage
+    paneBackgroundImage,
+    lineWrapEnabled
 }) => {
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
     const [colSizes, setColSizes] = useState<number[]>([]);
@@ -239,6 +241,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     fontFamily={fontFamily}
                                     terminalForeground={terminalForeground}
                                     terminalBackground={terminalBackground}
+                                    lineWrapEnabled={lineWrapEnabled}
                                 />
                             )
                         ) : (

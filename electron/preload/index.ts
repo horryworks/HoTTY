@@ -110,6 +110,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     focusWindow: () => ipcRenderer.send('focus-window'),
     listSerialPorts: () => ipcRenderer.invoke('list-serial-ports'),
     selectImage: () => ipcRenderer.invoke('select-image'),
+    selectFolder: () => ipcRenderer.invoke('select-folder'),
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
     // New Event Listeners

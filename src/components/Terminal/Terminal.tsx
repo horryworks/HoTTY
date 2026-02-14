@@ -13,11 +13,11 @@ interface TerminalProps {
     fontFamily: string;
     terminalForeground: string;
     terminalBackground: string;
+    lineWrapEnabled: boolean;
 }
 
 export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?: Terminal }> = ({
     sessionId,
-    onData,
     isActive,
     focusTrigger,
     terminalInstance,
@@ -25,15 +25,10 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
     fontSize,
     fontFamily,
     terminalForeground,
-    terminalBackground
+    terminalBackground,
+    lineWrapEnabled
 }) => {
     const terminalRef = useRef<HTMLDivElement>(null);
-    const onDataRef = useRef(onData);
-
-    useEffect(() => {
-        onDataRef.current = onData;
-    }, [onData]);
-
     // Initial Attach / Re-attach
     useEffect(() => {
         if (!terminalRef.current || !terminalInstance) return;
@@ -49,42 +44,47 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
 
             console.log('[Terminal] Attaching xterm instance to div');
 
+            // Set overflow based on line wrapping
+            container.style.overflowX = lineWrapEnabled ? 'hidden' : 'auto';
+
             try {
+                // ... (existing attach logic)
                 if (!term.element) {
-                    // First time: open normally
                     term.open(container);
-                    console.log('[Terminal] Opened new xterm instance.');
                 } else if (!term.element.isConnected || term.element.parentElement !== container) {
-                    // Re-attach: move existing element to new container
-                    // Clear the container first
-                    while (container.firstChild) {
-                        container.removeChild(container.firstChild);
-                    }
+                    while (container.firstChild) container.removeChild(container.firstChild);
                     container.appendChild(term.element);
-                    console.log('[Terminal] Re-attached existing xterm element.');
-                } else {
-                    console.log('[Terminal] Already attached correctly.');
                 }
             } catch (e) {
                 console.error('[Terminal] Error in attach:', e);
             }
 
-            // Force full canvas re-render after attachment
+            // Force full canvas re-render
             const forceRedraw = () => {
                 if (!container || container.clientWidth === 0 || container.clientHeight === 0) return false;
 
                 try {
-                    // Clear texture atlas to force glyph re-rendering
                     if (typeof term.clearTextureAtlas === 'function') {
                         term.clearTextureAtlas();
                     }
 
                     if (fitAddon) {
-                        // Force resize cycle: change size then fit back to trigger canvas re-init
-                        const cols = term.cols;
-                        const rows = term.rows;
-                        term.resize(Math.max(cols, 2) - 1, Math.max(rows, 2) - 1);
-                        fitAddon.fit();
+                        if (lineWrapEnabled) {
+                            // Normal Wrap Mode: Just Fit
+                            const cols = term.cols;
+                            const rows = term.rows;
+                            // Force resize to trigger re-render
+                            term.resize(Math.max(cols, 2) - 1, Math.max(rows, 2) - 1);
+                            fitAddon.fit();
+                        } else {
+                            // No Wrap Mode: Horizontal Scrollbar
+                            const proposed = fitAddon.proposeDimensions();
+                            if (proposed) {
+                                // Keep proposed rows (height fit), enforce huge cols
+                                const newCols = Math.max(proposed.cols, 5000);
+                                term.resize(newCols, proposed.rows);
+                            }
+                        }
 
                         term.refresh(0, term.rows - 1);
                         term.scrollToBottom();
@@ -101,14 +101,11 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                 return true;
             };
 
-            // Try immediately, then with increasing delays
+            // ... (retry logic)
             if (!forceRedraw()) {
-                const retryDelays = [16, 50, 150, 300, 500];
-                retryDelays.forEach(delay => {
-                    setTimeout(() => forceRedraw(), delay);
-                });
+                const retryDelays = [16, 50, 150];
+                retryDelays.forEach(delay => setTimeout(() => forceRedraw(), delay));
             } else {
-                // Even if first attempt succeeded, retry once more for safety
                 setTimeout(() => forceRedraw(), 100);
             }
         };
@@ -120,8 +117,16 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                 const fitAddon = (term as any)._fitAddon;
                 if (fitAddon) {
                     try {
-                        fitAddon.fit();
-                        // Refresh entire viewport to restore display after re-attach
+                        if (lineWrapEnabled) {
+                            fitAddon.fit();
+                        } else {
+                            const proposed = fitAddon.proposeDimensions();
+                            if (proposed) {
+                                const newCols = Math.max(proposed.cols, 5000);
+                                term.resize(newCols, proposed.rows);
+                            }
+                        }
+
                         term.refresh(0, term.rows - 1);
                         term.scrollToBottom();
                         if (term.cols > 0 && term.rows > 0) {
@@ -134,9 +139,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             }
         };
 
-        // Use ResizeObserver for robust layout handling
         const resizeObserver = new ResizeObserver(() => {
-            // Debounce slightly or just call
             requestAnimationFrame(handleResize);
         });
 
@@ -144,18 +147,16 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             resizeObserver.observe(terminalRef.current);
         }
 
-        // Initial fit in case observer takes time
         setTimeout(handleResize, 50);
 
         return () => {
-            console.log('[Terminal] Unmounting Component (Detaching xterm), Session:', sessionId);
+            console.log('[Terminal] Unmounting Component', sessionId);
             resizeObserver.disconnect();
-            // Detach xterm element from container (don't dispose – terminal instance persists)
             if (term.element && term.element.parentElement) {
                 term.element.parentElement.removeChild(term.element);
             }
         };
-    }, [sessionId, terminalInstance, disableFocus]);
+    }, [sessionId, terminalInstance, disableFocus, lineWrapEnabled]); // Added lineWrapEnabled dependency
 
     // Handle Resizing / Focus
     useEffect(() => {
@@ -167,15 +168,22 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             setTimeout(() => {
                 const fitAddon = (terminalInstance as any)._fitAddon;
                 if (fitAddon) {
-                    fitAddon.fit();
+                    if (lineWrapEnabled) {
+                        fitAddon.fit();
+                    } else {
+                        const proposed = fitAddon.proposeDimensions();
+                        if (proposed) {
+                            const newCols = Math.max(proposed.cols, 5000);
+                            terminalInstance.resize(newCols, proposed.rows);
+                        }
+                    }
                     try {
                         window.electronAPI.resize(sessionId, terminalInstance.cols, terminalInstance.rows);
                     } catch (e) { console.error(e); }
                 }
             }, 50);
         }
-
-    }, [isActive, sessionId, focusTrigger, terminalInstance, disableFocus]);
+    }, [isActive, sessionId, focusTrigger, terminalInstance, disableFocus, lineWrapEnabled]);
 
     // Update Font Settings
     useEffect(() => {
@@ -191,11 +199,18 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                 cursorAccent: terminalBackground
             };
 
-            // Re-fit after font change
             setTimeout(() => {
                 const fitAddon = (terminalInstance as any)._fitAddon;
                 if (fitAddon) {
-                    fitAddon.fit();
+                    if (lineWrapEnabled) {
+                        fitAddon.fit();
+                    } else {
+                        const proposed = fitAddon.proposeDimensions();
+                        if (proposed) {
+                            const newCols = Math.max(proposed.cols, 5000);
+                            terminalInstance.resize(newCols, proposed.rows);
+                        }
+                    }
                     if (terminalInstance.cols > 0 && terminalInstance.rows > 0) {
                         try {
                             window.electronAPI.resize(sessionId, terminalInstance.cols, terminalInstance.rows);
@@ -204,13 +219,19 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                 }
             }, 10);
         }
-    }, [terminalInstance, fontSize, fontFamily, terminalForeground, terminalBackground]);
+    }, [terminalInstance, fontSize, fontFamily, terminalForeground, terminalBackground, lineWrapEnabled]);
 
     return (
         <div
             className="terminal-container"
             ref={terminalRef}
-            style={{ display: 'block', height: '100%', width: '100%' }}
+            style={{
+                display: 'block',
+                height: '100%',
+                width: '100%',
+                overflowX: lineWrapEnabled ? 'hidden' : 'auto', // Dynamic overflow
+                overflowY: 'hidden' // Always hide vertical scrollbar of container, xterm handles it
+            }}
             onClick={() => {
                 if (terminalInstance) terminalInstance.focus();
             }}

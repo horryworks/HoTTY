@@ -48,6 +48,9 @@ export class SshService implements ISessionService {
                 }).on('data', (data: Buffer) => {
                     const text = iconv.decode(data, this.encoding);
                     this.window.webContents.send('session-data', { sessionId: this.sessionId, data: text });
+                    if (this.dataCallback) {
+                        this.dataCallback(text);
+                    }
                 });
             });
         }).on('error', (err) => {
@@ -77,7 +80,14 @@ export class SshService implements ISessionService {
         }
     }
 
+    private dataCallback: ((data: string) => void) | null = null;
+
+    onData(callback: (data: string) => void) {
+        this.dataCallback = callback;
+    }
+
     disconnect() {
         this.conn.end();
+        this.dataCallback = null;
     }
 }

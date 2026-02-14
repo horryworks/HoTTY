@@ -1,4 +1,21 @@
-# Release Notes - HoTTY v0.1.0
+# Release Notes - HoTTY v0.1.2
+
+## [0.1.2] - 2026-02-14
+
+### Added
+- **Log Saving**:
+  - Enable auto-logging of terminal sessions to local text files.
+  - Configurable log folder path with native directory picker.
+  - Logs are named with timestamp, protocol, and host (e.g., `YYYYMMDDHHMMSS-SSH-192.168.1.1.txt`).
+- **Local Log Buffer Control**:
+  - Configurable scrollback limit (default 10,000 lines) to manage memory usage.
+  - Auto-trimming of old logs from memory when the limit is exceeded.
+- **Line Wrap Toggle**:
+  - New sidebar button to toggle connecting line wrapping on/off.
+  - **Horizontal Scrolling**: When line wrap is disabled, a horizontal scrollbar appears for long lines.
+
+### Changed
+- **Settings UI**: Added a dedicated "System" tab for logging and buffer settings.
 
 ## [0.1.1] - 2026-02-13
 

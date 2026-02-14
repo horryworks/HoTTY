@@ -18,4 +18,7 @@ export interface ISessionService {
 
     /** 文字エンコーディングを変更 */
     setEncoding(encoding: string): void;
+
+    /** データ受信時のコールバック登録 (ログ保存用) */
+    onData(callback: (data: string) => void): void;
 }

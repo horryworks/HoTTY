@@ -24,6 +24,10 @@ interface UseSessionManagerOptions {
     setActivePaneId: React.Dispatch<React.SetStateAction<string>>;
     sshKeepAliveEnabled: boolean;
     sshKeepAliveInterval: number;
+    loggingEnabled: boolean;
+    loggingPath: string;
+    lineWrapEnabled: boolean;
+    scrollback: number;
 }
 
 export function useSessionManager(options: UseSessionManagerOptions) {
@@ -36,6 +40,10 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         setActivePaneId,
         sshKeepAliveEnabled,
         sshKeepAliveInterval,
+        loggingEnabled,
+        loggingPath,
+        lineWrapEnabled,
+        scrollback,
     } = options;
 
     const [sessions, setSessions] = useState<Session[]>([]);
@@ -51,7 +59,11 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             disableStdin: false,
             theme: { background: '#1e1e1e', foreground: '#ffffff' },
             allowProposedApi: true,
+            scrollback: scrollback
         });
+
+        // Apply initial line wrap state
+        term.write(lineWrapEnabled ? '\x1b[?7h' : '\x1b[?7l');
 
         const fitAddon = new FitAddon();
         term.loadAddon(fitAddon);
@@ -85,6 +97,23 @@ export function useSessionManager(options: UseSessionManagerOptions) {
 
         return term;
     };
+
+
+
+    // Apply Line Wrap setting to all terminals when it changes
+    useEffect(() => {
+        const sequence = lineWrapEnabled ? '\x1b[?7h' : '\x1b[?7l';
+        Object.values(terminalRegistry.current).forEach(term => {
+            term.write(sequence);
+        });
+    }, [lineWrapEnabled]);
+
+    // Apply Scrollback setting to all terminals when it changes
+    useEffect(() => {
+        Object.values(terminalRegistry.current).forEach(term => {
+            term.options.scrollback = scrollback;
+        });
+    }, [scrollback]);
 
     // Global session data dispatcher
     useEffect(() => {
@@ -161,7 +190,9 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         const fullConfig = {
             ...config,
             encoding: globalEncoding,
-            keepaliveInterval: sshKeepAliveEnabled ? sshKeepAliveInterval * 1000 : 0
+            keepaliveInterval: sshKeepAliveEnabled ? sshKeepAliveInterval * 1000 : 0,
+            loggingEnabled,
+            loggingPath
         };
         window.electronAPI.connectSession(sessionId, fullConfig);
     };

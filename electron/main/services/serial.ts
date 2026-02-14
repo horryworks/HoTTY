@@ -53,6 +53,9 @@ export class SerialService implements ISessionService {
         this.port.on('data', (data: Buffer) => {
             const text = iconv.decode(data, this.encoding);
             this.window.webContents.send('session-data', { sessionId: this.sessionId, data: text });
+            if (this.dataCallback) {
+                this.dataCallback(text);
+            }
         });
 
         this.port.on('error', (err: Error) => {
@@ -87,9 +90,16 @@ export class SerialService implements ISessionService {
         // No-op: serial ports have no terminal size concept
     }
 
+    private dataCallback: ((data: string) => void) | null = null;
+
+    onData(callback: (data: string) => void) {
+        this.dataCallback = callback;
+    }
+
     disconnect() {
         if (this.port && this.port.isOpen) {
             this.port.close();
         }
+        this.dataCallback = null;
     }
 }

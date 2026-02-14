@@ -73,6 +73,9 @@ export class TelnetService implements ISessionService {
                 const text = iconv.decode(cleanData, this.encoding);
 
                 this.window.webContents.send('session-data', { sessionId: this.sessionId, data: text });
+                if (this.dataCallback) {
+                    this.dataCallback(text);
+                }
             });
 
             this.conn.on('close', () => {
@@ -208,6 +211,12 @@ export class TelnetService implements ISessionService {
         }
     }
 
+    private dataCallback: ((data: string) => void) | null = null;
+
+    onData(callback: (data: string) => void) {
+        this.dataCallback = callback;
+    }
+
     disconnect() {
         if (this.conn) {
             try {
@@ -216,6 +225,7 @@ export class TelnetService implements ISessionService {
                 // ignore
             }
         }
+        this.dataCallback = null;
     }
 }
 

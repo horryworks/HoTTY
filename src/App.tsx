@@ -62,6 +62,14 @@ function App() {
     return saved ? parseInt(saved, 10) : 10;
   });
 
+  // Logging State
+  const [loggingEnabled, setLoggingEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('hterm_logging_enabled') === 'true'; // default false
+  });
+  const [loggingPath, setLoggingPath] = useState<string>(() => {
+    return localStorage.getItem('hterm_logging_path') || '';
+  });
+
 
 
 
@@ -106,6 +114,30 @@ function App() {
     }
   };
 
+  // Line Wrap State
+  const [lineWrapEnabled, setLineWrapEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('hterm_line_wrap_enabled') !== 'false'; // default true
+  });
+
+  const toggleLineWrap = () => {
+    setLineWrapEnabled(prev => {
+      const newValue = !prev;
+      localStorage.setItem('hterm_line_wrap_enabled', newValue.toString());
+      return newValue;
+    });
+  };
+
+  // Scrollback State
+  const [scrollback, setScrollback] = useState<number>(() => {
+    const saved = localStorage.getItem('hterm_scrollback');
+    return saved ? parseInt(saved, 10) : 10000;
+  });
+
+  const updateScrollback = (lines: number) => {
+    setScrollback(lines);
+    localStorage.setItem('hterm_scrollback', lines.toString());
+  };
+
   // ── Pane Manager ──
   const pane = usePaneManager();
 
@@ -120,12 +152,20 @@ function App() {
     globalEncoding,
     sshKeepAliveEnabled,
     sshKeepAliveInterval,
+    loggingEnabled,
+    loggingPath,
+    lineWrapEnabled,
+    scrollback,
     onPasteRequest: handlePasteRequest,
     onSessionConnected: () => setShowDialog(false),
     onSessionError: (msg) => setErrorModalMessage(msg),
     setPaneAllocations: pane.setPaneAllocations,
     setActivePaneId: pane.setActivePaneId,
   });
+
+  // ... (rest of the file)
+
+
 
   // ── Settings Updaters ──
   const updateGlobalEncoding = (newEncoding: string) => {
@@ -155,6 +195,18 @@ function App() {
     setSshKeepAliveInterval(interval);
     localStorage.setItem('hterm_ssh_keepalive_interval', interval.toString());
   };
+
+  const updateLoggingEnabled = (enabled: boolean) => {
+    setLoggingEnabled(enabled);
+    localStorage.setItem('hterm_logging_enabled', enabled.toString());
+  };
+
+  const updateLoggingPath = (path: string) => {
+    setLoggingPath(path);
+    localStorage.setItem('hterm_logging_path', path);
+  };
+
+
 
   // Theme Change Handler
   const updateTheme = (newTheme: 'dark' | 'light' | 'custom') => {
@@ -261,6 +313,13 @@ function App() {
         </div>
         <div className="sidebar-bottom">
           <button
+            className={`sidebar-btn ${lineWrapEnabled ? 'sidebar-btn-active' : ''}`}
+            onClick={toggleLineWrap}
+            title={lineWrapEnabled ? "Disable Line Wrap" : "Enable Line Wrap"}
+          >
+            {lineWrapEnabled ? '↩️' : '➡️'}
+          </button>
+          <button
             className={`sidebar-btn ${showPaneLines ? 'sidebar-btn-active' : ''}`}
             onClick={() => setShowPaneLines(prev => !prev)}
             title="Show Tab-Pane Mapping"
@@ -313,6 +372,7 @@ function App() {
             paneBackground={paneBackground}
             paneBackgroundMode={paneBackgroundMode}
             paneBackgroundImage={paneBackgroundImage}
+            lineWrapEnabled={lineWrapEnabled}
           />
         </div>
       </div>
@@ -361,6 +421,12 @@ function App() {
         onPaneBackgroundModeChange={updatePaneBackgroundMode}
         paneBackgroundImage={paneBackgroundImage}
         onPaneBackgroundImageChange={updatePaneBackgroundImage}
+        loggingEnabled={loggingEnabled}
+        onLoggingEnabledChange={updateLoggingEnabled}
+        loggingPath={loggingPath}
+        onLoggingPathChange={updateLoggingPath}
+        scrollback={scrollback}
+        onScrollbackChange={updateScrollback}
         theme={theme}
         onThemeChange={updateTheme}
       />

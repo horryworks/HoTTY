@@ -13,6 +13,7 @@ export interface ElectronAPI {
     onSessionError: (callback: (sessionId: string, error: string) => void) => () => void;
     listSerialPorts: () => Promise<{ path: string; manufacturer: string; pnpId: string }[]>;
     selectImage: () => Promise<string | null>;
+    selectFolder: () => Promise<string | null>;
     getAppVersion: () => Promise<string>;
 
     // Gemini AI

@@ -7,6 +7,7 @@ import { SerialService } from './services/serial';
 import { SerialPort } from 'serialport';
 import type { ISessionService } from './services/ISessionService';
 import { GeminiService } from './services/gemini';
+import { LogManager } from './services/LogManager';
 
 // Disable GPU Acceleration for Windows 7
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
@@ -21,6 +22,7 @@ if (!app.requestSingleInstanceLock()) {
 
 let win: BrowserWindow | null = null
 let geminiService: GeminiService | null = null;
+const logManager = new LogManager();
 
 const preload = join(__dirname, '../preload/index.js')
 const url = process.env.VITE_DEV_SERVER_URL
@@ -171,6 +173,14 @@ ipcMain.on('connect-session', async (event, { sessionId, config }) => {
   // Strategy: I will modify SshService and TelnetService to accept `sessionId` in constructor 
   // and send `{ sessionId, data }` in their IPC events.
 
+  // Start logging if enabled
+  logManager.startLogging(sessionId, config);
+
+  // Subscribe to data events for logging
+  service.onData((data) => {
+    logManager.write(sessionId, data);
+  });
+
   await service.connect(config);
 });
 
@@ -218,13 +228,17 @@ ipcMain.on('disconnect-session', (event, sessionId) => {
   const session = sessions.get(sessionId);
   if (session) {
     session.service.disconnect();
+    logManager.stopLogging(sessionId);
     sessions.delete(sessionId);
     win?.webContents.send('session-status', { sessionId, status: 'disconnected' });
   }
 });
 
 ipcMain.on('app-quit', () => {
-  sessions.forEach(s => s.service.disconnect());
+  sessions.forEach(s => {
+    s.service.disconnect();
+    logManager.stopLogging(s.id);
+  });
   sessions.clear();
   app.quit();
 });
@@ -248,6 +262,16 @@ ipcMain.handle('select-image', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog(win!, {
     properties: ['openFile'],
     filters: [{ name: 'Images', extensions: ['jpg', 'png', 'gif', 'svg', 'webp'] }],
+  });
+  if (canceled || filePaths.length === 0) {
+    return null;
+  }
+  return filePaths[0];
+});
+
+ipcMain.handle('select-folder', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(win!, {
+    properties: ['openDirectory'],
   });
   if (canceled || filePaths.length === 0) {
     return null;

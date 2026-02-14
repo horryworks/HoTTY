@@ -1,7 +1,7 @@
 {
   "name": "hotty",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "SSH/Telnet/Serial Terminal Emulator",
   "author": "horry",
   "main": "dist-electron/main/index.js",

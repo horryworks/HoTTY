@@ -18,6 +18,7 @@ release
 logs
 *.log
 npm-debug.log*
+logging
 
 # Editor
 .vscode/*
