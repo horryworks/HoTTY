@@ -219,7 +219,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
                 inputText: '',
                 selectedModel: localStorage.getItem('hotty_gemini_model') || 'Unspecified',
                 selectedLanguage: localStorage.getItem('hotty_gemini_language') || 'English',
-                textareaHeight: 100,
+                textareaHeight: 0,
                 scrollTop: 0
             }
         };

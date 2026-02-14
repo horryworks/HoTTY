@@ -34,7 +34,7 @@ async function createWindow() {
   win = new BrowserWindow({
     title: 'HoTTY',
     // If dev env, assume public/favicon.ico. If prod, assume dist/favicon.ico
-    icon: join(process.env.PUBLIC || 'public', 'favicon.ico'),
+    icon: join(process.env.PUBLIC || 'public', 'icon.png'),
     width: 1200,
     height: 800,
     webPreferences: {

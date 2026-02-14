@@ -234,6 +234,9 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     initialState={session.aiChatState}
                                     onStateChange={(newState) => updateSessionState(session.id, newState)}
                                     showSystemPrompt={showSystemPrompt}
+                                    isActive={isActive}
+                                    terminalBackground={terminalBackground}
+                                    terminalBackgroundInactive={terminalBackgroundInactive}
                                 />
                             ) : (
                                 <TerminalComponent

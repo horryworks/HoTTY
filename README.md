@@ -1,5 +1,7 @@
 # HoTTY
 
+**Current Version: v0.1.5 (Latest)**
+
 HoTTY is a modern, high-performance terminal emulator built with Electron, React, and TypeScript. It is designed to provide a seamless terminal experience with advanced window management and customization options.
 
 ## Features
@@ -11,6 +13,7 @@ HoTTY is a modern, high-performance terminal emulator built with Electron, React
     - Intuitive resizing including **2D intersection resizing** (drag the junction between 4 panes to resize all at once).
 - **Customization**:
     - **Themes**: Built-in **Dark**, **Medium**, and **Light** themes, plus a **Custom** mode for independent color settings.
+    - **Visual Identity**: Features a modern black "H" logo with optimized visibility across all themes (including a rounded white background for dark mode icons).
     - **Advanced Backgrounds**: Support for solid colors or tiled image patterns.
     - **File Picker**: Easily select custom local images as your terminal background via a built-in file explorer integration.
 - **Session Management**:

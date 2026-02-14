@@ -189,18 +189,18 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 100%;
+    width: 35px;
+    /* Perfect square matching bar height */
+    height: 35px;
     flex-shrink: 0;
     cursor: pointer;
-    font-size: 16px;
-    font-weight: bold;
     border-right: 1px solid var(--border-color);
     transition: background-color 0.2s;
 }
 
 .ai-tab-btn svg {
     width: 20px;
+    /* Slightly smaller for better balance in 35px bar */
     height: 20px;
     transition: transform 0.2s;
 }

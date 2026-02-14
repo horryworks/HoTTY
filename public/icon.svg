@@ -12,8 +12,8 @@
     </filter>
   </defs>
 
-  <!-- Dark Background to make contrast pop -->
-  <rect width="512" height="512" fill="#050010" rx="100" ry="100" />
+  <!-- Background with white border to prevent transparency issues -->
+  <rect width="510" height="510" x="1" y="1" fill="#050010" rx="90" ry="90" stroke="#ffffff" stroke-width="2" />
 
   <!-- Black Hole Accretion Disk (Vibrant Neon) -->
   <ellipse cx="256" cy="256" rx="220" ry="80" fill="none" stroke="#00ffff" stroke-width="20" opacity="0.8" filter="url(#glow)" transform="rotate(-15, 256, 256)" />

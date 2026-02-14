@@ -33,9 +33,21 @@ interface AIChatPaneProps {
     }) => void;
     showSystemPrompt?: boolean;
     fontSize?: number;
+    isActive?: boolean;
+    terminalBackground?: string;
+    terminalBackgroundInactive?: string;
 }
 
-export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState, onStateChange, showSystemPrompt, fontSize = 14 }) => {
+export const AIChatPane: React.FC<AIChatPaneProps> = ({
+    sessionId,
+    initialState,
+    onStateChange,
+    showSystemPrompt,
+    fontSize = 14,
+    isActive = true,
+    terminalBackground,
+    terminalBackgroundInactive
+}) => {
     // Auth state
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isAuthLoading, setIsAuthLoading] = useState(false);
@@ -52,7 +64,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
     const [selectedModel, setSelectedModel] = useState(initialState?.selectedModel || 'Unspecified');
     const [selectedLanguage, setSelectedLanguage] = useState(initialState?.selectedLanguage || 'English');
     const [selectedExpertise, setSelectedExpertise] = useState(initialState?.selectedExpertise || 'General Helper');
-    const [textareaHeight, setTextareaHeight] = useState(initialState?.textareaHeight || 60);
+    const [textareaHeight, setTextareaHeight] = useState(initialState?.textareaHeight || 0);
     const [localSystemInstruction, setLocalSystemInstruction] = useState(initialState?.systemInstruction || 'You are a helpful assistant.');
 
     // Manage pending message locally to avoid sync race conditions
@@ -332,74 +344,121 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
         'Auto', 'English', 'Japanese', 'Chinese', 'Korean', 'Spanish', 'French', 'German', 'Russian'
     ];
 
+    const GeminiIcon = ({ size = 20 }: { size?: number }) => (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="gemini-svg-icon">
+            <path d="M13.5 3.5C14.3 6.9 16.9 9.5 20.3 10.5C21.9 10.9 21.9 13.1 20.3 13.5C16.9 14.5 14.3 17.1 13.5 20.5C13.1 22.1 10.9 22.1 10.5 20.5C9.7 17.1 7.1 14.5 3.7 13.5C2.1 13.1 2.1 10.9 3.7 10.5C7.1 9.5 9.7 6.9 10.5 3.5C10.9 1.9 13.1 1.9 13.5 3.5Z" fill="url(#gemini-pane-gradient)" />
+            <defs>
+                <linearGradient id="gemini-pane-gradient" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#4E86F8" />
+                    <stop offset="100%" stopColor="#D64669" />
+                </linearGradient>
+            </defs>
+        </svg>
+    );
+
+    const activeBg = terminalBackground || 'var(--bg-primary)';
+    const inactiveBg = terminalBackgroundInactive || activeBg;
+    const effectiveBg = isActive ? activeBg : inactiveBg;
+
     return (
-        <div className="ai-chat-pane" style={{ fontSize: `${fontSize}px` }}>
+        <div className="ai-chat-pane" style={{ fontSize: `${fontSize}px`, backgroundColor: effectiveBg }}>
             {/* Header */}
             <div className="ai-chat-header">
                 <div className="ai-chat-header-left">
-                    <span className="ai-chat-logo">✦</span>
-                    <span className="ai-chat-title">Gemini</span>
+                    <div className="ai-chat-logo">
+                        <GeminiIcon size={24} />
+                    </div>
                 </div>
                 <div className="ai-chat-header-right">
                     {isAuthenticated && (
                         <>
-                            <select
-                                className="ai-chat-model-select"
-                                style={{ marginRight: '5px', width: '120px' }}
-                                value={selectedExpertise}
-                                onChange={(e) => setSelectedExpertise(e.target.value)}
-                                disabled={isStreaming}
-                            >
-                                {EXPERTISE_OPTIONS.map(opt => (
-                                    <option key={opt} value={opt}>{opt}</option>
-                                ))}
-                            </select>
-                            <select
-                                className="ai-chat-model-select"
-                                style={{ marginRight: '5px', width: '100px' }}
-                                value={selectedLanguage}
-                                onChange={(e) => {
-                                    const lang = e.target.value;
-                                    setSelectedLanguage(lang);
-                                    localStorage.setItem('hotty_gemini_language', lang);
-                                }}
-                                disabled={isStreaming}
-                            >
-                                {LANGUAGES.map(lang => (
-                                    <option key={lang} value={lang}>{lang}</option>
-                                ))}
-                            </select>
-                            <select
-                                className="ai-chat-model-select"
-                                value={selectedModel}
-                                onChange={(e) => {
-                                    const model = e.target.value;
-                                    setSelectedModel(model);
-                                    localStorage.setItem('hotty_gemini_model', model);
-                                }}
-                                disabled={isStreaming}
-                            >
-                                {selectedModel === 'Unspecified' && (
-                                    <option value="Unspecified">Select a model...</option>
-                                )}
-                                {availableModels.length > 0 ? (
-                                    availableModels.map(m => (
-                                        <option key={m.name} value={m.name}>{m.displayName}</option>
-                                    ))
-                                ) : (
-                                    <>
-                                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                                        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                                        <option value="gemini-3.0-flash-preview">Gemini 3 Flash Preview</option>
-                                        <option value="gemini-3.0-pro-preview">Gemini 3 Pro Preview</option>
-                                    </>
-                                )}
-                            </select>
+                            <div className="ai-chat-header-item">
+                                <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M22 10L12 5L2 10L12 15L22 10Z" />
+                                    <path d="M6 12V17C8.5 19.5 15.5 19.5 18 17V12" />
+                                    <line x1="22" y1="10" x2="22" y2="16" />
+                                </svg>
+                                <select
+                                    className="ai-chat-model-select"
+                                    style={{ width: '140px' }}
+                                    value={selectedExpertise}
+                                    onChange={(e) => setSelectedExpertise(e.target.value)}
+                                    disabled={isStreaming}
+                                >
+                                    {EXPERTISE_OPTIONS.map(opt => (
+                                        <option key={opt} value={opt}>{opt}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="ai-chat-header-item">
+                                <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <line x1="2" y1="12" x2="22" y2="12" />
+                                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                                </svg>
+                                <select
+                                    className="ai-chat-model-select"
+                                    style={{ width: '100px' }}
+                                    value={selectedLanguage}
+                                    onChange={(e) => {
+                                        const lang = e.target.value;
+                                        setSelectedLanguage(lang);
+                                        localStorage.setItem('hotty_gemini_language', lang);
+                                    }}
+                                    disabled={isStreaming}
+                                >
+                                    {LANGUAGES.map(lang => (
+                                        <option key={lang} value={lang}>{lang}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="ai-chat-header-item">
+                                <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                                    <rect x="9" y="9" width="6" height="6" />
+                                    <line x1="9" y1="1" x2="9" y2="4" />
+                                    <line x1="15" y1="1" x2="15" y2="4" />
+                                    <line x1="9" y1="20" x2="9" y2="23" />
+                                    <line x1="15" y1="20" x2="15" y2="23" />
+                                    <line x1="20" y1="9" x2="23" y2="9" />
+                                    <line x1="20" y1="15" x2="23" y2="15" />
+                                    <line x1="1" y1="9" x2="4" y2="9" />
+                                    <line x1="1" y1="15" x2="4" y2="15" />
+                                </svg>
+                                <select
+                                    className="ai-chat-model-select"
+                                    value={selectedModel}
+                                    onChange={(e) => {
+                                        const model = e.target.value;
+                                        setSelectedModel(model);
+                                        localStorage.setItem('hotty_gemini_model', model);
+                                    }}
+                                    disabled={isStreaming}
+                                >
+                                    {selectedModel === 'Unspecified' && (
+                                        <option value="Unspecified">Select a model...</option>
+                                    )}
+                                    {availableModels.length > 0 ? (
+                                        availableModels.map(m => (
+                                            <option key={m.name} value={m.name}>{m.displayName}</option>
+                                        ))
+                                    ) : (
+                                        <>
+                                            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                            <option value="gemini-3.0-flash-preview">Gemini 3 Flash Preview</option>
+                                            <option value="gemini-3.0-pro-preview">Gemini 3 Pro Preview</option>
+                                        </>
+                                    )}
+                                </select>
+                            </div>
                             <button className="ai-chat-header-btn" onClick={handleClearChat} title="Clear chat history">
                                 🗑️
                             </button>
                             <button className="ai-chat-header-btn" onClick={handleLogout} title="Logout">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style={{ display: 'block' }}>
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style={{ display: 'block', transform: 'translateY(1px)' }}>
                                     <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
                                 </svg>
                             </button>
@@ -412,7 +471,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
             {!isAuthenticated ? (
                 <div className="ai-chat-auth-container">
                     <div className="ai-chat-auth-card">
-                        <div className="ai-chat-auth-icon">✦</div>
+                        <div className="ai-chat-auth-icon">
+                            <GeminiIcon size={64} />
+                        </div>
                         <h2>Connect to Gemini</h2>
                         <p className="ai-chat-auth-desc">
                             Enter your OAuth 2.0 Client ID from the{' '}
@@ -494,7 +555,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
                         {messages.map((msg, idx) => (
                             <div key={idx} className={`ai-chat-message ai-chat-message-${msg.role}`}>
                                 <div className="ai-chat-message-avatar">
-                                    {msg.role === 'user' ? '👤' : '✦'}
+                                    {msg.role === 'user' ? '👤' : <GeminiIcon size={18} />}
                                 </div>
                                 {msg.role === 'model' ? (
                                     <div className="ai-chat-message-content ai-chat-markdown"
@@ -509,7 +570,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
                         ))}
                         {streamingContent && (
                             <div className="ai-chat-message ai-chat-message-model">
-                                <div className="ai-chat-message-avatar">✦</div>
+                                <div className="ai-chat-message-avatar">
+                                    <GeminiIcon size={18} />
+                                </div>
                                 <div className="ai-chat-message-content ai-chat-markdown streaming"
                                     dangerouslySetInnerHTML={{ __html: marked.parse(streamingContent, { async: false }) as string }}
                                 />
@@ -517,7 +580,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
                         )}
                         {isStreaming && !streamingContent && (
                             <div className="ai-chat-message ai-chat-message-model">
-                                <div className="ai-chat-message-avatar">✦</div>
+                                <div className="ai-chat-message-avatar">
+                                    <GeminiIcon size={18} />
+                                </div>
                                 <div className="ai-chat-message-content">
                                     <span className="ai-chat-thinking-spinner">⟳</span> Thinking...
                                 </div>
@@ -532,10 +597,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
                         onMouseDown={(e) => {
                             e.preventDefault();
                             const startY = e.clientY;
-                            const startHeight = textareaHeight;
+                            const startHeight = textareaHeight > 0 ? textareaHeight : (textareaRef.current?.offsetHeight || 40);
                             const onMouseMove = (ev: MouseEvent) => {
                                 const delta = startY - ev.clientY;
-                                const newHeight = Math.min(300, Math.max(36, startHeight + delta));
+                                const newHeight = Math.min(500, Math.max(20, startHeight + delta));
                                 setTextareaHeight(newHeight);
                             };
                             const onMouseUp = () => {
@@ -552,7 +617,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
                         <textarea
                             ref={textareaRef}
                             className="ai-chat-textarea"
-                            style={{ height: `${textareaHeight}px` }}
+                            rows={1}
+                            style={{ height: textareaHeight > 0 ? `${textareaHeight}px` : 'auto' }}
                             value={inputText}
                             onChange={(e) => setInputText(e.target.value)}
                             onKeyDown={handleKeyDown}

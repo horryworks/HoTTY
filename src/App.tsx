@@ -50,7 +50,7 @@ function App() {
     return localStorage.getItem('hterm_font_family') || 'Consolas, "Courier New", monospace';
   });
   const [theme, setTheme] = useState<'dark' | 'light' | 'medium' | 'custom'>(() => {
-    return (localStorage.getItem('hterm_theme') as 'dark' | 'light' | 'medium' | 'custom') || 'medium';
+    return (localStorage.getItem('hterm_theme') as 'dark' | 'light' | 'medium' | 'custom') || 'dark';
   });
 
   // Apply theme attributes

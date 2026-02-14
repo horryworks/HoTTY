@@ -88,9 +88,9 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
         <div className="tab-bar" onMouseLeave={() => setDragOverInfo(null)}>
             <div className="ai-tab-btn" onClick={onNewAITab} title="AI Chat">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M16 3C16.8 6.4 19.4 9 22.8 10C24.4 10.4 24.4 12.6 22.8 13C19.4 14 16.8 16.6 16 20C15.6 21.6 13.4 21.6 13 20C12.2 16.6 9.6 14 6.2 13C4.6 12.6 4.6 10.4 6.2 10C9.6 9 12.2 6.4 13 3C13.4 1.4 15.6 1.4 16 3Z" fill="url(#gemini-gradient)" />
+                    <path d="M13.5 3.5C14.3 6.9 16.9 9.5 20.3 10.5C21.9 10.9 21.9 13.1 20.3 13.5C16.9 14.5 14.3 17.1 13.5 20.5C13.1 22.1 10.9 22.1 10.5 20.5C9.7 17.1 7.1 14.5 3.7 13.5C2.1 13.1 2.1 10.9 3.7 10.5C7.1 9.5 9.7 6.9 10.5 3.5C10.9 1.9 13.1 1.9 13.5 3.5Z" fill="url(#gemini-gradient)" />
                     <defs>
-                        <linearGradient id="gemini-gradient" x1="4" y1="3" x2="25" y2="22" gradientUnits="userSpaceOnUse">
+                        <linearGradient id="gemini-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
                             <stop offset="0%" stopColor="#4E86F8" />
                             <stop offset="100%" stopColor="#D64669" />
                         </linearGradient>

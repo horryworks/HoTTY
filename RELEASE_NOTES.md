@@ -1,5 +1,13 @@
 # Release Notes - HoTTY
 
+## [0.1.5] - 2026-02-15
+
+### Changed
+- **Visual Refinements**:
+  - Replaced the icon on the Setting -> About page with the official app icon (icon.png).
+  - Added a white rounded background to the logo on the About page to ensure visibility for transparent icons on dark backgrounds.
+  - Standardized the window and browser tab icons with the latest logo.
+
 ## [0.1.4] - 2026-02-14
 
 ### Added

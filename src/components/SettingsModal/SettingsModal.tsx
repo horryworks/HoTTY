@@ -645,7 +645,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                     {activeTab === 'about' && (
                         <div className="about-content" style={{ textAlign: 'center', padding: '20px 0' }}>
-                            <img src="/favicon.ico" alt="HoTTY Logo" width="64" height="64" style={{ marginBottom: '16px' }} />
+                            <img src="/icon.png" alt="HoTTY Logo" width="64" height="64" style={{ marginBottom: '16px', background: 'white', borderRadius: '12px', padding: '4px' }} />
                             <h2 style={{ margin: '0 0 8px 0' }}>HoTTY</h2>
                             <p style={{ color: '#aaa', margin: '0 0 24px 0' }}>v{version}</p>
                             <p style={{ fontSize: '0.9em', color: '#666' }}>
