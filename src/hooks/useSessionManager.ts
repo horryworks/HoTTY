@@ -217,7 +217,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             aiChatState: {
                 messages: [],
                 inputText: '',
-                selectedModel: localStorage.getItem('hotty_gemini_model') || 'gemini-2.0-flash-exp',
+                selectedModel: localStorage.getItem('hotty_gemini_model') || 'Unspecified',
                 selectedLanguage: localStorage.getItem('hotty_gemini_language') || 'English',
                 textareaHeight: 100,
                 scrollTop: 0

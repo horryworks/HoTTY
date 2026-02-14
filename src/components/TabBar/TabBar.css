@@ -22,6 +22,8 @@
     max-width: 200px;
     position: relative;
     transition: background-color 0.2s;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
 }
 
 .tab.drag-over-left {
@@ -125,22 +127,25 @@
     overflow: hidden;
     text-overflow: ellipsis;
     margin-right: 8px;
+    text-align: center;
 }
 
 .tab-close {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 3px;
-    font-size: 12px;
+    border-radius: 50%;
+    background-color: #ff4d4d;
+    color: white;
+    margin-left: 5px;
+    /* Add some spacing from title */
 }
 
 .tab-close:hover {
-    background-color: var(--bg-tertiary);
-    /* Highlight close btn */
-    color: var(--text-primary);
+    background-color: #cc0000;
+    color: white;
 }
 
 .new-tab-btn {

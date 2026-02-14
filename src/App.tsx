@@ -98,10 +98,16 @@ function App() {
     return localStorage.getItem('hterm_pane_background') || '#000200';
   });
 
+  // New Inactive Terminal Background
+  const [terminalBackgroundInactive, setTerminalBackgroundInactive] = useState<string>(() => {
+    return localStorage.getItem('hterm_terminal_background_inactive') || '#121212';
+  });
+
   // Custom colors cache (to restore when switching back to Custom)
   const [customColors, setCustomColors] = useState(() => ({
     foreground: localStorage.getItem('hterm_custom_terminal_foreground') || '#ffffff',
     background: localStorage.getItem('hterm_custom_terminal_background') || '#1e1e1e',
+    backgroundInactive: localStorage.getItem('hterm_custom_terminal_background_inactive') || '#121212',
     paneBackground: localStorage.getItem('hterm_custom_pane_background') || '#000200',
   }));
 
@@ -330,22 +336,26 @@ function App() {
     if (newTheme === 'dark') {
       updateTerminalForeground('#ffffff');
       updateTerminalBackground('#1e1e1e');
+      updateTerminalBackgroundInactive('#121212');
       updatePaneBackground('#000200');
       if (shouldSetColorMode) updatePaneBackgroundMode('color');
     } else if (newTheme === 'light') {
       updateTerminalForeground('#000000');
       updateTerminalBackground('#ffffff');
+      updateTerminalBackgroundInactive('#f8f8f8');
       updatePaneBackground('#f0f0f0');
       if (shouldSetColorMode) updatePaneBackgroundMode('color');
     } else if (newTheme === 'medium') {
       updateTerminalForeground('#f0f0f0');
       updateTerminalBackground('#454545');
+      updateTerminalBackgroundInactive('#383838');
       updatePaneBackground('#383838');
       if (shouldSetColorMode) updatePaneBackgroundMode('color');
     } else if (newTheme === 'custom') {
       // Restore custom colors
       updateTerminalForeground(customColors.foreground);
       updateTerminalBackground(customColors.background);
+      updateTerminalBackgroundInactive(customColors.backgroundInactive);
       updatePaneBackground(customColors.paneBackground);
       // Custom theme restoration might want to restore mode too, but for now let's respect image
       if (shouldSetColorMode) updatePaneBackgroundMode('color');
@@ -367,6 +377,15 @@ function App() {
     if (theme === 'custom') {
       localStorage.setItem('hterm_custom_terminal_background', color);
       setCustomColors(prev => ({ ...prev, background: color }));
+    }
+  };
+
+  const updateTerminalBackgroundInactive = (color: string) => {
+    setTerminalBackgroundInactive(color);
+    localStorage.setItem('hterm_terminal_background_inactive', color);
+    if (theme === 'custom') {
+      localStorage.setItem('hterm_custom_terminal_background_inactive', color);
+      setCustomColors(prev => ({ ...prev, backgroundInactive: color }));
     }
   };
 
@@ -433,6 +452,19 @@ function App() {
             currentLayout={pane.layoutMode}
             onLayoutChange={pane.setLayoutMode}
           />
+          <div
+            className={`sidebar-btn ${showPaneLines ? 'sidebar-btn-active' : ''}`}
+            onClick={() => setShowPaneLines(prev => !prev)}
+            title="Show Tab-Pane Mapping"
+            style={{ marginTop: '10px' }} // Add margin to separate from LayoutSelector
+            role="button"
+            tabIndex={0}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="7" y1="17" x2="17" y2="7"></line>
+              <polyline points="7 7 17 7 17 17"></polyline>
+            </svg>
+          </div>
         </div>
         <div className="sidebar-bottom">
           <button
@@ -440,21 +472,27 @@ function App() {
             onClick={toggleLineWrap}
             title={lineWrapEnabled ? "Disable Line Wrap" : "Enable Line Wrap"}
           >
-            {lineWrapEnabled ? '↩️' : '➡️'}
-          </button>
-          <button
-            className={`sidebar-btn ${showPaneLines ? 'sidebar-btn-active' : ''}`}
-            onClick={() => setShowPaneLines(prev => !prev)}
-            title="Show Tab-Pane Mapping"
-          >
-            ↗️
+            {lineWrapEnabled ? (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 10 4 15 9 20"></polyline>
+                <path d="M20 4v7a4 4 0 0 1-4 4H4"></path>
+              </svg>
+            ) : (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            )}
           </button>
           <button
             className="sidebar-btn"
             onClick={() => setIsSettingsOpen(true)}
             title="Settings"
           >
-            ⚙️
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
           </button>
         </div>
       </div>
@@ -492,6 +530,7 @@ function App() {
             fontFamily={fontFamily}
             terminalForeground={terminalForeground}
             terminalBackground={terminalBackground}
+            terminalBackgroundInactive={terminalBackgroundInactive}
             paneBackground={paneBackground}
             paneBackgroundMode={paneBackgroundMode}
             paneBackgroundImage={paneBackgroundImage}
@@ -540,6 +579,8 @@ function App() {
         onTerminalForegroundChange={updateTerminalForeground}
         terminalBackground={terminalBackground}
         onTerminalBackgroundChange={updateTerminalBackground}
+        terminalBackgroundInactive={terminalBackgroundInactive}
+        onTerminalBackgroundInactiveChange={updateTerminalBackgroundInactive}
         paneBackground={paneBackground}
         onPaneBackgroundChange={updatePaneBackground}
         paneBackgroundMode={paneBackgroundMode}

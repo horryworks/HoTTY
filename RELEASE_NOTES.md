@@ -1,5 +1,26 @@
 # Release Notes - HoTTY
 
+## [0.1.4] - 2026-02-14
+
+### Added
+- **Security Hardening**:
+  - Implemented path validation for the `media://` protocol to prevent path traversal vulnerabilities.
+  - Enabled Electron sandbox for all windows.
+  - Added input validation for internal IPC handlers.
+- **Uninstaller Improvements**:
+  - Added an option to completely remove user data (settings, credentials, history) during uninstallation.
+- **AI Integration**:
+  - The default AI model is now "Unspecified" on startup.
+  - Added a UI guard that disables the "Send" button until a model is selected, with a clear error message in English.
+
+### Changed
+- **Visual Refinements**:
+  - Updated application icon to the new black "H" logo.
+  - Refined tab close button: Now a red circle with a perfectly centered SVG cross.
+  - Sidebar Refactoring: Moved "Show Tab-Pane Mapping" to the top group and aligned "Line Wrap" to the bottom. Replaced emoji icons with theme-aware SVG icons.
+- **Customization**:
+  - Added "Inactive Terminal Background" setting for Custom themes, allowing distinct background colors for active vs. inactive panes.
+
 ## [0.1.3] - 2026-02-14
 
 ### Changed

@@ -20,6 +20,7 @@ interface GridLayoutProps {
     fontFamily: string;
     terminalForeground: string;
     terminalBackground: string;
+    terminalBackgroundInactive?: string; // Optional for now to avoid breaking other usages if any
     paneBackground: string;
     paneBackgroundMode: 'color' | 'image';
     paneBackgroundImage: string;
@@ -45,6 +46,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     fontFamily,
     terminalForeground,
     terminalBackground,
+    terminalBackgroundInactive,
     paneBackground,
     paneBackgroundMode,
     paneBackgroundImage,
@@ -246,6 +248,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     fontFamily={fontFamily}
                                     terminalForeground={terminalForeground}
                                     terminalBackground={terminalBackground}
+                                    terminalBackgroundInactive={terminalBackgroundInactive}
                                     lineWrapEnabled={lineWrapEnabled}
                                     askGeminiCommands={askGeminiCommands}
                                 />

@@ -13,6 +13,7 @@ interface TerminalProps {
     fontFamily: string;
     terminalForeground: string;
     terminalBackground: string;
+    terminalBackgroundInactive?: string;
     lineWrapEnabled: boolean;
     askGeminiCommands?: { id: string; label: string; promptTemplate: string }[];
 }
@@ -27,6 +28,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
     fontFamily,
     terminalForeground,
     terminalBackground,
+    terminalBackgroundInactive,
     lineWrapEnabled,
     askGeminiCommands
 }) => {
@@ -187,20 +189,26 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
         }
     }, [isActive, sessionId, focusTrigger, terminalInstance, disableFocus, lineWrapEnabled]);
 
-    // Update Font Settings
+    // Update Font & Theme Settings
     useEffect(() => {
         if (terminalInstance) {
             if (fontSize) terminalInstance.options.fontSize = fontSize;
             if (fontFamily) terminalInstance.options.fontFamily = fontFamily;
 
+            const activeBg = terminalBackground;
+            const inactiveBg = terminalBackgroundInactive || terminalBackground; // Fallback if not provided
+            const effectiveBg = isActive ? activeBg : inactiveBg;
+
             terminalInstance.options.theme = {
                 ...terminalInstance.options.theme,
                 foreground: terminalForeground,
-                background: terminalBackground,
+                background: effectiveBg,
                 cursor: terminalForeground,
-                cursorAccent: terminalBackground
+                cursorAccent: effectiveBg
             };
 
+            // Force refresh if needed (usually handled by xterm internally on options change, but let's be safe)
+            // ... triggering resize/fit if necessary
             setTimeout(() => {
                 const fitAddon = (terminalInstance as any)._fitAddon;
                 if (fitAddon) {
@@ -221,7 +229,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                 }
             }, 10);
         }
-    }, [terminalInstance, fontSize, fontFamily, terminalForeground, terminalBackground, lineWrapEnabled]);
+    }, [terminalInstance, fontSize, fontFamily, terminalForeground, terminalBackground, terminalBackgroundInactive, isActive, lineWrapEnabled]);
 
     return (
         <div

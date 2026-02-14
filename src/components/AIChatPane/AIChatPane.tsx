@@ -49,7 +49,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
     // Chat state - initialize from props if available
     const [messages, setMessages] = useState<ChatMessage[]>(initialState?.messages || []);
     const [inputText, setInputText] = useState(initialState?.inputText || '');
-    const [selectedModel, setSelectedModel] = useState(initialState?.selectedModel || 'gemini-2.0-flash-exp');
+    const [selectedModel, setSelectedModel] = useState(initialState?.selectedModel || 'Unspecified');
     const [selectedLanguage, setSelectedLanguage] = useState(initialState?.selectedLanguage || 'English');
     const [selectedExpertise, setSelectedExpertise] = useState(initialState?.selectedExpertise || 'General Helper');
     const [textareaHeight, setTextareaHeight] = useState(initialState?.textareaHeight || 60);
@@ -132,8 +132,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
             // Clear local pending message immediately to prevent re-sending
             setLocalPendingMessage(undefined);
 
-            // Sync state will handle pushing the 'undefined' back to parent in the next effect cycle
-            // effectively clearing it from the store.
+            if (selectedModel === 'Unspecified') {
+                setMessages(prev => [
+                    ...prev,
+                    { role: 'user', content: text },
+                    { role: 'model', content: '⚠️ AI model not selected. Please select a model from the dropdown at the top right of the screen.' }
+                ]);
+                return;
+            }
 
             // Sync local system instruction if one was provided in payload
             if (initialState?.systemInstruction) {
@@ -282,7 +288,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
 
     const handleSend = () => {
         const text = inputText.trim();
-        if (!text || isStreaming) return;
+        if (!text || isStreaming || selectedModel === 'Unspecified') return;
 
         setMessages(prev => [...prev, { role: 'user', content: text }]);
         lastSentTextRef.current = text;
@@ -373,6 +379,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
                                 }}
                                 disabled={isStreaming}
                             >
+                                {selectedModel === 'Unspecified' && (
+                                    <option value="Unspecified">Select a model...</option>
+                                )}
                                 {availableModels.length > 0 ? (
                                     availableModels.map(m => (
                                         <option key={m.name} value={m.name}>{m.displayName}</option>
@@ -562,7 +571,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({ sessionId, initialState,
                         <button
                             className="ai-chat-send-btn"
                             onClick={handleSend}
-                            disabled={!inputText.trim() || isStreaming}
+                            disabled={!inputText.trim() || isStreaming || selectedModel === 'Unspecified'}
+                            title={selectedModel === 'Unspecified' ? 'Please select an AI model first' : 'Send'}
                         >
                             ➤
                         </button>

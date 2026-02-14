@@ -28,6 +28,8 @@ const preload = join(__dirname, '../preload/index.js')
 const url = process.env.VITE_DEV_SERVER_URL
 const indexHtml = join(process.env.DIST || 'dist', 'index.html')
 
+const allowedMediaPaths = new Set<string>();
+
 async function createWindow() {
   win = new BrowserWindow({
     title: 'HoTTY',
@@ -39,6 +41,7 @@ async function createWindow() {
       preload,
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
     },
     backgroundColor: '#1e1e1e',
   })
@@ -74,9 +77,20 @@ app.whenReady().then(() => {
     }
 
     try {
-      return callback(decodeURIComponent(url));
+      const decodedPath = decodeURIComponent(url);
+      const normalizedPath = join(decodedPath); // Basic normalization
+
+      // Security Check: Only allow paths that were explicitly selected via dialog
+      // This prevents path traversal into system files.
+      if (!allowedMediaPaths.has(normalizedPath)) {
+        console.warn('Blocked unauthorized media protocol access:', normalizedPath);
+        return callback({ error: -6 }); // net::ERR_FILE_NOT_FOUND or similar
+      }
+
+      return callback(normalizedPath);
     } catch (error) {
       console.error('Failed to register protocol', error);
+      return callback({ error: -2 }); // net::ERR_FAILED
     }
   });
 });
@@ -118,11 +132,18 @@ ipcMain.on('log-debug', (_, message) => {
 
 // IPC Handlers
 ipcMain.handle('open-win', (_, arg) => {
+  // Input validation for 'arg' (hash)
+  if (typeof arg !== 'string' || !/^[a-zA-Z0-9_-]*$/.test(arg)) {
+    console.error('Invalid window hash argument:', arg);
+    return;
+  }
+
   const childWindow = new BrowserWindow({
     webPreferences: {
       preload,
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
     },
   })
 
@@ -280,7 +301,10 @@ ipcMain.handle('select-image', async () => {
   if (canceled || filePaths.length === 0) {
     return null;
   }
-  return filePaths[0];
+  const selectedPath = filePaths[0];
+  // Add to whitelist
+  allowedMediaPaths.add(join(selectedPath));
+  return selectedPath;
 });
 
 ipcMain.handle('select-folder', async () => {

@@ -15,11 +15,45 @@
     border: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
+    /* Ensure border doesn't add to width */
 }
 
-.grid-pane.active-pane {
-    border: 1px solid #007acc;
-    box-shadow: 0 0 0 1px #007acc inset;
+/* 
+   Active Pane Border Logic:
+   Use an ::after pseudo-element to create a border that sits ON TOP of the content
+   but effectively "inside" the scrollbar if the scrollbar is on a child element,
+   because this overlay is on the grid-pane (parent).
+   However, if the child has a scrollbar, it might cover this if z-index is low.
+   We want the border to be visible.
+   Currently, the request is "Inside the scrollbar". 
+   If we use pointer-events: none, we can just overlay it.
+*/
+
+
+/* 
+   Active/Inactive Pane Overlay Logic:
+   - Base: create an overlay element on every pane.
+   - Default: Inactive pane overlay (mostly transparent or specific for Light theme).
+   - Active: Active pane overlay (light for Dark/Medium, transparent for Light).
+   - Colors are defined in index.css variables: --pane-overlay-active, --pane-overlay-inactive.
+*/
+.grid-pane::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 1;
+    background-color: var(--pane-overlay-inactive);
+    transition: background-color 0.1s;
+}
+
+/* Override for Active Pane */
+.grid-pane.active-pane::after {
+    background-color: var(--pane-overlay-active);
 }
 
 .empty-pane-placeholder {

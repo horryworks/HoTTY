@@ -18,6 +18,8 @@ interface SettingsModalProps {
     onTerminalForegroundChange: (color: string) => void;
     terminalBackground: string;
     onTerminalBackgroundChange: (color: string) => void;
+    terminalBackgroundInactive: string;
+    onTerminalBackgroundInactiveChange: (color: string) => void;
     paneBackground: string;
     onPaneBackgroundChange: (color: string) => void;
     paneBackgroundMode: 'color' | 'image';
@@ -55,6 +57,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onTerminalForegroundChange,
     terminalBackground,
     onTerminalBackgroundChange,
+    terminalBackgroundInactive,
+    onTerminalBackgroundInactiveChange,
     paneBackground,
     onPaneBackgroundChange,
     paneBackgroundMode,
@@ -257,7 +261,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             {theme === 'custom' && (
                                 <div className="form-group">
                                     <label>Colors (Custom Theme)</label>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                                         <div>
                                             <label style={{ fontSize: '0.9em', color: '#ccc' }}>Terminal Text</label>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -277,7 +281,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                             </div>
                                         </div>
                                         <div>
-                                            <label style={{ fontSize: '0.9em', color: '#ccc' }}>Terminal Background</label>
+                                            <label style={{ fontSize: '0.9em', color: '#ccc' }}>Active Background</label>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <input
                                                     type="color"
@@ -289,6 +293,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     type="text"
                                                     value={terminalBackground}
                                                     onChange={(e) => onTerminalBackgroundChange(e.target.value)}
+                                                    className="settings-input"
+                                                    style={{ width: '80px', padding: '4px', fontSize: '12px' }}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '0.9em', color: '#ccc' }}>Inactive Background</label>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <input
+                                                    type="color"
+                                                    value={terminalBackgroundInactive}
+                                                    onChange={(e) => onTerminalBackgroundInactiveChange(e.target.value)}
+                                                    style={{ border: 'none', width: '30px', height: '30px', cursor: 'pointer', padding: 0, backgroundColor: 'transparent' }}
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={terminalBackgroundInactive}
+                                                    onChange={(e) => onTerminalBackgroundInactiveChange(e.target.value)}
                                                     className="settings-input"
                                                     style={{ width: '80px', padding: '4px', fontSize: '12px' }}
                                                 />

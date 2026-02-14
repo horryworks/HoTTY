@@ -21,6 +21,10 @@ HoTTY is a modern, high-performance terminal emulator built with Electron, React
     - **Gemini Chat**: Built-in AI assistant pane powered by Google Gemini.
     - **Context Aware**: Helper for coding, debugging, or general questions within the terminal environment.
     - **Dynamic Models**: Automatically creates a list of available models from your API key.
+- **Security & Reliability**:
+    - **Path Traversal Protection**: Secure `media://` protocol with path validation.
+    - **Sandboxed Execution**: Enhanced security with Electron's sandbox mode.
+    - **Clean Uninstallation**: Option to fully remove user data during uninstallation.
 - **Modern Tech Stack**: Built on Electron, React, and Vite for performance and stability.
 
 ## Getting Started
