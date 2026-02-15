@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { useDraggable } from '../../hooks/useDraggable';
 import './PasteConfirmationModal.css';
 
 interface PasteConfirmationModalProps {
@@ -8,6 +9,7 @@ interface PasteConfirmationModalProps {
 }
 
 export const PasteConfirmationModal: React.FC<PasteConfirmationModalProps> = ({ content, onConfirm, onCancel }) => {
+    const { position, onMouseDown: onHeaderMouseDown } = useDraggable();
     const confirmButtonRef = React.useRef<HTMLButtonElement>(null);
 
     useEffect(() => {
@@ -34,8 +36,8 @@ export const PasteConfirmationModal: React.FC<PasteConfirmationModalProps> = ({ 
 
     return (
         <div className="paste-modal-overlay">
-            <div className={`paste-modal ${hasNewlines ? 'has-newlines' : ''}`}>
-                <h3>Paste Confirmation</h3>
+            <div className={`paste-modal ${hasNewlines ? 'has-newlines' : ''}`} style={{ transform: `translate(${position.x}px, ${position.y}px)` }}>
+                <h3 onMouseDown={onHeaderMouseDown} style={{ cursor: 'grab', userSelect: 'none' }}>Paste Confirmation</h3>
                 {hasNewlines && (
                     <div className="paste-warning">
                         ⚠️ Warning: Contains newline characters

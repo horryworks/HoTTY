@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useDraggable } from '../../hooks/useDraggable';
 import './ErrorModal.css';
 
 interface ErrorModalProps {
@@ -7,6 +8,7 @@ interface ErrorModalProps {
 }
 
 export const ErrorModal: React.FC<ErrorModalProps> = ({ message, onClose }) => {
+    const { position, onMouseDown: onHeaderMouseDown } = useDraggable();
     const closeButtonRef = useRef<HTMLButtonElement>(null);
 
     useEffect(() => {
@@ -28,8 +30,8 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ message, onClose }) => {
 
     return (
         <div className="error-modal-overlay">
-            <div className="error-modal">
-                <h3>
+            <div className="error-modal" style={{ transform: `translate(${position.x}px, ${position.y}px)` }}>
+                <h3 onMouseDown={onHeaderMouseDown} style={{ cursor: 'grab', userSelect: 'none' }}>
                     <span>⚠️</span> Session Error
                 </h3>
                 <div className="error-content">

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useDraggable } from '../../hooks/useDraggable';
 import './ConnectionDialog.css';
 
 interface ConnectionDialogProps {
@@ -22,6 +23,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     getCachedPassword,
     saveCachedPassword
 }) => {
+    const { position, onMouseDown: onHeaderMouseDown } = useDraggable();
     const [history, setHistory] = useState<string[]>(() => {
         const saved = localStorage.getItem('hterm_host_history');
         return saved ? JSON.parse(saved) : [];
@@ -150,7 +152,18 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
     return (
         <div className="connection-dialog-overlay">
-            <div className="connection-dialog" style={{ position: 'relative' }}>
+            <div className="connection-dialog" style={{ position: 'relative', transform: `translate(${position.x}px, ${position.y}px)` }}>
+                <div
+                    style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height: '40px',
+                        cursor: 'grab'
+                    }}
+                    onMouseDown={onHeaderMouseDown}
+                />
                 <button
                     onClick={onClose}
                     style={{

@@ -1,6 +1,6 @@
 # HoTTY
 
-**Current Version: v0.1.5 (Latest)**
+**Current Version: v0.1.6 (Latest)**
 
 HoTTY is a modern, high-performance terminal emulator built with Electron, React, and TypeScript. It is designed to provide a seamless terminal experience with advanced window management and customization options.
 

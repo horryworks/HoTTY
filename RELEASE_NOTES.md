@@ -1,5 +1,16 @@
 # Release Notes - HoTTY
 
+## [0.1.6] - 2026-02-15
+
+### Changed
+- **Persona System Improvements**:
+  - Fixed an issue where "Ask Gemini" would default to the "General Helper" persona instead of the selected one.
+  - Ensured that the System Prompt is properly sent with manual chat messages, preserving the selected persona during conversation.
+  - Removed the redundant Persona dropdown in the manual input area for a cleaner UI.
+- **UI/UX Refinements**:
+  - Reordered the "Settings -> AI" tabs to "Ask Gemini Commands", "Personas", and "Debugging".
+  - Fixed text wrapping issues for "Show System Prompt" and "Enable Logging" labels in Settings.
+
 ## [0.1.5] - 2026-02-15
 
 ### Changed

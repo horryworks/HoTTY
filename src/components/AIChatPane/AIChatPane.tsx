@@ -20,6 +20,7 @@ interface AIChatPaneProps {
         textareaHeight: number;
         scrollTop?: number;
     };
+    aiPersona?: string;
     onStateChange?: (state: {
         messages: ChatMessage[];
         inputText: string;
@@ -31,7 +32,9 @@ interface AIChatPaneProps {
         textareaHeight: number;
         scrollTop?: number;
     }) => void;
-    showSystemPrompt?: boolean;
+    showSystemPrompt: boolean;
+    askGeminiCommands: { id: string; label: string; promptTemplate: string }[];
+    aiPersonas: { id: string; label: string; systemPrompt: string }[];
     fontSize?: number;
     isActive?: boolean;
     terminalBackground?: string;
@@ -43,10 +46,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     initialState,
     onStateChange,
     showSystemPrompt,
-    fontSize = 14,
-    isActive = true,
-    terminalBackground,
-    terminalBackgroundInactive
+    aiPersonas,
+    fontSize,
+    terminalBackground
 }) => {
     // Auth state
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -85,33 +87,18 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     const lastSentTextRef = useRef<string>('');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-    const EXPERTISE_OPTIONS = [
-        'General Helper',
-        'Network Expert',
-        'Server Expert',
-        'Cloud Expert',
-        'Coding Expert'
-    ];
-
     // Real-time System Prompt Update
     useEffect(() => {
         let basePrompt = '';
-        switch (selectedExpertise) {
-            case 'Network Expert':
-                basePrompt = 'You are a Network Expert. Provide detailed technical analysis of network protocols, routing, and infrastructure.';
-                break;
-            case 'Server Expert':
-                basePrompt = 'You are a Server Expert. Focus on server administration, OS internals, and system performance.';
-                break;
-            case 'Cloud Expert':
-                basePrompt = 'You are a Cloud Expert. Specialize in cloud architecture, AWS/Azure/GCP services, and cloud-native practices.';
-                break;
-            case 'Coding Expert':
-                basePrompt = 'You are a Coding Expert. Provide efficient, clean code solutions and explain algorithmic complexity.';
-                break;
-            default:
-                basePrompt = 'You are a helpful assistant.';
-                break;
+
+        // Find selected persona from props
+        const selectedPersona = aiPersonas?.find(p => p.label === selectedExpertise);
+
+        if (selectedPersona) {
+            basePrompt = selectedPersona.systemPrompt;
+        } else {
+            // Fallback to first persona or default if not found
+            basePrompt = aiPersonas?.[0]?.systemPrompt || 'You are a helpful assistant.';
         }
 
         let langInstruction = '';
@@ -121,15 +108,16 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
 
         setLocalSystemInstruction(`${basePrompt}${langInstruction}`);
 
-    }, [selectedExpertise, selectedLanguage]);
+    }, [selectedExpertise, selectedLanguage, aiPersonas]);
 
 
     // Initialize scroll position
     useEffect(() => {
-        if (initialState?.scrollTop !== undefined && scrollContainerRef.current) {
-            scrollContainerRef.current.scrollTop = initialState.scrollTop;
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
         }
-    }, []); // Run once on mount
+    }, [messages]);
+    // Run once on mount
 
     // Auto-send pending message if authenticated
     useEffect(() => {
@@ -307,7 +295,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         setInputText('');
         setIsStreaming(true);
         setStreamingContent('');
-        window.electronAPI.geminiChatSend(sessionId, text, selectedModel);
+        window.electronAPI.geminiChatSend(sessionId, text, selectedModel, localSystemInstruction);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -356,9 +344,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         </svg>
     );
 
-    const activeBg = terminalBackground || 'var(--bg-primary)';
-    const inactiveBg = terminalBackgroundInactive || activeBg;
-    const effectiveBg = isActive ? activeBg : inactiveBg;
+    const effectiveBg = terminalBackground || 'var(--bg-primary)';
 
     return (
         <div className="ai-chat-pane" style={{ fontSize: `${fontSize}px`, backgroundColor: effectiveBg }}>
@@ -374,25 +360,32 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                         <>
                             <div className="ai-chat-header-item">
                                 <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <title>Persona</title>
                                     <path d="M22 10L12 5L2 10L12 15L22 10Z" />
                                     <path d="M6 12V17C8.5 19.5 15.5 19.5 18 17V12" />
-                                    <line x1="22" y1="10" x2="22" y2="16" />
                                 </svg>
                                 <select
                                     className="ai-chat-model-select"
                                     style={{ width: '140px' }}
                                     value={selectedExpertise}
-                                    onChange={(e) => setSelectedExpertise(e.target.value)}
+                                    onChange={(e) => {
+                                        setSelectedExpertise(e.target.value);
+                                        const persona = aiPersonas?.find(p => p.label === e.target.value);
+                                        if (persona) {
+                                            setLocalSystemInstruction(persona.systemPrompt + (selectedLanguage !== 'English' ? ` Answer in ${selectedLanguage}.` : ''));
+                                        }
+                                    }}
                                     disabled={isStreaming}
                                 >
-                                    {EXPERTISE_OPTIONS.map(opt => (
-                                        <option key={opt} value={opt}>{opt}</option>
+                                    {aiPersonas?.map(persona => (
+                                        <option key={persona.id} value={persona.label}>{persona.label}</option>
                                     ))}
                                 </select>
                             </div>
 
                             <div className="ai-chat-header-item">
                                 <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <title>Language</title>
                                     <circle cx="12" cy="12" r="10" />
                                     <line x1="2" y1="12" x2="22" y2="12" />
                                     <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
@@ -416,6 +409,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
 
                             <div className="ai-chat-header-item">
                                 <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <title>AI Model</title>
                                     <rect x="4" y="4" width="16" height="16" rx="2" />
                                     <rect x="9" y="9" width="6" height="6" />
                                     <line x1="9" y1="1" x2="9" y2="4" />
@@ -429,6 +423,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                                 </svg>
                                 <select
                                     className="ai-chat-model-select"
+                                    style={{ width: '150px' }}
                                     value={selectedModel}
                                     onChange={(e) => {
                                         const model = e.target.value;
@@ -538,9 +533,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                             overflowY: 'auto',
                             flexShrink: 0
                         }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontWeight: 'bold' }}>
-                                <span>⚙️</span> System Prompt
-                            </div>
                             <div style={{ whiteSpace: 'pre-wrap' }}>
                                 {localSystemInstruction}
                             </div>

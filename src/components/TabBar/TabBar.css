@@ -1,6 +1,6 @@
 .tab-bar {
     display: flex;
-    background-color: var(--bg-secondary);
+    background-color: var(--sidebar-bg);
     height: 35px;
     align-items: center;
     padding-left: 0px;
@@ -13,8 +13,8 @@
     align-items: center;
     padding: 0 10px;
     height: 100%;
-    background-color: var(--bg-tertiary);
-    color: var(--text-secondary);
+    background-color: var(--tab-bg);
+    color: var(--tab-text);
     border-right: 1px solid var(--border-color);
     cursor: pointer;
     font-size: 13px;
@@ -38,7 +38,7 @@
     left: -5px;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
-    border-top: 6px solid #ffcc00;
+    border-top: 6px solid var(--tab-drag-indicator);
     z-index: 102;
 }
 
@@ -49,22 +49,22 @@
     left: -5px;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
-    border-bottom: 6px solid #ffcc00;
+    border-bottom: 6px solid var(--tab-drag-indicator);
     z-index: 102;
 }
 
 /* Vertical Line connecting triangles */
 .tab.drag-over-left::after {
-    border-left: 2px solid #ffcc00;
+    border-left: 2px solid var(--tab-drag-indicator);
     /* Use after element for the line? No, after is bottom triangle */
 }
 
 /* Wait, we have before (top) and after (bottom). Where is the line?
    We can use the element border-left.
    Let's ensure the border spans full height.
-*/
+ */
 .tab.drag-over-left {
-    border-left: 2px solid #ffcc00;
+    border-left: 2px solid var(--tab-drag-indicator);
     margin-left: -1px;
 }
 
@@ -82,7 +82,7 @@
     right: -5px;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
-    border-top: 6px solid #ffcc00;
+    border-top: 6px solid var(--tab-drag-indicator);
     z-index: 102;
 }
 
@@ -93,13 +93,13 @@
     right: -5px;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
-    border-bottom: 6px solid #ffcc00;
+    border-bottom: 6px solid var(--tab-drag-indicator);
     z-index: 102;
 }
 
 /* Vertical Line for right side */
 .tab.drag-over-right {
-    border-right: 2px solid #ffcc00;
+    border-right: 2px solid var(--tab-drag-indicator);
     margin-right: -1px;
 }
 
@@ -117,8 +117,8 @@
 }
 
 .tab.active {
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
+    background-color: var(--tab-active-bg);
+    color: var(--tab-active-text);
 }
 
 .tab-title {
@@ -137,14 +137,14 @@
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background-color: #ff4d4d;
+    background-color: var(--tab-close-bg);
     color: white;
     margin-left: 5px;
     /* Add some spacing from title */
 }
 
 .tab-close:hover {
-    background-color: #cc0000;
+    background-color: var(--tab-close-hover-bg);
     color: white;
 }
 

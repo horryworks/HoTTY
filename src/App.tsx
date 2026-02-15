@@ -11,6 +11,7 @@ import { PaneLines } from './components/PaneLines/PaneLines'
 import { useSessionManager } from './hooks/useSessionManager'
 import type { Session } from './hooks/useSessionManager'
 import { usePaneManager } from './hooks/usePaneManager'
+import themesData from './themes.json'
 import '@xterm/xterm/css/xterm.css'
 import './App.css'
 
@@ -24,6 +25,40 @@ const DEFAULT_GEMINI_COMMANDS: AskGeminiCommand[] = [
   { id: 'what-is-this', label: 'What is this?', promptTemplate: 'What is this?\n\n{selection}' },
   { id: 'what-does-it-mean', label: 'What does it mean?', promptTemplate: 'What does this mean?\n\n{selection}' },
   { id: 'root-cause', label: 'Research root cause', promptTemplate: 'Analyze the potential root cause of this:\n\n{selection}' },
+];
+
+export interface PersonaDefinition {
+  id: string;
+  label: string;
+  systemPrompt: string;
+}
+
+const DEFAULT_PERSONAS: PersonaDefinition[] = [
+  {
+    id: 'general-helper',
+    label: 'General Helper',
+    systemPrompt: 'You are a helpful assistant.'
+  },
+  {
+    id: 'network-expert',
+    label: 'Network Expert',
+    systemPrompt: 'You are a Network Expert. Provide detailed technical analysis of network protocols, routing, and infrastructure.'
+  },
+  {
+    id: 'server-expert',
+    label: 'Server Expert',
+    systemPrompt: 'You are a Server Expert. Focus on server administration, OS internals, and system performance.'
+  },
+  {
+    id: 'cloud-expert',
+    label: 'Cloud Expert',
+    systemPrompt: 'You are a Cloud Expert. Specialize in cloud architecture, AWS/Azure/GCP services, and cloud-native practices.'
+  },
+  {
+    id: 'coding-expert',
+    label: 'Coding Expert',
+    systemPrompt: 'You are a Coding Expert. Provide efficient, clean code solutions and explain algorithmic complexity.'
+  }
 ];
 
 function App() {
@@ -57,7 +92,24 @@ function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('hterm_theme', theme);
+    applyTheme(theme);
   }, [theme]);
+
+  const applyTheme = (themeName: string) => {
+    if (themeName === 'custom') {
+      // For custom theme, we rely on the Individual settings already in state/localStorage
+      // But we might want to ensure standard variables are also set if they weren't
+      // For now, let's assume Custom only overrides specific terminal colors.
+      return;
+    }
+
+    const themeDef = (themesData as any)[themeName];
+    if (themeDef && themeDef.variables) {
+      Object.entries(themeDef.variables).forEach(([key, value]) => {
+        document.documentElement.style.setProperty(`--${key}`, value as string);
+      });
+    }
+  };
 
   // Set Window Title with Version
   useEffect(() => {
@@ -194,6 +246,18 @@ function App() {
     localStorage.setItem('hotty_show_system_prompt', show.toString());
   };
 
+  // AI Persona State
+  // AI Persona State
+  const [aiPersonas, setAiPersonas] = useState<PersonaDefinition[]>(() => {
+    const saved = localStorage.getItem('hotty_ai_personas');
+    return saved ? JSON.parse(saved) : DEFAULT_PERSONAS;
+  });
+
+  const updateAiPersonas = (personas: PersonaDefinition[]) => {
+    setAiPersonas(personas);
+    localStorage.setItem('hotty_ai_personas', JSON.stringify(personas));
+  };
+
   // Ask Gemini Commands State
   const [askGeminiCommands, setAskGeminiCommands] = useState<AskGeminiCommand[]>(() => {
     const saved = localStorage.getItem('hotty_ask_gemini_commands');
@@ -210,12 +274,14 @@ function App() {
   const sessionRef = useRef(session);
   const paneRef = useRef(pane);
   const askGeminiCommandsRef = useRef(askGeminiCommands);
+  const aiPersonasRef = useRef(aiPersonas); // Add ref for aiPersonas
 
   // Update refs on every render
   useEffect(() => {
     sessionRef.current = session;
     paneRef.current = pane;
     askGeminiCommandsRef.current = askGeminiCommands;
+    aiPersonasRef.current = aiPersonas; // Update aiPersonas ref
   });
 
   useEffect(() => {
@@ -230,6 +296,7 @@ function App() {
       const currentSession = sessionRef.current;
       const currentPane = paneRef.current;
       const currentCommands = askGeminiCommandsRef.current;
+      const currentPersonas = aiPersonasRef.current; // Get current personas
 
       // Ensure AI Session
       let aiSessionId: string;
@@ -253,23 +320,37 @@ function App() {
 
       const lang = localStorage.getItem('hotty_gemini_language') || 'English';
 
+      // 1. Try to find persona from existing session's selected expertise
+      let targetPersonaPrompt = 'You are a helpful assistant.';
+
+      if (existingAiSession && existingAiSession.aiChatState?.selectedExpertise) {
+        const expertiseLabel = existingAiSession.aiChatState.selectedExpertise;
+        const foundPersona = currentPersonas.find(p => p.label === expertiseLabel);
+        if (foundPersona) {
+          targetPersonaPrompt = foundPersona.systemPrompt;
+        }
+      }
+      // 2. If not found (or new session), fallback to first persona if available
+      else if (currentPersonas.length > 0) {
+        targetPersonaPrompt = currentPersonas[0].systemPrompt;
+      }
+
+      const defaultPersona = targetPersonaPrompt;
+
       let systemInstruction = '';
       let userPrompt = '';
 
       const existingCommand = currentCommands.find(c => c.id === type);
 
       if (existingCommand) {
-        systemInstruction = `You are a helpful assistant. Answer in ${lang}.`;
+        systemInstruction = `${defaultPersona} Answer in ${lang}.`;
         if (existingCommand.id === 'root-cause') {
-          // Keep specific persona for root cause if desired, or make it generic.
-          // For now, let's make it generic but maybe user wants to customize system prompt too?
-          // The request was just "customize items". Let's stick to prompt template customization.
-          systemInstruction = `You are an expert troubleshooter. Answer in ${lang}.`;
+          systemInstruction = `You are an expert troubleshooter. ${defaultPersona} Answer in ${lang}.`;
         }
         userPrompt = existingCommand.promptTemplate.replace('{selection}', selection);
       } else {
         // Fallback
-        systemInstruction = `You are a helpful assistant. Answer in ${lang}.`;
+        systemInstruction = `${defaultPersona} Answer in ${lang}.`;
         userPrompt = `Please explain the following text:\n\n${selection}`;
       }
 
@@ -331,33 +412,26 @@ function App() {
   const updateTheme = (newTheme: 'dark' | 'light' | 'medium' | 'custom') => {
     setTheme(newTheme);
 
-    const shouldSetColorMode = paneBackgroundMode !== 'image';
-
-    if (newTheme === 'dark') {
-      updateTerminalForeground('#ffffff');
-      updateTerminalBackground('#1e1e1e');
-      updateTerminalBackgroundInactive('#121212');
-      updatePaneBackground('#000200');
-      if (shouldSetColorMode) updatePaneBackgroundMode('color');
-    } else if (newTheme === 'light') {
-      updateTerminalForeground('#000000');
-      updateTerminalBackground('#ffffff');
-      updateTerminalBackgroundInactive('#f8f8f8');
-      updatePaneBackground('#f0f0f0');
-      if (shouldSetColorMode) updatePaneBackgroundMode('color');
-    } else if (newTheme === 'medium') {
-      updateTerminalForeground('#f0f0f0');
-      updateTerminalBackground('#454545');
-      updateTerminalBackgroundInactive('#383838');
-      updatePaneBackground('#383838');
-      if (shouldSetColorMode) updatePaneBackgroundMode('color');
-    } else if (newTheme === 'custom') {
+    if (newTheme === 'custom') {
+      const shouldSetColorMode = paneBackgroundMode !== 'image';
       // Restore custom colors
       updateTerminalForeground(customColors.foreground);
       updateTerminalBackground(customColors.background);
       updateTerminalBackgroundInactive(customColors.backgroundInactive);
       updatePaneBackground(customColors.paneBackground);
-      // Custom theme restoration might want to restore mode too, but for now let's respect image
+      if (shouldSetColorMode) updatePaneBackgroundMode('color');
+      return;
+    }
+
+    const themeDef = (themesData as any)[newTheme];
+    if (themeDef && themeDef.terminal) {
+      const { foreground, background, backgroundInactive, paneBackground: pBg } = themeDef.terminal;
+      updateTerminalForeground(foreground);
+      updateTerminalBackground(background);
+      updateTerminalBackgroundInactive(backgroundInactive);
+      updatePaneBackground(pBg);
+
+      const shouldSetColorMode = paneBackgroundMode !== 'image';
       if (shouldSetColorMode) updatePaneBackgroundMode('color');
     }
   };
@@ -537,6 +611,7 @@ function App() {
             lineWrapEnabled={lineWrapEnabled}
             showSystemPrompt={showSystemPrompt}
             askGeminiCommands={askGeminiCommands}
+            aiPersonas={aiPersonas}
           />
         </div>
       </div>
@@ -599,6 +674,8 @@ function App() {
         onShowSystemPromptChange={updateShowSystemPrompt}
         askGeminiCommands={askGeminiCommands}
         onAskGeminiCommandsChange={updateAskGeminiCommands}
+        aiPersonas={aiPersonas}
+        onAiPersonasChange={updateAiPersonas}
       />
       <PaneLines
         paneAllocations={pane.paneAllocations}

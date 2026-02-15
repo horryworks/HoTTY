@@ -15,7 +15,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 12px;
-    background: rgba(0, 0, 0, 0.1);
+    background: var(--ai-header-bg);
     border-bottom: 1px solid var(--border-color);
     height: 48px;
     min-height: 48px;
@@ -37,7 +37,7 @@
 .ai-chat-title {
     font-size: 14px;
     font-weight: 600;
-    color: #e0e0e0;
+    color: var(--text-primary);
 }
 
 .ai-chat-header-right {
@@ -282,7 +282,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: #555;
+    color: var(--ai-welcome-text);
     text-align: center;
 }
 
@@ -297,12 +297,12 @@
 }
 
 .ai-chat-welcome h3 {
-    color: #666;
+    color: var(--ai-welcome-subtext);
     margin: 0 0 4px;
 }
 
 .ai-chat-welcome p {
-    color: #555;
+    color: var(--ai-welcome-text);
     font-size: 13px;
     margin: 0;
 }
@@ -344,7 +344,7 @@
 }
 
 .ai-chat-message-avatar {
-    width: 24px;
+    width: 1.5em;
     height: 1.6em;
     /* Synchronized with text line-height */
     display: flex;
@@ -376,8 +376,8 @@
     margin: 0;
     white-space: pre-wrap;
     word-wrap: break-word;
-    font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 1em;
+    font-family: var(--font-family, 'Consolas', 'Courier New', monospace);
+    font-size: 1.1em;
     line-height: 1.6;
     color: var(--chat-msg-model-text);
 }
@@ -394,7 +394,7 @@
     display: inline-block;
     animation: blink 0.8s step-end infinite;
     color: var(--accent-color);
-    font-size: 14px;
+    font-size: 1em;
 }
 
 @keyframes blink {
@@ -425,7 +425,7 @@
     right: 25%;
     top: 50%;
     height: 2px;
-    background-color: #2a2a4a;
+    background-color: var(--border-color);
     border-radius: 1px;
     transition: background-color 0.2s;
 }
@@ -438,7 +438,7 @@
     display: flex;
     gap: 8px;
     padding: 12px;
-    background-color: var(--header-bg);
+    background-color: var(--sidebar-bg);
     border-top: 1px solid var(--border-color);
     /* Keep buttons at bottom when textarea expands */
     align-items: flex-end;
@@ -452,7 +452,7 @@
     border: 1px solid var(--border-color);
     border-radius: 6px;
     padding: 0.4em 0.8em;
-    font-size: 14px;
+    font-size: 1em;
     font-family: inherit;
     resize: none;
     outline: none;
@@ -482,7 +482,7 @@
     border: none;
     border-radius: 6px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 1em;
     font-family: inherit;
     line-height: 1.4;
     transition: opacity 0.2s, background-color 0.2s;
@@ -492,7 +492,7 @@
     /* Ensure button height matches a single-line textarea exactly */
     box-sizing: border-box;
     height: auto;
-    min-width: 36px;
+    min-width: 2.2em;
 }
 
 .ai-chat-cancel-btn {
@@ -505,14 +505,14 @@
 }
 
 .ai-chat-send-btn {
-    width: 36px;
-    min-height: 36px;
+    width: 2.2em;
+    min-height: 2.2em;
     align-self: stretch;
     border: none;
     border-radius: 8px;
     background: linear-gradient(135deg, var(--accent-color), var(--accent-hover));
     color: #fff;
-    font-size: 16px;
+    font-size: 1.1em;
     cursor: pointer;
     display: flex;
     align-items: center;

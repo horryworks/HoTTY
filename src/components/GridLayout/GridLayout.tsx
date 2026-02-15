@@ -25,8 +25,9 @@ interface GridLayoutProps {
     paneBackgroundMode: 'color' | 'image';
     paneBackgroundImage: string;
     lineWrapEnabled: boolean;
-    showSystemPrompt?: boolean;
-    askGeminiCommands?: { id: string; label: string; promptTemplate: string }[];
+    showSystemPrompt: boolean;
+    askGeminiCommands: { id: string; label: string; promptTemplate: string }[];
+    aiPersonas: { id: string; label: string; systemPrompt: string }[];
 }
 
 export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: string]: any } }> = ({
@@ -52,7 +53,8 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     paneBackgroundImage,
     lineWrapEnabled,
     showSystemPrompt,
-    askGeminiCommands
+    askGeminiCommands,
+    aiPersonas
 }) => {
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
     const [colSizes, setColSizes] = useState<number[]>([]);
@@ -234,7 +236,9 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     initialState={session.aiChatState}
                                     onStateChange={(newState) => updateSessionState(session.id, newState)}
                                     showSystemPrompt={showSystemPrompt}
-                                    isActive={isActive}
+                                    askGeminiCommands={askGeminiCommands}
+                                    aiPersonas={aiPersonas}
+                                    fontSize={fontSize}
                                     terminalBackground={terminalBackground}
                                     terminalBackgroundInactive={terminalBackgroundInactive}
                                 />
