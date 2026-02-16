@@ -173,7 +173,7 @@ function App() {
     return (localStorage.getItem('hterm_pane_background_mode') as 'color' | 'image') || 'image';
   });
   const [paneBackgroundImage, setPaneBackgroundImage] = useState<string>(() => {
-    return localStorage.getItem('hterm_pane_background_image') || '/HoTTY_background.svg';
+    return localStorage.getItem('hterm_pane_background_image') || 'HoTTY_background.svg';
   });
 
   const [isMediaAuthorized, setIsMediaAuthorized] = useState(false);
