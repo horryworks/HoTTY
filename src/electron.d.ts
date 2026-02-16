@@ -17,6 +17,7 @@ export interface ElectronAPI {
     authorizeMediaPath: (path: string) => Promise<void>;
     getAppVersion: () => Promise<string>;
     logDebug: (message: string) => void;
+    openExternal: (url: string) => void;
 
     // Gemini AI
     geminiAuthStart: (clientId: string, clientSecret: string) => Promise<boolean>;

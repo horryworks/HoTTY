@@ -114,6 +114,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     authorizeMediaPath: (path: string) => ipcRenderer.invoke('authorize-media-path', path),
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
     logDebug: (message: string) => ipcRenderer.send('log-debug', message),
+    openExternal: (url: string) => ipcRenderer.send('open-external', url),
 
     showContextMenu: (selection: string, commands?: { id: string; label: string }[]) => ipcRenderer.send('show-context-menu', selection, commands),
     onAskGemini: (callback: (selection: string, type: string) => void) => {

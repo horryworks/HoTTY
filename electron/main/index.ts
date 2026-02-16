@@ -155,6 +155,10 @@ ipcMain.handle('open-win', (_, arg) => {
   }
 })
 
+ipcMain.on('open-external', (_, url) => {
+  shell.openExternal(url);
+});
+
 // Session Management
 interface Session {
   id: string;
