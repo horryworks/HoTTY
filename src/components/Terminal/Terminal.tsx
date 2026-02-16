@@ -38,6 +38,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
         if (!terminalRef.current || !terminalInstance) return;
 
         const term = terminalInstance;
+        term.options.allowTransparency = true;
 
         // Open or Re-attach terminal
         const attachTerminal = () => {
@@ -196,13 +197,24 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             if (fontFamily) terminalInstance.options.fontFamily = fontFamily;
 
             const activeBg = terminalBackground;
-            const inactiveBg = terminalBackgroundInactive || terminalBackground; // Fallback if not provided
+            const inactiveBg = terminalBackgroundInactive || terminalBackground;
             const effectiveBg = isActive ? activeBg : inactiveBg;
+
+            // Convert hex to rgba for transparency if it's a hex color
+            const getTransparentColor = (hex: string) => {
+                if (hex.startsWith('#') && hex.length === 7) {
+                    const r = parseInt(hex.slice(1, 3), 16);
+                    const g = parseInt(hex.slice(3, 5), 16);
+                    const b = parseInt(hex.slice(5, 7), 16);
+                    return `rgba(${r}, ${g}, ${b}, 0.85)`;
+                }
+                return hex;
+            };
 
             terminalInstance.options.theme = {
                 ...terminalInstance.options.theme,
                 foreground: terminalForeground,
-                background: effectiveBg,
+                background: getTransparentColor(effectiveBg),
                 cursor: terminalForeground,
                 cursorAccent: effectiveBg
             };

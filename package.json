@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.6",
   "description": "SSH/Telnet/Serial Terminal Emulator",
+  "license": "GPL-3.0-or-later",
   "author": "horry",
   "main": "dist-electron/main/index.js",
   "scripts": {

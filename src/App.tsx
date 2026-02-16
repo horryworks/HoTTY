@@ -176,6 +176,20 @@ function App() {
     return localStorage.getItem('hterm_pane_background_image') || '/bg-cyberspace.svg';
   });
 
+  const [isMediaAuthorized, setIsMediaAuthorized] = useState(false);
+
+  // Authorize media path whenever it changes (including startup)
+  useEffect(() => {
+    if (paneBackgroundImage.startsWith('media:///')) {
+      const path = paneBackgroundImage.replace(/^media:\/\/\//, '');
+      window.electronAPI.authorizeMediaPath(decodeURIComponent(path)).then(() => {
+        setIsMediaAuthorized(true);
+      });
+    } else {
+      setIsMediaAuthorized(true);
+    }
+  }, [paneBackgroundImage]);
+
   const [showPaneLines, setShowPaneLines] = useState(false);
 
   // Password Cache (In-Memory Only)
@@ -577,49 +591,55 @@ function App() {
         </div>
       </div>
 
-      {/* Main Content Area */}
       <div className="main-layout">
-        <div className="top-bar">
-          <TabBar
-            tabs={orderedTabs}
-            activeTabId={pane.activeSessionId}
-            visibleSessionIds={pane.visibleSessionIds}
-            onTabClick={pane.handleTabClick}
-            onTabClose={session.closeSession}
-            onNewTab={() => setShowDialog(true)}
-            onNewAITab={() => session.createAISession()}
-            onTabReorder={session.handleTabReorder}
-          />
-        </div>
-
-        <div className="content-area">
-          <GridLayout
-            rows={pane.currentDims.rows}
-            cols={pane.currentDims.cols}
-            sessions={session.sessions}
-            updateSessionState={session.updateSessionState}
-            paneAllocations={pane.paneAllocations}
-            activePaneId={pane.activePaneId || ''}
-            onPaneClick={pane.setActivePaneId}
-            onDropSession={pane.handleDropSession}
-            onData={session.handleTerminalData}
-            focusTrigger={focusTrigger}
-            terminalRegistry={session.terminalRegistry.current}
-            disableFocus={showDialog || !!errorModalMessage}
-            fontSize={fontSize}
-            fontFamily={fontFamily}
-            terminalForeground={terminalForeground}
-            terminalBackground={terminalBackground}
-            terminalBackgroundInactive={terminalBackgroundInactive}
-            paneBackground={paneBackground}
-            paneBackgroundMode={paneBackgroundMode}
-            paneBackgroundImage={paneBackgroundImage}
-            lineWrapEnabled={lineWrapEnabled}
-            showSystemPrompt={showSystemPrompt}
-            askGeminiCommands={askGeminiCommands}
-            aiPersonas={aiPersonas}
-          />
-        </div>
+        {!isMediaAuthorized ? (
+          <div className="content-area">
+            <div className="empty-state">Loading background...</div>
+          </div>
+        ) : (
+          <>
+            <div className="top-bar">
+              <TabBar
+                tabs={orderedTabs}
+                activeTabId={pane.activeSessionId}
+                visibleSessionIds={pane.visibleSessionIds}
+                onTabClick={pane.handleTabClick}
+                onTabClose={session.closeSession}
+                onNewTab={() => setShowDialog(true)}
+                onNewAITab={() => session.createAISession()}
+                onTabReorder={session.handleTabReorder}
+              />
+            </div>
+            <div className="content-area">
+              <GridLayout
+                rows={pane.currentDims.rows}
+                cols={pane.currentDims.cols}
+                sessions={session.sessions}
+                updateSessionState={session.updateSessionState}
+                paneAllocations={pane.paneAllocations}
+                activePaneId={pane.activePaneId || ''}
+                onPaneClick={pane.setActivePaneId}
+                onDropSession={pane.handleDropSession}
+                onData={session.handleTerminalData}
+                focusTrigger={focusTrigger}
+                terminalRegistry={session.terminalRegistry.current}
+                disableFocus={showDialog || !!errorModalMessage}
+                fontSize={fontSize}
+                fontFamily={fontFamily}
+                terminalForeground={terminalForeground}
+                terminalBackground={terminalBackground}
+                terminalBackgroundInactive={terminalBackgroundInactive}
+                paneBackground={paneBackground}
+                paneBackgroundMode={paneBackgroundMode}
+                paneBackgroundImage={paneBackgroundImage}
+                lineWrapEnabled={lineWrapEnabled}
+                showSystemPrompt={showSystemPrompt}
+                askGeminiCommands={askGeminiCommands}
+                aiPersonas={aiPersonas}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {showDialog && (
@@ -690,7 +710,7 @@ function App() {
       />
       <ResizeGrip />
     </div>
-  )
-}
+  );
+};
 
 export default App

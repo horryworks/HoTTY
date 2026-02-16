@@ -14,6 +14,7 @@ export interface ElectronAPI {
     listSerialPorts: () => Promise<{ path: string; manufacturer: string; pnpId: string }[]>;
     selectImage: () => Promise<string | null>;
     selectFolder: () => Promise<string | null>;
+    authorizeMediaPath: (path: string) => Promise<void>;
     getAppVersion: () => Promise<string>;
     logDebug: (message: string) => void;
 

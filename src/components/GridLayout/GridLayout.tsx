@@ -20,10 +20,10 @@ interface GridLayoutProps {
     fontFamily: string;
     terminalForeground: string;
     terminalBackground: string;
-    terminalBackgroundInactive?: string; // Optional for now to avoid breaking other usages if any
-    paneBackground: string;
+    terminalBackgroundInactive?: string | null;
+    paneBackground: string | null;
     paneBackgroundMode: 'color' | 'image';
-    paneBackgroundImage: string;
+    paneBackgroundImage: string | null;
     lineWrapEnabled: boolean;
     showSystemPrompt: boolean;
     askGeminiCommands: { id: string; label: string; promptTemplate: string }[];
@@ -219,8 +219,8 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                             gridColumn: c * 2 + 1,
                             gridRow: r * 2 + 1,
                             backgroundColor: paneBackground || '#000200',
-                            backgroundImage: paneBackgroundMode === 'image' ? `url(${paneBackgroundImage || '/bg-cyberspace.svg'})` : 'none',
-                            backgroundSize: (paneBackgroundMode === 'image' && (!paneBackgroundImage || paneBackgroundImage.includes('bg-cyberspace.svg'))) ? '40px 40px' : 'auto',
+                            backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || '/bg-cyberspace.svg'}")` : 'none',
+                            backgroundSize: (paneBackgroundMode === 'image' && (!paneBackgroundImage || paneBackgroundImage.includes('bg-cyberspace.svg'))) ? '40px 40px' : 'cover',
                             backgroundRepeat: 'repeat',
                             backgroundPosition: 'center',
                             borderRight: '1px solid var(--border-color)',
@@ -240,7 +240,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     aiPersonas={aiPersonas}
                                     fontSize={fontSize}
                                     terminalBackground={terminalBackground}
-                                    terminalBackgroundInactive={terminalBackgroundInactive}
+                                    terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                                 />
                             ) : (
                                 <TerminalComponent
@@ -255,7 +255,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     fontFamily={fontFamily}
                                     terminalForeground={terminalForeground}
                                     terminalBackground={terminalBackground}
-                                    terminalBackgroundInactive={terminalBackgroundInactive}
+                                    terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                                     lineWrapEnabled={lineWrapEnabled}
                                     askGeminiCommands={askGeminiCommands}
                                 />

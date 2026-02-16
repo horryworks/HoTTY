@@ -747,15 +747,48 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                     {activeTab === 'about' && (
                         <div className="about-content" style={{ textAlign: 'center', padding: '20px 0' }}>
-                            <img src="./icon.png" alt="HoTTY Logo" width="64" height="64" style={{ marginBottom: '16px', background: 'white', borderRadius: '12px', padding: '4px' }} />
+                            <img src="./HoTTY_logo.svg" alt="HoTTY Logo" width="64" height="64" style={{ marginBottom: '16px', backgroundColor: 'white', borderRadius: '12px', padding: '4px' }} />
                             <h2 style={{ margin: '0 0 8px 0' }}>HoTTY</h2>
-                            <p style={{ color: '#aaa', margin: '0 0 24px 0' }}>v{version}</p>
-                            <p style={{ fontSize: '0.9em', color: '#666' }}>
+                            <p style={{ color: '#aaa', margin: '0 0 16px 0' }}>v{version}</p>
+
+                            <p style={{ fontSize: '1.0em', fontWeight: 'bold', margin: '0 0 8px 0' }}>
+                                Katsumasa "Horry" Horiuchi
+                            </p>
+
+                            <p style={{ margin: '0 0 16px 0' }}>
+                                <a
+                                    href="https://github.com/horryworks/HoTTY"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        window.electronAPI.openExternal('https://github.com/horryworks/HoTTY');
+                                    }}
+                                    style={{ color: '#64b5f6', textDecoration: 'none' }}
+                                >
+                                    https://github.com/horryworks/HoTTY
+                                </a>
+                            </p>
+
+                            <p style={{ fontSize: '0.9em', color: '#ccc', margin: '0 0 24px 0' }}>
                                 SSH/Telnet/Serial Terminal Emulator<br />
                                 Built with Electron, React, & TypeScript
                             </p>
-                            <p style={{ fontSize: '0.8em', color: '#444', marginTop: '32px' }}>
-                                Copyright © 2026 HoTTY Contributors
+
+                            <p style={{ fontSize: '0.85em', color: '#888', margin: '0 0 8px 0', lineHeight: '1.4' }}>
+                                This program is free software released under the<br />
+                                GNU General Public License v3.0 or later.
+                            </p>
+
+                            <p style={{ margin: '16px 0 0 0' }}>
+                                <a
+                                    href="https://www.gnu.org/licenses/gpl-3.0.html"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        window.electronAPI.openExternal('https://www.gnu.org/licenses/gpl-3.0.html');
+                                    }}
+                                    style={{ color: '#64b5f6', textDecoration: 'none', fontSize: '0.9em' }}
+                                >
+                                    View GNU General Public License v3.0
+                                </a>
                             </p>
                         </div>
                     )}

@@ -67,8 +67,10 @@ app.whenReady().then(() => {
   geminiService = new GeminiService(win!);
 
   // Register 'media' protocol to serve local files
-  const { protocol } = require('electron');
-  protocol.registerFileProtocol('media', (request: Electron.ProtocolRequest, callback: (response: string | Electron.ProtocolResponse) => void) => {
+  const { protocol, net } = require('electron');
+  const { pathToFileURL } = require('url');
+
+  protocol.handle('media', (request: Request) => {
     let url = request.url.replace(/^media:\/\//, '');
     // If 3 slashes were used 'media:///C:/...', we now have '/C:/...'
     // On Windows, we want 'C:/...'
@@ -78,19 +80,18 @@ app.whenReady().then(() => {
 
     try {
       const decodedPath = decodeURIComponent(url);
-      const normalizedPath = join(decodedPath); // Basic normalization
+      const normalizedPath = join(decodedPath);
 
-      // Security Check: Only allow paths that were explicitly selected via dialog
-      // This prevents path traversal into system files.
+      // Security Check: Only allow paths that were explicitly authorized
       if (!allowedMediaPaths.has(normalizedPath)) {
         console.warn('Blocked unauthorized media protocol access:', normalizedPath);
-        return callback({ error: -6 }); // net::ERR_FILE_NOT_FOUND or similar
+        return new Response('Access Denied', { status: 403 });
       }
 
-      return callback(normalizedPath);
+      return net.fetch(pathToFileURL(normalizedPath).toString());
     } catch (error) {
-      console.error('Failed to register protocol', error);
-      return callback({ error: -2 }); // net::ERR_FAILED
+      console.error('Failed to handle media protocol', error);
+      return new Response('Internal Error', { status: 500 });
     }
   });
 });
@@ -315,6 +316,13 @@ ipcMain.handle('select-folder', async () => {
     return null;
   }
   return filePaths[0];
+});
+
+ipcMain.handle('authorize-media-path', (_, path: string) => {
+  if (typeof path !== 'string') return;
+  const normalizedPath = join(path);
+  allowedMediaPaths.add(normalizedPath);
+  console.log('Authorized media path:', normalizedPath);
 });
 
 // ── Context Menu ──

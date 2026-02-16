@@ -344,7 +344,17 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         </svg>
     );
 
-    const effectiveBg = terminalBackground || 'var(--bg-primary)';
+    const getTransparentColor = (hex: string) => {
+        if (hex.startsWith('#') && hex.length === 7) {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, 0.85)`;
+        }
+        return hex;
+    };
+
+    const effectiveBg = getTransparentColor(terminalBackground || '#1e1e1e');
 
     return (
         <div className="ai-chat-pane" style={{ fontSize: `${fontSize}px`, backgroundColor: effectiveBg }}>

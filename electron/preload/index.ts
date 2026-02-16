@@ -111,6 +111,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     listSerialPorts: () => ipcRenderer.invoke('list-serial-ports'),
     selectImage: () => ipcRenderer.invoke('select-image'),
     selectFolder: () => ipcRenderer.invoke('select-folder'),
+    authorizeMediaPath: (path: string) => ipcRenderer.invoke('authorize-media-path', path),
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
     logDebug: (message: string) => ipcRenderer.send('log-debug', message),
 
