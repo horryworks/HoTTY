@@ -10,6 +10,12 @@
 - **UI/UX Refinements**:
   - Reordered the "Settings -> AI" tabs to "Ask Gemini Commands", "Personas", and "Debugging".
   - Fixed text wrapping issues for "Show System Prompt" and "Enable Logging" labels in Settings.
+- **AI Content Enriched**:
+  - **New Commands**: Added "Explain code", "Interpret log", "Root cause analysis", and "Fix this" commands with improved prompt templates.
+  - **New Personas**: Added "Security Analyst" persona.
+  - **Refined Personas**: Updated "Network/Server/Cloud/Coding Expert" system prompts to be more specific and professional.
+- **Installer Improvements**:
+  - **Silent Updates**: The installer no longer asks to delete user data during silent installations (e.g., auto-updates). The prompt only appears during manual uninstallation.
 
 ## [0.1.5] - 2026-02-15
 

@@ -22,9 +22,10 @@ export interface AskGeminiCommand {
 }
 
 const DEFAULT_GEMINI_COMMANDS: AskGeminiCommand[] = [
-  { id: 'what-is-this', label: 'What is this?', promptTemplate: 'What is this?\n\n{selection}' },
-  { id: 'what-does-it-mean', label: 'What does it mean?', promptTemplate: 'What does this mean?\n\n{selection}' },
-  { id: 'root-cause', label: 'Research root cause', promptTemplate: 'Analyze the potential root cause of this:\n\n{selection}' },
+  { id: 'what-is-this', label: 'What is this?', promptTemplate: 'Explain the following text or code snippet concisely:\n\n{selection}' },
+  { id: 'what-does-it-mean', label: 'What does it mean?', promptTemplate: 'Interpret the meaning of this log entry or message and its implications:\n\n{selection}' },
+  { id: 'root-cause', label: 'Research root cause', promptTemplate: 'Analyze the following error or issue, identify 3 potential root causes, and suggest verification steps for each:\n\n{selection}' },
+  { id: 'fix-this', label: 'Fix this', promptTemplate: 'Suggest a fix or improvement for the selected code or configuration:\n\n{selection}' },
 ];
 
 export interface PersonaDefinition {
@@ -37,27 +38,32 @@ const DEFAULT_PERSONAS: PersonaDefinition[] = [
   {
     id: 'general-helper',
     label: 'General Helper',
-    systemPrompt: 'You are a helpful assistant.'
+    systemPrompt: 'You are a helpful technical assistant. Provide clear, concise, and accurate answers. When explaining concepts, use analogies where appropriate.'
   },
   {
     id: 'network-expert',
     label: 'Network Expert',
-    systemPrompt: 'You are a Network Expert. Provide detailed technical analysis of network protocols, routing, and infrastructure.'
+    systemPrompt: 'You are a Senior Network Engineer. Analyze network issues with a focus on OSI layers, routing protocols (BGP, OSPF), and switching. Use industry-standard terminology (Cisco/Juniper syntax) and formatting.'
   },
   {
     id: 'server-expert',
     label: 'Server Expert',
-    systemPrompt: 'You are a Server Expert. Focus on server administration, OS internals, and system performance.'
+    systemPrompt: 'You are a Systems Administrator specializing in Linux and Windows servers. Focus on OS internals, kernel parameters, performance tuning, and security best practices. Provide specific commands for troubleshooting.'
   },
   {
     id: 'cloud-expert',
     label: 'Cloud Expert',
-    systemPrompt: 'You are a Cloud Expert. Specialize in cloud architecture, AWS/Azure/GCP services, and cloud-native practices.'
+    systemPrompt: 'You are a Cloud Architect (AWS/Azure/GCP). Advise on cloud-native patterns, microservices, and infrastructure-as-code (Terraform/K8s). Prioritize scalability, cost-efficiency, and security in your recommendations.'
   },
   {
     id: 'coding-expert',
     label: 'Coding Expert',
-    systemPrompt: 'You are a Coding Expert. Provide efficient, clean code solutions and explain algorithmic complexity.'
+    systemPrompt: 'You are a Senior Software Engineer. Provide idiomatic, clean, and performant code solutions. Explain time/space complexity (Big O) where relevant. Prefer modern syntax and safety.'
+  },
+  {
+    id: 'security-analyst',
+    label: 'Security Analyst',
+    systemPrompt: 'You are a Cybersecurity Analyst. Analyze logs and configurations for potential vulnerabilities, threats, and indicators of compromise (IoCs). Recommend mitigation strategies based on industry standards (NIST/CIS).'
   }
 ];
 

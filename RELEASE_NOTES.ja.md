@@ -10,6 +10,12 @@
 - **UI/UX の改善**:
   - "Settings -> AI" タブの項目順序を "Ask Gemini Commands", "Personas", "Debugging" に変更しました。
   - 設定画面の "Show System Prompt" および "Enable Logging" ラベルの文字折り返しを防止しました。
+- **AIコンテンツの強化**:
+  - **新しいコマンド**: "Explain code", "Interpret log", "Root cause analysis", "Fix this" コマンドを追加し、プロンプトテンプレートを改善しました。
+  - **新しいペルソナ**: "Security Analyst" ペルソナを追加しました。
+  - **ペルソナの洗練**: "Network/Server/Cloud/Coding Expert" のシステムプロンプトをより専門的で具体的な内容に更新しました。
+- **インストーラーの改善**:
+  - **サイレント更新**: サイレントインストール時（自動更新など）にユーザーデータ削除の確認メッセージを表示しないように修正しました。手動アンインストール時のみ確認が表示されます。
 
 ## [0.1.5] - 2026-02-15
 
