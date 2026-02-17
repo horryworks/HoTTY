@@ -23,8 +23,8 @@ interface SettingsModalProps {
     onTerminalBackgroundInactiveChange: (color: string) => void;
     paneBackground: string;
     onPaneBackgroundChange: (color: string) => void;
-    paneBackgroundMode: 'color' | 'image';
-    onPaneBackgroundModeChange: (mode: 'color' | 'image') => void;
+    paneBackgroundMode: 'color' | 'image' | 'default';
+    onPaneBackgroundModeChange: (mode: 'color' | 'image' | 'default') => void;
     paneBackgroundImage: string;
     onPaneBackgroundImageChange: (url: string) => void;
     loggingEnabled: boolean;
@@ -333,6 +333,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                         <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
                                             <input
                                                 type="radio"
+                                                checked={paneBackgroundMode === 'default'}
+                                                onChange={() => onPaneBackgroundModeChange('default')}
+                                                style={{ marginRight: '6px' }}
+                                            /> Default
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
+                                            <input
+                                                type="radio"
                                                 checked={paneBackgroundMode === 'image'}
                                                 onChange={() => onPaneBackgroundModeChange('image')}
                                                 style={{ marginRight: '6px' }}
@@ -348,7 +356,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                         </label>
                                     </div>
 
-                                    {paneBackgroundMode === 'color' ? (
+                                    {paneBackgroundMode === 'color' && (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             <input
                                                 type="color"
@@ -364,7 +372,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 style={{ width: '80px', padding: '4px', fontSize: '12px' }}
                                             />
                                         </div>
-                                    ) : (
+                                    )}
+                                    {paneBackgroundMode === 'image' && (
                                         <div style={{ display: 'flex', gap: '8px' }}>
                                             <input
                                                 type="text"

@@ -22,7 +22,7 @@ interface GridLayoutProps {
     terminalBackground: string;
     terminalBackgroundInactive?: string | null;
     paneBackground: string | null;
-    paneBackgroundMode: 'color' | 'image';
+    paneBackgroundMode: 'color' | 'image' | 'default';
     paneBackgroundImage: string | null;
     lineWrapEnabled: boolean;
     showSystemPrompt: boolean;
@@ -219,9 +219,10 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                             gridColumn: c * 2 + 1,
                             gridRow: r * 2 + 1,
                             backgroundColor: paneBackground || '#000200',
-                            backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || 'HoTTY_background.svg'}")` : 'none',
-                            backgroundSize: (paneBackgroundMode === 'image' && (!paneBackgroundImage || paneBackgroundImage.includes('HoTTY_background.svg'))) ? '128px 128px' : 'auto',
-                            backgroundRepeat: 'repeat',
+                            backgroundImage: paneBackgroundMode === 'default' ? `url("HoTTY_background.svg")` :
+                                (paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || 'HoTTY_background.svg'}")` : 'none'),
+                            backgroundSize: (paneBackgroundMode === 'default' || (paneBackgroundMode === 'image' && (!paneBackgroundImage || paneBackgroundImage.includes('HoTTY_background.svg'))))
+                                ? '128px 128px' : 'auto', backgroundRepeat: 'repeat',
                             backgroundPosition: 'center',
                             borderRight: '1px solid var(--border-color)',
                             borderBottom: '1px solid var(--border-color)',

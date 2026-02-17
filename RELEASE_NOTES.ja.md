@@ -4,6 +4,7 @@
 
 ### 新機能
 - **テーマガイドの追加**: `themes.json` の各プロパティの意味を解説する [THEMES_GUIDE.md](file:///c:/Users/horry/development/HoTTY/THEMES_GUIDE.md) および [THEMES_GUIDE.ja.md](file:///c:/Users/horry/development/HoTTY/THEMES_GUIDE.ja.md) を追加しました。
+- **デフォルト背景モード**: 空きペインの背景設定に「Default」オプションを追加しました。ファイルを手動で選択しなくても、標準の HoTTY ロゴ背景を簡単に復元できるようになりました。
 - **SSH 互換性の向上**: 古いネットワーク機器や産業用ハードウェアへの接続を可能にするため、幅広いレガシーアルゴリズム（鍵交換、暗号、サーバーホストキー、HMAC）への対応を追加しました。
 
 ### 変更・改善

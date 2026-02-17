@@ -178,8 +178,8 @@ function App() {
     paneBackground: localStorage.getItem('hterm_custom_pane_background') || '#000200',
   }));
 
-  const [paneBackgroundMode, setPaneBackgroundMode] = useState<'color' | 'image'>(() => {
-    return (localStorage.getItem('hterm_pane_background_mode') as 'color' | 'image') || 'image';
+  const [paneBackgroundMode, setPaneBackgroundMode] = useState<'color' | 'image' | 'default'>(() => {
+    return (localStorage.getItem('hterm_pane_background_mode') as 'color' | 'image' | 'default') || 'default';
   });
   const [paneBackgroundImage, setPaneBackgroundImage] = useState<string>(() => {
     return localStorage.getItem('hterm_pane_background_image') || 'HoTTY_background.svg';
@@ -501,7 +501,7 @@ function App() {
     }
   };
 
-  const updatePaneBackgroundMode = (mode: 'color' | 'image') => {
+  const updatePaneBackgroundMode = (mode: 'color' | 'image' | 'default') => {
     setPaneBackgroundMode(mode);
     localStorage.setItem('hterm_pane_background_mode', mode);
   };

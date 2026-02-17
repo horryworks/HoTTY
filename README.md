@@ -15,7 +15,7 @@ HoTTY is a modern, high-performance terminal emulator built with Electron, React
 - **Customization**:
     - **Themes**: Built-in **Dark**, **Medium**, and **Light** themes, plus a **Custom** mode for independent color settings.
     - **Visual Identity**: Features a modern black "H" logo with optimized visibility across all themes (including a rounded white background for dark mode icons).
-    - **Advanced Backgrounds**: Support for solid colors or tiled image patterns.
+    - **Advanced Backgrounds**: Support for solid colors, tiled image patterns, or the **built-in Default logo background**.
     - **File Picker**: Easily select custom local images as your terminal background via a built-in file explorer integration.
 - **Session Management**:
     - Persistent settings (fonts, encoding, colors) across sessions.
