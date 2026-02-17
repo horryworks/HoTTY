@@ -1,5 +1,22 @@
 # Release Notes - HoTTY
 
+## [0.1.7] - 2026-02-17
+
+### Added
+- **Themes Guide**: Added [THEMES_GUIDE.md](file:///c:/Users/horry/development/HoTTY/THEMES_GUIDE.md) and [THEMES_GUIDE.ja.md](file:///c:/Users/horry/development/HoTTY/THEMES_GUIDE.ja.md) to explain the properties in `themes.json`.
+- **Improved SSH Compatibility**: Added support for a wide range of legacy algorithms (Key Exchange, Ciphers, Server Host Keys, and HMACs) to enable connections to older network devices and industrial hardware.
+
+### Changed
+- **Visual Improvements**:
+  - **Dark Theme**: Set active terminal background to pure black (`#000000`) for maximum contrast.
+  - **Medium Theme**: Swapped active and inactive background colors for better consistency; removed unnecessary white overlays to ensure intended color depth.
+  - **Light Theme**: Corrected a typo in `paneBackground`.
+- **Code Maintenance**:
+  - All source code comments have been translated from Japanese to English for global maintainability.
+  - Removed non-ASCII separators and characters from the codebase.
+- **Reliability**:
+  - Improved theme application logic to correctly load values from `themes.json` and override potentially stale `localStorage` data on application startup.
+
 ## [0.1.6] - 2026-02-15
 
 ### Changed

@@ -1,5 +1,7 @@
 # HoTTY Theme Configuration Guide
 
+[日本語版はこちら (Japanese version)](file:///c:/Users/horry/development/HoTTY/THEMES_GUIDE.ja.md)
+
 This guide explains the properties available in `src/themes.json`. Since JSON does not support comments, use this file as a reference for customizing HoTTY's appearance.
 
 ## Structure Overview
@@ -76,5 +78,6 @@ These settings directly configure the terminal emulator.
 ## How to Apply Changes
 
 After modifying `src/themes.json`, you may need to:
-1. Restart the application or reload the developer window.
+1. Restart the application or reload the developer window (**Ctrl+R**).
 2. If changes are not visible, go to **Settings** and re-select your theme (e.g., switch to Light and back to Dark) to force a refresh of the cached values in `localStorage`.
+3. Check the **Browser Console** (if in dev mode) for any CSS variable errors.
