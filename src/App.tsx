@@ -69,7 +69,7 @@ const DEFAULT_PERSONAS: PersonaDefinition[] = [
 
 function App() {
 
-  // ── UI State ──
+  // -- UI State --
   const [showDialog, setShowDialog] = useState(true);
   const [errorModalMessage, setErrorModalMessage] = useState<string | null>(null);
   const [focusTrigger, setFocusTrigger] = useState(0);
@@ -238,18 +238,18 @@ function App() {
     localStorage.setItem('hterm_scrollback', lines.toString());
   };
 
-  // ── Pane Manager ──
+  // -- Pane Manager --
   const pane = usePaneManager();
 
 
 
-  // ── Paste handler (needed by session manager for terminal paste interception) ──
+  // -- Paste handler (needed by session manager for terminal paste interception) --
   const handlePasteRequest = (sessionId: string, text: string) => {
     setPasteContent(text);
     setPasteSessionId(sessionId);
   };
 
-  // ── Session Manager ──
+  // -- Session Manager --
   const session = useSessionManager({
     globalEncoding,
     sshKeepAliveEnabled,
@@ -298,7 +298,7 @@ function App() {
     localStorage.setItem('hotty_ask_gemini_commands', JSON.stringify(commands));
   };
 
-  // ── Ask Gemini Handler ──
+  // -- Ask Gemini Handler --
   // Use ref to access latest sessions and functions without re-binding the listener
   const sessionRef = useRef(session);
   const paneRef = useRef(pane);
@@ -398,7 +398,7 @@ function App() {
 
 
 
-  // ── Settings Updaters ──
+  // -- Settings Updaters --
   const updateGlobalEncoding = (newEncoding: string) => {
     setGlobalEncoding(newEncoding);
     localStorage.setItem('hterm_global_encoding', newEncoding);
@@ -511,7 +511,7 @@ function App() {
     localStorage.setItem('hterm_pane_background_image', url);
   };
 
-  // ── Paste Handlers ──
+  // -- Paste Handlers --
   const cancelPaste = () => {
     setPasteContent(null);
     setPasteSessionId(null);
@@ -529,23 +529,23 @@ function App() {
     setFocusTrigger(prev => prev + 1);
   };
 
-  // ── Error Modal ──
+  // -- Error Modal --
   const handleCloseErrorModal = () => {
     setErrorModalMessage(null);
     window.electronAPI.focusWindow();
   };
 
-  // ── Early Return ──
+  // -- Early Return --
   if (!window.electronAPI) {
     return <div style={{ color: 'white', padding: '20px' }}>Loading Electron API...</div>;
   }
 
-  // ── Derived State ──
+  // -- Derived State --
   const orderedTabs = session.tabOrder
     .map(id => session.sessions.find(s => s.id === id))
     .filter((s): s is Session => !!s);
 
-  // ── Render ──
+  // -- Render --
   return (
     <div className="app-container">
       {/* Sidebar */}

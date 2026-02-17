@@ -178,7 +178,7 @@
     background-color: #4a0000;
 }
 
-/* アクティブペインに対応するタブ: 青背景 */
+/* Tab corresponding to the active pane: blue background */
 .tab.active-pane-tab {
     background-color: var(--accent-color);
     color: #ffffff;

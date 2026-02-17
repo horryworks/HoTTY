@@ -29,7 +29,7 @@ export class GeminiService {
     this.win = win;
   }
 
-  // ── OAuth 2.0 Flow ──
+  // -- OAuth 2.0 Flow --
 
   async startAuth(clientId: string, clientSecret: string): Promise<boolean> {
     this.clientId = clientId;
@@ -191,7 +191,7 @@ export class GeminiService {
     return this.tokenData.access_token;
   }
 
-  // ── Chat ──
+  // -- Chat --
 
   async sendMessage(sessionId: string, message: string, model: string = 'gemini-2.5-flash', systemInstruction?: string): Promise<void> {
     const token = await this.getValidToken();
@@ -302,7 +302,7 @@ export class GeminiService {
     }
   }
 
-  // ── State ──
+  // -- State --
 
   isAuthenticated(): boolean {
     return this.tokenData !== null;

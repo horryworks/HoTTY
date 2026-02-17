@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { LayoutMode } from '../components/LayoutSelector/LayoutSelector';
 
-/** グリッド寸法の計算 */
+/** Calculate grid dimensions */
 function getGridDimensions(mode: LayoutMode) {
     switch (mode) {
         case '1x1': return { rows: 1, cols: 1 };
@@ -69,7 +69,7 @@ export function usePaneManager() {
         }
     }, [layoutMode, currentDims.rows, currentDims.cols]);
 
-    /** タブをペインにドロップ（スワップ対応） */
+    /** Drop tab onto pane (supports swapping) */
     const handleDropSession = (sessionId: string, targetPaneId: string) => {
         setPaneAllocations(prev => {
             const next = { ...prev };
@@ -88,9 +88,9 @@ export function usePaneManager() {
         setActivePaneId(targetPaneId);
     };
 
-    /** タブクリック：表示中ならそのペインをアクティブ化。非表示の場合は何もしない（D&Dで移動） */
+    /** Tab click: Activate the pane if visible. If not visible, do nothing (move via D&D) */
     const handleTabClick = (sessionId: string) => {
-        // 有効なペイン（現在の画面に表示中）のみを検索
+        // Search only for valid panes (currently visible on screen)
         const existingPaneId = Object.keys(paneAllocations).find(
             paneId => paneAllocations[paneId] === sessionId && parseInt(paneId) < totalPanes
         );
@@ -98,16 +98,16 @@ export function usePaneManager() {
         if (existingPaneId) {
             setActivePaneId(existingPaneId);
         }
-        // 非表示タブはクリックしても移動しない（D&Dでのみ移動可能）
+        // Hidden tabs do not move on click (can only be moved via D&D)
     };
 
-    /** 現在のレイアウトで有効なペインに表示中のセッションID一覧 */
+    /** List of session IDs currently displayed in valid panes for the current layout */
     const totalPanes = currentDims.rows * currentDims.cols;
     const visibleSessionIds = Object.entries(paneAllocations)
         .filter(([paneId, sessionId]) => sessionId !== null && parseInt(paneId) < totalPanes)
         .map(([, sessionId]) => sessionId as string);
 
-    /** アクティブペインのセッションID */
+    /** Session ID of the active pane */
     const activeSessionId = paneAllocations[activePaneId] || null;
 
     return {

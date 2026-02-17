@@ -1,24 +1,24 @@
 /**
- * SSH/Telnet サービスの共通インターフェース。
- * 両プロトコルが同じ API を公開することで、
- * メインプロセス側のセッション管理コードから型安全に利用できます。
+ * Common interface for SSH/Telnet services.
+ * Exposing the same API for both protocols allows type-safe
+ * session management from the main process.
  */
 export interface ISessionService {
-    /** リモートホストへ接続 */
+    /** Connect to remote host */
     connect(config: any): void | Promise<void>;
 
-    /** データ（ユーザー入力）をリモートへ送信 */
+    /** Send data (user input) to remote host */
     write(data: string): void;
 
-    /** ターミナルサイズ変更を通知 */
+    /** Notify changes in terminal size */
     resize(cols: number, rows: number): void;
 
-    /** 接続を切断 */
+    /** Disconnect from remote host */
     disconnect(): void;
 
-    /** 文字エンコーディングを変更 */
+    /** Change character encoding */
     setEncoding(encoding: string): void;
 
-    /** データ受信時のコールバック登録 (ログ保存用) */
+    /** Register callback for data reception (used for logging) */
     onData(callback: (data: string) => void): void;
 }

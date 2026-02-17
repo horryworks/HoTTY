@@ -92,13 +92,13 @@ export class TelnetService implements ISessionService {
     }
 
     /**
-     * Telnet IAC (Interpret As Command) シーケンスを手動で除去します。
+     * Manually strips Telnet IAC (Interpret As Command) sequences.
      *
-     * 背景:
-     * `negotiationMandatory: false` は telnet-client ライブラリ側のネゴシエーション処理を
-     * スキップする設定ですが、リモートサーバーが一方的に送信する IAC シーケンスは
-     * data イベントに混入する場合があります。このメソッドはそれらをクリーンに除去し、
-     * 純粋なターミナル出力データのみを返します。
+     * Background:
+     * Although 'negotiationMandatory: false' skips negotiation handling in the
+     * telnet-client library, IAC sequences sent by the remote server può still
+     * appear in 'data' events. This method cleanly removes them and returns
+     * pure terminal output data.
      */
     private stripTelnetIAC(data: Buffer): Buffer {
         const IAC = 255;
