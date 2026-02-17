@@ -103,17 +103,26 @@ function App() {
 
   const applyTheme = (themeName: string) => {
     if (themeName === 'custom') {
-      // For custom theme, we rely on the Individual settings already in state/localStorage
-      // But we might want to ensure standard variables are also set if they weren't
-      // For now, let's assume Custom only overrides specific terminal colors.
       return;
     }
 
     const themeDef = (themesData as any)[themeName];
-    if (themeDef && themeDef.variables) {
-      Object.entries(themeDef.variables).forEach(([key, value]) => {
-        document.documentElement.style.setProperty(`--${key}`, value as string);
-      });
+    if (themeDef) {
+      if (themeDef.variables) {
+        Object.entries(themeDef.variables).forEach(([key, value]) => {
+          document.documentElement.style.setProperty(`--${key}`, value as string);
+        });
+      }
+
+      if (themeDef.terminal) {
+        const { foreground, background, backgroundInactive, paneBackground: pBg } = themeDef.terminal;
+        // Update state and localStorage to match the theme definition
+        // This ensures that when the theme is selected, the specific colors are also updated
+        updateTerminalForeground(foreground);
+        updateTerminalBackground(background);
+        updateTerminalBackgroundInactive(backgroundInactive);
+        updatePaneBackground(pBg);
+      }
     }
   };
 

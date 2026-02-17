@@ -2,7 +2,7 @@
     "dark": {
         "name": "Dark",
         "variables": {
-            "bg-primary": "#1e1e1e",
+            "bg-primary": "#000000",
             "bg-secondary": "#252526",
             "bg-tertiary": "#2d2d2d",
             "text-primary": "#e0e0e0",
@@ -26,7 +26,7 @@
             "sidebar-btn-hover-color": "#fff",
             "tab-bg": "#2d2d2d",
             "tab-text": "#aaaaaa",
-            "tab-active-bg": "#1e1e1e",
+            "tab-active-bg": "#000000",
             "tab-active-text": "#e0e0e0",
             "tab-close-bg": "#ff4d4d",
             "tab-close-hover-bg": "#cc0000",
@@ -34,14 +34,14 @@
             "ai-header-bg": "rgba(0, 0, 0, 0.1)",
             "ai-welcome-text": "#555",
             "ai-welcome-subtext": "#666",
-            "pane-overlay-active": "rgba(255, 255, 255, 0.1)",
+            "pane-overlay-active": "transparent",
             "pane-overlay-inactive": "transparent"
         },
         "terminal": {
             "foreground": "#ffffff",
-            "background": "#1e1e1e",
-            "backgroundInactive": "#121212",
-            "paneBackground": "#000200"
+            "background": "#000000",
+            "backgroundInactive": "#333333",
+            "paneBackground": "#000000"
         }
     },
     "light": {
@@ -83,10 +83,10 @@
             "pane-overlay-inactive": "rgba(0, 0, 0, 0.05)"
         },
         "terminal": {
-            "foreground": "#000000",
-            "background": "#ffffff",
-            "backgroundInactive": "#f8f8f8",
-            "paneBackground": "#f0f0f0"
+            "foreground": "#ffffff",
+            "background": "#000000",
+            "backgroundInactive": "#f0f0f0",
+            "paneBackground": "#f8f8f8"
         }
     },
     "medium": {
@@ -124,13 +124,13 @@
             "ai-header-bg": "rgba(0, 0, 0, 0.1)",
             "ai-welcome-text": "#cccccc",
             "ai-welcome-subtext": "#eaeaea",
-            "pane-overlay-active": "rgba(255, 255, 255, 0.1)",
+            "pane-overlay-active": "transparent",
             "pane-overlay-inactive": "transparent"
         },
         "terminal": {
             "foreground": "#f0f0f0",
-            "background": "#454545",
-            "backgroundInactive": "#383838",
+            "background": "#383838",
+            "backgroundInactive": "#454545",
             "paneBackground": "#383838"
         }
     }
