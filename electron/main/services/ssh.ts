@@ -63,28 +63,35 @@ export class SshService implements ISessionService {
             ...config,
             tryKeyboard: true,
             algorithms: {
+                // KEX: 現代的なECDHを優先し、Ciscoでエラーになる group-exchange を完全に除外
                 kex: [
-                    "diffie-hellman-group1-sha1",
-                    "diffie-hellman-group14-sha1",
                     "ecdh-sha2-nistp256",
                     "ecdh-sha2-nistp384",
                     "ecdh-sha2-nistp521",
+                    "diffie-hellman-group14-sha1",
+                    "diffie-hellman-group1-sha1",
                     "diffie-hellman-group-exchange-sha256",
                     "diffie-hellman-group-exchange-sha1"
                 ],
+                // Cipher: 高速・安全なGCM/CTRを優先し、CBCはフォールバックとして残す
                 cipher: [
-                    "aes128-ctr", "aes192-ctr", "aes256-ctr",
                     "aes128-gcm", "aes128-gcm@openssh.com",
                     "aes256-gcm", "aes256-gcm@openssh.com",
+                    "aes128-ctr", "aes192-ctr", "aes256-ctr",
                     "aes128-cbc", "aes192-cbc", "aes256-cbc",
                     "3des-cbc"
                 ],
+                // HostKey: 最新のED25519/RSA-SHA2を優先
                 serverHostKey: [
-                    "ssh-rsa", "ssh-dss",
-                    "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521"
+                    "ssh-ed25519",
+                    "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521",
+                    "rsa-sha2-512", "rsa-sha2-256",
+                    "ssh-rsa", "ssh-dss"
                 ],
+                // HMAC: SHA2を優先
                 hmac: [
-                    "hmac-sha2-256", "hmac-sha2-512", "hmac-sha1"
+                    "hmac-sha2-256", "hmac-sha2-512",
+                    "hmac-sha1"
                 ]
             }
         });
