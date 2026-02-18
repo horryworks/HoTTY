@@ -81,15 +81,22 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             }
         });
 
-        // Paste interception (Ctrl+V)
+        // Paste interception (Ctrl+V) and Selection clearing (Ctrl+C)
         term.attachCustomKeyEventHandler((event) => {
-            if (event.ctrlKey && event.key === 'v' && event.type === 'keydown') {
-                event.preventDefault();
-                event.stopPropagation();
-                navigator.clipboard.readText().then(text => {
-                    if (text) onPasteRequest(sessionId, text);
-                }).catch(err => console.error('Clipboard error:', err));
-                return false;
+            if (event.ctrlKey && event.type === 'keydown') {
+                if (event.key === 'v') {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    navigator.clipboard.readText().then(text => {
+                        if (text) onPasteRequest(sessionId, text);
+                    }).catch(err => console.error('Clipboard error:', err));
+                    return false;
+                }
+                if (event.key === 'c' && term.hasSelection()) {
+                    // If text is selected, just clear selection and don't send Ctrl+C to device
+                    term.clearSelection();
+                    return false;
+                }
             }
             return true;
         });
