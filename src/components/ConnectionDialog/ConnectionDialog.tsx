@@ -109,6 +109,14 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             return;
         }
 
+        if (protocol === 'cmd' || protocol === 'powershell') {
+            onConnect({
+                protocol,
+                shellType: protocol
+            });
+            return;
+        }
+
         // Save to history (SSH/Telnet)
         if (host) {
             const newHistory = [host, ...history.filter(h => h !== host)].slice(0, 5);
@@ -228,11 +236,13 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             <option value="telnet">Telnet</option>
                             <option value="serial">Serial</option>
                             <option value="wsl">WSL</option>
+                            <option value="cmd">Command Prompt</option>
+                            <option value="powershell">PowerShell</option>
                         </select>
                     </div>
 
                     {/* SSH/Telnet fields */}
-                    {(protocol !== 'serial' && protocol !== 'wsl') && (
+                    {(protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell') && (
                         <>
                             <div className="form-group">
                                 <label>Host</label>

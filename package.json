@@ -1,7 +1,7 @@
 {
   "name": "hotty",
   "private": true,
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "SSH/Telnet/Serial Terminal Emulator",
   "license": "GPL-3.0-or-later",
   "author": "horry",
@@ -29,7 +29,8 @@
     "asarUnpack": [
       "node_modules/serialport/**/*",
       "node_modules/@serialport/**/*",
-      "node_modules/ssh2/**/*"
+      "node_modules/ssh2/**/*",
+      "node_modules/node-pty/**/*"
     ],
     "win": {
       "icon": "public/icon.ico",
@@ -58,6 +59,7 @@
     "@xterm/xterm": "^6.0.0",
     "iconv-lite": "^0.7.2",
     "marked": "^17.0.2",
+    "node-pty": "^1.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "serialport": "^13.0.0",

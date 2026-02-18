@@ -1,12 +1,9 @@
-# HoTTY
-
-**Current Version: v0.1.8 (Latest)**
-
-HoTTY is a modern, high-performance terminal emulator built with Electron, React, and TypeScript. It is designed to provide a seamless terminal experience with advanced window management and customization options.
+# HoTTY v0.1.9 - Gemini Integrated Advanced Terminal
+emulator built with Electron, React, and TypeScript. It is designed to provide a seamless terminal experience with advanced window management and customization options.
 
 ## Features
 
-- **Multi-protocol Support**: Seamlessly connect via **SSH**, **Telnet**, **Serial** port, and **WSL** (Windows Subsystem for Linux).
+- **Multi-protocol Support**: Seamlessly connect via **SSH**, **Telnet**, **Serial** port, **WSL** (Windows Subsystem for Linux), and **Windows Local Shell (CMD/PowerShell)**.
     - **WSL Integration**: Connect directly to installed Linux distributions (Ubuntu, Debian, etc.) with automatic distribution discovery.
     - **Wide SSH Compatibility**: Supports a comprehensive range of algorithms, including DH Group 1/14, 3DES, CBC ciphers, and all major Key Exchange methods.
 - **Advanced Grid Layout**: 

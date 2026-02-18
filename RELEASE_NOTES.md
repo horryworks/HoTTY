@@ -1,5 +1,11 @@
 # Release Notes - HoTTY
 
+## [v0.1.9] - 2026-02-18
+### Added
+- **Windows Local Shell Support**: Added direct connection to Command Prompt (CMD) and PowerShell.
+- **PTY Implementation**: Integrated `node-pty` for perfect terminal experience (Backspace, Arrow keys, Ctrl+C support).
+- **WSL Enhancement**: Refactored WSL connection to use `node-pty` for better stability and resizing.
+
 ## [0.1.8] - 2026-02-18
 
 ### Added

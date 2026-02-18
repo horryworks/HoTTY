@@ -17,7 +17,7 @@ export default defineConfig({
           build: {
             outDir: 'dist-electron/main',
             rollupOptions: {
-              external: ['electron', 'ssh2', 'telnet-client', 'serialport', '@serialport/bindings-cpp', 'bufferutil', 'utf-8-validate'],
+              external: ['electron', 'ssh2', 'telnet-client', 'serialport', '@serialport/bindings-cpp', 'node-pty', 'bufferutil', 'utf-8-validate'],
             },
             lib: {
               entry: 'electron/main/index.ts',

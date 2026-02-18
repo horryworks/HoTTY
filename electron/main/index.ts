@@ -5,6 +5,7 @@ import { SshService } from './services/ssh';
 import { TelnetService } from './services/telnet';
 import { SerialService } from './services/serial';
 import { WslService } from './services/wsl';
+import { LocalService } from './services/local';
 import { SerialPort } from 'serialport';
 import type { ISessionService } from './services/ISessionService';
 import { GeminiService } from './services/gemini';
@@ -166,7 +167,7 @@ ipcMain.on('open-external', (_, url) => {
 // Session Management
 interface Session {
   id: string;
-  type: 'ssh' | 'telnet' | 'serial' | 'wsl';
+  type: 'ssh' | 'telnet' | 'serial' | 'wsl' | 'local';
   service: ISessionService;
 }
 
@@ -191,6 +192,8 @@ ipcMain.on('connect-session', async (event, { sessionId, config }) => {
     service = new TelnetService(win, sessionId);
   } else if (protocol === 'wsl') {
     service = new WslService(win, sessionId);
+  } else if (protocol === 'cmd' || protocol === 'powershell') {
+    service = new LocalService(win, sessionId);
   } else {
     service = new SerialService(win, sessionId);
   }
