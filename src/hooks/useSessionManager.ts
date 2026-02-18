@@ -143,7 +143,17 @@ export function useSessionManager(options: UseSessionManagerOptions) {
 
         const removeErrorListener = window.electronAPI.onSessionError((sessionId, error) => {
             console.error(`Session ${sessionId} Error:`, error);
-            onSessionError(`Session error occurred:\n${error}`);
+
+            // Suppress popup for common disconnection messages
+            const silentErrors = [
+                'The connection is closed by SSH server',
+                'Connection lost'
+            ];
+
+            if (!silentErrors.some(msg => error.includes(msg))) {
+                onSessionError(error);
+            }
+
             closeSession(sessionId);
         });
 
