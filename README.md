@@ -7,7 +7,7 @@ HoTTY is a modern, high-performance terminal emulator built with Electron, React
 ## Features
 
 - **Multi-protocol Support**: Seamlessly connect via **SSH**, **Telnet**, and **Serial** port.
-    - **Legacy SSH Support**: Supports a wide range of algorithms (DH Group 1/14, 3DES, CBC ciphers) for compatibility with older network devices.
+    - **Wide SSH Compatibility**: Supports a comprehensive range of algorithms, including DH Group 1/14, 3DES, CBC ciphers, and all major Key Exchange methods. Ensures stable connectivity with everything from modern servers to legacy network devices like Cisco.
 - **Advanced Grid Layout**: 
     - Flexible multi-pane interface.
     - Drag-and-drop tabs to re-organize panes.

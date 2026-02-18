@@ -5,7 +5,7 @@
 ### Added
 - **Themes Guide**: Added [THEMES_GUIDE.md](file:///c:/Users/horry/development/HoTTY/THEMES_GUIDE.md) and [THEMES_GUIDE.ja.md](file:///c:/Users/horry/development/HoTTY/THEMES_GUIDE.ja.md) to explain the properties in `themes.json`.
 - **Default Background Mode**: Added a "Default" option for empty pane backgrounds, allowing users to easily restore the original HoTTY logo background without manual file selection.
-- **Improved SSH Compatibility**: Added support for a wide range of legacy algorithms (Key Exchange, Ciphers, Server Host Keys, and HMACs) to enable connections to older network devices and industrial hardware.
+- **Further Improved SSH Compatibility**: Resolved the "Unknown DH group" error observed on certain devices by explicitly allowing all Key Exchange algorithms. This ensures even better connectivity with legacy network devices and industrial hardware.
 
 ### Changed
 - **Visual Improvements**:

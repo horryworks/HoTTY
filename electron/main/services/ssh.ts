@@ -65,13 +65,15 @@ export class SshService implements ISessionService {
             algorithms: {
                 // KEX: 現代的なECDHを優先し、Ciscoでエラーになる group-exchange を完全に除外
                 kex: [
+                    "curve25519-sha256",
+                    "curve25519-sha256@libssh.org",
                     "ecdh-sha2-nistp256",
                     "ecdh-sha2-nistp384",
                     "ecdh-sha2-nistp521",
-                    "diffie-hellman-group14-sha1",
-                    "diffie-hellman-group1-sha1",
                     "diffie-hellman-group-exchange-sha256",
-                    "diffie-hellman-group-exchange-sha1"
+                    "diffie-hellman-group-exchange-sha1",
+                    "diffie-hellman-group14-sha1",
+                    "diffie-hellman-group1-sha1"
                 ],
                 // Cipher: 高速・安全なGCM/CTRを優先し、CBCはフォールバックとして残す
                 cipher: [
