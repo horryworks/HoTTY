@@ -5,7 +5,7 @@ import { FitAddon } from '@xterm/addon-fit';
 export interface Session {
     id: string;
     title: string;
-    type: 'ssh' | 'telnet' | 'serial' | 'ai';
+    type: 'ssh' | 'telnet' | 'serial' | 'ai' | 'wsl';
     aiChatState?: {
         messages: any[]; // ChatMessage[] but avoiding circular dependency or complex imports here
         inputText: string;
@@ -196,6 +196,9 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         } else if (config.protocol === 'telnet') {
             title = `Telnet ${config.host}`;
             type = 'telnet';
+        } else if (config.protocol === 'wsl') {
+            title = `WSL ${config.distro || 'Default'}`;
+            type = 'wsl';
         } else {
             title = `SSH ${config.host}`;
             type = 'ssh';

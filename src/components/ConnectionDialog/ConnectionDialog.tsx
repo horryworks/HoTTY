@@ -62,13 +62,24 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     const [stopBits, setStopBits] = useState('1');
     const [flowControl, setFlowControl] = useState('none');
 
-    // Fetch serial ports when protocol is serial
+    // WSL-specific state
+    const [wslDistros, setWslDistros] = useState<string[]>([]);
+    const [selectedDistro, setSelectedDistro] = useState('');
+
+    // Fetch resources when protocol changes
     useEffect(() => {
         if (protocol === 'serial') {
             (window as any).electronAPI.listSerialPorts().then((ports: SerialPortInfo[]) => {
                 setSerialPorts(ports);
-                if (ports.length > 0 && !serialPath) {
-                    setSerialPath(ports[0].path);
+                if (ports.length > 0) {
+                    setSerialPath(prev => prev || ports[0].path);
+                }
+            });
+        } else if (protocol === 'wsl') {
+            (window as any).electronAPI.listWslDistributions().then((distros: string[]) => {
+                setWslDistros(distros);
+                if (distros.length > 0) {
+                    setSelectedDistro(prev => prev || distros[0]);
                 }
             });
         }
@@ -86,6 +97,14 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                 parity,
                 stopBits: parseFloat(stopBits),
                 flowControl,
+            });
+            return;
+        }
+
+        if (protocol === 'wsl') {
+            onConnect({
+                protocol: 'wsl',
+                distro: selectedDistro
             });
             return;
         }
@@ -200,17 +219,20 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                 } else if (newProtocol === 'telnet') {
                                     setPort('23');
                                     setUsername('');
+                                } else if (newProtocol === 'wsl') {
+                                    // WSL handles its own context
                                 }
                             }}
                         >
                             <option value="ssh">SSH</option>
                             <option value="telnet">Telnet</option>
                             <option value="serial">Serial</option>
+                            <option value="wsl">WSL</option>
                         </select>
                     </div>
 
                     {/* SSH/Telnet fields */}
-                    {protocol !== 'serial' && (
+                    {(protocol !== 'serial' && protocol !== 'wsl') && (
                         <>
                             <div className="form-group">
                                 <label>Host</label>
@@ -264,7 +286,26 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                         </>
                     )}
 
-                    {/* Serial fields */}
+                    {/* WSL fields */}
+                    {protocol === 'wsl' && (
+                        <div className="form-group">
+                            <label>Distribution</label>
+                            {wslDistros.length > 0 ? (
+                                <select
+                                    value={selectedDistro}
+                                    onChange={(e) => setSelectedDistro(e.target.value)}
+                                >
+                                    {wslDistros.map((d) => (
+                                        <option key={d} value={d}>{d}</option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <div style={{ color: '#aaa', fontSize: '0.9rem', fontStyle: 'italic' }}>
+                                    No WSL distributions found.
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {protocol === 'serial' && (
                         <>
                             <div className="form-group">

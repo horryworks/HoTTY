@@ -4,10 +4,14 @@ import { join } from 'node:path';
 import { SshService } from './services/ssh';
 import { TelnetService } from './services/telnet';
 import { SerialService } from './services/serial';
+import { WslService } from './services/wsl';
 import { SerialPort } from 'serialport';
 import type { ISessionService } from './services/ISessionService';
 import { GeminiService } from './services/gemini';
 import { LogManager } from './services/LogManager';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+const execAsync = promisify(exec);
 
 // Disable GPU Acceleration for Windows 7
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
@@ -162,7 +166,7 @@ ipcMain.on('open-external', (_, url) => {
 // Session Management
 interface Session {
   id: string;
-  type: 'ssh' | 'telnet' | 'serial';
+  type: 'ssh' | 'telnet' | 'serial' | 'wsl';
   service: ISessionService;
 }
 
@@ -185,6 +189,8 @@ ipcMain.on('connect-session', async (event, { sessionId, config }) => {
     service = new SshService(win, sessionId);
   } else if (protocol === 'telnet') {
     service = new TelnetService(win, sessionId);
+  } else if (protocol === 'wsl') {
+    service = new WslService(win, sessionId);
   } else {
     service = new SerialService(win, sessionId);
   }
@@ -320,6 +326,18 @@ ipcMain.handle('select-folder', async () => {
     return null;
   }
   return filePaths[0];
+});
+
+ipcMain.handle('list-wsl-distributions', async () => {
+  try {
+    const { stdout } = await execAsync('wsl.exe --list --quiet');
+    return stdout.split('\n')
+      .map(s => s.replace(/[\r\0]/g, '').trim()) // \r と \0 を除去してから trim
+      .filter(s => s.length > 0);
+  } catch (err) {
+    console.error('Failed to list WSL distributions:', err);
+    return [];
+  }
 });
 
 ipcMain.handle('authorize-media-path', (_, path: string) => {

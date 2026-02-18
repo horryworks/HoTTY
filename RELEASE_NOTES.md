@@ -1,5 +1,21 @@
 # Release Notes - HoTTY
 
+## [0.1.8] - 2026-02-18
+
+### Added
+- **WSL Connection Support**: Connect directly to Windows Subsystem for Linux (WSL) distributions.
+  - Automatically lists installed distributions.
+  - Implements a TTY simulation using the `script` command to ensure interactive shells work correctly without heavy dependencies.
+
+### Changed
+- **SSH UX Improvements**:
+  - Replaced technical authentication error messages with a more user-friendly: "Username or password may be incorrect."
+  - Suppressed redundant error popups for normal disconnections (e.g., "Connection closed by server").
+- **Terminal Interaction**:
+  - **Custom Ctrl+C Behavior**: If text is selected in the terminal, pressing `Ctrl+C` will now only clear the selection. This prevents accidental SIGINT signals from being sent to the remote process when you just want to copy/deselect.
+- **Maintenance**:
+  - Updated all documentation (README, Release Notes) to reflect the new connectivity options.
+
 ## [0.1.7] - 2026-02-17
 
 ### Added

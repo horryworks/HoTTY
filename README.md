@@ -1,13 +1,14 @@
 # HoTTY
 
-**Current Version: v0.1.7 (Latest)**
+**Current Version: v0.1.8 (Latest)**
 
 HoTTY is a modern, high-performance terminal emulator built with Electron, React, and TypeScript. It is designed to provide a seamless terminal experience with advanced window management and customization options.
 
 ## Features
 
-- **Multi-protocol Support**: Seamlessly connect via **SSH**, **Telnet**, and **Serial** port.
-    - **Wide SSH Compatibility**: Supports a comprehensive range of algorithms, including DH Group 1/14, 3DES, CBC ciphers, and all major Key Exchange methods. Ensures stable connectivity with everything from modern servers to legacy network devices like Cisco.
+- **Multi-protocol Support**: Seamlessly connect via **SSH**, **Telnet**, **Serial** port, and **WSL** (Windows Subsystem for Linux).
+    - **WSL Integration**: Connect directly to installed Linux distributions (Ubuntu, Debian, etc.) with automatic distribution discovery.
+    - **Wide SSH Compatibility**: Supports a comprehensive range of algorithms, including DH Group 1/14, 3DES, CBC ciphers, and all major Key Exchange methods.
 - **Advanced Grid Layout**: 
     - Flexible multi-pane interface.
     - Drag-and-drop tabs to re-organize panes.
@@ -60,6 +61,7 @@ Alternatively, you can use the provided batch files on Windows:
 
 - **Image Loading**: If a custom background image does not appear, ensure the file is an image (PNG, JPG, SVG, WebP) and that the path is correctly selected via the "Browse" button in Settings.
 - **SSH Connectivity**: If connections time out, check your "SSH KeepAlive" settings in the Settings modal.
+- **WSL Terminal**: If the WSL terminal doesn't show a prompt, ensure the distribution is correctly installed and initialized. HoTTY uses an internal workaround (`script` command) to provide a TTY experience.
 
 ## License
 
