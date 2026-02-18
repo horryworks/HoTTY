@@ -34,6 +34,9 @@ emulator built with Electron, React, and TypeScript. It is designed to provide a
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) (Recommended version: LTS)
+- **Windows Build Tools** (For native modules like `node-pty` and `serialport`):
+    - Visual Studio 2022 with "Desktop development with C++" workload.
+    - **Important**: "MSVC v143 - VS 2022 C++ x64/x86 Spectre-mitigated libs (Latest)" component is required.
 
 ### Installation
 
@@ -58,7 +61,7 @@ Alternatively, you can use the provided batch files on Windows:
 
 - **Image Loading**: If a custom background image does not appear, ensure the file is an image (PNG, JPG, SVG, WebP) and that the path is correctly selected via the "Browse" button in Settings.
 - **SSH Connectivity**: If connections time out, check your "SSH KeepAlive" settings in the Settings modal.
-- **WSL Terminal**: If the WSL terminal doesn't show a prompt, ensure the distribution is correctly installed and initialized. HoTTY uses an internal workaround (`script` command) to provide a TTY experience.
+- **WSL Terminal**: If the WSL terminal doesn't show a prompt, ensure the distribution is correctly installed and initialized. HoTTY now uses `node-pty` for a native TTY experience.
 
 ## License
 
