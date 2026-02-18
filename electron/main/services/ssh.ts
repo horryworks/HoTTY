@@ -54,7 +54,11 @@ export class SshService implements ISessionService {
                 });
             });
         }).on('error', (err) => {
-            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: err.message });
+            let message = err.message;
+            if (message === 'All configured authentication methods failed') {
+                message = 'Username or password may be incorrect';
+            }
+            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: message });
         }).on('close', () => {
             this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
         }).on('keyboard-interactive', (name, instructions, instructionsLang, prompts, finish) => {

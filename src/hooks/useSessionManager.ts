@@ -143,7 +143,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
 
         const removeErrorListener = window.electronAPI.onSessionError((sessionId, error) => {
             console.error(`Session ${sessionId} Error:`, error);
-            onSessionError(`Session error occurred:\n${error}\n\nThe session will now be closed.`);
+            onSessionError(`Session error occurred:\n${error}`);
             closeSession(sessionId);
         });
 
