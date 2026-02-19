@@ -26,15 +26,25 @@ export function usePaneManager() {
         const totalPanes = currentDims.rows * currentDims.cols;
         setPaneAllocations(prev => {
             // Check for active sessions that would be lost
+            // Filter out 'sidebar' or other non-numeric keys from grid logic
             const activeEntries = Object.entries(prev)
-                .filter(([, v]) => v !== null)
+                .filter(([k, v]) => v !== null && !isNaN(parseInt(k)))
                 .sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
 
             const hasOverflow = activeEntries.some(([k]) => parseInt(k) >= totalPanes);
 
+
             if (hasOverflow) {
                 // "Head filling": Compact active sessions into available slots
                 const next: { [key: string]: string | null } = {};
+
+                // Preserve non-numeric keys (sidebars)
+                Object.keys(prev).forEach(key => {
+                    if (isNaN(parseInt(key))) {
+                        next[key] = prev[key];
+                    }
+                });
+
                 for (let i = 0; i < totalPanes; i++) {
                     // Start with explicit nulls
                     next[i.toString()] = null;
@@ -46,7 +56,7 @@ export function usePaneManager() {
                 }));
                 return next;
             } else {
-                // Standard resize (keep existing positions)
+
                 const next = { ...prev };
                 // Add missing keys
                 for (let i = 0; i < totalPanes; i++) {
@@ -54,14 +64,16 @@ export function usePaneManager() {
                         next[i.toString()] = null;
                     }
                 }
-                // Remove excess keys
+                // Remove excess numeric keys
                 Object.keys(next).forEach(key => {
-                    if (parseInt(key) >= totalPanes) {
+                    const keyNum = parseInt(key);
+                    if (!isNaN(keyNum) && keyNum >= totalPanes) {
                         delete next[key];
                     }
                 });
                 return next;
             }
+
         });
 
         if (parseInt(activePaneId) >= totalPanes) {
@@ -92,8 +104,9 @@ export function usePaneManager() {
     const handleTabClick = (sessionId: string) => {
         // Search only for valid panes (currently visible on screen)
         const existingPaneId = Object.keys(paneAllocations).find(
-            paneId => paneAllocations[paneId] === sessionId && parseInt(paneId) < totalPanes
+            paneId => paneAllocations[paneId] === sessionId && (paneId === 'sidebar' || parseInt(paneId) < totalPanes)
         );
+
 
         if (existingPaneId) {
             setActivePaneId(existingPaneId);
@@ -104,8 +117,9 @@ export function usePaneManager() {
     /** List of session IDs currently displayed in valid panes for the current layout */
     const totalPanes = currentDims.rows * currentDims.cols;
     const visibleSessionIds = Object.entries(paneAllocations)
-        .filter(([paneId, sessionId]) => sessionId !== null && parseInt(paneId) < totalPanes)
+        .filter(([paneId, sessionId]) => sessionId !== null && (paneId === 'sidebar' || parseInt(paneId) < totalPanes))
         .map(([, sessionId]) => sessionId as string);
+
 
     /** Session ID of the active pane */
     const activeSessionId = paneAllocations[activePaneId] || null;

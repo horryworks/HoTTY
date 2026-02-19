@@ -6,7 +6,10 @@ import { PasteConfirmationModal } from './components/PasteConfirmationModal/Past
 import { SettingsModal } from './components/SettingsModal/SettingsModal'
 import { LayoutSelector } from './components/LayoutSelector/LayoutSelector'
 import { GridLayout } from './components/GridLayout/GridLayout'
+import { TerminalComponent } from './components/Terminal/Terminal'
+import { AIChatPane } from './components/AIChatPane/AIChatPane'
 import { ErrorModal } from './components/ErrorModal/ErrorModal'
+
 import { PaneLines } from './components/PaneLines/PaneLines'
 import { useSessionManager } from './hooks/useSessionManager'
 import type { Session } from './hooks/useSessionManager'
@@ -73,8 +76,83 @@ function App() {
   const [showDialog, setShowDialog] = useState(true);
   const [errorModalMessage, setErrorModalMessage] = useState<string | null>(null);
   const [focusTrigger, setFocusTrigger] = useState(0);
+  const [showRightSidebar, setShowRightSidebar] = useState(false);
+  const [showLeftSidebar, setShowLeftSidebar] = useState(false);
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(300);
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(300);
+  const [resizingSide, setResizingSide] = useState<'left' | 'right' | null>(null);
+
+  // -- Sidebar Resizing Logic --
+
+  const sidebarResizingState = useRef<{
+    side: 'left' | 'right';
+    startX: number;
+    startWidth: number;
+    containerWidth: number;
+  } | null>(null);
+
+  const handleSidebarResizeStart = (e: React.MouseEvent, side: 'left' | 'right') => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    setResizingSide(side);
+
+    // Get container width for max width calculation if needed
+    const container = document.querySelector('.content-area');
+    const containerWidth = container ? container.clientWidth : 1000;
+
+    sidebarResizingState.current = {
+      side,
+      startX: e.clientX,
+      startWidth: side === 'left' ? leftSidebarWidth : rightSidebarWidth,
+      containerWidth
+    };
+
+    document.addEventListener('mousemove', handleSidebarResizeMove);
+    document.addEventListener('mouseup', handleSidebarResizeEnd);
+    document.body.style.cursor = 'col-resize';
+  };
+
+  const handleSidebarResizeMove = (e: MouseEvent) => {
+    if (!sidebarResizingState.current) return;
+
+    const { side, startX, startWidth, containerWidth } = sidebarResizingState.current;
+    const currentX = e.clientX;
+    const deltaX = currentX - startX;
+
+    // For left sidebar, moving right (positive delta) increases width
+    // For right sidebar, moving left (negative delta) increases width
+    const newWidth = side === 'left'
+      ? startWidth + deltaX
+      : startWidth - deltaX;
+
+    // Constraints
+    const minWidth = 100;
+    const maxWidth = containerWidth - 100; // Leave space for main content
+
+    if (newWidth >= minWidth && newWidth <= maxWidth) {
+      if (side === 'left') {
+        setLeftSidebarWidth(newWidth);
+      } else {
+        setRightSidebarWidth(newWidth);
+      }
+    }
+  };
+
+  const handleSidebarResizeEnd = () => {
+    sidebarResizingState.current = null;
+    setResizingSide(null);
+    document.removeEventListener('mousemove', handleSidebarResizeMove);
+    document.removeEventListener('mouseup', handleSidebarResizeEnd);
+    document.body.style.cursor = '';
+  };
+
+
 
   // Load themes on startup
+
+
+
   useEffect(() => {
     window.electronAPI.getThemes().then(setThemesData);
   }, []);
@@ -574,7 +652,13 @@ function App() {
           <LayoutSelector
             currentLayout={pane.layoutMode}
             onLayoutChange={pane.setLayoutMode}
+            showSidebar={showRightSidebar}
+            onToggleSidebar={() => setShowRightSidebar(prev => !prev)}
+            showLeftSidebar={showLeftSidebar}
+            onToggleLeftSidebar={() => setShowLeftSidebar(prev => !prev)}
           />
+
+
           <div
             className={`sidebar-btn ${showPaneLines ? 'sidebar-btn-active' : ''}`}
             onClick={() => setShowPaneLines(prev => !prev)}
@@ -639,35 +723,216 @@ function App() {
                 onTabReorder={session.handleTabReorder}
               />
             </div>
-            <div className="content-area">
-              <GridLayout
-                rows={pane.currentDims.rows}
-                cols={pane.currentDims.cols}
-                sessions={session.sessions}
-                updateSessionState={session.updateSessionState}
-                paneAllocations={pane.paneAllocations}
-                activePaneId={pane.activePaneId || ''}
-                onPaneClick={pane.setActivePaneId}
-                onDropSession={pane.handleDropSession}
-                onData={session.handleTerminalData}
-                focusTrigger={focusTrigger}
-                terminalRegistry={session.terminalRegistry.current}
-                disableFocus={showDialog || !!errorModalMessage}
-                fontSize={fontSize}
-                fontFamily={fontFamily}
-                terminalForeground={terminalForeground}
-                terminalBackground={terminalBackground}
-                terminalBackgroundInactive={terminalBackgroundInactive}
-                paneBackground={paneBackground}
-                paneBackgroundMode={paneBackgroundMode}
-                paneBackgroundImage={paneBackgroundImage}
-                lineWrapEnabled={lineWrapEnabled}
-                showSystemPrompt={showSystemPrompt}
-                askGeminiCommands={askGeminiCommands}
-                aiPersonas={aiPersonas}
-              />
+            <div className="content-area" style={{ display: 'flex', flexDirection: 'row', width: '100%', height: '100%', gap: '0' }}>
+
+
+              {showLeftSidebar && (
+                <div
+                  className="left-sidebar-pane"
+                  style={{
+                    width: `${leftSidebarWidth}px`,
+                    border: '1px solid var(--border-color)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backgroundColor: paneBackground || '#000200',
+                    backgroundImage: paneBackgroundMode === 'default' ? `url("HoTTY_background.svg")` :
+                      (paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || 'HoTTY_background.svg'}")` : 'none'),
+                    backgroundSize: (paneBackgroundMode === 'default' || (paneBackgroundMode === 'image' && (!paneBackgroundImage || paneBackgroundImage.includes('HoTTY_background.svg'))))
+                      ? '128px 128px' : 'auto',
+                    backgroundRepeat: 'repeat',
+                    backgroundPosition: 'center',
+                    position: 'relative',
+                    flexShrink: 0,
+                    margin: '2px' // Gap all around to match grid padding
+                  }}
+                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+
+
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const sessionId = e.dataTransfer.getData('text/plain');
+                    if (sessionId) {
+                      pane.handleDropSession(sessionId, 'sidebar-left');
+                    }
+                  }}
+                  onClick={() => pane.setActivePaneId('sidebar-left')}
+                >
+                  {(() => {
+                    const sessionId = pane.paneAllocations['sidebar-left'];
+                    const sessionData = session.sessions.find(s => s.id === sessionId);
+                    const isActive = pane.activePaneId === 'sidebar-left';
+
+                    if (sessionData) {
+                      return sessionData.type === 'ai' ? (
+                        <AIChatPane
+                          sessionId={sessionData.id}
+                          initialState={sessionData.aiChatState}
+                          onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
+                          showSystemPrompt={showSystemPrompt}
+                          askGeminiCommands={askGeminiCommands}
+                          aiPersonas={aiPersonas}
+                          fontSize={fontSize}
+                          terminalBackground={terminalBackground}
+                          terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                        />
+                      ) : (
+                        <TerminalComponent
+                          key={sessionData.id}
+                          sessionId={sessionData.id}
+                          onData={session.handleTerminalData}
+                          isActive={isActive}
+                          focusTrigger={focusTrigger}
+                          terminalInstance={session.terminalRegistry.current[sessionData.id]}
+                          disableFocus={showDialog || !!errorModalMessage}
+                          fontSize={fontSize}
+                          fontFamily={fontFamily}
+                          terminalForeground={terminalForeground}
+                          terminalBackground={terminalBackground}
+                          terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                          lineWrapEnabled={lineWrapEnabled}
+                          askGeminiCommands={askGeminiCommands}
+                        />
+                      );
+                    } else {
+                      return (
+                        <div className="empty-pane-placeholder">
+                          <span className="pane-label">Left Sidebar</span>
+                          <span className="drop-hint">Drop Tab Here</span>
+                        </div>
+                      );
+                    }
+                  })()}
+                </div>
+              )}
+
+              {showLeftSidebar && (
+                <div
+                  className={`sidebar-resizer ${resizingSide === 'left' ? 'interact' : ''}`}
+                  onMouseDown={(e) => handleSidebarResizeStart(e, 'left')}
+                />
+              )}
+
+
+
+
+              <div style={{ flex: 1, minWidth: 0, height: '100%' }}>
+
+                <GridLayout
+                  rows={pane.currentDims.rows}
+                  cols={pane.currentDims.cols}
+                  sessions={session.sessions}
+                  updateSessionState={session.updateSessionState}
+                  paneAllocations={pane.paneAllocations}
+                  activePaneId={pane.activePaneId || ''}
+                  onPaneClick={pane.setActivePaneId}
+                  onDropSession={pane.handleDropSession}
+                  onData={session.handleTerminalData}
+                  focusTrigger={focusTrigger}
+                  terminalRegistry={session.terminalRegistry.current}
+                  disableFocus={showDialog || !!errorModalMessage}
+                  fontSize={fontSize}
+                  fontFamily={fontFamily}
+                  terminalForeground={terminalForeground}
+                  terminalBackground={terminalBackground}
+                  terminalBackgroundInactive={terminalBackgroundInactive}
+                  paneBackground={paneBackground}
+                  paneBackgroundMode={paneBackgroundMode}
+                  paneBackgroundImage={paneBackgroundImage}
+                  lineWrapEnabled={lineWrapEnabled}
+                  showSystemPrompt={showSystemPrompt}
+                  askGeminiCommands={askGeminiCommands}
+                  aiPersonas={aiPersonas}
+                />
+              </div>
+
+              {showRightSidebar && (
+                <div
+                  className={`sidebar-resizer ${resizingSide === 'right' ? 'interact' : ''}`}
+                  onMouseDown={(e) => handleSidebarResizeStart(e, 'right')}
+                />
+              )}
+
+              {showRightSidebar && (
+                <div
+                  className="right-sidebar-pane"
+                  style={{
+                    width: `${rightSidebarWidth}px`,
+                    border: '1px solid var(--border-color)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backgroundColor: paneBackground || '#000200',
+                    backgroundImage: paneBackgroundMode === 'default' ? `url("HoTTY_background.svg")` :
+                      (paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || 'HoTTY_background.svg'}")` : 'none'),
+                    backgroundSize: (paneBackgroundMode === 'default' || (paneBackgroundMode === 'image' && (!paneBackgroundImage || paneBackgroundImage.includes('HoTTY_background.svg'))))
+                      ? '128px 128px' : 'auto',
+                    backgroundRepeat: 'repeat',
+                    backgroundPosition: 'center',
+                    position: 'relative',
+                    flexShrink: 0,
+                    margin: '2px' // Gap all around to match grid padding
+                  }}
+                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+
+
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const sessionId = e.dataTransfer.getData('text/plain');
+                    if (sessionId) {
+                      pane.handleDropSession(sessionId, 'sidebar');
+                    }
+                  }}
+                  onClick={() => pane.setActivePaneId('sidebar')}
+                >
+                  {(() => {
+                    const sessionId = pane.paneAllocations['sidebar'];
+                    const sessionData = session.sessions.find(s => s.id === sessionId);
+                    const isActive = pane.activePaneId === 'sidebar';
+
+                    if (sessionData) {
+                      return sessionData.type === 'ai' ? (
+                        <AIChatPane
+                          sessionId={sessionData.id}
+                          initialState={sessionData.aiChatState}
+                          onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
+                          showSystemPrompt={showSystemPrompt}
+                          askGeminiCommands={askGeminiCommands}
+                          aiPersonas={aiPersonas}
+                          fontSize={fontSize}
+                          terminalBackground={terminalBackground}
+                          terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                        />
+                      ) : (
+                        <TerminalComponent
+                          key={sessionData.id}
+                          sessionId={sessionData.id}
+                          onData={session.handleTerminalData}
+                          isActive={isActive}
+                          focusTrigger={focusTrigger}
+                          terminalInstance={session.terminalRegistry.current[sessionData.id]}
+                          disableFocus={showDialog || !!errorModalMessage}
+                          fontSize={fontSize}
+                          fontFamily={fontFamily}
+                          terminalForeground={terminalForeground}
+                          terminalBackground={terminalBackground}
+                          terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                          lineWrapEnabled={lineWrapEnabled}
+                          askGeminiCommands={askGeminiCommands}
+                        />
+                      );
+                    } else {
+                      return (
+                        <div className="empty-pane-placeholder">
+                          <span className="pane-label">Sidebar</span>
+                          <span className="drop-hint">Drop Tab Here</span>
+                        </div>
+                      );
+                    }
+                  })()}
+                </div>
+              )}
             </div>
           </>
+
         )}
       </div>
 

@@ -1,10 +1,11 @@
+/* Sidebar Resizer */
 .grid-layout {
     box-sizing: border-box;
     /* gap property removed as we use explicit tracks for spacing/resizers */
     /* gap: 4px; */
     /* Gutter between panes */
     /* Gutter between panes */
-    padding: 4px;
+    padding: 2px;
     background-color: transparent;
 }
 
@@ -67,7 +68,7 @@
     /* background-size: cover; */
     /* background-color: #000510; */
     color: #00aaff;
-    margin: 4px;
+    margin: 2px;
     border-radius: 4px;
 }
 
@@ -83,7 +84,7 @@
 }
 
 .grid-resizer-v {
-    width: 8px;
+    width: 4px;
     cursor: col-resize;
     z-index: 10;
     transition: background-color 0.2s;
@@ -96,12 +97,13 @@
 }
 
 .grid-resizer-h {
-    height: 8px;
+    height: 4px;
     cursor: row-resize;
     z-index: 10;
     transition: background-color 0.2s;
     background-color: transparent;
 }
+
 
 .grid-resizer-h:hover,
 .grid-resizer-h.resizing {

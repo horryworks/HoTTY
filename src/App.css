@@ -141,3 +141,21 @@
   color: #666;
   font-size: 14px;
 }
+
+/* Sidebar Resizer */
+.sidebar-resizer {
+  width: 4px;
+  cursor: col-resize;
+  background-color: transparent;
+  z-index: 10;
+  flex-shrink: 0;
+  margin-left: -2px;
+  margin-right: -2px;
+  transition: background-color 0.2s;
+  height: 100%;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer.interact {
+  background-color: var(--accent-color, #007acc);
+}

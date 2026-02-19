@@ -178,8 +178,9 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     };
 
     // Construct grid template strings
-    const gridTemplateColumns = colSizes.map(s => `minmax(0, ${s}fr)`).join(' 8px ');
-    const gridTemplateRows = rowSizes.map(s => `minmax(0, ${s}fr)`).join(' 8px ');
+    const gridTemplateColumns = colSizes.map(s => `minmax(0, ${s}fr)`).join(' 4px ');
+    const gridTemplateRows = rowSizes.map(s => `minmax(0, ${s}fr)`).join(' 4px ');
+
 
     // Drag & Drop logic for Sessions
     const handleDragOver = (e: React.DragEvent) => {
@@ -224,11 +225,11 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                             backgroundSize: (paneBackgroundMode === 'default' || (paneBackgroundMode === 'image' && (!paneBackgroundImage || paneBackgroundImage.includes('HoTTY_background.svg'))))
                                 ? '128px 128px' : 'auto', backgroundRepeat: 'repeat',
                             backgroundPosition: 'center',
-                            borderRight: '1px solid var(--border-color)',
-                            borderBottom: '1px solid var(--border-color)',
+                            border: '1px solid var(--border-color)',
                             boxSizing: 'border-box',
                             position: 'relative'
                         }}
+
                     >
                         {session ? (
                             session.type === 'ai' ? (
