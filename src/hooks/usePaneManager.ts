@@ -16,7 +16,13 @@ function getGridDimensions(mode: LayoutMode) {
 }
 
 export function usePaneManager() {
-    const [layoutMode, setLayoutMode] = useState<LayoutMode>('1x1');
+    const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
+        return (localStorage.getItem('hterm_ui_layoutMode') as LayoutMode) || '1x1';
+    });
+
+    useEffect(() => {
+        localStorage.setItem('hterm_ui_layoutMode', layoutMode);
+    }, [layoutMode]);
     const [activePaneId, setActivePaneId] = useState<string>('0');
     const [paneAllocations, setPaneAllocations] = useState<{ [paneId: string]: string | null }>({ '0': null });
 

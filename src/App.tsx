@@ -72,20 +72,35 @@ const DEFAULT_PERSONAS: PersonaDefinition[] = [
 function App() {
 
   // -- UI State --
+  // -- UI State --
   const [themesData, setThemesData] = useState<any>(null);
   const [showDialog, setShowDialog] = useState(true);
   const [errorModalMessage, setErrorModalMessage] = useState<string | null>(null);
   const [focusTrigger, setFocusTrigger] = useState(0);
-  const [showLeftSidebar, setShowLeftSidebar] = useState(false);
-  const [showRightSidebar, setShowRightSidebar] = useState(false);
-  const [showTopBar, setShowTopBar] = useState(false);
-  const [showBottomBar, setShowBottomBar] = useState(false);
-  const [leftSidebarWidth, setLeftSidebarWidth] = useState(300);
-  const [rightSidebarWidth, setRightSidebarWidth] = useState(300);
-  const [topBarHeight, setTopBarHeight] = useState(200);
-  const [bottomBarHeight, setBottomBarHeight] = useState(200);
+
+  // Load UI state from localStorage or default
+  const [showLeftSidebar, setShowLeftSidebar] = useState(() => localStorage.getItem('hterm_ui_showLeftSidebar') === 'true');
+  const [showRightSidebar, setShowRightSidebar] = useState(() => localStorage.getItem('hterm_ui_showRightSidebar') === 'true');
+  const [showTopBar, setShowTopBar] = useState(() => localStorage.getItem('hterm_ui_showTopBar') === 'true');
+  const [showBottomBar, setShowBottomBar] = useState(() => localStorage.getItem('hterm_ui_showBottomBar') === 'true');
+
+  const [leftSidebarPercent, setLeftSidebarPercent] = useState(() => parseFloat(localStorage.getItem('hterm_ui_leftSidebarPercent') || '20'));
+  const [rightSidebarPercent, setRightSidebarPercent] = useState(() => parseFloat(localStorage.getItem('hterm_ui_rightSidebarPercent') || '20'));
+  const [topBarPercent, setTopBarPercent] = useState(() => parseFloat(localStorage.getItem('hterm_ui_topBarPercent') || '20'));
+  const [bottomBarPercent, setBottomBarPercent] = useState(() => parseFloat(localStorage.getItem('hterm_ui_bottomBarPercent') || '20'));
+
   const [resizingSide, setResizingSide] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
 
+  // Persist UI State on change
+  useEffect(() => localStorage.setItem('hterm_ui_showLeftSidebar', String(showLeftSidebar)), [showLeftSidebar]);
+  useEffect(() => localStorage.setItem('hterm_ui_showRightSidebar', String(showRightSidebar)), [showRightSidebar]);
+  useEffect(() => localStorage.setItem('hterm_ui_showTopBar', String(showTopBar)), [showTopBar]);
+  useEffect(() => localStorage.setItem('hterm_ui_showBottomBar', String(showBottomBar)), [showBottomBar]);
+
+  useEffect(() => localStorage.setItem('hterm_ui_leftSidebarPercent', String(leftSidebarPercent)), [leftSidebarPercent]);
+  useEffect(() => localStorage.setItem('hterm_ui_rightSidebarPercent', String(rightSidebarPercent)), [rightSidebarPercent]);
+  useEffect(() => localStorage.setItem('hterm_ui_topBarPercent', String(topBarPercent)), [topBarPercent]);
+  useEffect(() => localStorage.setItem('hterm_ui_bottomBarPercent', String(bottomBarPercent)), [bottomBarPercent]);
 
 
   // -- Sidebar Resizing Logic --
@@ -93,7 +108,8 @@ function App() {
   const sidebarResizingState = useRef<{
     side: 'left' | 'right' | 'top' | 'bottom';
     startPos: number; // X for left/right, Y for top/bottom
-    startSize: number;
+    startPercent: number;
+    containerSize: number;
   } | null>(null);
 
   const handleSidebarResizeStart = (e: React.MouseEvent, side: 'left' | 'right' | 'top' | 'bottom') => {
@@ -102,19 +118,21 @@ function App() {
 
     setResizingSide(side);
 
-    // Get container dimensions for max limitations
-    const container = document.querySelector('.content-area');
-    const maxSize = side === 'left' || side === 'right'
-      ? (container ? container.clientWidth - 100 : 1000)
-      : (container ? container.clientHeight - 100 : 800);
+    // Get container dimensions
+    const container = document.querySelector('.app-container'); // Use outer container for width
+    const centerColumn = document.querySelector('.center-column'); // Use center column for height
+
+    const containerWidth = container ? container.clientWidth : window.innerWidth;
+    const containerHeight = centerColumn ? centerColumn.clientHeight : window.innerHeight;
 
     sidebarResizingState.current = {
       side,
       startPos: side === 'left' || side === 'right' ? e.clientX : e.clientY,
-      startSize: side === 'left' ? leftSidebarWidth
-        : side === 'right' ? rightSidebarWidth
-          : side === 'top' ? topBarHeight
-            : bottomBarHeight
+      startPercent: side === 'left' ? leftSidebarPercent
+        : side === 'right' ? rightSidebarPercent
+          : side === 'top' ? topBarPercent
+            : bottomBarPercent,
+      containerSize: side === 'left' || side === 'right' ? containerWidth : containerHeight
     };
 
     document.addEventListener('mousemove', handleSidebarResizeMove);
@@ -125,37 +143,28 @@ function App() {
   const handleSidebarResizeMove = (e: MouseEvent) => {
     if (!sidebarResizingState.current) return;
 
-    const { side, startPos, startSize } = sidebarResizingState.current;
+    const { side, startPos, startPercent, containerSize } = sidebarResizingState.current;
 
     if (side === 'left' || side === 'right') {
       const currentX = e.clientX;
-      const delta = side === 'left' ? currentX - startPos : startPos - currentX;
+      const deltaPx = side === 'left' ? currentX - startPos : startPos - currentX;
+      const deltaPercent = (deltaPx / containerSize) * 100;
 
-      // Get container width for max constraint
-      const container = document.querySelector('.content-area');
-      const containerWidth = container ? container.clientWidth : 1000;
-      const maxSideWidth = Math.max(100, containerWidth - 100);
+      const newPercent = Math.max(5, Math.min(80, startPercent + deltaPercent)); // Limit between 5% and 80%
 
-      const newWidth = Math.max(100, Math.min(maxSideWidth, startSize + delta));
-
-      if (side === 'left') setLeftSidebarWidth(newWidth);
-      else setRightSidebarWidth(newWidth);
+      if (side === 'left') setLeftSidebarPercent(newPercent);
+      else setRightSidebarPercent(newPercent);
     } else {
       const currentY = e.clientY;
-      const delta = side === 'top' ? currentY - startPos : startPos - currentY;
+      const deltaPx = side === 'top' ? currentY - startPos : startPos - currentY;
+      const deltaPercent = (deltaPx / containerSize) * 100;
 
-      // Get container height for max constraint
-      const container = document.querySelector('.center-column'); // Use center column for height constraint
-      const containerHeight = container ? container.clientHeight : 800;
-      const maxSideHeight = Math.max(100, containerHeight - 100);
+      const newPercent = Math.max(5, Math.min(80, startPercent + deltaPercent));
 
-      const newHeight = Math.max(100, Math.min(maxSideHeight, startSize + delta));
-
-      if (side === 'top') setTopBarHeight(newHeight);
-      else setBottomBarHeight(newHeight);
+      if (side === 'top') setTopBarPercent(newPercent);
+      else setBottomBarPercent(newPercent);
     }
   };
-
 
   const handleSidebarResizeEnd = () => {
     sidebarResizingState.current = null;
@@ -164,6 +173,7 @@ function App() {
     document.removeEventListener('mouseup', handleSidebarResizeEnd);
     document.body.style.cursor = '';
   };
+
 
 
 
@@ -753,7 +763,7 @@ function App() {
                 <div
                   className="left-sidebar-pane"
                   style={{
-                    width: `${leftSidebarWidth}px`,
+                    width: `${leftSidebarPercent}%`,
                     border: '1px solid var(--border-color)',
                     display: 'flex',
                     flexDirection: 'column',
@@ -844,7 +854,7 @@ function App() {
                   <div
                     className="top-bar-pane"
                     style={{
-                      height: `${topBarHeight}px`,
+                      height: `${topBarPercent}%`,
                       // width: '100%', // Removed to prevent overflow with margin
                       border: '1px solid var(--border-color)',
                       display: 'flex',
@@ -971,7 +981,7 @@ function App() {
                   <div
                     className="bottom-bar-pane"
                     style={{
-                      height: `${bottomBarHeight}px`,
+                      height: `${bottomBarPercent}%`,
                       // width: '100%', // Removed to prevent overflow
                       border: '1px solid var(--border-color)',
                       display: 'flex',
@@ -1060,7 +1070,7 @@ function App() {
                 <div
                   className="right-sidebar-pane"
                   style={{
-                    width: `${rightSidebarWidth}px`,
+                    width: `${rightSidebarPercent}%`,
                     border: '1px solid var(--border-color)',
                     display: 'flex',
                     flexDirection: 'column',

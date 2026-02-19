@@ -57,15 +57,50 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     aiPersonas
 }) => {
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
+    // State to store track sizes (ratios). Initialized to 1 for all tracks.
     const [colSizes, setColSizes] = useState<number[]>([]);
     const [rowSizes, setRowSizes] = useState<number[]>([]);
     const gridRef = useRef<HTMLDivElement>(null);
 
     // Initial setup & logic reset on dimension change
     useEffect(() => {
-        setColSizes(new Array(cols).fill(1));
-        setRowSizes(new Array(rows).fill(1));
+        // Try to load from localStorage first
+        const savedCols = localStorage.getItem(`hterm_ui_gridColSizes_${cols}`);
+        const savedRows = localStorage.getItem(`hterm_ui_gridRowSizes_${rows}`);
+
+        if (savedCols) {
+            try {
+                setColSizes(JSON.parse(savedCols));
+            } catch (e) {
+                setColSizes(new Array(cols).fill(1));
+            }
+        } else {
+            setColSizes(new Array(cols).fill(1));
+        }
+
+        if (savedRows) {
+            try {
+                setRowSizes(JSON.parse(savedRows));
+            } catch (e) {
+                setRowSizes(new Array(rows).fill(1));
+            }
+        } else {
+            setRowSizes(new Array(rows).fill(1));
+        }
     }, [rows, cols]);
+
+    // Persist sizes when changed
+    useEffect(() => {
+        if (colSizes.length === cols && colSizes.length > 0) {
+            localStorage.setItem(`hterm_ui_gridColSizes_${cols}`, JSON.stringify(colSizes));
+        }
+    }, [colSizes, cols]);
+
+    useEffect(() => {
+        if (rowSizes.length === rows && rowSizes.length > 0) {
+            localStorage.setItem(`hterm_ui_gridRowSizes_${rows}`, JSON.stringify(rowSizes));
+        }
+    }, [rowSizes, rows]);
 
     // Resizing logic
     const resizingState = useRef<{
