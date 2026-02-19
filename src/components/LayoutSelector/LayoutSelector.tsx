@@ -6,13 +6,18 @@ export type LayoutMode = '1x1' | '1x2' | '2x1' | '2x2' | '2x3' | '3x2';
 interface LayoutSelectorProps {
     currentLayout: LayoutMode;
     onLayoutChange: (mode: LayoutMode) => void;
-    showSidebar: boolean;
-    onToggleSidebar: () => void;
     showLeftSidebar: boolean;
+    showRightSidebar: boolean;
+    showTopBar: boolean;
+    showBottomBar: boolean;
     onToggleLeftSidebar: () => void;
+    onToggleRightSidebar: () => void;
+    onToggleTopBar: () => void;
+    onToggleBottomBar: () => void;
 }
 
-export const LayoutSelector: React.FC<LayoutSelectorProps> = ({ currentLayout, onLayoutChange, showSidebar, onToggleSidebar, showLeftSidebar, onToggleLeftSidebar }) => {
+
+export const LayoutSelector: React.FC<LayoutSelectorProps> = ({ currentLayout, onLayoutChange, showLeftSidebar, onToggleLeftSidebar, showRightSidebar, onToggleRightSidebar, showTopBar, onToggleTopBar, showBottomBar, onToggleBottomBar }) => {
 
 
     return (
@@ -63,18 +68,32 @@ export const LayoutSelector: React.FC<LayoutSelectorProps> = ({ currentLayout, o
             <div className={`layout-option ${showLeftSidebar ? 'selected' : ''}`} onClick={onToggleLeftSidebar} title="Toggle Left Sidebar">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="2" y="2" width="20" height="20" rx="2" />
-
                     <line x1="8" y1="2" x2="8" y2="22" />
                 </svg>
             </div>
-            <div className={`layout-option ${showSidebar ? 'selected' : ''}`} onClick={onToggleSidebar} title="Toggle Right Sidebar">
 
+            <div className={`layout-option ${showRightSidebar ? 'selected' : ''}`} onClick={onToggleRightSidebar} title="Toggle Right Sidebar">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="2" y="2" width="20" height="20" rx="2" />
                     <line x1="16" y1="2" x2="16" y2="22" />
                 </svg>
             </div>
-        </div>
 
+            <div className={`layout-option ${showTopBar ? 'selected' : ''}`} onClick={onToggleTopBar} title="Toggle Top Bar">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="2" y="2" width="20" height="20" rx="2" />
+                    <line x1="2" y1="8" x2="22" y2="8" />
+                </svg>
+            </div>
+
+            <div className={`layout-option ${showBottomBar ? 'selected' : ''}`} onClick={onToggleBottomBar} title="Toggle Bottom Bar">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="2" y="2" width="20" height="20" rx="2" />
+                    <line x1="2" y1="16" x2="22" y2="16" />
+                </svg>
+            </div>
+
+        </div>
     );
 };
+

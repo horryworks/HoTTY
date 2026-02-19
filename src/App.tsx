@@ -76,68 +76,86 @@ function App() {
   const [showDialog, setShowDialog] = useState(true);
   const [errorModalMessage, setErrorModalMessage] = useState<string | null>(null);
   const [focusTrigger, setFocusTrigger] = useState(0);
-  const [showRightSidebar, setShowRightSidebar] = useState(false);
   const [showLeftSidebar, setShowLeftSidebar] = useState(false);
+  const [showRightSidebar, setShowRightSidebar] = useState(false);
+  const [showTopBar, setShowTopBar] = useState(false);
+  const [showBottomBar, setShowBottomBar] = useState(false);
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(300);
   const [rightSidebarWidth, setRightSidebarWidth] = useState(300);
-  const [resizingSide, setResizingSide] = useState<'left' | 'right' | null>(null);
+  const [topBarHeight, setTopBarHeight] = useState(200);
+  const [bottomBarHeight, setBottomBarHeight] = useState(200);
+  const [resizingSide, setResizingSide] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
+
+
 
   // -- Sidebar Resizing Logic --
 
   const sidebarResizingState = useRef<{
-    side: 'left' | 'right';
-    startX: number;
-    startWidth: number;
-    containerWidth: number;
+    side: 'left' | 'right' | 'top' | 'bottom';
+    startPos: number; // X for left/right, Y for top/bottom
+    startSize: number;
   } | null>(null);
 
-  const handleSidebarResizeStart = (e: React.MouseEvent, side: 'left' | 'right') => {
+  const handleSidebarResizeStart = (e: React.MouseEvent, side: 'left' | 'right' | 'top' | 'bottom') => {
     e.preventDefault();
     e.stopPropagation();
 
     setResizingSide(side);
 
-    // Get container width for max width calculation if needed
+    // Get container dimensions for max limitations
     const container = document.querySelector('.content-area');
-    const containerWidth = container ? container.clientWidth : 1000;
+    const maxSize = side === 'left' || side === 'right'
+      ? (container ? container.clientWidth - 100 : 1000)
+      : (container ? container.clientHeight - 100 : 800);
 
     sidebarResizingState.current = {
       side,
-      startX: e.clientX,
-      startWidth: side === 'left' ? leftSidebarWidth : rightSidebarWidth,
-      containerWidth
+      startPos: side === 'left' || side === 'right' ? e.clientX : e.clientY,
+      startSize: side === 'left' ? leftSidebarWidth
+        : side === 'right' ? rightSidebarWidth
+          : side === 'top' ? topBarHeight
+            : bottomBarHeight
     };
 
     document.addEventListener('mousemove', handleSidebarResizeMove);
     document.addEventListener('mouseup', handleSidebarResizeEnd);
-    document.body.style.cursor = 'col-resize';
+    document.body.style.cursor = (side === 'left' || side === 'right') ? 'col-resize' : 'row-resize';
   };
 
   const handleSidebarResizeMove = (e: MouseEvent) => {
     if (!sidebarResizingState.current) return;
 
-    const { side, startX, startWidth, containerWidth } = sidebarResizingState.current;
-    const currentX = e.clientX;
-    const deltaX = currentX - startX;
+    const { side, startPos, startSize } = sidebarResizingState.current;
 
-    // For left sidebar, moving right (positive delta) increases width
-    // For right sidebar, moving left (negative delta) increases width
-    const newWidth = side === 'left'
-      ? startWidth + deltaX
-      : startWidth - deltaX;
+    if (side === 'left' || side === 'right') {
+      const currentX = e.clientX;
+      const delta = side === 'left' ? currentX - startPos : startPos - currentX;
 
-    // Constraints
-    const minWidth = 100;
-    const maxWidth = containerWidth - 100; // Leave space for main content
+      // Get container width for max constraint
+      const container = document.querySelector('.content-area');
+      const containerWidth = container ? container.clientWidth : 1000;
+      const maxSideWidth = Math.max(100, containerWidth - 100);
 
-    if (newWidth >= minWidth && newWidth <= maxWidth) {
-      if (side === 'left') {
-        setLeftSidebarWidth(newWidth);
-      } else {
-        setRightSidebarWidth(newWidth);
-      }
+      const newWidth = Math.max(100, Math.min(maxSideWidth, startSize + delta));
+
+      if (side === 'left') setLeftSidebarWidth(newWidth);
+      else setRightSidebarWidth(newWidth);
+    } else {
+      const currentY = e.clientY;
+      const delta = side === 'top' ? currentY - startPos : startPos - currentY;
+
+      // Get container height for max constraint
+      const container = document.querySelector('.center-column'); // Use center column for height constraint
+      const containerHeight = container ? container.clientHeight : 800;
+      const maxSideHeight = Math.max(100, containerHeight - 100);
+
+      const newHeight = Math.max(100, Math.min(maxSideHeight, startSize + delta));
+
+      if (side === 'top') setTopBarHeight(newHeight);
+      else setBottomBarHeight(newHeight);
     }
   };
+
 
   const handleSidebarResizeEnd = () => {
     sidebarResizingState.current = null;
@@ -652,11 +670,16 @@ function App() {
           <LayoutSelector
             currentLayout={pane.layoutMode}
             onLayoutChange={pane.setLayoutMode}
-            showSidebar={showRightSidebar}
-            onToggleSidebar={() => setShowRightSidebar(prev => !prev)}
             showLeftSidebar={showLeftSidebar}
             onToggleLeftSidebar={() => setShowLeftSidebar(prev => !prev)}
+            showRightSidebar={showRightSidebar}
+            onToggleRightSidebar={() => setShowRightSidebar(prev => !prev)}
+            showTopBar={showTopBar}
+            onToggleTopBar={() => setShowTopBar(prev => !prev)}
+            showBottomBar={showBottomBar}
+            onToggleBottomBar={() => setShowBottomBar(prev => !prev)}
           />
+
 
 
           <div
@@ -813,37 +836,218 @@ function App() {
               )}
 
 
+              {/* Center Column: TopBar + Grid + BottomBar */}
+              <div className="center-column" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, height: '100%', position: 'relative' }}>
 
+                {/* Top Bar */}
+                {showTopBar && (
+                  <div
+                    className="top-bar-pane"
+                    style={{
+                      height: `${topBarHeight}px`,
+                      // width: '100%', // Removed to prevent overflow with margin
+                      border: '1px solid var(--border-color)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      backgroundColor: paneBackground || '#000200',
+                      backgroundImage: paneBackgroundMode === 'default' ? `url("HoTTY_background.svg")` :
+                        (paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || 'HoTTY_background.svg'}")` : 'none'),
+                      backgroundSize: (paneBackgroundMode === 'default' || (paneBackgroundMode === 'image' && (!paneBackgroundImage || paneBackgroundImage.includes('HoTTY_background.svg'))))
+                        ? '128px 128px' : 'auto',
+                      backgroundRepeat: 'repeat',
+                      backgroundPosition: 'center',
+                      position: 'relative',
+                      flexShrink: 0,
+                      margin: '2px' // Gap
+                    }}
 
-              <div style={{ flex: 1, minWidth: 0, height: '100%' }}>
+                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const sessionId = e.dataTransfer.getData('text/plain');
+                      if (sessionId) {
+                        pane.handleDropSession(sessionId, 'top-bar'); // Use specific ID
+                      }
+                    }}
+                    onClick={() => pane.setActivePaneId('top-bar')}
+                  >
+                    {/* Top Bar Content */}
+                    {(() => {
+                      const sessionId = pane.paneAllocations['top-bar'];
+                      const sessionData = session.sessions.find(s => s.id === sessionId);
 
-                <GridLayout
-                  rows={pane.currentDims.rows}
-                  cols={pane.currentDims.cols}
-                  sessions={session.sessions}
-                  updateSessionState={session.updateSessionState}
-                  paneAllocations={pane.paneAllocations}
-                  activePaneId={pane.activePaneId || ''}
-                  onPaneClick={pane.setActivePaneId}
-                  onDropSession={pane.handleDropSession}
-                  onData={session.handleTerminalData}
-                  focusTrigger={focusTrigger}
-                  terminalRegistry={session.terminalRegistry.current}
-                  disableFocus={showDialog || !!errorModalMessage}
-                  fontSize={fontSize}
-                  fontFamily={fontFamily}
-                  terminalForeground={terminalForeground}
-                  terminalBackground={terminalBackground}
-                  terminalBackgroundInactive={terminalBackgroundInactive}
-                  paneBackground={paneBackground}
-                  paneBackgroundMode={paneBackgroundMode}
-                  paneBackgroundImage={paneBackgroundImage}
-                  lineWrapEnabled={lineWrapEnabled}
-                  showSystemPrompt={showSystemPrompt}
-                  askGeminiCommands={askGeminiCommands}
-                  aiPersonas={aiPersonas}
-                />
+                      if (sessionData) {
+                        // Render session... (simplified for brevity, should duplicate logic or extract component)
+                        return sessionData.type === 'ai' ? (
+                          <AIChatPane
+                            sessionId={sessionData.id}
+                            initialState={sessionData.aiChatState}
+                            onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
+                            showSystemPrompt={showSystemPrompt}
+                            askGeminiCommands={askGeminiCommands}
+                            aiPersonas={aiPersonas}
+                            fontSize={fontSize}
+                            terminalBackground={terminalBackground}
+                            terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                          />
+                        ) : (
+                          <TerminalComponent
+                            key={sessionData.id}
+                            sessionId={sessionData.id}
+                            onData={session.handleTerminalData}
+                            isActive={pane.activePaneId === 'top-bar'}
+                            focusTrigger={focusTrigger}
+                            terminalInstance={session.terminalRegistry.current[sessionData.id]}
+                            disableFocus={showDialog || !!errorModalMessage}
+                            fontSize={fontSize}
+                            fontFamily={fontFamily}
+                            terminalForeground={terminalForeground}
+                            terminalBackground={terminalBackground}
+                            terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                            lineWrapEnabled={lineWrapEnabled}
+                            askGeminiCommands={askGeminiCommands}
+                          />
+                        );
+                      } else {
+                        return (
+                          <div className="empty-pane-placeholder">
+                            <span className="pane-label">Top Bar</span>
+                            <span className="drop-hint">Drop Tab Here</span>
+                          </div>
+                        );
+                      }
+                    })()}
+                  </div>
+                )}
+
+                {/* Top Bar Resizer */}
+                {showTopBar && (
+                  <div
+                    className={`sidebar-resizer-h ${resizingSide === 'top' ? 'interact' : ''}`}
+                    onMouseDown={(e) => handleSidebarResizeStart(e, 'top')}
+                  />
+                )}
+
+                {/* Grid Layout Container */}
+                <div style={{ flex: 1, minHeight: 0, width: '100%' }}>
+                  <GridLayout
+                    rows={pane.currentDims.rows}
+                    cols={pane.currentDims.cols}
+                    sessions={session.sessions}
+                    updateSessionState={session.updateSessionState}
+                    paneAllocations={pane.paneAllocations}
+                    activePaneId={pane.activePaneId || ''}
+                    onPaneClick={pane.setActivePaneId}
+                    onDropSession={pane.handleDropSession}
+                    onData={session.handleTerminalData}
+                    focusTrigger={focusTrigger}
+                    terminalRegistry={session.terminalRegistry.current}
+                    disableFocus={showDialog || !!errorModalMessage}
+                    fontSize={fontSize}
+                    fontFamily={fontFamily}
+                    terminalForeground={terminalForeground}
+                    terminalBackground={terminalBackground}
+                    terminalBackgroundInactive={terminalBackgroundInactive}
+                    paneBackground={paneBackground}
+                    paneBackgroundMode={paneBackgroundMode}
+                    paneBackgroundImage={paneBackgroundImage}
+                    lineWrapEnabled={lineWrapEnabled}
+                    showSystemPrompt={showSystemPrompt}
+                    askGeminiCommands={askGeminiCommands}
+                    aiPersonas={aiPersonas}
+                  />
+                </div>
+
+                {/* Bottom Bar Resizer */}
+                {showBottomBar && (
+                  <div
+                    className={`sidebar-resizer-h ${resizingSide === 'bottom' ? 'interact' : ''}`}
+                    onMouseDown={(e) => handleSidebarResizeStart(e, 'bottom')}
+                  />
+                )}
+
+                {/* Bottom Bar */}
+                {showBottomBar && (
+                  <div
+                    className="bottom-bar-pane"
+                    style={{
+                      height: `${bottomBarHeight}px`,
+                      // width: '100%', // Removed to prevent overflow
+                      border: '1px solid var(--border-color)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      backgroundColor: paneBackground || '#000200',
+                      backgroundImage: paneBackgroundMode === 'default' ? `url("HoTTY_background.svg")` :
+                        (paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || 'HoTTY_background.svg'}")` : 'none'),
+                      backgroundSize: (paneBackgroundMode === 'default' || (paneBackgroundMode === 'image' && (!paneBackgroundImage || paneBackgroundImage.includes('HoTTY_background.svg'))))
+                        ? '128px 128px' : 'auto',
+                      backgroundRepeat: 'repeat',
+                      backgroundPosition: 'center',
+                      position: 'relative',
+                      flexShrink: 0,
+                      margin: '2px' // Gap
+                    }}
+                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const sessionId = e.dataTransfer.getData('text/plain');
+                      if (sessionId) {
+                        pane.handleDropSession(sessionId, 'bottom-bar'); // Use specific ID
+                      }
+                    }}
+                    onClick={() => pane.setActivePaneId('bottom-bar')}
+                  >
+                    {/* Bottom Bar Content */}
+                    {(() => {
+                      const sessionId = pane.paneAllocations['bottom-bar'];
+                      const sessionData = session.sessions.find(s => s.id === sessionId);
+
+                      if (sessionData) {
+                        // Render session...
+                        return sessionData.type === 'ai' ? (
+                          <AIChatPane
+                            sessionId={sessionData.id}
+                            initialState={sessionData.aiChatState}
+                            onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
+                            showSystemPrompt={showSystemPrompt}
+                            askGeminiCommands={askGeminiCommands}
+                            aiPersonas={aiPersonas}
+                            fontSize={fontSize}
+                            terminalBackground={terminalBackground}
+                            terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                          />
+                        ) : (
+                          <TerminalComponent
+                            key={sessionData.id}
+                            sessionId={sessionData.id}
+                            onData={session.handleTerminalData}
+                            isActive={pane.activePaneId === 'bottom-bar'}
+                            focusTrigger={focusTrigger}
+                            terminalInstance={session.terminalRegistry.current[sessionData.id]}
+                            disableFocus={showDialog || !!errorModalMessage}
+                            fontSize={fontSize}
+                            fontFamily={fontFamily}
+                            terminalForeground={terminalForeground}
+                            terminalBackground={terminalBackground}
+                            terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                            lineWrapEnabled={lineWrapEnabled}
+                            askGeminiCommands={askGeminiCommands}
+                          />
+                        );
+                      } else {
+                        return (
+                          <div className="empty-pane-placeholder">
+                            <span className="pane-label">Bottom Bar</span>
+                            <span className="drop-hint">Drop Tab Here</span>
+                          </div>
+                        );
+                      }
+                    })()}
+                  </div>
+                )}
+
               </div>
+
 
               {showRightSidebar && (
                 <div
@@ -936,26 +1140,32 @@ function App() {
         )}
       </div>
 
-      {showDialog && (
-        <ConnectionDialog
-          onConnect={(config) => { session.createSession(config); setShowDialog(false); }}
-          onClose={() => setShowDialog(false)}
-          getCachedPassword={getCachedPassword}
-          saveCachedPassword={saveCachedPassword}
-        />
-      )}
+      {
+        showDialog && (
+          <ConnectionDialog
+            onConnect={(config) => { session.createSession(config); setShowDialog(false); }}
+            onClose={() => setShowDialog(false)}
+            getCachedPassword={getCachedPassword}
+            saveCachedPassword={saveCachedPassword}
+          />
+        )
+      }
 
-      {errorModalMessage && (
-        <ErrorModal message={errorModalMessage} onClose={handleCloseErrorModal} />
-      )}
+      {
+        errorModalMessage && (
+          <ErrorModal message={errorModalMessage} onClose={handleCloseErrorModal} />
+        )
+      }
 
-      {pasteContent !== null && (
-        <PasteConfirmationModal
-          content={pasteContent}
-          onConfirm={confirmPaste}
-          onCancel={cancelPaste}
-        />
-      )}
+      {
+        pasteContent !== null && (
+          <PasteConfirmationModal
+            content={pasteContent}
+            onConfirm={confirmPaste}
+            onCancel={cancelPaste}
+          />
+        )
+      }
 
       <SettingsModal
         isOpen={isSettingsOpen}
@@ -1005,7 +1215,7 @@ function App() {
         visible={showPaneLines}
       />
       <ResizeGrip />
-    </div>
+    </div >
   );
 };
 

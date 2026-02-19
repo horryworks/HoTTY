@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+
 import type { LayoutMode } from '../components/LayoutSelector/LayoutSelector';
 
 /** Calculate grid dimensions */
@@ -100,24 +101,30 @@ export function usePaneManager() {
         setActivePaneId(targetPaneId);
     };
 
-    /** Tab click: Activate the pane if visible. If not visible, do nothing (move via D&D) */
-    const handleTabClick = (sessionId: string) => {
+    // When a tab is clicked, if it's not assigned to any pane, drag-drop logic usually handles assignment.
+    // But if we want to focus an existing pane by clicking a tab (if mapped), we can find it.
+    const handleTabClick = useCallback((sessionId: string) => {
+        // The instruction implies setActiveSessionId is a state setter, but it's a derived value.
+        // Assuming the intent is to activate the pane containing this session, and if not,
+        // the session itself is considered "active" for other UI purposes.
+        // If activeSessionId was a state, it would be set here.
+        // For now, we'll just focus the pane if it exists.
+
         // Search only for valid panes (currently visible on screen)
+        const totalPanes = currentDims.rows * currentDims.cols; // Recalculate or pass as dependency
         const existingPaneId = Object.keys(paneAllocations).find(
-            paneId => paneAllocations[paneId] === sessionId && (paneId === 'sidebar' || parseInt(paneId) < totalPanes)
+            paneId => paneAllocations[paneId] === sessionId && (paneId === 'sidebar' || paneId === 'sidebar-left' || paneId === 'top-bar' || paneId === 'bottom-bar' || parseInt(paneId) < totalPanes)
         );
-
-
         if (existingPaneId) {
             setActivePaneId(existingPaneId);
         }
         // Hidden tabs do not move on click (can only be moved via D&D)
-    };
+    }, [paneAllocations, currentDims.rows, currentDims.cols]); // Added currentDims to dependencies for totalPanes
 
     /** List of session IDs currently displayed in valid panes for the current layout */
     const totalPanes = currentDims.rows * currentDims.cols;
     const visibleSessionIds = Object.entries(paneAllocations)
-        .filter(([paneId, sessionId]) => sessionId !== null && (paneId === 'sidebar' || parseInt(paneId) < totalPanes))
+        .filter(([paneId, sessionId]) => sessionId !== null && (paneId === 'sidebar' || paneId === 'sidebar-left' || paneId === 'top-bar' || paneId === 'bottom-bar' || parseInt(paneId) < totalPanes))
         .map(([, sessionId]) => sessionId as string);
 
 
