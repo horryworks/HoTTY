@@ -1,6 +1,8 @@
 import { Client, ClientChannel, ConnectConfig } from 'ssh2';
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, app } from 'electron';
 import * as iconv from 'iconv-lite';
+import * as fs from 'fs';
+import * as path from 'path';
 import { ISessionService } from './ISessionService';
 
 export class SshService implements ISessionService {
@@ -21,6 +23,59 @@ export class SshService implements ISessionService {
 
     setEncoding(encoding: string) {
         this.encoding = encoding;
+    }
+
+    private getAlgorithms() {
+        // Default algorithms (fallback)
+        const defaultAlgorithms = {
+            kex: [
+                "curve25519-sha256", "curve25519-sha256@libssh.org",
+                "ecdh-sha2-nistp256", "ecdh-sha2-nistp384", "ecdh-sha2-nistp521",
+                "diffie-hellman-group-exchange-sha256", "diffie-hellman-group-exchange-sha1",
+                "diffie-hellman-group14-sha1", "diffie-hellman-group1-sha1"
+            ],
+            cipher: [
+                "aes128-gcm", "aes128-gcm@openssh.com", "aes256-gcm", "aes256-gcm@openssh.com",
+                "aes128-ctr", "aes192-ctr", "aes256-ctr", "aes128-cbc", "aes192-cbc", "aes256-cbc",
+                "3des-cbc"
+            ],
+            serverHostKey: [
+                "ssh-ed25519", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521",
+                "rsa-sha2-512", "rsa-sha2-256", "ssh-rsa", "ssh-dss"
+            ],
+            hmac: [
+                "hmac-sha2-256", "hmac-sha2-512", "hmac-sha1"
+            ]
+        };
+
+        try {
+            const configPath = app.isPackaged
+                ? path.join(process.resourcesPath, 'ssh_algorithms.json')
+                : path.join(__dirname, '..', 'ssh_algorithms.json');
+
+            if (fs.existsSync(configPath)) {
+                const content = fs.readFileSync(configPath, 'utf8');
+                const config = JSON.parse(content);
+
+                const result: any = {};
+                for (const key of ['kex', 'cipher', 'serverHostKey', 'hmac']) {
+                    if (config[key] && Array.isArray(config[key])) {
+                        result[key] = config[key]
+                            .filter((item: any) => item.enabled)
+                            .map((item: any) => item.name);
+                    }
+                }
+
+                // Only return if we actually found enabled algorithms
+                if (Object.keys(result).length > 0) {
+                    return result;
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load SSH algorithms:', error);
+        }
+
+        return defaultAlgorithms;
     }
 
     connect(config: ConnectConfig & { encoding?: string }) {
@@ -66,40 +121,7 @@ export class SshService implements ISessionService {
         }).connect({
             ...config,
             tryKeyboard: true,
-            algorithms: {
-                // KEX: 現代的なECDHを優先し、Ciscoでエラーになる group-exchange を完全に除外
-                kex: [
-                    "curve25519-sha256",
-                    "curve25519-sha256@libssh.org",
-                    "ecdh-sha2-nistp256",
-                    "ecdh-sha2-nistp384",
-                    "ecdh-sha2-nistp521",
-                    "diffie-hellman-group-exchange-sha256",
-                    "diffie-hellman-group-exchange-sha1",
-                    "diffie-hellman-group14-sha1",
-                    "diffie-hellman-group1-sha1"
-                ],
-                // Cipher: 高速・安全なGCM/CTRを優先し、CBCはフォールバックとして残す
-                cipher: [
-                    "aes128-gcm", "aes128-gcm@openssh.com",
-                    "aes256-gcm", "aes256-gcm@openssh.com",
-                    "aes128-ctr", "aes192-ctr", "aes256-ctr",
-                    "aes128-cbc", "aes192-cbc", "aes256-cbc",
-                    "3des-cbc"
-                ],
-                // HostKey: 最新のED25519/RSA-SHA2を優先
-                serverHostKey: [
-                    "ssh-ed25519",
-                    "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521",
-                    "rsa-sha2-512", "rsa-sha2-256",
-                    "ssh-rsa", "ssh-dss"
-                ],
-                // HMAC: SHA2を優先
-                hmac: [
-                    "hmac-sha2-256", "hmac-sha2-512",
-                    "hmac-sha1"
-                ]
-            }
+            algorithms: this.getAlgorithms()
         });
     }
 

@@ -5,6 +5,8 @@
 - **Windows Local Shell Support**: Added direct connection to Command Prompt (CMD) and PowerShell.
 - **PTY Implementation**: Integrated `node-pty` for perfect terminal experience (Backspace, Arrow keys, Ctrl+C support).
 - **WSL Enhancement**: Refactored WSL connection to use `node-pty` for better stability and resizing.
+- **SSH**: Externalized supported algorithms to `ssh_algorithms.json` with multi-tier fallback support.
+- **SSH**: Added `enabled` flag to each SSH algorithm in the configuration file for granular control.
 
 ## [0.1.8] - 2026-02-18
 

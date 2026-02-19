@@ -1,0 +1,214 @@
+{
+    "kex": [
+        {
+            "name": "curve25519-sha256",
+            "enabled": true
+        },
+        {
+            "name": "curve25519-sha256@libssh.org",
+            "enabled": true
+        },
+        {
+            "name": "ecdh-sha2-nistp256",
+            "enabled": true
+        },
+        {
+            "name": "ecdh-sha2-nistp384",
+            "enabled": true
+        },
+        {
+            "name": "ecdh-sha2-nistp521",
+            "enabled": true
+        },
+        {
+            "name": "diffie-hellman-group-exchange-sha256",
+            "enabled": true
+        },
+        {
+            "name": "diffie-hellman-group14-sha256",
+            "enabled": false
+        },
+        {
+            "name": "diffie-hellman-group15-sha512",
+            "enabled": false
+        },
+        {
+            "name": "diffie-hellman-group16-sha512",
+            "enabled": false
+        },
+        {
+            "name": "diffie-hellman-group17-sha512",
+            "enabled": false
+        },
+        {
+            "name": "diffie-hellman-group18-sha512",
+            "enabled": false
+        },
+        {
+            "name": "diffie-hellman-group-exchange-sha1",
+            "enabled": true
+        },
+        {
+            "name": "diffie-hellman-group14-sha1",
+            "enabled": true
+        },
+        {
+            "name": "diffie-hellman-group1-sha1",
+            "enabled": true
+        }
+    ],
+    "cipher": [
+        {
+            "name": "chacha20-poly1305@openssh.com",
+            "enabled": false
+        },
+        {
+            "name": "aes128-gcm",
+            "enabled": true
+        },
+        {
+            "name": "aes128-gcm@openssh.com",
+            "enabled": true
+        },
+        {
+            "name": "aes256-gcm",
+            "enabled": true
+        },
+        {
+            "name": "aes256-gcm@openssh.com",
+            "enabled": true
+        },
+        {
+            "name": "aes128-ctr",
+            "enabled": true
+        },
+        {
+            "name": "aes192-ctr",
+            "enabled": true
+        },
+        {
+            "name": "aes256-ctr",
+            "enabled": true
+        },
+        {
+            "name": "aes256-cbc",
+            "enabled": true
+        },
+        {
+            "name": "aes192-cbc",
+            "enabled": true
+        },
+        {
+            "name": "aes128-cbc",
+            "enabled": true
+        },
+        {
+            "name": "3des-cbc",
+            "enabled": true
+        },
+        {
+            "name": "arcfour256",
+            "enabled": false
+        },
+        {
+            "name": "arcfour128",
+            "enabled": false
+        },
+        {
+            "name": "arcfour",
+            "enabled": false
+        },
+        {
+            "name": "blowfish-cbc",
+            "enabled": false
+        },
+        {
+            "name": "cast128-cbc",
+            "enabled": false
+        }
+    ],
+    "serverHostKey": [
+        {
+            "name": "ssh-ed25519",
+            "enabled": true
+        },
+        {
+            "name": "ecdsa-sha2-nistp256",
+            "enabled": true
+        },
+        {
+            "name": "ecdsa-sha2-nistp384",
+            "enabled": true
+        },
+        {
+            "name": "ecdsa-sha2-nistp521",
+            "enabled": true
+        },
+        {
+            "name": "rsa-sha2-512",
+            "enabled": true
+        },
+        {
+            "name": "rsa-sha2-256",
+            "enabled": true
+        },
+        {
+            "name": "ssh-rsa",
+            "enabled": true
+        },
+        {
+            "name": "ssh-dss",
+            "enabled": true
+        }
+    ],
+    "hmac": [
+        {
+            "name": "hmac-sha2-256-etm@openssh.com",
+            "enabled": false
+        },
+        {
+            "name": "hmac-sha2-512-etm@openssh.com",
+            "enabled": false
+        },
+        {
+            "name": "hmac-sha1-etm@openssh.com",
+            "enabled": false
+        },
+        {
+            "name": "hmac-sha2-256",
+            "enabled": true
+        },
+        {
+            "name": "hmac-sha2-512",
+            "enabled": true
+        },
+        {
+            "name": "hmac-sha1",
+            "enabled": true
+        },
+        {
+            "name": "hmac-md5",
+            "enabled": false
+        },
+        {
+            "name": "hmac-sha2-256-96",
+            "enabled": false
+        },
+        {
+            "name": "hmac-sha2-512-96",
+            "enabled": false
+        },
+        {
+            "name": "hmac-ripemd160",
+            "enabled": false
+        },
+        {
+            "name": "hmac-sha1-96",
+            "enabled": false
+        },
+        {
+            "name": "hmac-md5-96",
+            "enabled": false
+        }
+    ]
+}
