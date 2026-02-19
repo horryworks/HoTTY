@@ -17,7 +17,6 @@ interface ChatMessage {
 }
 
 export class GeminiService {
-  private win: BrowserWindow;
   private tokenData: TokenData | null = null;
   private chatHistories: Map<string, ChatMessage[]> = new Map();
   private abortControllers: Map<string, AbortController> = new Map();
@@ -25,13 +24,12 @@ export class GeminiService {
   private clientId: string | null = null;
   private clientSecret: string | null = null;
 
-  constructor(win: BrowserWindow) {
-    this.win = win;
+  constructor() {
   }
 
   // -- OAuth 2.0 Flow --
 
-  async startAuth(clientId: string, clientSecret: string): Promise<boolean> {
+  async startAuth(win: BrowserWindow, clientId: string, clientSecret: string): Promise<boolean> {
     this.clientId = clientId;
     this.clientSecret = clientSecret;
 
@@ -53,7 +51,7 @@ export class GeminiService {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#ef4444">❌ Authentication Error</h1><p>You may close this window.</p></div></body></html>');
             this.cleanupServer();
-            this.win.webContents.send('gemini-auth-result', { success: false });
+            win.webContents.send('gemini-auth-result', { success: false });
             resolve(false);
             return;
           }
@@ -65,13 +63,13 @@ export class GeminiService {
               res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
               res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#4ade80">✅ Authentication Successful</h1><p>You can return to HoTTY. You may close this window.</p></div></body></html>');
               this.cleanupServer();
-              this.win.webContents.send('gemini-auth-result', { success: true });
+              win.webContents.send('gemini-auth-result', { success: true });
               resolve(true);
             } catch (err: any) {
               res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
               res.end(`<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#ef4444">❌ Token Exchange Error</h1><p>${err.message}</p></div></body></html>`);
               this.cleanupServer();
-              this.win.webContents.send('gemini-auth-result', { success: false });
+              win.webContents.send('gemini-auth-result', { success: false });
               resolve(false);
             }
           }
@@ -100,7 +98,7 @@ export class GeminiService {
       setTimeout(() => {
         if (this.authServer) {
           this.cleanupServer();
-          this.win.webContents.send('gemini-auth-result', { success: false });
+          win.webContents.send('gemini-auth-result', { success: false });
           resolve(false);
         }
       }, 5 * 60 * 1000);
@@ -193,10 +191,10 @@ export class GeminiService {
 
   // -- Chat --
 
-  async sendMessage(sessionId: string, message: string, model: string = 'gemini-2.5-flash', systemInstruction?: string): Promise<void> {
+  async sendMessage(win: BrowserWindow, sessionId: string, message: string, model: string = 'gemini-1.5-flash', systemInstruction?: string): Promise<void> {
     const token = await this.getValidToken();
     if (!token) {
-      this.win.webContents.send('gemini-chat-response', {
+      win.webContents.send('gemini-chat-response', {
         sessionId,
         type: 'error',
         content: 'Authentication expired. Please sign in again.',
@@ -267,7 +265,7 @@ export class GeminiService {
               const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text || '';
               if (text) {
                 fullResponse += text;
-                this.win.webContents.send('gemini-chat-response', {
+                win.webContents.send('gemini-chat-response', {
                   sessionId,
                   type: 'chunk',
                   content: text,
@@ -281,7 +279,7 @@ export class GeminiService {
       }
 
       history.push({ role: 'model', content: fullResponse });
-      this.win.webContents.send('gemini-chat-response', {
+      win.webContents.send('gemini-chat-response', {
         sessionId,
         type: 'done',
         content: fullResponse,
@@ -292,7 +290,7 @@ export class GeminiService {
         return;
       }
       console.error('Gemini chat error:', err);
-      this.win.webContents.send('gemini-chat-response', {
+      win.webContents.send('gemini-chat-response', {
         sessionId,
         type: 'error',
         content: `Error: ${err.message}`,
@@ -345,6 +343,7 @@ export class GeminiService {
     const controller = this.abortControllers.get(sessionId);
     if (controller) {
       controller.abort();
+      this.abortControllers.set(sessionId, controller); // Actually delete it below
       this.abortControllers.delete(sessionId);
     }
   }

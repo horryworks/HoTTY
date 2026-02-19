@@ -1,5 +1,10 @@
 # Release Notes - HoTTY
 
+## [v0.1.10] - 2026-02-19
+### Added
+- **Multi-Window Support**: You can now open multiple HoTTY windows simultaneously. Clicking the app icon or running a second instance will open a new independent window.
+- **Improved IPC Architecture**: Refactored internal communication to ensure each window manages its own sessions and AI chat independently.
+
 ## [v0.1.9] - 2026-02-18
 ### Added
 - **Windows Local Shell Support**: Added direct connection to Command Prompt (CMD) and PowerShell.
@@ -149,7 +154,7 @@
   - Persistent settings for fonts, encoding, and colors.
   - In-memory password caching for secure session resumption.
   - Configurable SSH KeepAlive to prevent idle disconnects.
-- **Installer**: Official Windows NSIS installer version 0.1.0.
+ - **Installer**: Official Windows NSIS installer version 0.1.0.
 
 ### Changed
 - Refactored core architecture to use `ISessionService` for better maintainability.

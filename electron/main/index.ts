@@ -25,7 +25,7 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0)
 }
 
-let win: BrowserWindow | null = null
+const windows = new Set<BrowserWindow>();
 let geminiService: GeminiService | null = null;
 const logManager = new LogManager();
 
@@ -36,7 +36,7 @@ const indexHtml = join(process.env.DIST || 'dist', 'index.html')
 const allowedMediaPaths = new Set<string>();
 
 async function createWindow() {
-  win = new BrowserWindow({
+  const newWin = new BrowserWindow({
     title: 'HoTTY',
     // If dev env, assume public/favicon.ico. If prod, assume dist/favicon.ico
     icon: join(process.env.PUBLIC || 'public', 'icon.png'),
@@ -51,25 +51,33 @@ async function createWindow() {
     backgroundColor: '#1e1e1e',
   })
 
+  windows.add(newWin);
+
   // Hide menu bar
-  win.setMenuBarVisibility(false)
+  newWin.setMenuBarVisibility(false)
 
   if (process.env.VITE_DEV_SERVER_URL) {
-    win.loadURL(process.env.VITE_DEV_SERVER_URL)
+    newWin.loadURL(process.env.VITE_DEV_SERVER_URL)
   } else {
-    win.loadFile(indexHtml)
+    newWin.loadFile(indexHtml)
   }
 
   // Make all links open with the browser, not with the application
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  newWin.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https:')) shell.openExternal(url)
     return { action: 'deny' }
   })
+
+  newWin.on('closed', () => {
+    windows.delete(newWin);
+  });
+
+  return newWin;
 }
 
-app.whenReady().then(() => {
-  createWindow();
-  geminiService = new GeminiService(win!);
+app.whenReady().then(async () => {
+  const firstWin = await createWindow();
+  geminiService = new GeminiService();
 
   // Register 'media' protocol to serve local files
   const { protocol, net } = require('electron');
@@ -102,22 +110,15 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  win = null
   if (process.platform !== 'darwin') app.quit()
 })
 
 app.on('second-instance', () => {
-  if (win) {
-    if (win.isMinimized()) win.restore()
-    win.focus()
-  }
+  createWindow();
 })
 
 app.on('activate', () => {
-  const allWindows = BrowserWindow.getAllWindows()
-  if (allWindows.length) {
-    allWindows[0].focus()
-  } else {
+  if (windows.size === 0) {
     createWindow()
   }
 })
@@ -174,7 +175,8 @@ interface Session {
 const sessions = new Map<string, Session>();
 
 ipcMain.on('connect-session', async (event, { sessionId, config }) => {
-  if (!win) return;
+  const eventWin = BrowserWindow.fromWebContents(event.sender);
+  if (!eventWin) return;
 
   // Cleanup existing if reusing ID (shouldn't happen with UUIDs but good safety)
   if (sessions.has(sessionId)) {
@@ -187,15 +189,15 @@ ipcMain.on('connect-session', async (event, { sessionId, config }) => {
   let service: ISessionService;
 
   if (protocol === 'ssh') {
-    service = new SshService(win, sessionId);
+    service = new SshService(eventWin, sessionId);
   } else if (protocol === 'telnet') {
-    service = new TelnetService(win, sessionId);
+    service = new TelnetService(eventWin, sessionId);
   } else if (protocol === 'wsl') {
-    service = new WslService(win, sessionId);
+    service = new WslService(eventWin, sessionId);
   } else if (protocol === 'cmd' || protocol === 'powershell') {
-    service = new LocalService(win, sessionId);
+    service = new LocalService(eventWin, sessionId);
   } else {
-    service = new SerialService(win, sessionId);
+    service = new SerialService(eventWin, sessionId);
   }
 
   sessions.set(sessionId, {
@@ -248,8 +250,9 @@ ipcMain.on('term-resize', (event, { sessionId, cols, rows }) => {
 });
 
 ipcMain.on('set-window-size', (event, { width, height }) => {
-  if (win) {
-    win.setSize(width, height);
+  const eventWin = BrowserWindow.fromWebContents(event.sender);
+  if (eventWin) {
+    eventWin.setSize(width, height);
   }
 });
 
@@ -259,10 +262,11 @@ ipcMain.on('write-clipboard', (event, text) => {
   }
 });
 
-ipcMain.on('focus-window', () => {
-  if (win) {
-    if (win.isMinimized()) win.restore();
-    win.focus();
+ipcMain.on('focus-window', (event) => {
+  const eventWin = BrowserWindow.fromWebContents(event.sender);
+  if (eventWin) {
+    if (eventWin.isMinimized()) eventWin.restore();
+    eventWin.focus();
   }
 });
 
@@ -279,7 +283,8 @@ ipcMain.on('disconnect-session', (event, sessionId) => {
     session.service.disconnect();
     logManager.stopLogging(sessionId);
     sessions.delete(sessionId);
-    win?.webContents.send('session-status', { sessionId, status: 'disconnected' });
+    const eventWin = BrowserWindow.fromWebContents(event.sender);
+    eventWin?.webContents.send('session-status', { sessionId, status: 'disconnected' });
   }
 });
 
@@ -307,8 +312,9 @@ ipcMain.handle('list-serial-ports', async () => {
   }
 });
 
-ipcMain.handle('select-image', async () => {
-  const { canceled, filePaths } = await dialog.showOpenDialog(win!, {
+ipcMain.handle('select-image', async (event) => {
+  const eventWin = BrowserWindow.fromWebContents(event.sender);
+  const { canceled, filePaths } = await dialog.showOpenDialog(eventWin!, {
     properties: ['openFile'],
     filters: [{ name: 'Images', extensions: ['jpg', 'png', 'gif', 'svg', 'webp'] }],
   });
@@ -321,8 +327,9 @@ ipcMain.handle('select-image', async () => {
   return selectedPath;
 });
 
-ipcMain.handle('select-folder', async () => {
-  const { canceled, filePaths } = await dialog.showOpenDialog(win!, {
+ipcMain.handle('select-folder', async (event) => {
+  const eventWin = BrowserWindow.fromWebContents(event.sender);
+  const { canceled, filePaths } = await dialog.showOpenDialog(eventWin!, {
     properties: ['openDirectory'],
   });
   if (canceled || filePaths.length === 0) {
@@ -398,9 +405,11 @@ ipcMain.on('show-context-menu', (event, selection: string, commands?: { id: stri
 
 // ── Gemini AI IPC Handlers ──
 
-ipcMain.handle('gemini-auth-start', async (_, { clientId, clientSecret }) => {
+ipcMain.handle('gemini-auth-start', async (event, { clientId, clientSecret }) => {
   if (!geminiService) return false;
-  return await geminiService.startAuth(clientId, clientSecret);
+  const eventWin = BrowserWindow.fromWebContents(event.sender);
+  if (!eventWin) return false;
+  return await geminiService.startAuth(eventWin, clientId, clientSecret);
 });
 
 ipcMain.handle('gemini-auth-status', () => {
@@ -411,9 +420,11 @@ ipcMain.on('gemini-auth-logout', () => {
   geminiService?.logout();
 });
 
-ipcMain.on('gemini-chat-send', async (_, { sessionId, message, model, systemInstruction }) => {
+ipcMain.on('gemini-chat-send', async (event, { sessionId, message, model, systemInstruction }) => {
   if (!geminiService) return;
-  await geminiService.sendMessage(sessionId, message, model, systemInstruction);
+  const eventWin = BrowserWindow.fromWebContents(event.sender);
+  if (!eventWin) return;
+  await geminiService.sendMessage(eventWin, sessionId, message, model, systemInstruction);
 });
 
 ipcMain.on('gemini-chat-cancel', (_, sessionId: string) => {
