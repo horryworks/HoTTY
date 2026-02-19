@@ -2,13 +2,21 @@
 
 ## [v0.1.11-beta2] - 2026-02-19
 ### Fixed
-- Improved Backspace key compatibility for network devices (Huawei, Cisco, etc.).
+- **Installer Fixes**:
+    - Fixed an issue where configuration files (`themes.json`, `ssh_algorithms.json`) were not included in the installer.
+    - Changed the configuration storage location to the user data folder (e.g., `%APPDATA%`) to ensure settings are saved correctly.
+- **Startup Issue Fix**:
+    - Fixed an issue where the application would hang on a black screen at startup (due to missing IPC definitions).
+- **Improved Backspace key compatibility for network devices**:
     - Changed default Backspace character from `0x7f` (DEL) to `0x08` (BS) for **SSH, Telnet, and Serial** sessions.
     - Kept `0x7f` (DEL) as default for WSL and local shells (CMD, PowerShell) to maintain compatibility with Unix-like environments.
     - Added "Backspace sends 0x7F (DEL)" option in Settings > System for cases where DEL is required.
+
 ### Added
 - **SSH Algorithm Customization**: Added menu in Settings > SSH to individually enable/disable SSH Key Exchange, Cipher, Server Host Key, and HMAC algorithms.
+- **External Configuration Files**: Separated theme definitions (`themes.json`) and SSH algorithm definitions (`ssh_algorithms.json`) as external resources. Users can now edit these files in the user data folder for advanced customization.
 - **Settings UI improvements**: Reordered tabs (System, Appearance, SSH, AI, About) and moved Network settings to a dedicated "SSH" tab.
+
 
 ## [v0.1.10] - 2026-02-19
 ### Added

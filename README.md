@@ -1,4 +1,7 @@
-# HoTTY v0.1.9 - Gemini Integrated Advanced Terminal
+# HoTTY v0.1.11 - Gemini Integrated Advanced Terminal
+
+**Current Version: v0.1.11-beta2 (Latest)**
+
 emulator built with Electron, React, and TypeScript. It is designed to provide a seamless terminal experience with advanced window management and customization options.
 
 ## Features
@@ -12,6 +15,7 @@ emulator built with Electron, React, and TypeScript. It is designed to provide a
     - Intuitive resizing including **2D intersection resizing** (drag the junction between 4 panes to resize all at once).
 - **Customization**:
     - **Themes**: Built-in **Dark**, **Medium**, and **Light** themes, plus a **Custom** mode for independent color settings.
+    - **Advanced Configuration**: Theme definitions (`themes.json`) and SSH algorithms (`ssh_algorithms.json`) are externalized to the user data folder (`%APPDATA%/HoTTY`), allowing for direct editing and advanced customization.
     - **Visual Identity**: Features a modern black "H" logo with optimized visibility across all themes (including a rounded white background for dark mode icons).
     - **Advanced Backgrounds**: Support for solid colors, tiled image patterns, or the **built-in Default logo background**.
     - **File Picker**: Easily select custom local images as your terminal background via a built-in file explorer integration.

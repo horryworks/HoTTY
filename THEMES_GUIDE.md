@@ -2,7 +2,8 @@
 
 [日本語版はこちら (Japanese version)](file:///c:/Users/horry/development/HoTTY/THEMES_GUIDE.ja.md)
 
-This guide explains the properties available in `src/themes.json`. Since JSON does not support comments, use this file as a reference for customizing HoTTY's appearance.
+This guide explains the properties available in `themes.json`. You can find this file in your user data folder (e.g., `%APPDATA%\HoTTY\themes.json` on Windows) to customize HoTTY's appearance.
+
 
 ## Structure Overview
 
