@@ -1,5 +1,27 @@
 # Release Notes - HoTTY
 
+## [v0.1.11-beta3] - 2026-02-20
+### Added
+- **Top and Bottom Bars**:
+    - Added toggleable **Top Bar** and **Bottom Bar** to the workspace.
+    - Bars function like standard panes (drop tabs into them) but span the full width of the central grid.
+    - Ideal for status monitoring, input fields, or dedicated tools.
+- **Layout Persistence**:
+    - The application now remembers your layout configuration across restarts!
+    - **Persisted Settings**:
+        - Visibility and size (percentage) of Left/Right Sidebars and Top/Bottom Bars.
+        - Grid Layout Mode (1x1, 2x2, etc.).
+        - Relative sizes of grid panes (dragged ratios).
+    - **Smart Resizing**: Sidebars and Bars now use **percentage-based sizing**, ensuring your layout proportions remain consistent even when resizing the application window.
+
+### Changed
+- **UI Refinements**:
+    - **Corner Priority**: Sidebars (Left/Right) now take vertical priority over Top/Bottom bars, creating a "sandwiched" center layout.
+    - **Gap Consistency**: Unified spacing (2px) between all panes, sidebars, and bars for a cleaner look.
+    - **Layout Selector**: Added icons for toggling Top/Bottom bars.
+
+
+
 ## [v0.1.11-beta2] - 2026-02-19
 ### Fixed
 - **Installer Fixes**:
