@@ -1,5 +1,12 @@
 # Release Notes - HoTTY
 
+## [v0.1.11-beta1] - 2026-02-19
+### Fixed
+- Improved Backspace key compatibility for network devices (Huawei, Cisco, etc.).
+    - Changed default Backspace character from `0x7f` (DEL) to `0x08` (BS) for **SSH, Telnet, and Serial** sessions.
+    - Kept `0x7f` (DEL) as default for WSL and local shells (CMD, PowerShell) to maintain compatibility with Unix-like environments.
+    - Added "Backspace sends 0x7F (DEL)" option in Settings > System for cases where DEL is required.
+
 ## [v0.1.10] - 2026-02-19
 ### Added
 - **Multi-Window Support**: You can now open multiple HoTTY windows simultaneously. Clicking the app icon or running a second instance will open a new independent window.

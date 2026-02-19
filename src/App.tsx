@@ -238,6 +238,16 @@ function App() {
     localStorage.setItem('hterm_scrollback', lines.toString());
   };
 
+  // Backspace Behavior State
+  const [backspaceSendsDel, setBackspaceSendsDel] = useState<boolean>(() => {
+    return localStorage.getItem('hterm_backspace_sends_del') === 'true'; // default false (0x08)
+  });
+
+  const updateBackspaceSendsDel = (sendsDel: boolean) => {
+    setBackspaceSendsDel(sendsDel);
+    localStorage.setItem('hterm_backspace_sends_del', sendsDel.toString());
+  };
+
   // -- Pane Manager --
   const pane = usePaneManager();
 
@@ -258,6 +268,7 @@ function App() {
     loggingPath,
     lineWrapEnabled,
     scrollback,
+    backspaceSendsDel,
     onPasteRequest: handlePasteRequest,
     onSessionConnected: () => setShowDialog(false),
     onSessionError: (msg) => setErrorModalMessage(msg),
@@ -711,6 +722,8 @@ function App() {
         onAskGeminiCommandsChange={updateAskGeminiCommands}
         aiPersonas={aiPersonas}
         onAiPersonasChange={updateAiPersonas}
+        backspaceSendsDel={backspaceSendsDel}
+        onBackspaceSendsDelChange={updateBackspaceSendsDel}
       />
       <PaneLines
         paneAllocations={pane.paneAllocations}

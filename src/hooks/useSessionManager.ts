@@ -32,6 +32,7 @@ interface UseSessionManagerOptions {
     loggingPath: string;
     lineWrapEnabled: boolean;
     scrollback: number;
+    backspaceSendsDel: boolean;
 }
 
 export function useSessionManager(options: UseSessionManagerOptions) {
@@ -48,6 +49,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         loggingPath,
         lineWrapEnabled,
         scrollback,
+        backspaceSendsDel,
     } = options;
 
     const [sessions, setSessions] = useState<Session[]>([]);
@@ -55,7 +57,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     const terminalRegistry = useRef<{ [sessionId: string]: Terminal }>({});
 
     // Terminal instance factory
-    const createTerminalInstance = (sessionId: string) => {
+    const createTerminalInstance = (sessionId: string, type?: Session['type']) => {
         const term = new Terminal({
             cursorBlink: true,
             fontSize: 14,
@@ -103,7 +105,14 @@ export function useSessionManager(options: UseSessionManagerOptions) {
 
         // User input → backend
         term.onData((data) => {
-            window.electronAPI.sendInput(sessionId, data);
+            let processedData = data;
+            // Intercept Backspace (\x7f) and convert to \x08 if required
+            // Only apply this to remote/serial connections. Local shells (wsl, local) typically expect \x7f.
+            const isRemoteOrSerial = type === 'ssh' || type === 'telnet' || type === 'serial';
+            if (isRemoteOrSerial && !backspaceSendsDel && data === '\x7f') {
+                processedData = '\x08';
+            }
+            window.electronAPI.sendInput(sessionId, processedData);
         });
 
         return term;
@@ -211,7 +220,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         }
         const newSession: Session = { id: sessionId, title, type };
 
-        terminalRegistry.current[sessionId] = createTerminalInstance(sessionId);
+        terminalRegistry.current[sessionId] = createTerminalInstance(sessionId, type);
 
         setSessions(prev => [...prev, newSession]);
         setTabOrder(prev => [...prev, sessionId]);

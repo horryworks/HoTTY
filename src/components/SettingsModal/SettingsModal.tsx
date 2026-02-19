@@ -41,6 +41,8 @@ interface SettingsModalProps {
     onAskGeminiCommandsChange: (commands: { id: string; label: string; promptTemplate: string }[]) => void;
     aiPersonas: { id: string; label: string; systemPrompt: string }[];
     onAiPersonasChange: (personas: { id: string; label: string; systemPrompt: string }[]) => void;
+    backspaceSendsDel: boolean;
+    onBackspaceSendsDelChange: (sendsDel: boolean) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -81,7 +83,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     askGeminiCommands,
     onAskGeminiCommandsChange,
     aiPersonas,
-    onAiPersonasChange
+    onAiPersonasChange,
+    backspaceSendsDel,
+    onBackspaceSendsDelChange
 }) => {
     const { position, onMouseDown: onHeaderMouseDown } = useDraggable();
     const [activeTab, setActiveTab] = React.useState<'appearance' | 'network' | 'system' | 'ai' | 'about'>('appearance');
@@ -531,6 +535,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <span style={{ fontSize: '0.9em', color: '#ccc' }}>lines</span>
                                 </div>
                                 <p className="settings-help">Max lines to keep in memory per terminal (Default: 10000).</p>
+                            </div>
+
+                            <div className="form-group" style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid var(--border-color)' }}>
+                                <label>Keyboard</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal', whiteSpace: 'nowrap' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={backspaceSendsDel}
+                                            onChange={(e) => onBackspaceSendsDelChange(e.target.checked)}
+                                            style={{ marginRight: '8px' }}
+                                        />
+                                        Backspace sends 0x7F (DEL)
+                                    </label>
+                                </div>
+                                <p className="settings-help">If disabled (default), Backspace sends 0x08 (BS/^H). Enable this if your server expects 0x7F (DEL) for Backspace.</p>
                             </div>
                         </div>
                     )}
