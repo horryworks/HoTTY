@@ -165,5 +165,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     getSshAlgorithms: () => ipcRenderer.invoke('get-ssh-algorithms'),
     saveSshAlgorithms: (algorithms: any) => ipcRenderer.invoke('save-ssh-algorithms', algorithms),
+    getThemes: () => ipcRenderer.invoke('get-themes'),
+    saveThemes: (themes: any) => ipcRenderer.invoke('save-themes', themes),
 })
+
 

@@ -3,6 +3,7 @@ import { BrowserWindow, app } from 'electron';
 import * as iconv from 'iconv-lite';
 import * as fs from 'fs';
 import * as path from 'path';
+import { join } from 'path';
 import { ISessionService } from './ISessionService';
 
 export class SshService implements ISessionService {
@@ -49,9 +50,7 @@ export class SshService implements ISessionService {
         };
 
         try {
-            const configPath = app.isPackaged
-                ? path.join(process.resourcesPath, 'ssh_algorithms.json')
-                : path.join(app.getAppPath(), 'electron', 'main', 'ssh_algorithms.json');
+            const configPath = join(app.getPath('userData'), 'ssh_algorithms.json');
 
             if (fs.existsSync(configPath)) {
                 const content = fs.readFileSync(configPath, 'utf8');

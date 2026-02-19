@@ -25,6 +25,15 @@
       "node_modules/**/*",
       "!node_modules/.cache"
     ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
     "asar": true,
     "asarUnpack": [
       "node_modules/serialport/**/*",

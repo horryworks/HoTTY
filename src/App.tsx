@@ -11,7 +11,6 @@ import { PaneLines } from './components/PaneLines/PaneLines'
 import { useSessionManager } from './hooks/useSessionManager'
 import type { Session } from './hooks/useSessionManager'
 import { usePaneManager } from './hooks/usePaneManager'
-import themesData from './themes.json'
 import '@xterm/xterm/css/xterm.css'
 import './App.css'
 
@@ -70,9 +69,16 @@ const DEFAULT_PERSONAS: PersonaDefinition[] = [
 function App() {
 
   // -- UI State --
+  const [themesData, setThemesData] = useState<any>(null);
   const [showDialog, setShowDialog] = useState(true);
   const [errorModalMessage, setErrorModalMessage] = useState<string | null>(null);
   const [focusTrigger, setFocusTrigger] = useState(0);
+
+  // Load themes on startup
+  useEffect(() => {
+    window.electronAPI.getThemes().then(setThemesData);
+  }, []);
+
 
   // Paste Confirmation State
   const [pasteContent, setPasteContent] = useState<string | null>(null);
@@ -98,8 +104,11 @@ function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('hterm_theme', theme);
-    applyTheme(theme);
-  }, [theme]);
+    if (themesData) {
+      applyTheme(theme);
+    }
+  }, [theme, themesData]);
+
 
   const applyTheme = (themeName: string) => {
     if (themeName === 'custom') {

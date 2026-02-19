@@ -35,7 +35,10 @@ export interface ElectronAPI {
     onAskGemini: (callback: (selection: string, type: string) => void) => () => void;
     getSshAlgorithms: () => Promise<any>;
     saveSshAlgorithms: (algorithms: any) => Promise<boolean>;
+    getThemes: () => Promise<any>;
+    saveThemes: (themes: any) => Promise<boolean>;
 }
+
 
 declare global {
     interface Window {

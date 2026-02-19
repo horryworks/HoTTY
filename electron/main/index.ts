@@ -443,12 +443,33 @@ ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
 
-const algorithmsPath = app.isPackaged
-  ? join(process.resourcesPath, 'ssh_algorithms.json')
-  : join(app.getAppPath(), 'electron', 'main', 'ssh_algorithms.json');
+const getSshAlgorithmsPath = () => {
+  const userDataPath = join(app.getPath('userData'), 'ssh_algorithms.json');
+
+  // If user data doesn't have the file, copy it from resources
+  if (!fs.existsSync(userDataPath)) {
+    const defaultPath = app.isPackaged
+      ? join(process.resourcesPath, 'resources', 'ssh_algorithms.json')
+      : join(app.getAppPath(), 'resources', 'ssh_algorithms.json');
+
+    try {
+      if (fs.existsSync(defaultPath)) {
+        fs.copyFileSync(defaultPath, userDataPath);
+        console.log('Initialized ssh_algorithms.json in userData');
+      } else {
+        console.error('Default ssh_algorithms.json not found at:', defaultPath);
+      }
+    } catch (err) {
+      console.error('Failed to initialize ssh_algorithms.json:', err);
+    }
+  }
+
+  return userDataPath;
+};
 
 ipcMain.handle('get-ssh-algorithms', async () => {
   try {
+    const algorithmsPath = getSshAlgorithmsPath();
     if (fs.existsSync(algorithmsPath)) {
       const content = fs.readFileSync(algorithmsPath, 'utf8');
       return JSON.parse(content);
@@ -461,6 +482,7 @@ ipcMain.handle('get-ssh-algorithms', async () => {
 
 ipcMain.handle('save-ssh-algorithms', async (_, algorithms) => {
   try {
+    const algorithmsPath = getSshAlgorithmsPath();
     fs.writeFileSync(algorithmsPath, JSON.stringify(algorithms, null, 2), 'utf8');
     return true;
   } catch (err) {
@@ -468,3 +490,52 @@ ipcMain.handle('save-ssh-algorithms', async (_, algorithms) => {
     return false;
   }
 });
+
+const getThemesPath = () => {
+  const userDataPath = join(app.getPath('userData'), 'themes.json');
+
+  if (!fs.existsSync(userDataPath)) {
+    const defaultPath = app.isPackaged
+      ? join(process.resourcesPath, 'resources', 'themes.json')
+      : join(app.getAppPath(), 'resources', 'themes.json');
+
+    try {
+      if (fs.existsSync(defaultPath)) {
+        fs.copyFileSync(defaultPath, userDataPath);
+        console.log('Initialized themes.json in userData');
+      } else {
+        console.error('Default themes.json not found at:', defaultPath);
+      }
+    } catch (err) {
+      console.error('Failed to initialize themes.json:', err);
+    }
+  }
+
+  return userDataPath;
+};
+
+ipcMain.handle('get-themes', async () => {
+  try {
+    const themesPath = getThemesPath();
+    if (fs.existsSync(themesPath)) {
+      const content = fs.readFileSync(themesPath, 'utf8');
+      return JSON.parse(content);
+    }
+  } catch (err) {
+    console.error('Failed to get themes:', err);
+  }
+  return null;
+});
+
+ipcMain.handle('save-themes', async (_, themes) => {
+  try {
+    const themesPath = getThemesPath();
+    fs.writeFileSync(themesPath, JSON.stringify(themes, null, 2), 'utf8');
+    return true;
+  } catch (err) {
+    console.error('Failed to save themes:', err);
+    return false;
+  }
+});
+
+
