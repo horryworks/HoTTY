@@ -442,3 +442,29 @@ ipcMain.on('gemini-chat-clear', (_, sessionId: string) => {
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
+
+const algorithmsPath = app.isPackaged
+  ? join(process.resourcesPath, 'ssh_algorithms.json')
+  : join(app.getAppPath(), 'electron', 'main', 'ssh_algorithms.json');
+
+ipcMain.handle('get-ssh-algorithms', async () => {
+  try {
+    if (fs.existsSync(algorithmsPath)) {
+      const content = fs.readFileSync(algorithmsPath, 'utf8');
+      return JSON.parse(content);
+    }
+  } catch (err) {
+    console.error('Failed to get SSH algorithms:', err);
+  }
+  return null;
+});
+
+ipcMain.handle('save-ssh-algorithms', async (_, algorithms) => {
+  try {
+    fs.writeFileSync(algorithmsPath, JSON.stringify(algorithms, null, 2), 'utf8');
+    return true;
+  } catch (err) {
+    console.error('Failed to save SSH algorithms:', err);
+    return false;
+  }
+});

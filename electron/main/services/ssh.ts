@@ -51,7 +51,7 @@ export class SshService implements ISessionService {
         try {
             const configPath = app.isPackaged
                 ? path.join(process.resourcesPath, 'ssh_algorithms.json')
-                : path.join(__dirname, '..', 'ssh_algorithms.json');
+                : path.join(app.getAppPath(), 'electron', 'main', 'ssh_algorithms.json');
 
             if (fs.existsSync(configPath)) {
                 const content = fs.readFileSync(configPath, 'utf8');

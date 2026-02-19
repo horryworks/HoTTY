@@ -1,11 +1,14 @@
 # リリースノート - HoTTY
 
-## [v0.1.11-beta1] - 2026-02-19
+## [v0.1.11-beta2] - 2026-02-19
 ### 修正
 - ネットワーク機器（Huawei, Cisco等）でのBackspaceキーの互換性を向上。
     - **SSH, Telnet, Serial** 接続において、Backspace時に送信される文字コードのデフォルトを `0x7f` (DEL) から `0x08` (BS) に変更。
     - WSLやローカルシェル（CMD, PowerShell）では従来の `0x7f` (DEL) を維持し、互換性を確保。
     - 必要に応じて `0x7f` を送信するための設定項目「Backspace sends 0x7F (DEL)」を設定 > システムに追加。
+### 追加
+- **SSHアルゴリズムのカスタマイズ機能**: 設定 > SSHに、SSHの鍵交換(Kex)、暗号方式(Cipher)、サーバーホストキー(HostKey)、HMACアルゴリズムを個別に有効/無効化できるメニューを追加。
+- **設定画面のUI改善**: タブの並び順を変更（System, Appearance, SSH, AI, About）し、Network設定を専用の「SSH」タブに統合。
 
 ## [v0.1.10] - 2026-02-19
 ### 追加

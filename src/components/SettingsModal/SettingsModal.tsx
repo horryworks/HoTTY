@@ -88,12 +88,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onBackspaceSendsDelChange
 }) => {
     const { position, onMouseDown: onHeaderMouseDown } = useDraggable();
-    const [activeTab, setActiveTab] = React.useState<'appearance' | 'network' | 'system' | 'ai' | 'about'>('appearance');
+    const [activeTab, setActiveTab] = React.useState<'appearance' | 'ssh' | 'system' | 'ai' | 'about'>('system');
     const [version, setVersion] = React.useState<string>('');
+    const [sshAlgorithms, setSshAlgorithms] = React.useState<any>(null);
 
     React.useEffect(() => {
         if (isOpen) {
             window.electronAPI.getAppVersion().then(setVersion);
+            window.electronAPI.getSshAlgorithms().then(setSshAlgorithms);
         }
     }, [isOpen]);
 
@@ -104,6 +106,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             return;
         }
         onClose();
+    };
+
+    const handleAlgorithmToggle = async (category: string, name: string) => {
+        if (!sshAlgorithms) return;
+        const newAlgorithms = { ...sshAlgorithms };
+        newAlgorithms[category] = newAlgorithms[category].map((algo: any) =>
+            algo.name === name ? { ...algo, enabled: !algo.enabled } : algo
+        );
+        setSshAlgorithms(newAlgorithms);
+        await window.electronAPI.saveSshAlgorithms(newAlgorithms);
     };
 
     const tabsRef = React.useRef<HTMLDivElement>(null);
@@ -184,22 +196,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onMouseMove={handleMouseMove}
                 >
                     <button
+                        className={`settings-tab ${activeTab === 'system' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('system')}
+                    >
+                        System
+                    </button>
+                    <button
                         className={`settings-tab ${activeTab === 'appearance' ? 'active' : ''}`}
                         onClick={() => setActiveTab('appearance')}
                     >
                         Appearance
                     </button>
                     <button
-                        className={`settings-tab ${activeTab === 'network' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('network')}
+                        className={`settings-tab ${activeTab === 'ssh' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('ssh')}
                     >
-                        Network
-                    </button>
-                    <button
-                        className={`settings-tab ${activeTab === 'system' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('system')}
-                    >
-                        System
+                        SSH
                     </button>
                     <button
                         className={`settings-tab ${activeTab === 'ai' ? 'active' : ''}`}
@@ -446,36 +458,69 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </>
                     )}
 
-                    {activeTab === 'network' && (
-                        <div className="form-group">
-                            <label>SSH KeepAlive</label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={sshKeepAliveEnabled}
-                                        onChange={(e) => onSshKeepAliveEnabledChange(e.target.checked)}
-                                        style={{ marginRight: '8px' }}
-                                    />
-                                    Enable
-                                </label>
+                    {activeTab === 'ssh' && (
+                        <>
+                            <div className="form-group">
+                                <label>SSH KeepAlive</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={sshKeepAliveEnabled}
+                                            onChange={(e) => onSshKeepAliveEnabledChange(e.target.checked)}
+                                            style={{ marginRight: '8px' }}
+                                        />
+                                        Enable
+                                    </label>
+                                </div>
+                                {sshKeepAliveEnabled && (
+                                    <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ fontSize: '0.9em', color: '#ccc' }}>Interval (seconds):</span>
+                                        <input
+                                            type="number"
+                                            value={sshKeepAliveInterval}
+                                            onChange={(e) => onSshKeepAliveIntervalChange(parseInt(e.target.value, 10))}
+                                            className="settings-input"
+                                            min={5}
+                                            max={300}
+                                            style={{ width: '80px' }}
+                                        />
+                                    </div>
+                                )}
+                                <p className="settings-help">Sends dummy packets to prevent timeouts.</p>
                             </div>
-                            {sshKeepAliveEnabled && (
-                                <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <span style={{ fontSize: '0.9em', color: '#ccc' }}>Interval (seconds):</span>
-                                    <input
-                                        type="number"
-                                        value={sshKeepAliveInterval}
-                                        onChange={(e) => onSshKeepAliveIntervalChange(parseInt(e.target.value, 10))}
-                                        className="settings-input"
-                                        min={5}
-                                        max={300}
-                                        style={{ width: '80px' }}
-                                    />
+
+                            {sshAlgorithms && (
+                                <div className="form-group" style={{ marginTop: '20px', borderTop: '1px solid var(--border-color)', paddingTop: '15px' }}>
+                                    <label style={{ marginBottom: '10px', display: 'block' }}>SSH Algorithms</label>
+                                    <div className="ssh-algorithms-container" style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '10px' }}>
+                                        {Object.keys(sshAlgorithms).map(category => (
+                                            <div key={category} style={{ marginBottom: '15px' }}>
+                                                <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9em', color: '#aaa', textTransform: 'capitalize' }}>
+                                                    {category === 'serverHostKey' ? 'Server Host Key' : category}
+                                                </h4>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px' }}>
+                                                    {sshAlgorithms[category].map((algo: any) => (
+                                                        <label key={algo.name} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px', alignItems: 'center', fontSize: '0.85em', fontWeight: 'normal', cursor: 'pointer' }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={algo.enabled}
+                                                                onChange={() => handleAlgorithmToggle(category, algo.name)}
+                                                                style={{ margin: 0, padding: 0, cursor: 'pointer' }}
+                                                            />
+                                                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }} title={algo.name}>
+                                                                {algo.name}
+                                                            </span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p className="settings-help">Choose which algorithms to enable for SSH connections. Changes apply to new sessions.</p>
                                 </div>
                             )}
-                            <p className="settings-help">Sends dummy packets to prevent timeouts.</p>
-                        </div>
+                        </>
                     )}
 
                     {activeTab === 'system' && (

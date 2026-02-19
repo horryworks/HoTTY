@@ -33,6 +33,8 @@ export interface ElectronAPI {
     // Context Menu
     showContextMenu: (selection: string, commands?: { id: string; label: string }[]) => void;
     onAskGemini: (callback: (selection: string, type: string) => void) => () => void;
+    getSshAlgorithms: () => Promise<any>;
+    saveSshAlgorithms: (algorithms: any) => Promise<boolean>;
 }
 
 declare global {

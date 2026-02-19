@@ -163,5 +163,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('gemini-chat-response', subscription);
         return () => ipcRenderer.removeListener('gemini-chat-response', subscription);
     },
+    getSshAlgorithms: () => ipcRenderer.invoke('get-ssh-algorithms'),
+    saveSshAlgorithms: (algorithms: any) => ipcRenderer.invoke('save-ssh-algorithms', algorithms),
 })
 
