@@ -63,7 +63,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
 
     // --- Panel divider resize ---
-    const [treePanelWidth, setTreePanelWidth] = useState(260); // 1:2 tree:form default ratio
+    const [treePanelWidth, setTreePanelWidth] = useState(600); // 2:1 tree:form default ratio
     const panelResizeState = useRef<{ startX: number; startWidth: number } | null>(null);
 
     const handlePanelDividerMouseDown = useCallback((e: React.MouseEvent) => {
@@ -87,15 +87,15 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     }, [treePanelWidth]);
 
     // --- Dialog size and position (absolute top/left, so resize only expands right/bottom) ---
-    const [dialogSize, setDialogSize] = useState({ width: 820, height: 520 });
+    const [dialogSize, setDialogSize] = useState({ width: 960, height: 540 });
     const [dialogPos, setDialogPos] = useState<{ top: number; left: number } | null>(null);
 
     // Initialize dialog position to viewport center when first rendered
     const dialogPosInitialized = useRef(false);
     useEffect(() => {
         if (!dialogPosInitialized.current) {
-            const w = 820;
-            const h = 520;
+            const w = 960;
+            const h = 540;
             setDialogPos({
                 top: Math.max(0, (window.innerHeight - h) / 2),
                 left: Math.max(0, (window.innerWidth - w) / 2),
@@ -210,6 +210,22 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         setPassword(cachedPass !== '' ? cachedPass : (e.password ?? ''));
     };
 
+    // --- Double-click a host: connect immediately using the node's data ---
+    const handleDoubleClickHost = useCallback((node: HostTreeNode) => {
+        if (node.type !== 'host' || !node.entry) return;
+        const e = node.entry;
+        handleSelectHost(node); // also fill the form for visual feedback
+        const cachedPass = getCachedPassword(e.host ?? '', e.username ?? '');
+        const pass = cachedPass !== '' ? cachedPass : (e.password ?? '');
+        onConnect({
+            protocol: e.protocol,
+            host: e.host,
+            port: e.port,
+            username: e.protocol === 'ssh' ? (e.username ?? '') : undefined,
+            password: e.protocol === 'ssh' ? pass : undefined,
+        });
+    }, [getCachedPassword, onConnect]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -299,6 +315,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             tree={hostManager.tree}
                             selectedId={selectedHostId}
                             onSelect={handleSelectHost}
+                            onDoubleClickHost={handleDoubleClickHost}
                             onAddFolder={hostManager.addFolder}
                             onAddHost={hostManager.addHost}
                             onEditNode={hostManager.editNode}

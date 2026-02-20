@@ -18,6 +18,7 @@ interface HostTreeProps {
     tree: HostTreeNode[];
     selectedId: string | null;
     onSelect: (node: HostTreeNode) => void;
+    onDoubleClickHost?: (node: HostTreeNode) => void;
     onAddFolder: (parentId: string | null, name: string) => void;
     onAddHost: (parentId: string | null, name: string, entry: HostEntry) => void;
     onEditNode: (id: string, patch: Partial<HostTreeNode>) => void;
@@ -28,6 +29,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
     tree,
     selectedId,
     onSelect,
+    onDoubleClickHost,
     onAddFolder,
     onAddHost,
     onEditNode,
@@ -143,6 +145,9 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     onClick={() => {
                         if (node.type === 'folder') toggle(node.id);
                         else onSelect(node);
+                    }}
+                    onDoubleClick={() => {
+                        if (node.type === 'host') onDoubleClickHost?.(node);
                     }}
                     onContextMenu={(e) => openContextMenu(e, node)}
                 >
