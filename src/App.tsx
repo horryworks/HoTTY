@@ -364,7 +364,12 @@ function App() {
   };
 
   // -- Pane Manager --
-  const pane = usePaneManager();
+  const pane = usePaneManager({
+    showLeftSidebar,
+    showRightSidebar,
+    showTopBar,
+    showBottomBar,
+  });
 
 
 

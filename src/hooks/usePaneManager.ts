@@ -15,7 +15,14 @@ function getGridDimensions(mode: LayoutMode) {
     }
 }
 
-export function usePaneManager() {
+export interface PaneManagerOptions {
+    showLeftSidebar: boolean;
+    showRightSidebar: boolean;
+    showTopBar: boolean;
+    showBottomBar: boolean;
+}
+
+export function usePaneManager(options?: PaneManagerOptions) {
     const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
         return (localStorage.getItem('hterm_ui_layoutMode') as LayoutMode) || '1x1';
     });
@@ -130,7 +137,13 @@ export function usePaneManager() {
     /** List of session IDs currently displayed in valid panes for the current layout */
     const totalPanes = currentDims.rows * currentDims.cols;
     const visibleSessionIds = Object.entries(paneAllocations)
-        .filter(([paneId, sessionId]) => sessionId !== null && (paneId === 'sidebar' || paneId === 'sidebar-left' || paneId === 'top-bar' || paneId === 'bottom-bar' || parseInt(paneId) < totalPanes))
+        .filter(([paneId, sessionId]) => sessionId !== null && (
+            (paneId === 'sidebar-left' && options?.showLeftSidebar) ||
+            (paneId === 'sidebar' && options?.showRightSidebar) ||
+            (paneId === 'top-bar' && options?.showTopBar) ||
+            (paneId === 'bottom-bar' && options?.showBottomBar) ||
+            parseInt(paneId) < totalPanes
+        ))
         .map(([, sessionId]) => sessionId as string);
 
 

@@ -17,6 +17,8 @@
 ### Fixed
 - **Tab-Pane Mapping**:
     - Fixed an issue where the "Show Tab-Pane Mapping" arrows were not displayed when tabs were placed in the Sidebars, Top Bar, or Bottom Bar.
+- **Unread Data Indicator**:
+    - Fixed an issue where terminal tabs placed in the Sidebars, Top Bar, or Bottom Bar did not turn red to indicate unread activity when their respective bar was hidden.
 
 ### Changed
 - **UI Refinements**:
