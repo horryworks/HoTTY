@@ -1,0 +1,217 @@
+/* --- Host Tree Container --- */
+.host-tree-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--panel-bg, #1a1a1a);
+    border-right: 1px solid var(--border-color, #333);
+    position: relative;
+    user-select: none;
+}
+
+/* --- Toolbar --- */
+.host-tree-toolbar {
+    display: flex;
+    gap: 4px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border-color, #333);
+    flex-shrink: 0;
+}
+
+.tree-toolbar-btn {
+    background: var(--btn-bg, #2a2a2a);
+    border: 1px solid var(--border-color, #3a3a3a);
+    color: var(--text-primary, #ccc);
+    border-radius: 4px;
+    padding: 3px 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.15s;
+}
+
+.tree-toolbar-btn:hover {
+    background: var(--btn-hover-bg, #3a3a3a);
+}
+
+/* --- Tree Body --- */
+.host-tree-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px 0;
+}
+
+.host-tree-empty {
+    color: #555;
+    font-size: 0.8rem;
+    text-align: center;
+    padding: 20px 12px;
+    line-height: 1.6;
+}
+
+/* --- Nodes --- */
+/* padding-left depth applied via inline style on each row */
+
+.host-tree-row {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 4px 8px;
+    cursor: pointer;
+    border-radius: 4px;
+    margin: 1px 4px;
+    font-size: 0.88rem;
+    color: var(--text-primary, #ccc);
+    transition: background 0.12s;
+    min-height: 26px;
+}
+
+.host-tree-row:hover {
+    background: var(--hover-bg, #2a2a2a);
+}
+
+.host-tree-row.selected {
+    background: var(--accent-color, #1a3a5c);
+    color: #fff;
+}
+
+.tree-icon {
+    flex-shrink: 0;
+    font-size: 0.8rem;
+    width: 16px;
+    text-align: center;
+}
+
+.tree-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tree-meta {
+    font-size: 0.78rem;
+    color: #d4b86a;
+    flex-shrink: 0;
+    font-family: monospace;
+    opacity: 0.85;
+}
+
+
+
+/* --- Context Menu ---
+   Use position:absolute so it stays inside the host-tree-container (position:relative).
+   position:fixed would be offset by the dialog's transform:translate() parent. */
+.context-menu {
+    position: absolute;
+    z-index: 10000;
+    background: #252525;
+    border: 1px solid #404040;
+    border-radius: 6px;
+    padding: 4px 0;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    min-width: 160px;
+}
+
+.context-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    color: #ccc;
+    padding: 6px 14px;
+    font-size: 0.88rem;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.context-menu button:hover {
+    background: #333;
+    color: #fff;
+}
+
+.context-menu button.danger {
+    color: #e05050;
+}
+
+.context-menu button.danger:hover {
+    background: #3a1a1a;
+    color: #ff6b6b;
+}
+
+.context-menu-separator {
+    height: 1px;
+    background: #3a3a3a;
+    margin: 3px 0;
+}
+
+/* --- Add/Edit Modal --- */
+.host-edit-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 20000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.host-edit-modal {
+    background: #222;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    padding: 20px 24px;
+    min-width: 320px;
+    max-width: 460px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.modal-form-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+}
+
+.modal-form-group label {
+    font-size: 0.8rem;
+    color: #888;
+    margin-bottom: 4px;
+}
+
+.modal-form-group input,
+.modal-form-group select {
+    background: #1a1a1a;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    color: #ddd;
+    padding: 5px 8px;
+    font-size: 0.9rem;
+}
+
+.modal-form-group input:focus,
+.modal-form-group select:focus {
+    outline: none;
+    border-color: #4a7fb0;
+}
+
+.modal-form-row {
+    display: flex;
+    gap: 10px;
+}
+
+.modal-form-group.flex-3 {
+    flex: 3;
+}
+
+.modal-form-group.flex-1 {
+    flex: 1;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+}

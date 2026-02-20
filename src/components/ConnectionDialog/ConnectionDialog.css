@@ -5,10 +5,8 @@
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.4);
-    display: flex;
-    justify-content: center;
-    align-items: center;
     z-index: 100;
+    /* No flex here — dialog is positioned with absolute top/left */
 }
 
 .connection-dialog {
@@ -21,6 +19,73 @@
     max-height: 90vh;
     overflow-y: auto;
 }
+
+/* Wide variant used for the two-panel layout */
+.connection-dialog-wide {
+    /* width and height are now controlled by JS state */
+    max-width: 98vw;
+    max-height: 95vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Two-panel body */
+.dialog-body {
+    display: flex;
+    gap: 0;
+    flex: 1;
+    min-height: 0;
+    /* allow flex shrink */
+    border: 1px solid var(--border-color, #333);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+/* Left host-tree panel — width is controlled via inline style (treePanelWidth) */
+.host-panel {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Vertical drag grip between panels */
+.panel-divider {
+    width: 5px;
+    flex-shrink: 0;
+    cursor: col-resize;
+    background: var(--border-color, #333);
+    transition: background 0.15s;
+}
+
+.panel-divider:hover {
+    background: var(--accent-color, #4a7fb0);
+}
+
+/* Right form panel */
+.form-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 14px;
+}
+
+/* Bottom-right dialog resize grip */
+.dialog-resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 18px;
+    height: 18px;
+    cursor: nwse-resize;
+    background: linear-gradient(135deg, transparent 40%, var(--border-color, #555) 40%, var(--border-color, #555) 50%, transparent 50%, transparent 65%, var(--border-color, #555) 65%, var(--border-color, #555) 75%, transparent 75%);
+    opacity: 0.6;
+    border-radius: 0 0 4px 0;
+}
+
+.dialog-resize-handle:hover {
+    opacity: 1;
+}
+
 
 .connection-dialog h2 {
     margin-top: 0;

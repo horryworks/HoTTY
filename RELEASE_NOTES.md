@@ -13,6 +13,12 @@
         - Grid Layout Mode (1x1, 2x2, etc.).
         - Relative sizes of grid panes (dragged ratios).
     - **Smart Resizing**: Sidebars and Bars now use **percentage-based sizing**, ensuring your layout proportions remain consistent even when resizing the application window.
+- **Host Manager**:
+    - The **New Connection** dialog now features a two-panel layout.
+    - **Left panel**: Tree-based host manager supporting unlimited nested folders (e.g., Global → APAC → Japan).
+    - Hosts save protocol, host/IP, port, username, and password persistently.
+    - **Right-click** tree nodes to Add Folder, Add Host, Rename, or Delete.
+    - Clicking a saved host auto-fills the connection form. Credentials update automatically on Connect.
 
 ### Fixed
 - **Tab-Pane Mapping**:
