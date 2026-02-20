@@ -14,6 +14,10 @@
         - Relative sizes of grid panes (dragged ratios).
     - **Smart Resizing**: Sidebars and Bars now use **percentage-based sizing**, ensuring your layout proportions remain consistent even when resizing the application window.
 
+### Fixed
+- **Tab-Pane Mapping**:
+    - Fixed an issue where the "Show Tab-Pane Mapping" arrows were not displayed when tabs were placed in the Sidebars, Top Bar, or Bottom Bar.
+
 ### Changed
 - **UI Refinements**:
     - **Corner Priority**: Sidebars (Left/Right) now take vertical priority over Top/Bottom bars, creating a "sandwiched" center layout.

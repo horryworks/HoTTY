@@ -762,6 +762,7 @@ function App() {
               {showLeftSidebar && (
                 <div
                   className="left-sidebar-pane"
+                  data-pane-id="sidebar-left"
                   style={{
                     width: `${leftSidebarPercent}%`,
                     border: '1px solid var(--border-color)',
@@ -853,6 +854,7 @@ function App() {
                 {showTopBar && (
                   <div
                     className="top-bar-pane"
+                    data-pane-id="top-bar"
                     style={{
                       height: `${topBarPercent}%`,
                       // width: '100%', // Removed to prevent overflow with margin
@@ -980,6 +982,7 @@ function App() {
                 {showBottomBar && (
                   <div
                     className="bottom-bar-pane"
+                    data-pane-id="bottom-bar"
                     style={{
                       height: `${bottomBarPercent}%`,
                       // width: '100%', // Removed to prevent overflow
@@ -1069,6 +1072,7 @@ function App() {
               {showRightSidebar && (
                 <div
                   className="right-sidebar-pane"
+                  data-pane-id="sidebar"
                   style={{
                     width: `${rightSidebarPercent}%`,
                     border: '1px solid var(--border-color)',

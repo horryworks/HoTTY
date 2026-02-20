@@ -49,8 +49,9 @@ export const PaneLines: React.FC<PaneLinesProps> = ({
                 if (!sessionId) return;
 
                 // Safety check: ensure paneId is within valid range for current layout
+                const validNonNumericIds = ['sidebar-left', 'sidebar', 'top-bar', 'bottom-bar'];
                 const pId = parseInt(paneId);
-                if (isNaN(pId) || pId >= totalPanes) return;
+                if ((isNaN(pId) || pId >= totalPanes) && !validNonNumericIds.includes(paneId)) return;
 
                 // Find the tab element
                 const tabEl = document.querySelector(`[data-session-id="${sessionId}"]`);
