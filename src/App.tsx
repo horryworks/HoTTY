@@ -394,6 +394,10 @@ function App() {
     onSessionError: (msg) => setErrorModalMessage(msg),
     setPaneAllocations: pane.setPaneAllocations,
     setActivePaneId: pane.setActivePaneId,
+    showLeftSidebar,
+    showRightSidebar,
+    showTopBar,
+    showBottomBar,
   });
 
   // Show System Prompt State

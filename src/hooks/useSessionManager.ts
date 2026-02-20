@@ -33,6 +33,10 @@ interface UseSessionManagerOptions {
     lineWrapEnabled: boolean;
     scrollback: number;
     backspaceSendsDel: boolean;
+    showLeftSidebar: boolean;
+    showRightSidebar: boolean;
+    showTopBar: boolean;
+    showBottomBar: boolean;
 }
 
 export function useSessionManager(options: UseSessionManagerOptions) {
@@ -50,6 +54,10 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         lineWrapEnabled,
         scrollback,
         backspaceSendsDel,
+        showLeftSidebar,
+        showRightSidebar,
+        showTopBar,
+        showBottomBar,
     } = options;
 
     const [sessions, setSessions] = useState<Session[]>([]);
@@ -182,10 +190,29 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     const allocateToPane = (sessionId: string) => {
         setPaneAllocations(prev => {
             const next = { ...prev };
-            const validPanes = Object.keys(next)
+
+            // 1. Find the first empty grid pane (numerical ID)
+            const validGridPanes = Object.keys(next)
                 .filter(p => !isNaN(parseInt(p)))
                 .sort((a, b) => parseInt(a) - parseInt(b));
-            const firstEmpty = validPanes.find(p => next[p] === null);
+            let firstEmpty = validGridPanes.find(p => next[p] === null);
+
+            // 2. Fallback to outer bars in priority order if grid is full
+            if (!firstEmpty) {
+                const fallbackOrder = [
+                    { id: 'sidebar-left', visible: showLeftSidebar },
+                    { id: 'sidebar', visible: showRightSidebar },
+                    { id: 'top-bar', visible: showTopBar },
+                    { id: 'bottom-bar', visible: showBottomBar }
+                ];
+
+                for (const bar of fallbackOrder) {
+                    if (bar.visible && !next[bar.id]) {
+                        firstEmpty = bar.id;
+                        break;
+                    }
+                }
+            }
 
             if (firstEmpty) {
                 next[firstEmpty] = sessionId;

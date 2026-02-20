@@ -1,6 +1,6 @@
 # Release Notes - HoTTY
 
-## [v0.1.11-beta3] - 2026-02-20
+## [v0.1.11] - 2026-02-20
 ### Added
 - **Top and Bottom Bars**:
     - Added toggleable **Top Bar** and **Bottom Bar** to the workspace.
@@ -25,6 +25,8 @@
     - **Corner Priority**: Sidebars (Left/Right) now take vertical priority over Top/Bottom bars, creating a "sandwiched" center layout.
     - **Gap Consistency**: Unified spacing (2px) between all panes, sidebars, and bars for a cleaner look.
     - **Layout Selector**: Added icons for toggling Top/Bottom bars.
+- **Terminal Allocation**:
+    - **Fallback Allocation**: When the main grid is full, new terminal sessions will now automatically open in empty outer bars (if visible) in the following priority order: Left Sidebar -> Right Sidebar -> Top Bar -> Bottom Bar.
 
 
 
