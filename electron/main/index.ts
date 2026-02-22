@@ -343,7 +343,7 @@ ipcMain.handle('list-wsl-distributions', async () => {
   try {
     const { stdout } = await execAsync('wsl.exe --list --quiet');
     return stdout.split('\n')
-      .map(s => s.replace(/[\r\0]/g, '').trim()) // \r と \0 を除去してから trim
+      .map(s => s.replace(/[\r\0]/g, '').trim()) // Remove \r and \0, then trim whitespace
       .filter(s => s.length > 0);
   } catch (err) {
     console.error('Failed to list WSL distributions:', err);

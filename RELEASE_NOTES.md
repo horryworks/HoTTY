@@ -1,5 +1,16 @@
 # Release Notes - HoTTY
 
+## [v0.1.12] - 2026-02-22
+### Fixed
+- **Host Tree Indentation**:
+    - Fixed a bug where the indentation of deeply nested host entries was too large due to cumulative `paddingLeft` from wrapper `div` elements.
+    - Moved `paddingLeft` from the outer `host-tree-node` wrapper to the `host-tree-row` element directly, ensuring each level adds exactly 14px regardless of nesting depth.
+    - Hosts under deep folders (e.g., Global → APAC → Japan) now display at the same relative indentation as shallow hosts (e.g., Local → WSL local).
+
+### Changed
+- **Code Maintenance**:
+    - Translated the remaining Japanese comment in `electron/main/index.ts` to English.
+
 ## [v0.1.11] - 2026-02-20
 ### Added
 - **Top and Bottom Bars**:

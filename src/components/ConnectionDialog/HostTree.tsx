@@ -157,9 +157,10 @@ export const HostTree: React.FC<HostTreeProps> = ({
         const isSelected = selectedId === node.id;
 
         return (
-            <div key={node.id} className="host-tree-node" style={{ paddingLeft: `${depth * 14}px` }}>
+            <div key={node.id} className="host-tree-node">
                 <div
                     className={`host-tree-row ${isSelected ? 'selected' : ''}`}
+                    style={{ paddingLeft: `${depth * 14 + 8}px` }}
                     tabIndex={node.type === 'host' ? 0 : undefined}
                     onClick={() => {
                         if (node.type === 'folder') toggle(node.id);
