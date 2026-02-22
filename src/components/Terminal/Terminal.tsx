@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
+import type { PromptPattern } from '../../App';
 import '@xterm/xterm/css/xterm.css';
 import './Terminal.css';
 
@@ -16,6 +17,9 @@ interface TerminalProps {
     terminalBackgroundInactive?: string;
     lineWrapEnabled: boolean;
     askGeminiCommands?: { id: string; label: string; promptTemplate: string }[];
+    enablePromptHighlight?: boolean;
+    promptHighlightColor?: string;
+    promptPatterns?: PromptPattern[];
 }
 
 export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?: Terminal }> = ({
@@ -30,7 +34,10 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
     terminalBackground,
     terminalBackgroundInactive,
     lineWrapEnabled,
-    askGeminiCommands
+    askGeminiCommands,
+    enablePromptHighlight,
+    promptHighlightColor,
+    promptPatterns
 }) => {
     const terminalRef = useRef<HTMLDivElement>(null);
     // Initial Attach / Re-attach
@@ -122,20 +129,22 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                 const fitAddon = (term as any)._fitAddon;
                 if (fitAddon) {
                     try {
-                        if (lineWrapEnabled) {
-                            fitAddon.fit();
-                        } else {
-                            const proposed = fitAddon.proposeDimensions();
-                            if (proposed) {
+                        const proposed = fitAddon.proposeDimensions();
+                        if (proposed) {
+                            if (lineWrapEnabled) {
+                                const offset = enablePromptHighlight ? 1 : 0;
+                                const newCols = Math.max(proposed.cols - offset, 2);
+                                term.resize(newCols, proposed.rows);
+                            } else {
                                 const newCols = Math.max(proposed.cols, 5000);
                                 term.resize(newCols, proposed.rows);
                             }
-                        }
 
-                        term.refresh(0, term.rows - 1);
-                        term.scrollToBottom();
-                        if (term.cols > 0 && term.rows > 0) {
-                            window.electronAPI.resize(sessionId, term.cols, term.rows);
+                            term.refresh(0, term.rows - 1);
+                            term.scrollToBottom();
+                            if (term.cols > 0 && term.rows > 0) {
+                                window.electronAPI.resize(sessionId, term.cols, term.rows);
+                            }
                         }
                     } catch (e) {
                         console.error('[Terminal] Fit error:', e);
@@ -173,11 +182,13 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             setTimeout(() => {
                 const fitAddon = (terminalInstance as any)._fitAddon;
                 if (fitAddon) {
-                    if (lineWrapEnabled) {
-                        fitAddon.fit();
-                    } else {
-                        const proposed = fitAddon.proposeDimensions();
-                        if (proposed) {
+                    const proposed = fitAddon.proposeDimensions();
+                    if (proposed) {
+                        if (lineWrapEnabled) {
+                            const offset = enablePromptHighlight ? 1 : 0;
+                            const newCols = Math.max(proposed.cols - offset, 2);
+                            terminalInstance.resize(newCols, proposed.rows);
+                        } else {
                             const newCols = Math.max(proposed.cols, 5000);
                             terminalInstance.resize(newCols, proposed.rows);
                         }
@@ -224,11 +235,13 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             setTimeout(() => {
                 const fitAddon = (terminalInstance as any)._fitAddon;
                 if (fitAddon) {
-                    if (lineWrapEnabled) {
-                        fitAddon.fit();
-                    } else {
-                        const proposed = fitAddon.proposeDimensions();
-                        if (proposed) {
+                    const proposed = fitAddon.proposeDimensions();
+                    if (proposed) {
+                        if (lineWrapEnabled) {
+                            const offset = enablePromptHighlight ? 1 : 0;
+                            const newCols = Math.max(proposed.cols - offset, 2);
+                            terminalInstance.resize(newCols, proposed.rows);
+                        } else {
                             const newCols = Math.max(proposed.cols, 5000);
                             terminalInstance.resize(newCols, proposed.rows);
                         }
@@ -243,6 +256,257 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
         }
     }, [terminalInstance, fontSize, fontFamily, terminalForeground, terminalBackground, terminalBackgroundInactive, isActive, lineWrapEnabled]);
 
+    // Prompt Highlighting Logic
+    useEffect(() => {
+        if (!terminalInstance || !enablePromptHighlight || !promptPatterns) return;
+
+        const term = terminalInstance;
+        let activeLines: { marker: any, decoration: any, isPrompt: boolean, element?: HTMLElement }[] = [];
+        let lastClickedMarkerLine: number | null = null;
+
+        const evaluateLine = (bufferY: number) => {
+            const buffer = term.buffer.active;
+            const line = buffer.getLine(bufferY);
+            if (!line) return;
+
+            const text = line.translateToString(true).trimRight();
+
+            let isPrompt = false;
+            // Only evaluate patterns if there's actual text. Empty lines default to isPrompt = false.
+            if (text.trim() !== '') {
+                for (const patternObj of promptPatterns) {
+                    if (!patternObj.enabled || !patternObj.pattern) continue;
+                    try {
+                        const regex = new RegExp(patternObj.pattern);
+                        const match = regex.exec(text);
+                        if (match && match.index === 0) {
+                            isPrompt = true;
+                            break;
+                        }
+                    } catch (e) { }
+                }
+            }
+
+            // Find existing decoration on this line
+            let existingIdx = -1;
+            for (let i = activeLines.length - 1; i >= 0; i--) {
+                const item = activeLines[i];
+                if (item.marker && item.marker.line === bufferY) {
+                    existingIdx = i;
+                    break;
+                }
+                if (i < activeLines.length - 50) break; // heuristic optimization
+            }
+
+            const existing = existingIdx !== -1 ? activeLines[existingIdx] : null;
+
+            if (existing && existing.isPrompt === isPrompt) {
+                return; // Nothing to change
+            }
+
+            if (existing) {
+                if (existing.decoration) existing.decoration.dispose();
+                // Marker is disposed automatically by decoration or vice versa, but let's be safe
+                if (existing.marker && !existing.marker.isDisposed) existing.marker.dispose();
+                activeLines.splice(existingIdx, 1);
+            }
+
+            // Register new marker and decoration
+            const cursorYOffset = bufferY - (buffer.baseY + buffer.cursorY);
+            const marker = term.registerMarker(cursorYOffset);
+            if (!marker) return;
+
+            const decoration = term.registerDecoration({
+                marker,
+                anchor: 'right',
+                x: 0,
+                width: 1
+            });
+
+            if (decoration) {
+                const trackObj = { marker, decoration, isPrompt };
+                activeLines.push(trackObj);
+
+                decoration.onRender((element: HTMLElement) => {
+                    const defaultPromptColor = promptHighlightColor && promptHighlightColor !== 'rgba(255, 255, 255, 0.15)' ? promptHighlightColor : '#f44336';
+                    const targetColor = isPrompt ? defaultPromptColor : '#2196f3';
+
+                    element.style.position = 'absolute';
+                    element.style.right = '0px';
+                    element.style.left = 'auto';
+                    element.style.width = '8px'; // Increased click area
+                    // Do not override height; xterm.js sets it exactly to the line height.
+                    element.style.backgroundColor = 'transparent';
+                    element.style.borderRight = `6px solid ${targetColor}`;
+                    element.style.pointerEvents = 'all'; // Allow user to click the marker
+                    element.style.cursor = 'pointer';
+                    element.style.zIndex = '10';
+                    element.style.transform = 'translateX(6px)'; // Push it outside the text column by translating right into the 1 column space we freed
+
+                    if (!element.dataset.clickEventBound) {
+                        element.dataset.clickEventBound = "true";
+
+                        element.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            if (marker.isDisposed) return;
+
+                            const currentLine = marker.line;
+
+                            let startLine = currentLine;
+                            let endLine = currentLine;
+
+                            let upperBoundary = -1;
+                            let lowerBoundary = Infinity;
+
+                            if (e.shiftKey && lastClickedMarkerLine !== null) {
+                                // Select range between last clicked marker block and this one block
+                                const rangeTop = Math.min(lastClickedMarkerLine, currentLine);
+                                const rangeBottom = Math.max(lastClickedMarkerLine, currentLine);
+
+                                // Find bounds to capture the full marker block at the top and bottom edges
+                                let topBoundary = -1; // Highest line we can go up without hitting a different marker
+                                let bottomBoundary = Infinity; // Lowest line we can go down without hitting a different marker
+
+                                // We need to determine the type (isPrompt) of the top marker and bottom marker
+                                let topIsPrompt: boolean | null = null;
+                                let bottomIsPrompt: boolean | null = null;
+
+                                for (const item of activeLines) {
+                                    if (item.marker && !item.marker.isDisposed) {
+                                        if (item.marker.line === rangeTop) topIsPrompt = item.isPrompt;
+                                        if (item.marker.line === rangeBottom) bottomIsPrompt = item.isPrompt;
+                                    }
+                                }
+
+                                for (const item of activeLines) {
+                                    if (item.marker && !item.marker.isDisposed) {
+                                        const mLine = item.marker.line;
+
+                                        // Bound top block
+                                        if (topIsPrompt !== null && item.isPrompt !== topIsPrompt) {
+                                            if (mLine < rangeTop && mLine > topBoundary) topBoundary = mLine;
+                                        }
+
+                                        // Bound bottom block
+                                        if (bottomIsPrompt !== null && item.isPrompt !== bottomIsPrompt) {
+                                            if (mLine > rangeBottom && mLine < bottomBoundary) bottomBoundary = mLine;
+                                        }
+                                    }
+                                }
+
+                                // We expand startLine downwards to the top marker block's topmost boundary limit,
+                                startLine = rangeTop;
+                                for (const item of activeLines) {
+                                    if (item.marker && !item.marker.isDisposed && item.isPrompt === topIsPrompt) {
+                                        const mLine = item.marker.line;
+                                        if (mLine <= rangeTop && mLine > topBoundary && mLine < startLine) {
+                                            startLine = mLine;
+                                        }
+                                    }
+                                }
+
+                                // We expand endLine upwards to the bottom marker block's bottommost boundary limit,
+                                endLine = rangeBottom;
+                                for (const item of activeLines) {
+                                    if (item.marker && !item.marker.isDisposed && item.isPrompt === bottomIsPrompt) {
+                                        const mLine = item.marker.line;
+                                        if (mLine >= rangeBottom && mLine < bottomBoundary && mLine > endLine) {
+                                            endLine = mLine;
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Normal click - select the contiguous block of the same type
+                                for (const item of activeLines) {
+                                    if (item.marker && !item.marker.isDisposed) {
+                                        const mLine = item.marker.line;
+                                        if (item.isPrompt !== isPrompt) {
+                                            if (mLine < currentLine && mLine > upperBoundary) {
+                                                upperBoundary = mLine;
+                                            }
+                                            if (mLine > currentLine && mLine < lowerBoundary) {
+                                                lowerBoundary = mLine;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                for (const item of activeLines) {
+                                    if (item.marker && !item.marker.isDisposed && item.isPrompt === isPrompt) {
+                                        const mLine = item.marker.line;
+                                        if (mLine > upperBoundary && mLine < lowerBoundary) {
+                                            if (mLine < startLine) startLine = mLine;
+                                            if (mLine > endLine) endLine = mLine;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Update last clicked marker
+                            lastClickedMarkerLine = currentLine;
+
+                            // Prevent out of bounds
+                            startLine = Math.max(0, startLine);
+                            endLine = Math.max(startLine, Math.min(endLine, term.buffer.active.length - 1));
+
+                            term.selectLines(startLine, endLine);
+                        });
+                    }
+                });
+
+                decoration.onDispose(() => {
+                    const idx = activeLines.indexOf(trackObj);
+                    if (idx !== -1) activeLines.splice(idx, 1);
+                });
+            }
+        };
+
+        const onCursorMove = term.onCursorMove(() => {
+            const buffer = term.buffer.active;
+            evaluateLine(buffer.baseY + buffer.cursorY);
+        });
+
+        const onLineFeed = term.onLineFeed(() => {
+            const buffer = term.buffer.active;
+            evaluateLine(buffer.baseY + buffer.cursorY - 1);
+        });
+
+        // Ensure all lines are decorated immediately upon mount or once the terminal is opened
+        let attachCheckInterval: any = null;
+        const scanAllLines = () => {
+            if (!term.buffer.active) return;
+            // Scan through all lines available so far up to the cursor
+            const maxLine = term.buffer.active.baseY + term.buffer.active.cursorY;
+            for (let i = 0; i <= maxLine && i < term.buffer.active.length; i++) {
+                evaluateLine(i);
+            }
+        };
+
+        if (term.element) {
+            scanAllLines();
+        } else {
+            // Wait for attachTerminal to call term.open(container)
+            attachCheckInterval = setInterval(() => {
+                if (term.element) {
+                    scanAllLines();
+                    clearInterval(attachCheckInterval);
+                }
+            }, 100);
+        }
+
+        return () => {
+            onCursorMove.dispose();
+            onLineFeed.dispose();
+            if (attachCheckInterval) clearInterval(attachCheckInterval);
+            activeLines.forEach(item => {
+                if (item.decoration) item.decoration.dispose();
+            });
+            activeLines = [];
+        };
+    }, [terminalInstance, enablePromptHighlight, promptHighlightColor, promptPatterns]);
+
     return (
         <div
             className="terminal-container"
@@ -251,6 +515,8 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                 display: 'block',
                 height: '100%',
                 width: '100%',
+                paddingRight: '0px',
+                boxSizing: 'border-box',
                 overflowX: lineWrapEnabled ? 'hidden' : 'auto', // Dynamic overflow
                 overflowY: 'hidden' // Always hide vertical scrollbar of container, xterm handles it
             }}

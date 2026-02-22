@@ -30,6 +30,22 @@ const DEFAULT_GEMINI_COMMANDS: AskGeminiCommand[] = [
   { id: 'fix-this', label: 'Fix this', promptTemplate: 'Suggest a fix or improvement for the selected code or configuration:\n\n{selection}' },
 ];
 
+export interface PromptPattern {
+  id: string;
+  name: string;
+  pattern: string;
+  enabled: boolean;
+}
+
+const DEFAULT_PROMPT_PATTERNS: PromptPattern[] = [
+  { id: 'cisco', name: 'Cisco / Allied Telesis', pattern: '^([a-zA-Z0-9_\\-\\.]+(?:\\([a-zA-Z0-9_\\-\\.]+\\))?[>#])\\s*', enabled: true },
+  { id: 'huawei', name: 'Huawei / Yamaha', pattern: '^([<\\[][a-zA-Z0-9_\\-\\./]+[>\\]])\\s*', enabled: true },
+  { id: 'juniper', name: 'Juniper', pattern: '^([-_\\w]+@[-_\\w]+[>#])\\s*', enabled: true },
+  { id: 'linux', name: 'Linux', pattern: '^([-_\\w]+@[-_\\w]+:.*[$#])\\s*', enabled: true },
+  { id: 'cmd', name: 'Command Prompt', pattern: '^([A-Za-z]:\\\\.*>)\\s*', enabled: true },
+  { id: 'powershell', name: 'PowerShell', pattern: '^(PS\\s+[A-Za-z]:\\\\.*>)\\s*', enabled: true }
+];
+
 export interface PersonaDefinition {
   id: string;
   label: string;
@@ -423,6 +439,31 @@ function App() {
   const updateShowSystemPrompt = (show: boolean) => {
     setShowSystemPrompt(show);
     localStorage.setItem('hotty_show_system_prompt', show.toString());
+  };
+
+  // Prompt Highlight State
+  const [enablePromptHighlight, setEnablePromptHighlight] = useState<boolean>(() => {
+    return localStorage.getItem('hotty_enable_prompt_highlight') !== 'false';
+  });
+  const [promptHighlightColor, setPromptHighlightColor] = useState<string>(() => {
+    return localStorage.getItem('hotty_prompt_highlight_color') || 'rgba(255, 255, 255, 0.15)';
+  });
+  const [promptPatterns, setPromptPatterns] = useState<PromptPattern[]>(() => {
+    const saved = localStorage.getItem('hotty_prompt_patterns');
+    return saved ? JSON.parse(saved) : DEFAULT_PROMPT_PATTERNS;
+  });
+
+  const updateEnablePromptHighlight = (enabled: boolean) => {
+    setEnablePromptHighlight(enabled);
+    localStorage.setItem('hotty_enable_prompt_highlight', enabled.toString());
+  };
+  const updatePromptHighlightColor = (color: string) => {
+    setPromptHighlightColor(color);
+    localStorage.setItem('hotty_prompt_highlight_color', color);
+  };
+  const updatePromptPatterns = (patterns: PromptPattern[]) => {
+    setPromptPatterns(patterns);
+    localStorage.setItem('hotty_prompt_patterns', JSON.stringify(patterns));
   };
 
   // AI Persona State
@@ -849,6 +890,9 @@ function App() {
                           terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                           lineWrapEnabled={lineWrapEnabled}
                           askGeminiCommands={askGeminiCommands}
+                          enablePromptHighlight={enablePromptHighlight}
+                          promptHighlightColor={promptHighlightColor}
+                          promptPatterns={promptPatterns}
                         />
                       );
                     } else {
@@ -942,6 +986,9 @@ function App() {
                             terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                             lineWrapEnabled={lineWrapEnabled}
                             askGeminiCommands={askGeminiCommands}
+                            enablePromptHighlight={enablePromptHighlight}
+                            promptHighlightColor={promptHighlightColor}
+                            promptPatterns={promptPatterns}
                           />
                         );
                       } else {
@@ -991,6 +1038,9 @@ function App() {
                     showSystemPrompt={showSystemPrompt}
                     askGeminiCommands={askGeminiCommands}
                     aiPersonas={aiPersonas}
+                    enablePromptHighlight={enablePromptHighlight}
+                    promptHighlightColor={promptHighlightColor}
+                    promptPatterns={promptPatterns}
                   />
                 </div>
 
@@ -1069,6 +1119,9 @@ function App() {
                             terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                             lineWrapEnabled={lineWrapEnabled}
                             askGeminiCommands={askGeminiCommands}
+                            enablePromptHighlight={enablePromptHighlight}
+                            promptHighlightColor={promptHighlightColor}
+                            promptPatterns={promptPatterns}
                           />
                         );
                       } else {
@@ -1246,6 +1299,12 @@ function App() {
         onAiPersonasChange={updateAiPersonas}
         backspaceSendsDel={backspaceSendsDel}
         onBackspaceSendsDelChange={updateBackspaceSendsDel}
+        enablePromptHighlight={enablePromptHighlight}
+        onEnablePromptHighlightChange={updateEnablePromptHighlight}
+        promptHighlightColor={promptHighlightColor}
+        onPromptHighlightColorChange={updatePromptHighlightColor}
+        promptPatterns={promptPatterns}
+        onPromptPatternsChange={updatePromptPatterns}
       />
       <PaneLines
         paneAllocations={pane.paneAllocations}

@@ -44,6 +44,12 @@ interface SettingsModalProps {
     onAiPersonasChange: (personas: { id: string; label: string; systemPrompt: string }[]) => void;
     backspaceSendsDel: boolean;
     onBackspaceSendsDelChange: (sendsDel: boolean) => void;
+    enablePromptHighlight: boolean;
+    onEnablePromptHighlightChange: (enabled: boolean) => void;
+    promptHighlightColor: string;
+    onPromptHighlightColorChange: (color: string) => void;
+    promptPatterns: { id: string; name: string; pattern: string; enabled: boolean }[];
+    onPromptPatternsChange: (patterns: { id: string; name: string; pattern: string; enabled: boolean }[]) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -86,7 +92,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     aiPersonas,
     onAiPersonasChange,
     backspaceSendsDel,
-    onBackspaceSendsDelChange
+    onBackspaceSendsDelChange,
+    enablePromptHighlight,
+    onEnablePromptHighlightChange,
+    promptHighlightColor,
+    onPromptHighlightColorChange,
+    promptPatterns,
+    onPromptPatternsChange
 }) => {
     const { position, onMouseDown: onHeaderMouseDown } = useDraggable();
     const [activeTab, setActiveTab] = React.useState<'appearance' | 'ssh' | 'system' | 'ai' | 'about'>('system');
@@ -481,6 +493,118 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <option value="euc-jp">EUC-JP</option>
                                 </select>
                                 <p className="settings-help">Applies to new connections.</p>
+                            </div>
+
+                            <div className="form-group" style={{ paddingTop: '15px', borderTop: '1px solid var(--border-color)' }}>
+                                <label>Prompt Highlight</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal', whiteSpace: 'nowrap' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={enablePromptHighlight}
+                                            onChange={(e) => onEnablePromptHighlightChange(e.target.checked)}
+                                            style={{ marginRight: '8px' }}
+                                        />
+                                        Enable User Input Highlight
+                                    </label>
+                                </div>
+                                {enablePromptHighlight && (
+                                    <>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' }}>
+                                            <span style={{ fontSize: '0.9em', color: '#ccc' }}>Highlight Color</span>
+                                            <input
+                                                type="color"
+                                                value={promptHighlightColor}
+                                                onChange={(e) => onPromptHighlightColorChange(e.target.value)}
+                                                style={{ border: 'none', width: '30px', height: '30px', cursor: 'pointer', padding: 0, backgroundColor: 'transparent' }}
+                                            />
+                                            <input
+                                                type="text"
+                                                value={promptHighlightColor}
+                                                onChange={(e) => onPromptHighlightColorChange(e.target.value)}
+                                                className="settings-input"
+                                                style={{ width: '120px', padding: '4px', fontSize: '12px' }}
+                                            />
+                                        </div>
+                                        <label style={{ marginBottom: '10px', display: 'block' }}>Prompt Patterns (Regex)</label>
+                                        <div className="command-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                                            {promptPatterns?.map((p, index) => (
+                                                <div
+                                                    key={p.id}
+                                                    style={{
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '4px',
+                                                        padding: '10px',
+                                                        backgroundColor: 'var(--bg-secondary)',
+                                                        borderRadius: '4px',
+                                                        border: '1px solid var(--border-color)'
+                                                    }}
+                                                >
+                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={p.enabled}
+                                                            onChange={(e) => {
+                                                                const newPatterns = [...promptPatterns];
+                                                                newPatterns[index] = { ...p, enabled: e.target.checked };
+                                                                onPromptPatternsChange(newPatterns);
+                                                            }}
+                                                            style={{ margin: 0, cursor: 'pointer' }}
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={p.name}
+                                                            onChange={(e) => {
+                                                                const newPatterns = [...promptPatterns];
+                                                                newPatterns[index] = { ...p, name: e.target.value };
+                                                                onPromptPatternsChange(newPatterns);
+                                                            }}
+                                                            placeholder="Pattern Name"
+                                                            className="settings-input"
+                                                            style={{ flex: 1, padding: '4px', fontSize: '13px' }}
+                                                        />
+                                                        <button
+                                                            onClick={() => {
+                                                                if (confirm('Delete this pattern?')) {
+                                                                    const newPatterns = promptPatterns.filter((_, i) => i !== index);
+                                                                    onPromptPatternsChange(newPatterns);
+                                                                }
+                                                            }}
+                                                            style={{ padding: '4px 8px', fontSize: '12px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        value={p.pattern}
+                                                        onChange={(e) => {
+                                                            const newPatterns = [...promptPatterns];
+                                                            newPatterns[index] = { ...p, pattern: e.target.value };
+                                                            onPromptPatternsChange(newPatterns);
+                                                        }}
+                                                        placeholder="Regex Pattern (e.g. ^[-_\w]+@[-_\w]+[>#]\s*)"
+                                                        className="settings-input"
+                                                        style={{ width: '100%', padding: '6px', fontSize: '12px', boxSizing: 'border-box', fontFamily: 'monospace' }}
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '10px', paddingBottom: '10px' }}>
+                                            <button
+                                                onClick={() => {
+                                                    const id = crypto.randomUUID();
+                                                    const newPattern = { id, name: 'New Pattern', pattern: '^pattern\\s*', enabled: true };
+                                                    onPromptPatternsChange([...(promptPatterns || []), newPattern]);
+                                                }}
+                                                style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}
+                                            >
+                                                + Add Pattern
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </>
                     )}

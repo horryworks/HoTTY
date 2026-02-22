@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TerminalComponent } from '../Terminal/Terminal';
 import { AIChatPane } from '../AIChatPane/AIChatPane';
 import type { Session } from '../../hooks/useSessionManager';
+import type { PromptPattern } from '../../App';
 import './GridLayout.css';
 
 interface GridLayoutProps {
@@ -28,6 +29,9 @@ interface GridLayoutProps {
     showSystemPrompt: boolean;
     askGeminiCommands: { id: string; label: string; promptTemplate: string }[];
     aiPersonas: { id: string; label: string; systemPrompt: string }[];
+    enablePromptHighlight?: boolean;
+    promptHighlightColor?: string;
+    promptPatterns?: PromptPattern[];
 }
 
 export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: string]: any } }> = ({
@@ -54,7 +58,10 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     lineWrapEnabled,
     showSystemPrompt,
     askGeminiCommands,
-    aiPersonas
+    aiPersonas,
+    enablePromptHighlight,
+    promptHighlightColor,
+    promptPatterns
 }) => {
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
@@ -295,6 +302,9 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                                     lineWrapEnabled={lineWrapEnabled}
                                     askGeminiCommands={askGeminiCommands}
+                                    enablePromptHighlight={enablePromptHighlight}
+                                    promptHighlightColor={promptHighlightColor}
+                                    promptPatterns={promptPatterns}
                                 />
                             )
                         ) : (
