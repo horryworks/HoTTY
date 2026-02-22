@@ -167,6 +167,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     saveSshAlgorithms: (algorithms: any) => ipcRenderer.invoke('save-ssh-algorithms', algorithms),
     getThemes: () => ipcRenderer.invoke('get-themes'),
     saveThemes: (themes: any) => ipcRenderer.invoke('save-themes', themes),
+    encryptSecret: (plaintext: string) => ipcRenderer.invoke('dpapi-encrypt', plaintext),
+    decryptSecret: (ciphertext: string) => ipcRenderer.invoke('dpapi-decrypt', ciphertext),
 })
 
 

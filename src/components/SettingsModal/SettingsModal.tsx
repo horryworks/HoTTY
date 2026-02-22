@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useDraggable } from '../../hooks/useDraggable';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import './SettingsModal.css';
 
 interface SettingsModalProps {
@@ -91,6 +92,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const [activeTab, setActiveTab] = React.useState<'appearance' | 'ssh' | 'system' | 'ai' | 'about'>('system');
     const [version, setVersion] = React.useState<string>('');
     const [sshAlgorithms, setSshAlgorithms] = React.useState<any>(null);
+    const modalRef = useRef<HTMLDivElement>(null);
+    const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+    // Focus trap inside modal
+    useFocusTrap(modalRef, isOpen);
+
+    // Auto-focus close button on open
+    useEffect(() => {
+        if (isOpen && closeButtonRef.current) {
+            closeButtonRef.current.focus();
+        }
+    }, [isOpen]);
 
     React.useEffect(() => {
         if (isOpen) {
@@ -98,6 +111,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             window.electronAPI.getSshAlgorithms().then(setSshAlgorithms);
         }
     }, [isOpen]);
+
+    // Close on Escape key
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                handleClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, loggingEnabled, loggingPath]);
 
     const handleClose = () => {
         if (loggingEnabled && !loggingPath) {
@@ -181,10 +208,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
     return (
         <div className="settings-modal-overlay">
-            <div className="settings-modal" style={{ transform: `translate(${position.x}px, ${position.y}px)` }}>
+            <div className="settings-modal" ref={modalRef} style={{ transform: `translate(${position.x}px, ${position.y}px)` }}>
                 <div className="settings-header" onMouseDown={onHeaderMouseDown}>
                     <h2>Settings</h2>
-                    <button className="close-btn" onClick={handleClose}>✕</button>
+                    <button className="close-btn" ref={closeButtonRef} onClick={handleClose}>✕</button>
                 </div>
 
                 <div

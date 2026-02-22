@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { HostTreeNode, HostEntry } from '../../hooks/useHostManager';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import './HostTree.css';
 
 interface ContextMenuState {
@@ -47,6 +48,10 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [formPassword, setFormPassword] = useState('');
 
     const containerRef = useRef<HTMLDivElement>(null);
+    const editModalRef = useRef<HTMLDivElement>(null);
+
+    // Focus trap for the edit modal
+    useFocusTrap(editModalRef, !!editModal);
 
     // Close context menu on outside click
     useEffect(() => {
@@ -54,6 +59,20 @@ export const HostTree: React.FC<HostTreeProps> = ({
         document.addEventListener('click', handler);
         return () => document.removeEventListener('click', handler);
     }, []);
+
+    // Close edit modal on Escape
+    useEffect(() => {
+        if (!editModal) return;
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                setEditModal(null);
+            }
+        };
+        document.addEventListener('keydown', handler);
+        return () => document.removeEventListener('keydown', handler);
+    }, [editModal]);
 
     const toggle = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -150,6 +169,17 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         if (node.type === 'host') onDoubleClickHost?.(node);
                     }}
                     onContextMenu={(e) => openContextMenu(e, node)}
+                    onKeyDown={(e) => {
+                        // Application key or Shift+F10 → open context menu at element
+                        if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+                            e.preventDefault();
+                            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                            const containerRect = containerRef.current?.getBoundingClientRect();
+                            const x = containerRect ? rect.left - containerRect.left : rect.left;
+                            const y = containerRect ? rect.bottom - containerRect.top : rect.bottom;
+                            setContextMenu({ x, y, node });
+                        }
+                    }}
                 >
                     {node.type === 'folder' ? (
                         <>
@@ -250,7 +280,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
             {/* Add/Edit Modal */}
             {editModal && (
                 <div className="host-edit-modal-overlay" onClick={() => setEditModal(null)}>
-                    <div className="host-edit-modal" onClick={e => e.stopPropagation()}>
+                    <div className="host-edit-modal" ref={editModalRef} onClick={e => e.stopPropagation()}>
                         <h3 style={{ marginTop: 0 }}>
                             {editModal.existingNode ? 'Edit' : editModal.mode === 'folder' ? 'Add Folder' : 'Add Host'}
                         </h3>
@@ -289,6 +319,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                             type="text"
                                             value={formHost}
                                             onChange={e => setFormHost(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
                                             placeholder="192.168.1.1"
                                         />
                                     </div>
@@ -298,6 +329,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                             type="number"
                                             value={formPort}
                                             onChange={e => setFormPort(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
                                         />
                                     </div>
                                 </div>
@@ -309,6 +341,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                                 type="text"
                                                 value={formUsername}
                                                 onChange={e => setFormUsername(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
                                             />
                                         </div>
                                         <div className="modal-form-group">
@@ -317,6 +350,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                                 type="password"
                                                 value={formPassword}
                                                 onChange={e => setFormPassword(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
                                             />
                                         </div>
                                     </>

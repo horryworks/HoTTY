@@ -37,6 +37,10 @@ export interface ElectronAPI {
     saveSshAlgorithms: (algorithms: any) => Promise<boolean>;
     getThemes: () => Promise<any>;
     saveThemes: (themes: any) => Promise<boolean>;
+
+    // Credential encryption (Windows DPAPI)
+    encryptSecret: (plaintext: string) => Promise<string>;
+    decryptSecret: (ciphertext: string) => Promise<string>;
 }
 
 

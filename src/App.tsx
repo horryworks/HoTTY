@@ -186,12 +186,27 @@ function App() {
   }, []);
 
 
-  // Paste Confirmation State
+
   const [pasteContent, setPasteContent] = useState<string | null>(null);
   const [pasteSessionId, setPasteSessionId] = useState<string | null>(null);
 
   // Settings State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Global keyboard shortcut: Ctrl+N → open New Connection dialog
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'n') {
+        // Ignore if any modal is open
+        if (isSettingsOpen || pasteContent !== null || errorModalMessage !== null) return;
+        e.preventDefault();
+        setShowDialog(true);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [isSettingsOpen, pasteContent, errorModalMessage]);
+
   const [globalEncoding, setGlobalEncoding] = useState<string>(() => {
     return localStorage.getItem('hterm_global_encoding') || 'utf8';
   });

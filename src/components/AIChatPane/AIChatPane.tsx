@@ -53,12 +53,23 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     // Auth state
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isAuthLoading, setIsAuthLoading] = useState(false);
-    const [clientId, setClientId] = useState<string>(() =>
-        localStorage.getItem('hotty_gemini_client_id') || ''
-    );
-    const [clientSecret, setClientSecret] = useState<string>(() =>
-        localStorage.getItem('hotty_gemini_client_secret') || ''
-    );
+    const [clientId, setClientId] = useState<string>('');
+    const [clientSecret, setClientSecret] = useState<string>('');
+
+    // Load encrypted credentials on mount
+    useEffect(() => {
+        const load = async () => {
+            try {
+                const encId = localStorage.getItem('hotty_gemini_client_id') || '';
+                const encSecret = localStorage.getItem('hotty_gemini_client_secret') || '';
+                if (encId) setClientId(await window.electronAPI.decryptSecret(encId));
+                if (encSecret) setClientSecret(await window.electronAPI.decryptSecret(encSecret));
+            } catch (err) {
+                console.error('Failed to decrypt Gemini credentials:', err);
+            }
+        };
+        load();
+    }, []);
 
     // Chat state - initialize from props if available
     const [messages, setMessages] = useState<ChatMessage[]>(initialState?.messages || []);
@@ -265,8 +276,15 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
 
     const handleLogin = async () => {
         if (!clientId || !clientSecret) return;
-        localStorage.setItem('hotty_gemini_client_id', clientId);
-        localStorage.setItem('hotty_gemini_client_secret', clientSecret);
+        // Encrypt credentials before persisting
+        try {
+            const encId = await window.electronAPI.encryptSecret(clientId);
+            const encSecret = await window.electronAPI.encryptSecret(clientSecret);
+            localStorage.setItem('hotty_gemini_client_id', encId);
+            localStorage.setItem('hotty_gemini_client_secret', encSecret);
+        } catch (err) {
+            console.error('Failed to encrypt Gemini credentials:', err);
+        }
         setIsAuthLoading(true);
         setAuthError(null);
 
@@ -493,6 +511,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                                 type="text"
                                 value={clientId}
                                 onChange={(e) => setClientId(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
                                 placeholder="xxxxxxxxxx.apps.googleusercontent.com"
                                 className="ai-chat-input"
                             />
@@ -501,6 +520,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                                 type="password"
                                 value={clientSecret}
                                 onChange={(e) => setClientSecret(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
                                 placeholder="GOCSPX-xxxxxxxx"
                                 className="ai-chat-input"
                             />

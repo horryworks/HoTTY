@@ -10,6 +10,7 @@ import { SerialPort } from 'serialport';
 import type { ISessionService } from './services/ISessionService';
 import { GeminiService } from './services/gemini';
 import { LogManager } from './services/LogManager';
+import { encryptString, decryptString } from './services/dpapi';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 const execAsync = promisify(exec);
@@ -535,6 +536,26 @@ ipcMain.handle('save-themes', async (_, themes) => {
   } catch (err) {
     console.error('Failed to save themes:', err);
     return false;
+  }
+});
+
+// ── DPAPI Credential Protection ──
+
+ipcMain.handle('dpapi-encrypt', async (_, plaintext: string) => {
+  try {
+    return await encryptString(plaintext);
+  } catch (err) {
+    console.error('[DPAPI] IPC encrypt error:', err);
+    throw err;
+  }
+});
+
+ipcMain.handle('dpapi-decrypt', async (_, ciphertext: string) => {
+  try {
+    return await decryptString(ciphertext);
+  } catch (err) {
+    console.error('[DPAPI] IPC decrypt error:', err);
+    throw err;
   }
 });
 

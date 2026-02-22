@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { join } from 'path';
 import { ISessionService } from './ISessionService';
+import { verifyHostKey } from './knownHosts';
 
 export class SshService implements ISessionService {
     private conn: Client;
@@ -120,7 +121,34 @@ export class SshService implements ISessionService {
         }).connect({
             ...config,
             tryKeyboard: true,
-            algorithms: this.getAlgorithms()
+            algorithms: this.getAlgorithms(),
+            hostVerifier: (hostKey: Buffer, verify: (result: boolean) => void) => {
+                try {
+                    // Extract key type from the key buffer (first 4 bytes = length, then key type string)
+                    const keyTypeLen = hostKey.readUInt32BE(0);
+                    const keyType = hostKey.slice(4, 4 + keyTypeLen).toString('utf8');
+                    verifyHostKey(
+                        this.window,
+                        config.host as string,
+                        (config.port as number) || 22,
+                        { key: hostKey, type: keyType }
+                    ).then((trusted) => {
+                        if (!trusted) {
+                            this.window.webContents.send('session-error', {
+                                sessionId: this.sessionId,
+                                error: 'Connection aborted: Host key not trusted.',
+                            });
+                        }
+                        verify(trusted);
+                    }).catch((err) => {
+                        console.error('[KnownHosts] hostVerifier error:', err);
+                        verify(false);
+                    });
+                } catch (err) {
+                    console.error('[KnownHosts] hostVerifier parse error:', err);
+                    verify(false);
+                }
+            },
         });
     }
 

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 const STORAGE_KEY = 'hterm_host_tree';
 
@@ -23,7 +23,93 @@ function generateId(): string {
     return self.crypto.randomUUID();
 }
 
-function loadTree(): HostTreeNode[] {
+// ── DPAPI helpers ──
+
+/**
+ * Encrypts a credential string via the main process (Windows DPAPI).
+ * Returns the original value if electronAPI is unavailable.
+ */
+async function encrypt(value: string | undefined): Promise<string | undefined> {
+    if (!value) return value;
+    try {
+        return await window.electronAPI.encryptSecret(value);
+    } catch (err) {
+        console.error('[HostManager] Failed to encrypt credential:', err);
+        return value; // fallback: store as-is
+    }
+}
+
+/**
+ * Decrypts a credential string via the main process (Windows DPAPI).
+ * Returns the original value if not encrypted or if electronAPI is unavailable.
+ */
+async function decrypt(value: string | undefined): Promise<string | undefined> {
+    if (!value) return value;
+    try {
+        return await window.electronAPI.decryptSecret(value);
+    } catch (err) {
+        console.error('[HostManager] Failed to decrypt credential:', err);
+        return value; // fallback: return as-is
+    }
+}
+
+// ── Serialization / Deserialization ──
+
+/**
+ * Encrypts sensitive fields of a HostEntry before persisting.
+ */
+async function encryptEntry(entry: HostEntry): Promise<HostEntry> {
+    return {
+        ...entry,
+        username: await encrypt(entry.username),
+        password: await encrypt(entry.password),
+    };
+}
+
+/**
+ * Decrypts sensitive fields of a HostEntry after loading from storage.
+ */
+async function decryptEntry(entry: HostEntry): Promise<HostEntry> {
+    return {
+        ...entry,
+        username: await decrypt(entry.username),
+        password: await decrypt(entry.password),
+    };
+}
+
+/**
+ * Recursively encrypts all HostEntry nodes in a tree before persisting.
+ */
+async function encryptTree(nodes: HostTreeNode[]): Promise<HostTreeNode[]> {
+    return Promise.all(
+        nodes.map(async (n) => {
+            const children = n.children ? await encryptTree(n.children) : undefined;
+            if (n.type === 'host' && n.entry) {
+                return { ...n, entry: await encryptEntry(n.entry), children };
+            }
+            return { ...n, children };
+        })
+    );
+}
+
+/**
+ * Recursively decrypts all HostEntry nodes in a tree after loading.
+ */
+async function decryptTree(nodes: HostTreeNode[]): Promise<HostTreeNode[]> {
+    return Promise.all(
+        nodes.map(async (n) => {
+            const children = n.children ? await decryptTree(n.children) : undefined;
+            if (n.type === 'host' && n.entry) {
+                return { ...n, entry: await decryptEntry(n.entry), children };
+            }
+            return { ...n, children };
+        })
+    );
+}
+
+// ── Raw storage (stores encrypted values) ──
+
+function loadRawTree(): HostTreeNode[] {
     try {
         const saved = localStorage.getItem(STORAGE_KEY);
         return saved ? JSON.parse(saved) : [];
@@ -32,11 +118,11 @@ function loadTree(): HostTreeNode[] {
     }
 }
 
-function persistTree(tree: HostTreeNode[]) {
+function saveRawTree(tree: HostTreeNode[]) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(tree));
 }
 
-// --- Tree manipulation helpers (pure functions) ---
+// ── Tree manipulation helpers (pure functions) ──
 
 function insertNode(nodes: HostTreeNode[], parentId: string | null, newNode: HostTreeNode): HostTreeNode[] {
     if (parentId === null) {
@@ -67,14 +153,35 @@ function removeNode(nodes: HostTreeNode[], id: string): HostTreeNode[] {
         .map(n => n.children ? { ...n, children: removeNode(n.children, id) } : n);
 }
 
-// --- Hook ---
+// ── Hook ──
 
 export function useHostManager() {
-    const [tree, setTree] = useState<HostTreeNode[]>(loadTree);
+    // State holds decrypted tree (safe to use in UI / SSH connection)
+    const [tree, setTree] = useState<HostTreeNode[]>([]);
+    // Ref keeps the encrypted tree synced with localStorage
+    const [initialized, setInitialized] = useState(false);
 
-    const saveAndSet = useCallback((newTree: HostTreeNode[]) => {
-        persistTree(newTree);
-        setTree(newTree);
+    // On mount: load raw (encrypted) tree from localStorage, then decrypt into state
+    useEffect(() => {
+        const raw = loadRawTree();
+        if (raw.length === 0) {
+            setInitialized(true);
+            return;
+        }
+        decryptTree(raw).then((decrypted) => {
+            setTree(decrypted);
+            setInitialized(true);
+        });
+    }, []);
+
+    /**
+     * Encrypts the given tree and persists to localStorage.
+     * Updates the in-memory state with the decrypted version.
+     */
+    const persistAndSet = useCallback(async (decryptedTree: HostTreeNode[]) => {
+        const encrypted = await encryptTree(decryptedTree);
+        saveRawTree(encrypted);
+        setTree(decryptedTree);
     }, []);
 
     const addFolder = useCallback((parentId: string | null, name: string) => {
@@ -86,7 +193,7 @@ export function useHostManager() {
         };
         setTree(prev => {
             const next = insertNode(prev, parentId, node);
-            persistTree(next);
+            encryptTree(next).then(saveRawTree);
             return next;
         });
         return node.id;
@@ -97,11 +204,11 @@ export function useHostManager() {
             id: generateId(),
             type: 'host',
             name,
-            entry,
+            entry, // decrypted in state
         };
         setTree(prev => {
             const next = insertNode(prev, parentId, node);
-            persistTree(next);
+            encryptTree(next).then(saveRawTree);
             return next;
         });
         return node.id;
@@ -110,7 +217,7 @@ export function useHostManager() {
     const editNode = useCallback((id: string, patch: Partial<HostTreeNode>) => {
         setTree(prev => {
             const next = patchNode(prev, id, patch);
-            persistTree(next);
+            encryptTree(next).then(saveRawTree);
             return next;
         });
     }, []);
@@ -118,14 +225,14 @@ export function useHostManager() {
     const deleteNode = useCallback((id: string) => {
         setTree(prev => {
             const next = removeNode(prev, id);
-            persistTree(next);
+            encryptTree(next).then(saveRawTree);
             return next;
         });
     }, []);
 
     const saveTree = useCallback((newTree: HostTreeNode[]) => {
-        saveAndSet(newTree);
-    }, [saveAndSet]);
+        persistAndSet(newTree);
+    }, [persistAndSet]);
 
-    return { tree, addFolder, addHost, editNode, deleteNode, saveTree };
+    return { tree, initialized, addFolder, addHost, editNode, deleteNode, saveTree };
 }

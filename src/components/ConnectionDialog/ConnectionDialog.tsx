@@ -41,12 +41,19 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     // Submit the form when Enter is pressed:
     //  - while focus is inside the right-side form panel, OR
     //  - while a focusable host row (tabIndex=0) in the left panel has focus and a host is selected.
-    // Does NOT fire when the HostTree edit modal is open (it handles Enter itself).
+    // Does NOT fire when the HostTree edit modal is open (it handles Enter/Escape itself).
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
-            if (e.key !== 'Enter') return;
-            // Ignore if the HostTree edit modal is currently open
+            // Ignore if the HostTree edit modal is currently open (it handles its own keys)
             if (document.querySelector('.host-edit-modal-overlay')) return;
+
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                onClose();
+                return;
+            }
+
+            if (e.key !== 'Enter') return;
             const active = document.activeElement;
             const container = containerRef.current;
             if (!container) return;
@@ -59,7 +66,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         };
         document.addEventListener('keydown', handler);
         return () => document.removeEventListener('keydown', handler);
-    }, []);
+    }, [onClose]);
 
 
     // --- Panel divider resize ---
@@ -226,7 +233,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         });
     }, [getCachedPassword, onConnect]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         if (protocol === 'serial') {
@@ -248,8 +255,20 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             localStorage.setItem('hterm_host_history', JSON.stringify(newHistory));
 
             if (protocol === 'ssh' && username) {
-                const usernameMap = JSON.parse(localStorage.getItem('hterm_username_map') || '{}');
-                localStorage.setItem('hterm_username_map', JSON.stringify({ ...usernameMap, [host]: username }));
+                // Persist host→username map encrypted via DPAPI
+                try {
+                    const encryptedMap = localStorage.getItem('hterm_username_map') || '';
+                    let usernameMap: Record<string, string> = {};
+                    if (encryptedMap) {
+                        const decrypted = await window.electronAPI.decryptSecret(encryptedMap);
+                        usernameMap = JSON.parse(decrypted);
+                    }
+                    usernameMap[host] = username;
+                    const encrypted = await window.electronAPI.encryptSecret(JSON.stringify(usernameMap));
+                    localStorage.setItem('hterm_username_map', encrypted);
+                } catch (err) {
+                    console.error('Failed to persist username map:', err);
+                }
                 if (password) saveCachedPassword(host, username, password);
             }
 
