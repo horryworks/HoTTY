@@ -1,5 +1,17 @@
 # Release Notes - HoTTY
 
+## [v0.1.13] - 2026-02-23
+### Fixed
+- **Terminal Marker Rendering**:
+    - Fixed an issue where markers (orange/blue) were interrupted on long wrapped lines.
+    - Improved consistency of output markers on empty lines within command outputs.
+    - Resolved the issue of redundant markers remaining below the cursor in WSL and PowerShell by simplifying the marker lifecycle logic.
+
+### Changed
+- **Cleanup**:
+    - Removed unnecessary test scripts (`test.js`) and backup files (`README.ja.md.bak`) to keep the project clean.
+
+
 ## [v0.1.12] - 2026-02-22
 ### Fixed
 - **Host Tree Indentation**:
