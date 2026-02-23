@@ -269,36 +269,51 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             const line = buffer.getLine(bufferY);
             if (!line) return;
 
-            const text = line.translateToString(true).trimRight();
-
-            let isPrompt = false;
-            // Only evaluate patterns if there's actual text. Empty lines default to isPrompt = false.
-            if (text.trim() !== '') {
-                for (const patternObj of promptPatterns) {
-                    if (!patternObj.enabled || !patternObj.pattern) continue;
-                    try {
-                        const regex = new RegExp(patternObj.pattern);
-                        const match = regex.exec(text);
-                        if (match && match.index === 0) {
-                            isPrompt = true;
-                            break;
-                        }
-                    } catch (e) { }
-                }
+            // Trace back to the start of the logical line if this is wrapped
+            let startLineY = bufferY;
+            let currentLine = line;
+            while (currentLine.isWrapped && startLineY > 0) {
+                const prevLine = buffer.getLine(startLineY - 1);
+                if (!prevLine) break;
+                startLineY--;
+                currentLine = prevLine;
             }
 
-            // Find existing decoration on this line
+            const logicalStartLine = buffer.getLine(startLineY);
+            if (!logicalStartLine) return;
+
+            const startText = logicalStartLine.translateToString(true).trimRight();
+
+            // Find existing decoration for this LOGICAL start line
             let existingIdx = -1;
             for (let i = activeLines.length - 1; i >= 0; i--) {
                 const item = activeLines[i];
-                if (item.marker && item.marker.line === bufferY) {
+                if (!item.marker || item.marker.isDisposed) {
+                    activeLines.splice(i, 1);
+                    continue;
+                }
+                if (item.marker.line === startLineY) {
                     existingIdx = i;
                     break;
                 }
-                if (i < activeLines.length - 50) break; // heuristic optimization
             }
 
             const existing = existingIdx !== -1 ? activeLines[existingIdx] : null;
+
+
+
+            let isPrompt = false;
+            for (const patternObj of promptPatterns) {
+                if (!patternObj.enabled || !patternObj.pattern) continue;
+                try {
+                    const regex = new RegExp(patternObj.pattern);
+                    const match = regex.exec(startText);
+                    if (match && match.index === 0) {
+                        isPrompt = true;
+                        break;
+                    }
+                } catch (e) { }
+            }
 
             if (existing && existing.isPrompt === isPrompt) {
                 return; // Nothing to change
@@ -306,13 +321,12 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
 
             if (existing) {
                 if (existing.decoration) existing.decoration.dispose();
-                // Marker is disposed automatically by decoration or vice versa, but let's be safe
                 if (existing.marker && !existing.marker.isDisposed) existing.marker.dispose();
                 activeLines.splice(existingIdx, 1);
             }
 
-            // Register new marker and decoration
-            const cursorYOffset = bufferY - (buffer.baseY + buffer.cursorY);
+            // Register new marker and decoration precisely at the LOGICAL start line
+            const cursorYOffset = startLineY - (buffer.baseY + buffer.cursorY);
             const marker = term.registerMarker(cursorYOffset);
             if (!marker) return;
 
@@ -320,16 +334,25 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                 marker,
                 anchor: 'right',
                 x: 0,
-                width: 1
+                width: 1 // xterm API expects columns.
             });
 
             if (decoration) {
-                const trackObj = { marker, decoration, isPrompt };
+                const trackObj = { marker, decoration, isPrompt, element: undefined as HTMLElement | undefined };
                 activeLines.push(trackObj);
 
                 decoration.onRender((element: HTMLElement) => {
+                    trackObj.element = element;
                     const defaultPromptColor = promptHighlightColor && promptHighlightColor !== 'rgba(255, 255, 255, 0.15)' ? promptHighlightColor : '#f44336';
                     const targetColor = isPrompt ? defaultPromptColor : '#2196f3';
+
+                    let count = 1;
+                    let checkY = marker.line + 1;
+                    while (checkY < term.buffer.active.length) {
+                        const l = term.buffer.active.getLine(checkY);
+                        if (l && l.isWrapped) { count++; checkY++; }
+                        else break;
+                    }
 
                     element.style.position = 'absolute';
                     element.style.right = '0px';
@@ -341,7 +364,8 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                     element.style.pointerEvents = 'all'; // Allow user to click the marker
                     element.style.cursor = 'pointer';
                     element.style.zIndex = '10';
-                    element.style.transform = 'translateX(6px)'; // Push it outside the text column by translating right into the 1 column space we freed
+                    element.style.transformOrigin = 'top';
+                    element.style.transform = `translateX(6px) scaleY(${count})`;
 
                     if (!element.dataset.clickEventBound) {
                         element.dataset.clickEventBound = "true";
@@ -449,7 +473,15 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
 
                             // Prevent out of bounds
                             startLine = Math.max(0, startLine);
-                            endLine = Math.max(startLine, Math.min(endLine, term.buffer.active.length - 1));
+
+                            let expandedEndLine = endLine;
+                            while (expandedEndLine + 1 < term.buffer.active.length) {
+                                const l = term.buffer.active.getLine(expandedEndLine + 1);
+                                if (l && l.isWrapped) { expandedEndLine++; }
+                                else break;
+                            }
+
+                            endLine = Math.max(startLine, Math.min(expandedEndLine, term.buffer.active.length - 1));
 
                             term.selectLines(startLine, endLine);
                         });
@@ -465,12 +497,52 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
 
         const onCursorMove = term.onCursorMove(() => {
             const buffer = term.buffer.active;
-            evaluateLine(buffer.baseY + buffer.cursorY);
+            const currentCursorY = buffer.baseY + buffer.cursorY;
+
+            // 1. Evaluate the new cursor line
+            evaluateLine(currentCursorY);
+
+            // 2. Perform a sweep: re-evaluate any active markers that are at or below the cursor.
+            // This guarantees that if the cursor moves UP, any garbage markers from empty output lines 
+            // that were previously below the cursor (but are now left behind) are cleanly destroyed!
+            for (let i = activeLines.length - 1; i >= 0; i--) {
+                const item = activeLines[i];
+                if (item.marker && !item.marker.isDisposed && item.marker.line >= currentCursorY) {
+                    evaluateLine(item.marker.line);
+                }
+            }
         });
 
         const onLineFeed = term.onLineFeed(() => {
             const buffer = term.buffer.active;
             evaluateLine(buffer.baseY + buffer.cursorY - 1);
+        });
+
+        const onRender = term.onRender((e) => {
+            // e.start and e.end are viewport row indices (0 to term.rows - 1)
+            const buffer = term.buffer.active;
+
+            // Re-evaluate the height of all active decorations on screen
+            for (const item of activeLines) {
+                if (item.marker && !item.marker.isDisposed && item.element) {
+                    let count = 1;
+                    let checkY = item.marker.line + 1;
+                    while (checkY < buffer.length) {
+                        const l = buffer.getLine(checkY);
+                        if (l && l.isWrapped) { count++; checkY++; }
+                        else break;
+                    }
+                    item.element.style.transform = `translateX(6px) scaleY(${count})`;
+                }
+            }
+
+            for (let i = e.start; i <= e.end; i++) {
+                // ydisp is not exposed in the TypeScript types for IBuffer but it exists
+                const bufferY = (buffer as any).ydisp + i;
+                if (bufferY >= 0 && bufferY < buffer.length) {
+                    evaluateLine(bufferY);
+                }
+            }
         });
 
         // Ensure all lines are decorated immediately upon mount or once the terminal is opened
@@ -499,6 +571,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
         return () => {
             onCursorMove.dispose();
             onLineFeed.dispose();
+            onRender.dispose();
             if (attachCheckInterval) clearInterval(attachCheckInterval);
             activeLines.forEach(item => {
                 if (item.decoration) item.decoration.dispose();
