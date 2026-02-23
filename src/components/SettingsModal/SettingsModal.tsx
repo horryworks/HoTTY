@@ -434,7 +434,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 type="text"
                                                 value={paneBackgroundImage}
                                                 onChange={(e) => onPaneBackgroundImageChange(e.target.value)}
-                                                placeholder="/bg-cyberspace.svg"
+                                                placeholder="e.g. /my-background.jpg or media:///C:/path/to/image.png"
                                                 className="settings-input"
                                                 style={{ flex: 1, padding: '4px', fontSize: '12px' }}
                                             />
@@ -972,7 +972,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                     {activeTab === 'about' && (
                         <div className="about-content" style={{ textAlign: 'center', padding: '20px 0' }}>
-                            <img src="./HoTTY_logo.svg" alt="HoTTY Logo" width="64" height="64" style={{ marginBottom: '16px', backgroundColor: 'white', borderRadius: '12px', padding: '4px' }} />
+                            <img src="./HoTTY_logo.png" alt="HoTTY Logo" width="64" height="64" style={{ marginBottom: '16px', borderRadius: '12px', backgroundColor: '#fff', padding: '4px' }} />
                             <h2 style={{ margin: '0 0 8px 0' }}>HoTTY</h2>
                             <p style={{ color: '#aaa', margin: '0 0 16px 0' }}>v{version}</p>
 

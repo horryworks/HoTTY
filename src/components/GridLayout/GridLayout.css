@@ -64,8 +64,7 @@
     align-items: center;
     justify-content: center;
     /* Background handled by parent grid-pane via inline styles */
-    /* background: url('/bg-cyberspace.svg') no-repeat center center; */
-    /* background-size: cover; */
+    /* background-color: #000510; */
     /* background-color: #000510; */
     color: #00aaff;
     margin: 2px;
