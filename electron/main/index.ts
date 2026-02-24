@@ -559,4 +559,22 @@ ipcMain.handle('dpapi-decrypt', async (_, ciphertext: string) => {
   }
 });
 
+ipcMain.handle('dpapi-encrypt-batch', async (_, plaintexts: (string | undefined)[]) => {
+  try {
+    return await Promise.all(plaintexts.map(text => text ? encryptString(text) : Promise.resolve(text)));
+  } catch (err) {
+    console.error('[DPAPI] IPC batch encrypt error:', err);
+    throw err;
+  }
+});
+
+ipcMain.handle('dpapi-decrypt-batch', async (_, ciphertexts: (string | undefined)[]) => {
+  try {
+    return await Promise.all(ciphertexts.map(text => text ? decryptString(text) : Promise.resolve(text)));
+  } catch (err) {
+    console.error('[DPAPI] IPC batch decrypt error:', err);
+    throw err;
+  }
+});
+
 

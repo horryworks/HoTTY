@@ -23,91 +23,96 @@ function generateId(): string {
     return self.crypto.randomUUID();
 }
 
-// ── DPAPI helpers ──
+// ── DPAPI batch helpers ──
 
 /**
- * Encrypts a credential string via the main process (Windows DPAPI).
- * Returns the original value if electronAPI is unavailable.
+ * Encrypts an array of credential strings via the main process (Windows DPAPI).
+ * Returns the original values if electronAPI is unavailable.
  */
-async function encrypt(value: string | undefined): Promise<string | undefined> {
-    if (!value) return value;
+async function encryptBatch(values: (string | undefined)[]): Promise<(string | undefined)[]> {
+    if (values.length === 0) return values;
     try {
-        return await window.electronAPI.encryptSecret(value);
+        return await window.electronAPI.encryptSecrets(values);
     } catch (err) {
-        console.error('[HostManager] Failed to encrypt credential:', err);
-        return value; // fallback: store as-is
+        console.error('[HostManager] Failed to batch encrypt credentials:', err);
+        return values; // fallback: return as-is
     }
 }
 
 /**
- * Decrypts a credential string via the main process (Windows DPAPI).
- * Returns the original value if not encrypted or if electronAPI is unavailable.
+ * Decrypts an array of credential strings via the main process (Windows DPAPI).
+ * Returns the original values if electronAPI is unavailable.
  */
-async function decrypt(value: string | undefined): Promise<string | undefined> {
-    if (!value) return value;
+export async function decryptBatch(values: (string | undefined)[]): Promise<(string | undefined)[]> {
+    if (values.length === 0) return values;
     try {
-        return await window.electronAPI.decryptSecret(value);
+        return await window.electronAPI.decryptSecrets(values);
     } catch (err) {
-        console.error('[HostManager] Failed to decrypt credential:', err);
-        return value; // fallback: return as-is
+        console.error('[HostManager] Failed to batch decrypt credentials:', err);
+        return values; // fallback: return as-is
     }
 }
 
 // ── Serialization / Deserialization ──
 
 /**
- * Encrypts sensitive fields of a HostEntry before persisting.
- */
-async function encryptEntry(entry: HostEntry): Promise<HostEntry> {
-    return {
-        ...entry,
-        username: await encrypt(entry.username),
-        password: await encrypt(entry.password),
-    };
-}
-
-/**
- * Decrypts sensitive fields of a HostEntry after loading from storage.
- */
-async function decryptEntry(entry: HostEntry): Promise<HostEntry> {
-    return {
-        ...entry,
-        username: await decrypt(entry.username),
-        password: await decrypt(entry.password),
-    };
-}
-
-/**
- * Recursively encrypts all HostEntry nodes in a tree before persisting.
+ * Encrypts all HostEntry nodes in a tree before persisting (using a single batch call).
  */
 async function encryptTree(nodes: HostTreeNode[]): Promise<HostTreeNode[]> {
-    return Promise.all(
-        nodes.map(async (n) => {
-            const children = n.children ? await encryptTree(n.children) : undefined;
+    const secrets: (string | undefined)[] = [];
+    const setters: ((val: string | undefined) => void)[] = [];
+
+    function traverse(nodeList: HostTreeNode[]): HostTreeNode[] {
+        return nodeList.map(n => {
+            const children = n.children ? traverse(n.children) : undefined;
             if (n.type === 'host' && n.entry) {
-                return { ...n, entry: await encryptEntry(n.entry), children };
+                // clone the entry so we can mutate it after batch encryption
+                const entry = { ...n.entry };
+
+                secrets.push(entry.username);
+                setters.push((val) => entry.username = val);
+
+                secrets.push(entry.password);
+                setters.push((val) => entry.password = val);
+
+                return { ...n, entry, children };
             }
             return { ...n, children };
-        })
-    );
+        });
+    }
+
+    const newTree = traverse(nodes);
+    const encryptedSecrets = await encryptBatch(secrets);
+
+    for (let i = 0; i < encryptedSecrets.length; i++) {
+        setters[i](encryptedSecrets[i]);
+    }
+
+    return newTree;
+}
+// ── In-Memory Decryption Cache ──
+
+type DecryptedCredentialInfo = { username?: string; password?: string; decrypted?: boolean };
+const decryptedCache: Record<string, DecryptedCredentialInfo> = {};
+
+export function getCachedCredential(id: string): DecryptedCredentialInfo | undefined {
+    return decryptedCache[id];
 }
 
-/**
- * Recursively decrypts all HostEntry nodes in a tree after loading.
- */
-async function decryptTree(nodes: HostTreeNode[]): Promise<HostTreeNode[]> {
-    return Promise.all(
-        nodes.map(async (n) => {
-            const children = n.children ? await decryptTree(n.children) : undefined;
-            if (n.type === 'host' && n.entry) {
-                return { ...n, entry: await decryptEntry(n.entry), children };
-            }
-            return { ...n, children };
-        })
-    );
+export function setCachedCredential(id: string, info: DecryptedCredentialInfo) {
+    if (!decryptedCache[id]) decryptedCache[id] = {};
+    if (info.username !== undefined) decryptedCache[id].username = info.username;
+    if (info.password !== undefined) decryptedCache[id].password = info.password;
+    if (info.decrypted !== undefined) decryptedCache[id].decrypted = info.decrypted;
 }
 
-// ── Raw storage (stores encrypted values) ──
+export function clearDecryptedCache() {
+    for (const key in decryptedCache) {
+        delete decryptedCache[key];
+    }
+}
+
+// ── Serialization / Deserialization ──
 
 function loadRawTree(): HostTreeNode[] {
     try {
@@ -156,22 +161,71 @@ function removeNode(nodes: HostTreeNode[], id: string): HostTreeNode[] {
 // ── Hook ──
 
 export function useHostManager() {
-    // State holds decrypted tree (safe to use in UI / SSH connection)
+    // State holds the full tree (passwords remain encrypted until explicitly decrypted by UI)
     const [tree, setTree] = useState<HostTreeNode[]>([]);
-    // Ref keeps the encrypted tree synced with localStorage
-    const [initialized, setInitialized] = useState(false);
 
-    // On mount: load raw (encrypted) tree from localStorage, then decrypt into state
+    // On mount: load raw (encrypted) tree from localStorage and set it immediately for 0-latency UI render.
     useEffect(() => {
         const raw = loadRawTree();
-        if (raw.length === 0) {
-            setInitialized(true);
-            return;
-        }
-        decryptTree(raw).then((decrypted) => {
-            setTree(decrypted);
-            setInitialized(true);
+        setTree(raw);
+
+        // --- Eager Pre-Decryption ---
+        // Fire off a background task to decrypt all [DPAPI] strings in the tree and load them into the cache
+        const eagerDecryptTree = async (nodes: HostTreeNode[]) => {
+            const secrets: (string | undefined)[] = [];
+            const targets: { id: string, type: 'username' | 'password' }[] = [];
+
+            function traverse(nodeList: HostTreeNode[]) {
+                for (const n of nodeList) {
+                    if (n.type === 'host' && n.entry && !decryptedCache[n.id]?.decrypted) {
+                        if (n.entry.username?.startsWith('[DPAPI]')) {
+                            secrets.push(n.entry.username);
+                            targets.push({ id: n.id, type: 'username' });
+                        }
+                        if (n.entry.password?.startsWith('[DPAPI]')) {
+                            secrets.push(n.entry.password);
+                            targets.push({ id: n.id, type: 'password' });
+                        }
+                    }
+                    if (n.children) {
+                        traverse(n.children);
+                    }
+                }
+            }
+
+            traverse(nodes);
+
+            if (secrets.length > 0) {
+                const decrypted = await decryptBatch(secrets);
+                // Populate cache
+                for (let i = 0; i < targets.length; i++) {
+                    const t = targets[i];
+                    const val = decrypted[i];
+                    if (val !== undefined) {
+                        setCachedCredential(t.id, { [t.type]: val });
+                    }
+                }
+            }
+
+            // Mark all visited hosts as decrypted in cache so we don't try again
+            function markDecrypted(nodeList: HostTreeNode[]) {
+                for (const n of nodeList) {
+                    if (n.type === 'host') {
+                        setCachedCredential(n.id, { decrypted: true });
+                    }
+                    if (n.children) {
+                        markDecrypted(n.children);
+                    }
+                }
+            }
+            markDecrypted(nodes);
+        };
+
+        // Run non-blocking
+        eagerDecryptTree(raw).catch(err => {
+            console.error('[HostManager] Background eager decryption failed:', err);
         });
+
     }, []);
 
     /**
@@ -217,6 +271,18 @@ export function useHostManager() {
     const editNode = useCallback((id: string, patch: Partial<HostTreeNode>) => {
         setTree(prev => {
             const next = patchNode(prev, id, patch);
+
+            // Need to track this id in cache if username/password changed to unencrypted string
+            const patchedNode = next.flatMap(n => n.type === 'host' ? [n] : n.children ?? []).find(n => n.id === id);
+            if (patchedNode?.type === 'host' && patchedNode.entry) {
+                if (patch.entry?.username && !patch.entry.username.startsWith('[DPAPI]')) {
+                    setCachedCredential(id, { username: patch.entry.username });
+                }
+                if (patch.entry?.password && !patch.entry.password.startsWith('[DPAPI]')) {
+                    setCachedCredential(id, { password: patch.entry.password });
+                }
+            }
+
             encryptTree(next).then(saveRawTree);
             return next;
         });
@@ -234,5 +300,5 @@ export function useHostManager() {
         persistAndSet(newTree);
     }, [persistAndSet]);
 
-    return { tree, initialized, addFolder, addHost, editNode, deleteNode, saveTree };
+    return { tree, addFolder, addHost, editNode, deleteNode, saveTree };
 }

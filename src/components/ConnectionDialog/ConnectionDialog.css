@@ -200,3 +200,7 @@
 .form-group input:hover::-webkit-calendar-picker-indicator {
     background-color: transparent;
 }
+
+.decrypting-placeholder {
+    color: var(--error-color, red) !important;
+}

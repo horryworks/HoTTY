@@ -215,3 +215,7 @@
     gap: 8px;
     margin-top: 16px;
 }
+
+.decrypting-placeholder {
+    color: var(--error-color, red) !important;
+}

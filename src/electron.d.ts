@@ -41,6 +41,8 @@ export interface ElectronAPI {
     // Credential encryption (Windows DPAPI)
     encryptSecret: (plaintext: string) => Promise<string>;
     decryptSecret: (ciphertext: string) => Promise<string>;
+    encryptSecrets: (plaintexts: (string | undefined)[]) => Promise<(string | undefined)[]>;
+    decryptSecrets: (ciphertexts: (string | undefined)[]) => Promise<(string | undefined)[]>;
 }
 
 

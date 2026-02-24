@@ -169,6 +169,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     saveThemes: (themes: any) => ipcRenderer.invoke('save-themes', themes),
     encryptSecret: (plaintext: string) => ipcRenderer.invoke('dpapi-encrypt', plaintext),
     decryptSecret: (ciphertext: string) => ipcRenderer.invoke('dpapi-decrypt', ciphertext),
+    encryptSecrets: (plaintexts: (string | undefined)[]) => ipcRenderer.invoke('dpapi-encrypt-batch', plaintexts),
+    decryptSecrets: (ciphertexts: (string | undefined)[]) => ipcRenderer.invoke('dpapi-decrypt-batch', ciphertexts),
 })
 
 

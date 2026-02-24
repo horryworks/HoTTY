@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useHostManager } from '../../hooks/useHostManager';
+import { useHostManager, decryptBatch, getCachedCredential, clearDecryptedCache } from '../../hooks/useHostManager';
 import type { HostTreeNode, HostEntry } from '../../hooks/useHostManager';
 import { HostTree } from './HostTree';
 import './ConnectionDialog.css';
@@ -28,6 +28,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     const hostManager = useHostManager();
 
     const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
+    const [isDecrypting, setIsDecrypting] = useState(false);
 
     // Ref to the connection form for programmatic submission
     const formRef = useRef<HTMLFormElement>(null);
@@ -65,7 +66,11 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             }
         };
         document.addEventListener('keydown', handler);
-        return () => document.removeEventListener('keydown', handler);
+        return () => {
+            document.removeEventListener('keydown', handler);
+            // Clear cache when dialog closes to free memory
+            clearDecryptedCache();
+        };
     }, [onClose]);
 
 
@@ -204,37 +209,122 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     }, [protocol]);
 
     // --- Select a host from the tree ---
-    const handleSelectHost = (node: HostTreeNode) => {
+    const handleSelectHost = async (node: HostTreeNode) => {
         if (node.type !== 'host' || !node.entry) return;
         setSelectedHostId(node.id);
         const e = node.entry;
         setProtocol(e.protocol);
         setHost(e.host ?? '');
         setPort(String(e.port ?? (e.protocol === 'ssh' ? 22 : 23)));
-        setUsername(e.username ?? '');
+
+        let u = e.username ?? '';
+        let p = e.password ?? '';
+
+        const cached = getCachedCredential(node.id);
+
+        // On-demand decryption if they are still encrypted
+        const needsDecryption = [];
+        if (u.startsWith('[DPAPI]')) {
+            if (cached?.username !== undefined) u = cached.username;
+            else needsDecryption.push(u);
+        } else {
+            needsDecryption.push(undefined);
+        }
+
+        if (p.startsWith('[DPAPI]')) {
+            if (cached?.password !== undefined) p = cached.password;
+            else needsDecryption.push(p);
+        } else {
+            needsDecryption.push(undefined);
+        }
+
+        if (needsDecryption.some(val => val !== undefined)) {
+            setIsDecrypting(true);
+            const [decU, decP] = await decryptBatch(needsDecryption);
+            if (decU !== undefined) u = decU;
+            if (decP !== undefined) p = decP;
+            setIsDecrypting(false);
+        }
+
+        setUsername(u);
         // Prefer in-memory cached password, fall back to stored password
-        const cachedPass = getCachedPassword(e.host ?? '', e.username ?? '');
-        setPassword(cachedPass !== '' ? cachedPass : (e.password ?? ''));
+        const cachedPass = getCachedPassword(e.host ?? '', u);
+        setPassword(cachedPass !== '' ? cachedPass : p);
     };
 
     // --- Double-click a host: connect immediately using the node's data ---
-    const handleDoubleClickHost = useCallback((node: HostTreeNode) => {
+    const handleDoubleClickHost = useCallback(async (node: HostTreeNode) => {
         if (node.type !== 'host' || !node.entry) return;
         const e = node.entry;
-        handleSelectHost(node); // also fill the form for visual feedback
-        const cachedPass = getCachedPassword(e.host ?? '', e.username ?? '');
-        const pass = cachedPass !== '' ? cachedPass : (e.password ?? '');
+        await handleSelectHost(node); // wait for decryption to finish and form to fill
+
+        // Use the latest decrypted state correctly
+        // We know handleSelectHost will set state asynchronously, but to be 100% sure we can just decrypt here too
+        let u = e.username ?? '';
+        let p = e.password ?? '';
+
+        const cached = getCachedCredential(node.id);
+
+        const needsDecryption = [];
+        if (u.startsWith('[DPAPI]')) {
+            if (cached?.username !== undefined) u = cached.username;
+            else needsDecryption.push(u);
+        } else {
+            needsDecryption.push(undefined);
+        }
+
+        if (p.startsWith('[DPAPI]')) {
+            if (cached?.password !== undefined) p = cached.password;
+            else needsDecryption.push(p);
+        } else {
+            needsDecryption.push(undefined);
+        }
+
+        if (needsDecryption.some(val => val !== undefined)) {
+            const [decU, decP] = await decryptBatch(needsDecryption);
+            if (decU !== undefined) u = decU;
+            if (decP !== undefined) p = decP;
+        }
+
+        const cachedPass = getCachedPassword(e.host ?? '', u);
+        const finalPass = cachedPass !== '' ? cachedPass : p;
+
         onConnect({
             protocol: e.protocol,
             host: e.host,
             port: e.port,
-            username: e.protocol === 'ssh' ? (e.username ?? '') : undefined,
-            password: e.protocol === 'ssh' ? pass : undefined,
+            username: e.protocol === 'ssh' ? u : undefined,
+            password: e.protocol === 'ssh' ? finalPass : undefined,
         });
     }, [getCachedPassword, onConnect]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Ensure we don't connect with raw DPAPI values if they somehow bypassed handleSelectHost
+        let finalU = username;
+        let finalP = password;
+        if (finalU.startsWith('[DPAPI]') || finalP.startsWith('[DPAPI]')) {
+            const cached = selectedHostId ? getCachedCredential(selectedHostId) : undefined;
+
+            const needsDecryption = [undefined, undefined] as (string | undefined)[];
+            if (finalU.startsWith('[DPAPI]')) {
+                if (cached?.username !== undefined) finalU = cached.username;
+                else needsDecryption[0] = finalU;
+            }
+            if (finalP.startsWith('[DPAPI]')) {
+                if (cached?.password !== undefined) finalP = cached.password;
+                else needsDecryption[1] = finalP;
+            }
+
+            if (needsDecryption.some(val => val !== undefined)) {
+                setIsDecrypting(true);
+                const [decU, decP] = await decryptBatch(needsDecryption);
+                if (decU !== undefined) { finalU = decU; setUsername(decU); }
+                if (decP !== undefined) { finalP = decP; setPassword(decP); }
+                setIsDecrypting(false);
+            }
+        }
 
         if (protocol === 'serial') {
             onConnect({ protocol: 'serial', path: serialPath, baudRate: parseInt(baudRate), dataBits: parseInt(dataBits), parity, stopBits: parseFloat(stopBits), flowControl });
@@ -263,13 +353,13 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                         const decrypted = await window.electronAPI.decryptSecret(encryptedMap);
                         usernameMap = JSON.parse(decrypted);
                     }
-                    usernameMap[host] = username;
+                    usernameMap[host] = finalU;
                     const encrypted = await window.electronAPI.encryptSecret(JSON.stringify(usernameMap));
                     localStorage.setItem('hterm_username_map', encrypted);
                 } catch (err) {
                     console.error('Failed to persist username map:', err);
                 }
-                if (password) saveCachedPassword(host, username, password);
+                if (finalP) saveCachedPassword(host, finalU, finalP);
             }
 
             // Persist credential changes back to the selected tree node
@@ -289,8 +379,8 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             protocol,
             host,
             port: parseInt(port),
-            username: protocol === 'ssh' ? username : undefined,
-            password: protocol === 'ssh' ? password : undefined,
+            username: protocol === 'ssh' ? finalU : undefined,
+            password: protocol === 'ssh' ? finalP : undefined,
         });
     };
 
@@ -400,8 +490,10 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                             <label>Username</label>
                                             <input
                                                 type="text"
-                                                value={username}
+                                                value={isDecrypting ? 'Decrypting...' : username}
                                                 onChange={e => setUsername(e.target.value)}
+                                                className={isDecrypting ? 'decrypting-placeholder' : ''}
+                                                disabled={isDecrypting}
                                                 required
                                             />
                                         </div>
@@ -411,8 +503,10 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                             <label>Password</label>
                                             <input
                                                 type="password"
-                                                value={password}
+                                                value={isDecrypting ? 'Decrypting...' : password}
                                                 onChange={e => setPassword(e.target.value)}
+                                                className={isDecrypting ? 'decrypting-placeholder' : ''}
+                                                disabled={isDecrypting}
                                             />
                                         </div>
                                     )}

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { HostTreeNode, HostEntry } from '../../hooks/useHostManager';
+import { decryptBatch, getCachedCredential } from '../../hooks/useHostManager';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import './HostTree.css';
 
@@ -46,6 +47,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [formPort, setFormPort] = useState('22');
     const [formUsername, setFormUsername] = useState('');
     const [formPassword, setFormPassword] = useState('');
+    const [isDecrypting, setIsDecrypting] = useState(false);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const editModalRef = useRef<HTMLDivElement>(null);
@@ -103,14 +105,44 @@ export const HostTree: React.FC<HostTreeProps> = ({
         setContextMenu(null);
     }, []);
 
-    const openEditNode = useCallback((node: HostTreeNode) => {
+    const openEditNode = useCallback(async (node: HostTreeNode) => {
         setFormName(node.name);
         if (node.type === 'host' && node.entry) {
             setFormProtocol(node.entry.protocol);
             setFormHost(node.entry.host);
             setFormPort(String(node.entry.port));
-            setFormUsername(node.entry.username ?? '');
-            setFormPassword(node.entry.password ?? '');
+
+            let u = node.entry.username ?? '';
+            let p = node.entry.password ?? '';
+
+            const cached = getCachedCredential(node.id);
+
+            // Decrypt on-demand if needed
+            const needsDecryption = [];
+            if (u.startsWith('[DPAPI]')) {
+                if (cached?.username !== undefined) u = cached.username;
+                else needsDecryption.push(u);
+            } else {
+                needsDecryption.push(undefined);
+            }
+
+            if (p.startsWith('[DPAPI]')) {
+                if (cached?.password !== undefined) p = cached.password;
+                else needsDecryption.push(p);
+            } else {
+                needsDecryption.push(undefined);
+            }
+
+            if (needsDecryption.some(val => val !== undefined)) {
+                setIsDecrypting(true);
+                const [decU, decP] = await decryptBatch(needsDecryption);
+                if (decU !== undefined) u = decU;
+                if (decP !== undefined) p = decP;
+                setIsDecrypting(false);
+            }
+
+            setFormUsername(u);
+            setFormPassword(p);
             setEditModal({ mode: 'host', parentId: null, existingNode: node });
         } else {
             setEditModal({ mode: 'folder', parentId: null, existingNode: node });
@@ -340,18 +372,22 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                             <label>Username</label>
                                             <input
                                                 type="text"
-                                                value={formUsername}
+                                                value={isDecrypting ? 'Decrypting...' : formUsername}
                                                 onChange={e => setFormUsername(e.target.value)}
                                                 onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
+                                                className={isDecrypting ? 'decrypting-placeholder' : ''}
+                                                disabled={isDecrypting}
                                             />
                                         </div>
                                         <div className="modal-form-group">
                                             <label>Password</label>
                                             <input
                                                 type="password"
-                                                value={formPassword}
+                                                value={isDecrypting ? 'Decrypting...' : formPassword}
                                                 onChange={e => setFormPassword(e.target.value)}
                                                 onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
+                                                className={isDecrypting ? 'decrypting-placeholder' : ''}
+                                                disabled={isDecrypting}
                                             />
                                         </div>
                                     </>
