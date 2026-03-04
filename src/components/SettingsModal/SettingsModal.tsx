@@ -16,6 +16,10 @@ interface SettingsModalProps {
     onSshKeepAliveEnabledChange: (enabled: boolean) => void;
     sshKeepAliveInterval: number;
     onSshKeepAliveIntervalChange: (interval: number) => void;
+    telnetKeepAliveEnabled: boolean;
+    onTelnetKeepAliveEnabledChange: (enabled: boolean) => void;
+    telnetKeepAliveInterval: number;
+    onTelnetKeepAliveIntervalChange: (interval: number) => void;
     terminalForeground: string;
     onTerminalForegroundChange: (color: string) => void;
     terminalBackground: string;
@@ -36,6 +40,8 @@ interface SettingsModalProps {
     onScrollbackChange: (lines: number) => void;
     theme: 'dark' | 'light' | 'medium' | 'custom';
     onThemeChange: (theme: 'dark' | 'light' | 'medium' | 'custom') => void;
+    sidebarPosition: 'left' | 'right';
+    onSidebarPositionChange: (position: 'left' | 'right') => void;
     showSystemPrompt: boolean;
     onShowSystemPromptChange: (show: boolean) => void;
     askGeminiCommands: { id: string; label: string; promptTemplate: string }[];
@@ -65,6 +71,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onSshKeepAliveEnabledChange,
     sshKeepAliveInterval,
     onSshKeepAliveIntervalChange,
+    telnetKeepAliveEnabled,
+    onTelnetKeepAliveEnabledChange,
+    telnetKeepAliveInterval,
+    onTelnetKeepAliveIntervalChange,
     terminalForeground,
     onTerminalForegroundChange,
     terminalBackground,
@@ -85,6 +95,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onScrollbackChange,
     theme,
     onThemeChange,
+    sidebarPosition,
+    onSidebarPositionChange,
     showSystemPrompt,
     onShowSystemPromptChange,
     askGeminiCommands,
@@ -101,7 +113,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onPromptPatternsChange
 }) => {
     const { position, onMouseDown: onHeaderMouseDown } = useDraggable();
-    const [activeTab, setActiveTab] = React.useState<'appearance' | 'ssh' | 'system' | 'ai' | 'about'>('system');
+    const [activeTab, setActiveTab] = React.useState<'appearance' | 'ssh' | 'telnet' | 'system' | 'ai' | 'about'>('system');
     const [version, setVersion] = React.useState<string>('');
     const [sshAlgorithms, setSshAlgorithms] = React.useState<any>(null);
     const modalRef = useRef<HTMLDivElement>(null);
@@ -253,6 +265,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         SSH
                     </button>
                     <button
+                        className={`settings-tab ${activeTab === 'telnet' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('telnet')}
+                    >
+                        Telnet
+                    </button>
+                    <button
                         className={`settings-tab ${activeTab === 'ai' ? 'active' : ''}`}
                         onClick={() => setActiveTab('ai')}
                     >
@@ -269,6 +287,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="settings-content">
                     {activeTab === 'appearance' && (
                         <>
+                            <div className="form-group">
+                                <label>Toolbar Position</label>
+                                <div style={{ display: 'flex', gap: '15px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
+                                        <input
+                                            type="radio"
+                                            name="sidebarPosition"
+                                            value="left"
+                                            checked={sidebarPosition === 'left'}
+                                            onChange={() => onSidebarPositionChange('left')}
+                                            style={{ marginRight: '6px' }}
+                                        />
+                                        Left
+                                    </label>
+                                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
+                                        <input
+                                            type="radio"
+                                            name="sidebarPosition"
+                                            value="right"
+                                            checked={sidebarPosition === 'right'}
+                                            onChange={() => onSidebarPositionChange('right')}
+                                            style={{ marginRight: '6px' }}
+                                        />
+                                        Right
+                                    </label>
+                                </div>
+                            </div>
+
                             <div className="form-group">
                                 <label>Theme</label>
                                 <div style={{ display: 'flex', gap: '15px' }}>
@@ -671,6 +717,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <p className="settings-help">Choose which algorithms to enable for SSH connections. Changes apply to new sessions.</p>
                                 </div>
                             )}
+                        </>
+                    )}
+
+                    {activeTab === 'telnet' && (
+                        <>
+                            <div className="form-group">
+                                <label>Telnet KeepAlive</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={telnetKeepAliveEnabled}
+                                            onChange={(e) => onTelnetKeepAliveEnabledChange(e.target.checked)}
+                                            style={{ marginRight: '8px' }}
+                                        />
+                                        Enable
+                                    </label>
+                                </div>
+                                {telnetKeepAliveEnabled && (
+                                    <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ fontSize: '0.9em', color: '#ccc' }}>Interval (seconds):</span>
+                                        <input
+                                            type="number"
+                                            value={telnetKeepAliveInterval}
+                                            onChange={(e) => onTelnetKeepAliveIntervalChange(parseInt(e.target.value, 10))}
+                                            className="settings-input"
+                                            min={5}
+                                            max={300}
+                                            style={{ width: '80px' }}
+                                        />
+                                    </div>
+                                )}
+                                <p className="settings-help">Sends Telnet NOP commands to prevent idle timeouts.</p>
+                            </div>
                         </>
                     )}
 

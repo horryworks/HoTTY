@@ -1,6 +1,6 @@
-﻿# HoTTY v0.1.13 - Gemini Integrated Advanced Terminal
+﻿# HoTTY v0.1.14-beta1 - Gemini Integrated Advanced Terminal
 
-**Current Version: v0.1.13 (Latest)**
+**Current Version: v0.1.14-beta1**
 
 emulator built with Electron, React, and TypeScript. It is designed to provide a seamless terminal experience with advanced window management and customization options.
 
@@ -13,6 +13,7 @@ emulator built with Electron, React, and TypeScript. It is designed to provide a
     - Flexible multi-pane interface with **Top/Bottom Bars** and **Left/Right Sidebars**.
     - **Layout Persistence**: Automatically saves and restores your workspace configuration (sizes, visibility, grid ratios).
     - **Smart Resizing**: Percentage-based responsive layout that adapts to any window size.
+    - **Toolbar Position**: Switch the sidebar between left and right via Settings > Appearance.
     - Drag-and-drop tabs to re-organize panes.
     - Intuitive resizing including **2D intersection resizing** (drag the junction between 4 panes to resize all at once).
 - **Customization**:
@@ -23,7 +24,8 @@ emulator built with Electron, React, and TypeScript. It is designed to provide a
     - **File Picker**: Easily select custom local images as your terminal background via a built-in file explorer integration.
 - **Session Management**:
     - Persistent settings (fonts, encoding, colors) across sessions.
-    - **SSH KeepAlive**: Stay connected to remote hosts without timeouts.
+    - **SSH KeepAlive**: Stay connected to SSH hosts without timeouts.
+    - **Telnet KeepAlive**: Dual-layer keepalive (TCP + Telnet NOP) to prevent idle disconnects on Telnet sessions. Configurable in Settings > Telnet.
     - **Secure Credential Handling**: SSH passwords are cached in memory only and never written to disk.
 - **AI Integration**:
     - **Gemini Chat**: Built-in AI assistant pane powered by Google Gemini.

@@ -1,5 +1,18 @@
 # Release Notes - HoTTY
 
+## [v0.1.14-beta1] - 2026-03-04
+### Added
+- **Telnet KeepAlive**:
+    - Implemented dual-layer keepalive for Telnet connections to prevent idle timeouts.
+    - **TCP Keepalive**: OS-level connection health monitoring via `socket.setKeepAlive()`.
+    - **Telnet NOP**: Periodically sends IAC NOP (`0xFF 0xF1`) to reset server-side idle timers.
+    - Default interval: 30 seconds (configurable).
+- **Telnet Settings Tab**: Added a dedicated "Telnet" tab in Settings for KeepAlive configuration (enable/disable checkbox and interval input).
+- **Toolbar Position**: Added a "Toolbar Position" option in Settings > Appearance to switch the sidebar between Left and Right.
+
+### Fixed
+- **Close Button Consistency**: Unified the close button styling between the Settings modal and the New Connection dialog (matching font size, color, and removing the focus ring).
+
 ## [v0.1.13] - 2026-02-23
 ### Fixed
 - **Terminal Marker Rendering**:

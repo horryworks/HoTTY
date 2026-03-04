@@ -31,6 +31,12 @@
   z-index: 10;
 }
 
+.sidebar.sidebar-right {
+  order: 1;
+  border-right: none;
+  border-left: 1px solid var(--border-color);
+}
+
 .sidebar-top,
 .sidebar-bottom {
   display: flex;

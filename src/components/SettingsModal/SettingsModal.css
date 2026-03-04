@@ -52,18 +52,23 @@
     /* Match ConnectionDialog size */
 }
 
-.settings-header .close-btn {
+.settings-modal .close-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
     background: transparent;
     border: none;
-    color: var(--text-secondary);
-    font-size: 20px;
+    color: #ccc;
     cursor: pointer;
-    padding: 0;
+    font-size: 1.2rem;
     line-height: 1;
+    padding: 0;
+    z-index: 1;
+    outline: none;
 }
 
-.settings-header .close-btn:hover {
-    color: var(--text-primary);
+.settings-modal .close-btn:hover {
+    color: #fff;
 }
 
 .settings-tabs {

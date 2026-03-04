@@ -97,6 +97,9 @@ function App() {
   // Load UI state from localStorage or default
   const [showLeftSidebar, setShowLeftSidebar] = useState(() => localStorage.getItem('hterm_ui_showLeftSidebar') === 'true');
   const [showRightSidebar, setShowRightSidebar] = useState(() => localStorage.getItem('hterm_ui_showRightSidebar') === 'true');
+  const [sidebarPosition, setSidebarPosition] = useState<'left' | 'right'>(() => {
+    return (localStorage.getItem('hterm_sidebar_position') as 'left' | 'right') || 'left';
+  });
   const [showTopBar, setShowTopBar] = useState(() => localStorage.getItem('hterm_ui_showTopBar') === 'true');
   const [showBottomBar, setShowBottomBar] = useState(() => localStorage.getItem('hterm_ui_showBottomBar') === 'true');
 
@@ -288,6 +291,15 @@ function App() {
     return saved ? parseInt(saved, 10) : 10;
   });
 
+  // Telnet KeepAlive State
+  const [telnetKeepAliveEnabled, setTelnetKeepAliveEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('hterm_telnet_keepalive_enabled') !== 'false'; // default true
+  });
+  const [telnetKeepAliveInterval, setTelnetKeepAliveInterval] = useState<number>(() => {
+    const saved = localStorage.getItem('hterm_telnet_keepalive_interval');
+    return saved ? parseInt(saved, 10) : 30;
+  });
+
   // Logging State
   const [loggingEnabled, setLoggingEnabled] = useState<boolean>(() => {
     return localStorage.getItem('hterm_logging_enabled') === 'true'; // default false
@@ -415,6 +427,8 @@ function App() {
     globalEncoding,
     sshKeepAliveEnabled,
     sshKeepAliveInterval,
+    telnetKeepAliveEnabled,
+    telnetKeepAliveInterval,
     loggingEnabled,
     loggingPath,
     lineWrapEnabled,
@@ -618,6 +632,16 @@ function App() {
     localStorage.setItem('hterm_ssh_keepalive_interval', interval.toString());
   };
 
+  const updateTelnetKeepAliveEnabled = (enabled: boolean) => {
+    setTelnetKeepAliveEnabled(enabled);
+    localStorage.setItem('hterm_telnet_keepalive_enabled', enabled.toString());
+  };
+
+  const updateTelnetKeepAliveInterval = (interval: number) => {
+    setTelnetKeepAliveInterval(interval);
+    localStorage.setItem('hterm_telnet_keepalive_interval', interval.toString());
+  };
+
   const updateLoggingEnabled = (enabled: boolean) => {
     setLoggingEnabled(enabled);
     localStorage.setItem('hterm_logging_enabled', enabled.toString());
@@ -626,6 +650,11 @@ function App() {
   const updateLoggingPath = (path: string) => {
     setLoggingPath(path);
     localStorage.setItem('hterm_logging_path', path);
+  };
+
+  const updateSidebarPosition = (pos: 'left' | 'right') => {
+    setSidebarPosition(pos);
+    localStorage.setItem('hterm_sidebar_position', pos);
   };
 
   // Theme Change Handler
@@ -740,7 +769,7 @@ function App() {
   return (
     <div className="app-container">
       {/* Sidebar */}
-      <div className="sidebar">
+      <div className={`sidebar ${sidebarPosition === 'right' ? 'sidebar-right' : ''}`}>
         <div className="sidebar-top">
           <LayoutSelector
             currentLayout={pane.layoutMode}
@@ -1271,6 +1300,10 @@ function App() {
         onSshKeepAliveEnabledChange={updateSshKeepAliveEnabled}
         sshKeepAliveInterval={sshKeepAliveInterval}
         onSshKeepAliveIntervalChange={updateSshKeepAliveInterval}
+        telnetKeepAliveEnabled={telnetKeepAliveEnabled}
+        onTelnetKeepAliveEnabledChange={updateTelnetKeepAliveEnabled}
+        telnetKeepAliveInterval={telnetKeepAliveInterval}
+        onTelnetKeepAliveIntervalChange={updateTelnetKeepAliveInterval}
         terminalForeground={terminalForeground}
         onTerminalForegroundChange={updateTerminalForeground}
         terminalBackground={terminalBackground}
@@ -1291,6 +1324,8 @@ function App() {
         onScrollbackChange={updateScrollback}
         theme={theme}
         onThemeChange={updateTheme}
+        sidebarPosition={sidebarPosition}
+        onSidebarPositionChange={updateSidebarPosition}
         showSystemPrompt={showSystemPrompt}
         onShowSystemPromptChange={updateShowSystemPrompt}
         askGeminiCommands={askGeminiCommands}

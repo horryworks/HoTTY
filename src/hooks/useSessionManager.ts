@@ -28,6 +28,8 @@ interface UseSessionManagerOptions {
     setActivePaneId: React.Dispatch<React.SetStateAction<string>>;
     sshKeepAliveEnabled: boolean;
     sshKeepAliveInterval: number;
+    telnetKeepAliveEnabled: boolean;
+    telnetKeepAliveInterval: number;
     loggingEnabled: boolean;
     loggingPath: string;
     lineWrapEnabled: boolean;
@@ -49,6 +51,8 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         setActivePaneId,
         sshKeepAliveEnabled,
         sshKeepAliveInterval,
+        telnetKeepAliveEnabled,
+        telnetKeepAliveInterval,
         loggingEnabled,
         loggingPath,
         lineWrapEnabled,
@@ -257,6 +261,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             ...config,
             encoding: globalEncoding,
             keepaliveInterval: sshKeepAliveEnabled ? sshKeepAliveInterval * 1000 : 0,
+            telnetKeepAliveInterval: telnetKeepAliveEnabled ? telnetKeepAliveInterval * 1000 : 0,
             loggingEnabled,
             loggingPath
         };

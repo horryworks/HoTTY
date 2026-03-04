@@ -11,6 +11,7 @@ export class TelnetService implements ISessionService {
 
     private lastCols: number | null = null;
     private lastRows: number | null = null;
+    private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
     constructor(window: BrowserWindow, sessionId: string) {
         this.window = window;
@@ -49,6 +50,11 @@ export class TelnetService implements ISessionService {
         try {
             await this.conn.connect(params);
             this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'connected' });
+
+            // Start keepalive if configured
+            if (config.telnetKeepAliveInterval && config.telnetKeepAliveInterval > 0) {
+                this.startKeepalive(config.telnetKeepAliveInterval);
+            }
 
             // Apply cached resize if exists
             if (this.lastCols !== null && this.lastRows !== null) {
@@ -217,7 +223,44 @@ export class TelnetService implements ISessionService {
         this.dataCallback = callback;
     }
 
+    /**
+     * Starts keepalive mechanism using both TCP keepalive and Telnet NOP.
+     *
+     * TCP keepalive maintains OS-level connection health checks.
+     * Telnet NOP (IAC NOP = 0xFF 0xF1) resets the server's idle timer,
+     * which is the primary cause of Telnet session timeouts.
+     */
+    private startKeepalive(intervalMs: number) {
+        this.stopKeepalive();
+
+        // Enable TCP keepalive on the underlying socket
+        if (this.conn.socket && typeof this.conn.socket.setKeepAlive === 'function') {
+            this.conn.socket.setKeepAlive(true, intervalMs);
+        }
+
+        // Send Telnet NOP (IAC NOP) periodically
+        const IAC_NOP = Buffer.from([0xFF, 0xF1]);
+        this.keepaliveTimer = setInterval(() => {
+            try {
+                if (this.conn.socket && typeof this.conn.socket.write === 'function') {
+                    this.conn.socket.write(IAC_NOP);
+                }
+            } catch (e) {
+                // Connection may already be closed; stop keepalive
+                this.stopKeepalive();
+            }
+        }, intervalMs);
+    }
+
+    private stopKeepalive() {
+        if (this.keepaliveTimer) {
+            clearInterval(this.keepaliveTimer);
+            this.keepaliveTimer = null;
+        }
+    }
+
     disconnect() {
+        this.stopKeepalive();
         if (this.conn) {
             try {
                 this.conn.end();
