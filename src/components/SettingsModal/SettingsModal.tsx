@@ -28,8 +28,8 @@ interface SettingsModalProps {
     onTerminalBackgroundInactiveChange: (color: string) => void;
     paneBackground: string;
     onPaneBackgroundChange: (color: string) => void;
-    paneBackgroundMode: 'color' | 'image' | 'default';
-    onPaneBackgroundModeChange: (mode: 'color' | 'image' | 'default') => void;
+    paneBackgroundMode: 'color' | 'image';
+    onPaneBackgroundModeChange: (mode: 'color' | 'image') => void;
     paneBackgroundImage: string;
     onPaneBackgroundImageChange: (url: string) => void;
     loggingEnabled: boolean;
@@ -438,10 +438,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                         <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
                                             <input
                                                 type="radio"
-                                                checked={paneBackgroundMode === 'default'}
-                                                onChange={() => onPaneBackgroundModeChange('default')}
+                                                checked={paneBackgroundMode === 'color'}
+                                                onChange={() => onPaneBackgroundModeChange('color')}
                                                 style={{ marginRight: '6px' }}
-                                            /> Default
+                                            /> Color
                                         </label>
                                         <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
                                             <input
@@ -450,14 +450,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 onChange={() => onPaneBackgroundModeChange('image')}
                                                 style={{ marginRight: '6px' }}
                                             /> Image
-                                        </label>
-                                        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
-                                            <input
-                                                type="radio"
-                                                checked={paneBackgroundMode === 'color'}
-                                                onChange={() => onPaneBackgroundModeChange('color')}
-                                                style={{ marginRight: '6px' }}
-                                            /> Color
                                         </label>
                                     </div>
 

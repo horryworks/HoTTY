@@ -164,6 +164,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     }, [dialogSize]);
 
     // --- Connection form state ---
+    const [displayName, setDisplayName] = useState('');
     const [host, setHost] = useState('');
     const [port, setPort] = useState('22');
     const [username, setUsername] = useState('');
@@ -182,6 +183,16 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     // WSL-specific state
     const [wslDistros, setWslDistros] = useState<string[]>([]);
     const [selectedDistro, setSelectedDistro] = useState('');
+
+    // State to track original values to determine if the form is dirty
+    const [originalState, setOriginalState] = useState<{
+        name: string;
+        protocol: string;
+        host: string;
+        port: string;
+        username: string;
+        password: string;
+    } | null>(null);
 
     // Host history (legacy, kept for datalist)
     const [history] = useState<string[]>(() => {
@@ -210,8 +221,13 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
     // --- Select a host from the tree ---
     const handleSelectHost = async (node: HostTreeNode) => {
-        if (node.type !== 'host' || !node.entry) return;
         setSelectedHostId(node.id);
+        if (node.type !== 'host' || !node.entry) {
+            setOriginalState(null);
+            setDisplayName('');
+            return;
+        }
+
         const e = node.entry;
         setProtocol(e.protocol);
         setHost(e.host ?? '');
@@ -223,19 +239,15 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         const cached = getCachedCredential(node.id);
 
         // On-demand decryption if they are still encrypted
-        const needsDecryption = [];
+        const needsDecryption: (string | undefined)[] = [undefined, undefined];
         if (u.startsWith('[DPAPI]')) {
             if (cached?.username !== undefined) u = cached.username;
-            else needsDecryption.push(u);
-        } else {
-            needsDecryption.push(undefined);
+            else needsDecryption[0] = u;
         }
 
         if (p.startsWith('[DPAPI]')) {
             if (cached?.password !== undefined) p = cached.password;
-            else needsDecryption.push(p);
-        } else {
-            needsDecryption.push(undefined);
+            else needsDecryption[1] = p;
         }
 
         if (needsDecryption.some(val => val !== undefined)) {
@@ -249,7 +261,18 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         setUsername(u);
         // Prefer in-memory cached password, fall back to stored password
         const cachedPass = getCachedPassword(e.host ?? '', u);
-        setPassword(cachedPass !== '' ? cachedPass : p);
+        const finalPass = cachedPass !== '' ? cachedPass : p;
+        setPassword(finalPass);
+
+        setDisplayName(node.name);
+        setOriginalState({
+            name: node.name,
+            protocol: e.protocol,
+            host: e.host ?? '',
+            port: String(e.port ?? (e.protocol === 'ssh' ? 22 : 23)),
+            username: u,
+            password: finalPass
+        });
     };
 
     // --- Double-click a host: connect immediately using the node's data ---
@@ -265,19 +288,15 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
         const cached = getCachedCredential(node.id);
 
-        const needsDecryption = [];
+        const needsDecryption: (string | undefined)[] = [undefined, undefined];
         if (u.startsWith('[DPAPI]')) {
             if (cached?.username !== undefined) u = cached.username;
-            else needsDecryption.push(u);
-        } else {
-            needsDecryption.push(undefined);
+            else needsDecryption[0] = u;
         }
 
         if (p.startsWith('[DPAPI]')) {
             if (cached?.password !== undefined) p = cached.password;
-            else needsDecryption.push(p);
-        } else {
-            needsDecryption.push(undefined);
+            else needsDecryption[1] = p;
         }
 
         if (needsDecryption.some(val => val !== undefined)) {
@@ -297,6 +316,67 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             password: e.protocol === 'ssh' ? finalPass : undefined,
         });
     }, [getCachedPassword, onConnect]);
+
+    // Check if current form is dirty compared to original state
+    const isDirty = originalState !== null && (
+        originalState.name !== displayName ||
+        originalState.protocol !== protocol ||
+        originalState.host !== host ||
+        originalState.port !== String(port) ||
+        originalState.username !== username ||
+        originalState.password !== password
+    );
+
+    const handleSave = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!selectedHostId || !isDirty) return;
+
+        let finalU = username;
+        let finalP = password;
+
+        if (finalU.startsWith('[DPAPI]') || finalP.startsWith('[DPAPI]')) {
+            const cached = getCachedCredential(selectedHostId);
+            const needsDecryption = [undefined, undefined] as (string | undefined)[];
+            if (finalU.startsWith('[DPAPI]')) {
+                if (cached?.username !== undefined) finalU = cached.username;
+                else needsDecryption[0] = finalU;
+            }
+            if (finalP.startsWith('[DPAPI]')) {
+                if (cached?.password !== undefined) finalP = cached.password;
+                else needsDecryption[1] = finalP;
+            }
+
+            if (needsDecryption.some(val => val !== undefined)) {
+                setIsDecrypting(true);
+                const [decU, decP] = await decryptBatch(needsDecryption);
+                if (decU !== undefined) { finalU = decU; setUsername(decU); }
+                if (decP !== undefined) { finalP = decP; setPassword(decP); }
+                setIsDecrypting(false);
+            }
+        }
+
+        // Update Original State
+        setOriginalState({
+            name: displayName,
+            protocol,
+            host,
+            port: String(port),
+            username: finalU,
+            password: finalP
+        });
+
+        const entry: HostEntry = {
+            protocol: protocol as 'ssh' | 'telnet',
+            host,
+            port: parseInt(port),
+            username: protocol === 'ssh' ? finalU : undefined,
+            password: protocol === 'ssh' ? finalP : undefined,
+        };
+
+        hostManager.editNode(selectedHostId, { name: displayName, entry });
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -364,14 +444,26 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
             // Persist credential changes back to the selected tree node
             if (selectedHostId && (protocol === 'ssh' || protocol === 'telnet')) {
-                const entry: HostEntry = {
-                    protocol: protocol as 'ssh' | 'telnet',
-                    host,
-                    port: parseInt(port),
-                    username: protocol === 'ssh' ? username : undefined,
-                    password: protocol === 'ssh' ? password : undefined,
+                const findNode = (nodes: HostTreeNode[], id: string): HostTreeNode | undefined => {
+                    for (const n of nodes) {
+                        if (n.id === id) return n;
+                        if (n.children) {
+                            const f = findNode(n.children, id);
+                            if (f) return f;
+                        }
+                    }
                 };
-                hostManager.editNode(selectedHostId, { entry });
+                const selNode = findNode(hostManager.tree, selectedHostId);
+                if (selNode && selNode.type === 'host') {
+                    const entry: HostEntry = {
+                        protocol: protocol as 'ssh' | 'telnet',
+                        host,
+                        port: parseInt(port),
+                        username: protocol === 'ssh' ? username : undefined,
+                        password: protocol === 'ssh' ? password : undefined,
+                    };
+                    hostManager.editNode(selectedHostId, { entry });
+                }
             }
         }
 
@@ -429,6 +521,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             onAddHost={hostManager.addHost}
                             onEditNode={hostManager.editNode}
                             onDeleteNode={hostManager.deleteNode}
+                            onMoveNode={hostManager.moveNode}
                         />
                     </div>
 
@@ -438,6 +531,19 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                     {/* Right panel: Connection form */}
                     <div className="form-panel">
                         <form ref={formRef} onSubmit={handleSubmit}>
+                            {/* Disabled unless a host is selected where display name makes sense, but show it if selectedHostId is present */}
+                            {originalState !== null && (
+                                <div className="form-group">
+                                    <label>Name</label>
+                                    <input
+                                        type="text"
+                                        value={displayName}
+                                        onChange={e => setDisplayName(e.target.value)}
+                                        placeholder="Display Name"
+                                    />
+                                </div>
+                            )}
+
                             <div className="form-group">
                                 <label>Protocol</label>
                                 <select
@@ -446,7 +552,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                         const p = e.target.value;
                                         setProtocol(p);
                                         if (p === 'ssh') setPort('22');
-                                        else if (p === 'telnet') { setPort('23'); setUsername(''); }
+                                        else if (p === 'telnet') setPort('23');
                                     }}
                                 >
                                     <option value="ssh">SSH</option>
@@ -494,6 +600,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                                 onChange={e => setUsername(e.target.value)}
                                                 className={isDecrypting ? 'decrypting-placeholder' : ''}
                                                 disabled={isDecrypting}
+                                                autoComplete="off"
                                                 required
                                             />
                                         </div>
@@ -507,6 +614,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                                 onChange={e => setPassword(e.target.value)}
                                                 className={isDecrypting ? 'decrypting-placeholder' : ''}
                                                 disabled={isDecrypting}
+                                                autoComplete="new-password"
                                             />
                                         </div>
                                     )}
@@ -598,8 +706,21 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                 </>
                             )}
 
-                            <div className="form-actions">
-                                <button type="submit" className="btn-primary">Connect</button>
+                            <div className="form-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                                {originalState !== null && protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell' && (
+                                    <button
+                                        type="button"
+                                        className="btn-secondary"
+                                        onClick={handleSave}
+                                        disabled={!isDirty || isDecrypting}
+                                        title={isDirty ? "Save changes to this host" : "No changes to save"}
+                                    >
+                                        Save
+                                    </button>
+                                )}
+                                <button type="submit" className="btn-primary" disabled={isDecrypting}>
+                                    Connect
+                                </button>
                             </div>
                         </form>
                     </div>

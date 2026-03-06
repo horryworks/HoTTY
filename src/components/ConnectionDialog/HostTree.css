@@ -56,14 +56,14 @@
     display: flex;
     align-items: center;
     gap: 3px;
-    padding: 4px 8px;
+    padding: 2px 6px;
     cursor: pointer;
     border-radius: 4px;
-    margin: 1px 4px;
-    font-size: 0.88rem;
+    margin: 0px 4px;
+    font-size: 0.85rem;
     color: var(--text-primary, #ccc);
     transition: background 0.12s;
-    min-height: 26px;
+    min-height: 22px;
 }
 
 .host-tree-row:hover {
@@ -120,7 +120,7 @@
     background: none;
     border: none;
     color: #ccc;
-    padding: 6px 14px;
+    padding: 4px 14px;
     font-size: 0.88rem;
     cursor: pointer;
     transition: background 0.1s;
@@ -218,4 +218,43 @@
 
 .decrypting-placeholder {
     color: var(--error-color, red) !important;
+}
+
+/* --- Drag & Drop --- */
+.host-tree-row.dragging {
+    opacity: 0.4;
+}
+
+.host-tree-row.drag-over-before {
+    box-shadow: 0 -2px 0 0 #4a9eff;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+.host-tree-row.drag-over-after {
+    box-shadow: 0 2px 0 0 #4a9eff;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.host-tree-row.drag-over-inside {
+    background: rgba(74, 158, 255, 0.2);
+    box-shadow: 0 0 0 1px #4a9eff inset;
+}
+
+/* --- Inline Edit --- */
+.tree-label-edit-input {
+    background: var(--btn-bg, #2a2a2a);
+    border: 1px solid #4a9eff;
+    border-radius: 3px;
+    color: var(--text-primary, #ccc);
+    padding: 1px 4px;
+    margin: -2px -5px;
+    /* prevent layout shift compared to normal text */
+    font-size: inherit;
+    font-family: inherit;
+    min-width: 80px;
+    max-width: 100%;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
 }

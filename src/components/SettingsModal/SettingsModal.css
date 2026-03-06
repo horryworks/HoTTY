@@ -103,7 +103,7 @@
     color: var(--text-secondary);
     border: none;
     border-bottom: 2px solid transparent;
-    padding: 10px 15px;
+    padding: 7px 12px;
     font-size: 0.95rem;
     cursor: pointer;
     border-radius: 4px 4px 0 0;
@@ -126,7 +126,7 @@
 /* ... styles ... */
 
 .settings-content {
-    padding: 20px;
+    padding: 15px 20px;
     overflow-y: auto;
     flex: 1;
     /* Take remaining space */
@@ -137,8 +137,8 @@
 .form-group {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-bottom: 15px;
+    gap: 4px;
+    margin-bottom: 10px;
 }
 
 .form-group label {
@@ -152,7 +152,7 @@
     background-color: var(--input-bg);
     color: var(--text-primary);
     border: 1px solid var(--border-color);
-    padding: 8px 12px;
+    padding: 5px 8px;
     border-radius: 4px;
     font-size: 1rem;
     outline: none;

@@ -69,11 +69,15 @@ async function encryptTree(nodes: HostTreeNode[]): Promise<HostTreeNode[]> {
                 // clone the entry so we can mutate it after batch encryption
                 const entry = { ...n.entry };
 
-                secrets.push(entry.username);
-                setters.push((val) => entry.username = val);
+                if (entry.username && !entry.username.startsWith('[DPAPI]')) {
+                    secrets.push(entry.username);
+                    setters.push((val) => entry.username = val);
+                }
 
-                secrets.push(entry.password);
-                setters.push((val) => entry.password = val);
+                if (entry.password && !entry.password.startsWith('[DPAPI]')) {
+                    secrets.push(entry.password);
+                    setters.push((val) => entry.password = val);
+                }
 
                 return { ...n, entry, children };
             }
@@ -300,5 +304,82 @@ export function useHostManager() {
         persistAndSet(newTree);
     }, [persistAndSet]);
 
-    return { tree, addFolder, addHost, editNode, deleteNode, saveTree };
+    const moveNode = useCallback((nodeId: string, targetId: string, position: 'before' | 'after' | 'inside') => {
+        setTree(prev => {
+            // Find the node to move
+            const findNode = (nodes: HostTreeNode[]): HostTreeNode | null => {
+                for (const n of nodes) {
+                    if (n.id === nodeId) return n;
+                    if (n.children) {
+                        const found = findNode(n.children);
+                        if (found) return found;
+                    }
+                }
+                return null;
+            };
+
+            // Check if targetId is a descendant of nodeId (prevent circular move)
+            const isDescendant = (parentNode: HostTreeNode, childId: string): boolean => {
+                if (!parentNode.children) return false;
+                for (const child of parentNode.children) {
+                    if (child.id === childId) return true;
+                    if (isDescendant(child, childId)) return true;
+                }
+                return false;
+            };
+
+            const movingNode = findNode(prev);
+            if (!movingNode) return prev;
+            if (nodeId === targetId) return prev;
+            if (isDescendant(movingNode, targetId)) return prev;
+
+            // Remove the node from its current position
+            const treeWithoutNode = removeNode(prev, nodeId);
+
+            // Insert at new position
+            if (position === 'inside') {
+                // Insert as last child of target folder
+                const insertInside = (nodes: HostTreeNode[]): HostTreeNode[] => {
+                    return nodes.map(n => {
+                        if (n.id === targetId && n.type === 'folder') {
+                            return { ...n, children: [...(n.children ?? []), movingNode] };
+                        }
+                        if (n.children) {
+                            return { ...n, children: insertInside(n.children) };
+                        }
+                        return n;
+                    });
+                };
+                const next = insertInside(treeWithoutNode);
+                encryptTree(next).then(saveRawTree);
+                return next;
+            }
+
+            // Insert before or after target
+            const insertAtPosition = (nodes: HostTreeNode[]): HostTreeNode[] => {
+                const result: HostTreeNode[] = [];
+                for (const n of nodes) {
+                    if (n.id === targetId) {
+                        if (position === 'before') {
+                            result.push(movingNode, n);
+                        } else {
+                            result.push(n, movingNode);
+                        }
+                    } else {
+                        if (n.children) {
+                            result.push({ ...n, children: insertAtPosition(n.children) });
+                        } else {
+                            result.push(n);
+                        }
+                    }
+                }
+                return result;
+            };
+            const next = insertAtPosition(treeWithoutNode);
+            encryptTree(next).then(saveRawTree);
+            return next;
+        });
+    }, []);
+
+    return { tree, addFolder, addHost, editNode, deleteNode, saveTree, moveNode };
 }

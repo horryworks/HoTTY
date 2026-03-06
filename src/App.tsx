@@ -336,8 +336,10 @@ function App() {
     paneBackground: localStorage.getItem('hterm_custom_pane_background') || '#000200',
   }));
 
-  const [paneBackgroundMode, setPaneBackgroundMode] = useState<'color' | 'image' | 'default'>(() => {
-    return (localStorage.getItem('hterm_pane_background_mode') as 'color' | 'image' | 'default') || 'default';
+  const [paneBackgroundMode, setPaneBackgroundMode] = useState<'color' | 'image'>(() => {
+    const saved = localStorage.getItem('hterm_pane_background_mode');
+    if (saved === 'default') return 'color';
+    return (saved as 'color' | 'image') || 'color';
   });
   const [paneBackgroundImage, setPaneBackgroundImage] = useState<string>(() => {
     return localStorage.getItem('hterm_pane_background_image') || 'HoTTY_background.svg';
@@ -737,7 +739,7 @@ function App() {
     }
   };
 
-  const updatePaneBackgroundMode = (mode: 'color' | 'image' | 'default') => {
+  const updatePaneBackgroundMode = (mode: 'color' | 'image') => {
     setPaneBackgroundMode(mode);
     localStorage.setItem('hterm_pane_background_mode', mode);
   };
@@ -878,11 +880,9 @@ function App() {
                     border: '1px solid var(--border-color)',
                     display: 'flex',
                     flexDirection: 'column',
-                    backgroundColor: paneBackground || '#000200',
-                    backgroundImage: paneBackgroundMode === 'default' ? `url("HoTTY_background.svg")` :
-                      (paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || 'HoTTY_background.svg'}")` : 'none'),
-                    backgroundSize: (paneBackgroundMode === 'default' || (paneBackgroundMode === 'image' && (!paneBackgroundImage || paneBackgroundImage.includes('HoTTY_background.svg'))))
-                      ? '128px 128px' : 'auto',
+                    backgroundColor: paneBackground || '#000000',
+                    backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || ''}")` : 'none',
+                    backgroundSize: paneBackgroundMode === 'image' ? 'cover' : 'auto',
                     backgroundRepeat: 'repeat',
                     backgroundPosition: 'center',
                     position: 'relative',
@@ -976,11 +976,9 @@ function App() {
                       border: '1px solid var(--border-color)',
                       display: 'flex',
                       flexDirection: 'column',
-                      backgroundColor: paneBackground || '#000200',
-                      backgroundImage: paneBackgroundMode === 'default' ? `url("HoTTY_background.svg")` :
-                        (paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || 'HoTTY_background.svg'}")` : 'none'),
-                      backgroundSize: (paneBackgroundMode === 'default' || (paneBackgroundMode === 'image' && (!paneBackgroundImage || paneBackgroundImage.includes('HoTTY_background.svg'))))
-                        ? '128px 128px' : 'auto',
+                      backgroundColor: paneBackground || '#000000',
+                      backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || ''}")` : 'none',
+                      backgroundSize: paneBackgroundMode === 'image' ? 'cover' : 'auto',
                       backgroundRepeat: 'repeat',
                       backgroundPosition: 'center',
                       position: 'relative',
@@ -1117,11 +1115,9 @@ function App() {
                       border: '1px solid var(--border-color)',
                       display: 'flex',
                       flexDirection: 'column',
-                      backgroundColor: paneBackground || '#000200',
-                      backgroundImage: paneBackgroundMode === 'default' ? `url("HoTTY_background.svg")` :
-                        (paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || 'HoTTY_background.svg'}")` : 'none'),
-                      backgroundSize: (paneBackgroundMode === 'default' || (paneBackgroundMode === 'image' && (!paneBackgroundImage || paneBackgroundImage.includes('HoTTY_background.svg'))))
-                        ? '128px 128px' : 'auto',
+                      backgroundColor: paneBackground || '#000000',
+                      backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || ''}")` : 'none',
+                      backgroundSize: paneBackgroundMode === 'image' ? 'cover' : 'auto',
                       backgroundRepeat: 'repeat',
                       backgroundPosition: 'center',
                       position: 'relative',
@@ -1211,11 +1207,9 @@ function App() {
                     border: '1px solid var(--border-color)',
                     display: 'flex',
                     flexDirection: 'column',
-                    backgroundColor: paneBackground || '#000200',
-                    backgroundImage: paneBackgroundMode === 'default' ? `url("HoTTY_background.svg")` :
-                      (paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || 'HoTTY_background.svg'}")` : 'none'),
-                    backgroundSize: (paneBackgroundMode === 'default' || (paneBackgroundMode === 'image' && (!paneBackgroundImage || paneBackgroundImage.includes('HoTTY_background.svg'))))
-                      ? '128px 128px' : 'auto',
+                    backgroundColor: paneBackground || '#000000',
+                    backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || ''}")` : 'none',
+                    backgroundSize: paneBackgroundMode === 'image' ? 'cover' : 'auto',
                     backgroundRepeat: 'repeat',
                     backgroundPosition: 'center',
                     position: 'relative',

@@ -25,6 +25,7 @@ interface HostTreeProps {
     onAddHost: (parentId: string | null, name: string, entry: HostEntry) => void;
     onEditNode: (id: string, patch: Partial<HostTreeNode>) => void;
     onDeleteNode: (id: string) => void;
+    onMoveNode?: (nodeId: string, targetId: string, position: 'before' | 'after' | 'inside') => void;
 }
 
 export const HostTree: React.FC<HostTreeProps> = ({
@@ -36,10 +37,15 @@ export const HostTree: React.FC<HostTreeProps> = ({
     onAddHost,
     onEditNode,
     onDeleteNode,
+    onMoveNode,
 }) => {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
     const [editModal, setEditModal] = useState<EditModalState | null>(null);
+
+    // Inline edit state
+    const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+    const [editingName, setEditingName] = useState('');
 
     const [formName, setFormName] = useState('');
     const [formProtocol, setFormProtocol] = useState<'ssh' | 'telnet'>('ssh');
@@ -48,6 +54,10 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [formUsername, setFormUsername] = useState('');
     const [formPassword, setFormPassword] = useState('');
     const [isDecrypting, setIsDecrypting] = useState(false);
+
+    // Drag & drop state
+    const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
+    const [dropTarget, setDropTarget] = useState<{ nodeId: string; position: 'before' | 'after' | 'inside' } | null>(null);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const editModalRef = useRef<HTMLDivElement>(null);
@@ -88,6 +98,31 @@ export const HostTree: React.FC<HostTreeProps> = ({
         setContextMenu({ x, y, node });
     }, []);
 
+    const getTargetParentId = useCallback(() => {
+        if (!selectedId) return null;
+
+        let targetParentId: string | null = null;
+        const findNodeInfo = (nodes: HostTreeNode[], parentId: string | null): boolean => {
+            for (const n of nodes) {
+                if (n.id === selectedId) {
+                    if (n.type === 'folder') {
+                        targetParentId = n.id;
+                    } else {
+                        targetParentId = parentId;
+                    }
+                    return true;
+                }
+                if (n.children) {
+                    if (findNodeInfo(n.children, n.id)) return true;
+                }
+            }
+            return false;
+        };
+
+        findNodeInfo(tree, null);
+        return targetParentId;
+    }, [selectedId, tree]);
+
     const openAddFolder = useCallback((parentId: string | null) => {
         setFormName('');
         setEditModal({ mode: 'folder', parentId });
@@ -105,50 +140,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
         setContextMenu(null);
     }, []);
 
-    const openEditNode = useCallback(async (node: HostTreeNode) => {
-        setFormName(node.name);
-        if (node.type === 'host' && node.entry) {
-            setFormProtocol(node.entry.protocol);
-            setFormHost(node.entry.host);
-            setFormPort(String(node.entry.port));
 
-            let u = node.entry.username ?? '';
-            let p = node.entry.password ?? '';
-
-            const cached = getCachedCredential(node.id);
-
-            // Decrypt on-demand if needed
-            const needsDecryption = [];
-            if (u.startsWith('[DPAPI]')) {
-                if (cached?.username !== undefined) u = cached.username;
-                else needsDecryption.push(u);
-            } else {
-                needsDecryption.push(undefined);
-            }
-
-            if (p.startsWith('[DPAPI]')) {
-                if (cached?.password !== undefined) p = cached.password;
-                else needsDecryption.push(p);
-            } else {
-                needsDecryption.push(undefined);
-            }
-
-            if (needsDecryption.some(val => val !== undefined)) {
-                setIsDecrypting(true);
-                const [decU, decP] = await decryptBatch(needsDecryption);
-                if (decU !== undefined) u = decU;
-                if (decP !== undefined) p = decP;
-                setIsDecrypting(false);
-            }
-
-            setFormUsername(u);
-            setFormPassword(p);
-            setEditModal({ mode: 'host', parentId: null, existingNode: node });
-        } else {
-            setEditModal({ mode: 'folder', parentId: null, existingNode: node });
-        }
-        setContextMenu(null);
-    }, []);
 
     const handleModalSubmit = () => {
         if (!editModal) return;
@@ -187,16 +179,107 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const renderNode = (node: HostTreeNode, depth: number): React.ReactNode => {
         const isExpanded = expanded[node.id] ?? true;
         const isSelected = selectedId === node.id;
+        const isDragging = draggedNodeId === node.id;
+        const isDropTarget = dropTarget?.nodeId === node.id;
+        const dropPosition = isDropTarget ? dropTarget.position : null;
+
+        const dragClasses = [
+            isDragging ? 'dragging' : '',
+            dropPosition === 'before' ? 'drag-over-before' : '',
+            dropPosition === 'after' ? 'drag-over-after' : '',
+            dropPosition === 'inside' ? 'drag-over-inside' : '',
+        ].filter(Boolean).join(' ');
 
         return (
             <div key={node.id} className="host-tree-node">
                 <div
-                    className={`host-tree-row ${isSelected ? 'selected' : ''}`}
+                    className={`host-tree-row ${isSelected ? 'selected' : ''} ${dragClasses}`}
                     style={{ paddingLeft: `${depth * 14 + 8}px` }}
                     tabIndex={node.type === 'host' ? 0 : undefined}
+                    draggable
+                    onDragStart={(e) => {
+                        setDraggedNodeId(node.id);
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', node.id);
+                    }}
+                    onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!draggedNodeId || draggedNodeId === node.id) return;
+                        e.dataTransfer.dropEffect = 'move';
+
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        const y = e.clientY - rect.top;
+                        const h = rect.height;
+
+                        let position: 'before' | 'after' | 'inside';
+                        const isNodeExpanded = expanded[node.id] ?? true;
+
+                        if (node.type === 'folder') {
+                            // If folder is expanded and has children, dropping at the bottom of the header means 'inside' 
+                            // rather than 'after' (since children are in between).
+                            if (isNodeExpanded && node.children && node.children.length > 0) {
+                                if (y < h * 0.25) position = 'before';
+                                else position = 'inside';
+                            } else {
+                                if (y < h * 0.25) position = 'before';
+                                else if (y > h * 0.75) position = 'after';
+                                else position = 'inside';
+                            }
+                        } else {
+                            // Host: top 50% = before, bottom 50% = after
+                            position = y < h * 0.5 ? 'before' : 'after';
+                        }
+                        setDropTarget({ nodeId: node.id, position });
+                    }}
+                    onDragLeave={(e) => {
+                        // Only clear if leaving the element entirely
+                        const related = e.relatedTarget as HTMLElement;
+                        if (!e.currentTarget.contains(related)) {
+                            if (dropTarget?.nodeId === node.id) setDropTarget(null);
+                        }
+                    }}
+                    onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!draggedNodeId || draggedNodeId === node.id || !onMoveNode) {
+                            setDraggedNodeId(null);
+                            setDropTarget(null);
+                            return;
+                        }
+
+                        // Calculate drop position synchronously to avoid React state closure staleness
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        const y = e.clientY - rect.top;
+                        const h = rect.height;
+
+                        let position: 'before' | 'after' | 'inside';
+                        const isNodeExpanded = expanded[node.id] ?? true;
+
+                        if (node.type === 'folder') {
+                            if (isNodeExpanded && node.children && node.children.length > 0) {
+                                if (y < h * 0.25) position = 'before';
+                                else position = 'inside';
+                            } else {
+                                if (y < h * 0.25) position = 'before';
+                                else if (y > h * 0.75) position = 'after';
+                                else position = 'inside';
+                            }
+                        } else {
+                            position = y < h * 0.5 ? 'before' : 'after';
+                        }
+
+                        onMoveNode(draggedNodeId, node.id, position);
+                        setDraggedNodeId(null);
+                        setDropTarget(null);
+                    }}
+                    onDragEnd={() => {
+                        setDraggedNodeId(null);
+                        setDropTarget(null);
+                    }}
                     onClick={() => {
+                        onSelect(node);
                         if (node.type === 'folder') toggle(node.id);
-                        else onSelect(node);
                     }}
                     onDoubleClick={() => {
                         if (node.type === 'host') onDoubleClickHost?.(node);
@@ -211,6 +294,11 @@ export const HostTree: React.FC<HostTreeProps> = ({
                             const x = containerRect ? rect.left - containerRect.left : rect.left;
                             const y = containerRect ? rect.bottom - containerRect.top : rect.bottom;
                             setContextMenu({ x, y, node });
+                        } else if (e.key === 'F2') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setEditingNodeId(node.id);
+                            setEditingName(node.name);
                         }
                     }}
                 >
@@ -226,9 +314,40 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         </>
                     )}
                     <span className="tree-label">
-                        {node.name}
-                        {node.type === 'host' && node.entry && (
-                            <span className="tree-meta"> {node.entry.host}</span>
+                        {editingNodeId === node.id ? (
+                            <input
+                                autoFocus
+                                type="text"
+                                className="tree-label-edit-input"
+                                value={editingName}
+                                onChange={(e) => setEditingName(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                onDoubleClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => {
+                                    e.stopPropagation(); // prevent tree row from handling it
+                                    if (e.key === 'Enter') {
+                                        if (editingName.trim() && editingName !== node.name) {
+                                            onEditNode(node.id, { name: editingName.trim() });
+                                        }
+                                        setEditingNodeId(null);
+                                    } else if (e.key === 'Escape') {
+                                        setEditingNodeId(null);
+                                    }
+                                }}
+                                onBlur={() => {
+                                    if (editingName.trim() && editingName !== node.name) {
+                                        onEditNode(node.id, { name: editingName.trim() });
+                                    }
+                                    setEditingNodeId(null);
+                                }}
+                            />
+                        ) : (
+                            <>
+                                {node.name}
+                                {node.type === 'host' && node.entry && (
+                                    <span className="tree-meta"> {node.entry.host}</span>
+                                )}
+                            </>
                         )}
                     </span>
                 </div>
@@ -252,15 +371,15 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 <div
                     className="tree-toolbar-btn"
                     role="button"
-                    title="Add Root Folder"
-                    onClick={() => openAddFolder(null)}
+                    title="Add Folder"
+                    onClick={() => openAddFolder(getTargetParentId())}
                     style={{ cursor: 'pointer' }}
                 >📁+</div>
                 <div
                     className="tree-toolbar-btn"
                     role="button"
-                    title="Add Root Host"
-                    onClick={() => openAddHost(null)}
+                    title="Add Host"
+                    onClick={() => openAddHost(getTargetParentId())}
                     style={{ cursor: 'pointer' }}
                 >🖥+</div>
             </div>
@@ -293,9 +412,6 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     {contextMenu.node && (
                         <>
                             <div className="context-menu-separator" />
-                            <button onClick={() => openEditNode(contextMenu.node!)}>
-                                ✏️ Edit
-                            </button>
                             <button
                                 className="danger"
                                 onClick={() => {
@@ -377,6 +493,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                                 onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
                                                 className={isDecrypting ? 'decrypting-placeholder' : ''}
                                                 disabled={isDecrypting}
+                                                autoComplete="off"
                                             />
                                         </div>
                                         <div className="modal-form-group">
@@ -388,6 +505,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                                 onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
                                                 className={isDecrypting ? 'decrypting-placeholder' : ''}
                                                 disabled={isDecrypting}
+                                                autoComplete="new-password"
                                             />
                                         </div>
                                     </>
