@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { HostTreeNode, HostEntry } from '../../hooks/useHostManager';
-import { decryptBatch, getCachedCredential } from '../../hooks/useHostManager';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import './HostTree.css';
 
@@ -53,9 +52,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [formPort, setFormPort] = useState('22');
     const [formUsername, setFormUsername] = useState('');
     const [formPassword, setFormPassword] = useState('');
-    const [isDecrypting, setIsDecrypting] = useState(false);
-
-    // Drag & drop state
+    const [isDecrypting] = useState(false);
     const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
     const [dropTarget, setDropTarget] = useState<{ nodeId: string; position: 'before' | 'after' | 'inside' } | null>(null);
 
@@ -412,6 +409,17 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     {contextMenu.node && (
                         <>
                             <div className="context-menu-separator" />
+                            {contextMenu.node && (
+                                <button
+                                    onClick={() => {
+                                        setEditingNodeId(contextMenu.node!.id);
+                                        setEditingName(contextMenu.node!.name);
+                                        setContextMenu(null);
+                                    }}
+                                >
+                                    ✏️ Rename (F2)
+                                </button>
+                            )}
                             <button
                                 className="danger"
                                 onClick={() => {

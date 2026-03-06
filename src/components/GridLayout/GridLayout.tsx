@@ -267,7 +267,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                             gridRow: r * 2 + 1,
                             backgroundColor: paneBackground || '#000000',
                             backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || ''}")` : 'none',
-                            backgroundSize: paneBackgroundMode === 'image' ? 'cover' : 'auto',
+                            backgroundSize: paneBackgroundMode === 'image' ? 'auto' : 'auto',
                             backgroundRepeat: 'repeat',
                             backgroundPosition: 'center',
                             border: '1px solid var(--border-color)',
