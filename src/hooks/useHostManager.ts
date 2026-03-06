@@ -162,6 +162,17 @@ function removeNode(nodes: HostTreeNode[], id: string): HostTreeNode[] {
         .map(n => n.children ? { ...n, children: removeNode(n.children, id) } : n);
 }
 
+function sortNodes(nodes: HostTreeNode[]): HostTreeNode[] {
+    return [...nodes].sort((a, b) => {
+        // Folders first
+        if (a.type !== b.type) {
+            return a.type === 'folder' ? -1 : 1;
+        }
+        // Then alphabetical by name
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+}
+
 // ── Hook ──
 
 export function useHostManager() {
@@ -381,5 +392,31 @@ export function useHostManager() {
         });
     }, []);
 
-    return { tree, addFolder, addHost, editNode, deleteNode, saveTree, moveNode };
+    const sortFolder = useCallback((folderId: string | null) => {
+        setTree(prev => {
+            if (folderId === null) {
+                const next = sortNodes(prev);
+                encryptTree(next).then(saveRawTree);
+                return next;
+            }
+
+            const sortInTree = (nodes: HostTreeNode[]): HostTreeNode[] => {
+                return nodes.map(n => {
+                    if (n.id === folderId && n.type === 'folder') {
+                        return { ...n, children: sortNodes(n.children ?? []) };
+                    }
+                    if (n.children) {
+                        return { ...n, children: sortInTree(n.children) };
+                    }
+                    return n;
+                });
+            };
+
+            const next = sortInTree(prev);
+            encryptTree(next).then(saveRawTree);
+            return next;
+        });
+    }, []);
+
+    return { tree, addFolder, addHost, editNode, deleteNode, saveTree, moveNode, sortFolder };
 }

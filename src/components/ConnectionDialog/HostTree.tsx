@@ -25,6 +25,7 @@ interface HostTreeProps {
     onEditNode: (id: string, patch: Partial<HostTreeNode>) => void;
     onDeleteNode: (id: string) => void;
     onMoveNode?: (nodeId: string, targetId: string, position: 'before' | 'after' | 'inside') => void;
+    onSortFolder?: (folderId: string | null) => void;
 }
 
 export const HostTree: React.FC<HostTreeProps> = ({
@@ -37,6 +38,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
     onEditNode,
     onDeleteNode,
     onMoveNode,
+    onSortFolder,
 }) => {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -418,6 +420,16 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                     }}
                                 >
                                     ✏️ Rename (F2)
+                                </button>
+                            )}
+                            {contextMenu.node.type === 'folder' && onSortFolder && (
+                                <button
+                                    onClick={() => {
+                                        onSortFolder(contextMenu.node?.id ?? null);
+                                        setContextMenu(null);
+                                    }}
+                                >
+                                    🔼 Sort Ascending
                                 </button>
                             )}
                             <button

@@ -522,6 +522,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             onEditNode={hostManager.editNode}
                             onDeleteNode={hostManager.deleteNode}
                             onMoveNode={hostManager.moveNode}
+                            onSortFolder={hostManager.sortFolder}
                         />
                     </div>
 
