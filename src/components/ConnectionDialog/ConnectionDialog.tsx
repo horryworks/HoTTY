@@ -523,6 +523,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             onDeleteNode={hostManager.deleteNode}
                             onMoveNode={hostManager.moveNode}
                             onSortFolder={hostManager.sortFolder}
+                            onImportData={hostManager.importData}
                         />
                     </div>
 

@@ -1,5 +1,13 @@
 # Release Notes - HoTTY
 
+## [v0.1.14-beta2] - 2026-03-06
+### Added
+- **Host Tree Enhancements**: Added an **Export** button to the toolbar (red icon) for easier access to the host tree export feature.
+
+### Fixed
+- **Context Menu Interaction**: Fixed an issue where the context menu would stay open after selecting the "Export" option. The menu now closes automatically when the export password prompt appears.
+- **Visual Cleanup**: Removed a redundant separator line that appeared at the top of the host-specific context menu.
+
 ## [v0.1.14-beta1] - 2026-03-04
 ### Added
 - **Telnet KeepAlive**:

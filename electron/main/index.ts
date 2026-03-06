@@ -14,8 +14,8 @@ import { encryptString, decryptString } from './services/dpapi';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 const execAsync = promisify(exec);
-
-// Disable GPU Acceleration for Windows 7
+import * as fs from 'fs';
+import * as crypto from 'crypto';
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
 
 // Set application name for Windows 10+ notifications
@@ -125,17 +125,19 @@ app.on('activate', () => {
 })
 
 // IPC Handlers
-// IPC Handlers
-import * as fs from 'fs';
 const debugLogPath = join(app.getPath('userData'), 'debug_gemini.log');
 
-ipcMain.on('log-debug', (_, message) => {
+const logToDebugFile = (message: string) => {
   const timestamp = new Date().toISOString();
   const logMessage = `[${timestamp}] ${message}\n`;
   console.log(logMessage);
   fs.appendFile(debugLogPath, logMessage, (err) => {
     if (err) console.error('Failed to write request log', err);
   });
+};
+
+ipcMain.on('log-debug', (_, message) => {
+  logToDebugFile(message);
 });
 
 // IPC Handlers
@@ -596,6 +598,99 @@ ipcMain.handle('dpapi-decrypt-batch', async (_, ciphertexts: (string | undefined
   } catch (err) {
     console.error('[DPAPI] IPC batch decrypt error:', err);
     throw err;
+  }
+});
+
+// ── Host Tree Export/Import with Password Encryption ──
+const MAGIC_NUMBER = 'HOTTY';
+
+ipcMain.handle('export-htree', async (event, { data, password }) => {
+  logToDebugFile('[Main] export-htree called');
+  const eventWin = BrowserWindow.fromWebContents(event.sender);
+  logToDebugFile(`[Main] eventWin found: ${!!eventWin}`);
+
+  const { canceled, filePath } = await dialog.showSaveDialog(eventWin!, {
+    title: 'Export Host Tree',
+    defaultPath: 'hosts.htree',
+    filters: [{ name: 'HoTTY Tree', extensions: ['htree'] }],
+  });
+
+  logToDebugFile(`[Main] Save dialog result: ${JSON.stringify({ canceled, filePath })}`);
+  if (canceled || !filePath) return false;
+
+  try {
+    logToDebugFile('[Main] Deriving key...');
+    const salt = crypto.randomBytes(16);
+    const key = crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256');
+
+    logToDebugFile('[Main] Encrypting data...');
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const encrypted = Buffer.concat([cipher.update(JSON.stringify(data), 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+
+    logToDebugFile('[Main] Constructing payload...');
+    const payload = Buffer.concat([
+      Buffer.from(MAGIC_NUMBER),
+      salt,
+      iv,
+      tag,
+      encrypted
+    ]);
+
+    fs.writeFileSync(filePath, payload);
+    logToDebugFile('[Main] Export successful');
+    return true;
+  } catch (err: any) {
+    logToDebugFile(`[Main] Export failed: ${err.message}`);
+    throw err;
+  }
+});
+
+ipcMain.handle('select-import-file', async (event) => {
+  logToDebugFile('[Main] select-import-file called');
+  const eventWin = BrowserWindow.fromWebContents(event.sender);
+  const { canceled, filePaths } = await dialog.showOpenDialog(eventWin!, {
+    title: 'Select HoTTY Tree File',
+    filters: [{ name: 'HoTTY Tree', extensions: ['htree'] }],
+    properties: ['openFile'],
+  });
+
+  logToDebugFile(`[Main] Open dialog result: ${JSON.stringify({ canceled, filePaths })}`);
+  if (canceled || filePaths.length === 0) return null;
+  return filePaths[0];
+});
+
+ipcMain.handle('decrypt-import-file', async (event, { filePath, password }) => {
+  logToDebugFile(`[Main] decrypt-import-file called for ${filePath}`);
+  try {
+    logToDebugFile('[Main] Reading file...');
+    const payload = fs.readFileSync(filePath);
+
+    const magic = payload.subarray(0, 5).toString();
+    logToDebugFile(`[Main] Magic number check: ${magic}`);
+    if (magic !== MAGIC_NUMBER) {
+      throw new Error('Not a valid HoTTY tree file');
+    }
+
+    const salt = payload.subarray(5, 5 + 16);
+    const iv = payload.subarray(21, 21 + 12);
+    const tag = payload.subarray(33, 33 + 16);
+    const encrypted = payload.subarray(49);
+
+    logToDebugFile('[Main] Deriving key for import...');
+    const key = crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256');
+
+    logToDebugFile('[Main] Decrypting data...');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(tag);
+    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+
+    logToDebugFile('[Main] Decryption successful');
+    return JSON.parse(decrypted.toString('utf8'));
+  } catch (err: any) {
+    logToDebugFile(`[Main] Decryption failed: ${err.message}`);
+    throw new Error('Invalid password or corrupted file.');
   }
 });
 

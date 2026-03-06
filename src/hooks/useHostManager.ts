@@ -418,5 +418,30 @@ export function useHostManager() {
         });
     }, []);
 
-    return { tree, addFolder, addHost, editNode, deleteNode, saveTree, moveNode, sortFolder };
+    const importData = useCallback(async (nodes: HostTreeNode[], folderName: string = 'Imported') => {
+        // Assign new IDs recursively to avoid collisions
+        const reassignIds = (nodeList: HostTreeNode[]): HostTreeNode[] => {
+            return nodeList.map(n => ({
+                ...n,
+                id: generateId(),
+                children: n.children ? reassignIds(n.children) : undefined
+            }));
+        };
+
+        const importedNodes = reassignIds(nodes);
+        const importedFolder: HostTreeNode = {
+            id: generateId(),
+            type: 'folder',
+            name: folderName,
+            children: importedNodes
+        };
+
+        setTree(prev => {
+            const next = [...prev, importedFolder];
+            encryptTree(next).then(saveRawTree);
+            return next;
+        });
+    }, []);
+
+    return { tree, addFolder, addHost, editNode, deleteNode, saveTree, moveNode, sortFolder, importData };
 }

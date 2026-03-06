@@ -172,6 +172,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     encryptSecrets: (plaintexts: (string | undefined)[]) => ipcRenderer.invoke('dpapi-encrypt-batch', plaintexts),
     decryptSecrets: (ciphertexts: (string | undefined)[]) => ipcRenderer.invoke('dpapi-decrypt-batch', ciphertexts),
     updateLogging: (loggingEnabled: boolean, loggingPath: string) => ipcRenderer.send('update-logging', { loggingEnabled, loggingPath }),
+    exportHTree: (data: any, password: string) => ipcRenderer.invoke('export-htree', { data, password }),
+    selectImportFile: () => ipcRenderer.invoke('select-import-file'),
+    decryptImportFile: (filePath: string, password: string) => ipcRenderer.invoke('decrypt-import-file', { filePath, password }),
 })
 
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import type { HostTreeNode, HostEntry } from '../../hooks/useHostManager';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import './HostTree.css';
@@ -10,7 +10,7 @@ interface ContextMenuState {
 }
 
 interface EditModalState {
-    mode: 'folder' | 'host';
+    mode: 'folder' | 'host' | 'export' | 'import';
     parentId: string | null;
     existingNode?: HostTreeNode;
 }
@@ -26,6 +26,7 @@ interface HostTreeProps {
     onDeleteNode: (id: string) => void;
     onMoveNode?: (nodeId: string, targetId: string, position: 'before' | 'after' | 'inside') => void;
     onSortFolder?: (folderId: string | null) => void;
+    onImportData?: (nodes: HostTreeNode[], folderName: string) => void;
 }
 
 export const HostTree: React.FC<HostTreeProps> = ({
@@ -39,9 +40,11 @@ export const HostTree: React.FC<HostTreeProps> = ({
     onDeleteNode,
     onMoveNode,
     onSortFolder,
+    onImportData,
 }) => {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+    const [exportNode, setExportNode] = useState<HostTreeNode | null>(null);
     const [editModal, setEditModal] = useState<EditModalState | null>(null);
 
     // Inline edit state
@@ -55,11 +58,13 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [formUsername, setFormUsername] = useState('');
     const [formPassword, setFormPassword] = useState('');
     const [isDecrypting] = useState(false);
+    const [importFilePath, setImportFilePath] = useState<string | null>(null);
     const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
     const [dropTarget, setDropTarget] = useState<{ nodeId: string; position: 'before' | 'after' | 'inside' } | null>(null);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const editModalRef = useRef<HTMLDivElement>(null);
+    const contextMenuRef = useRef<HTMLDivElement>(null);
 
     // Focus trap for the edit modal
     useFocusTrap(editModalRef, !!editModal);
@@ -90,12 +95,29 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const openContextMenu = useCallback((e: React.MouseEvent, node: HostTreeNode | null) => {
         e.preventDefault();
         e.stopPropagation();
-        // Compute position relative to the container to avoid transform-parent issue
-        const rect = containerRef.current?.getBoundingClientRect();
-        const x = rect ? e.clientX - rect.left : e.clientX;
-        const y = rect ? e.clientY - rect.top : e.clientY;
-        setContextMenu({ x, y, node });
+        setContextMenu({ x: e.clientX, y: e.clientY, node });
     }, []);
+
+    useLayoutEffect(() => {
+        if (contextMenu && contextMenuRef.current) {
+            const menu = contextMenuRef.current;
+            const rect = menu.getBoundingClientRect();
+            let adjustedX = contextMenu.x;
+            let adjustedY = contextMenu.y;
+
+            if (adjustedX + rect.width > window.innerWidth) {
+                adjustedX = window.innerWidth - rect.width - 5;
+            }
+            if (adjustedY + rect.height > window.innerHeight) {
+                adjustedY = window.innerHeight - rect.height - 5;
+            }
+
+            if (adjustedX !== contextMenu.x || adjustedY !== contextMenu.y) {
+                menu.style.left = `${adjustedX}px`;
+                menu.style.top = `${adjustedY}px`;
+            }
+        }
+    }, [contextMenu]);
 
     const getTargetParentId = useCallback(() => {
         if (!selectedId) return null;
@@ -139,11 +161,75 @@ export const HostTree: React.FC<HostTreeProps> = ({
         setContextMenu(null);
     }, []);
 
+    const handleExport = (node: HostTreeNode | null = null) => {
+        setExportNode(node);
+        setFormName('');
+        setFormPassword('');
+        setEditModal({ mode: 'export', parentId: null });
+        setContextMenu(null);
+        (window as any).electronAPI.logDebug(`Export modal opened${node ? ` for node: ${node.name}` : ' for full tree'}`);
+    };
+
+    const handleImport = async () => {
+        (window as any).electronAPI.logDebug('Import button clicked');
+        try {
+            const filePath = await (window as any).electronAPI.selectImportFile();
+            if (!filePath) {
+                (window as any).electronAPI.logDebug('Import file selection cancelled');
+                return;
+            }
+            setImportFilePath(filePath);
+            setFormPassword('');
+            setEditModal({ mode: 'import', parentId: null });
+            (window as any).electronAPI.logDebug('Import password modal opened');
+        } catch (err: any) {
+            alert('Failed to open file: ' + err.message);
+        }
+    };
 
 
-    const handleModalSubmit = () => {
+
+    const handleModalSubmit = async () => {
         if (!editModal) return;
         const { mode, parentId, existingNode } = editModal;
+
+        if (mode === 'export') {
+            if (!formPassword) return;
+            try {
+                (window as any).electronAPI.logDebug('Calling exportHTree IPC from modal');
+                // Use selected node or full tree
+                const dataToExport = exportNode ? [exportNode] : tree;
+                const success = await (window as any).electronAPI.exportHTree(dataToExport, formPassword);
+                if (success) alert('Export successful!');
+                setEditModal(null);
+                setExportNode(null);
+            } catch (err: any) {
+                alert('Export failed: ' + err.message);
+            }
+            return;
+        }
+
+        if (mode === 'import') {
+            if (!formPassword || !importFilePath) return;
+            try {
+                (window as any).electronAPI.logDebug('Calling decryptImportFile IPC from modal');
+                const data = await (window as any).electronAPI.decryptImportFile(importFilePath, formPassword);
+                if (data && onImportData) {
+                    // Extract filename from path for folder naming
+                    const pathParts = importFilePath.split(/[\\/]/);
+                    const fileNameWithExt = pathParts[pathParts.length - 1];
+                    const fileName = fileNameWithExt.replace(/\.[^/.]+$/, "");
+
+                    onImportData(data, `Imported_${fileName}`);
+                    alert(`Import successful! Added to "Imported_${fileName}" folder.`);
+                    setEditModal(null);
+                    setImportFilePath(null);
+                }
+            } catch (err: any) {
+                alert('Import failed: ' + err.message);
+            }
+            return;
+        }
 
         if (existingNode) {
             if (mode === 'folder') {
@@ -373,14 +459,53 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     title="Add Folder"
                     onClick={() => openAddFolder(getTargetParentId())}
                     style={{ cursor: 'pointer' }}
-                >📁+</div>
+                >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ffcc00' }}>
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                        <line x1="12" y1="11" x2="12" y2="17"></line>
+                        <line x1="9" y1="14" x2="15" y2="14"></line>
+                    </svg>
+                </div>
                 <div
                     className="tree-toolbar-btn"
                     role="button"
                     title="Add Host"
                     onClick={() => openAddHost(getTargetParentId())}
                     style={{ cursor: 'pointer' }}
-                >🖥+</div>
+                >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#4a9eff' }}>
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                    </svg>
+                </div>
+                <div style={{ flex: 1 }} />
+                <div
+                    className="tree-toolbar-btn"
+                    role="button"
+                    title="Export Tree"
+                    onClick={() => handleExport(null)}
+                    style={{ cursor: 'pointer' }}
+                >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ff6b6b' }}>
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                </div>
+                <div
+                    className="tree-toolbar-btn"
+                    role="button"
+                    title="Import Tree"
+                    onClick={handleImport}
+                    style={{ cursor: 'pointer' }}
+                >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#51cf66' }}>
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                </div>
             </div>
 
             {/* Tree */}
@@ -391,9 +516,10 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 {tree.map(node => renderNode(node, 0))}
             </div>
 
-            {/* Context Menu — position absolute relative to container to avoid transform-parent issue */}
+            {/* Context Menu — position: fixed for top-level overlay */}
             {contextMenu && (
                 <div
+                    ref={contextMenuRef}
                     className="context-menu"
                     style={{ top: contextMenu.y, left: contextMenu.x }}
                     onClick={(e) => e.stopPropagation()}
@@ -410,7 +536,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     )}
                     {contextMenu.node && (
                         <>
-                            <div className="context-menu-separator" />
+                            {contextMenu.node.type === 'folder' && <div className="context-menu-separator" />}
                             {contextMenu.node && (
                                 <button
                                     onClick={() => {
@@ -422,6 +548,11 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                     ✏️ Rename (F2)
                                 </button>
                             )}
+                            <button
+                                onClick={() => handleExport(contextMenu.node)}
+                            >
+                                📤 Export
+                            </button>
                             {contextMenu.node.type === 'folder' && onSortFolder && (
                                 <button
                                     onClick={() => {
@@ -446,24 +577,49 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 </div>
             )}
 
-            {/* Add/Edit Modal */}
+            {/* Add/Edit/Export/Import Modal */}
             {editModal && (
                 <div className="host-edit-modal-overlay" onClick={() => setEditModal(null)}>
-                    <div className="host-edit-modal" ref={editModalRef} onClick={e => e.stopPropagation()}>
-                        <h3 style={{ marginTop: 0 }}>
-                            {editModal.existingNode ? 'Edit' : editModal.mode === 'folder' ? 'Add Folder' : 'Add Host'}
+                    <div className="host-edit-modal" ref={editModalRef} onClick={(e) => e.stopPropagation()}>
+                        <h3>
+                            {editModal.mode === 'folder' ? (editModal.existingNode ? 'Rename Folder' : 'Add Folder') :
+                                editModal.mode === 'host' ? (editModal.existingNode ? 'Rename Host' : 'Add Host') :
+                                    editModal.mode === 'export' ? 'Export Host Tree' : 'Import Host Tree'}
                         </h3>
 
-                        <div className="modal-form-group">
-                            <label>Display Name</label>
-                            <input
-                                autoFocus
-                                type="text"
-                                value={formName}
-                                onChange={e => setFormName(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
-                            />
-                        </div>
+                        {editModal.mode !== 'export' && editModal.mode !== 'import' && (
+                            <div className="modal-form-group">
+                                <label>Display Name</label>
+                                <input
+                                    autoFocus
+                                    type="text"
+                                    value={formName}
+                                    onChange={e => setFormName(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
+                                />
+                            </div>
+                        )}
+
+                        {(editModal.mode === 'export' || editModal.mode === 'import') && (
+                            <div className="modal-form-group">
+                                <label>
+                                    {editModal.mode === 'export' ? 'Set encryption password:' : 'Enter decryption password:'}
+                                </label>
+                                <input
+                                    autoFocus
+                                    type="password"
+                                    value={formPassword}
+                                    onChange={e => setFormPassword(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
+                                    autoComplete="new-password"
+                                />
+                                <p style={{ fontSize: '0.75rem', color: '#888', marginTop: '4px' }}>
+                                    {editModal.mode === 'export'
+                                        ? 'This password will be required to import the file later.'
+                                        : 'Enter the password that was used to export this file.'}
+                                </p>
+                            </div>
+                        )}
 
                         {editModal.mode === 'host' && (
                             <>
@@ -535,7 +691,10 @@ export const HostTree: React.FC<HostTreeProps> = ({
 
                         <div className="modal-actions">
                             <button className="btn-secondary" onClick={() => setEditModal(null)}>Cancel</button>
-                            <button className="btn-primary" onClick={handleModalSubmit}>Save</button>
+                            <button className="btn-primary" onClick={handleModalSubmit}>
+                                {editModal.mode === 'export' ? 'Export' :
+                                    editModal.mode === 'import' ? 'Import' : 'Save'}
+                            </button>
                         </div>
                     </div>
                 </div>

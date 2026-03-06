@@ -23,14 +23,27 @@
     border: 1px solid var(--border-color, #3a3a3a);
     color: var(--text-primary, #ccc);
     border-radius: 4px;
-    padding: 3px 8px;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
-    font-size: 0.85rem;
-    transition: background 0.15s;
+    transition: all 0.2s;
 }
 
 .tree-toolbar-btn:hover {
     background: var(--btn-hover-bg, #3a3a3a);
+    border-color: var(--accent-color, #4a7fb0);
+    transform: translateY(-1px);
+}
+
+.tree-toolbar-btn svg {
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.tree-toolbar-btn:hover svg {
+    opacity: 1;
 }
 
 /* --- Tree Body --- */
@@ -100,11 +113,10 @@
 
 
 /* --- Context Menu ---
-   Use position:absolute so it stays inside the host-tree-container (position:relative).
-   position:fixed would be offset by the dialog's transform:translate() parent. */
+   Use position:fixed and viewport coordinates so it stays above all other layers. */
 .context-menu {
-    position: absolute;
-    z-index: 10000;
+    position: fixed;
+    z-index: 30000;
     background: #252525;
     border: 1px solid #404040;
     border-radius: 6px;
