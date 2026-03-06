@@ -655,11 +655,17 @@ function App() {
   const updateLoggingEnabled = (enabled: boolean) => {
     setLoggingEnabled(enabled);
     localStorage.setItem('hterm_logging_enabled', enabled.toString());
+    // Apply to existing sessions immediately
+    window.electronAPI.updateLogging(enabled, loggingPath);
   };
 
   const updateLoggingPath = (path: string) => {
     setLoggingPath(path);
     localStorage.setItem('hterm_logging_path', path);
+    // Apply to existing sessions immediately if logging is enabled
+    if (loggingEnabled && path) {
+      window.electronAPI.updateLogging(loggingEnabled, path);
+    }
   };
 
   const updateSidebarPosition = (pos: 'left' | 'right') => {

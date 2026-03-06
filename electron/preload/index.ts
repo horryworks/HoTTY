@@ -171,6 +171,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     decryptSecret: (ciphertext: string) => ipcRenderer.invoke('dpapi-decrypt', ciphertext),
     encryptSecrets: (plaintexts: (string | undefined)[]) => ipcRenderer.invoke('dpapi-encrypt-batch', plaintexts),
     decryptSecrets: (ciphertexts: (string | undefined)[]) => ipcRenderer.invoke('dpapi-decrypt-batch', ciphertexts),
+    updateLogging: (loggingEnabled: boolean, loggingPath: string) => ipcRenderer.send('update-logging', { loggingEnabled, loggingPath }),
 })
 
 

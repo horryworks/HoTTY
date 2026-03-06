@@ -171,6 +171,8 @@ interface Session {
   id: string;
   type: 'ssh' | 'telnet' | 'serial' | 'wsl' | 'local';
   service: ISessionService;
+  host?: string;
+  protocol?: string;
 }
 
 const sessions = new Map<string, Session>();
@@ -204,7 +206,9 @@ ipcMain.on('connect-session', async (event, { sessionId, config }) => {
   sessions.set(sessionId, {
     id: sessionId,
     type: protocol,
-    service: service
+    service: service,
+    host: config.host,
+    protocol: config.protocol
   });
 
   // We need to proxy the service events to include sessionId
@@ -296,6 +300,24 @@ ipcMain.on('app-quit', () => {
   });
   sessions.clear();
   app.quit();
+});
+
+// Update logging for all active sessions
+ipcMain.on('update-logging', (event, { loggingEnabled, loggingPath }) => {
+  sessions.forEach((session, sessionId) => {
+    if (loggingEnabled && loggingPath) {
+      // Start logging if not already logging
+      logManager.startLogging(sessionId, {
+        loggingEnabled,
+        loggingPath,
+        host: session.host,
+        protocol: session.protocol
+      });
+    } else {
+      // Stop logging
+      logManager.stopLogging(sessionId);
+    }
+  });
 });
 
 // Serial port auto-detection

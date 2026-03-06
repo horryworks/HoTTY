@@ -14,6 +14,11 @@ export class LogManager {
             return;
         }
 
+        // Skip if already logging this session
+        if (this.streams.has(sessionId)) {
+            return;
+        }
+
         try {
             if (!fs.existsSync(config.loggingPath)) {
                 // If path doesn't exist, we probably shouldn't try to create it blindly, 
