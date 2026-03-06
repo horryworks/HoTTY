@@ -50,6 +50,8 @@ interface SettingsModalProps {
     onAiPersonasChange: (personas: { id: string; label: string; systemPrompt: string }[]) => void;
     backspaceSendsDel: boolean;
     onBackspaceSendsDelChange: (sendsDel: boolean) => void;
+    rightClickPaste: boolean;
+    onRightClickPasteChange: (enabled: boolean) => void;
     enablePromptHighlight: boolean;
     onEnablePromptHighlightChange: (enabled: boolean) => void;
     promptHighlightColor: string;
@@ -105,6 +107,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onAiPersonasChange,
     backspaceSendsDel,
     onBackspaceSendsDelChange,
+    rightClickPaste,
+    onRightClickPasteChange,
     enablePromptHighlight,
     onEnablePromptHighlightChange,
     promptHighlightColor,
@@ -827,6 +831,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     </label>
                                 </div>
                                 <p className="settings-help">If disabled (default), Backspace sends 0x08 (BS/^H). Enable this if your server expects 0x7F (DEL) for Backspace.</p>
+                            </div>
+
+                            <div className="form-group" style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid var(--border-color)' }}>
+                                <label>Mouse</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal', whiteSpace: 'nowrap' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={rightClickPaste}
+                                            onChange={(e) => onRightClickPasteChange(e.target.checked)}
+                                            style={{ marginRight: '8px' }}
+                                        />
+                                        Right-click to paste
+                                    </label>
+                                </div>
+                                <p className="settings-help">If enabled, right-clicking the terminal will read the clipboard and show the paste confirmation dialog instead of the context menu.</p>
                             </div>
                         </div>
                     )}

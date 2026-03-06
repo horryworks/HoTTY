@@ -406,6 +406,16 @@ function App() {
     localStorage.setItem('hterm_backspace_sends_del', sendsDel.toString());
   };
 
+  // Right-Click Paste State
+  const [rightClickPaste, setRightClickPaste] = useState<boolean>(() => {
+    return localStorage.getItem('hterm_right_click_paste') !== 'false'; // default true
+  });
+
+  const updateRightClickPaste = (enabled: boolean) => {
+    setRightClickPaste(enabled);
+    localStorage.setItem('hterm_right_click_paste', enabled.toString());
+  };
+
   // -- Pane Manager --
   const pane = usePaneManager({
     showLeftSidebar,
@@ -922,6 +932,8 @@ function App() {
                           enablePromptHighlight={enablePromptHighlight}
                           promptHighlightColor={promptHighlightColor}
                           promptPatterns={promptPatterns}
+                          rightClickPaste={rightClickPaste}
+                          onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
                         />
                       );
                     } else {
@@ -1018,6 +1030,8 @@ function App() {
                             enablePromptHighlight={enablePromptHighlight}
                             promptHighlightColor={promptHighlightColor}
                             promptPatterns={promptPatterns}
+                            rightClickPaste={rightClickPaste}
+                            onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
                           />
                         );
                       } else {
@@ -1070,6 +1084,11 @@ function App() {
                     enablePromptHighlight={enablePromptHighlight}
                     promptHighlightColor={promptHighlightColor}
                     promptPatterns={promptPatterns}
+                    rightClickPaste={rightClickPaste}
+                    onPasteRequest={(text) => {
+                      const activePaneSessionId = pane.paneAllocations[pane.activePaneId || ''];
+                      if (activePaneSessionId) handlePasteRequest(activePaneSessionId, text);
+                    }}
                   />
                 </div>
 
@@ -1151,6 +1170,8 @@ function App() {
                             enablePromptHighlight={enablePromptHighlight}
                             promptHighlightColor={promptHighlightColor}
                             promptPatterns={promptPatterns}
+                            rightClickPaste={rightClickPaste}
+                            onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
                           />
                         );
                       } else {
@@ -1241,6 +1262,8 @@ function App() {
                           terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                           lineWrapEnabled={lineWrapEnabled}
                           askGeminiCommands={askGeminiCommands}
+                          rightClickPaste={rightClickPaste}
+                          onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
                         />
                       );
                     } else {
@@ -1334,6 +1357,8 @@ function App() {
         onAiPersonasChange={updateAiPersonas}
         backspaceSendsDel={backspaceSendsDel}
         onBackspaceSendsDelChange={updateBackspaceSendsDel}
+        rightClickPaste={rightClickPaste}
+        onRightClickPasteChange={updateRightClickPaste}
         enablePromptHighlight={enablePromptHighlight}
         onEnablePromptHighlightChange={updateEnablePromptHighlight}
         promptHighlightColor={promptHighlightColor}

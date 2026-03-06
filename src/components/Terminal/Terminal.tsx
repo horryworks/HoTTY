@@ -20,6 +20,8 @@ interface TerminalProps {
     enablePromptHighlight?: boolean;
     promptHighlightColor?: string;
     promptPatterns?: PromptPattern[];
+    rightClickPaste?: boolean;
+    onPasteRequest?: (text: string) => void;
 }
 
 export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?: Terminal }> = ({
@@ -37,7 +39,9 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
     askGeminiCommands,
     enablePromptHighlight,
     promptHighlightColor,
-    promptPatterns
+    promptPatterns,
+    rightClickPaste,
+    onPasteRequest
 }) => {
     const terminalRef = useRef<HTMLDivElement>(null);
     // Initial Attach / Re-attach
@@ -596,10 +600,19 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             onClick={() => {
                 if (terminalInstance) terminalInstance.focus();
             }}
-            onContextMenu={() => {
+            onContextMenu={(e) => {
                 if (terminalInstance) {
-                    const selection = terminalInstance.getSelection();
-                    window.electronAPI.showContextMenu(selection, askGeminiCommands);
+                    if (rightClickPaste) {
+                        // Right-click paste mode: read clipboard and trigger paste confirmation
+                        e.preventDefault();
+                        navigator.clipboard.readText().then(text => {
+                            if (text && onPasteRequest) onPasteRequest(text);
+                        }).catch(err => console.error('Clipboard error:', err));
+                    } else {
+                        // Default: show Electron context menu
+                        const selection = terminalInstance.getSelection();
+                        window.electronAPI.showContextMenu(selection, askGeminiCommands);
+                    }
                 }
             }}
         />

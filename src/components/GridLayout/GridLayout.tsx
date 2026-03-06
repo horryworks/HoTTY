@@ -32,6 +32,8 @@ interface GridLayoutProps {
     enablePromptHighlight?: boolean;
     promptHighlightColor?: string;
     promptPatterns?: PromptPattern[];
+    rightClickPaste?: boolean;
+    onPasteRequest?: (text: string) => void;
 }
 
 export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: string]: any } }> = ({
@@ -61,7 +63,9 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     aiPersonas,
     enablePromptHighlight,
     promptHighlightColor,
-    promptPatterns
+    promptPatterns,
+    rightClickPaste,
+    onPasteRequest
 }) => {
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
@@ -305,6 +309,8 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     enablePromptHighlight={enablePromptHighlight}
                                     promptHighlightColor={promptHighlightColor}
                                     promptPatterns={promptPatterns}
+                                    rightClickPaste={rightClickPaste}
+                                    onPasteRequest={onPasteRequest}
                                 />
                             )
                         ) : (
