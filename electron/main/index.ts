@@ -412,16 +412,13 @@ ipcMain.on('show-context-menu', (event, selection: string, commands?: { id: stri
   }
 
   const template = [
+    { role: 'paste' },
+    { type: 'separator' },
     {
       label: 'Ask Gemini',
       enabled: !!selection,
       submenu: geminiSubmenu
-    },
-    { type: 'separator' },
-    { role: 'copy' },
-    { role: 'paste' },
-    { type: 'separator' },
-    { role: 'selectAll' }
+    }
   ] as Electron.MenuItemConstructorOptions[];
 
   const menu = Menu.buildFromTemplate(template);

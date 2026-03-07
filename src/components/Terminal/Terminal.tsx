@@ -20,7 +20,6 @@ interface TerminalProps {
     enablePromptHighlight?: boolean;
     promptHighlightColor?: string;
     promptPatterns?: PromptPattern[];
-    rightClickPaste?: boolean;
     onPasteRequest?: (text: string) => void;
 }
 
@@ -40,71 +39,9 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
     enablePromptHighlight,
     promptHighlightColor,
     promptPatterns,
-    rightClickPaste,
     onPasteRequest
 }) => {
     const terminalRef = useRef<HTMLDivElement>(null);
-    const [popoverState, setPopoverState] = React.useState<{
-        visible: boolean;
-        expanded: boolean;
-        x: number;
-        y: number;
-        selection: string;
-    }>({ visible: false, expanded: false, x: 0, y: 0, selection: '' });
-
-    // Handle selection and popover positioning
-    useEffect(() => {
-        if (!terminalInstance || !terminalRef.current) return;
-        const term = terminalInstance;
-
-        const handleMouseUp = (e: MouseEvent) => {
-            const target = e.target as HTMLElement;
-            // Ignore mouseup events originating from the popover itself to prevent resetting state
-            if (target && target.closest && target.closest('.terminal-selection-popover')) {
-                return;
-            }
-
-            const selection = term.getSelection();
-            if (selection && selection.length > 0) {
-                // Determine position at the top right of the terminal container
-                if (container) {
-                    const rect = container.getBoundingClientRect();
-                    setPopoverState({
-                        visible: true,
-                        expanded: false,
-                        x: rect.right - 20, // 20px padding from the right edge
-                        y: rect.top + 20,   // 20px padding from the top edge
-                        selection
-                    });
-                }
-            }
-        };
-
-        const handleMouseDown = (e: MouseEvent) => {
-            // Hide popover if clicking outside the popover element
-            const target = e.target as HTMLElement;
-            if (!target.closest('.terminal-selection-popover')) {
-                setPopoverState(prev => prev.visible ? { ...prev, visible: false, expanded: false } : prev);
-            }
-        };
-
-        const container = terminalRef.current;
-        container.addEventListener('mouseup', handleMouseUp);
-        container.addEventListener('mousedown', handleMouseDown);
-
-        // Also listen to xterm selection change to hide if selection is cleared via keyboard
-        const onSelectionChange = term.onSelectionChange(() => {
-            if (!term.hasSelection()) {
-                setPopoverState(prev => prev.visible ? { ...prev, visible: false, expanded: false } : prev);
-            }
-        });
-
-        return () => {
-            container.removeEventListener('mouseup', handleMouseUp);
-            container.removeEventListener('mousedown', handleMouseDown);
-            onSelectionChange.dispose();
-        };
-    }, [terminalInstance]);
 
     // Initial Attach / Re-attach
     useEffect(() => {
@@ -441,6 +378,28 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                             e.stopPropagation();
 
                             if (marker.isDisposed) return;
+                            handleMarkerSelection(e, marker);
+                        });
+
+                        element.addEventListener('contextmenu', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            if (marker.isDisposed) return;
+
+                            // Select the text block
+                            handleMarkerSelection(e, marker);
+
+                            // Trigger context menu after a short delay to allow selection to register
+                            setTimeout(() => {
+                                const selection = term.getSelection();
+                                if (selection) {
+                                    window.electronAPI.showContextMenu(selection, askGeminiCommands);
+                                }
+                            }, 50);
+                        });
+
+                        const handleMarkerSelection = (e: MouseEvent, marker: any) => {
 
                             const currentLine = marker.line;
 
@@ -550,7 +509,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                             endLine = Math.max(startLine, Math.min(expandedEndLine, term.buffer.active.length - 1));
 
                             term.selectLines(startLine, endLine);
-                        });
+                        };
                     }
                 });
 
@@ -664,65 +623,58 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             }}
             onContextMenu={(e) => {
                 if (terminalInstance) {
-                    if (rightClickPaste) {
-                        // Right-click paste mode: read clipboard and trigger paste confirmation
+                    const selection = terminalInstance.getSelection();
+
+                    let isOverSelection = false;
+
+                    if (selection) {
+                        // Check if click is actually over the selection rect
+                        try {
+                            const core = (terminalInstance as any)._core;
+                            const mouseService = core?._mouseService || core?.mouseService; // Depending on xterm.js version
+
+                            if (mouseService && typeof mouseService.getCoords === 'function') {
+                                const coords = mouseService.getCoords(e.nativeEvent, terminalInstance.element, terminalInstance.cols, terminalInstance.rows, true);
+                                const pos = terminalInstance.getSelectionPosition();
+
+                                if (coords && pos) {
+                                    // coords[0] is 1-based column (viewport), coords[1] is 1-based row (viewport)
+                                    // pos.start/end x,y are 0-based buffer coordinates
+
+                                    const clickX = coords[0] - 1;
+                                    const clickY = coords[1] - 1 + terminalInstance.buffer.active.viewportY;
+
+                                    if (clickY >= pos.start.y && clickY <= pos.end.y) {
+                                        isOverSelection = true;
+                                        // Refine X bounds for first and last line of selection
+                                        if (clickY === pos.start.y && clickX < pos.start.x) isOverSelection = false;
+                                        if (clickY === pos.end.y && clickX >= pos.end.x) isOverSelection = false;
+                                    }
+                                }
+                            } else {
+                                // Fallback: if we can't reliably determine coords, assume we are over selection if there is one
+                                // Though typically the internal mouseService is accessible.
+                                isOverSelection = true;
+                            }
+                        } catch (err) {
+                            console.warn('[Terminal] Failed to calculate mouse coords against selection:', err);
+                            isOverSelection = true; // Fallback
+                        }
+                    }
+
+                    if (selection && isOverSelection) {
+                        // Text is selected AND right-click is over it -> show context menu
+                        window.electronAPI.showContextMenu(selection, askGeminiCommands);
+                    } else {
+                        // No text selected OR right-click is outside selection -> trigger paste
                         e.preventDefault();
                         navigator.clipboard.readText().then(text => {
                             if (text && onPasteRequest) onPasteRequest(text);
                         }).catch(err => console.error('Clipboard error:', err));
-                    } else {
-                        // Default: show Electron context menu
-                        const selection = terminalInstance.getSelection();
-                        window.electronAPI.showContextMenu(selection, askGeminiCommands);
                     }
                 }
             }}
         >
-            {/* Selection Popover */}
-            <div
-                className={`terminal-selection-popover ${popoverState.visible ? 'visible' : ''} ${popoverState.expanded ? 'expanded' : ''}`}
-                style={{ left: popoverState.x, top: popoverState.y }}
-                onMouseDown={(e) => e.stopPropagation()} // Prevent terminal from clearing selection
-                onMouseUp={(e) => e.stopPropagation()} // Prevent terminal from re-detecting selection and replacing expanded popover
-                onClick={(e) => e.stopPropagation()}
-            >
-                {!popoverState.expanded ? (
-                    <button
-                        className="popover-btn"
-                        onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setPopoverState(prev => ({ ...prev, expanded: true }));
-                        }}
-                        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                        title="Ask Gemini about selection"
-                    >
-                        ✨ Ask Gemini
-                    </button>
-                ) : (
-                    askGeminiCommands?.map(cmd => (
-                        <button
-                            key={cmd.id}
-                            className="popover-btn"
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                const event = new CustomEvent('ask-gemini-internal', {
-                                    detail: { selection: popoverState.selection, type: cmd.id }
-                                });
-                                console.log('[Terminal.tsx] Dispatching ask-gemini-internal event:', cmd.id, popoverState.selection.substring(0, 20) + '...');
-                                window.electronAPI.logDebug(`[Terminal.tsx] Dispatching ask-gemini-internal event: ${cmd.id}, selection length: ${popoverState.selection.length}`);
-                                window.dispatchEvent(event);
-                                setPopoverState(prev => ({ ...prev, visible: false, expanded: false }));
-                            }}
-                            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                            title={cmd.label}
-                        >
-                            ✨ {cmd.label}
-                        </button>
-                    ))
-                )}
-            </div>
         </div>
     );
 };
