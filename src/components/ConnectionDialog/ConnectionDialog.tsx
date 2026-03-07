@@ -10,6 +10,7 @@ interface ConnectionDialogProps {
     error?: string | null;
     getCachedPassword: (host: string, user: string) => string;
     saveCachedPassword: (host: string, user: string, pass: string) => void;
+    onShowMessage?: (type: 'error' | 'success' | 'info', title: string | undefined, message: string) => void;
 }
 
 interface SerialPortInfo {
@@ -23,7 +24,8 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     onClose,
     error,
     getCachedPassword,
-    saveCachedPassword
+    saveCachedPassword,
+    onShowMessage
 }) => {
     const hostManager = useHostManager();
 
@@ -524,6 +526,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             onMoveNode={hostManager.moveNode}
                             onSortFolder={hostManager.sortFolder}
                             onImportData={hostManager.importData}
+                            onShowMessage={onShowMessage}
                         />
                     </div>
 

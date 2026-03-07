@@ -92,7 +92,23 @@
     flex-shrink: 0;
     font-size: 0.8rem;
     width: 16px;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tree-chevron {
+    color: #888;
+    transition: transform 0.15s ease-in-out, color 0.1s;
+    /* Base SVG rotation if drawn pointing right */
+}
+
+.tree-chevron:hover {
+    color: #ccc;
+}
+
+.tree-chevron.expanded {
+    transform: rotate(90deg);
 }
 
 .tree-label {
@@ -126,16 +142,30 @@
 }
 
 .context-menu button {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 12px;
     width: 100%;
     text-align: left;
     background: none;
     border: none;
     color: #ccc;
-    padding: 4px 14px;
+    padding: 6px 14px;
     font-size: 0.88rem;
     cursor: pointer;
     transition: background 0.1s;
+}
+
+.menu-icon-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    flex-shrink: 0;
+}
+
+.context-menu button svg {
+    flex-shrink: 0;
 }
 
 .context-menu button:hover {
@@ -167,6 +197,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    user-select: text !important;
+    -webkit-user-select: text !important;
 }
 
 .host-edit-modal {
@@ -178,6 +210,9 @@
     max-width: 460px;
     width: 90%;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    /* Allow input focus and selection inside modal */
 }
 
 .modal-form-group {
@@ -200,6 +235,8 @@
     color: #ddd;
     padding: 5px 8px;
     font-size: 0.9rem;
+    user-select: text !important;
+    -webkit-user-select: text !important;
 }
 
 .modal-form-group input:focus,

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import type { HostTreeNode, HostEntry } from '../../hooks/useHostManager';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import './HostTree.css';
 
 interface ContextMenuState {
@@ -26,7 +27,8 @@ interface HostTreeProps {
     onDeleteNode: (id: string) => void;
     onMoveNode?: (nodeId: string, targetId: string, position: 'before' | 'after' | 'inside') => void;
     onSortFolder?: (folderId: string | null) => void;
-    onImportData?: (nodes: HostTreeNode[], folderName: string) => void;
+    onImportData?: (nodes: HostTreeNode[], folderName: string, parentId: string | null) => Promise<string | undefined> | void;
+    onShowMessage?: (type: 'error' | 'success' | 'info', title: string | undefined, message: string) => void;
 }
 
 export const HostTree: React.FC<HostTreeProps> = ({
@@ -41,11 +43,13 @@ export const HostTree: React.FC<HostTreeProps> = ({
     onMoveNode,
     onSortFolder,
     onImportData,
+    onShowMessage
 }) => {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
     const [exportNode, setExportNode] = useState<HostTreeNode | null>(null);
     const [editModal, setEditModal] = useState<EditModalState | null>(null);
+    const [nodeToDelete, setNodeToDelete] = useState<HostTreeNode | null>(null);
 
     // Inline edit state
     const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -57,10 +61,23 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [formPort, setFormPort] = useState('22');
     const [formUsername, setFormUsername] = useState('');
     const [formPassword, setFormPassword] = useState('');
-    const [isDecrypting] = useState(false);
     const [importFilePath, setImportFilePath] = useState<string | null>(null);
     const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
     const [dropTarget, setDropTarget] = useState<{ nodeId: string; position: 'before' | 'after' | 'inside' } | null>(null);
+    const modalInputRef = useRef<HTMLInputElement>(null);
+
+    const focusModal = useCallback(() => {
+        setTimeout(() => {
+            if (modalInputRef.current) {
+                modalInputRef.current.focus();
+                // Ensure the window itself has focus (critical after native alerts in Electron)
+                try {
+                    (window as any).electronAPI.focusWindow();
+                    window.focus();
+                } catch (e) { }
+            }
+        }, 200);
+    }, []);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const editModalRef = useRef<HTMLDivElement>(null);
@@ -69,26 +86,19 @@ export const HostTree: React.FC<HostTreeProps> = ({
     // Focus trap for the edit modal
     useFocusTrap(editModalRef, !!editModal);
 
-    // Close context menu on outside click
     useEffect(() => {
         const handler = () => setContextMenu(null);
         document.addEventListener('click', handler);
         return () => document.removeEventListener('click', handler);
     }, []);
 
-    // Close edit modal on Escape
+    // Handle focus when modal opens
     useEffect(() => {
-        if (!editModal) return;
-        const handler = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                e.stopPropagation();
-                setEditModal(null);
-            }
-        };
-        document.addEventListener('keydown', handler);
-        return () => document.removeEventListener('keydown', handler);
-    }, [editModal]);
+        if (editModal) {
+            setEditingNodeId(null);
+            focusModal();
+        }
+    }, [editModal, focusModal]);
 
     const toggle = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -170,8 +180,8 @@ export const HostTree: React.FC<HostTreeProps> = ({
         (window as any).electronAPI.logDebug(`Export modal opened${node ? ` for node: ${node.name}` : ' for full tree'}`);
     };
 
-    const handleImport = async () => {
-        (window as any).electronAPI.logDebug('Import button clicked');
+    const handleImport = async (parentId: string | null = null) => {
+        (window as any).electronAPI.logDebug(`Import button clicked${parentId ? ` for parent: ${parentId}` : ''}`);
         try {
             const filePath = await (window as any).electronAPI.selectImportFile();
             if (!filePath) {
@@ -180,10 +190,11 @@ export const HostTree: React.FC<HostTreeProps> = ({
             }
             setImportFilePath(filePath);
             setFormPassword('');
-            setEditModal({ mode: 'import', parentId: null });
+            setEditModal({ mode: 'import', parentId });
+            setContextMenu(null);
             (window as any).electronAPI.logDebug('Import password modal opened');
         } catch (err: any) {
-            alert('Failed to open file: ' + err.message);
+            onShowMessage?.('error', 'Import Error', 'Failed to open file: ' + err.message);
         }
     };
 
@@ -200,11 +211,20 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 // Use selected node or full tree
                 const dataToExport = exportNode ? [exportNode] : tree;
                 const success = await (window as any).electronAPI.exportHTree(dataToExport, formPassword);
-                if (success) alert('Export successful!');
+
+                // Close modal and reset state BEFORE showing success alert
                 setEditModal(null);
                 setExportNode(null);
+                setFormPassword('');
+
+                if (success) {
+                    setTimeout(() => {
+                        onShowMessage?.('success', 'Export Successful', 'Host tree has been exported successfully.');
+                        focusModal();
+                    }, 50);
+                }
             } catch (err: any) {
-                alert('Export failed: ' + err.message);
+                onShowMessage?.('error', 'Export Failed', err.message);
             }
             return;
         }
@@ -220,13 +240,28 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     const fileNameWithExt = pathParts[pathParts.length - 1];
                     const fileName = fileNameWithExt.replace(/\.[^/.]+$/, "");
 
-                    onImportData(data, `Imported_${fileName}`);
-                    alert(`Import successful! Added to "Imported_${fileName}" folder.`);
+                    const currentParentId = parentId;
+                    const folderId = await onImportData(data, currentParentId ? '' : `Imported_${fileName}`, currentParentId);
+
+                    // Auto-expand the target folder
+                    if (folderId) {
+                        setExpanded(prev => ({ ...prev, [folderId]: true }));
+                    }
+
+                    // Close modal and reset state BEFORE showing success alert
                     setEditModal(null);
                     setImportFilePath(null);
+                    setFormPassword('');
+
+                    setTimeout(() => {
+                        onShowMessage?.('success', 'Import Successful', currentParentId ? 'Hosts imported successfully.' : `Hosts imported and added to "Imported_${fileName}" folder.`);
+                        focusModal();
+                    }, 50);
                 }
             } catch (err: any) {
-                alert('Import failed: ' + err.message);
+                onShowMessage?.('error', 'Import Failed', err.message);
+                // Keep password if failed, but maybe good to clear on some errors? 
+                // Let's keep it for now so user can try again.
             }
             return;
         }
@@ -389,12 +424,27 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 >
                     {node.type === 'folder' ? (
                         <>
-                            <span className="tree-icon">{isExpanded ? '▾' : '▸'}</span>
+                            <span
+                                className="tree-icon"
+                                onClick={(e) => { e.stopPropagation(); toggle(node.id); }}
+                                style={{ opacity: (!node.children || node.children.length === 0) ? 0 : 1, cursor: (!node.children || node.children.length === 0) ? 'default' : 'pointer' }}
+                            >
+                                <svg
+                                    className={`tree-chevron ${isExpanded ? 'expanded' : ''}`}
+                                    width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                                >
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
+                            </span>
                             <span className="tree-icon">📁</span>
                         </>
                     ) : (
                         <>
-                            <span className="tree-icon" style={{ opacity: 0 }}>▸</span>
+                            <span className="tree-icon" style={{ opacity: 0 }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
+                            </span>
                             <span className="tree-icon">🖥</span>
                         </>
                     )}
@@ -497,7 +547,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     className="tree-toolbar-btn"
                     role="button"
                     title="Import Tree"
-                    onClick={handleImport}
+                    onClick={() => handleImport(null)}
                     style={{ cursor: 'pointer' }}
                 >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#51cf66' }}>
@@ -527,10 +577,24 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     {contextMenu.node?.type !== 'host' && (
                         <>
                             <button onClick={() => openAddFolder(contextMenu.node?.id ?? null)}>
-                                📁 Add Folder
+                                <span className="menu-icon-wrapper">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ffcc00' }}>
+                                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                        <line x1="12" y1="11" x2="12" y2="17"></line>
+                                        <line x1="9" y1="14" x2="15" y2="14"></line>
+                                    </svg>
+                                </span>
+                                Add Folder
                             </button>
                             <button onClick={() => openAddHost(contextMenu.node?.id ?? null)}>
-                                🖥 Add Host
+                                <span className="menu-icon-wrapper">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#4a9eff' }}>
+                                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                                    </svg>
+                                </span>
+                                Add Host
                             </button>
                         </>
                     )}
@@ -545,14 +609,40 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                         setContextMenu(null);
                                     }}
                                 >
-                                    ✏️ Rename (F2)
+                                    <span className="menu-icon-wrapper">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ff922b' }}>
+                                            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                                        </svg>
+                                    </span>
+                                    Rename (F2)
                                 </button>
                             )}
                             <button
                                 onClick={() => handleExport(contextMenu.node)}
                             >
-                                📤 Export
+                                <span className="menu-icon-wrapper">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ff6b6b' }}>
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                </span>
+                                Export
                             </button>
+                            {contextMenu.node?.type === 'folder' && (
+                                <button
+                                    onClick={() => handleImport(contextMenu.node!.id)}
+                                >
+                                    <span className="menu-icon-wrapper">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#51cf66' }}>
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="7 10 12 15 17 10"></polyline>
+                                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                                        </svg>
+                                    </span>
+                                    Import
+                                </button>
+                            )}
                             {contextMenu.node.type === 'folder' && onSortFolder && (
                                 <button
                                     onClick={() => {
@@ -560,17 +650,30 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                         setContextMenu(null);
                                     }}
                                 >
-                                    🔼 Sort Ascending
+                                    <span className="menu-icon-wrapper">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#4a9eff' }}>
+                                            <path d="M18 15l-6-6-6 6"></path>
+                                        </svg>
+                                    </span>
+                                    Sort Ascending
                                 </button>
                             )}
                             <button
                                 className="danger"
                                 onClick={() => {
-                                    onDeleteNode(contextMenu.node!.id);
+                                    setNodeToDelete(contextMenu.node!);
                                     setContextMenu(null);
                                 }}
                             >
-                                🗑 Delete
+                                <span className="menu-icon-wrapper">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#fa5252' }}>
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                                    </svg>
+                                </span>
+                                Delete
                             </button>
                         </>
                     )}
@@ -579,8 +682,20 @@ export const HostTree: React.FC<HostTreeProps> = ({
 
             {/* Add/Edit/Export/Import Modal */}
             {editModal && (
-                <div className="host-edit-modal-overlay" onClick={() => setEditModal(null)}>
-                    <div className="host-edit-modal" ref={editModalRef} onClick={(e) => e.stopPropagation()}>
+                <div className="host-edit-modal-overlay" onClick={() => setEditModal(null)} tabIndex={-1}>
+                    <div
+                        className="host-edit-modal"
+                        ref={editModalRef}
+                        onClick={(e) => e.stopPropagation()}
+                        onContextMenu={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === 'Escape') {
+                                e.preventDefault();
+                                setEditModal(null);
+                            }
+                        }}
+                    >
                         <h3>
                             {editModal.mode === 'folder' ? (editModal.existingNode ? 'Rename Folder' : 'Add Folder') :
                                 editModal.mode === 'host' ? (editModal.existingNode ? 'Rename Host' : 'Add Host') :
@@ -591,6 +706,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                             <div className="modal-form-group">
                                 <label>Display Name</label>
                                 <input
+                                    ref={modalInputRef}
                                     autoFocus
                                     type="text"
                                     value={formName}
@@ -606,6 +722,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                     {editModal.mode === 'export' ? 'Set encryption password:' : 'Enter decryption password:'}
                                 </label>
                                 <input
+                                    ref={modalInputRef}
                                     autoFocus
                                     type="password"
                                     value={formPassword}
@@ -664,11 +781,9 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                             <label>Username</label>
                                             <input
                                                 type="text"
-                                                value={isDecrypting ? 'Decrypting...' : formUsername}
+                                                value={formUsername}
                                                 onChange={e => setFormUsername(e.target.value)}
                                                 onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
-                                                className={isDecrypting ? 'decrypting-placeholder' : ''}
-                                                disabled={isDecrypting}
                                                 autoComplete="off"
                                             />
                                         </div>
@@ -676,11 +791,9 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                             <label>Password</label>
                                             <input
                                                 type="password"
-                                                value={isDecrypting ? 'Decrypting...' : formPassword}
+                                                value={formPassword}
                                                 onChange={e => setFormPassword(e.target.value)}
                                                 onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
-                                                className={isDecrypting ? 'decrypting-placeholder' : ''}
-                                                disabled={isDecrypting}
                                                 autoComplete="new-password"
                                             />
                                         </div>
@@ -698,6 +811,31 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         </div>
                     </div>
                 </div>
+            )}
+
+            {nodeToDelete && (
+                <ConfirmModal
+                    title={`Delete ${nodeToDelete.type === 'folder' ? 'Folder' : 'Host'}`}
+                    message={`Are you sure you want to delete "${nodeToDelete.name}"?\nThis action cannot be undone.`}
+                    onConfirm={() => {
+                        onDeleteNode(nodeToDelete.id);
+                        setNodeToDelete(null);
+                        // Ensure window focus is restored after dialog closes (just in case)
+                        setTimeout(() => {
+                            try {
+                                (window as any).electronAPI.focusWindow();
+                            } catch (e) { }
+                        }, 50);
+                    }}
+                    onCancel={() => {
+                        setNodeToDelete(null);
+                        setTimeout(() => {
+                            try {
+                                (window as any).electronAPI.focusWindow();
+                            } catch (e) { }
+                        }, 50);
+                    }}
+                />
             )}
         </div>
     );

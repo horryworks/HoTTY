@@ -1,4 +1,4 @@
-.error-modal-overlay {
+.confirm-modal-overlay {
     position: fixed;
     top: 0;
     left: 0;
@@ -11,17 +11,17 @@
     z-index: 10000;
 }
 
-.error-modal {
+.confirm-modal {
     background-color: #252526;
-    border: 1px solid #7a2e2e;
     border-radius: 6px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-    width: 450px;
+    width: 400px;
     max-width: 90vw;
     display: flex;
     flex-direction: column;
     color: #cccccc;
     animation: fadeIn 0.1s ease-out;
+    border: 1px solid #c07a30;
 }
 
 @keyframes fadeIn {
@@ -36,20 +36,22 @@
     }
 }
 
-.error-modal h3 {
+.confirm-modal h3 {
     margin: 0;
     padding: 12px 16px;
-    background-color: #3e1a1a;
-    border-bottom: 1px solid #7a2e2e;
     font-size: 14px;
     font-weight: 600;
-    color: #ffcccc;
     display: flex;
     align-items: center;
     gap: 8px;
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+    background-color: #443015;
+    border-bottom: 1px solid #c07a30;
+    color: #ffcc99;
 }
 
-.error-content {
+.confirm-content {
     padding: 20px 16px;
     font-size: 14px;
     line-height: 1.5;
@@ -58,16 +60,18 @@
     word-break: break-word;
 }
 
-.error-modal-actions {
+.confirm-modal-actions {
     display: flex;
     justify-content: flex-end;
     padding: 12px 16px;
     background-color: #252526;
     border-top: 1px solid #3e3e42;
+    border-bottom-left-radius: 5px;
+    border-bottom-right-radius: 5px;
     gap: 12px;
 }
 
-.error-btn {
+.confirm-btn {
     padding: 6px 20px;
     border: none;
     border-radius: 2px;
@@ -78,14 +82,22 @@
     transition: background-color 0.1s;
 }
 
-.error-btn:hover {
+.confirm-btn:hover {
     background-color: #4e4e52;
 }
 
-.error-btn.primary {
-    background-color: #007acc;
+.confirm-btn.danger {
+    background-color: #c93a3a;
 }
 
-.error-btn.primary:hover {
-    background-color: #0062a3;
+.confirm-btn.danger:hover {
+    background-color: #a02828;
+}
+
+.confirm-btn.secondary {
+    background-color: #555555;
+}
+
+.confirm-btn.secondary:hover {
+    background-color: #666666;
 }

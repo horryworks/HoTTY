@@ -1,13 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 import { useDraggable } from '../../hooks/useDraggable';
-import './ErrorModal.css';
+import './MessageModal.css';
 
-interface ErrorModalProps {
+export interface MessageModalProps {
+    type: 'error' | 'success' | 'info';
+    title?: string;
     message: string;
     onClose: () => void;
 }
 
-export const ErrorModal: React.FC<ErrorModalProps> = ({ message, onClose }) => {
+export const MessageModal: React.FC<MessageModalProps> = ({ type, title, message, onClose }) => {
     const { position, onMouseDown: onHeaderMouseDown } = useDraggable();
     const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -28,18 +30,36 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ message, onClose }) => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [onClose]);
 
+    const getIcon = () => {
+        switch (type) {
+            case 'error': return '⚠️';
+            case 'success': return '✅';
+            case 'info': return 'ℹ️';
+            default: return '💬';
+        }
+    };
+
+    const getDefaultTitle = () => {
+        switch (type) {
+            case 'error': return 'Error';
+            case 'success': return 'Success';
+            case 'info': return 'Information';
+            default: return 'Message';
+        }
+    };
+
     return (
-        <div className="error-modal-overlay">
-            <div className="error-modal" style={{ transform: `translate(${position.x}px, ${position.y}px)` }}>
+        <div className="message-modal-overlay">
+            <div className={`message-modal ${type}`} style={{ transform: `translate(${position.x}px, ${position.y}px)` }}>
                 <h3 onMouseDown={onHeaderMouseDown} style={{ cursor: 'grab', userSelect: 'none' }}>
-                    <span>⚠️</span> Session Error
+                    <span>{getIcon()}</span> {title || getDefaultTitle()}
                 </h3>
-                <div className="error-content">
+                <div className="message-content">
                     {message}
                 </div>
-                <div className="error-modal-actions">
+                <div className="message-modal-actions">
                     <button
-                        className="error-btn primary"
+                        className={`message-btn primary ${type}`}
                         onClick={onClose}
                         ref={closeButtonRef}
                     >

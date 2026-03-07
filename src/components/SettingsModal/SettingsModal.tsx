@@ -374,7 +374,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <label>Colors (Custom Theme)</label>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                                         <div>
-                                            <label style={{ fontSize: '0.9em', color: '#ccc' }}>Terminal Text</label>
+                                            <label style={{  color: '#ccc' }}>Terminal Text</label>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <input
                                                     type="color"
@@ -387,12 +387,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     value={terminalForeground}
                                                     onChange={(e) => onTerminalForegroundChange(e.target.value)}
                                                     className="settings-input"
-                                                    style={{ width: '80px', padding: '4px', fontSize: '12px' }}
+                                                    style={{ width: '80px', padding: '4px' }}
                                                 />
                                             </div>
                                         </div>
                                         <div>
-                                            <label style={{ fontSize: '0.9em', color: '#ccc' }}>Active Background</label>
+                                            <label style={{  color: '#ccc' }}>Active Background</label>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <input
                                                     type="color"
@@ -405,12 +405,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     value={terminalBackground}
                                                     onChange={(e) => onTerminalBackgroundChange(e.target.value)}
                                                     className="settings-input"
-                                                    style={{ width: '80px', padding: '4px', fontSize: '12px' }}
+                                                    style={{ width: '80px', padding: '4px' }}
                                                 />
                                             </div>
                                         </div>
                                         <div>
-                                            <label style={{ fontSize: '0.9em', color: '#ccc' }}>Inactive Background</label>
+                                            <label style={{  color: '#ccc' }}>Inactive Background</label>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <input
                                                     type="color"
@@ -423,7 +423,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     value={terminalBackgroundInactive}
                                                     onChange={(e) => onTerminalBackgroundInactiveChange(e.target.value)}
                                                     className="settings-input"
-                                                    style={{ width: '80px', padding: '4px', fontSize: '12px' }}
+                                                    style={{ width: '80px', padding: '4px' }}
                                                 />
                                             </div>
                                         </div>
@@ -434,7 +434,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <div className="form-group">
                                 <label>Empty Pane Background</label>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <div style={{ display: 'flex', gap: '10px', fontSize: '12px', color: '#ccc' }}>
+                                    <div style={{ display: 'flex', gap: '10px', color: '#ccc' }}>
                                         <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
                                             <input
                                                 type="radio"
@@ -466,7 +466,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 value={paneBackground}
                                                 onChange={(e) => onPaneBackgroundChange(e.target.value)}
                                                 className="settings-input"
-                                                style={{ width: '80px', padding: '4px', fontSize: '12px' }}
+                                                style={{ width: '80px', padding: '4px' }}
                                             />
                                         </div>
                                     )}
@@ -478,7 +478,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 onChange={(e) => onPaneBackgroundImageChange(e.target.value)}
                                                 placeholder="e.g. /my-background.jpg or media:///C:/path/to/image.png"
                                                 className="settings-input"
-                                                style={{ flex: 1, padding: '4px', fontSize: '12px' }}
+                                                style={{ flex: 1, padding: '4px' }}
                                             />
                                             <button
                                                 onClick={async () => {
@@ -488,7 +488,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                         onPaneBackgroundImageChange(url);
                                                     }
                                                 }}
-                                                style={{ padding: '4px 8px', fontSize: '12px', cursor: 'pointer' }}
+                                                style={{ padding: '4px 8px', cursor: 'pointer' }}
                                             >
                                                 Browse...
                                             </button>
@@ -553,7 +553,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 {enablePromptHighlight && (
                                     <>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' }}>
-                                            <span style={{ fontSize: '0.9em', color: '#ccc' }}>Highlight Color</span>
+                                            <span style={{  color: '#ccc' }}>Highlight Color</span>
                                             <input
                                                 type="color"
                                                 value={promptHighlightColor}
@@ -565,7 +565,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 value={promptHighlightColor}
                                                 onChange={(e) => onPromptHighlightColorChange(e.target.value)}
                                                 className="settings-input"
-                                                style={{ width: '120px', padding: '4px', fontSize: '12px' }}
+                                                style={{ width: '120px', padding: '4px' }}
                                             />
                                         </div>
                                         <label style={{ marginBottom: '10px', display: 'block' }}>Prompt Patterns (Regex)</label>
@@ -604,7 +604,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                             }}
                                                             placeholder="Pattern Name"
                                                             className="settings-input"
-                                                            style={{ flex: 1, padding: '4px', fontSize: '13px' }}
+                                                            style={{ flex: 1, padding: '4px' }}
                                                         />
                                                         <button
                                                             onClick={() => {
@@ -613,7 +613,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                                     onPromptPatternsChange(newPatterns);
                                                                 }
                                                             }}
-                                                            style={{ padding: '4px 8px', fontSize: '12px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
+                                                            style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
                                                         >
                                                             ✕
                                                         </button>
@@ -628,7 +628,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                         }}
                                                         placeholder="Regex Pattern (e.g. ^[-_\w]+@[-_\w]+[>#]\s*)"
                                                         className="settings-input"
-                                                        style={{ width: '100%', padding: '6px', fontSize: '12px', boxSizing: 'border-box', fontFamily: 'monospace' }}
+                                                        style={{ width: '100%', padding: '6px', boxSizing: 'border-box', fontFamily: 'monospace' }}
                                                     />
                                                 </div>
                                             ))}
@@ -640,7 +640,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     const newPattern = { id, name: 'New Pattern', pattern: '^pattern\\s*', enabled: true };
                                                     onPromptPatternsChange([...(promptPatterns || []), newPattern]);
                                                 }}
-                                                style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}
+                                                style={{ padding: '6px 12px', cursor: 'pointer' }}
                                             >
                                                 + Add Pattern
                                             </button>
@@ -668,7 +668,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 </div>
                                 {sshKeepAliveEnabled && (
                                     <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span style={{ fontSize: '0.9em', color: '#ccc' }}>Interval (seconds):</span>
+                                        <span style={{  color: '#ccc' }}>Interval (seconds):</span>
                                         <input
                                             type="number"
                                             value={sshKeepAliveInterval}
@@ -689,12 +689,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <div className="ssh-algorithms-container" style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '10px' }}>
                                         {Object.keys(sshAlgorithms).map(category => (
                                             <div key={category} style={{ marginBottom: '15px' }}>
-                                                <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9em', color: '#aaa', textTransform: 'capitalize' }}>
+                                                <h4 style={{ margin: '0 0 8px 0', color: '#aaa', textTransform: 'capitalize' }}>
                                                     {category === 'serverHostKey' ? 'Server Host Key' : category}
                                                 </h4>
                                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px' }}>
                                                     {sshAlgorithms[category].map((algo: any) => (
-                                                        <label key={algo.name} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px', alignItems: 'center', fontSize: '0.85em', fontWeight: 'normal', cursor: 'pointer' }}>
+                                                        <label key={algo.name} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px', alignItems: 'center', fontWeight: 'normal', cursor: 'pointer' }}>
                                                             <input
                                                                 type="checkbox"
                                                                 checked={algo.enabled}
@@ -733,7 +733,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 </div>
                                 {telnetKeepAliveEnabled && (
                                     <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span style={{ fontSize: '0.9em', color: '#ccc' }}>Interval (seconds):</span>
+                                        <span style={{  color: '#ccc' }}>Interval (seconds):</span>
                                         <input
                                             type="number"
                                             value={telnetKeepAliveInterval}
@@ -766,14 +766,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             </div>
                             {loggingEnabled && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                                    <label style={{ fontSize: '0.9em', color: '#ccc' }}>Log Folder Path</label>
+                                    <label style={{  color: '#ccc' }}>Log Folder Path</label>
                                     <div style={{ display: 'flex', gap: '8px' }}>
                                         <input
                                             type="text"
                                             value={loggingPath}
                                             onChange={(e) => onLoggingPathChange(e.target.value)}
                                             className="settings-input"
-                                            style={{ flex: 1, padding: '4px', fontSize: '12px' }}
+                                            style={{ flex: 1, padding: '4px' }}
                                             placeholder="Select a folder or type path..."
                                         />
                                         <button
@@ -783,7 +783,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     onLoggingPathChange(path);
                                                 }
                                             }}
-                                            style={{ padding: '4px 8px', fontSize: '12px', cursor: 'pointer' }}
+                                            style={{ padding: '4px 8px', cursor: 'pointer' }}
                                         >
                                             Browse...
                                         </button>
@@ -804,7 +804,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                         max={100000}
                                         style={{ width: '100px' }}
                                     />
-                                    <span style={{ fontSize: '0.9em', color: '#ccc' }}>lines</span>
+                                    <span style={{  color: '#ccc' }}>lines</span>
                                 </div>
                                 <p className="settings-help">Max lines to keep in memory per terminal (Default: 10000).</p>
                             </div>
@@ -871,7 +871,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                         }}
                                     >
                                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                            <span style={{ cursor: 'grab', color: '#888', fontSize: '16px', userSelect: 'none' }}>☰</span>
+                                            <span style={{ cursor: 'grab', color: '#888', userSelect: 'none' }}>☰</span>
                                             <input
                                                 type="text"
                                                 value={cmd.label}
@@ -882,14 +882,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 }}
                                                 placeholder="Label"
                                                 className="settings-input"
-                                                style={{ flex: 1, padding: '4px', fontSize: '13px' }}
+                                                style={{ flex: 1, padding: '4px' }}
                                             />
                                             <button
                                                 onClick={() => {
                                                     const newCommands = askGeminiCommands.filter((_, i) => i !== index);
                                                     onAskGeminiCommandsChange(newCommands);
                                                 }}
-                                                style={{ padding: '4px 8px', fontSize: '12px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
+                                                style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
                                             >
                                                 ✕
                                             </button>
@@ -906,14 +906,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                             style={{
                                                 width: '100%',
                                                 padding: '6px',
-                                                fontSize: '12px',
                                                 height: '60px',
                                                 fontFamily: 'monospace',
                                                 resize: 'vertical',
                                                 boxSizing: 'border-box' // Fix overflow
                                             }}
                                         />
-                                        <div style={{ fontSize: '10px', color: '#888' }}>
+                                        <div style={{  color: '#888' }}>
                                             Use <code>{'{selection}'}</code> placeholder for the selected text.
                                         </div>
                                     </div>
@@ -927,7 +926,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                         const newCommand = { id, label: 'New Command', promptTemplate: '{selection}' };
                                         onAskGeminiCommandsChange([...(askGeminiCommands || []), newCommand]);
                                     }}
-                                    style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}
+                                    style={{ padding: '6px 12px', cursor: 'pointer' }}
                                 >
                                     + Add Command
                                 </button>
@@ -943,7 +942,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                             onAskGeminiCommandsChange(DEFAULT_COMMANDS);
                                         }
                                     }}
-                                    style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}
+                                    style={{ padding: '6px 12px', cursor: 'pointer' }}
                                 >
                                     Reset Defaults
                                 </button>
@@ -977,7 +976,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     }}
                                                     placeholder="Display Name"
                                                     className="settings-input"
-                                                    style={{ flex: 1, padding: '4px', fontSize: '13px' }}
+                                                    style={{ flex: 1, padding: '4px' }}
                                                 />
                                                 <button
                                                     onClick={() => {
@@ -986,7 +985,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                             onAiPersonasChange(newPersonas);
                                                         }
                                                     }}
-                                                    style={{ padding: '4px 8px', fontSize: '12px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
+                                                    style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
                                                 >
                                                     ✕
                                                 </button>
@@ -1003,7 +1002,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 style={{
                                                     width: '100%',
                                                     padding: '6px',
-                                                    fontSize: '12px',
                                                     height: '60px',
                                                     resize: 'vertical',
                                                     boxSizing: 'border-box'
@@ -1020,7 +1018,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                             const newPersona = { id, label: 'New Persona', systemPrompt: 'You are a helpful assistant.' };
                                             onAiPersonasChange([...(aiPersonas || []), newPersona]);
                                         }}
-                                        style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}
+                                        style={{ padding: '6px 12px', cursor: 'pointer' }}
                                     >
                                         + Add Persona
                                     </button>
@@ -1038,7 +1036,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 onAiPersonasChange(DEFAULT_PERSONAS);
                                             }
                                         }}
-                                        style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}
+                                        style={{ padding: '6px 12px', cursor: 'pointer' }}
                                     >
                                         Reset Defaults
                                     </button>
@@ -1068,7 +1066,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <h2 style={{ margin: '0 0 8px 0' }}>HoTTY</h2>
                             <p style={{ color: '#aaa', margin: '0 0 16px 0' }}>v{version}</p>
 
-                            <p style={{ fontSize: '1.0em', fontWeight: 'bold', margin: '0 0 8px 0' }}>
+                            <p style={{  fontWeight: 'bold', margin: '0 0 8px 0' }}>
                                 Katsumasa "Horry" Horiuchi
                             </p>
 
@@ -1085,12 +1083,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 </a>
                             </p>
 
-                            <p style={{ fontSize: '0.9em', color: '#ccc', margin: '0 0 24px 0' }}>
+                            <p style={{  color: '#ccc', margin: '0 0 24px 0' }}>
                                 SSH/Telnet/Serial Terminal Emulator<br />
                                 Built with Electron, React, & TypeScript
                             </p>
 
-                            <p style={{ fontSize: '0.85em', color: '#888', margin: '0 0 8px 0', lineHeight: '1.4' }}>
+                            <p style={{  color: '#888', margin: '0 0 8px 0', lineHeight: '1.4' }}>
                                 This program is free software released under the<br />
                                 GNU General Public License v3.0 or later.
                             </p>
@@ -1102,7 +1100,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                         e.preventDefault();
                                         window.electronAPI.openExternal('https://www.gnu.org/licenses/gpl-3.0.html');
                                     }}
-                                    style={{ color: '#64b5f6', textDecoration: 'none', fontSize: '0.9em' }}
+                                    style={{ color: '#64b5f6', textDecoration: 'none' }}
                                 >
                                     View GNU General Public License v3.0
                                 </a>

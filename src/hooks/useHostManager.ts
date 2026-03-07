@@ -148,6 +148,21 @@ function insertNode(nodes: HostTreeNode[], parentId: string | null, newNode: Hos
     });
 }
 
+function insertNodes(nodes: HostTreeNode[], parentId: string | null, newNodes: HostTreeNode[]): HostTreeNode[] {
+    if (parentId === null) {
+        return [...nodes, ...newNodes];
+    }
+    return nodes.map(n => {
+        if (n.id === parentId && n.type === 'folder') {
+            return { ...n, children: [...(n.children ?? []), ...newNodes] };
+        }
+        if (n.children) {
+            return { ...n, children: insertNodes(n.children, parentId, newNodes) };
+        }
+        return n;
+    });
+}
+
 function patchNode(nodes: HostTreeNode[], id: string, patch: Partial<HostTreeNode>): HostTreeNode[] {
     return nodes.map(n => {
         if (n.id === id) return { ...n, ...patch };
@@ -418,7 +433,7 @@ export function useHostManager() {
         });
     }, []);
 
-    const importData = useCallback(async (nodes: HostTreeNode[], folderName: string = 'Imported') => {
+    const importData = useCallback(async (nodes: HostTreeNode[], folderName: string = 'Imported', parentId: string | null = null): Promise<string> => {
         // Assign new IDs recursively to avoid collisions
         const reassignIds = (nodeList: HostTreeNode[]): HostTreeNode[] => {
             return nodeList.map(n => ({
@@ -429,18 +444,28 @@ export function useHostManager() {
         };
 
         const importedNodes = reassignIds(nodes);
-        const importedFolder: HostTreeNode = {
-            id: generateId(),
-            type: 'folder',
-            name: folderName,
-            children: importedNodes
-        };
+        const targetFolderId = parentId || generateId();
 
         setTree(prev => {
-            const next = [...prev, importedFolder];
+            let next: HostTreeNode[];
+            if (parentId) {
+                // If parentId is specified, insert nodes directly into that folder
+                next = insertNodes(prev, parentId, importedNodes);
+            } else {
+                // Otherwise create a wrapper folder at the root with the generated ID
+                const importedFolder: HostTreeNode = {
+                    id: targetFolderId,
+                    type: 'folder',
+                    name: folderName,
+                    children: importedNodes
+                };
+                next = [...prev, importedFolder];
+            }
             encryptTree(next).then(saveRawTree);
             return next;
         });
+
+        return targetFolderId;
     }, []);
 
     return { tree, addFolder, addHost, editNode, deleteNode, saveTree, moveNode, sortFolder, importData };

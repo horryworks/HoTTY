@@ -8,7 +8,7 @@ import { LayoutSelector } from './components/LayoutSelector/LayoutSelector'
 import { GridLayout } from './components/GridLayout/GridLayout'
 import { TerminalComponent } from './components/Terminal/Terminal'
 import { AIChatPane } from './components/AIChatPane/AIChatPane'
-import { ErrorModal } from './components/ErrorModal/ErrorModal'
+import { MessageModal } from './components/MessageModal/MessageModal'
 
 import { PaneLines } from './components/PaneLines/PaneLines'
 import { useSessionManager } from './hooks/useSessionManager'
@@ -91,7 +91,7 @@ function App() {
   // -- UI State --
   const [themesData, setThemesData] = useState<any>(null);
   const [showDialog, setShowDialog] = useState(true);
-  const [errorModalMessage, setErrorModalMessage] = useState<string | null>(null);
+  const [globalMessage, setGlobalMessage] = useState<{ type: 'error' | 'success' | 'info', title?: string, message: string } | null>(null);
   const [focusTrigger, setFocusTrigger] = useState(0);
 
   // Load UI state from localStorage or default
@@ -217,14 +217,14 @@ function App() {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === 'n') {
         // Ignore if any modal is open
-        if (isSettingsOpen || pasteContent !== null || errorModalMessage !== null) return;
+        if (isSettingsOpen || pasteContent !== null || globalMessage !== null) return;
         e.preventDefault();
         setShowDialog(true);
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [isSettingsOpen, pasteContent, errorModalMessage]);
+  }, [isSettingsOpen, pasteContent, globalMessage]);
 
   const [globalEncoding, setGlobalEncoding] = useState<string>(() => {
     return localStorage.getItem('hterm_global_encoding') || 'utf8';
@@ -448,7 +448,7 @@ function App() {
     backspaceSendsDel,
     onPasteRequest: handlePasteRequest,
     onSessionConnected: () => setShowDialog(false),
-    onSessionError: (msg) => setErrorModalMessage(msg),
+    onSessionError: (msg) => setGlobalMessage({ type: 'error', message: msg }),
     setPaneAllocations: pane.setPaneAllocations,
     setActivePaneId: pane.setActivePaneId,
     showLeftSidebar,
@@ -767,9 +767,9 @@ function App() {
     setFocusTrigger(prev => prev + 1);
   };
 
-  // -- Error Modal --
-  const handleCloseErrorModal = () => {
-    setErrorModalMessage(null);
+  // -- Message Modal --
+  const handleCloseMessageModal = () => {
+    setGlobalMessage(null);
     window.electronAPI.focusWindow();
   };
 
@@ -927,7 +927,7 @@ function App() {
                           isActive={isActive}
                           focusTrigger={focusTrigger}
                           terminalInstance={session.terminalRegistry.current[sessionData.id]}
-                          disableFocus={showDialog || !!errorModalMessage}
+                          disableFocus={showDialog || !!globalMessage}
                           fontSize={fontSize}
                           fontFamily={fontFamily}
                           terminalForeground={terminalForeground}
@@ -1023,7 +1023,7 @@ function App() {
                             isActive={pane.activePaneId === 'top-bar'}
                             focusTrigger={focusTrigger}
                             terminalInstance={session.terminalRegistry.current[sessionData.id]}
-                            disableFocus={showDialog || !!errorModalMessage}
+                            disableFocus={showDialog || !!globalMessage}
                             fontSize={fontSize}
                             fontFamily={fontFamily}
                             terminalForeground={terminalForeground}
@@ -1072,7 +1072,7 @@ function App() {
                     onData={session.handleTerminalData}
                     focusTrigger={focusTrigger}
                     terminalRegistry={session.terminalRegistry.current}
-                    disableFocus={showDialog || !!errorModalMessage}
+                    disableFocus={showDialog || !!globalMessage}
                     fontSize={fontSize}
                     fontFamily={fontFamily}
                     terminalForeground={terminalForeground}
@@ -1161,7 +1161,7 @@ function App() {
                             isActive={pane.activePaneId === 'bottom-bar'}
                             focusTrigger={focusTrigger}
                             terminalInstance={session.terminalRegistry.current[sessionData.id]}
-                            disableFocus={showDialog || !!errorModalMessage}
+                            disableFocus={showDialog || !!globalMessage}
                             fontSize={fontSize}
                             fontFamily={fontFamily}
                             terminalForeground={terminalForeground}
@@ -1254,7 +1254,7 @@ function App() {
                           isActive={isActive}
                           focusTrigger={focusTrigger}
                           terminalInstance={session.terminalRegistry.current[sessionData.id]}
-                          disableFocus={showDialog || !!errorModalMessage}
+                          disableFocus={showDialog || !!globalMessage}
                           fontSize={fontSize}
                           fontFamily={fontFamily}
                           terminalForeground={terminalForeground}
@@ -1281,99 +1281,103 @@ function App() {
           </>
 
         )}
-      </div>
-
-      {
-        showDialog && (
+        {/* Modals and Overlays */}
+        {showDialog && (
           <ConnectionDialog
             onConnect={(config) => { session.createSession(config); setShowDialog(false); }}
             onClose={() => setShowDialog(false)}
             getCachedPassword={getCachedPassword}
             saveCachedPassword={saveCachedPassword}
+            onShowMessage={(type, title, message) => setGlobalMessage({ type, title, message })}
           />
-        )
-      }
+        )}
 
-      {
-        errorModalMessage && (
-          <ErrorModal message={errorModalMessage} onClose={handleCloseErrorModal} />
-        )
-      }
+        {
+          globalMessage && (
+            <MessageModal
+              type={globalMessage.type}
+              title={globalMessage.title}
+              message={globalMessage.message}
+              onClose={handleCloseMessageModal}
+            />
+          )
+        }
 
-      {
-        pasteContent !== null && (
-          <PasteConfirmationModal
-            content={pasteContent}
-            onConfirm={confirmPaste}
-            onCancel={cancelPaste}
-          />
-        )
-      }
+        {
+          pasteContent !== null && (
+            <PasteConfirmationModal
+              content={pasteContent}
+              onConfirm={confirmPaste}
+              onCancel={cancelPaste}
+            />
+          )
+        }
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        encoding={globalEncoding}
-        onEncodingChange={updateGlobalEncoding}
-        fontSize={fontSize}
-        onFontSizeChange={updateFontSize}
-        fontFamily={fontFamily}
-        onFontFamilyChange={updateFontFamily}
-        sshKeepAliveEnabled={sshKeepAliveEnabled}
-        onSshKeepAliveEnabledChange={updateSshKeepAliveEnabled}
-        sshKeepAliveInterval={sshKeepAliveInterval}
-        onSshKeepAliveIntervalChange={updateSshKeepAliveInterval}
-        telnetKeepAliveEnabled={telnetKeepAliveEnabled}
-        onTelnetKeepAliveEnabledChange={updateTelnetKeepAliveEnabled}
-        telnetKeepAliveInterval={telnetKeepAliveInterval}
-        onTelnetKeepAliveIntervalChange={updateTelnetKeepAliveInterval}
-        terminalForeground={terminalForeground}
-        onTerminalForegroundChange={updateTerminalForeground}
-        terminalBackground={terminalBackground}
-        onTerminalBackgroundChange={updateTerminalBackground}
-        terminalBackgroundInactive={terminalBackgroundInactive}
-        onTerminalBackgroundInactiveChange={updateTerminalBackgroundInactive}
-        paneBackground={paneBackground}
-        onPaneBackgroundChange={updatePaneBackground}
-        paneBackgroundMode={paneBackgroundMode}
-        onPaneBackgroundModeChange={updatePaneBackgroundMode}
-        paneBackgroundImage={paneBackgroundImage}
-        onPaneBackgroundImageChange={updatePaneBackgroundImage}
-        loggingEnabled={loggingEnabled}
-        onLoggingEnabledChange={updateLoggingEnabled}
-        loggingPath={loggingPath}
-        onLoggingPathChange={updateLoggingPath}
-        scrollback={scrollback}
-        onScrollbackChange={updateScrollback}
-        theme={theme}
-        onThemeChange={updateTheme}
-        sidebarPosition={sidebarPosition}
-        onSidebarPositionChange={updateSidebarPosition}
-        showSystemPrompt={showSystemPrompt}
-        onShowSystemPromptChange={updateShowSystemPrompt}
-        askGeminiCommands={askGeminiCommands}
-        onAskGeminiCommandsChange={updateAskGeminiCommands}
-        aiPersonas={aiPersonas}
-        onAiPersonasChange={updateAiPersonas}
-        backspaceSendsDel={backspaceSendsDel}
-        onBackspaceSendsDelChange={updateBackspaceSendsDel}
-        rightClickPaste={rightClickPaste}
-        onRightClickPasteChange={updateRightClickPaste}
-        enablePromptHighlight={enablePromptHighlight}
-        onEnablePromptHighlightChange={updateEnablePromptHighlight}
-        promptHighlightColor={promptHighlightColor}
-        onPromptHighlightColorChange={updatePromptHighlightColor}
-        promptPatterns={promptPatterns}
-        onPromptPatternsChange={updatePromptPatterns}
-      />
-      <PaneLines
-        paneAllocations={pane.paneAllocations}
-        totalPanes={pane.currentDims.rows * pane.currentDims.cols}
-        visible={showPaneLines}
-      />
-      <ResizeGrip />
-    </div >
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          encoding={globalEncoding}
+          onEncodingChange={updateGlobalEncoding}
+          fontSize={fontSize}
+          onFontSizeChange={updateFontSize}
+          fontFamily={fontFamily}
+          onFontFamilyChange={updateFontFamily}
+          sshKeepAliveEnabled={sshKeepAliveEnabled}
+          onSshKeepAliveEnabledChange={updateSshKeepAliveEnabled}
+          sshKeepAliveInterval={sshKeepAliveInterval}
+          onSshKeepAliveIntervalChange={updateSshKeepAliveInterval}
+          telnetKeepAliveEnabled={telnetKeepAliveEnabled}
+          onTelnetKeepAliveEnabledChange={updateTelnetKeepAliveEnabled}
+          telnetKeepAliveInterval={telnetKeepAliveInterval}
+          onTelnetKeepAliveIntervalChange={updateTelnetKeepAliveInterval}
+          terminalForeground={terminalForeground}
+          onTerminalForegroundChange={updateTerminalForeground}
+          terminalBackground={terminalBackground}
+          onTerminalBackgroundChange={updateTerminalBackground}
+          terminalBackgroundInactive={terminalBackgroundInactive}
+          onTerminalBackgroundInactiveChange={updateTerminalBackgroundInactive}
+          paneBackground={paneBackground}
+          onPaneBackgroundChange={updatePaneBackground}
+          paneBackgroundMode={paneBackgroundMode}
+          onPaneBackgroundModeChange={updatePaneBackgroundMode}
+          paneBackgroundImage={paneBackgroundImage}
+          onPaneBackgroundImageChange={updatePaneBackgroundImage}
+          loggingEnabled={loggingEnabled}
+          onLoggingEnabledChange={updateLoggingEnabled}
+          loggingPath={loggingPath}
+          onLoggingPathChange={updateLoggingPath}
+          scrollback={scrollback}
+          onScrollbackChange={updateScrollback}
+          theme={theme}
+          onThemeChange={updateTheme}
+          sidebarPosition={sidebarPosition}
+          onSidebarPositionChange={updateSidebarPosition}
+          showSystemPrompt={showSystemPrompt}
+          onShowSystemPromptChange={updateShowSystemPrompt}
+          askGeminiCommands={askGeminiCommands}
+          onAskGeminiCommandsChange={updateAskGeminiCommands}
+          aiPersonas={aiPersonas}
+          onAiPersonasChange={updateAiPersonas}
+          backspaceSendsDel={backspaceSendsDel}
+          onBackspaceSendsDelChange={updateBackspaceSendsDel}
+          rightClickPaste={rightClickPaste}
+          onRightClickPasteChange={updateRightClickPaste}
+          enablePromptHighlight={enablePromptHighlight}
+          onEnablePromptHighlightChange={updateEnablePromptHighlight}
+          promptHighlightColor={promptHighlightColor}
+          onPromptHighlightColorChange={updatePromptHighlightColor}
+          promptPatterns={promptPatterns}
+          onPromptPatternsChange={updatePromptPatterns}
+        />
+        <PaneLines
+          paneAllocations={pane.paneAllocations}
+          totalPanes={pane.currentDims.rows * pane.currentDims.cols}
+          visible={showPaneLines}
+        />
+        <ResizeGrip />
+      </div>
+    </div>
   );
 };
 
-export default App
+export default App;

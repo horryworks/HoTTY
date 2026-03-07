@@ -154,9 +154,14 @@
     border: 1px solid var(--border-color);
     padding: 5px 8px;
     border-radius: 4px;
-    font-size: 1rem;
+    font-size: 0.9rem;
     outline: none;
     transition: border-color 0.2s;
+}
+
+.settings-modal button {
+    font-size: 0.9rem;
+    font-family: inherit;
 }
 
 .settings-select:focus,
