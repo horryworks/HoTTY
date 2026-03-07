@@ -56,16 +56,35 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     const [clientId, setClientId] = useState<string>('');
     const [clientSecret, setClientSecret] = useState<string>('');
 
-    // Load encrypted credentials on mount
+    // Load encrypted credentials and attempt auto-auth on mount
     useEffect(() => {
         const load = async () => {
             try {
                 const encId = localStorage.getItem('hotty_gemini_client_id') || '';
                 const encSecret = localStorage.getItem('hotty_gemini_client_secret') || '';
-                if (encId) setClientId(await window.electronAPI.decryptSecret(encId));
-                if (encSecret) setClientSecret(await window.electronAPI.decryptSecret(encSecret));
+
+                let decryptedId = '';
+                let decryptedSecret = '';
+
+                if (encId) {
+                    decryptedId = await window.electronAPI.decryptSecret(encId);
+                    setClientId(decryptedId);
+                }
+                if (encSecret) {
+                    decryptedSecret = await window.electronAPI.decryptSecret(encSecret);
+                    setClientSecret(decryptedSecret);
+                }
+
+                // Attempt auto background auth if both are present
+                if (decryptedId && decryptedSecret) {
+                    setIsAuthLoading(true);
+                    const success = await window.electronAPI.geminiAuthAuto(decryptedId, decryptedSecret);
+                    setIsAuthenticated(success);
+                    setIsAuthLoading(false);
+                }
             } catch (err) {
-                console.error('Failed to decrypt Gemini credentials:', err);
+                console.error('Failed to decrypt Gemini credentials or auto-auth:', err);
+                setIsAuthLoading(false);
             }
         };
         load();

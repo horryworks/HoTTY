@@ -147,6 +147,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Gemini AI
     geminiAuthStart: (clientId: string, clientSecret: string) => ipcRenderer.invoke('gemini-auth-start', { clientId, clientSecret }),
+    geminiAuthAuto: (clientId: string, clientSecret: string) => ipcRenderer.invoke('gemini-auth-auto', { clientId, clientSecret }),
     geminiAuthStatus: () => ipcRenderer.invoke('gemini-auth-status'),
     geminiAuthLogout: () => ipcRenderer.send('gemini-auth-logout'),
     geminiChatSend: (sessionId: string, message: string, model: string, systemInstruction?: string) => ipcRenderer.send('gemini-chat-send', { sessionId, message, model, systemInstruction }),

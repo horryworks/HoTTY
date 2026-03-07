@@ -21,6 +21,7 @@ export interface ElectronAPI {
 
     // Gemini AI
     geminiAuthStart: (clientId: string, clientSecret: string) => Promise<boolean>;
+    geminiAuthAuto: (clientId: string, clientSecret: string) => Promise<boolean>;
     geminiAuthStatus: () => Promise<boolean>;
     geminiAuthLogout: () => void;
     geminiChatSend: (sessionId: string, message: string, model: string, systemInstruction?: string) => void;

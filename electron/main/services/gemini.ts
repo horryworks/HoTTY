@@ -2,6 +2,10 @@ import { BrowserWindow, shell } from 'electron';
 import * as http from 'http';
 import * as url from 'url';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
+import { app } from 'electron';
+import { encryptString, decryptString } from './dpapi';
 
 interface TokenData {
   access_token: string;
@@ -25,6 +29,99 @@ export class GeminiService {
   private clientSecret: string | null = null;
 
   constructor() {
+  }
+
+  // -- Token Persistence --
+
+  private getTokenFilePath(): string {
+    return path.join(app.getPath('userData'), 'gemini_token.json');
+  }
+
+  private async saveToken(): Promise<void> {
+    if (!this.tokenData || !this.tokenData.refresh_token) return;
+
+    try {
+      const dataToSave = {
+        refresh_token: this.tokenData.refresh_token,
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+        obtained_at: this.tokenData.obtained_at
+      };
+
+      const jsonString = JSON.stringify(dataToSave);
+      const encrypted = await encryptString(jsonString);
+      fs.writeFileSync(this.getTokenFilePath(), encrypted, 'utf8');
+      console.log('Gemini token saved successfully.');
+    } catch (err) {
+      console.error('Failed to save Gemini token:', err);
+    }
+  }
+
+  private async loadToken(): Promise<boolean> {
+    try {
+      const tokenPath = this.getTokenFilePath();
+      if (!fs.existsSync(tokenPath)) return false;
+
+      const encrypted = fs.readFileSync(tokenPath, 'utf8');
+      const decrypted = await decryptString(encrypted);
+      if (!decrypted) return false;
+
+      const data = JSON.parse(decrypted);
+
+      if (!data.refresh_token || !data.client_id || !data.client_secret) {
+        return false;
+      }
+
+      this.clientId = data.client_id;
+      this.clientSecret = data.client_secret;
+      this.tokenData = {
+        access_token: '', // We don't save access token since it expires quickly
+        refresh_token: data.refresh_token,
+        expires_in: 0,
+        token_type: 'Bearer',
+        obtained_at: data.obtained_at || 0,
+      };
+
+      // Try reading and refreshing access token
+      const success = await this.refreshAccessToken();
+      return success;
+
+    } catch (err) {
+      console.error('Failed to load Gemini token:', err);
+      return false;
+    }
+  }
+
+  // -- Auto Auth Flow --
+
+  async autoAuth(clientId: string, clientSecret: string): Promise<boolean> {
+    // If we're already authenticated and have a valid token (or can refresh one), just return true.
+    if (this.isAuthenticated() && this.clientId === clientId && this.clientSecret === clientSecret) {
+      const token = await this.getValidToken();
+      if (token) return true;
+    }
+
+    try {
+      const tokenPath = this.getTokenFilePath();
+      if (!fs.existsSync(tokenPath)) {
+        return false; // No saved credentials
+      }
+
+      const success = await this.loadToken();
+      if (success) {
+        // Validate that the stored clientId/secret matches what we were passed
+        if (this.clientId !== clientId || this.clientSecret !== clientSecret) {
+          console.log("Gemini auto-auth failed: saved credentials do not match provided credentials.");
+          this.logout();
+          return false;
+        }
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Auto auth error:', err);
+      return false;
+    }
   }
 
   // -- OAuth 2.0 Flow --
@@ -60,6 +157,10 @@ export class GeminiService {
             try {
               const port = (this.authServer!.address() as any).port;
               await this.exchangeCodeForToken(code, clientId, clientSecret, codeVerifier, `http://localhost:${port}/callback`);
+
+              // Save token immediately after authenticating
+              await this.saveToken();
+
               res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
               res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#4ade80">✅ Authentication Successful</h1><p>You can return to HoTTY. You may close this window.</p></div></body></html>');
               this.cleanupServer();
@@ -91,7 +192,36 @@ export class GeminiService {
         authUrl.searchParams.set('access_type', 'offline');
         authUrl.searchParams.set('prompt', 'consent');
 
-        shell.openExternal(authUrl.toString());
+        const authWin = new BrowserWindow({
+          width: 600,
+          height: 800,
+          parent: win,
+          modal: true,
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+          },
+          autoHideMenuBar: true,
+        });
+
+        authWin.loadURL(authUrl.toString());
+
+        authWin.on('closed', () => {
+          // If user closes the window manually before callback happens
+          if (this.authServer) {
+            this.cleanupServer();
+            win.webContents.send('gemini-auth-result', { success: false });
+            resolve(false);
+          }
+        });
+
+        // When auth is complete, close the auth window
+        win.webContents.once('gemini-auth-result', () => {
+          if (!authWin.isDestroyed()) {
+            authWin.close();
+          }
+        });
+
       });
 
       // Timeout after 5 minutes
@@ -166,6 +296,10 @@ export class GeminiService {
         expires_in: data.expires_in,
         obtained_at: Date.now(),
       };
+
+      // Save the updated token data (specifically `obtained_at`)
+      await this.saveToken();
+
       return true;
     } catch {
       return false;
@@ -333,6 +467,16 @@ export class GeminiService {
     this.clientId = null;
     this.clientSecret = null;
     this.chatHistories.clear();
+
+    // Remove the saved token file
+    try {
+      const tokenPath = this.getTokenFilePath();
+      if (fs.existsSync(tokenPath)) {
+        fs.unlinkSync(tokenPath);
+      }
+    } catch (err) {
+      console.error('Failed to delete Gemini token file:', err);
+    }
   }
 
   clearHistory(sessionId: string): void {

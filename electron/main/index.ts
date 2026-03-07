@@ -437,6 +437,11 @@ ipcMain.handle('gemini-auth-start', async (event, { clientId, clientSecret }) =>
   return await geminiService.startAuth(eventWin, clientId, clientSecret);
 });
 
+ipcMain.handle('gemini-auth-auto', async (_, { clientId, clientSecret }) => {
+  if (!geminiService) return false;
+  return await geminiService.autoAuth(clientId, clientSecret);
+});
+
 ipcMain.handle('gemini-auth-status', () => {
   return geminiService?.isAuthenticated() || false;
 });
