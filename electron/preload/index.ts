@@ -123,6 +123,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('ask-gemini', subscription);
         return () => ipcRenderer.removeListener('ask-gemini', subscription);
     },
+    onTerminalContextPaste: (callback: () => void) => {
+        const subscription = () => callback();
+        ipcRenderer.on('terminal-context-paste', subscription);
+        return () => ipcRenderer.removeListener('terminal-context-paste', subscription);
+    },
 
     // New Event Listeners
     onSessionData: (callback: (sessionId: string, data: string) => void) => {

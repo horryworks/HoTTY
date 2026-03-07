@@ -34,6 +34,7 @@ export interface ElectronAPI {
     // Context Menu
     showContextMenu: (selection: string, commands?: { id: string; label: string }[]) => void;
     onAskGemini: (callback: (selection: string, type: string) => void) => () => void;
+    onTerminalContextPaste: (callback: () => void) => () => void;
     getSshAlgorithms: () => Promise<any>;
     saveSshAlgorithms: (algorithms: any) => Promise<boolean>;
     getThemes: () => Promise<any>;

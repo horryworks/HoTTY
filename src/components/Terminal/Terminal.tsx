@@ -605,6 +605,18 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
         };
     }, [terminalInstance, enablePromptHighlight, promptHighlightColor, promptPatterns]);
 
+    useEffect(() => {
+        if (!window.electronAPI.onTerminalContextPaste) return;
+        const cleanup = window.electronAPI.onTerminalContextPaste(() => {
+            if (terminalRef.current && terminalRef.current.contains(document.activeElement)) {
+                navigator.clipboard.readText().then(text => {
+                    if (text && onPasteRequest) onPasteRequest(text);
+                }).catch(err => console.error('Clipboard error:', err));
+            }
+        });
+        return cleanup;
+    }, [onPasteRequest]);
+
     return (
         <div
             className="terminal-container"
@@ -623,6 +635,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             }}
             onContextMenu={(e) => {
                 if (terminalInstance) {
+                    terminalInstance.focus();
                     const selection = terminalInstance.getSelection();
 
                     let isOverSelection = false;

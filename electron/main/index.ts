@@ -412,7 +412,10 @@ ipcMain.on('show-context-menu', (event, selection: string, commands?: { id: stri
   }
 
   const template = [
-    { role: 'paste' },
+    {
+      label: 'Paste',
+      click: () => { event.sender.send('terminal-context-paste'); }
+    },
     { type: 'separator' },
     {
       label: 'Ask Gemini',
