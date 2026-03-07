@@ -531,7 +531,7 @@ function App() {
   });
 
   useEffect(() => {
-    const removeListener = window.electronAPI.onAskGemini((selection: string, type: string) => {
+    const handleAskGemini = (selection: string, type: string) => {
       window.electronAPI.logDebug(`[App.tsx] onAskGemini triggered. Type: ${type}, Selection length: ${selection?.length}`);
 
       if (!selection) {
@@ -601,14 +601,31 @@ function App() {
       }
 
       window.electronAPI.logDebug(`[App.tsx] Updating session state. Prompt: ${userPrompt.substring(0, 50)}...`);
+      console.log(`[App.tsx] Updating session state. Prompt: ${userPrompt.substring(0, 50)}...`);
       currentSession.updateSessionState(aiSessionId, {
         pendingMessage: userPrompt,
         systemInstruction: systemInstruction
       });
       window.electronAPI.logDebug('[App.tsx] Session state updated.');
-    });
+      console.log('[App.tsx] Session state updated.');
+    };
 
-    return () => removeListener();
+    const removeListener = window.electronAPI.onAskGemini(handleAskGemini);
+
+    const handleCustomAskGemini = (e: Event) => {
+      const customEvent = e as CustomEvent<{ selection: string, type: string }>;
+      console.log('[App.tsx] handleCustomAskGemini triggered with detail:', customEvent.detail);
+      window.electronAPI.logDebug(`[App.tsx] handleCustomAskGemini triggered with type: ${customEvent.detail?.type}`);
+      if (customEvent.detail) {
+        handleAskGemini(customEvent.detail.selection, customEvent.detail.type);
+      }
+    };
+    window.addEventListener('ask-gemini-internal', handleCustomAskGemini);
+
+    return () => {
+      removeListener();
+      window.removeEventListener('ask-gemini-internal', handleCustomAskGemini);
+    };
   }, []); // Empty dependency array ensures listener is bound ONLY ONCE
 
   // ... (rest of the file)

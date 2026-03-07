@@ -44,6 +44,68 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
     onPasteRequest
 }) => {
     const terminalRef = useRef<HTMLDivElement>(null);
+    const [popoverState, setPopoverState] = React.useState<{
+        visible: boolean;
+        expanded: boolean;
+        x: number;
+        y: number;
+        selection: string;
+    }>({ visible: false, expanded: false, x: 0, y: 0, selection: '' });
+
+    // Handle selection and popover positioning
+    useEffect(() => {
+        if (!terminalInstance || !terminalRef.current) return;
+        const term = terminalInstance;
+
+        const handleMouseUp = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            // Ignore mouseup events originating from the popover itself to prevent resetting state
+            if (target && target.closest && target.closest('.terminal-selection-popover')) {
+                return;
+            }
+
+            const selection = term.getSelection();
+            if (selection && selection.length > 0) {
+                // Determine position at the top right of the terminal container
+                if (container) {
+                    const rect = container.getBoundingClientRect();
+                    setPopoverState({
+                        visible: true,
+                        expanded: false,
+                        x: rect.right - 20, // 20px padding from the right edge
+                        y: rect.top + 20,   // 20px padding from the top edge
+                        selection
+                    });
+                }
+            }
+        };
+
+        const handleMouseDown = (e: MouseEvent) => {
+            // Hide popover if clicking outside the popover element
+            const target = e.target as HTMLElement;
+            if (!target.closest('.terminal-selection-popover')) {
+                setPopoverState(prev => prev.visible ? { ...prev, visible: false, expanded: false } : prev);
+            }
+        };
+
+        const container = terminalRef.current;
+        container.addEventListener('mouseup', handleMouseUp);
+        container.addEventListener('mousedown', handleMouseDown);
+
+        // Also listen to xterm selection change to hide if selection is cleared via keyboard
+        const onSelectionChange = term.onSelectionChange(() => {
+            if (!term.hasSelection()) {
+                setPopoverState(prev => prev.visible ? { ...prev, visible: false, expanded: false } : prev);
+            }
+        });
+
+        return () => {
+            container.removeEventListener('mouseup', handleMouseUp);
+            container.removeEventListener('mousedown', handleMouseDown);
+            onSelectionChange.dispose();
+        };
+    }, [terminalInstance]);
+
     // Initial Attach / Re-attach
     useEffect(() => {
         if (!terminalRef.current || !terminalInstance) return;
@@ -615,7 +677,53 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                     }
                 }
             }}
-        />
+        >
+            {/* Selection Popover */}
+            <div
+                className={`terminal-selection-popover ${popoverState.visible ? 'visible' : ''} ${popoverState.expanded ? 'expanded' : ''}`}
+                style={{ left: popoverState.x, top: popoverState.y }}
+                onMouseDown={(e) => e.stopPropagation()} // Prevent terminal from clearing selection
+                onMouseUp={(e) => e.stopPropagation()} // Prevent terminal from re-detecting selection and replacing expanded popover
+                onClick={(e) => e.stopPropagation()}
+            >
+                {!popoverState.expanded ? (
+                    <button
+                        className="popover-btn"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setPopoverState(prev => ({ ...prev, expanded: true }));
+                        }}
+                        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        title="Ask Gemini about selection"
+                    >
+                        ✨ Ask Gemini
+                    </button>
+                ) : (
+                    askGeminiCommands?.map(cmd => (
+                        <button
+                            key={cmd.id}
+                            className="popover-btn"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const event = new CustomEvent('ask-gemini-internal', {
+                                    detail: { selection: popoverState.selection, type: cmd.id }
+                                });
+                                console.log('[Terminal.tsx] Dispatching ask-gemini-internal event:', cmd.id, popoverState.selection.substring(0, 20) + '...');
+                                window.electronAPI.logDebug(`[Terminal.tsx] Dispatching ask-gemini-internal event: ${cmd.id}, selection length: ${popoverState.selection.length}`);
+                                window.dispatchEvent(event);
+                                setPopoverState(prev => ({ ...prev, visible: false, expanded: false }));
+                            }}
+                            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                            title={cmd.label}
+                        >
+                            ✨ {cmd.label}
+                        </button>
+                    ))
+                )}
+            </div>
+        </div>
     );
 };
 

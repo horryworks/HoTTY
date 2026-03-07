@@ -182,3 +182,69 @@
 .sidebar-resizer-h.interact {
   background-color: var(--accent-color, #007acc);
 }
+
+/* --- Terminal Selection Popover --- */
+.terminal-selection-popover {
+  position: fixed;
+  z-index: 50000;
+  background: rgba(30, 30, 30, 0.85);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 6px;
+  display: flex;
+  gap: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  transform: translateX(-10px) translateY(-10px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  opacity: 0;
+  pointer-events: none;
+  align-items: center;
+}
+
+.terminal-selection-popover.visible {
+  opacity: 1;
+  transform: translateX(-100%) translateY(0);
+  pointer-events: auto;
+}
+
+.popover-btn {
+  background: transparent;
+  border: none;
+  color: #e0e0e0;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.popover-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.popover-separator {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 0 4px;
+}
+
+.terminal-selection-popover.expanded {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 8px;
+  gap: 2px;
+}
+
+.terminal-selection-popover.expanded .popover-btn {
+  width: 100%;
+  text-align: left;
+  justify-content: flex-start;
+}
