@@ -34,7 +34,23 @@ const preload = join(__dirname, '../preload/index.js')
 const url = process.env.VITE_DEV_SERVER_URL
 const indexHtml = join(process.env.DIST || 'dist', 'index.html')
 
-const allowedMediaPaths = new Set<string>();
+const mediaTokensPath = join(app.getPath('userData'), 'media_tokens.json');
+let mediaTokens: Record<string, string> = {};
+try {
+  if (fs.existsSync(mediaTokensPath)) {
+    mediaTokens = JSON.parse(fs.readFileSync(mediaTokensPath, 'utf8'));
+  }
+} catch (e) {
+  console.error('Failed to load media tokens:', e);
+}
+
+function saveMediaTokens() {
+  try {
+    fs.writeFileSync(mediaTokensPath, JSON.stringify(mediaTokens, null, 2), 'utf8');
+  } catch (e) {
+    console.error('Failed to save media tokens:', e);
+  }
+}
 
 async function createWindow() {
   const newWin = new BrowserWindow({
@@ -85,24 +101,17 @@ app.whenReady().then(async () => {
   const { pathToFileURL } = require('url');
 
   protocol.handle('media', (request: Request) => {
-    let url = request.url.replace(/^media:\/\//, '');
-    // If 3 slashes were used 'media:///C:/...', we now have '/C:/...'
-    // On Windows, we want 'C:/...'
-    if (process.platform === 'win32' && url.startsWith('/') && /^[a-zA-Z]:/.test(url.slice(1))) {
-      url = url.slice(1);
+    // The URL comes as media:///token or media://token
+    const token = request.url.replace(/^media:\/\/\/?/, '').split(/[?#]/)[0];
+
+    const actualPath = mediaTokens[token];
+    if (!actualPath) {
+      console.warn('Blocked unauthorized media protocol access or invalid token:', token);
+      return new Response('Access Denied', { status: 403 });
     }
 
     try {
-      const decodedPath = decodeURIComponent(url);
-      const normalizedPath = join(decodedPath);
-
-      // Security Check: Only allow paths that were explicitly authorized
-      if (!allowedMediaPaths.has(normalizedPath)) {
-        console.warn('Blocked unauthorized media protocol access:', normalizedPath);
-        return new Response('Access Denied', { status: 403 });
-      }
-
-      return net.fetch(pathToFileURL(normalizedPath).toString());
+      return net.fetch(pathToFileURL(actualPath).toString());
     } catch (error) {
       console.error('Failed to handle media protocol', error);
       return new Response('Internal Error', { status: 500 });
@@ -346,10 +355,17 @@ ipcMain.handle('select-image', async (event) => {
   if (canceled || filePaths.length === 0) {
     return null;
   }
-  const selectedPath = filePaths[0];
-  // Add to whitelist
-  allowedMediaPaths.add(join(selectedPath));
-  return selectedPath;
+  const selectedPath = join(filePaths[0]);
+
+  // Check if we already have a token for this path
+  let token = Object.keys(mediaTokens).find(k => mediaTokens[k] === selectedPath);
+  if (!token) {
+    token = crypto.randomUUID();
+    mediaTokens[token] = selectedPath;
+    saveMediaTokens();
+  }
+
+  return token; // Return the token, UI will use media://token
 });
 
 ipcMain.handle('select-folder', async (event) => {
@@ -375,12 +391,7 @@ ipcMain.handle('list-wsl-distributions', async () => {
   }
 });
 
-ipcMain.handle('authorize-media-path', (_, path: string) => {
-  if (typeof path !== 'string') return;
-  const normalizedPath = join(path);
-  allowedMediaPaths.add(normalizedPath);
-  console.log('Authorized media path:', normalizedPath);
-});
+
 
 // ── Context Menu ──
 ipcMain.on('show-context-menu', (event, selection: string, commands?: { id: string; label: string }[]) => {

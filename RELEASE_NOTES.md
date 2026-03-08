@@ -1,10 +1,15 @@
 # Release Notes - HoTTY
 
-## [v0.1.14-beta2] - 2026-03-08
+## [v0.1.14-beta3] - 2026-03-08
 ### Added
-- **Ask Gemini Free Format Questions**: Added a "Free format question..." option to the right-click context menu. This opens a modal dialog allowing you to ask custom questions about the selected terminal text.
-- **Host Tree Enhancements**: Added an **Export** button to the toolbar (red icon) for easier access to the host tree export feature.
+- **Gemini Logout**: Added a "Logout from Gemini" button in Settings > AI. This allows you to securely clear your Google authentication token.
+- **Auto-Close AI Tabs**: When logging out from Gemini, all open AI chat tabs are now automatically closed for security and workspace cleanup.
 
+### Security Enhancements
+- **Content Security Policy (CSP)**: Implemented a strict CSP to mitigate XSS risks and restrict unauthorized script execution.
+- **Capability-based Media Access**: Refactored the `media://` protocol to use a secure token-based lookup system. This replaces the vulnerable `authorizeMediaPath` IPC and prevents unauthorized access to local files.
+
+## [v0.1.14-beta2] - 2026-03-08
 ### Fixed
 - **Context Menu Interaction**: Fixed an issue where the context menu would stay open after selecting the "Export" option. The menu now closes automatically when the export password prompt appears.
 - **Visual Cleanup**: Removed a redundant separator line that appeared at the top of the host-specific context menu.

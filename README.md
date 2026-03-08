@@ -1,6 +1,6 @@
-﻿# HoTTY v0.1.14-beta2 - Gemini Integrated Advanced Terminal
+﻿# HoTTY v0.1.14-beta3 - Gemini Integrated Advanced Terminal
 
-**Current Version: v0.1.14-beta2**
+**Current Version: v0.1.14-beta3**
 
 emulator built with Electron, React, and TypeScript. It is designed to provide a seamless terminal experience with advanced window management and customization options.
 

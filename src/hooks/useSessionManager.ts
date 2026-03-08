@@ -337,6 +337,16 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         });
     };
 
+    const closeAllAISessions = useCallback(() => {
+        setSessions(prev => {
+            const aiSessions = prev.filter(s => s.type === 'ai');
+            aiSessions.forEach(s => {
+                closeSession(s.id);
+            });
+            return prev;
+        });
+    }, [closeSession]);
+
     const handleTabReorder = (fromIndex: number, toIndex: number) => {
         setTabOrder(prev => {
             if (fromIndex === toIndex) return prev;
@@ -359,6 +369,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         createAISession,
         updateSessionState,
         closeSession,
+        closeAllAISessions,
         handleTabReorder,
         handleTerminalData,
     };

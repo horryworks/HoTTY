@@ -6,6 +6,7 @@ import './SettingsModal.css';
 interface SettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
+    onLogout: () => void;
     encoding: string;
     onEncodingChange: (encoding: string) => void;
     fontSize: number;
@@ -63,6 +64,7 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({
     isOpen,
     onClose,
+    onLogout,
     encoding,
     onEncodingChange,
     fontSize,
@@ -119,6 +121,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const { position, onMouseDown: onHeaderMouseDown } = useDraggable();
     const [activeTab, setActiveTab] = React.useState<'appearance' | 'ssh' | 'telnet' | 'system' | 'ai' | 'about'>('system');
     const [version, setVersion] = React.useState<string>('');
+    const [isAiAuthenticated, setIsAiAuthenticated] = React.useState<boolean>(false);
     const [sshAlgorithms, setSshAlgorithms] = React.useState<any>(null);
     const modalRef = useRef<HTMLDivElement>(null);
     const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -137,6 +140,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         if (isOpen) {
             window.electronAPI.getAppVersion().then(setVersion);
             window.electronAPI.getSshAlgorithms().then(setSshAlgorithms);
+            window.electronAPI.geminiAuthStatus().then(setIsAiAuthenticated);
         }
     }, [isOpen]);
 
@@ -374,7 +378,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <label>Colors (Custom Theme)</label>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                                         <div>
-                                            <label style={{  color: '#ccc' }}>Terminal Text</label>
+                                            <label style={{ color: '#ccc' }}>Terminal Text</label>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <input
                                                     type="color"
@@ -392,7 +396,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                             </div>
                                         </div>
                                         <div>
-                                            <label style={{  color: '#ccc' }}>Active Background</label>
+                                            <label style={{ color: '#ccc' }}>Active Background</label>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <input
                                                     type="color"
@@ -410,7 +414,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                             </div>
                                         </div>
                                         <div>
-                                            <label style={{  color: '#ccc' }}>Inactive Background</label>
+                                            <label style={{ color: '#ccc' }}>Inactive Background</label>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <input
                                                     type="color"
@@ -553,7 +557,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 {enablePromptHighlight && (
                                     <>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' }}>
-                                            <span style={{  color: '#ccc' }}>Highlight Color</span>
+                                            <span style={{ color: '#ccc' }}>Highlight Color</span>
                                             <input
                                                 type="color"
                                                 value={promptHighlightColor}
@@ -668,7 +672,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 </div>
                                 {sshKeepAliveEnabled && (
                                     <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span style={{  color: '#ccc' }}>Interval (seconds):</span>
+                                        <span style={{ color: '#ccc' }}>Interval (seconds):</span>
                                         <input
                                             type="number"
                                             value={sshKeepAliveInterval}
@@ -733,7 +737,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 </div>
                                 {telnetKeepAliveEnabled && (
                                     <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span style={{  color: '#ccc' }}>Interval (seconds):</span>
+                                        <span style={{ color: '#ccc' }}>Interval (seconds):</span>
                                         <input
                                             type="number"
                                             value={telnetKeepAliveInterval}
@@ -766,7 +770,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             </div>
                             {loggingEnabled && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                                    <label style={{  color: '#ccc' }}>Log Folder Path</label>
+                                    <label style={{ color: '#ccc' }}>Log Folder Path</label>
                                     <div style={{ display: 'flex', gap: '8px' }}>
                                         <input
                                             type="text"
@@ -804,7 +808,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                         max={100000}
                                         style={{ width: '100px' }}
                                     />
-                                    <span style={{  color: '#ccc' }}>lines</span>
+                                    <span style={{ color: '#ccc' }}>lines</span>
                                 </div>
                                 <p className="settings-help">Max lines to keep in memory per terminal (Default: 10000).</p>
                             </div>
@@ -845,6 +849,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                     {activeTab === 'ai' && (
                         <div className="form-group">
+                            <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
+                                <label style={{ marginBottom: '10px', display: 'block' }}>Google Account Authentication</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div style={{
+                                            width: '10px',
+                                            height: '10px',
+                                            borderRadius: '50%',
+                                            backgroundColor: isAiAuthenticated ? '#4caf50' : '#f44336'
+                                        }}></div>
+                                        <span>{isAiAuthenticated ? 'Authenticated' : 'Not Authenticated'}</span>
+                                    </div>
+                                    {isAiAuthenticated && (
+                                        <button
+                                            onClick={async () => {
+                                                if (confirm('Are you sure you want to logout? You will need to re-authenticate to use Gemini AI.')) {
+                                                    await window.electronAPI.geminiAuthLogout();
+                                                    setIsAiAuthenticated(false);
+                                                    onLogout();
+                                                }
+                                            }}
+                                            style={{
+                                                padding: '6px 12px',
+                                                cursor: 'pointer',
+                                                backgroundColor: 'var(--bg-secondary)',
+                                                border: '1px solid var(--border-color)',
+                                                color: 'var(--text-primary)',
+                                                borderRadius: '3px'
+                                            }}
+                                        >
+                                            Logout from Gemini
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
                             <label style={{ marginBottom: '10px', display: 'block' }}>Ask Gemini Commands</label>
 
                             <div className="command-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
@@ -912,7 +952,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 boxSizing: 'border-box' // Fix overflow
                                             }}
                                         />
-                                        <div style={{  color: '#888' }}>
+                                        <div style={{ color: '#888' }}>
                                             Use <code>{'{selection}'}</code> placeholder for the selected text.
                                         </div>
                                     </div>
@@ -1066,7 +1106,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <h2 style={{ margin: '0 0 8px 0' }}>HoTTY</h2>
                             <p style={{ color: '#aaa', margin: '0 0 16px 0' }}>v{version}</p>
 
-                            <p style={{  fontWeight: 'bold', margin: '0 0 8px 0' }}>
+                            <p style={{ fontWeight: 'bold', margin: '0 0 8px 0' }}>
                                 Katsumasa "Horry" Horiuchi
                             </p>
 
@@ -1083,12 +1123,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 </a>
                             </p>
 
-                            <p style={{  color: '#ccc', margin: '0 0 24px 0' }}>
+                            <p style={{ color: '#ccc', margin: '0 0 24px 0' }}>
                                 SSH/Telnet/Serial Terminal Emulator<br />
                                 Built with Electron, React, & TypeScript
                             </p>
 
-                            <p style={{  color: '#888', margin: '0 0 8px 0', lineHeight: '1.4' }}>
+                            <p style={{ color: '#888', margin: '0 0 8px 0', lineHeight: '1.4' }}>
                                 This program is free software released under the<br />
                                 GNU General Public License v3.0 or later.
                             </p>

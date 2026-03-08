@@ -349,19 +349,6 @@ function App() {
     return localStorage.getItem('hterm_pane_background_image') || 'HoTTY_background.svg';
   });
 
-  const [isMediaAuthorized, setIsMediaAuthorized] = useState(false);
-
-  // Authorize media path whenever it changes (including startup)
-  useEffect(() => {
-    if (paneBackgroundImage.startsWith('media:///')) {
-      const path = paneBackgroundImage.replace(/^media:\/\/\//, '');
-      window.electronAPI.authorizeMediaPath(decodeURIComponent(path)).then(() => {
-        setIsMediaAuthorized(true);
-      });
-    } else {
-      setIsMediaAuthorized(true);
-    }
-  }, [paneBackgroundImage]);
 
   const [showPaneLines, setShowPaneLines] = useState(false);
 
@@ -912,33 +899,123 @@ function App() {
       </div>
 
       <div className="main-layout">
-        {!isMediaAuthorized ? (
-          <div className="content-area">
-            <div className="empty-state">Loading background...</div>
+        <>
+          <div className="top-bar">
+            <TabBar
+              tabs={orderedTabs}
+              activeTabId={pane.activeSessionId}
+              visibleSessionIds={pane.visibleSessionIds}
+              onTabClick={pane.handleTabClick}
+              onTabClose={session.closeSession}
+              onNewTab={() => setShowDialog(true)}
+              onNewAITab={() => session.createAISession()}
+              onTabReorder={session.handleTabReorder}
+            />
           </div>
-        ) : (
-          <>
-            <div className="top-bar">
-              <TabBar
-                tabs={orderedTabs}
-                activeTabId={pane.activeSessionId}
-                visibleSessionIds={pane.visibleSessionIds}
-                onTabClick={pane.handleTabClick}
-                onTabClose={session.closeSession}
-                onNewTab={() => setShowDialog(true)}
-                onNewAITab={() => session.createAISession()}
-                onTabReorder={session.handleTabReorder}
+          <div className="content-area" style={{ display: 'flex', flexDirection: 'row', width: '100%', height: '100%', gap: '0' }}>
+
+
+            {showLeftSidebar && (
+              <div
+                className="left-sidebar-pane"
+                data-pane-id="sidebar-left"
+                style={{
+                  width: `${leftSidebarPercent}%`,
+                  border: '1px solid var(--border-color)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  backgroundColor: paneBackground || '#000000',
+                  backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || ''}")` : 'none',
+                  backgroundSize: paneBackgroundMode === 'image' ? 'auto' : 'auto',
+                  backgroundRepeat: 'repeat',
+                  backgroundPosition: 'center',
+                  position: 'relative',
+                  flexShrink: 0,
+                  margin: '2px' // Gap all around to match grid padding
+                }}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+
+
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const sessionId = e.dataTransfer.getData('text/plain');
+                  if (sessionId) {
+                    pane.handleDropSession(sessionId, 'sidebar-left');
+                  }
+                }}
+                onClick={() => pane.setActivePaneId('sidebar-left')}
+              >
+                {(() => {
+                  const sessionId = pane.paneAllocations['sidebar-left'];
+                  const sessionData = session.sessions.find(s => s.id === sessionId);
+                  const isActive = pane.activePaneId === 'sidebar-left';
+
+                  if (sessionData) {
+                    return sessionData.type === 'ai' ? (
+                      <AIChatPane
+                        sessionId={sessionData.id}
+                        initialState={sessionData.aiChatState}
+                        onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
+                        showSystemPrompt={showSystemPrompt}
+                        askGeminiCommands={askGeminiCommands}
+                        aiPersonas={aiPersonas}
+                        fontSize={fontSize}
+                        terminalBackground={terminalBackground}
+                        terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                      />
+                    ) : (
+                      <TerminalComponent
+                        key={sessionData.id}
+                        sessionId={sessionData.id}
+                        onData={session.handleTerminalData}
+                        isActive={isActive}
+                        focusTrigger={focusTrigger}
+                        terminalInstance={session.terminalRegistry.current[sessionData.id]}
+                        disableFocus={showDialog || !!globalMessage}
+                        fontSize={fontSize}
+                        fontFamily={fontFamily}
+                        terminalForeground={terminalForeground}
+                        terminalBackground={terminalBackground}
+                        terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                        lineWrapEnabled={lineWrapEnabled}
+                        askGeminiCommands={askGeminiCommands}
+                        enablePromptHighlight={enablePromptHighlight}
+                        promptHighlightColor={promptHighlightColor}
+                        promptPatterns={promptPatterns}
+                        onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
+                      />
+                    );
+                  } else {
+                    return (
+                      <div className="empty-pane-placeholder">
+                        <span className="pane-label">Left Sidebar</span>
+                        <span className="drop-hint">Drop Tab Here</span>
+                      </div>
+                    );
+                  }
+                })()}
+              </div>
+            )}
+
+            {showLeftSidebar && (
+              <div
+                className={`sidebar-resizer ${resizingSide === 'left' ? 'interact' : ''}`}
+                onMouseDown={(e) => handleSidebarResizeStart(e, 'left')}
               />
-            </div>
-            <div className="content-area" style={{ display: 'flex', flexDirection: 'row', width: '100%', height: '100%', gap: '0' }}>
+            )}
 
 
-              {showLeftSidebar && (
+            {/* Center Column: TopBar + Grid + BottomBar */}
+            <div className="center-column" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, height: '100%', position: 'relative' }}>
+
+              {/* Top Bar */}
+              {showTopBar && (
                 <div
-                  className="left-sidebar-pane"
-                  data-pane-id="sidebar-left"
+                  className="top-bar-pane"
+                  data-pane-id="top-bar"
                   style={{
-                    width: `${leftSidebarPercent}%`,
+                    height: `${topBarPercent}%`,
+                    // width: '100%', // Removed to prevent overflow with margin
                     border: '1px solid var(--border-color)',
                     display: 'flex',
                     flexDirection: 'column',
@@ -949,26 +1026,26 @@ function App() {
                     backgroundPosition: 'center',
                     position: 'relative',
                     flexShrink: 0,
-                    margin: '2px' // Gap all around to match grid padding
+                    margin: '2px' // Gap
                   }}
+
                   onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-
-
                   onDrop={(e) => {
                     e.preventDefault();
                     const sessionId = e.dataTransfer.getData('text/plain');
                     if (sessionId) {
-                      pane.handleDropSession(sessionId, 'sidebar-left');
+                      pane.handleDropSession(sessionId, 'top-bar'); // Use specific ID
                     }
                   }}
-                  onClick={() => pane.setActivePaneId('sidebar-left')}
+                  onClick={() => pane.setActivePaneId('top-bar')}
                 >
+                  {/* Top Bar Content */}
                   {(() => {
-                    const sessionId = pane.paneAllocations['sidebar-left'];
+                    const sessionId = pane.paneAllocations['top-bar'];
                     const sessionData = session.sessions.find(s => s.id === sessionId);
-                    const isActive = pane.activePaneId === 'sidebar-left';
 
                     if (sessionData) {
+                      // Render session... (simplified for brevity, should duplicate logic or extract component)
                       return sessionData.type === 'ai' ? (
                         <AIChatPane
                           sessionId={sessionData.id}
@@ -986,7 +1063,7 @@ function App() {
                           key={sessionData.id}
                           sessionId={sessionData.id}
                           onData={session.handleTerminalData}
-                          isActive={isActive}
+                          isActive={pane.activePaneId === 'top-bar'}
                           focusTrigger={focusTrigger}
                           terminalInstance={session.terminalRegistry.current[sessionData.id]}
                           disableFocus={showDialog || !!globalMessage}
@@ -1006,7 +1083,7 @@ function App() {
                     } else {
                       return (
                         <div className="empty-pane-placeholder">
-                          <span className="pane-label">Left Sidebar</span>
+                          <span className="pane-label">Top Bar</span>
                           <span className="drop-hint">Drop Tab Here</span>
                         </div>
                       );
@@ -1015,253 +1092,67 @@ function App() {
                 </div>
               )}
 
-              {showLeftSidebar && (
+              {/* Top Bar Resizer */}
+              {showTopBar && (
                 <div
-                  className={`sidebar-resizer ${resizingSide === 'left' ? 'interact' : ''}`}
-                  onMouseDown={(e) => handleSidebarResizeStart(e, 'left')}
+                  className={`sidebar-resizer-h ${resizingSide === 'top' ? 'interact' : ''}`}
+                  onMouseDown={(e) => handleSidebarResizeStart(e, 'top')}
                 />
               )}
 
-
-              {/* Center Column: TopBar + Grid + BottomBar */}
-              <div className="center-column" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, height: '100%', position: 'relative' }}>
-
-                {/* Top Bar */}
-                {showTopBar && (
-                  <div
-                    className="top-bar-pane"
-                    data-pane-id="top-bar"
-                    style={{
-                      height: `${topBarPercent}%`,
-                      // width: '100%', // Removed to prevent overflow with margin
-                      border: '1px solid var(--border-color)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      backgroundColor: paneBackground || '#000000',
-                      backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || ''}")` : 'none',
-                      backgroundSize: paneBackgroundMode === 'image' ? 'auto' : 'auto',
-                      backgroundRepeat: 'repeat',
-                      backgroundPosition: 'center',
-                      position: 'relative',
-                      flexShrink: 0,
-                      margin: '2px' // Gap
-                    }}
-
-                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const sessionId = e.dataTransfer.getData('text/plain');
-                      if (sessionId) {
-                        pane.handleDropSession(sessionId, 'top-bar'); // Use specific ID
-                      }
-                    }}
-                    onClick={() => pane.setActivePaneId('top-bar')}
-                  >
-                    {/* Top Bar Content */}
-                    {(() => {
-                      const sessionId = pane.paneAllocations['top-bar'];
-                      const sessionData = session.sessions.find(s => s.id === sessionId);
-
-                      if (sessionData) {
-                        // Render session... (simplified for brevity, should duplicate logic or extract component)
-                        return sessionData.type === 'ai' ? (
-                          <AIChatPane
-                            sessionId={sessionData.id}
-                            initialState={sessionData.aiChatState}
-                            onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
-                            showSystemPrompt={showSystemPrompt}
-                            askGeminiCommands={askGeminiCommands}
-                            aiPersonas={aiPersonas}
-                            fontSize={fontSize}
-                            terminalBackground={terminalBackground}
-                            terminalBackgroundInactive={terminalBackgroundInactive || undefined}
-                          />
-                        ) : (
-                          <TerminalComponent
-                            key={sessionData.id}
-                            sessionId={sessionData.id}
-                            onData={session.handleTerminalData}
-                            isActive={pane.activePaneId === 'top-bar'}
-                            focusTrigger={focusTrigger}
-                            terminalInstance={session.terminalRegistry.current[sessionData.id]}
-                            disableFocus={showDialog || !!globalMessage}
-                            fontSize={fontSize}
-                            fontFamily={fontFamily}
-                            terminalForeground={terminalForeground}
-                            terminalBackground={terminalBackground}
-                            terminalBackgroundInactive={terminalBackgroundInactive || undefined}
-                            lineWrapEnabled={lineWrapEnabled}
-                            askGeminiCommands={askGeminiCommands}
-                            enablePromptHighlight={enablePromptHighlight}
-                            promptHighlightColor={promptHighlightColor}
-                            promptPatterns={promptPatterns}
-                            onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
-                          />
-                        );
-                      } else {
-                        return (
-                          <div className="empty-pane-placeholder">
-                            <span className="pane-label">Top Bar</span>
-                            <span className="drop-hint">Drop Tab Here</span>
-                          </div>
-                        );
-                      }
-                    })()}
-                  </div>
-                )}
-
-                {/* Top Bar Resizer */}
-                {showTopBar && (
-                  <div
-                    className={`sidebar-resizer-h ${resizingSide === 'top' ? 'interact' : ''}`}
-                    onMouseDown={(e) => handleSidebarResizeStart(e, 'top')}
-                  />
-                )}
-
-                {/* Grid Layout Container */}
-                <div style={{ flex: 1, minHeight: 0, width: '100%' }}>
-                  <GridLayout
-                    rows={pane.currentDims.rows}
-                    cols={pane.currentDims.cols}
-                    sessions={session.sessions}
-                    updateSessionState={session.updateSessionState}
-                    paneAllocations={pane.paneAllocations}
-                    activePaneId={pane.activePaneId || ''}
-                    onPaneClick={pane.setActivePaneId}
-                    onDropSession={pane.handleDropSession}
-                    onData={session.handleTerminalData}
-                    focusTrigger={focusTrigger}
-                    terminalRegistry={session.terminalRegistry.current}
-                    disableFocus={showDialog || !!globalMessage}
-                    fontSize={fontSize}
-                    fontFamily={fontFamily}
-                    terminalForeground={terminalForeground}
-                    terminalBackground={terminalBackground}
-                    terminalBackgroundInactive={terminalBackgroundInactive}
-                    paneBackground={paneBackground}
-                    paneBackgroundMode={paneBackgroundMode}
-                    paneBackgroundImage={paneBackgroundImage}
-                    lineWrapEnabled={lineWrapEnabled}
-                    showSystemPrompt={showSystemPrompt}
-                    askGeminiCommands={askGeminiCommands}
-                    aiPersonas={aiPersonas}
-                    enablePromptHighlight={enablePromptHighlight}
-                    promptHighlightColor={promptHighlightColor}
-                    promptPatterns={promptPatterns}
-                    onPasteRequest={(text) => {
-                      const activePaneSessionId = pane.paneAllocations[pane.activePaneId || ''];
-                      if (activePaneSessionId) handlePasteRequest(activePaneSessionId, text);
-                    }}
-                  />
-                </div>
-
-                {/* Bottom Bar Resizer */}
-                {showBottomBar && (
-                  <div
-                    className={`sidebar-resizer-h ${resizingSide === 'bottom' ? 'interact' : ''}`}
-                    onMouseDown={(e) => handleSidebarResizeStart(e, 'bottom')}
-                  />
-                )}
-
-                {/* Bottom Bar */}
-                {showBottomBar && (
-                  <div
-                    className="bottom-bar-pane"
-                    data-pane-id="bottom-bar"
-                    style={{
-                      height: `${bottomBarPercent}%`,
-                      // width: '100%', // Removed to prevent overflow
-                      border: '1px solid var(--border-color)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      backgroundColor: paneBackground || '#000000',
-                      backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || ''}")` : 'none',
-                      backgroundSize: paneBackgroundMode === 'image' ? 'auto' : 'auto',
-                      backgroundRepeat: 'repeat',
-                      backgroundPosition: 'center',
-                      position: 'relative',
-                      flexShrink: 0,
-                      margin: '2px' // Gap
-                    }}
-                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const sessionId = e.dataTransfer.getData('text/plain');
-                      if (sessionId) {
-                        pane.handleDropSession(sessionId, 'bottom-bar'); // Use specific ID
-                      }
-                    }}
-                    onClick={() => pane.setActivePaneId('bottom-bar')}
-                  >
-                    {/* Bottom Bar Content */}
-                    {(() => {
-                      const sessionId = pane.paneAllocations['bottom-bar'];
-                      const sessionData = session.sessions.find(s => s.id === sessionId);
-
-                      if (sessionData) {
-                        // Render session...
-                        return sessionData.type === 'ai' ? (
-                          <AIChatPane
-                            sessionId={sessionData.id}
-                            initialState={sessionData.aiChatState}
-                            onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
-                            showSystemPrompt={showSystemPrompt}
-                            askGeminiCommands={askGeminiCommands}
-                            aiPersonas={aiPersonas}
-                            fontSize={fontSize}
-                            terminalBackground={terminalBackground}
-                            terminalBackgroundInactive={terminalBackgroundInactive || undefined}
-                          />
-                        ) : (
-                          <TerminalComponent
-                            key={sessionData.id}
-                            sessionId={sessionData.id}
-                            onData={session.handleTerminalData}
-                            isActive={pane.activePaneId === 'bottom-bar'}
-                            focusTrigger={focusTrigger}
-                            terminalInstance={session.terminalRegistry.current[sessionData.id]}
-                            disableFocus={showDialog || !!globalMessage}
-                            fontSize={fontSize}
-                            fontFamily={fontFamily}
-                            terminalForeground={terminalForeground}
-                            terminalBackground={terminalBackground}
-                            terminalBackgroundInactive={terminalBackgroundInactive || undefined}
-                            lineWrapEnabled={lineWrapEnabled}
-                            askGeminiCommands={askGeminiCommands}
-                            enablePromptHighlight={enablePromptHighlight}
-                            promptHighlightColor={promptHighlightColor}
-                            promptPatterns={promptPatterns}
-                            onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
-                          />
-                        );
-                      } else {
-                        return (
-                          <div className="empty-pane-placeholder">
-                            <span className="pane-label">Bottom Bar</span>
-                            <span className="drop-hint">Drop Tab Here</span>
-                          </div>
-                        );
-                      }
-                    })()}
-                  </div>
-                )}
-
+              {/* Grid Layout Container */}
+              <div style={{ flex: 1, minHeight: 0, width: '100%' }}>
+                <GridLayout
+                  rows={pane.currentDims.rows}
+                  cols={pane.currentDims.cols}
+                  sessions={session.sessions}
+                  updateSessionState={session.updateSessionState}
+                  paneAllocations={pane.paneAllocations}
+                  activePaneId={pane.activePaneId || ''}
+                  onPaneClick={pane.setActivePaneId}
+                  onDropSession={pane.handleDropSession}
+                  onData={session.handleTerminalData}
+                  focusTrigger={focusTrigger}
+                  terminalRegistry={session.terminalRegistry.current}
+                  disableFocus={showDialog || !!globalMessage}
+                  fontSize={fontSize}
+                  fontFamily={fontFamily}
+                  terminalForeground={terminalForeground}
+                  terminalBackground={terminalBackground}
+                  terminalBackgroundInactive={terminalBackgroundInactive}
+                  paneBackground={paneBackground}
+                  paneBackgroundMode={paneBackgroundMode}
+                  paneBackgroundImage={paneBackgroundImage}
+                  lineWrapEnabled={lineWrapEnabled}
+                  showSystemPrompt={showSystemPrompt}
+                  askGeminiCommands={askGeminiCommands}
+                  aiPersonas={aiPersonas}
+                  enablePromptHighlight={enablePromptHighlight}
+                  promptHighlightColor={promptHighlightColor}
+                  promptPatterns={promptPatterns}
+                  onPasteRequest={(text) => {
+                    const activePaneSessionId = pane.paneAllocations[pane.activePaneId || ''];
+                    if (activePaneSessionId) handlePasteRequest(activePaneSessionId, text);
+                  }}
+                />
               </div>
 
-
-              {showRightSidebar && (
+              {/* Bottom Bar Resizer */}
+              {showBottomBar && (
                 <div
-                  className={`sidebar-resizer ${resizingSide === 'right' ? 'interact' : ''}`}
-                  onMouseDown={(e) => handleSidebarResizeStart(e, 'right')}
+                  className={`sidebar-resizer-h ${resizingSide === 'bottom' ? 'interact' : ''}`}
+                  onMouseDown={(e) => handleSidebarResizeStart(e, 'bottom')}
                 />
               )}
 
-              {showRightSidebar && (
+              {/* Bottom Bar */}
+              {showBottomBar && (
                 <div
-                  className="right-sidebar-pane"
-                  data-pane-id="sidebar"
+                  className="bottom-bar-pane"
+                  data-pane-id="bottom-bar"
                   style={{
-                    width: `${rightSidebarPercent}%`,
+                    height: `${bottomBarPercent}%`,
+                    // width: '100%', // Removed to prevent overflow
                     border: '1px solid var(--border-color)',
                     display: 'flex',
                     flexDirection: 'column',
@@ -1272,26 +1163,25 @@ function App() {
                     backgroundPosition: 'center',
                     position: 'relative',
                     flexShrink: 0,
-                    margin: '2px' // Gap all around to match grid padding
+                    margin: '2px' // Gap
                   }}
                   onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-
-
                   onDrop={(e) => {
                     e.preventDefault();
                     const sessionId = e.dataTransfer.getData('text/plain');
                     if (sessionId) {
-                      pane.handleDropSession(sessionId, 'sidebar');
+                      pane.handleDropSession(sessionId, 'bottom-bar'); // Use specific ID
                     }
                   }}
-                  onClick={() => pane.setActivePaneId('sidebar')}
+                  onClick={() => pane.setActivePaneId('bottom-bar')}
                 >
+                  {/* Bottom Bar Content */}
                   {(() => {
-                    const sessionId = pane.paneAllocations['sidebar'];
+                    const sessionId = pane.paneAllocations['bottom-bar'];
                     const sessionData = session.sessions.find(s => s.id === sessionId);
-                    const isActive = pane.activePaneId === 'sidebar';
 
                     if (sessionData) {
+                      // Render session...
                       return sessionData.type === 'ai' ? (
                         <AIChatPane
                           sessionId={sessionData.id}
@@ -1309,7 +1199,7 @@ function App() {
                           key={sessionData.id}
                           sessionId={sessionData.id}
                           onData={session.handleTerminalData}
-                          isActive={isActive}
+                          isActive={pane.activePaneId === 'bottom-bar'}
                           focusTrigger={focusTrigger}
                           terminalInstance={session.terminalRegistry.current[sessionData.id]}
                           disableFocus={showDialog || !!globalMessage}
@@ -1320,13 +1210,16 @@ function App() {
                           terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                           lineWrapEnabled={lineWrapEnabled}
                           askGeminiCommands={askGeminiCommands}
+                          enablePromptHighlight={enablePromptHighlight}
+                          promptHighlightColor={promptHighlightColor}
+                          promptPatterns={promptPatterns}
                           onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
                         />
                       );
                     } else {
                       return (
                         <div className="empty-pane-placeholder">
-                          <span className="pane-label">Sidebar</span>
+                          <span className="pane-label">Bottom Bar</span>
                           <span className="drop-hint">Drop Tab Here</span>
                         </div>
                       );
@@ -1334,10 +1227,98 @@ function App() {
                   })()}
                 </div>
               )}
-            </div>
-          </>
 
-        )}
+            </div>
+
+
+            {showRightSidebar && (
+              <div
+                className={`sidebar-resizer ${resizingSide === 'right' ? 'interact' : ''}`}
+                onMouseDown={(e) => handleSidebarResizeStart(e, 'right')}
+              />
+            )}
+
+            {showRightSidebar && (
+              <div
+                className="right-sidebar-pane"
+                data-pane-id="sidebar"
+                style={{
+                  width: `${rightSidebarPercent}%`,
+                  border: '1px solid var(--border-color)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  backgroundColor: paneBackground || '#000000',
+                  backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || ''}")` : 'none',
+                  backgroundSize: paneBackgroundMode === 'image' ? 'auto' : 'auto',
+                  backgroundRepeat: 'repeat',
+                  backgroundPosition: 'center',
+                  position: 'relative',
+                  flexShrink: 0,
+                  margin: '2px' // Gap all around to match grid padding
+                }}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+
+
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const sessionId = e.dataTransfer.getData('text/plain');
+                  if (sessionId) {
+                    pane.handleDropSession(sessionId, 'sidebar');
+                  }
+                }}
+                onClick={() => pane.setActivePaneId('sidebar')}
+              >
+                {(() => {
+                  const sessionId = pane.paneAllocations['sidebar'];
+                  const sessionData = session.sessions.find(s => s.id === sessionId);
+                  const isActive = pane.activePaneId === 'sidebar';
+
+                  if (sessionData) {
+                    return sessionData.type === 'ai' ? (
+                      <AIChatPane
+                        sessionId={sessionData.id}
+                        initialState={sessionData.aiChatState}
+                        onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
+                        showSystemPrompt={showSystemPrompt}
+                        askGeminiCommands={askGeminiCommands}
+                        aiPersonas={aiPersonas}
+                        fontSize={fontSize}
+                        terminalBackground={terminalBackground}
+                        terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                      />
+                    ) : (
+                      <TerminalComponent
+                        key={sessionData.id}
+                        sessionId={sessionData.id}
+                        onData={session.handleTerminalData}
+                        isActive={isActive}
+                        focusTrigger={focusTrigger}
+                        terminalInstance={session.terminalRegistry.current[sessionData.id]}
+                        disableFocus={showDialog || !!globalMessage}
+                        fontSize={fontSize}
+                        fontFamily={fontFamily}
+                        terminalForeground={terminalForeground}
+                        terminalBackground={terminalBackground}
+                        terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                        lineWrapEnabled={lineWrapEnabled}
+                        askGeminiCommands={askGeminiCommands}
+                        onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
+                      />
+                    );
+                  } else {
+                    return (
+                      <div className="empty-pane-placeholder">
+                        <span className="pane-label">Sidebar</span>
+                        <span className="drop-hint">Drop Tab Here</span>
+                      </div>
+                    );
+                  }
+                })()}
+              </div>
+            )}
+          </div>
+        </>
+
         {/* Modals and Overlays */}
         {showDialog && (
           <ConnectionDialog
@@ -1384,6 +1365,7 @@ function App() {
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
+          onLogout={session.closeAllAISessions}
           encoding={globalEncoding}
           onEncodingChange={updateGlobalEncoding}
           fontSize={fontSize}
