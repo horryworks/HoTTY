@@ -72,6 +72,11 @@ Windows環境では、付属のバッチファイルも利用可能です:
 - **SSH 接続**: 接続が頻繁に切れる場合は、設定画面で「SSH KeepAlive」の値を調整してください。
 - **WSL ターミナル**: WSL接続時にプロンプトが表示されない場合は、対象のディストリビューションが正しくインストール・初期設定されているか確認してください。HoTTYは `node-pty` を利用したネイティブなTTY接続に対応しています。
 
+## 貢献について
+
+HoTTY は個人プロジェクトです。プルリクエストの受け付けは行っていませんが、不具合報告や機能要望は [Issues](https://github.com/horryworks/HoTTY/issues) で受け付けています。詳細は [CONTRIBUTING.md](file:///c:/Users/horry/development/HoTTY/CONTRIBUTING.md) をご確認ください。
+
 ## ライセンス
 
 Copyright (c) 2026 HoTTY Contributors.
+[GPL-3.0-or-later](file:///c:/Users/horry/development/HoTTY/LICENSE) ライセンスの下で公開されています。

@@ -72,6 +72,11 @@ Alternatively, you can use the provided batch files on Windows:
 - **SSH Connectivity**: If connections time out, check your "SSH KeepAlive" settings in the Settings modal.
 - **WSL Terminal**: If the WSL terminal doesn't show a prompt, ensure the distribution is correctly installed and initialized. HoTTY now uses `node-pty` for a native TTY experience.
 
+## Contributing
+
+HoTTY is a personal project. We do not accept Pull Requests, but bug reports and feature requests are welcome via [Issues](https://github.com/horryworks/HoTTY/issues). Please see [CONTRIBUTING.md](file:///c:/Users/horry/development/HoTTY/CONTRIBUTING.md) for details.
+
 ## License
 
 Copyright (c) 2026 HoTTY Contributors.
+Licensed under the [GPL-3.0-or-later](file:///c:/Users/horry/development/HoTTY/LICENSE).

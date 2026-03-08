@@ -337,15 +337,12 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         });
     };
 
-    const closeAllAISessions = useCallback(() => {
-        setSessions(prev => {
-            const aiSessions = prev.filter(s => s.type === 'ai');
-            aiSessions.forEach(s => {
-                closeSession(s.id);
-            });
-            return prev;
+    const closeAllAISessions = () => {
+        const aiSessions = sessions.filter(s => s.type === 'ai');
+        aiSessions.forEach(s => {
+            closeSession(s.id);
         });
-    }, [closeSession]);
+    };
 
     const handleTabReorder = (fromIndex: number, toIndex: number) => {
         setTabOrder(prev => {
