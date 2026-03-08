@@ -951,6 +951,8 @@ function App() {
     sessionUpdateStateRef.current = session.updateSessionState;
   }, [session.sessions, session.updateSessionState]);
 
+  const stabilizationTimersRef = useRef<{ [sessionId: string]: any }>({});
+
   // -- Global terminal data listener for interactive flows --
   useEffect(() => {
     const removeListener = window.electronAPI.onSessionData((sessionId, data) => {
@@ -959,7 +961,10 @@ function App() {
       if (!currentTracking) return;
 
       // 2. Clear terminal codes and normalize
-      const cleanData = data.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')
+      // Enhanced ANSI and OSC stripping
+      const cleanData = data
+        .replace(/\x1b][^\x07\x1b]*(\x07|\x1b\\)/g, '') // Strip OSC sequences
+        .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '') // Strip standard ANSI
         .replace(/\r\n/g, '\n').replace(/\r/g, '');
 
       // 3. Update buffer synchronously in ref and schedule state update
@@ -971,8 +976,15 @@ function App() {
         [sessionId]: { ...prev[sessionId], buffer: newBuffer }
       }));
 
+      // Cancel any existing stabilization timer if new data arrives
+      if (stabilizationTimersRef.current[sessionId]) {
+        clearTimeout(stabilizationTimersRef.current[sessionId]);
+        delete stabilizationTimersRef.current[sessionId];
+      }
+
       // 4. Check for prompt (end of command execution)
-      const lines = newBuffer.split('\n').map(l => l.trimEnd());
+      const lines = newBuffer.split('\n').filter(l => l.length > 0).map(l => l.trimEnd());
+      if (lines.length === 0) return;
 
       // Look for a prompt in the last line (trimmed)
       const lastLine = lines[lines.length - 1].trim();
@@ -985,7 +997,7 @@ function App() {
           try {
             // Remove ^ from pattern if we want to match anywhere in the line (merged output)
             const patternStr = patternObj.pattern.startsWith('^') ? patternObj.pattern.substring(1) : patternObj.pattern;
-            const regex = new RegExp(patternStr);
+            const regex = new RegExp(`${patternStr}$`); // FORCE match at the very end of the string
             if (regex.test(lastLine)) {
               matched = true;
               matchedPatternName = patternObj.name;
@@ -995,33 +1007,47 @@ function App() {
         }
 
         if (matched) {
-          window.electronAPI.logDebug(`[Interactive Flow] Prompt detected (${matchedPatternName}) in session ${sessionId}. Line: "${lastLine}"`);
+          window.electronAPI.logDebug(`[Interactive Flow] Potential prompt detected (${matchedPatternName}) in session ${sessionId}. Waiting for silence...`);
 
-          // Trigger AI send
-          const aiSession = sessionSessionsRef.current.find(s => s.id === currentTracking.aiSessionId);
-          if (aiSession) {
-            const resultText = `Terminal Output (Command: ${currentTracking.originalCommand}):\n\`\`\`\n${newBuffer}\n\`\`\``;
+          // SET STABILIZATION TIMER: Wait 300ms of silence before concluding
+          stabilizationTimersRef.current[sessionId] = setTimeout(() => {
+            window.electronAPI.logDebug(`[Interactive Flow] Silence confirmed for session ${sessionId}. Finalizing output.`);
+            delete stabilizationTimersRef.current[sessionId];
 
-            // Update AI state via ref to ensure stability
-            sessionUpdateStateRef.current(currentTracking.aiSessionId, {
-              inputText: '',
-              pendingMessage: resultText,
-              isWaitingForTerminal: false
-            });
+            const finalTracking = interactiveSessionsRef.current[sessionId];
+            if (!finalTracking) return;
 
-            // Remove from tracking
-            setInteractiveSessions(prev => {
-              const next = { ...prev };
-              delete next[sessionId];
-              return next;
-            });
-            // Also cleanup ref immediately
-            delete interactiveSessionsRef.current[sessionId];
-          }
+            // Trigger AI send
+            const aiSession = sessionSessionsRef.current.find(s => s.id === finalTracking.aiSessionId);
+            if (aiSession) {
+              const resultText = `Terminal Output (Command: ${finalTracking.originalCommand}):\n\`\`\`\n${finalTracking.buffer}\n\`\`\``;
+
+              // Update AI state via ref to ensure stability
+              sessionUpdateStateRef.current(finalTracking.aiSessionId, {
+                inputText: '',
+                pendingMessage: resultText,
+                isWaitingForTerminal: false
+              });
+
+              // Remove from tracking
+              setInteractiveSessions(prev => {
+                const next = { ...prev };
+                delete next[sessionId];
+                return next;
+              });
+              // Also cleanup ref immediately
+              delete interactiveSessionsRef.current[sessionId];
+            }
+          }, 300); // 300ms of silence is usually enough to confirm the command finished
         }
       }
     });
-    return () => removeListener();
+    return () => {
+      removeListener();
+      // Cleanup all timers on unmount
+      Object.values(stabilizationTimersRef.current).forEach(clearTimeout);
+      stabilizationTimersRef.current = {};
+    };
     // Only re-register if promptPatterns change (which is rare/settings-driven)
   }, [promptPatterns]);
 
@@ -1035,6 +1061,12 @@ function App() {
 
       if (currentTracking) {
         window.electronAPI.logDebug(`[Interactive Flow] Manual send triggered for session ${sessionId}`);
+
+        // Cleanup stabilization timer if it exists
+        if (stabilizationTimersRef.current[sessionId]) {
+          clearTimeout(stabilizationTimersRef.current[sessionId]);
+          delete stabilizationTimersRef.current[sessionId];
+        }
 
         const resultText = `Terminal Output (Manual Send - Command: ${currentTracking.originalCommand}):\n\`\`\`\n${currentTracking.buffer}\n\`\`\``;
 
@@ -1067,6 +1099,12 @@ function App() {
         Object.keys(next).forEach(sid => {
           if (now - next[sid].startTime > MAX_TTL) {
             window.electronAPI.logDebug(`[Interactive Flow] Cleaning up stale session ${sid} (TTL exceeded)`);
+
+            // Cleanup stabilization timer if it exists
+            if (stabilizationTimersRef.current[sid]) {
+              clearTimeout(stabilizationTimersRef.current[sid]);
+              delete stabilizationTimersRef.current[sid];
+            }
 
             // Also update AI state to stop waiting if it's still waiting
             sessionUpdateStateRef.current(next[sid].aiSessionId, {
