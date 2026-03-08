@@ -1,6 +1,21 @@
 # Release Notes - HoTTY
 
-## [v0.1.14-beta3] - 2026-03-08
+## [v0.1.14-beta4] - 2026-03-08
+### Added
+- **Watch Gemini**:
+    - Introduced a "Watch" (👁️) feature for terminal sessions. When enabled, terminal output is recorded into an in-memory buffer.
+    - **Tab Ask Button**: A new "✨ Ask" button appears on watched tabs. Clicking it opens a context menu with "Analyze Watched Output" and custom Gemini commands.
+    - **Smart Buffer Limit**: Added a "Watch Buffer Limit" setting in Settings > AI to control the size of the recorded context (default: 500,000 characters).
+- **Refined AI Tab Activation**: Clicking "Ask Gemini" now automatically focuses the target terminal tab before opening the AI chat to ensure correct context.
+- **Improved UI Visuals**:
+    - Replaced Watch status emojis with clean, theme-aware SVG icons.
+    - Added a gentle pulsing animation to the active Watch icon for better visibility.
+- **Ask Button Safety**: The ✨ Ask button is automatically disabled when the watch buffer is empty to prevent non-actionable states.
+
+### Fixed
+- **Context Menu Context**: Fixed an issue where the wrong terminal context was read when using "Ask Gemini" from background tabs.
+- **Clean Context Menus**: Removed unnecessary options like "Paste" when opening Gemini menus from the tab bar ✨ button.
+
 ### Added
 - **Gemini Logout**: Added a "Logout from Gemini" button in Settings > AI. This allows you to securely clear your Google authentication token.
 - **Auto-Close AI Tabs**: When logging out from Gemini, all open AI chat tabs are now automatically closed for security and workspace cleanup.

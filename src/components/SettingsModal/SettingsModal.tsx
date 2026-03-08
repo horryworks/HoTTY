@@ -59,6 +59,8 @@ interface SettingsModalProps {
     onPromptHighlightColorChange: (color: string) => void;
     promptPatterns: { id: string; name: string; pattern: string; enabled: boolean }[];
     onPromptPatternsChange: (patterns: { id: string; name: string; pattern: string; enabled: boolean }[]) => void;
+    watchBufferLimit: number;
+    onWatchBufferLimitChange: (limit: number) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -116,7 +118,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     promptHighlightColor,
     onPromptHighlightColorChange,
     promptPatterns,
-    onPromptPatternsChange
+    onPromptPatternsChange,
+    watchBufferLimit,
+    onWatchBufferLimitChange,
 }) => {
     const { position, onMouseDown: onHeaderMouseDown } = useDraggable();
     const [activeTab, setActiveTab] = React.useState<'appearance' | 'ssh' | 'telnet' | 'system' | 'ai' | 'about'>('system');
@@ -882,6 +886,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                             Logout from Gemini
                                         </button>
                                     )}
+                                </div>
+                            </div>
+
+                            <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
+                                <label style={{ marginBottom: '10px', display: 'block' }}>Watch Buffer Limit (Characters)</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <input
+                                        type="number"
+                                        value={watchBufferLimit}
+                                        onChange={(e) => onWatchBufferLimitChange(parseInt(e.target.value, 10))}
+                                        min="10000"
+                                        max="5000000"
+                                        step="10000"
+                                        className="settings-input"
+                                        style={{ width: '120px', padding: '6px' }}
+                                    />
+                                    <span style={{ fontSize: '0.9em', color: 'var(--text-muted)' }}>
+                                        Default: 500,000. Higher limits consume more memory.
+                                    </span>
                                 </div>
                             </div>
 

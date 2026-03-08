@@ -389,6 +389,17 @@ function App() {
     localStorage.setItem('hterm_scrollback', lines.toString());
   };
 
+  // Watch Buffer State
+  const [watchBufferLimit, setWatchBufferLimit] = useState<number>(() => {
+    const saved = localStorage.getItem('hotty_watch_buffer_limit');
+    return saved ? parseInt(saved, 10) : 500000; // default 500k chars
+  });
+
+  const updateWatchBufferLimit = (limit: number) => {
+    setWatchBufferLimit(limit);
+    localStorage.setItem('hotty_watch_buffer_limit', limit.toString());
+  };
+
   // Backspace Behavior State
   const [backspaceSendsDel, setBackspaceSendsDel] = useState<boolean>(() => {
     return localStorage.getItem('hterm_backspace_sends_del') === 'true'; // default false (0x08)
@@ -446,6 +457,7 @@ function App() {
     showRightSidebar,
     showTopBar,
     showBottomBar,
+    watchBufferLimit: watchBufferLimit,
   });
 
   // Show System Prompt State
@@ -522,18 +534,33 @@ function App() {
   });
 
   useEffect(() => {
-    const handleAskGemini = (selection: string, type: string) => {
-      window.electronAPI.logDebug(`[App.tsx] onAskGemini triggered. Type: ${type}, Selection length: ${selection?.length}`);
-
-      if (!selection) {
-        window.electronAPI.logDebug('[App.tsx] Selection is empty, ignoring.');
-        return;
-      }
+    const handleAskGemini = (selection: string, type: string, targetSessionId?: string) => {
+      // If we got the special watch buffer marker, treat selection as empty
+      const actualSelection = selection === '__WATCH_BUFFER__' ? '' : selection;
+      window.electronAPI.logDebug(`[App.tsx] onAskGemini triggered. Type: ${type}, Selection length: ${actualSelection?.length}`);
 
       const currentSession = sessionRef.current;
       const currentPane = paneRef.current;
       const currentCommands = askGeminiCommandsRef.current;
       const currentPersonas = aiPersonasRef.current; // Get current personas
+
+      // Extract Watch Buffer before changing active pane
+      const activeTermId = targetSessionId || currentPane.activePaneId;
+      const activeSession = currentSession.sessions.find(s => s.id === activeTermId);
+      let prependedContext = '';
+      if (activeSession?.isWatching) {
+        const buffer = currentSession.getWatchBuffer(activeTermId);
+        if (buffer) {
+          prependedContext = `[Watched Terminal Output]\n${buffer}\n================\n`;
+        }
+      }
+
+      const finalSelection = prependedContext ? (actualSelection ? `${prependedContext}[Target Text]\n${actualSelection}` : prependedContext) : actualSelection;
+
+      if (!finalSelection) {
+        window.electronAPI.logDebug('[App.tsx] Selection and buffer are empty, ignoring.');
+        return;
+      }
 
       // Ensure AI Session
       let aiSessionId: string;
@@ -577,24 +604,27 @@ function App() {
       let systemInstruction = '';
       let userPrompt = '';
 
-      if (type === 'free-format') {
+      if (type === 'analyze-watch') {
+        systemInstruction = `${defaultPersona} Answer in ${lang}.`;
+        userPrompt = `Please analyze the following terminal output and point out any errors, warnings, or findings of interest:\n\n${finalSelection}`;
+      } else if (type === 'free-format') {
         // Open modal instead of sending immediately
-        setAskGeminiFreeFormatData({ selection });
+        setAskGeminiFreeFormatData({ selection: finalSelection });
         return;
-      }
-
-      const existingCommand = currentCommands.find(c => c.id === type);
-
-      if (existingCommand) {
-        systemInstruction = `${defaultPersona} Answer in ${lang}.`;
-        if (existingCommand.id === 'root-cause') {
-          systemInstruction = `You are an expert troubleshooter. ${defaultPersona} Answer in ${lang}.`;
-        }
-        userPrompt = existingCommand.promptTemplate.replace('{selection}', selection);
       } else {
-        // Fallback
-        systemInstruction = `${defaultPersona} Answer in ${lang}.`;
-        userPrompt = `Please explain the following text:\n\n${selection}`;
+        const existingCommand = currentCommands.find(c => c.id === type);
+
+        if (existingCommand) {
+          systemInstruction = `${defaultPersona} Answer in ${lang}.`;
+          if (existingCommand.id === 'root-cause') {
+            systemInstruction = `You are an expert troubleshooter. ${defaultPersona} Answer in ${lang}.`;
+          }
+          userPrompt = existingCommand.promptTemplate.replace('{selection}', finalSelection);
+        } else {
+          // Fallback
+          systemInstruction = `${defaultPersona} Answer in ${lang}.`;
+          userPrompt = `Please explain the following text:\n\n${finalSelection}`;
+        }
       }
 
       window.electronAPI.logDebug(`[App.tsx] Updating session state. Prompt: ${userPrompt.substring(0, 50)}...`);
@@ -610,11 +640,11 @@ function App() {
     const removeListener = window.electronAPI.onAskGemini(handleAskGemini);
 
     const handleCustomAskGemini = (e: Event) => {
-      const customEvent = e as CustomEvent<{ selection: string, type: string }>;
+      const customEvent = e as CustomEvent<{ selection: string, type: string, sessionId?: string }>;
       console.log('[App.tsx] handleCustomAskGemini triggered with detail:', customEvent.detail);
       window.electronAPI.logDebug(`[App.tsx] handleCustomAskGemini triggered with type: ${customEvent.detail?.type}`);
       if (customEvent.detail) {
-        handleAskGemini(customEvent.detail.selection, customEvent.detail.type);
+        handleAskGemini(customEvent.detail.selection, customEvent.detail.type, customEvent.detail.sessionId);
       }
     };
     window.addEventListener('ask-gemini-internal', handleCustomAskGemini);
@@ -832,6 +862,24 @@ function App() {
     .map(id => session.sessions.find(s => s.id === id))
     .filter((s): s is Session => !!s);
 
+  const watchedSessionIds = session.sessions.filter(s => s.isWatching).map(s => s.id);
+  const nonEmptyBufferSessionIds = session.sessions.filter(s => s.hasWatchData).map(s => s.id);
+
+  const handleAskGeminiFromTab = (sessionId: string) => {
+    // Switch to the target tab first to ensure context
+    pane.setActivePaneId(sessionId);
+
+    // Prepare menu items: default analysis + user-defined commands
+    const menuCommands = [
+      { id: 'analyze-watch', label: 'Analyze Watched Output' },
+      ...askGeminiCommands.map(c => ({ id: c.id, label: c.label }))
+    ];
+
+    // Show native context menu at current mouse position
+    // Use special selection marker to hide Paste and enable Gemini without real selection
+    window.electronAPI.showContextMenu('__WATCH_BUFFER__', menuCommands);
+  };
+
   // -- Render --
   return (
     <div className="app-container">
@@ -905,8 +953,12 @@ function App() {
               tabs={orderedTabs}
               activeTabId={pane.activeSessionId}
               visibleSessionIds={pane.visibleSessionIds}
+              watchedSessionIds={watchedSessionIds}
+              nonEmptyBufferSessionIds={nonEmptyBufferSessionIds}
               onTabClick={pane.handleTabClick}
               onTabClose={session.closeSession}
+              onToggleWatch={session.toggleWatch}
+              onAskGeminiTab={handleAskGeminiFromTab}
               onNewTab={() => setShowDialog(true)}
               onNewAITab={() => session.createAISession()}
               onTabReorder={session.handleTabReorder}
@@ -1418,6 +1470,8 @@ function App() {
           onPromptHighlightColorChange={updatePromptHighlightColor}
           promptPatterns={promptPatterns}
           onPromptPatternsChange={updatePromptPatterns}
+          watchBufferLimit={watchBufferLimit}
+          onWatchBufferLimitChange={updateWatchBufferLimit}
         />
         <PaneLines
           paneAllocations={pane.paneAllocations}

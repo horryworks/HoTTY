@@ -431,18 +431,25 @@ ipcMain.on('show-context-menu', (event, selection: string, commands?: { id: stri
     }
   );
 
-  const template = [
-    {
-      label: 'Paste',
-      click: () => { event.sender.send('terminal-context-paste'); }
-    },
-    { type: 'separator' },
-    {
-      label: 'Ask Gemini',
-      enabled: !!selection,
-      submenu: geminiSubmenu
-    }
-  ] as Electron.MenuItemConstructorOptions[];
+  const isWatchBuffer = selection === '__WATCH_BUFFER__';
+
+  const template: Electron.MenuItemConstructorOptions[] = [];
+
+  if (!isWatchBuffer) {
+    template.push(
+      {
+        label: 'Paste',
+        click: () => { event.sender.send('terminal-context-paste'); }
+      },
+      { type: 'separator' }
+    );
+  }
+
+  template.push({
+    label: 'Ask Gemini',
+    enabled: isWatchBuffer || !!selection,
+    submenu: geminiSubmenu
+  });
 
   const menu = Menu.buildFromTemplate(template);
   menu.popup({ window: BrowserWindow.fromWebContents(event.sender) || undefined });

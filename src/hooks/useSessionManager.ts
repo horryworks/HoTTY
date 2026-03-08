@@ -17,6 +17,8 @@ export interface Session {
         textareaHeight: number;
         scrollTop?: number;
     };
+    isWatching?: boolean;
+    hasWatchData?: boolean;
 }
 
 interface UseSessionManagerOptions {
@@ -39,6 +41,7 @@ interface UseSessionManagerOptions {
     showRightSidebar: boolean;
     showTopBar: boolean;
     showBottomBar: boolean;
+    watchBufferLimit: number;
 }
 
 export function useSessionManager(options: UseSessionManagerOptions) {
@@ -62,11 +65,13 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         showRightSidebar,
         showTopBar,
         showBottomBar,
+        watchBufferLimit,
     } = options;
 
     const [sessions, setSessions] = useState<Session[]>([]);
     const [tabOrder, setTabOrder] = useState<string[]>([]);
     const terminalRegistry = useRef<{ [sessionId: string]: Terminal }>({});
+    const watchBuffers = useRef<{ [sessionId: string]: string }>({});
 
     // Terminal instance factory
     const createTerminalInstance = (sessionId: string, type?: Session['type']) => {
@@ -154,9 +159,39 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             if (term) {
                 term.write(data);
             }
+
+            // Append to watch buffer if this session is being watched
+            setSessions(currentSessions => {
+                const session = currentSessions.find(s => s.id === id);
+                if (session && session.isWatching) {
+                    // Strip ANSI escape codes
+                    // eslint-disable-next-line no-control-regex
+                    let cleanData = data.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+                    cleanData = cleanData.replace(/\r\n/g, '\n').replace(/\r/g, ''); // Normalize CRLF/CR
+
+                    if (watchBuffers.current[id] === undefined) {
+                        watchBuffers.current[id] = '';
+                    }
+
+                    let newBuffer = watchBuffers.current[id] + cleanData;
+
+                    // Enforce limit (FIFO)
+                    if (newBuffer.length > watchBufferLimit) {
+                        newBuffer = newBuffer.substring(newBuffer.length - watchBufferLimit);
+                    }
+
+                    watchBuffers.current[id] = newBuffer;
+
+                    // Update session state to reflect that we have data (only if not already set)
+                    if (!session.hasWatchData) {
+                        return currentSessions.map(s => s.id === id ? { ...s, hasWatchData: true } : s);
+                    }
+                }
+                return currentSessions;
+            });
         });
         return () => removeDataListener();
-    }, []);
+    }, [watchBufferLimit]); // Need watchBufferLimit to be bound
 
     // Session status & error listeners
     useEffect(() => {
@@ -325,6 +360,9 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             }
         }
 
+        // Cleanup watch buffer
+        delete watchBuffers.current[sessionId];
+
         setSessions(prev => prev.filter(s => s.id !== sessionId));
         setTabOrder(prev => prev.filter(id => id !== sessionId));
 
@@ -358,6 +396,28 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         window.electronAPI.sendInput(sessionId, data);
     }, []);
 
+    const toggleWatch = useCallback((sessionId: string) => {
+        setSessions(prev => prev.map(s => {
+            if (s.id === sessionId) {
+                const newWatchingState = !s.isWatching;
+                // If turning off watch, clear the buffer to free memory
+                if (!newWatchingState) {
+                    delete watchBuffers.current[sessionId];
+                    return { ...s, isWatching: newWatchingState, hasWatchData: false };
+                } else if (!watchBuffers.current[sessionId]) {
+                    // Initialize if starting to watch
+                    watchBuffers.current[sessionId] = '';
+                }
+                return { ...s, isWatching: newWatchingState };
+            }
+            return s;
+        }));
+    }, []);
+
+    const getWatchBuffer = useCallback((sessionId: string) => {
+        return watchBuffers.current[sessionId] || '';
+    }, []);
+
     return {
         sessions,
         tabOrder,
@@ -369,5 +429,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         closeAllAISessions,
         handleTabReorder,
         handleTerminalData,
+        toggleWatch,
+        getWatchBuffer,
     };
 }
