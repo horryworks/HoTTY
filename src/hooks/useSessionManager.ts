@@ -16,6 +16,8 @@ export interface Session {
         selectedExpertise?: string;
         textareaHeight: number;
         scrollTop?: number;
+        lastTargetSessionId?: string;
+        lastTargetSessionTitle?: string;
     };
     isWatching?: boolean;
     hasWatchData?: boolean;

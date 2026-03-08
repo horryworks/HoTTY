@@ -21,6 +21,7 @@ interface TerminalProps {
     promptHighlightColor?: string;
     promptPatterns?: PromptPattern[];
     onPasteRequest?: (text: string) => void;
+    isAIHighlighted?: boolean;
 }
 
 export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?: Terminal }> = ({
@@ -39,7 +40,8 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
     enablePromptHighlight,
     promptHighlightColor,
     promptPatterns,
-    onPasteRequest
+    onPasteRequest,
+    isAIHighlighted
 }) => {
     const terminalRef = useRef<HTMLDivElement>(null);
 

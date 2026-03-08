@@ -95,6 +95,9 @@ function App() {
   const [showDialog, setShowDialog] = useState(true);
   const [globalMessage, setGlobalMessage] = useState<{ type: 'error' | 'success' | 'info', title?: string, message: string } | null>(null);
   const [focusTrigger, setFocusTrigger] = useState(0);
+  const [highlightedSessionId, setHighlightedSessionId] = useState<string | null>(null);
+  const [lastTerminalSessionId, setLastTerminalSessionId] = useState<string | null>(null);
+  const lastTerminalSessionIdRef = useRef<string | null>(null);
 
   // Load UI state from localStorage or default
   const [showLeftSidebar, setShowLeftSidebar] = useState(() => localStorage.getItem('hterm_ui_showLeftSidebar') === 'true');
@@ -537,6 +540,39 @@ function App() {
     aiPersonasRef.current = aiPersonas; // Update aiPersonas ref
   });
 
+  // -- Track last active terminal --
+  useEffect(() => {
+    const activeSessionId = pane.paneAllocations[pane.activePaneId || ''];
+    if (activeSessionId) {
+      const activeSession = session.sessions.find(s => s.id === activeSessionId);
+      if (activeSession && activeSession.type !== 'ai') {
+        setLastTerminalSessionId(activeSessionId);
+        lastTerminalSessionIdRef.current = activeSessionId;
+      }
+    }
+  }, [pane.activePaneId, pane.paneAllocations, session.sessions]);
+
+  // -- AI Highlight / Focus Sync --
+  useEffect(() => {
+    const handleHighlight = (e: any) => {
+      const { sessionId, highlighted } = e.detail;
+      setHighlightedSessionId(highlighted ? sessionId : null);
+    };
+    const handleFocus = (e: any) => {
+      const { sessionId } = e.detail;
+      const paneId = Object.keys(pane.paneAllocations).find(id => pane.paneAllocations[id] === sessionId);
+      if (paneId) {
+        pane.setActivePaneId(paneId);
+      }
+    };
+    window.addEventListener('hotty-highlight-session', handleHighlight);
+    window.addEventListener('hotty-focus-session', handleFocus);
+    return () => {
+      window.removeEventListener('hotty-highlight-session', handleHighlight);
+      window.removeEventListener('hotty-focus-session', handleFocus);
+    };
+  }, [pane.paneAllocations]);
+
   useEffect(() => {
     const handleAskGemini = (selection: string, type: string, targetSessionId?: string) => {
       // If we got the special watch buffer marker, treat selection as empty
@@ -549,8 +585,17 @@ function App() {
       const currentPersonas = aiPersonasRef.current; // Get current personas
 
       // Extract Watch Buffer before changing active pane
-      const activeTermId = targetSessionId || currentPane.activePaneId;
-      const activeSession = currentSession.sessions.find(s => s.id === activeTermId);
+      let activeTermId = targetSessionId || (pane.paneAllocations[pane.activePaneId || ''] as string);
+      let activeSession = currentSession.sessions.find(s => s.id === activeTermId);
+
+      // If focus is on AI or invalid, fallback to last known terminal
+      if (!activeSession || activeSession.type === 'ai') {
+        if (lastTerminalSessionIdRef.current) {
+          activeTermId = lastTerminalSessionIdRef.current;
+          activeSession = currentSession.sessions.find(s => s.id === activeTermId);
+        }
+      }
+
       let prependedContext = '';
       if (activeSession?.isWatching) {
         const buffer = currentSession.getWatchBuffer(activeTermId);
@@ -586,6 +631,12 @@ function App() {
         }
       }
 
+      // Record target session info immediately so it's available even for free-format modal
+      currentSession.updateSessionState(aiSessionId, {
+        lastTargetSessionId: activeTermId,
+        lastTargetSessionTitle: activeSession?.title || 'Unknown Terminal'
+      });
+
       const lang = localStorage.getItem('hotty_gemini_language') || 'English';
 
       // 1. Try to find persona from existing session's selected expertise
@@ -603,7 +654,7 @@ function App() {
         targetPersonaPrompt = currentPersonas[0].systemPrompt;
       }
 
-      const defaultPersona = targetPersonaPrompt;
+      const defaultPersona = targetPersonaPrompt + " When you suggest shell/terminal commands that the user can run, always enclose them in a code block marked with ```execute for direct execution.";
 
       let systemInstruction = '';
       let userPrompt = '';
@@ -631,8 +682,8 @@ function App() {
         }
       }
 
-      window.electronAPI.logDebug(`[App.tsx] Updating session state. Prompt: ${userPrompt.substring(0, 50)}...`);
-      console.log(`[App.tsx] Updating session state. Prompt: ${userPrompt.substring(0, 50)}...`);
+      window.electronAPI.logDebug(`[App.tsx] Updating session state with prompt. Prompt: ${userPrompt.substring(0, 50)}...`);
+      console.log(`[App.tsx] Updating session state with prompt. Prompt: ${userPrompt.substring(0, 50)}...`);
       currentSession.updateSessionState(aiSessionId, {
         pendingMessage: userPrompt,
         systemInstruction: systemInstruction
@@ -843,7 +894,9 @@ function App() {
       console.log(`[Ask Gemini Modal] Submitting free format request...`);
       currentSession.updateSessionState(aiSession.id, {
         pendingMessage: userPrompt,
-        systemInstruction: systemInstruction
+        systemInstruction: systemInstruction,
+        lastTargetSessionId: aiSession.aiChatState?.lastTargetSessionId,
+        lastTargetSessionTitle: aiSession.aiChatState?.lastTargetSessionTitle
       });
       currentPane.setActivePaneId(aiSession.id);
     }
@@ -961,7 +1014,7 @@ function App() {
         </div>
       </div>
 
-      <div className="main-layout">
+      <div className="main-layout" data-last-terminal={lastTerminalSessionId || ''}>
         <>
           <div className="top-bar">
             <TabBar
@@ -1029,6 +1082,8 @@ function App() {
                         fontSize={fontSize}
                         terminalBackground={terminalBackground}
                         terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                        lastTerminalSessionId={lastTerminalSessionId}
+                        lastTerminalSessionTitle={session.sessions.find(s => s.id === lastTerminalSessionId)?.title}
                       />
                     ) : (
                       <TerminalComponent
@@ -1131,6 +1186,7 @@ function App() {
                           sessionId={sessionData.id}
                           onData={session.handleTerminalData}
                           isActive={pane.activePaneId === 'top-bar'}
+                          isAIHighlighted={highlightedSessionId === sessionData.id}
                           focusTrigger={focusTrigger}
                           terminalInstance={session.terminalRegistry.current[sessionData.id]}
                           disableFocus={showDialog || !!globalMessage}
@@ -1267,6 +1323,7 @@ function App() {
                           sessionId={sessionData.id}
                           onData={session.handleTerminalData}
                           isActive={pane.activePaneId === 'bottom-bar'}
+                          isAIHighlighted={highlightedSessionId === sessionData.id}
                           focusTrigger={focusTrigger}
                           terminalInstance={session.terminalRegistry.current[sessionData.id]}
                           disableFocus={showDialog || !!globalMessage}
@@ -1352,6 +1409,8 @@ function App() {
                         fontSize={fontSize}
                         terminalBackground={terminalBackground}
                         terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                        lastTerminalSessionId={lastTerminalSessionId}
+                        lastTerminalSessionTitle={session.sessions.find(s => s.id === lastTerminalSessionId)?.title}
                       />
                     ) : (
                       <TerminalComponent
@@ -1359,6 +1418,7 @@ function App() {
                         sessionId={sessionData.id}
                         onData={session.handleTerminalData}
                         isActive={isActive}
+                        isAIHighlighted={highlightedSessionId === sessionData.id}
                         focusTrigger={focusTrigger}
                         terminalInstance={session.terminalRegistry.current[sessionData.id]}
                         disableFocus={showDialog || !!globalMessage}
