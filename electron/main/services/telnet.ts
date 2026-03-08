@@ -102,7 +102,7 @@ export class TelnetService implements ISessionService {
      *
      * Background:
      * Although 'negotiationMandatory: false' skips negotiation handling in the
-     * telnet-client library, IAC sequences sent by the remote server può still
+     * telnet-client library, IAC sequences sent by the remote server can still
      * appear in 'data' events. This method cleanly removes them and returns
      * pure terminal output data.
      */

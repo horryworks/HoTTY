@@ -248,3 +248,148 @@
   text-align: left;
   justify-content: flex-start;
 }
+
+/* Help Modal Styles */
+.settings-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.help-modal {
+  position: fixed;
+  max-width: 550px;
+  max-height: 80vh;
+  z-index: 10001;
+}
+
+.help-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+  padding-bottom: 20px;
+  padding-right: 8px;
+  /* Room for scrollbar */
+}
+
+.help-section {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 4px;
+}
+
+.help-section summary {
+  list-style: none;
+  /* Remove default arrow */
+  cursor: pointer;
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--accent-light, #42a5f5);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-weight: 500;
+  transition: opacity 0.2s;
+}
+
+.help-section summary::-webkit-details-marker {
+  display: none;
+  /* Remove Safari default arrow */
+}
+
+.help-section summary::before {
+  content: '▶';
+  font-size: 0.7rem;
+  transition: transform 0.2s;
+  opacity: 0.5;
+}
+
+.help-section[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.help-section summary:hover {
+  opacity: 0.8;
+}
+
+.help-section-body {
+  padding: 4px 0 12px 20px;
+}
+
+.help-text {
+  margin: 4px 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text-color);
+  opacity: 0.85;
+}
+
+.help-text code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-family: 'Cascadia Code', monospace;
+}
+
+.help-visual-guide {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 12px;
+  border-radius: 8px;
+  margin: 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.marker-expl {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.marker-line {
+  width: 6px;
+  height: 24px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.marker-red {
+  background-color: #f44336;
+}
+
+.marker-blue {
+  background-color: #2196f3;
+}
+
+.marker-desc {
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.shortcuts-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shortcuts-list code {
+  min-width: 80px;
+  display: inline-block;
+  text-align: center;
+  margin-right: 8px;
+  background: var(--accent-color);
+  color: white;
+  font-weight: bold;
+}

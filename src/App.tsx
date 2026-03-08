@@ -10,6 +10,7 @@ import { TerminalComponent } from './components/Terminal/Terminal'
 import { AIChatPane } from './components/AIChatPane/AIChatPane'
 import { MessageModal } from './components/MessageModal/MessageModal'
 import { AskGeminiModal } from './components/AskGeminiModal/AskGeminiModal'
+import HelpModal from './components/HelpModal/HelpModal'
 
 import { PaneLines } from './components/PaneLines/PaneLines'
 import { useSessionManager } from './hooks/useSessionManager'
@@ -215,6 +216,9 @@ function App() {
 
   // Ask Gemini Free Format State
   const [askGeminiFreeFormatData, setAskGeminiFreeFormatData] = useState<{ selection: string } | null>(null);
+
+  // -- Help State --
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   // Global keyboard shortcut: Ctrl+N → open New Connection dialog
   useEffect(() => {
@@ -935,6 +939,17 @@ function App() {
           </button>
           <button
             className="sidebar-btn"
+            onClick={() => setIsHelpOpen(true)}
+            title="Help / Documentation"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+          </button>
+          <button
+            className="sidebar-btn"
             onClick={() => setIsSettingsOpen(true)}
             title="Settings"
           >
@@ -1479,6 +1494,10 @@ function App() {
           visible={showPaneLines}
         />
         <ResizeGrip />
+        <HelpModal
+          isOpen={isHelpOpen}
+          onClose={() => setIsHelpOpen(false)}
+        />
       </div>
     </div>
   );
