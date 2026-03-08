@@ -1,5 +1,18 @@
 # Release Notes - HoTTY
 
+## [v0.1.14-beta5] - 2026-03-08
+### Added
+- **Interactive AI Investigation**:
+    - AI can now proactively propose investigation commands (e.g., `show version`).
+    - **Automatic Feedback Loop**: HoTTY automatically captures terminal output after execution and sends it back to the AI for analysis.
+    - **Wait Diagnostics**: The waiting indicator now shows real-time elapsed time and received data volume (bytes).
+    - **Manual Controls**: Added "Cancel" and "Send Now" buttons to the waiting state. "Send Now" allows manually triggering AI analysis with the current buffer if prompt detection fails.
+- **Smart Chat Scrolling**: Long AI responses now automatically scroll to the **beginning** of the message instead of the bottom, making it easier to read results immediately.
+
+### Fixed
+- **Prompt Detection Robustness**: Significantly improved prompt detection for CMD and PowerShell, including support for mid-line prompts.
+- **Data Listener Stability**: Refactored the terminal data listener to prevent data loss or stale state issues during rapid output.
+
 ## [v0.1.14-beta4] - 2026-03-08
 ### Added
 - **Watch Gemini**:

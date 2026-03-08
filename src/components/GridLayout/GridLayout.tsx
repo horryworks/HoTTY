@@ -33,6 +33,7 @@ interface GridLayoutProps {
     promptHighlightColor?: string;
     promptPatterns?: PromptPattern[];
     onPasteRequest?: (text: string) => void;
+    onRunCommand?: (targetId: string, command: string, aiSessionId: string) => void;
 }
 
 export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: string]: any } }> = ({
@@ -63,7 +64,8 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     enablePromptHighlight,
     promptHighlightColor,
     promptPatterns,
-    onPasteRequest
+    onPasteRequest,
+    onRunCommand
 }) => {
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
@@ -286,6 +288,9 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     fontSize={fontSize}
                                     terminalBackground={terminalBackground}
                                     terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                                    onRunCommand={(targetId, command) => {
+                                        if (onRunCommand) onRunCommand(targetId, command, session.id);
+                                    }}
                                 />
                             ) : (
                                 <TerminalComponent

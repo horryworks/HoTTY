@@ -1,6 +1,6 @@
-﻿# HoTTY v0.1.14-beta4 - Gemini Integrated Advanced Terminal
+﻿# HoTTY v0.1.14-beta5 - Gemini Integrated Advanced Terminal
 
-**Current Version: v0.1.14-beta4**
+**Current Version: v0.1.14-beta5**
 
 emulator built with Electron, React, and TypeScript. It is designed to provide a seamless terminal experience with advanced window management and customization options.
 
@@ -29,7 +29,9 @@ emulator built with Electron, React, and TypeScript. It is designed to provide a
     - **Secure Credential Handling**: SSH passwords are cached in memory only and never written to disk.
 - **AI Integration**:
     - **Gemini Chat**: Built-in AI assistant pane powered by Google Gemini.
+    - **Interactive Investigation**: AI can proactively propose investigation commands, capture results, and continue analysis automatically.
     - **Watch Gemini (Output Monitoring)**: Watch and record terminal output, requesting direct analysis from Gemini with tailored prompts (Explain, Research, Suggest Fixes).
+    - **Smart Chat Scrolling**: AI responses automatically scroll to the beginning of the message for better readability of long outputs.
     - **Free Format Questions**: Ask custom questions directly from the terminal via the right-click context menu.
     - **Context Aware**: Helper for coding, debugging, or general questions within the terminal environment.
     - **Dynamic Models**: Automatically creates a list of available models from your API key.

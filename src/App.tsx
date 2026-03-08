@@ -44,8 +44,8 @@ const DEFAULT_PROMPT_PATTERNS: PromptPattern[] = [
   { id: 'huawei', name: 'Huawei / Yamaha', pattern: '^([<\\[][a-zA-Z0-9_\\-\\./]+[>\\]])\\s*', enabled: true },
   { id: 'juniper', name: 'Juniper', pattern: '^([-_\\w]+@[-_\\w]+[>#])\\s*', enabled: true },
   { id: 'linux', name: 'Linux', pattern: '^([-_\\w]+@[-_\\w]+:.*[$#])\\s*', enabled: true },
-  { id: 'cmd', name: 'Command Prompt', pattern: '^([A-Za-z]:\\\\.*>)\\s*', enabled: true },
-  { id: 'powershell', name: 'PowerShell', pattern: '^(PS\\s+[A-Za-z]:\\\\.*>)\\s*', enabled: true }
+  { id: 'cmd', name: 'Command Prompt', pattern: '^([A-Za-z]:.*>)\\s*', enabled: true },
+  { id: 'powershell', name: 'PowerShell', pattern: '^(PS\\s+.*>)\\s*', enabled: true }
 ];
 
 export interface PersonaDefinition {
@@ -63,12 +63,12 @@ const DEFAULT_PERSONAS: PersonaDefinition[] = [
   {
     id: 'network-expert',
     label: 'Network Expert',
-    systemPrompt: 'You are a Senior Network Engineer. Analyze network issues with a focus on OSI layers, routing protocols (BGP, OSPF), and switching. Use industry-standard terminology (Cisco/Juniper syntax) and formatting.'
+    systemPrompt: 'You are a Senior Network Engineer. Analyze network issues with a focus on OSI layers, routing protocols (BGP, OSPF), and switching. Use industry-standard terminology (Cisco/Juniper syntax) and formatting. When you need more information about a device, propose investigation commands (e.g., "show version", "show inventory"). HoTTY will automatically execute these and send back the results if the user clicks "Run in Terminal".'
   },
   {
     id: 'server-expert',
     label: 'Server Expert',
-    systemPrompt: 'You are a Systems Administrator specializing in Linux and Windows servers. Focus on OS internals, kernel parameters, performance tuning, and security best practices. Provide specific commands for troubleshooting.'
+    systemPrompt: 'You are a Systems Administrator specializing in Linux and Windows servers. Focus on OS internals, kernel parameters, performance tuning, and security best practices. Provide specific commands for troubleshooting. When you need to identify the OS or hardware, propose investigation commands (e.g., "uname -a", "cat /etc/os-release"). HoTTY will automatically provide the output back to you after execution.'
   },
   {
     id: 'cloud-expert',
@@ -95,9 +95,21 @@ function App() {
   const [showDialog, setShowDialog] = useState(true);
   const [globalMessage, setGlobalMessage] = useState<{ type: 'error' | 'success' | 'info', title?: string, message: string } | null>(null);
   const [focusTrigger, setFocusTrigger] = useState(0);
-  const [highlightedSessionId, setHighlightedSessionId] = useState<string | null>(null);
   const [lastTerminalSessionId, setLastTerminalSessionId] = useState<string | null>(null);
   const lastTerminalSessionIdRef = useRef<string | null>(null);
+
+  // -- Interactive Flow State --
+  interface InteractiveSessionTracking {
+    aiSessionId: string;
+    buffer: string;
+    originalCommand: string;
+    startTime: number;
+  }
+  const [interactiveSessions, setInteractiveSessions] = useState<{
+    [sessionId: string]: InteractiveSessionTracking;
+  }>({});
+  const interactiveSessionsRef = useRef(interactiveSessions);
+  useEffect(() => { interactiveSessionsRef.current = interactiveSessions; }, [interactiveSessions]);
 
   // Load UI state from localStorage or default
   const [showLeftSidebar, setShowLeftSidebar] = useState(() => localStorage.getItem('hterm_ui_showLeftSidebar') === 'true');
@@ -552,12 +564,8 @@ function App() {
     }
   }, [pane.activePaneId, pane.paneAllocations, session.sessions]);
 
-  // -- AI Highlight / Focus Sync --
+  // -- AI Focus Sync --
   useEffect(() => {
-    const handleHighlight = (e: any) => {
-      const { sessionId, highlighted } = e.detail;
-      setHighlightedSessionId(highlighted ? sessionId : null);
-    };
     const handleFocus = (e: any) => {
       const { sessionId } = e.detail;
       const paneId = Object.keys(pane.paneAllocations).find(id => pane.paneAllocations[id] === sessionId);
@@ -565,13 +573,11 @@ function App() {
         pane.setActivePaneId(paneId);
       }
     };
-    window.addEventListener('hotty-highlight-session', handleHighlight);
     window.addEventListener('hotty-focus-session', handleFocus);
     return () => {
-      window.removeEventListener('hotty-highlight-session', handleHighlight);
       window.removeEventListener('hotty-focus-session', handleFocus);
     };
-  }, [pane.paneAllocations]);
+  }, [pane.paneAllocations, pane.setActivePaneId]);
 
   useEffect(() => {
     const handleAskGemini = (selection: string, type: string, targetSessionId?: string) => {
@@ -937,6 +943,152 @@ function App() {
     window.electronAPI.showContextMenu('__WATCH_BUFFER__', menuCommands);
   };
 
+  // -- Stable references for session management to keep the listener from re-registering --
+  const sessionSessionsRef = useRef(session.sessions);
+  const sessionUpdateStateRef = useRef(session.updateSessionState);
+  useEffect(() => {
+    sessionSessionsRef.current = session.sessions;
+    sessionUpdateStateRef.current = session.updateSessionState;
+  }, [session.sessions, session.updateSessionState]);
+
+  // -- Global terminal data listener for interactive flows --
+  useEffect(() => {
+    const removeListener = window.electronAPI.onSessionData((sessionId, data) => {
+      // 1. Check if this session is being tracked for interactive feedback
+      const currentTracking = interactiveSessionsRef.current[sessionId];
+      if (!currentTracking) return;
+
+      // 2. Clear terminal codes and normalize
+      const cleanData = data.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')
+        .replace(/\r\n/g, '\n').replace(/\r/g, '');
+
+      // 3. Update buffer synchronously in ref and schedule state update
+      const newBuffer = currentTracking.buffer + cleanData;
+      currentTracking.buffer = newBuffer;
+
+      setInteractiveSessions(prev => ({
+        ...prev,
+        [sessionId]: { ...prev[sessionId], buffer: newBuffer }
+      }));
+
+      // 4. Check for prompt (end of command execution)
+      const lines = newBuffer.split('\n').map(l => l.trimEnd());
+
+      // Look for a prompt in the last line (trimmed)
+      const lastLine = lines[lines.length - 1].trim();
+
+      if (lastLine.length > 0) {
+        let matched = false;
+        let matchedPatternName = '';
+        for (const patternObj of promptPatterns) {
+          if (!patternObj.enabled || !patternObj.pattern) continue;
+          try {
+            // Remove ^ from pattern if we want to match anywhere in the line (merged output)
+            const patternStr = patternObj.pattern.startsWith('^') ? patternObj.pattern.substring(1) : patternObj.pattern;
+            const regex = new RegExp(patternStr);
+            if (regex.test(lastLine)) {
+              matched = true;
+              matchedPatternName = patternObj.name;
+              break;
+            }
+          } catch (e) { /* ignore invalid regex */ }
+        }
+
+        if (matched) {
+          window.electronAPI.logDebug(`[Interactive Flow] Prompt detected (${matchedPatternName}) in session ${sessionId}. Line: "${lastLine}"`);
+
+          // Trigger AI send
+          const aiSession = sessionSessionsRef.current.find(s => s.id === currentTracking.aiSessionId);
+          if (aiSession) {
+            const resultText = `Terminal Output (Command: ${currentTracking.originalCommand}):\n\`\`\`\n${newBuffer}\n\`\`\``;
+
+            // Update AI state via ref to ensure stability
+            sessionUpdateStateRef.current(currentTracking.aiSessionId, {
+              inputText: '',
+              pendingMessage: resultText,
+              isWaitingForTerminal: false
+            });
+
+            // Remove from tracking
+            setInteractiveSessions(prev => {
+              const next = { ...prev };
+              delete next[sessionId];
+              return next;
+            });
+            // Also cleanup ref immediately
+            delete interactiveSessionsRef.current[sessionId];
+          }
+        }
+      }
+    });
+    return () => removeListener();
+    // Only re-register if promptPatterns change (which is rare/settings-driven)
+  }, [promptPatterns]);
+
+  // -- Manual send trigger and TTL cleanup for interactive flows --
+  useEffect(() => {
+    // 1. Manual push listener
+    const handleManualSend = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const sessionId = detail.sessionId;
+      const currentTracking = interactiveSessionsRef.current[sessionId];
+
+      if (currentTracking) {
+        window.electronAPI.logDebug(`[Interactive Flow] Manual send triggered for session ${sessionId}`);
+
+        const resultText = `Terminal Output (Manual Send - Command: ${currentTracking.originalCommand}):\n\`\`\`\n${currentTracking.buffer}\n\`\`\``;
+
+        sessionUpdateStateRef.current(currentTracking.aiSessionId, {
+          inputText: '',
+          pendingMessage: resultText,
+          isWaitingForTerminal: false
+        });
+
+        setInteractiveSessions(prev => {
+          const next = { ...prev };
+          delete next[sessionId];
+          return next;
+        });
+        delete interactiveSessionsRef.current[sessionId];
+      }
+    };
+
+    window.addEventListener('hotty-interactive-manual-send', handleManualSend);
+
+    // 2. TTL Cleanup (every minute)
+    const ttlInterval = setInterval(() => {
+      const now = Date.now();
+      const MAX_TTL = 15 * 60 * 1000; // 15 minutes
+
+      setInteractiveSessions(prev => {
+        let changed = false;
+        const next = { ...prev };
+
+        Object.keys(next).forEach(sid => {
+          if (now - next[sid].startTime > MAX_TTL) {
+            window.electronAPI.logDebug(`[Interactive Flow] Cleaning up stale session ${sid} (TTL exceeded)`);
+
+            // Also update AI state to stop waiting if it's still waiting
+            sessionUpdateStateRef.current(next[sid].aiSessionId, {
+              isWaitingForTerminal: false
+            });
+
+            delete next[sid];
+            delete interactiveSessionsRef.current[sid];
+            changed = true;
+          }
+        });
+
+        return changed ? next : prev;
+      });
+    }, 60 * 1000);
+
+    return () => {
+      window.removeEventListener('hotty-interactive-manual-send', handleManualSend);
+      clearInterval(ttlInterval);
+    };
+  }, []);
+
   // -- Render --
   return (
     <div className="app-container">
@@ -1084,6 +1236,7 @@ function App() {
                         terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                         lastTerminalSessionId={lastTerminalSessionId}
                         lastTerminalSessionTitle={session.sessions.find(s => s.id === lastTerminalSessionId)?.title}
+                        interactiveSessionTracking={Object.values(interactiveSessions).find(t => t.aiSessionId === sessionData.id)}
                       />
                     ) : (
                       <TerminalComponent
@@ -1179,6 +1332,7 @@ function App() {
                           fontSize={fontSize}
                           terminalBackground={terminalBackground}
                           terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                          interactiveSessionTracking={Object.values(interactiveSessions).find(t => t.aiSessionId === sessionData.id)}
                         />
                       ) : (
                         <TerminalComponent
@@ -1186,7 +1340,6 @@ function App() {
                           sessionId={sessionData.id}
                           onData={session.handleTerminalData}
                           isActive={pane.activePaneId === 'top-bar'}
-                          isAIHighlighted={highlightedSessionId === sessionData.id}
                           focusTrigger={focusTrigger}
                           terminalInstance={session.terminalRegistry.current[sessionData.id]}
                           disableFocus={showDialog || !!globalMessage}
@@ -1257,6 +1410,17 @@ function App() {
                     const activePaneSessionId = pane.paneAllocations[pane.activePaneId || ''];
                     if (activePaneSessionId) handlePasteRequest(activePaneSessionId, text);
                   }}
+                  onRunCommand={(targetId, command, aiSessionId) => {
+                    setInteractiveSessions(prev => ({
+                      ...prev,
+                      [targetId]: {
+                        aiSessionId: aiSessionId,
+                        buffer: '',
+                        originalCommand: command,
+                        startTime: Date.now()
+                      }
+                    }));
+                  }}
                 />
               </div>
 
@@ -1323,7 +1487,6 @@ function App() {
                           sessionId={sessionData.id}
                           onData={session.handleTerminalData}
                           isActive={pane.activePaneId === 'bottom-bar'}
-                          isAIHighlighted={highlightedSessionId === sessionData.id}
                           focusTrigger={focusTrigger}
                           terminalInstance={session.terminalRegistry.current[sessionData.id]}
                           disableFocus={showDialog || !!globalMessage}
@@ -1418,7 +1581,6 @@ function App() {
                         sessionId={sessionData.id}
                         onData={session.handleTerminalData}
                         isActive={isActive}
-                        isAIHighlighted={highlightedSessionId === sessionData.id}
                         focusTrigger={focusTrigger}
                         terminalInstance={session.terminalRegistry.current[sessionData.id]}
                         disableFocus={showDialog || !!globalMessage}

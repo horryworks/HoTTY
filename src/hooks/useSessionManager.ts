@@ -18,6 +18,7 @@ export interface Session {
         scrollTop?: number;
         lastTargetSessionId?: string;
         lastTargetSessionTitle?: string;
+        isWaitingForTerminal?: boolean;
     };
     isWatching?: boolean;
     hasWatchData?: boolean;

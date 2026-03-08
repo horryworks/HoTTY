@@ -21,6 +21,7 @@ interface AIChatPaneProps {
         scrollTop?: number;
         lastTargetSessionId?: string;
         lastTargetSessionTitle?: string;
+        isWaitingForTerminal?: boolean;
     };
     aiPersona?: string;
     onStateChange?: (state: {
@@ -35,7 +36,9 @@ interface AIChatPaneProps {
         scrollTop?: number;
         lastTargetSessionId?: string;
         lastTargetSessionTitle?: string;
+        isWaitingForTerminal?: boolean;
     }) => void;
+    onRunCommand?: (sessionId: string, command: string) => void;
     showSystemPrompt: boolean;
     askGeminiCommands: { id: string; label: string; promptTemplate: string }[];
     aiPersonas: { id: string; label: string; systemPrompt: string }[];
@@ -45,6 +48,10 @@ interface AIChatPaneProps {
     terminalBackgroundInactive?: string;
     lastTerminalSessionId?: string | null;
     lastTerminalSessionTitle?: string | null;
+    interactiveSessionTracking?: {
+        buffer: string;
+        startTime: number;
+    };
 }
 
 // ── Custom Message Component with Execution Support ──
@@ -111,7 +118,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     fontSize,
     terminalBackground,
     lastTerminalSessionId: lastTerminalSessionIdProp,
-    lastTerminalSessionTitle: lastTerminalSessionTitleProp
+    lastTerminalSessionTitle: lastTerminalSessionTitleProp,
+    onRunCommand,
+    interactiveSessionTracking
 }) => {
     // Auth state
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -166,6 +175,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     const [lastTargetSessionId, setLastTargetSessionId] = useState(initialState?.lastTargetSessionId);
     const [lastTargetSessionTitle, setLastTargetSessionTitle] = useState(initialState?.lastTargetSessionTitle);
 
+    // Interactive flow state
+    const [isWaitingForTerminal, setIsWaitingForTerminal] = useState(initialState?.isWaitingForTerminal || false);
+
     // Initialize target from props if empty and available
     useEffect(() => {
         if (!lastTargetSessionId && lastTerminalSessionIdProp) {
@@ -188,7 +200,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         if (initialState?.lastTargetSessionTitle !== undefined) {
             setLastTargetSessionTitle(initialState.lastTargetSessionTitle);
         }
-    }, [initialState?.pendingMessage, initialState?.lastTargetSessionId, initialState?.lastTargetSessionTitle]);
+        if (initialState?.isWaitingForTerminal !== undefined) {
+            setIsWaitingForTerminal(initialState.isWaitingForTerminal);
+        }
+    }, [initialState?.pendingMessage, initialState?.lastTargetSessionId, initialState?.lastTargetSessionTitle, initialState?.isWaitingForTerminal]);
 
     const [isStreaming, setIsStreaming] = useState(false);
     const [streamingContent, setStreamingContent] = useState('');
@@ -277,10 +292,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                 pendingMessage: localPendingMessage,
                 systemInstruction: localSystemInstruction,
                 lastTargetSessionId,
-                lastTargetSessionTitle
+                lastTargetSessionTitle,
+                isWaitingForTerminal
             });
         }
-    }, [messages, inputText, selectedModel, selectedLanguage, selectedExpertise, textareaHeight, localSystemInstruction, localPendingMessage, lastTargetSessionId, lastTargetSessionTitle]);
+    }, [messages, inputText, selectedModel, selectedLanguage, selectedExpertise, textareaHeight, localSystemInstruction, localPendingMessage, lastTargetSessionId, lastTargetSessionTitle, isWaitingForTerminal]);
 
     useEffect(() => {
         window.electronAPI.geminiAuthStatus().then(setIsAuthenticated);
@@ -322,13 +338,40 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         return () => removeListener();
     }, []);
 
+    const prevMessagesLength = useRef(messages.length);
+    const lastScrollType = useRef<'user' | 'model' | 'streaming-start' | null>(null);
+
     useEffect(() => {
         if (scrollContainerRef.current) {
-            const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-            const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-            if (isNearBottom || isStreaming) {
-                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            // Check if messages length increased
+            if (messages.length > prevMessagesLength.current) {
+                const lastMsg = messages[messages.length - 1];
+                if (lastMsg.role === 'model') {
+                    // Completed AI response: ensure the start is visible
+                    const modelMsgs = scrollContainerRef.current.querySelectorAll('.ai-chat-message-model');
+                    if (modelMsgs.length > 0) {
+                        modelMsgs[modelMsgs.length - 1].scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                } else {
+                    // User message added: scroll to bottom
+                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                }
+            } else if (isStreaming && streamingContent) {
+                // During streaming: ONLY scroll to top of the message when it starts
+                // or keep near bottom if it's short.
+                // However, the user specifically asked for "beginning of latest response"
+                if (lastScrollType.current !== 'streaming-start') {
+                    const modelMsgs = scrollContainerRef.current.querySelectorAll('.ai-chat-message-model.streaming');
+                    if (modelMsgs.length > 0) {
+                        modelMsgs[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        lastScrollType.current = 'streaming-start';
+                    }
+                }
+            } else if (!isStreaming) {
+                lastScrollType.current = null;
             }
+
+            prevMessagesLength.current = messages.length;
         }
     }, [messages, streamingContent, isStreaming]);
 
@@ -345,7 +388,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                 pendingMessage: localPendingMessage,
                 systemInstruction: localSystemInstruction,
                 lastTargetSessionId,
-                lastTargetSessionTitle
+                lastTargetSessionTitle,
+                isWaitingForTerminal
             });
         }
     };
@@ -391,11 +435,62 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
 
     const handleRunCommand = (command: string) => {
         if (!lastTargetSessionId) return;
+
         // Strictly trim and use \r for execution (standard for terminals)
         const cleanCmd = command.trim();
+
+        // Notify parent to start monitoring this session
+        if (onRunCommand) {
+            onRunCommand(lastTargetSessionId, cleanCmd);
+        }
+
+        setIsWaitingForTerminal(true);
+
+        // Sync state back to parent
+        onStateChange?.({
+            messages,
+            inputText,
+            selectedModel,
+            selectedLanguage,
+            selectedExpertise,
+            textareaHeight,
+            scrollTop: scrollContainerRef.current?.scrollTop || 0,
+            lastTargetSessionId,
+            lastTargetSessionTitle,
+            isWaitingForTerminal: true
+        });
+
         window.electronAPI.sendInput(lastTargetSessionId, cleanCmd + '\r');
         window.electronAPI.focusWindow();
         window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: lastTargetSessionId } }));
+    };
+
+    const handleStopWaiting = () => {
+        setIsWaitingForTerminal(false);
+        onStateChange?.({
+            messages,
+            inputText,
+            selectedModel,
+            selectedLanguage,
+            selectedExpertise,
+            textareaHeight,
+            scrollTop: scrollContainerRef.current?.scrollTop || 0,
+            lastTargetSessionId,
+            lastTargetSessionTitle,
+            isWaitingForTerminal: false
+        });
+    };
+
+    const handleSendBufferNow = () => {
+        if (!interactiveSessionTracking) return;
+
+        // Dispatch custom event to App.tsx to trigger manual completion
+        window.dispatchEvent(new CustomEvent('hotty-interactive-manual-send', {
+            detail: {
+                sessionId: lastTargetSessionId,
+                aiSessionId: sessionId
+            }
+        }));
     };
 
     const handleHoverTarget = (isHovering: boolean) => {
@@ -626,6 +721,41 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                             <div className="ai-chat-message ai-chat-message-model">
                                 <div className="ai-chat-message-avatar"><GeminiIcon size={18} /></div>
                                 <div className="ai-chat-message-content">Thinking...</div>
+                            </div>
+                        )}
+                        {isWaitingForTerminal && (
+                            <div className="ai-chat-message ai-chat-message-model">
+                                <div className="ai-chat-message-avatar">⚡</div>
+                                <div className="ai-chat-message-content waiting-feedback">
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                            <span>Waiting for terminal response from <b>{lastTargetSessionTitle}</b>...</span>
+                                            <button
+                                                className="run-command-btn"
+                                                onClick={handleStopWaiting}
+                                                style={{ padding: '2px 8px', fontSize: '11px', opacity: 0.8 }}
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                        {interactiveSessionTracking && (
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+                                                <div style={{ fontSize: '10px', opacity: 0.6, display: 'flex', gap: '12px' }}>
+                                                    <span>Elapsed: {Math.floor((Date.now() - interactiveSessionTracking.startTime) / 1000)}s</span>
+                                                    <span>Data: {new Intl.NumberFormat().format(interactiveSessionTracking.buffer.length)} bytes</span>
+                                                </div>
+                                                <button
+                                                    className="run-command-btn"
+                                                    onClick={handleSendBufferNow}
+                                                    style={{ padding: '0px 6px', fontSize: '10px', height: '20px' }}
+                                                    title="Send current output to AI immediately"
+                                                >
+                                                    Send Now
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         )}
                         <div ref={messagesEndRef} />
