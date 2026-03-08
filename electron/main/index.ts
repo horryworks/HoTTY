@@ -411,6 +411,15 @@ ipcMain.on('show-context-menu', (event, selection: string, commands?: { id: stri
     );
   }
 
+  // Append free format option
+  geminiSubmenu.push(
+    { type: 'separator' },
+    {
+      label: 'Free format question...',
+      click: () => { event.sender.send('ask-gemini', selection, 'free-format'); }
+    }
+  );
+
   const template = [
     {
       label: 'Paste',

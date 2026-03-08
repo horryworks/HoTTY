@@ -29,6 +29,7 @@ emulator built with Electron, React, and TypeScript. It is designed to provide a
     - **Secure Credential Handling**: SSH passwords are cached in memory only and never written to disk.
 - **AI Integration**:
     - **Gemini Chat**: Built-in AI assistant pane powered by Google Gemini.
+    - **Free Format Questions**: Ask custom questions directly from the terminal via the right-click context menu.
     - **Context Aware**: Helper for coding, debugging, or general questions within the terminal environment.
     - **Dynamic Models**: Automatically creates a list of available models from your API key.
 - **Security & Reliability**:

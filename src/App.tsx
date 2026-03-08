@@ -9,6 +9,7 @@ import { GridLayout } from './components/GridLayout/GridLayout'
 import { TerminalComponent } from './components/Terminal/Terminal'
 import { AIChatPane } from './components/AIChatPane/AIChatPane'
 import { MessageModal } from './components/MessageModal/MessageModal'
+import { AskGeminiModal } from './components/AskGeminiModal/AskGeminiModal'
 
 import { PaneLines } from './components/PaneLines/PaneLines'
 import { useSessionManager } from './hooks/useSessionManager'
@@ -211,6 +212,9 @@ function App() {
 
   // Settings State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Ask Gemini Free Format State
+  const [askGeminiFreeFormatData, setAskGeminiFreeFormatData] = useState<{ selection: string } | null>(null);
 
   // Global keyboard shortcut: Ctrl+N → open New Connection dialog
   useEffect(() => {
@@ -586,6 +590,12 @@ function App() {
       let systemInstruction = '';
       let userPrompt = '';
 
+      if (type === 'free-format') {
+        // Open modal instead of sending immediately
+        setAskGeminiFreeFormatData({ selection });
+        return;
+      }
+
       const existingCommand = currentCommands.find(c => c.id === type);
 
       if (existingCommand) {
@@ -784,6 +794,41 @@ function App() {
     setFocusTrigger(prev => prev + 1);
   };
 
+  const handleAskGeminiSubmit = (prompt: string, selection: string) => {
+    const currentSession = sessionRef.current;
+    const currentPane = paneRef.current;
+
+    // AI session is already created or found in handleAskGemini before the modal opens
+    // but just in case, we find it here
+    const aiSession = currentSession.sessions.find(s => s.type === 'ai');
+    if (aiSession) {
+      const lang = localStorage.getItem('hotty_gemini_language') || 'English';
+      let targetPersonaPrompt = 'You are a helpful assistant.';
+      const currentPersonas = aiPersonasRef.current;
+
+      if (aiSession.aiChatState?.selectedExpertise) {
+        const expertiseLabel = aiSession.aiChatState.selectedExpertise;
+        const foundPersona = currentPersonas.find(p => p.label === expertiseLabel);
+        if (foundPersona) {
+          targetPersonaPrompt = foundPersona.systemPrompt;
+        }
+      } else if (currentPersonas.length > 0) {
+        targetPersonaPrompt = currentPersonas[0].systemPrompt;
+      }
+
+      const systemInstruction = `${targetPersonaPrompt} Answer in ${lang}.`;
+      const userPrompt = `${prompt}\n\n\`\`\`\n${selection}\n\`\`\``;
+
+      console.log(`[Ask Gemini Modal] Submitting free format request...`);
+      currentSession.updateSessionState(aiSession.id, {
+        pendingMessage: userPrompt,
+        systemInstruction: systemInstruction
+      });
+      currentPane.setActivePaneId(aiSession.id);
+    }
+    setAskGeminiFreeFormatData(null);
+  };
+
   // -- Message Modal --
   const handleCloseMessageModal = () => {
     setGlobalMessage(null);
@@ -955,7 +1000,6 @@ function App() {
                           enablePromptHighlight={enablePromptHighlight}
                           promptHighlightColor={promptHighlightColor}
                           promptPatterns={promptPatterns}
-                          rightClickPaste={rightClickPaste}
                           onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
                         />
                       );
@@ -1051,7 +1095,6 @@ function App() {
                             enablePromptHighlight={enablePromptHighlight}
                             promptHighlightColor={promptHighlightColor}
                             promptPatterns={promptPatterns}
-                            rightClickPaste={rightClickPaste}
                             onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
                           />
                         );
@@ -1105,7 +1148,6 @@ function App() {
                     enablePromptHighlight={enablePromptHighlight}
                     promptHighlightColor={promptHighlightColor}
                     promptPatterns={promptPatterns}
-                    rightClickPaste={rightClickPaste}
                     onPasteRequest={(text) => {
                       const activePaneSessionId = pane.paneAllocations[pane.activePaneId || ''];
                       if (activePaneSessionId) handlePasteRequest(activePaneSessionId, text);
@@ -1189,7 +1231,6 @@ function App() {
                             enablePromptHighlight={enablePromptHighlight}
                             promptHighlightColor={promptHighlightColor}
                             promptPatterns={promptPatterns}
-                            rightClickPaste={rightClickPaste}
                             onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
                           />
                         );
@@ -1279,7 +1320,6 @@ function App() {
                           terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                           lineWrapEnabled={lineWrapEnabled}
                           askGeminiCommands={askGeminiCommands}
-                          rightClickPaste={rightClickPaste}
                           onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
                         />
                       );
@@ -1326,6 +1366,17 @@ function App() {
               content={pasteContent}
               onConfirm={confirmPaste}
               onCancel={cancelPaste}
+            />
+          )
+        }
+
+        {
+          askGeminiFreeFormatData !== null && (
+            <AskGeminiModal
+              isOpen={true}
+              selection={askGeminiFreeFormatData.selection}
+              onClose={() => setAskGeminiFreeFormatData(null)}
+              onSubmit={handleAskGeminiSubmit}
             />
           )
         }

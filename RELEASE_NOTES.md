@@ -1,7 +1,8 @@
 # Release Notes - HoTTY
 
-## [v0.1.14-beta2] - 2026-03-06
+## [v0.1.14-beta2] - 2026-03-08
 ### Added
+- **Ask Gemini Free Format Questions**: Added a "Free format question..." option to the right-click context menu. This opens a modal dialog allowing you to ask custom questions about the selected terminal text.
 - **Host Tree Enhancements**: Added an **Export** button to the toolbar (red icon) for easier access to the host tree export feature.
 
 ### Fixed

@@ -1,10 +1,9 @@
-import { BrowserWindow, shell } from 'electron';
+import { BrowserWindow, shell, app, ipcMain } from 'electron';
 import * as http from 'http';
 import * as url from 'url';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import { app } from 'electron';
 import { encryptString, decryptString } from './dpapi';
 
 interface TokenData {
@@ -165,6 +164,10 @@ export class GeminiService {
               res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#4ade80">✅ Authentication Successful</h1><p>You can return to HoTTY. You may close this window.</p></div></body></html>');
               this.cleanupServer();
               win.webContents.send('gemini-auth-result', { success: true });
+
+              // Trigger internal event to close window
+              ipcMain.emit('gemini-auth-result-internal');
+
               resolve(true);
             } catch (err: any) {
               res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -216,7 +219,8 @@ export class GeminiService {
         });
 
         // When auth is complete, close the auth window
-        win.webContents.once('gemini-auth-result', () => {
+        // Use ipcMain.once instead of win.webContents.once
+        ipcMain.once('gemini-auth-result-internal', () => {
           if (!authWin.isDestroyed()) {
             authWin.close();
           }

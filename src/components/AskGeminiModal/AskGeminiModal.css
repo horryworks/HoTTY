@@ -1,0 +1,106 @@
+.ask-gemini-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.ask-gemini-modal-content {
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    width: 500px;
+    max-width: 90vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.ask-gemini-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.ask-gemini-modal-header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: var(--text-primary);
+}
+
+.ask-gemini-modal-close-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.ask-gemini-modal-close-btn:hover {
+    color: var(--text-primary);
+}
+
+.ask-gemini-modal-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+}
+
+.ask-gemini-modal-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ask-gemini-modal-section label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.ask-gemini-modal-prompt-input,
+.ask-gemini-modal-selection-preview {
+    width: 100%;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.95rem;
+    padding: 8px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.ask-gemini-modal-prompt-input:focus {
+    outline: none;
+    border-color: #4CAF50;
+}
+
+.ask-gemini-modal-selection-preview {
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 0.85rem;
+    background-color: var(--bg-tertiary, #1e1e1e);
+    color: #d4d4d4;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.ask-gemini-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 16px;
+    border-top: 1px solid var(--border-color);
+}
