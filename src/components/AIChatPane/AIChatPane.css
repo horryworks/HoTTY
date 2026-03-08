@@ -256,11 +256,12 @@
 .ai-chat-messages {
     flex: 1;
     overflow-y: auto;
-    padding: 16px;
+    padding: 12px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
 }
+
 
 .ai-chat-messages::-webkit-scrollbar {
     width: 6px;
@@ -345,7 +346,7 @@
 
 .ai-chat-message-avatar {
     width: 1.5em;
-    height: 1.6em;
+    height: 1.3em;
     /* Synchronized with text line-height */
     display: flex;
     align-items: center;
@@ -355,6 +356,7 @@
     /* No more hardcoded pixel offset */
     border-radius: 4px;
 }
+
 
 .ai-chat-message-user .ai-chat-message-avatar {
     background-color: var(--chat-msg-user-bg);
@@ -378,9 +380,11 @@
     word-wrap: break-word;
     font-family: var(--font-family, 'Consolas', 'Courier New', monospace);
     font-size: 1.1em;
-    line-height: 1.6;
+    line-height: 1.3;
     color: var(--chat-msg-model-text);
 }
+
+
 
 .ai-chat-message-user .ai-chat-message-content pre {
     color: var(--chat-msg-user-text);
@@ -533,19 +537,21 @@
 
 /* ── Markdown Rendering ── */
 .ai-chat-markdown {
-    line-height: 1.6;
+    line-height: 1.3;
     word-wrap: break-word;
     overflow-wrap: break-word;
 }
+
 
 .ai-chat-markdown h1,
 .ai-chat-markdown h2,
 .ai-chat-markdown h3,
 .ai-chat-markdown h4 {
-    margin: 8px 0 4px;
+    margin: 4px 0 2px;
     color: var(--text-primary);
     font-weight: 600;
 }
+
 
 .ai-chat-markdown h1 {
     font-size: 1.3em;
@@ -560,8 +566,9 @@
 }
 
 .ai-chat-markdown p {
-    margin: 4px 0;
+    margin: 2px 0;
 }
+
 
 .ai-chat-markdown strong {
     color: #fff;
@@ -586,12 +593,13 @@
     background-color: var(--code-bg);
     border: 1px solid var(--border-color);
     border-radius: 6px;
-    padding: 10px 12px;
+    padding: 8px 10px;
     overflow-x: auto;
-    margin: 6px 0;
+    margin: 4px 0;
     white-space: pre-wrap;
     word-wrap: break-word;
 }
+
 
 .ai-chat-markdown pre code {
     background: none;
@@ -600,31 +608,111 @@
     font-size: 1em;
 }
 
+/* ── Execute Block (Run in Terminal) ── */
+.ai-execute-block {
+    margin: 8px 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--code-bg);
+    overflow: hidden;
+}
+
+.ai-execute-block pre {
+    margin: 0 !important;
+    padding: 10px 12px !important;
+    background: none !important;
+    border: none !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    border-radius: 0 !important;
+}
+
+.ai-execute-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 10px;
+    background-color: rgba(0, 0, 0, 0.15);
+}
+
+.ai-run-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 12px;
+    background-color: var(--accent-color);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.2s;
+    height: 26px;
+    /* Compact height */
+    line-height: 1;
+}
+
+.ai-run-btn:hover {
+    background-color: var(--accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.ai-run-btn:active {
+    transform: translateY(0);
+}
+
+.ai-run-btn svg {
+    display: block;
+    width: 14px;
+    height: 14px;
+    /* Perfect alignment */
+}
+
+.ai-run-target {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ai-run-target.no-target {
+    color: #884444;
+    font-style: italic;
+}
+
+
 .ai-chat-markdown ul,
 .ai-chat-markdown ol {
-    margin: 4px 0;
+    margin: 2px 0;
     padding-left: 20px;
 }
 
+
 .ai-chat-markdown li {
-    margin: 2px 0;
+    margin: 1px 0;
 }
+
 
 .ai-chat-markdown blockquote {
     border-left: 3px solid var(--accent-color);
-    margin: 6px 0;
+    margin: 4px 0;
     padding: 4px 12px;
     color: var(--text-secondary);
     background-color: rgba(0, 0, 0, 0.1);
     border-radius: 0 4px 4px 0;
 }
 
+
 .ai-chat-markdown table {
     border-collapse: collapse;
-    margin: 6px 0;
+    margin: 4px 0;
     width: 100%;
     font-size: 0.9em;
 }
+
 
 .ai-chat-markdown th,
 .ai-chat-markdown td {

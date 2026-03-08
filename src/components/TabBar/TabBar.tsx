@@ -20,9 +20,10 @@ interface TabBarProps {
     onNewTab: () => void;
     onNewAITab: () => void;
     onTabReorder: (fromIndex: number, toIndex: number) => void;
+    lastTargetSessionId?: string | null;
 }
 
-export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessionIds, watchedSessionIds = [], nonEmptyBufferSessionIds = [], onTabClick, onTabClose, onToggleWatch, onAskGeminiTab, onNewTab, onNewAITab, onTabReorder }) => {
+export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessionIds, watchedSessionIds = [], nonEmptyBufferSessionIds = [], onTabClick, onTabClose, onToggleWatch, onAskGeminiTab, onNewTab, onNewAITab, onTabReorder, lastTargetSessionId }) => {
     const [dragOverInfo, setDragOverInfo] = React.useState<{ id: string, position: 'left' | 'right' } | null>(null);
     const [dragSourceIndex, setDragSourceIndex] = React.useState<number | null>(null);
 
@@ -106,6 +107,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                 const isHidden = !visibleSessionIds.includes(tab.id);
                 const isActivePane = activeTabId === tab.id;
                 const isWatching = watchedSessionIds.includes(tab.id);
+                const isGeminiLinked = (isWatching || tab.id === lastTargetSessionId) && tab.type !== 'ai';
 
                 // Determine if this is a terminal capable of being watched
                 const isTerminal = tab.type ? tab.type !== 'ai' :
@@ -116,7 +118,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                         key={tab.id}
                         data-session-id={tab.id}
                         className={`tab ${activeTabId === tab.id ? 'active' : ''} ${isHidden ? 'hidden-tab' : ''} ${isActivePane ? 'active-pane-tab' : ''} ${dragOverInfo?.id === tab.id ? `drag-over-${dragOverInfo.position}` : ''
-                            } ${isWatching ? 'watching-tab' : ''}`}
+                            } ${isWatching ? 'watching-tab' : ''} ${isGeminiLinked ? 'gemini-linked-tab' : ''}`}
                         onClick={() => onTabClick(tab.id)}
                         draggable
                         onDragStart={(e) => handleDragStart(e, index, tab.id)}

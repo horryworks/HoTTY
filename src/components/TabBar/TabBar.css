@@ -6,6 +6,7 @@
     padding-left: 0px;
     user-select: none;
     overflow-x: auto;
+    --gemini-rainbow: linear-gradient(90deg, #4E86F8, #46B5D1, #8E54E9, #D64669);
 }
 
 .tab {
@@ -235,4 +236,23 @@
 
 .tab-watch-btn.watching {
     animation: watch-pulse 0.5s infinite ease-in-out;
+}
+
+/* ── Gemini Rainbow Bar ── */
+.tab.gemini-linked-tab::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--gemini-rainbow);
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    z-index: 5;
+}
+
+/* Ensure active state doesn't hide it or looks good with it */
+.tab.active.gemini-linked-tab::before {
+    height: 3px;
 }
