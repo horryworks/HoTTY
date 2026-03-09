@@ -360,15 +360,15 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                     element.style.position = 'absolute';
                     element.style.right = '0px';
                     element.style.left = 'auto';
-                    element.style.width = '8px'; // Increased click area
                     // Do not override height; xterm.js sets it exactly to the line height.
+                    element.style.width = '8px';
                     element.style.backgroundColor = 'transparent';
                     element.style.borderRight = `6px solid ${targetColor}`;
                     element.style.pointerEvents = 'all'; // Allow user to click the marker
                     element.style.cursor = 'pointer';
                     element.style.zIndex = '10';
                     element.style.transformOrigin = 'top';
-                    element.style.transform = `translateX(6px) scaleY(${count})`;
+                    element.style.transform = `translateX(10px) scaleY(${count})`;
 
                     if (!element.dataset.clickEventBound) {
                         element.dataset.clickEventBound = "true";

@@ -1228,7 +1228,7 @@ function App() {
 
             {showLeftSidebar && (
               <div
-                className="left-sidebar-pane"
+                className={`left-sidebar-pane ${pane.activePaneId === 'sidebar-left' ? 'active-pane' : ''}`}
                 data-pane-id="sidebar-left"
                 style={{
                   width: `${leftSidebarPercent}%`,
@@ -1325,7 +1325,7 @@ function App() {
               {/* Top Bar */}
               {showTopBar && (
                 <div
-                  className="top-bar-pane"
+                  className={`top-bar-pane ${pane.activePaneId === 'top-bar' ? 'active-pane' : ''}`}
                   data-pane-id="top-bar"
                   style={{
                     height: `${topBarPercent}%`,
@@ -1474,7 +1474,7 @@ function App() {
               {/* Bottom Bar */}
               {showBottomBar && (
                 <div
-                  className="bottom-bar-pane"
+                  className={`bottom-bar-pane ${pane.activePaneId === 'bottom-bar' ? 'active-pane' : ''}`}
                   data-pane-id="bottom-bar"
                   style={{
                     height: `${bottomBarPercent}%`,
@@ -1566,7 +1566,7 @@ function App() {
 
             {showRightSidebar && (
               <div
-                className="right-sidebar-pane"
+                className={`right-sidebar-pane ${pane.activePaneId === 'sidebar' ? 'active-pane' : ''}`}
                 data-pane-id="sidebar"
                 style={{
                   width: `${rightSidebarPercent}%`,
