@@ -242,17 +242,55 @@
 .tab.gemini-linked-tab::before {
     content: '';
     position: absolute;
-    top: 0;
+    bottom: 0;
     left: 0;
     right: 0;
     height: 3px;
     background: var(--gemini-rainbow);
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
     z-index: 5;
 }
 
 /* Ensure active state doesn't hide it or looks good with it */
 .tab.active.gemini-linked-tab::before {
     height: 3px;
+}
+
+/* ── Full Rainbow AI Tab ── */
+.tab.is-ai-tab {
+    background: var(--gemini-rainbow) !important;
+    background-color: transparent !important;
+    /* Force transparent background-color to stop bleed from .active-pane-tab */
+    color: white !important;
+    font-weight: bold;
+    border: none !important;
+    /* Explicitly keep rounded corners */
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
+    /* Ensure it stays above any background artifacts */
+}
+
+/* Hide the top bar for AI tab since it's already full rainbow */
+.tab.is-ai-tab::before {
+    display: none !important;
+}
+
+.tab.is-ai-tab:hover {
+    filter: brightness(1.1);
+}
+
+.tab.active.is-ai-tab {
+    filter: brightness(1.1);
+    /* Slightly less bright */
+    box-shadow: none !important;
+}
+
+.tab.is-ai-tab .tab-close {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+.tab.is-ai-tab .tab-close:hover {
+    background-color: rgba(255, 255, 255, 0.5);
 }

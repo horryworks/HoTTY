@@ -5,6 +5,7 @@ interface Tab {
     id: string;
     title: string;
     type?: 'ssh' | 'telnet' | 'serial' | 'ai' | 'wsl' | 'local';
+    aiChatState?: any;
 }
 
 interface TabBarProps {
@@ -107,7 +108,8 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                 const isHidden = !visibleSessionIds.includes(tab.id);
                 const isActivePane = activeTabId === tab.id;
                 const isWatching = watchedSessionIds.includes(tab.id);
-                const isGeminiLinked = (isWatching || tab.id === lastTargetSessionId) && tab.type !== 'ai';
+                // AI tab always shows rainbow bar. Terminal tab shows it if watching OR explicitly linked from AI session.
+                const isGeminiLinked = tab.type === 'ai' || isWatching || tab.id === lastTargetSessionId;
 
                 // Determine if this is a terminal capable of being watched
                 const isTerminal = tab.type ? tab.type !== 'ai' :
@@ -118,7 +120,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                         key={tab.id}
                         data-session-id={tab.id}
                         className={`tab ${activeTabId === tab.id ? 'active' : ''} ${isHidden ? 'hidden-tab' : ''} ${isActivePane ? 'active-pane-tab' : ''} ${dragOverInfo?.id === tab.id ? `drag-over-${dragOverInfo.position}` : ''
-                            } ${isWatching ? 'watching-tab' : ''} ${isGeminiLinked ? 'gemini-linked-tab' : ''}`}
+                            } ${isWatching ? 'watching-tab' : ''} ${isGeminiLinked ? 'gemini-linked-tab' : ''} ${tab.type === 'ai' ? 'is-ai-tab' : ''}`}
                         onClick={() => onTabClick(tab.id)}
                         draggable
                         onDragStart={(e) => handleDragStart(e, index, tab.id)}
