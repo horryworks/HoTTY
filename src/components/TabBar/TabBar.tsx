@@ -62,14 +62,21 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
 
         let draggedIndex = -1;
 
-        // Try getting index from text/plain (legacy/if sessionId is numeric?)
-        const draggedIndexStr = e.dataTransfer.getData('text/plain');
-        const parsed = parseInt(draggedIndexStr, 10);
+        // Try getting index from application/json payload
+        try {
+            const data = e.dataTransfer.getData('application/json');
+            if (data) {
+                const parsed = JSON.parse(data);
+                if (typeof parsed.index === 'number') {
+                    draggedIndex = parsed.index;
+                }
+            }
+        } catch (err) {
+            // fallback to state
+        }
 
-        if (!isNaN(parsed)) {
-            draggedIndex = parsed;
-        } else if (dragSourceIndex !== null) {
-            // Use state-tracked index (works for UUID sessions)
+        if (draggedIndex === -1 && dragSourceIndex !== null) {
+            // Use state-tracked index (very reliable for internal drops)
             draggedIndex = dragSourceIndex;
         }
 
