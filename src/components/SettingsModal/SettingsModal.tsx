@@ -61,6 +61,10 @@ interface SettingsModalProps {
     onPromptPatternsChange: (patterns: { id: string; name: string; pattern: string; enabled: boolean }[]) => void;
     watchBufferLimit: number;
     onWatchBufferLimitChange: (limit: number) => void;
+    proactiveInstruction: string;
+    onProactiveInstructionChange: (instruction: string) => void;
+    interactiveStabilizationTimeout: number;
+    onInteractiveStabilizationTimeoutChange: (timeout: number) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -121,6 +125,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onPromptPatternsChange,
     watchBufferLimit,
     onWatchBufferLimitChange,
+    proactiveInstruction,
+    onProactiveInstructionChange,
+    interactiveStabilizationTimeout,
+    onInteractiveStabilizationTimeoutChange,
 }) => {
     const { position, onMouseDown: onHeaderMouseDown } = useDraggable();
     const [activeTab, setActiveTab] = React.useState<'appearance' | 'ssh' | 'telnet' | 'system' | 'ai' | 'about'>('system');
@@ -908,6 +916,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 </div>
                             </div>
 
+                            <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
+                                <label style={{ marginBottom: '10px', display: 'block' }}>Interactive Flow Stabilization Timeout (ms)</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <input
+                                        type="number"
+                                        value={interactiveStabilizationTimeout}
+                                        onChange={(e) => onInteractiveStabilizationTimeoutChange(parseInt(e.target.value, 10))}
+                                        min="100"
+                                        max="60000"
+                                        step="500"
+                                        className="settings-input"
+                                        style={{ width: '120px', padding: '6px' }}
+                                    />
+                                    <span style={{ fontSize: '0.9em', color: 'var(--text-muted)' }}>
+                                        Default: 10,000 (10s). Wait time after prompt detection before sending to AI.
+                                    </span>
+                                </div>
+                            </div>
+
                             <label style={{ marginBottom: '10px', display: 'block' }}>Ask Gemini Commands</label>
 
                             <div className="command-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
@@ -1105,6 +1132,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     </button>
                                 </div>
                                 <p className="settings-help">The default system instruction sent to Gemini when starting a new session.</p>
+                            </div>
+
+                            <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
+                                <label style={{ marginBottom: '10px', display: 'block' }}>Proactive Investigation Instruction</label>
+                                <textarea
+                                    value={proactiveInstruction}
+                                    onChange={(e) => onProactiveInstructionChange(e.target.value)}
+                                    placeholder="Instruction to encourage Gemini to gather more info..."
+                                    className="settings-input"
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px',
+                                        height: '100px',
+                                        fontFamily: 'monospace',
+                                        resize: 'vertical',
+                                        boxSizing: 'border-box'
+                                    }}
+                                />
+                                <p className="settings-help" style={{ marginTop: '8px' }}>
+                                    This instruction is appended to the system prompt and terminal output responses to encourage Gemini to proactively search for information.
+                                </p>
                             </div>
 
                             <label>Debugging</label>

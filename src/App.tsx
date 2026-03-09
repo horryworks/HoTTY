@@ -43,7 +43,7 @@ const DEFAULT_PROMPT_PATTERNS: PromptPattern[] = [
   { id: 'cisco', name: 'Cisco / Allied Telesis', pattern: '^([a-zA-Z0-9_\\-\\.]+(?:\\([a-zA-Z0-9_\\-\\.]+\\))?[>#])\\s*', enabled: true },
   { id: 'huawei', name: 'Huawei / Yamaha', pattern: '^([<\\[][a-zA-Z0-9_\\-\\./]+[>\\]])\\s*', enabled: true },
   { id: 'juniper', name: 'Juniper', pattern: '^([-_\\w]+@[-_\\w]+[>#])\\s*', enabled: true },
-  { id: 'linux', name: 'Linux', pattern: '^([-_\\w]+@[-_\\w]+:.*[$#])\\s*', enabled: true },
+  { id: 'linux', name: 'Linux', pattern: '^([-_\\w]+@[-_\\w]+:[^$# ]*[$#])\\s*', enabled: true },
   { id: 'cmd', name: 'Command Prompt', pattern: '^([A-Za-z]:.*>)\\s*', enabled: true },
   { id: 'powershell', name: 'PowerShell', pattern: '^(PS\\s+.*>)\\s*', enabled: true }
 ];
@@ -98,6 +98,17 @@ function App() {
   const [lastTerminalSessionId, setLastTerminalSessionId] = useState<string | null>(null);
   const lastTerminalSessionIdRef = useRef<string | null>(null);
 
+  // Interactive flow stabilization timeout (ms)
+  const [interactiveStabilizationTimeout, setInteractiveStabilizationTimeout] = useState<number>(() => {
+    const saved = localStorage.getItem('hotty_interactive_stabilization_timeout');
+    return saved ? parseInt(saved, 10) : 10000;
+  });
+
+  const updateInteractiveStabilizationTimeout = (timeout: number) => {
+    setInteractiveStabilizationTimeout(timeout);
+    localStorage.setItem('hotty_interactive_stabilization_timeout', timeout.toString());
+  };
+
   // -- Interactive Flow State --
   interface InteractiveSessionTracking {
     aiSessionId: string;
@@ -110,6 +121,17 @@ function App() {
   }>({});
   const interactiveSessionsRef = useRef(interactiveSessions);
   useEffect(() => { interactiveSessionsRef.current = interactiveSessions; }, [interactiveSessions]);
+
+  // Proactive Gemini Instruction
+  const [proactiveInstruction, setProactiveInstruction] = useState<string>(() => {
+    return localStorage.getItem('hotty_gemini_proactive_instruction') ||
+      'If you need more information to fulfill the user\'s request, proactively suggest terminal commands using code blocks with the "execute" language tag, like this: ```execute\\n[command]\\n```. Do not just wait for user input if the information can be gathered via the terminal.';
+  });
+
+  const updateProactiveInstruction = (instruction: string) => {
+    setProactiveInstruction(instruction);
+    localStorage.setItem('hotty_gemini_proactive_instruction', instruction);
+  };
 
   // Load UI state from localStorage or default
   const [showLeftSidebar, setShowLeftSidebar] = useState(() => localStorage.getItem('hterm_ui_showLeftSidebar') === 'true');
@@ -997,7 +1019,7 @@ function App() {
           try {
             // Remove ^ from pattern if we want to match anywhere in the line (merged output)
             const patternStr = patternObj.pattern.startsWith('^') ? patternObj.pattern.substring(1) : patternObj.pattern;
-            const regex = new RegExp(`${patternStr}$`); // FORCE match at the very end of the string
+            const regex = new RegExp(`^${patternStr}$`); // FORCE whole line match
             if (regex.test(lastLine)) {
               matched = true;
               matchedPatternName = patternObj.name;
@@ -1009,7 +1031,7 @@ function App() {
         if (matched) {
           window.electronAPI.logDebug(`[Interactive Flow] Potential prompt detected (${matchedPatternName}) in session ${sessionId}. Waiting for silence...`);
 
-          // SET STABILIZATION TIMER: Wait 300ms of silence before concluding
+          // SET STABILIZATION TIMER: Wait customizeable amount of silence before concluding
           stabilizationTimersRef.current[sessionId] = setTimeout(() => {
             window.electronAPI.logDebug(`[Interactive Flow] Silence confirmed for session ${sessionId}. Finalizing output.`);
             delete stabilizationTimersRef.current[sessionId];
@@ -1020,7 +1042,7 @@ function App() {
             // Trigger AI send
             const aiSession = sessionSessionsRef.current.find(s => s.id === finalTracking.aiSessionId);
             if (aiSession) {
-              const resultText = `Terminal Output (Command: ${finalTracking.originalCommand}):\n\`\`\`\n${finalTracking.buffer}\n\`\`\``;
+              const resultText = `Terminal Output (Command: ${finalTracking.originalCommand}):\n\`\`\`\n${finalTracking.buffer}\n\`\`\`\n\n[Instruction]: ${proactiveInstruction}`;
 
               // Update AI state via ref to ensure stability
               sessionUpdateStateRef.current(finalTracking.aiSessionId, {
@@ -1038,7 +1060,7 @@ function App() {
               // Also cleanup ref immediately
               delete interactiveSessionsRef.current[sessionId];
             }
-          }, 300); // 300ms of silence is usually enough to confirm the command finished
+          }, interactiveStabilizationTimeout); // Use dynamic timeout
         }
       }
     });
@@ -1275,7 +1297,19 @@ function App() {
                         terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                         lastTerminalSessionId={lastTerminalSessionId}
                         lastTerminalSessionTitle={session.sessions.find(s => s.id === lastTerminalSessionId)?.title}
+                        proactiveInstruction={proactiveInstruction}
                         interactiveSessionTracking={Object.values(interactiveSessions).find(t => t.aiSessionId === sessionData.id)}
+                        onRunCommand={(targetId, command) => {
+                          setInteractiveSessions(prev => ({
+                            ...prev,
+                            [targetId]: {
+                              aiSessionId: sessionData.id,
+                              buffer: '',
+                              originalCommand: command,
+                              startTime: Date.now()
+                            }
+                          }));
+                        }}
                       />
                     ) : (
                       <TerminalComponent
@@ -1371,7 +1405,19 @@ function App() {
                           fontSize={fontSize}
                           terminalBackground={terminalBackground}
                           terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                          proactiveInstruction={proactiveInstruction}
                           interactiveSessionTracking={Object.values(interactiveSessions).find(t => t.aiSessionId === sessionData.id)}
+                          onRunCommand={(targetId, command) => {
+                            setInteractiveSessions(prev => ({
+                              ...prev,
+                              [targetId]: {
+                                aiSessionId: sessionData.id,
+                                buffer: '',
+                                originalCommand: command,
+                                startTime: Date.now()
+                              }
+                            }));
+                          }}
                         />
                       ) : (
                         <TerminalComponent
@@ -1445,6 +1491,8 @@ function App() {
                   enablePromptHighlight={enablePromptHighlight}
                   promptHighlightColor={promptHighlightColor}
                   promptPatterns={promptPatterns}
+                  proactiveInstruction={proactiveInstruction}
+                  interactiveSessions={interactiveSessions}
                   onPasteRequest={(text) => {
                     const activePaneSessionId = pane.paneAllocations[pane.activePaneId || ''];
                     if (activePaneSessionId) handlePasteRequest(activePaneSessionId, text);
@@ -1519,6 +1567,21 @@ function App() {
                           fontSize={fontSize}
                           terminalBackground={terminalBackground}
                           terminalBackgroundInactive={terminalBackgroundInactive || undefined}
+                          lastTerminalSessionId={lastTerminalSessionId}
+                          lastTerminalSessionTitle={session.sessions.find(s => s.id === lastTerminalSessionId)?.title}
+                          proactiveInstruction={proactiveInstruction}
+                          interactiveSessionTracking={Object.values(interactiveSessions).find(t => t.aiSessionId === sessionData.id)}
+                          onRunCommand={(targetId, command) => {
+                            setInteractiveSessions(prev => ({
+                              ...prev,
+                              [targetId]: {
+                                aiSessionId: sessionData.id,
+                                buffer: '',
+                                originalCommand: command,
+                                startTime: Date.now()
+                              }
+                            }));
+                          }}
                         />
                       ) : (
                         <TerminalComponent
@@ -1613,6 +1676,19 @@ function App() {
                         terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                         lastTerminalSessionId={lastTerminalSessionId}
                         lastTerminalSessionTitle={session.sessions.find(s => s.id === lastTerminalSessionId)?.title}
+                        proactiveInstruction={proactiveInstruction}
+                        interactiveSessionTracking={Object.values(interactiveSessions).find(t => t.aiSessionId === sessionData.id)}
+                        onRunCommand={(targetId, command) => {
+                          setInteractiveSessions(prev => ({
+                            ...prev,
+                            [targetId]: {
+                              aiSessionId: sessionData.id,
+                              buffer: '',
+                              originalCommand: command,
+                              startTime: Date.now()
+                            }
+                          }));
+                        }}
                       />
                     ) : (
                       <TerminalComponent
@@ -1748,6 +1824,10 @@ function App() {
           onPromptPatternsChange={updatePromptPatterns}
           watchBufferLimit={watchBufferLimit}
           onWatchBufferLimitChange={updateWatchBufferLimit}
+          proactiveInstruction={proactiveInstruction}
+          onProactiveInstructionChange={updateProactiveInstruction}
+          interactiveStabilizationTimeout={interactiveStabilizationTimeout}
+          onInteractiveStabilizationTimeoutChange={updateInteractiveStabilizationTimeout}
         />
         <PaneLines
           paneAllocations={pane.paneAllocations}

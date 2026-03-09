@@ -52,6 +52,7 @@ interface AIChatPaneProps {
         buffer: string;
         startTime: number;
     };
+    proactiveInstruction?: string;
 }
 
 // ── Custom Message Component with Execution Support ──
@@ -62,41 +63,52 @@ const MessageContent: React.FC<{
     targetTitle?: string;
     targetId?: string;
 }> = ({ content, onRun, onHoverTarget, targetTitle, targetId }) => {
-    // We split the content by code blocks. 
-    // This is a simple parser for ```execute ... ``` blocks
-    const parts = content.split(/(```execute[\s\S]*?```)/g);
+    // We split the content by any code blocks (3 or more backticks).
+    const parts = content.split(/(^```+[\s\S]*?^```+)/gm);
 
     return (
         <>
             {parts.map((part, i) => {
-                const match = part.match(/^```execute\s*\n?([\s\S]*?)\n?```$/);
+                const match = part.match(/^```+(\w*)\s*\n?([\s\S]*?)\n?```+$/);
                 if (match) {
-                    const command = match[1].trim();
-                    return (
-                        <div key={i} className="ai-execute-block">
-                            <pre><code>{command}</code></pre>
-                            <div className="ai-execute-actions">
-                                <button
-                                    className="ai-run-btn"
-                                    onClick={() => onRun?.(command)}
-                                    onMouseEnter={() => onHoverTarget?.(true)}
-                                    onMouseLeave={() => onHoverTarget?.(false)}
-                                >
-                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                                        <path d="M8 5v14l11-7z" />
-                                    </svg>
-                                    Run in Terminal
-                                </button>
-                                {targetId ? (
-                                    <span className="ai-run-target">Target: {targetTitle || 'Unnamed Terminal'}</span>
-                                ) : (
-                                    <span className="ai-run-target no-target">No Terminal Targeted</span>
-                                )}
+                    const lang = match[1].toLowerCase();
+                    let command = match[2].trim();
+
+                    // Check if it's an explicit execute block or a generic one starting with 'execute'
+                    // Also check for 'bash' or 'sh' if the first line is 'execute'
+                    const startsWithExecute = command.startsWith('execute\n') || command.startsWith('execute ');
+                    const isExecute = lang === 'execute' || (lang === '' && startsWithExecute) || ((lang === 'bash' || lang === 'sh' || lang === 'shell') && startsWithExecute);
+
+                    if (isExecute) {
+                        if (startsWithExecute) {
+                            command = command.replace(/^execute\s+/, '').trim();
+                        }
+                        return (
+                            <div key={i} className="ai-execute-block">
+                                <pre><code>{command}</code></pre>
+                                <div className="ai-execute-actions">
+                                    <button
+                                        className="ai-run-btn"
+                                        onClick={() => onRun?.(command)}
+                                        onMouseEnter={() => onHoverTarget?.(true)}
+                                        onMouseLeave={() => onHoverTarget?.(false)}
+                                    >
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                            <path d="M8 5v14l11-7z" />
+                                        </svg>
+                                        Run in Terminal
+                                    </button>
+                                    {targetId ? (
+                                        <span className="ai-run-target">Target: {targetTitle || 'Unnamed Terminal'}</span>
+                                    ) : (
+                                        <span className="ai-run-target no-target">No Terminal Targeted</span>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    );
+                        );
+                    }
                 }
-                // Fallback to standard markdown for other parts
+                // Fallback to standard markdown for other parts (including non-execute code blocks)
                 return (
                     <div
                         key={i}
@@ -120,7 +132,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     lastTerminalSessionId: lastTerminalSessionIdProp,
     lastTerminalSessionTitle: lastTerminalSessionTitleProp,
     onRunCommand,
-    interactiveSessionTracking
+    interactiveSessionTracking,
+    proactiveInstruction
 }) => {
     // Auth state
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -235,7 +248,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         // Add execution instruction
         const execInstruction = ' When suggesting a command to run, please wrap it in ```execute\\n...\\n``` block.';
 
-        setLocalSystemInstruction(`${basePrompt}${langInstruction}${execInstruction}`);
+        const finalProactive = proactiveInstruction ? ` ${proactiveInstruction}` : '';
+
+        setLocalSystemInstruction(`${basePrompt}${langInstruction}${execInstruction}${finalProactive}`);
 
     }, [selectedExpertise, selectedLanguage, aiPersonas]);
 
