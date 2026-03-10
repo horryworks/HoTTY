@@ -400,21 +400,30 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     }, []);
 
     const toggleWatch = useCallback((sessionId: string) => {
-        setSessions(prev => prev.map(s => {
-            if (s.id === sessionId) {
-                const newWatchingState = !s.isWatching;
-                // If turning off watch, clear the buffer to free memory
-                if (!newWatchingState) {
-                    delete watchBuffers.current[sessionId];
-                    return { ...s, isWatching: newWatchingState, hasWatchData: false };
-                } else if (!watchBuffers.current[sessionId]) {
-                    // Initialize if starting to watch
-                    watchBuffers.current[sessionId] = '';
+        setSessions(prev => {
+            const isTurningOn = !prev.find(s => s.id === sessionId)?.isWatching;
+
+            return prev.map(s => {
+                if (s.id === sessionId) {
+                    if (!isTurningOn) {
+                        // Turning OFF
+                        delete watchBuffers.current[sessionId];
+                        return { ...s, isWatching: false, hasWatchData: false };
+                    } else {
+                        // Turning ON
+                        if (!watchBuffers.current[sessionId]) {
+                            watchBuffers.current[sessionId] = '';
+                        }
+                        return { ...s, isWatching: true };
+                    }
+                } else if (isTurningOn && s.isWatching) {
+                    // Turn OFF others if we are turning ON a new one
+                    delete watchBuffers.current[s.id];
+                    return { ...s, isWatching: false, hasWatchData: false };
                 }
-                return { ...s, isWatching: newWatchingState };
-            }
-            return s;
-        }));
+                return s;
+            });
+        });
     }, []);
 
     const getWatchBuffer = useCallback((sessionId: string) => {

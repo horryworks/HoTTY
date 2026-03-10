@@ -39,6 +39,8 @@ interface AIChatPaneProps {
         isWaitingForTerminal?: boolean;
     }) => void;
     onRunCommand?: (sessionId: string, command: string) => void;
+    onShowPromptMenu?: () => void;
+    onSendMessage?: (text: string) => void;
     showSystemPrompt: boolean;
     askGeminiCommands: { id: string; label: string; promptTemplate: string }[];
     aiPersonas: { id: string; label: string; systemPrompt: string }[];
@@ -54,6 +56,27 @@ interface AIChatPaneProps {
     };
     proactiveInstruction?: string;
 }
+
+// ── Gemini Icon Component ──
+const GeminiIcon: React.FC<{ size?: number; className?: string }> = ({ size = 24, className = "" }) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        className={className}
+        style={{ flexShrink: 0 }}
+    >
+        <path d="M12 2L14.8 9.2L22 12L14.8 14.8L12 22L9.2 14.8L2L12L9.2 9.2L12 2Z" fill="url(#gemini-gradient)" />
+        <defs>
+            <linearGradient id="gemini-gradient" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#4E77FF" />
+                <stop offset="0.5" stopColor="#A87FF4" />
+                <stop offset="1" stopColor="#FF76AB" />
+            </linearGradient>
+        </defs>
+    </svg>
+);
 
 // ── Custom Message Component with Execution Support ──
 const MessageContent: React.FC<{
@@ -132,6 +155,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     lastTerminalSessionId: lastTerminalSessionIdProp,
     lastTerminalSessionTitle: lastTerminalSessionTitleProp,
     onRunCommand,
+    onShowPromptMenu,
+    onSendMessage,
     interactiveSessionTracking,
     proactiveInstruction
 }) => {
@@ -526,12 +551,18 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     const handleSend = () => {
         const text = inputText.trim();
         if (!text || isStreaming || selectedModel === 'Unspecified') return;
+
         setMessages(prev => [...prev, { role: 'user', content: text }]);
         lastSentTextRef.current = text;
         setInputText('');
         setIsStreaming(true);
         setStreamingContent('');
-        window.electronAPI.geminiChatSend(sessionId, text, selectedModel, localSystemInstruction);
+
+        if (onSendMessage) {
+            onSendMessage(text);
+        } else {
+            window.electronAPI.geminiChatSend(sessionId, text, selectedModel, localSystemInstruction);
+        }
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -564,17 +595,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         }, 0);
     };
 
-    const GeminiIcon = ({ size = 20 }: { size?: number }) => (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="gemini-svg-icon">
-            <path d="M13.5 3.5C14.3 6.9 16.9 9.5 20.3 10.5C21.9 10.9 21.9 13.1 20.3 13.5C16.9 14.5 14.3 17.1 13.5 20.5C13.1 22.1 10.9 22.1 10.5 20.5C9.7 17.1 7.1 14.5 3.7 13.5C2.1 13.1 2.1 10.9 3.7 10.5C7.1 9.5 9.7 6.9 10.5 3.5C10.9 1.9 13.1 1.9 13.5 3.5Z" fill="url(#gemini-pane-gradient)" />
-            <defs>
-                <linearGradient id="gemini-pane-gradient" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-                    <stop offset="0%" stopColor="#4E86F8" />
-                    <stop offset="100%" stopColor="#D64669" />
-                </linearGradient>
-            </defs>
-        </svg>
-    );
 
     const getTransparentColor = (hex: string) => {
         if (hex.startsWith('#') && hex.length === 7) {
@@ -613,7 +633,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                                         setSelectedExpertise(e.target.value);
                                         const persona = aiPersonas?.find(p => p.label === e.target.value);
                                         if (persona) {
-                                            setLocalSystemInstruction(persona.systemPrompt + (selectedLanguage !== 'English' ? ` Answer in ${selectedLanguage}.` : ''));
+                                            const langInstr = selectedLanguage !== 'English' ? ` Answer in ${selectedLanguage}.` : '';
+                                            setLocalSystemInstruction(`${persona.systemPrompt}${langInstr} When you suggest shell/terminal commands that the user can run, always enclose them in a code block marked with \`\`\`execute for direct execution.`);
                                         }
                                     }}
                                     disabled={isStreaming}
@@ -659,12 +680,13 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                                     disabled={isStreaming}
                                 >
                                     {selectedModel === 'Unspecified' && <option value="Unspecified">Select a model...</option>}
-                                    {availableModels.length > 0 ? availableModels.map(m => (
+                                    {availableModels && availableModels.length > 0 ? availableModels.map(m => (
                                         <option key={m.name} value={m.name}>{m.displayName}</option>
                                     )) : (
                                         <>
-                                            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                                            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
                                         </>
                                     )}
                                 </select>
@@ -812,12 +834,13 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                             placeholder="Type a message..."
                             disabled={isStreaming}
                         />
+                        <button className="ai-chat-prompt-btn" onClick={onShowPromptMenu} title="Analysis prompts">✨</button>
                         {isStreaming && <button className="ai-chat-cancel-btn" onClick={handleCancel}>■</button>}
                         <button className="ai-chat-send-btn" onClick={handleSend} disabled={!inputText.trim() || isStreaming || selectedModel === 'Unspecified'}>➤</button>
                     </div>
                 </div>
             )}
-        </div>
+        </div >
     );
 };
 

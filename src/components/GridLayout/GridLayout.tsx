@@ -34,6 +34,7 @@ interface GridLayoutProps {
     promptPatterns?: PromptPattern[];
     onPasteRequest?: (text: string) => void;
     onRunCommand?: (targetId: string, command: string, aiSessionId: string) => void;
+    onSendMessage?: (aiSessionId: string, text: string) => void;
     proactiveInstruction?: string;
     interactiveSessions?: { [sessionId: string]: any };
 }
@@ -68,6 +69,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     promptPatterns,
     onPasteRequest,
     onRunCommand,
+    onSendMessage,
     proactiveInstruction,
     interactiveSessions
 }) => {
@@ -296,6 +298,9 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     interactiveSessionTracking={interactiveSessions ? Object.values(interactiveSessions).find((t: any) => t.aiSessionId === session.id) : undefined}
                                     onRunCommand={(targetId, command) => {
                                         if (onRunCommand) onRunCommand(targetId, command, session.id);
+                                    }}
+                                    onSendMessage={(text) => {
+                                        if (onSendMessage) onSendMessage(session.id, text);
                                     }}
                                 />
                             ) : (

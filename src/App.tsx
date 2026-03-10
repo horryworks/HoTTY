@@ -461,45 +461,11 @@ function App() {
     localStorage.setItem('hterm_right_click_paste', enabled.toString());
   };
 
-  // -- Pane Manager --
-  const pane = usePaneManager({
-    showLeftSidebar,
-    showRightSidebar,
-    showTopBar,
-    showBottomBar,
-  });
-
-
-
   // -- Paste handler (needed by session manager for terminal paste interception) --
   const handlePasteRequest = (sessionId: string, text: string) => {
     setPasteContent(text);
     setPasteSessionId(sessionId);
   };
-
-  // -- Session Manager --
-  const session = useSessionManager({
-    globalEncoding,
-    sshKeepAliveEnabled,
-    sshKeepAliveInterval,
-    telnetKeepAliveEnabled,
-    telnetKeepAliveInterval,
-    loggingEnabled,
-    loggingPath,
-    lineWrapEnabled,
-    scrollback,
-    backspaceSendsDel,
-    onPasteRequest: handlePasteRequest,
-    onSessionConnected: () => setShowDialog(false),
-    onSessionError: (msg) => setGlobalMessage({ type: 'error', message: msg }),
-    setPaneAllocations: pane.setPaneAllocations,
-    setActivePaneId: pane.setActivePaneId,
-    showLeftSidebar,
-    showRightSidebar,
-    showTopBar,
-    showBottomBar,
-    watchBufferLimit: watchBufferLimit,
-  });
 
   // Show System Prompt State
   const [showSystemPrompt, setShowSystemPrompt] = useState<boolean>(() => {
@@ -537,7 +503,6 @@ function App() {
   };
 
   // AI Persona State
-  // AI Persona State
   const [aiPersonas, setAiPersonas] = useState<PersonaDefinition[]>(() => {
     const saved = localStorage.getItem('hotty_ai_personas');
     return saved ? JSON.parse(saved) : DEFAULT_PERSONAS;
@@ -557,6 +522,78 @@ function App() {
   const updateAskGeminiCommands = (commands: AskGeminiCommand[]) => {
     setAskGeminiCommands(commands);
     localStorage.setItem('hotty_ask_gemini_commands', JSON.stringify(commands));
+  };
+
+  // -- Pane Manager --
+  const pane = usePaneManager({
+    showLeftSidebar,
+    showRightSidebar,
+    showTopBar,
+    showBottomBar,
+  });
+
+  // -- Session Manager --
+  const session = useSessionManager({
+    globalEncoding,
+    sshKeepAliveEnabled,
+    sshKeepAliveInterval,
+    telnetKeepAliveEnabled,
+    telnetKeepAliveInterval,
+    loggingEnabled,
+    loggingPath,
+    lineWrapEnabled,
+    scrollback,
+    backspaceSendsDel,
+    onPasteRequest: handlePasteRequest,
+    onSessionConnected: () => setShowDialog(false),
+    onSessionError: (msg) => setGlobalMessage({ type: 'error', message: msg }),
+    setPaneAllocations: pane.setPaneAllocations,
+    setActivePaneId: pane.setActivePaneId,
+    showLeftSidebar,
+    showRightSidebar,
+    showTopBar,
+    showBottomBar,
+    watchBufferLimit: watchBufferLimit,
+  });
+
+  const handleShowPromptMenu = (aiSessionId: string) => {
+    window.electronAPI.logDebug(`[App.tsx] handleShowPromptMenu for session: ${aiSessionId}`);
+    const currentSession = sessionRef.current;
+    const currentCommands = askGeminiCommandsRef.current;
+    const aiSession = currentSession.sessions.find((s: any) => s.id === aiSessionId);
+    if (!aiSession || aiSession.type !== 'ai') return;
+
+    // Use current commands from ref
+    const menuCommands = [
+      { id: 'analyze-watch', label: 'Analyze Watched Output' },
+      ...currentCommands.map(c => ({ id: c.id, label: c.label }))
+    ];
+    window.electronAPI.showContextMenu('__WATCH_BUFFER__', menuCommands);
+  };
+
+  const handleAISendMessage = (aiSessionId: string, text: string) => {
+    const currentSession = sessionRef.current;
+    const aiSession = currentSession.sessions.find(s => s.id === aiSessionId);
+    if (!aiSession || aiSession.type !== 'ai') return;
+
+    let terminalId = aiSession.aiChatState?.lastTargetSessionId;
+    let prependedContext = '';
+
+    if (terminalId) {
+      const termSession = currentSession.sessions.find(s => s.id === terminalId);
+      if (termSession?.isWatching) {
+        const buffer = currentSession.getWatchBuffer(terminalId);
+        if (buffer) {
+          prependedContext = `[Watched Terminal Output (Linked)]\n${buffer}\n================\n`;
+        }
+      }
+    }
+
+    const finalMessage = prependedContext + text;
+    const selectedModel = aiSession.aiChatState?.selectedModel || 'Unspecified';
+    const systemInstruction = aiSession.aiChatState?.systemInstruction || 'You are a helpful assistant.';
+
+    window.electronAPI.geminiChatSend(aiSessionId, finalMessage, selectedModel, systemInstruction);
   };
 
   // -- Ask Gemini Handler --
@@ -601,125 +638,138 @@ function App() {
     };
   }, [pane.paneAllocations, pane.setActivePaneId]);
 
-  useEffect(() => {
-    const handleAskGemini = (selection: string, type: string, targetSessionId?: string) => {
-      // If we got the special watch buffer marker, treat selection as empty
-      const actualSelection = selection === '__WATCH_BUFFER__' ? '' : selection;
-      window.electronAPI.logDebug(`[App.tsx] onAskGemini triggered. Type: ${type}, Selection length: ${actualSelection?.length}`);
+  const handleAskGemini = (selection: string, type: string, targetSessionId?: string) => {
+    // If we got the special watch buffer marker, treat selection as empty
+    const actualSelection = selection === '__WATCH_BUFFER__' ? '' : selection;
+    window.electronAPI.logDebug(`[App.tsx] onAskGemini triggered. Type: ${type}, Selection length: ${actualSelection?.length}`);
 
-      const currentSession = sessionRef.current;
-      const currentPane = paneRef.current;
-      const currentCommands = askGeminiCommandsRef.current;
-      const currentPersonas = aiPersonasRef.current; // Get current personas
+    const currentSession = sessionRef.current;
+    const currentPane = paneRef.current;
+    const currentCommands = askGeminiCommandsRef.current;
+    const currentPersonas = aiPersonasRef.current; // Get current personas
 
-      // Extract Watch Buffer before changing active pane
-      let activeTermId = targetSessionId || (pane.paneAllocations[pane.activePaneId || ''] as string);
-      let activeSession = currentSession.sessions.find(s => s.id === activeTermId);
+    // Extract Watch Buffer before changing active pane
+    let activeTermId = targetSessionId || (pane.paneAllocations[pane.activePaneId || ''] as string);
+    let activeSession = currentSession.sessions.find(s => s.id === activeTermId);
 
-      // If focus is on AI or invalid, fallback to last known terminal
-      if (!activeSession || activeSession.type === 'ai') {
-        if (lastTerminalSessionIdRef.current) {
-          activeTermId = lastTerminalSessionIdRef.current;
-          activeSession = currentSession.sessions.find(s => s.id === activeTermId);
-        }
+    // If active session is an AI chat, prioritize its own linked terminal
+    if (activeSession?.type === 'ai' && !targetSessionId) {
+      if (activeSession.aiChatState?.lastTargetSessionId) {
+        activeTermId = activeSession.aiChatState.lastTargetSessionId;
+        activeSession = currentSession.sessions.find(s => s.id === activeTermId);
       }
+    }
 
-      let prependedContext = '';
-      if (activeSession?.isWatching) {
-        const buffer = currentSession.getWatchBuffer(activeTermId);
-        if (buffer) {
-          prependedContext = `[Watched Terminal Output]\n${buffer}\n================\n`;
-        }
+    // If still AI or invalid, fallback to last known terminal
+    if (!activeSession || activeSession.type === 'ai') {
+      if (lastTerminalSessionIdRef.current) {
+        activeTermId = lastTerminalSessionIdRef.current;
+        activeSession = currentSession.sessions.find(s => s.id === activeTermId);
       }
+    }
 
-      const finalSelection = prependedContext ? (actualSelection ? `${prependedContext}[Target Text]\n${actualSelection}` : prependedContext) : actualSelection;
+    let prependedContext = '';
+    if (activeSession?.isWatching) {
+      const buffer = currentSession.getWatchBuffer(activeTermId);
+      if (buffer) {
+        prependedContext = `[Watched Terminal Output]\n${buffer}\n================\n`;
+      }
+    }
 
-      if (!finalSelection) {
-        window.electronAPI.logDebug('[App.tsx] Selection and buffer are empty, ignoring.');
+    const finalSelection = prependedContext ? (actualSelection ? `${prependedContext}[Target Text]\n${actualSelection}` : prependedContext) : actualSelection;
+
+    if (!finalSelection) {
+      window.electronAPI.logDebug('[App.tsx] Selection and buffer are empty, ignoring.');
+      return;
+    }
+
+    // Ensure AI Session
+    let aiSessionId: string;
+    const existingAiSession = currentSession.sessions.find(s => s.type === 'ai');
+
+    if (existingAiSession) {
+      aiSessionId = existingAiSession.id;
+      window.electronAPI.logDebug(`[App.tsx] Found existing AI session: ${aiSessionId}`);
+      currentPane.setActivePaneId(aiSessionId);
+    } else {
+      // Create new AI session
+      const newId = currentSession.createAISession();
+      if (newId) {
+        aiSessionId = newId;
+        window.electronAPI.logDebug(`[App.tsx] Created new AI session: ${aiSessionId}`);
+      } else {
+        window.electronAPI.logDebug('[App.tsx] Failed to create AI session (already exists?)');
         return;
       }
+    }
 
-      // Ensure AI Session
-      let aiSessionId: string;
-      const existingAiSession = currentSession.sessions.find(s => s.type === 'ai');
+    // Record target session info immediately so it's available even for free-format modal
+    currentSession.updateSessionState(aiSessionId, {
+      lastTargetSessionId: activeTermId,
+      lastTargetSessionTitle: activeSession?.title || 'Unknown Terminal'
+    });
 
-      if (existingAiSession) {
-        aiSessionId = existingAiSession.id;
-        window.electronAPI.logDebug(`[App.tsx] Found existing AI session: ${aiSessionId}`);
-        currentPane.setActivePaneId(aiSessionId);
-      } else {
-        // Create new AI session
-        const newId = currentSession.createAISession();
-        if (newId) {
-          aiSessionId = newId;
-          window.electronAPI.logDebug(`[App.tsx] Created new AI session: ${aiSessionId}`);
-        } else {
-          window.electronAPI.logDebug('[App.tsx] Failed to create AI session (already exists?)');
-          return;
-        }
+    // Unified Link: Automatically start watching the targeted terminal if not already
+    if (activeSession && !activeSession.isWatching) {
+      currentSession.toggleWatch(activeTermId);
+    }
+
+    const lang = localStorage.getItem('hotty_gemini_language') || 'English';
+
+    // 1. Try to find persona from existing session's selected expertise
+    let targetPersonaPrompt = 'You are a helpful assistant.';
+
+    if (existingAiSession && existingAiSession.aiChatState?.selectedExpertise) {
+      const expertiseLabel = existingAiSession.aiChatState.selectedExpertise;
+      const foundPersona = currentPersonas.find(p => p.label === expertiseLabel);
+      if (foundPersona) {
+        targetPersonaPrompt = foundPersona.systemPrompt;
       }
+    }
+    // 2. If not found (or new session), fallback to first persona if available
+    else if (currentPersonas.length > 0) {
+      targetPersonaPrompt = currentPersonas[0].systemPrompt;
+    }
 
-      // Record target session info immediately so it's available even for free-format modal
-      currentSession.updateSessionState(aiSessionId, {
-        lastTargetSessionId: activeTermId,
-        lastTargetSessionTitle: activeSession?.title || 'Unknown Terminal'
-      });
+    const defaultPersona = targetPersonaPrompt + " When you suggest shell/terminal commands that the user can run, always enclose them in a code block marked with ```execute for direct execution.";
 
-      const lang = localStorage.getItem('hotty_gemini_language') || 'English';
+    let systemInstruction = '';
+    let userPrompt = '';
 
-      // 1. Try to find persona from existing session's selected expertise
-      let targetPersonaPrompt = 'You are a helpful assistant.';
+    if (type === 'analyze-watch') {
+      systemInstruction = `${defaultPersona} Answer in ${lang}.`;
+      userPrompt = `Please analyze the following terminal output and point out any errors, warnings, or findings of interest:\n\n${finalSelection}`;
+    } else if (type === 'free-format') {
+      // Open modal instead of sending immediately
+      setAskGeminiFreeFormatData({ selection: finalSelection });
+      return;
+    } else {
+      const existingCommand = currentCommands.find(c => c.id === type);
 
-      if (existingAiSession && existingAiSession.aiChatState?.selectedExpertise) {
-        const expertiseLabel = existingAiSession.aiChatState.selectedExpertise;
-        const foundPersona = currentPersonas.find(p => p.label === expertiseLabel);
-        if (foundPersona) {
-          targetPersonaPrompt = foundPersona.systemPrompt;
-        }
-      }
-      // 2. If not found (or new session), fallback to first persona if available
-      else if (currentPersonas.length > 0) {
-        targetPersonaPrompt = currentPersonas[0].systemPrompt;
-      }
-
-      const defaultPersona = targetPersonaPrompt + " When you suggest shell/terminal commands that the user can run, always enclose them in a code block marked with ```execute for direct execution.";
-
-      let systemInstruction = '';
-      let userPrompt = '';
-
-      if (type === 'analyze-watch') {
+      if (existingCommand) {
         systemInstruction = `${defaultPersona} Answer in ${lang}.`;
-        userPrompt = `Please analyze the following terminal output and point out any errors, warnings, or findings of interest:\n\n${finalSelection}`;
-      } else if (type === 'free-format') {
-        // Open modal instead of sending immediately
-        setAskGeminiFreeFormatData({ selection: finalSelection });
-        return;
-      } else {
-        const existingCommand = currentCommands.find(c => c.id === type);
-
-        if (existingCommand) {
-          systemInstruction = `${defaultPersona} Answer in ${lang}.`;
-          if (existingCommand.id === 'root-cause') {
-            systemInstruction = `You are an expert troubleshooter. ${defaultPersona} Answer in ${lang}.`;
-          }
-          userPrompt = existingCommand.promptTemplate.replace('{selection}', finalSelection);
-        } else {
-          // Fallback
-          systemInstruction = `${defaultPersona} Answer in ${lang}.`;
-          userPrompt = `Please explain the following text:\n\n${finalSelection}`;
+        if (existingCommand.id === 'root-cause') {
+          systemInstruction = `You are an expert troubleshooter. ${defaultPersona} Answer in ${lang}.`;
         }
+        userPrompt = existingCommand.promptTemplate.replace('{selection}', finalSelection);
+      } else {
+        // Fallback
+        systemInstruction = `${defaultPersona} Answer in ${lang}.`;
+        userPrompt = `Please explain the following text:\n\n${finalSelection}`;
       }
+    }
 
-      window.electronAPI.logDebug(`[App.tsx] Updating session state with prompt. Prompt: ${userPrompt.substring(0, 50)}...`);
-      console.log(`[App.tsx] Updating session state with prompt. Prompt: ${userPrompt.substring(0, 50)}...`);
-      currentSession.updateSessionState(aiSessionId, {
-        pendingMessage: userPrompt,
-        systemInstruction: systemInstruction
-      });
-      window.electronAPI.logDebug('[App.tsx] Session state updated.');
-      console.log('[App.tsx] Session state updated.');
-    };
+    window.electronAPI.logDebug(`[App.tsx] Updating session state with prompt. Prompt: ${userPrompt.substring(0, 50)}...`);
+    console.log(`[App.tsx] Updating session state with prompt. Prompt: ${userPrompt.substring(0, 50)}...`);
+    currentSession.updateSessionState(aiSessionId, {
+      pendingMessage: userPrompt,
+      systemInstruction: systemInstruction
+    });
+    window.electronAPI.logDebug('[App.tsx] Session state updated.');
+    console.log('[App.tsx] Session state updated.');
+  };
 
+  useEffect(() => {
     const removeListener = window.electronAPI.onAskGemini(handleAskGemini);
 
     const handleCustomAskGemini = (e: Event) => {
@@ -730,6 +780,7 @@ function App() {
         handleAskGemini(customEvent.detail.selection, customEvent.detail.type, customEvent.detail.sessionId);
       }
     };
+
     window.addEventListener('ask-gemini-internal', handleCustomAskGemini);
 
     return () => {
@@ -737,9 +788,6 @@ function App() {
       window.removeEventListener('ask-gemini-internal', handleCustomAskGemini);
     };
   }, []); // Empty dependency array ensures listener is bound ONLY ONCE
-
-  // ... (rest of the file)
-
 
 
   // -- Settings Updaters --
@@ -898,8 +946,6 @@ function App() {
     const currentSession = sessionRef.current;
     const currentPane = paneRef.current;
 
-    // AI session is already created or found in handleAskGemini before the modal opens
-    // but just in case, we find it here
     const aiSession = currentSession.sessions.find(s => s.type === 'ai');
     if (aiSession) {
       const lang = localStorage.getItem('hotty_gemini_language') || 'English';
@@ -937,10 +983,7 @@ function App() {
     window.electronAPI.focusWindow();
   };
 
-  // -- Early Return --
-  if (!window.electronAPI) {
-    return <div style={{ color: 'white', padding: '20px' }}>Loading Electron API...</div>;
-  }
+
 
   // -- Derived State --
   const orderedTabs = session.tabOrder
@@ -948,22 +991,7 @@ function App() {
     .filter((s): s is Session => !!s);
 
   const watchedSessionIds = session.sessions.filter(s => s.isWatching).map(s => s.id);
-  const nonEmptyBufferSessionIds = session.sessions.filter(s => s.hasWatchData).map(s => s.id);
 
-  const handleAskGeminiFromTab = (sessionId: string) => {
-    // Switch to the target tab first to ensure context
-    pane.setActivePaneId(sessionId);
-
-    // Prepare menu items: default analysis + user-defined commands
-    const menuCommands = [
-      { id: 'analyze-watch', label: 'Analyze Watched Output' },
-      ...askGeminiCommands.map(c => ({ id: c.id, label: c.label }))
-    ];
-
-    // Show native context menu at current mouse position
-    // Use special selection marker to hide Paste and enable Gemini without real selection
-    window.electronAPI.showContextMenu('__WATCH_BUFFER__', menuCommands);
-  };
 
   // -- Stable references for session management to keep the listener from re-registering --
   const sessionSessionsRef = useRef(session.sessions);
@@ -1181,6 +1209,11 @@ function App() {
     };
   }, []);
 
+  // -- Early Return --
+  if (!window.electronAPI) {
+    return <div style={{ color: 'white', padding: '20px' }}>Loading Electron API...</div>;
+  }
+
   // -- Render --
   return (
     <div className="app-container">
@@ -1266,11 +1299,9 @@ function App() {
               activeTabId={pane.activeSessionId}
               visibleSessionIds={pane.visibleSessionIds}
               watchedSessionIds={watchedSessionIds}
-              nonEmptyBufferSessionIds={nonEmptyBufferSessionIds}
               onTabClick={pane.handleTabClick}
               onTabClose={session.closeSession}
               onToggleWatch={session.toggleWatch}
-              onAskGeminiTab={handleAskGeminiFromTab}
               onNewTab={() => setShowDialog(true)}
               onNewAITab={() => session.createAISession()}
               onTabReorder={session.handleTabReorder}
@@ -1329,6 +1360,8 @@ function App() {
                         terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                         lastTerminalSessionId={lastTerminalSessionId}
                         lastTerminalSessionTitle={session.sessions.find(s => s.id === lastTerminalSessionId)?.title}
+                        onShowPromptMenu={() => handleShowPromptMenu(sessionData.id)}
+                        onSendMessage={(text) => handleAISendMessage(sessionData.id, text)}
                         proactiveInstruction={proactiveInstruction}
                         interactiveSessionTracking={Object.values(interactiveSessions).find(t => t.aiSessionId === sessionData.id)}
                         onRunCommand={(targetId, command) => {
@@ -1437,7 +1470,8 @@ function App() {
                           fontSize={fontSize}
                           terminalBackground={terminalBackground}
                           terminalBackgroundInactive={terminalBackgroundInactive || undefined}
-                          proactiveInstruction={proactiveInstruction}
+                          onShowPromptMenu={() => handleShowPromptMenu(sessionData.id)}
+                          onSendMessage={(text) => handleAISendMessage(sessionData.id, text)}
                           interactiveSessionTracking={Object.values(interactiveSessions).find(t => t.aiSessionId === sessionData.id)}
                           onRunCommand={(targetId, command) => {
                             setInteractiveSessions(prev => ({
@@ -1540,6 +1574,7 @@ function App() {
                       }
                     }));
                   }}
+                  onSendMessage={handleAISendMessage}
                 />
               </div>
 
@@ -1601,6 +1636,8 @@ function App() {
                           terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                           lastTerminalSessionId={lastTerminalSessionId}
                           lastTerminalSessionTitle={session.sessions.find(s => s.id === lastTerminalSessionId)?.title}
+                          onShowPromptMenu={() => handleShowPromptMenu(sessionData.id)}
+                          onSendMessage={(text) => handleAISendMessage(sessionData.id, text)}
                           proactiveInstruction={proactiveInstruction}
                           interactiveSessionTracking={Object.values(interactiveSessions).find(t => t.aiSessionId === sessionData.id)}
                           onRunCommand={(targetId, command) => {
@@ -1708,6 +1745,8 @@ function App() {
                         terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                         lastTerminalSessionId={lastTerminalSessionId}
                         lastTerminalSessionTitle={session.sessions.find(s => s.id === lastTerminalSessionId)?.title}
+                        onShowPromptMenu={() => handleShowPromptMenu(sessionData.id)}
+                        onSendMessage={(text) => handleAISendMessage(sessionData.id, text)}
                         proactiveInstruction={proactiveInstruction}
                         interactiveSessionTracking={Object.values(interactiveSessions).find(t => t.aiSessionId === sessionData.id)}
                         onRunCommand={(targetId, command) => {
