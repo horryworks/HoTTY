@@ -1031,13 +1031,28 @@ function App() {
         if (matched) {
           window.electronAPI.logDebug(`[Interactive Flow] Potential prompt detected (${matchedPatternName}) in session ${sessionId}. Waiting for silence...`);
 
+          // CLEAR PREVIOUS TIMER if it exists to avoid multiple executions
+          if (stabilizationTimersRef.current[sessionId]) {
+            clearTimeout(stabilizationTimersRef.current[sessionId]);
+          }
+
           // SET STABILIZATION TIMER: Wait customizeable amount of silence before concluding
           stabilizationTimersRef.current[sessionId] = setTimeout(() => {
             window.electronAPI.logDebug(`[Interactive Flow] Silence confirmed for session ${sessionId}. Finalizing output.`);
+
+            // RACE CONDITION PREVENTION: Clean up everything IMMEDIATELY before processing
+            const finalTracking = interactiveSessionsRef.current[sessionId];
             delete stabilizationTimersRef.current[sessionId];
 
-            const finalTracking = interactiveSessionsRef.current[sessionId];
             if (!finalTracking) return;
+
+            // Immediately remove from tracking to prevent other timers from finding it
+            setInteractiveSessions(prev => {
+              const next = { ...prev };
+              delete next[sessionId];
+              return next;
+            });
+            delete interactiveSessionsRef.current[sessionId];
 
             // Trigger AI send
             const aiSession = sessionSessionsRef.current.find(s => s.id === finalTracking.aiSessionId);
@@ -1050,15 +1065,6 @@ function App() {
                 pendingMessage: resultText,
                 isWaitingForTerminal: false
               });
-
-              // Remove from tracking
-              setInteractiveSessions(prev => {
-                const next = { ...prev };
-                delete next[sessionId];
-                return next;
-              });
-              // Also cleanup ref immediately
-              delete interactiveSessionsRef.current[sessionId];
             }
           }, interactiveStabilizationTimeout); // Use dynamic timeout
         }
@@ -1109,6 +1115,31 @@ function App() {
 
     window.addEventListener('hotty-interactive-manual-send', handleManualSend);
 
+    const handleCancelTracking = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const sessionId = detail.sessionId;
+
+      if (interactiveSessionsRef.current[sessionId]) {
+        window.electronAPI.logDebug(`[Interactive Flow] Tracking cancelled for session ${sessionId}`);
+
+        // Cleanup timer
+        if (stabilizationTimersRef.current[sessionId]) {
+          clearTimeout(stabilizationTimersRef.current[sessionId]);
+          delete stabilizationTimersRef.current[sessionId];
+        }
+
+        // Remove from tracking
+        setInteractiveSessions(prev => {
+          const next = { ...prev };
+          delete next[sessionId];
+          return next;
+        });
+        delete interactiveSessionsRef.current[sessionId];
+      }
+    };
+
+    window.addEventListener('hotty-interactive-cancel', handleCancelTracking);
+
     // 2. TTL Cleanup (every minute)
     const ttlInterval = setInterval(() => {
       const now = Date.now();
@@ -1145,6 +1176,7 @@ function App() {
 
     return () => {
       window.removeEventListener('hotty-interactive-manual-send', handleManualSend);
+      window.removeEventListener('hotty-interactive-cancel', handleCancelTracking);
       clearInterval(ttlInterval);
     };
   }, []);

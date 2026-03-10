@@ -1,5 +1,16 @@
 # Release Notes - HoTTY
 
+## [v0.1.15-beta6] - 2026-03-09
+### Added
+- **Interactive AI Improvements**:
+    - **Multi-Timer Prevention**: Implemented a "clear-and-reserve" logic for the stabilization timer to prevent duplicate AI requests during rapid terminal output.
+    - **Customizable Timeout**: Added an input field in Settings > AI to customize the interactive stabilization timeout (default: 10,000ms).
+    - **Cancellation Sync**: Cancelling the "Waiting" state in AI chat now immediately stops background terminal tracking, resolving issues with persistent commands like `top`.
+- **UI Refinements**:
+    - **Settings Layout**: Moved "Proactive Investigation Instruction" directly below "Personas" in the AI settings tab for a more logical configuration flow.
+- **Improved Prompt Detection**:
+    - Implemented strict whole-line matching for prompt detection patterns to eliminate false positives from terminal output content.
+
 ## [v0.1.14-beta5] - 2026-03-08
 ### Added
 - **Interactive AI Investigation**:

@@ -482,6 +482,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
 
     const handleStopWaiting = () => {
         setIsWaitingForTerminal(false);
+
+        // Dispatch cancel event to stop tracking in App.tsx
+        if (lastTargetSessionId) {
+            window.dispatchEvent(new CustomEvent('hotty-interactive-cancel', {
+                detail: { sessionId: lastTargetSessionId }
+            }));
+        }
+
         onStateChange?.({
             messages,
             inputText,
