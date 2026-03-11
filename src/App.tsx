@@ -845,9 +845,39 @@ function App() {
     }
   };
 
-  const updateSidebarPosition = (pos: 'left' | 'right') => {
+  const handleSidebarPositionChange = (pos: 'left' | 'right') => {
     setSidebarPosition(pos);
     localStorage.setItem('hterm_sidebar_position', pos);
+  };
+
+  const handleToggleWatch = (sessionId: string) => {
+    const s = session.sessions.find(session => session.id === sessionId);
+    if (!s) return;
+
+    const isTurningOn = !s.isWatching;
+    session.toggleWatch(sessionId);
+
+    if (isTurningOn) {
+      // Find or create AI session
+      let aiSessionId = session.sessions.find(session => session.type === 'ai')?.id;
+      if (!aiSessionId) {
+        aiSessionId = session.createAISession();
+      } else {
+        // Activate existing AI session pane
+        const aiPaneId = Object.keys(pane.paneAllocations).find(id => pane.paneAllocations[id] === aiSessionId);
+        if (aiPaneId) {
+          pane.setActivePaneId(aiPaneId);
+        }
+      }
+
+      if (aiSessionId) {
+        // Link this terminal to the AI session
+        session.updateSessionState(aiSessionId, {
+          lastTargetSessionId: sessionId,
+          lastTargetSessionTitle: s.title
+        });
+      }
+    }
   };
 
   // Theme Change Handler
@@ -1301,7 +1331,7 @@ function App() {
               watchedSessionIds={watchedSessionIds}
               onTabClick={pane.handleTabClick}
               onTabClose={session.closeSession}
-              onToggleWatch={session.toggleWatch}
+              onToggleWatch={handleToggleWatch}
               onNewTab={() => setShowDialog(true)}
               onNewAITab={() => session.createAISession()}
               onTabReorder={session.handleTabReorder}
@@ -1876,7 +1906,7 @@ function App() {
           theme={theme}
           onThemeChange={updateTheme}
           sidebarPosition={sidebarPosition}
-          onSidebarPositionChange={updateSidebarPosition}
+          onSidebarPositionChange={handleSidebarPositionChange}
           showSystemPrompt={showSystemPrompt}
           onShowSystemPromptChange={updateShowSystemPrompt}
           askGeminiCommands={askGeminiCommands}
