@@ -430,6 +430,13 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         return watchBuffers.current[sessionId] || '';
     }, []);
 
+    const clearWatchBuffer = useCallback((sessionId: string) => {
+        delete watchBuffers.current[sessionId];
+        setSessions(currentSessions => {
+            return currentSessions.map(s => s.id === sessionId ? { ...s, hasWatchData: false } : s);
+        });
+    }, []);
+
     return {
         sessions,
         tabOrder,
@@ -443,5 +450,6 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         handleTerminalData,
         toggleWatch,
         getWatchBuffer,
+        clearWatchBuffer,
     };
 }

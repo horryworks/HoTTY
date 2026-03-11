@@ -229,7 +229,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
 
     // Sync pending message from props if it arrives later or changes
     useEffect(() => {
-        if (initialState?.pendingMessage !== undefined) {
+        if (initialState?.pendingMessage !== undefined && initialState.pendingMessage !== processedPendingMessageRef.current) {
             setLocalPendingMessage(initialState.pendingMessage);
         }
         if (initialState?.lastTargetSessionId !== undefined) {
@@ -249,6 +249,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const lastSentTextRef = useRef<string>('');
+    const processedPendingMessageRef = useRef<string | undefined>(undefined);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     // Real-time System Prompt Update
@@ -270,12 +271,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             langInstruction = ` Answer in ${selectedLanguage}.`;
         }
 
-        // Add execution instruction
-        const execInstruction = ' When suggesting a command to run, please wrap it in ```execute\\n...\\n``` block.';
-
-        const finalProactive = proactiveInstruction ? ` ${proactiveInstruction}` : '';
-
-        setLocalSystemInstruction(`${basePrompt}${langInstruction}${execInstruction}${finalProactive}`);
+        // Add execution instruction and proactive instruction
+        const extraInstructions = ' When suggesting a command to run, please wrap it in ```execute\\n...\\n``` block.' + (proactiveInstruction ? ` ${proactiveInstruction}` : '');
+        setLocalSystemInstruction(`${basePrompt}${langInstruction}${extraInstructions}`);
 
     }, [selectedExpertise, selectedLanguage, aiPersonas]);
 
@@ -291,9 +289,28 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     useEffect(() => {
         if (isAuthenticated && localPendingMessage && !isStreaming) {
             const text = localPendingMessage;
-            const sysInstr = (initialState?.systemInstruction || localSystemInstruction) + ' When suggesting a command to run, please wrap it in ```execute\\n...\\n``` block.';
+            const sysInstr = initialState?.systemInstruction || localSystemInstruction;
 
             setLocalPendingMessage(undefined);
+            processedPendingMessageRef.current = text; // Mark as processed
+
+            // CRITICAL: Clear pendingMessage in central state as well
+            if (onStateChangeRef.current) {
+                onStateChangeRef.current({
+                    messages: [...messages, { role: 'user', content: text }],
+                    inputText: '',
+                    selectedModel,
+                    selectedLanguage,
+                    selectedExpertise,
+                    textareaHeight,
+                    scrollTop: scrollContainerRef.current?.scrollTop || 0,
+                    pendingMessage: undefined, // Clear it!
+                    systemInstruction: sysInstr,
+                    lastTargetSessionId,
+                    lastTargetSessionTitle,
+                    isWaitingForTerminal: true
+                });
+            }
 
             if (selectedModel === 'Unspecified') {
                 setMessages(prev => [
@@ -310,7 +327,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             setStreamingContent('');
             window.electronAPI.geminiChatSend(sessionId, text, selectedModel, sysInstr);
         }
-    }, [isAuthenticated, localPendingMessage, isStreaming, sessionId, selectedModel, initialState?.systemInstruction, localSystemInstruction]);
+    }, [isAuthenticated, localPendingMessage, isStreaming, sessionId, selectedModel, initialState?.systemInstruction, localSystemInstruction, messages, lastTargetSessionId, lastTargetSessionTitle, textareaHeight]);
 
     // Keep ref to onStateChange to avoid effect re-triggering
     const onStateChangeRef = useRef(onStateChange);

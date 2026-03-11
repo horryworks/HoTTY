@@ -6,31 +6,29 @@ import { PasteConfirmationModal } from './components/PasteConfirmationModal/Past
 import { SettingsModal } from './components/SettingsModal/SettingsModal'
 import { LayoutSelector } from './components/LayoutSelector/LayoutSelector'
 import { GridLayout } from './components/GridLayout/GridLayout'
-import { TerminalComponent } from './components/Terminal/Terminal'
-import { AIChatPane } from './components/AIChatPane/AIChatPane'
 import { MessageModal } from './components/MessageModal/MessageModal'
 import { AskGeminiModal } from './components/AskGeminiModal/AskGeminiModal'
 import HelpModal from './components/HelpModal/HelpModal'
-
+import { PaneContent } from './components/PaneContent/PaneContent'
 import { PaneLines } from './components/PaneLines/PaneLines'
+
 import { useSessionManager } from './hooks/useSessionManager'
 import type { Session } from './hooks/useSessionManager'
 import { usePaneManager } from './hooks/usePaneManager'
+import { useSettings } from './hooks/useSettings'
+import { useInteractiveFlow } from './hooks/useInteractiveFlow'
+import { useGeminiChat } from './hooks/useGeminiChat'
+
 import '@xterm/xterm/css/xterm.css'
 import './App.css'
+
+// -- Exported Types (used by other modules) --
 
 export interface AskGeminiCommand {
   id: string;
   label: string;
   promptTemplate: string;
 }
-
-const DEFAULT_GEMINI_COMMANDS: AskGeminiCommand[] = [
-  { id: 'what-is-this', label: 'What is this?', promptTemplate: 'Explain the following text or code snippet concisely:\n\n{selection}' },
-  { id: 'what-does-it-mean', label: 'What does it mean?', promptTemplate: 'Interpret the meaning of this log entry or message and its implications:\n\n{selection}' },
-  { id: 'root-cause', label: 'Research root cause', promptTemplate: 'Analyze the following error or issue, identify 3 potential root causes, and suggest verification steps for each:\n\n{selection}' },
-  { id: 'fix-this', label: 'Fix this', promptTemplate: 'Suggest a fix or improvement for the selected code or configuration:\n\n{selection}' },
-];
 
 export interface PromptPattern {
   id: string;
@@ -39,58 +37,56 @@ export interface PromptPattern {
   enabled: boolean;
 }
 
-const DEFAULT_PROMPT_PATTERNS: PromptPattern[] = [
-  { id: 'cisco', name: 'Cisco / Allied Telesis', pattern: '^([a-zA-Z0-9_\\-\\.]+(?:\\([a-zA-Z0-9_\\-\\.]+\\))?[>#])\\s*', enabled: true },
-  { id: 'huawei', name: 'Huawei / Yamaha', pattern: '^([<\\[][a-zA-Z0-9_\\-\\./]+[>\\]])\\s*', enabled: true },
-  { id: 'juniper', name: 'Juniper', pattern: '^([-_\\w]+@[-_\\w]+[>#])\\s*', enabled: true },
-  { id: 'linux', name: 'Linux', pattern: '^([-_\\w]+@[-_\\w]+:[^$# ]*[$#])\\s*', enabled: true },
-  { id: 'cmd', name: 'Command Prompt', pattern: '^([A-Za-z]:.*>)\\s*', enabled: true },
-  { id: 'powershell', name: 'PowerShell', pattern: '^(PS\\s+.*>)\\s*', enabled: true }
-];
-
 export interface PersonaDefinition {
   id: string;
   label: string;
   systemPrompt: string;
 }
 
-const DEFAULT_PERSONAS: PersonaDefinition[] = [
-  {
-    id: 'general-helper',
-    label: 'General Helper',
-    systemPrompt: 'You are a helpful technical assistant. Provide clear, concise, and accurate answers. When explaining concepts, use analogies where appropriate.'
-  },
-  {
-    id: 'network-expert',
-    label: 'Network Expert',
-    systemPrompt: 'You are a Senior Network Engineer. Analyze network issues with a focus on OSI layers, routing protocols (BGP, OSPF), and switching. Use industry-standard terminology (Cisco/Juniper syntax) and formatting. When you need more information about a device, propose investigation commands (e.g., "show version", "show inventory"). HoTTY will automatically execute these and send back the results if the user clicks "Run in Terminal".'
-  },
-  {
-    id: 'server-expert',
-    label: 'Server Expert',
-    systemPrompt: 'You are a Systems Administrator specializing in Linux and Windows servers. Focus on OS internals, kernel parameters, performance tuning, and security best practices. Provide specific commands for troubleshooting. When you need to identify the OS or hardware, propose investigation commands (e.g., "uname -a", "cat /etc/os-release"). HoTTY will automatically provide the output back to you after execution.'
-  },
-  {
-    id: 'cloud-expert',
-    label: 'Cloud Expert',
-    systemPrompt: 'You are a Cloud Architect (AWS/Azure/GCP). Advise on cloud-native patterns, microservices, and infrastructure-as-code (Terraform/K8s). Prioritize scalability, cost-efficiency, and security in your recommendations.'
-  },
-  {
-    id: 'coding-expert',
-    label: 'Coding Expert',
-    systemPrompt: 'You are a Senior Software Engineer. Provide idiomatic, clean, and performant code solutions. Explain time/space complexity (Big O) where relevant. Prefer modern syntax and safety.'
-  },
-  {
-    id: 'security-analyst',
-    label: 'Security Analyst',
-    systemPrompt: 'You are a Cybersecurity Analyst. Analyze logs and configurations for potential vulnerabilities, threats, and indicators of compromise (IoCs). Recommend mitigation strategies based on industry standards (NIST/CIS).'
-  }
-];
-
 function App() {
 
-  // -- UI State --
-  // -- UI State --
+  // ═══════════════════════════════════════════════
+  // 1. Settings (useSettings hook)
+  // ═══════════════════════════════════════════════
+
+  const {
+    settings,
+    updateGlobalEncoding,
+    updateTheme,
+    updateFontSize,
+    updateFontFamily,
+    updateSshKeepAliveEnabled,
+    updateSshKeepAliveInterval,
+    updateTelnetKeepAliveEnabled,
+    updateTelnetKeepAliveInterval,
+    updateLoggingEnabled,
+    updateLoggingPath,
+    updateScrollback,
+    updateWatchBufferLimit,
+    updateBackspaceSendsDel,
+    updateRightClickPaste,
+    updateShowSystemPrompt,
+    updateEnablePromptHighlight,
+    updatePromptHighlightColor,
+    updatePromptPatterns,
+    updateAiPersonas,
+    updateAskGeminiCommands,
+    updateSidebarPosition,
+    updateProactiveInstruction,
+    updateInteractiveStabilizationTimeout,
+    updateTerminalForeground,
+    updateTerminalBackground,
+    updateTerminalBackgroundInactive,
+    updatePaneBackground,
+    updatePaneBackgroundMode,
+    updatePaneBackgroundImage,
+    toggleLineWrap,
+  } = useSettings();
+
+  // ═══════════════════════════════════════════════
+  // 2. UI State
+  // ═══════════════════════════════════════════════
+
   const [themesData, setThemesData] = useState<any>(null);
   const [showDialog, setShowDialog] = useState(true);
   const [globalMessage, setGlobalMessage] = useState<{ type: 'error' | 'success' | 'info', title?: string, message: string } | null>(null);
@@ -98,74 +94,49 @@ function App() {
   const [lastTerminalSessionId, setLastTerminalSessionId] = useState<string | null>(null);
   const lastTerminalSessionIdRef = useRef<string | null>(null);
 
-  // Interactive flow stabilization timeout (ms)
-  const [interactiveStabilizationTimeout, setInteractiveStabilizationTimeout] = useState<number>(() => {
-    const saved = localStorage.getItem('hotty_interactive_stabilization_timeout');
-    return saved ? parseInt(saved, 10) : 10000;
-  });
-
-  const updateInteractiveStabilizationTimeout = (timeout: number) => {
-    setInteractiveStabilizationTimeout(timeout);
-    localStorage.setItem('hotty_interactive_stabilization_timeout', timeout.toString());
-  };
-
-  // -- Interactive Flow State --
-  interface InteractiveSessionTracking {
-    aiSessionId: string;
-    buffer: string;
-    originalCommand: string;
-    startTime: number;
-  }
-  const [interactiveSessions, setInteractiveSessions] = useState<{
-    [sessionId: string]: InteractiveSessionTracking;
-  }>({});
-  const interactiveSessionsRef = useRef(interactiveSessions);
-  useEffect(() => { interactiveSessionsRef.current = interactiveSessions; }, [interactiveSessions]);
-
-  // Proactive Gemini Instruction
-  const [proactiveInstruction, setProactiveInstruction] = useState<string>(() => {
-    return localStorage.getItem('hotty_gemini_proactive_instruction') ||
-      'If you need more information to fulfill the user\'s request, proactively suggest terminal commands using code blocks with the "execute" language tag, like this: ```execute\\n[command]\\n```. Do not just wait for user input if the information can be gathered via the terminal.';
-  });
-
-  const updateProactiveInstruction = (instruction: string) => {
-    setProactiveInstruction(instruction);
-    localStorage.setItem('hotty_gemini_proactive_instruction', instruction);
-  };
-
-  // Load UI state from localStorage or default
+  // Layout visibility
   const [showLeftSidebar, setShowLeftSidebar] = useState(() => localStorage.getItem('hterm_ui_showLeftSidebar') === 'true');
   const [showRightSidebar, setShowRightSidebar] = useState(() => localStorage.getItem('hterm_ui_showRightSidebar') === 'true');
-  const [sidebarPosition, setSidebarPosition] = useState<'left' | 'right'>(() => {
-    return (localStorage.getItem('hterm_sidebar_position') as 'left' | 'right') || 'left';
-  });
   const [showTopBar, setShowTopBar] = useState(() => localStorage.getItem('hterm_ui_showTopBar') === 'true');
   const [showBottomBar, setShowBottomBar] = useState(() => localStorage.getItem('hterm_ui_showBottomBar') === 'true');
 
+  // Layout sizes
   const [leftSidebarPercent, setLeftSidebarPercent] = useState(() => parseFloat(localStorage.getItem('hterm_ui_leftSidebarPercent') || '20'));
   const [rightSidebarPercent, setRightSidebarPercent] = useState(() => parseFloat(localStorage.getItem('hterm_ui_rightSidebarPercent') || '20'));
   const [topBarPercent, setTopBarPercent] = useState(() => parseFloat(localStorage.getItem('hterm_ui_topBarPercent') || '20'));
   const [bottomBarPercent, setBottomBarPercent] = useState(() => parseFloat(localStorage.getItem('hterm_ui_bottomBarPercent') || '20'));
 
   const [resizingSide, setResizingSide] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
+  const [showPaneLines, setShowPaneLines] = useState(false);
+
+  // Paste State
+  const [pasteContent, setPasteContent] = useState<string | null>(null);
+  const [pasteSessionId, setPasteSessionId] = useState<string | null>(null);
+
+  // Settings / Help Modal
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+
+  // Password Cache (In-Memory Only)
+  const passwordCache = useRef<Record<string, string>>({});
 
   // Persist UI State on change
   useEffect(() => localStorage.setItem('hterm_ui_showLeftSidebar', String(showLeftSidebar)), [showLeftSidebar]);
   useEffect(() => localStorage.setItem('hterm_ui_showRightSidebar', String(showRightSidebar)), [showRightSidebar]);
   useEffect(() => localStorage.setItem('hterm_ui_showTopBar', String(showTopBar)), [showTopBar]);
   useEffect(() => localStorage.setItem('hterm_ui_showBottomBar', String(showBottomBar)), [showBottomBar]);
-
   useEffect(() => localStorage.setItem('hterm_ui_leftSidebarPercent', String(leftSidebarPercent)), [leftSidebarPercent]);
   useEffect(() => localStorage.setItem('hterm_ui_rightSidebarPercent', String(rightSidebarPercent)), [rightSidebarPercent]);
   useEffect(() => localStorage.setItem('hterm_ui_topBarPercent', String(topBarPercent)), [topBarPercent]);
   useEffect(() => localStorage.setItem('hterm_ui_bottomBarPercent', String(bottomBarPercent)), [bottomBarPercent]);
 
-
-  // -- Sidebar Resizing Logic --
+  // ═══════════════════════════════════════════════
+  // 3. Sidebar Resizing
+  // ═══════════════════════════════════════════════
 
   const sidebarResizingState = useRef<{
     side: 'left' | 'right' | 'top' | 'bottom';
-    startPos: number; // X for left/right, Y for top/bottom
+    startPos: number;
     startPercent: number;
     containerSize: number;
   } | null>(null);
@@ -173,13 +144,10 @@ function App() {
   const handleSidebarResizeStart = (e: React.MouseEvent, side: 'left' | 'right' | 'top' | 'bottom') => {
     e.preventDefault();
     e.stopPropagation();
-
     setResizingSide(side);
 
-    // Get container dimensions
-    const container = document.querySelector('.app-container'); // Use outer container for width
-    const centerColumn = document.querySelector('.center-column'); // Use center column for height
-
+    const container = document.querySelector('.app-container');
+    const centerColumn = document.querySelector('.center-column');
     const containerWidth = container ? container.clientWidth : window.innerWidth;
     const containerHeight = centerColumn ? centerColumn.clientHeight : window.innerHeight;
 
@@ -200,25 +168,18 @@ function App() {
 
   const handleSidebarResizeMove = (e: MouseEvent) => {
     if (!sidebarResizingState.current) return;
-
     const { side, startPos, startPercent, containerSize } = sidebarResizingState.current;
 
     if (side === 'left' || side === 'right') {
-      const currentX = e.clientX;
-      const deltaPx = side === 'left' ? currentX - startPos : startPos - currentX;
+      const deltaPx = side === 'left' ? e.clientX - startPos : startPos - e.clientX;
       const deltaPercent = (deltaPx / containerSize) * 100;
-
-      const newPercent = Math.max(5, Math.min(80, startPercent + deltaPercent)); // Limit between 5% and 80%
-
+      const newPercent = Math.max(5, Math.min(80, startPercent + deltaPercent));
       if (side === 'left') setLeftSidebarPercent(newPercent);
       else setRightSidebarPercent(newPercent);
     } else {
-      const currentY = e.clientY;
-      const deltaPx = side === 'top' ? currentY - startPos : startPos - currentY;
+      const deltaPx = side === 'top' ? e.clientY - startPos : startPos - e.clientY;
       const deltaPercent = (deltaPx / containerSize) * 100;
-
       const newPercent = Math.max(5, Math.min(80, startPercent + deltaPercent));
-
       if (side === 'top') setTopBarPercent(newPercent);
       else setBottomBarPercent(newPercent);
     }
@@ -232,36 +193,54 @@ function App() {
     document.body.style.cursor = '';
   };
 
+  // ═══════════════════════════════════════════════
+  // 4. Initialization Effects
+  // ═══════════════════════════════════════════════
 
-
-
-  // Load themes on startup
-
-
-
+  // Load themes
   useEffect(() => {
     window.electronAPI.getThemes().then(setThemesData);
   }, []);
 
+  // Apply theme
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', settings.theme);
+    localStorage.setItem('hterm_theme', settings.theme);
+    if (themesData) {
+      applyTheme(settings.theme);
+    }
+  }, [settings.theme, themesData]);
 
+  const applyTheme = (themeName: string) => {
+    if (themeName === 'custom') return;
+    const themeDef = (themesData as any)[themeName];
+    if (themeDef) {
+      if (themeDef.variables) {
+        Object.entries(themeDef.variables).forEach(([key, value]) => {
+          document.documentElement.style.setProperty(`--${key}`, value as string);
+        });
+      }
+      if (themeDef.terminal) {
+        const { foreground, background, backgroundInactive, paneBackground: pBg } = themeDef.terminal;
+        updateTerminalForeground(foreground);
+        updateTerminalBackground(background);
+        updateTerminalBackgroundInactive(backgroundInactive);
+        updatePaneBackground(pBg);
+      }
+    }
+  };
 
-  const [pasteContent, setPasteContent] = useState<string | null>(null);
-  const [pasteSessionId, setPasteSessionId] = useState<string | null>(null);
-
-  // Settings State
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-
-  // Ask Gemini Free Format State
-  const [askGeminiFreeFormatData, setAskGeminiFreeFormatData] = useState<{ selection: string } | null>(null);
-
-  // -- Help State --
-  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  // Set Window Title
+  useEffect(() => {
+    window.electronAPI.getAppVersion().then(version => {
+      document.title = `HoTTY v${version}`;
+    });
+  }, []);
 
   // Global keyboard shortcut: Ctrl+N → open New Connection dialog
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === 'n') {
-        // Ignore if any modal is open
         if (isSettingsOpen || pasteContent !== null || globalMessage !== null) return;
         e.preventDefault();
         setShowDialog(true);
@@ -271,690 +250,15 @@ function App() {
     return () => document.removeEventListener('keydown', handler);
   }, [isSettingsOpen, pasteContent, globalMessage]);
 
-  const [globalEncoding, setGlobalEncoding] = useState<string>(() => {
-    return localStorage.getItem('hterm_global_encoding') || 'utf8';
-  });
-  const [fontSize, setFontSize] = useState<number>(() => {
-    const saved = localStorage.getItem('hterm_font_size');
-    return saved ? parseInt(saved, 10) : 14;
-  });
-  const [fontFamily, setFontFamily] = useState<string>(() => {
-    return localStorage.getItem('hterm_font_family') || 'Consolas, "Courier New", monospace';
-  });
-  const [theme, setTheme] = useState<'dark' | 'light' | 'medium' | 'custom'>(() => {
-    return (localStorage.getItem('hterm_theme') as 'dark' | 'light' | 'medium' | 'custom') || 'dark';
-  });
+  // ═══════════════════════════════════════════════
+  // 5. Paste Handlers
+  // ═══════════════════════════════════════════════
 
-  // Apply theme attributes
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('hterm_theme', theme);
-    if (themesData) {
-      applyTheme(theme);
-    }
-  }, [theme, themesData]);
-
-
-  const applyTheme = (themeName: string) => {
-    if (themeName === 'custom') {
-      return;
-    }
-
-    const themeDef = (themesData as any)[themeName];
-    if (themeDef) {
-      if (themeDef.variables) {
-        Object.entries(themeDef.variables).forEach(([key, value]) => {
-          document.documentElement.style.setProperty(`--${key}`, value as string);
-        });
-      }
-
-      if (themeDef.terminal) {
-        const { foreground, background, backgroundInactive, paneBackground: pBg } = themeDef.terminal;
-        // Update state and localStorage to match the theme definition
-        // This ensures that when the theme is selected, the specific colors are also updated
-        updateTerminalForeground(foreground);
-        updateTerminalBackground(background);
-        updateTerminalBackgroundInactive(backgroundInactive);
-        updatePaneBackground(pBg);
-      }
-    }
-  };
-
-  // Set Window Title with Version
-  useEffect(() => {
-    window.electronAPI.getAppVersion().then(version => {
-      document.title = `HoTTY v${version}`;
-    });
-  }, []);
-
-  // SSH KeepAlive State
-  const [sshKeepAliveEnabled, setSshKeepAliveEnabled] = useState<boolean>(() => {
-    return localStorage.getItem('hterm_ssh_keepalive_enabled') !== 'false'; // default true
-  });
-  const [sshKeepAliveInterval, setSshKeepAliveInterval] = useState<number>(() => {
-    const saved = localStorage.getItem('hterm_ssh_keepalive_interval');
-    return saved ? parseInt(saved, 10) : 10;
-  });
-
-  // Telnet KeepAlive State
-  const [telnetKeepAliveEnabled, setTelnetKeepAliveEnabled] = useState<boolean>(() => {
-    return localStorage.getItem('hterm_telnet_keepalive_enabled') !== 'false'; // default true
-  });
-  const [telnetKeepAliveInterval, setTelnetKeepAliveInterval] = useState<number>(() => {
-    const saved = localStorage.getItem('hterm_telnet_keepalive_interval');
-    return saved ? parseInt(saved, 10) : 30;
-  });
-
-  // Logging State
-  const [loggingEnabled, setLoggingEnabled] = useState<boolean>(() => {
-    return localStorage.getItem('hterm_logging_enabled') === 'true'; // default false
-  });
-  const [loggingPath, setLoggingPath] = useState<string>(() => {
-    return localStorage.getItem('hterm_logging_path') || '';
-  });
-
-
-
-
-
-  // Color Settings
-  const [terminalForeground, setTerminalForeground] = useState<string>(() => {
-    return localStorage.getItem('hterm_terminal_foreground') || '#ffffff';
-  });
-  const [terminalBackground, setTerminalBackground] = useState<string>(() => {
-    return localStorage.getItem('hterm_terminal_background') || '#1e1e1e';
-  });
-  const [paneBackground, setPaneBackground] = useState<string>(() => {
-    return localStorage.getItem('hterm_pane_background') || '#000200';
-  });
-
-  // New Inactive Terminal Background
-  const [terminalBackgroundInactive, setTerminalBackgroundInactive] = useState<string>(() => {
-    return localStorage.getItem('hterm_terminal_background_inactive') || '#121212';
-  });
-
-  // Custom colors cache (to restore when switching back to Custom)
-  const [customColors, setCustomColors] = useState(() => ({
-    foreground: localStorage.getItem('hterm_custom_terminal_foreground') || '#ffffff',
-    background: localStorage.getItem('hterm_custom_terminal_background') || '#1e1e1e',
-    backgroundInactive: localStorage.getItem('hterm_custom_terminal_background_inactive') || '#121212',
-    paneBackground: localStorage.getItem('hterm_custom_pane_background') || '#000200',
-  }));
-
-  const [paneBackgroundMode, setPaneBackgroundMode] = useState<'color' | 'image'>(() => {
-    const saved = localStorage.getItem('hterm_pane_background_mode');
-    if (saved === 'default') return 'color';
-    return (saved as 'color' | 'image') || 'color';
-  });
-  const [paneBackgroundImage, setPaneBackgroundImage] = useState<string>(() => {
-    return localStorage.getItem('hterm_pane_background_image') || 'HoTTY_background.svg';
-  });
-
-
-  const [showPaneLines, setShowPaneLines] = useState(false);
-
-  // Password Cache (In-Memory Only)
-  const passwordCache = useRef<Record<string, string>>({});
-
-  const getCachedPassword = (host: string, user: string) => {
-    return passwordCache.current[`${host}:${user}`] || '';
-  };
-
-  const saveCachedPassword = (host: string, user: string, pass: string) => {
-    if (pass) {
-      passwordCache.current[`${host}:${user}`] = pass;
-    }
-  };
-
-  // Line Wrap State
-  const [lineWrapEnabled, setLineWrapEnabled] = useState<boolean>(() => {
-    return localStorage.getItem('hterm_line_wrap_enabled') !== 'false'; // default true
-  });
-
-  const toggleLineWrap = () => {
-    setLineWrapEnabled(prev => {
-      const newValue = !prev;
-      localStorage.setItem('hterm_line_wrap_enabled', newValue.toString());
-      return newValue;
-    });
-  };
-
-  // Scrollback State
-  const [scrollback, setScrollback] = useState<number>(() => {
-    const saved = localStorage.getItem('hterm_scrollback');
-    return saved ? parseInt(saved, 10) : 10000;
-  });
-
-  const updateScrollback = (lines: number) => {
-    setScrollback(lines);
-    localStorage.setItem('hterm_scrollback', lines.toString());
-  };
-
-  // Watch Buffer State
-  const [watchBufferLimit, setWatchBufferLimit] = useState<number>(() => {
-    const saved = localStorage.getItem('hotty_watch_buffer_limit');
-    return saved ? parseInt(saved, 10) : 500000; // default 500k chars
-  });
-
-  const updateWatchBufferLimit = (limit: number) => {
-    setWatchBufferLimit(limit);
-    localStorage.setItem('hotty_watch_buffer_limit', limit.toString());
-  };
-
-  // Backspace Behavior State
-  const [backspaceSendsDel, setBackspaceSendsDel] = useState<boolean>(() => {
-    return localStorage.getItem('hterm_backspace_sends_del') === 'true'; // default false (0x08)
-  });
-
-  const updateBackspaceSendsDel = (sendsDel: boolean) => {
-    setBackspaceSendsDel(sendsDel);
-    localStorage.setItem('hterm_backspace_sends_del', sendsDel.toString());
-  };
-
-  // Right-Click Paste State
-  const [rightClickPaste, setRightClickPaste] = useState<boolean>(() => {
-    return localStorage.getItem('hterm_right_click_paste') !== 'false'; // default true
-  });
-
-  const updateRightClickPaste = (enabled: boolean) => {
-    setRightClickPaste(enabled);
-    localStorage.setItem('hterm_right_click_paste', enabled.toString());
-  };
-
-  // -- Paste handler (needed by session manager for terminal paste interception) --
   const handlePasteRequest = (sessionId: string, text: string) => {
     setPasteContent(text);
     setPasteSessionId(sessionId);
   };
 
-  // Show System Prompt State
-  const [showSystemPrompt, setShowSystemPrompt] = useState<boolean>(() => {
-    return localStorage.getItem('hotty_show_system_prompt') === 'true';
-  });
-
-  const updateShowSystemPrompt = (show: boolean) => {
-    setShowSystemPrompt(show);
-    localStorage.setItem('hotty_show_system_prompt', show.toString());
-  };
-
-  // Prompt Highlight State
-  const [enablePromptHighlight, setEnablePromptHighlight] = useState<boolean>(() => {
-    return localStorage.getItem('hotty_enable_prompt_highlight') !== 'false';
-  });
-  const [promptHighlightColor, setPromptHighlightColor] = useState<string>(() => {
-    return localStorage.getItem('hotty_prompt_highlight_color') || 'rgba(255, 255, 255, 0.15)';
-  });
-  const [promptPatterns, setPromptPatterns] = useState<PromptPattern[]>(() => {
-    const saved = localStorage.getItem('hotty_prompt_patterns');
-    return saved ? JSON.parse(saved) : DEFAULT_PROMPT_PATTERNS;
-  });
-
-  const updateEnablePromptHighlight = (enabled: boolean) => {
-    setEnablePromptHighlight(enabled);
-    localStorage.setItem('hotty_enable_prompt_highlight', enabled.toString());
-  };
-  const updatePromptHighlightColor = (color: string) => {
-    setPromptHighlightColor(color);
-    localStorage.setItem('hotty_prompt_highlight_color', color);
-  };
-  const updatePromptPatterns = (patterns: PromptPattern[]) => {
-    setPromptPatterns(patterns);
-    localStorage.setItem('hotty_prompt_patterns', JSON.stringify(patterns));
-  };
-
-  // AI Persona State
-  const [aiPersonas, setAiPersonas] = useState<PersonaDefinition[]>(() => {
-    const saved = localStorage.getItem('hotty_ai_personas');
-    return saved ? JSON.parse(saved) : DEFAULT_PERSONAS;
-  });
-
-  const updateAiPersonas = (personas: PersonaDefinition[]) => {
-    setAiPersonas(personas);
-    localStorage.setItem('hotty_ai_personas', JSON.stringify(personas));
-  };
-
-  // Ask Gemini Commands State
-  const [askGeminiCommands, setAskGeminiCommands] = useState<AskGeminiCommand[]>(() => {
-    const saved = localStorage.getItem('hotty_ask_gemini_commands');
-    return saved ? JSON.parse(saved) : DEFAULT_GEMINI_COMMANDS;
-  });
-
-  const updateAskGeminiCommands = (commands: AskGeminiCommand[]) => {
-    setAskGeminiCommands(commands);
-    localStorage.setItem('hotty_ask_gemini_commands', JSON.stringify(commands));
-  };
-
-  // -- Pane Manager --
-  const pane = usePaneManager({
-    showLeftSidebar,
-    showRightSidebar,
-    showTopBar,
-    showBottomBar,
-  });
-
-  // -- Session Manager --
-  const session = useSessionManager({
-    globalEncoding,
-    sshKeepAliveEnabled,
-    sshKeepAliveInterval,
-    telnetKeepAliveEnabled,
-    telnetKeepAliveInterval,
-    loggingEnabled,
-    loggingPath,
-    lineWrapEnabled,
-    scrollback,
-    backspaceSendsDel,
-    onPasteRequest: handlePasteRequest,
-    onSessionConnected: () => setShowDialog(false),
-    onSessionError: (msg) => setGlobalMessage({ type: 'error', message: msg }),
-    setPaneAllocations: pane.setPaneAllocations,
-    setActivePaneId: pane.setActivePaneId,
-    showLeftSidebar,
-    showRightSidebar,
-    showTopBar,
-    showBottomBar,
-    watchBufferLimit: watchBufferLimit,
-  });
-
-  const handleShowPromptMenu = (aiSessionId: string) => {
-    window.electronAPI.logDebug(`[App.tsx] handleShowPromptMenu for session: ${aiSessionId}`);
-    const currentSession = sessionRef.current;
-    const currentCommands = askGeminiCommandsRef.current;
-    const aiSession = currentSession.sessions.find((s: any) => s.id === aiSessionId);
-    if (!aiSession || aiSession.type !== 'ai') return;
-
-    // Use current commands from ref
-    const menuCommands = [
-      { id: 'analyze-watch', label: 'Analyze Watched Output' },
-      ...currentCommands.map(c => ({ id: c.id, label: c.label }))
-    ];
-    window.electronAPI.showContextMenu('__WATCH_BUFFER__', menuCommands);
-  };
-
-  const handleAISendMessage = (aiSessionId: string, text: string) => {
-    const currentSession = sessionRef.current;
-    const aiSession = currentSession.sessions.find(s => s.id === aiSessionId);
-    if (!aiSession || aiSession.type !== 'ai') return;
-
-    let terminalId = aiSession.aiChatState?.lastTargetSessionId;
-    let prependedContext = '';
-
-    if (terminalId) {
-      const termSession = currentSession.sessions.find(s => s.id === terminalId);
-      if (termSession?.isWatching) {
-        const buffer = currentSession.getWatchBuffer(terminalId);
-        if (buffer) {
-          prependedContext = `[Watched Terminal Output (Linked)]\n${buffer}\n================\n`;
-        }
-      }
-    }
-
-    const finalMessage = prependedContext + text;
-    const selectedModel = aiSession.aiChatState?.selectedModel || 'Unspecified';
-    const systemInstruction = aiSession.aiChatState?.systemInstruction || 'You are a helpful assistant.';
-
-    window.electronAPI.geminiChatSend(aiSessionId, finalMessage, selectedModel, systemInstruction);
-  };
-
-  // -- Ask Gemini Handler --
-  // Use ref to access latest sessions and functions without re-binding the listener
-  const sessionRef = useRef(session);
-  const paneRef = useRef(pane);
-  const askGeminiCommandsRef = useRef(askGeminiCommands);
-  const aiPersonasRef = useRef(aiPersonas); // Add ref for aiPersonas
-
-  // Update refs on every render
-  useEffect(() => {
-    sessionRef.current = session;
-    paneRef.current = pane;
-    askGeminiCommandsRef.current = askGeminiCommands;
-    aiPersonasRef.current = aiPersonas; // Update aiPersonas ref
-  });
-
-  // -- Track last active terminal --
-  useEffect(() => {
-    const activeSessionId = pane.paneAllocations[pane.activePaneId || ''];
-    if (activeSessionId) {
-      const activeSession = session.sessions.find(s => s.id === activeSessionId);
-      if (activeSession && activeSession.type !== 'ai') {
-        setLastTerminalSessionId(activeSessionId);
-        lastTerminalSessionIdRef.current = activeSessionId;
-      }
-    }
-  }, [pane.activePaneId, pane.paneAllocations, session.sessions]);
-
-  // -- AI Focus Sync --
-  useEffect(() => {
-    const handleFocus = (e: any) => {
-      const { sessionId } = e.detail;
-      const paneId = Object.keys(pane.paneAllocations).find(id => pane.paneAllocations[id] === sessionId);
-      if (paneId) {
-        pane.setActivePaneId(paneId);
-      }
-    };
-    window.addEventListener('hotty-focus-session', handleFocus);
-    return () => {
-      window.removeEventListener('hotty-focus-session', handleFocus);
-    };
-  }, [pane.paneAllocations, pane.setActivePaneId]);
-
-  const handleAskGemini = (selection: string, type: string, targetSessionId?: string) => {
-    // If we got the special watch buffer marker, treat selection as empty
-    const actualSelection = selection === '__WATCH_BUFFER__' ? '' : selection;
-    window.electronAPI.logDebug(`[App.tsx] onAskGemini triggered. Type: ${type}, Selection length: ${actualSelection?.length}`);
-
-    const currentSession = sessionRef.current;
-    const currentPane = paneRef.current;
-    const currentCommands = askGeminiCommandsRef.current;
-    const currentPersonas = aiPersonasRef.current; // Get current personas
-
-    // Extract Watch Buffer before changing active pane
-    let activeTermId = targetSessionId || (pane.paneAllocations[pane.activePaneId || ''] as string);
-    let activeSession = currentSession.sessions.find(s => s.id === activeTermId);
-
-    // If active session is an AI chat, prioritize its own linked terminal
-    if (activeSession?.type === 'ai' && !targetSessionId) {
-      if (activeSession.aiChatState?.lastTargetSessionId) {
-        activeTermId = activeSession.aiChatState.lastTargetSessionId;
-        activeSession = currentSession.sessions.find(s => s.id === activeTermId);
-      }
-    }
-
-    // If still AI or invalid, fallback to last known terminal
-    if (!activeSession || activeSession.type === 'ai') {
-      if (lastTerminalSessionIdRef.current) {
-        activeTermId = lastTerminalSessionIdRef.current;
-        activeSession = currentSession.sessions.find(s => s.id === activeTermId);
-      }
-    }
-
-    let prependedContext = '';
-    if (activeSession?.isWatching) {
-      const buffer = currentSession.getWatchBuffer(activeTermId);
-      if (buffer) {
-        prependedContext = `[Watched Terminal Output]\n${buffer}\n================\n`;
-      }
-    }
-
-    const finalSelection = prependedContext ? (actualSelection ? `${prependedContext}[Target Text]\n${actualSelection}` : prependedContext) : actualSelection;
-
-    if (!finalSelection) {
-      window.electronAPI.logDebug('[App.tsx] Selection and buffer are empty, ignoring.');
-      return;
-    }
-
-    // Ensure AI Session
-    let aiSessionId: string;
-    const existingAiSession = currentSession.sessions.find(s => s.type === 'ai');
-
-    if (existingAiSession) {
-      aiSessionId = existingAiSession.id;
-      window.electronAPI.logDebug(`[App.tsx] Found existing AI session: ${aiSessionId}`);
-      currentPane.setActivePaneId(aiSessionId);
-    } else {
-      // Create new AI session
-      const newId = currentSession.createAISession();
-      if (newId) {
-        aiSessionId = newId;
-        window.electronAPI.logDebug(`[App.tsx] Created new AI session: ${aiSessionId}`);
-      } else {
-        window.electronAPI.logDebug('[App.tsx] Failed to create AI session (already exists?)');
-        return;
-      }
-    }
-
-    // Record target session info immediately so it's available even for free-format modal
-    currentSession.updateSessionState(aiSessionId, {
-      lastTargetSessionId: activeTermId,
-      lastTargetSessionTitle: activeSession?.title || 'Unknown Terminal'
-    });
-
-    // Unified Link: Automatically start watching the targeted terminal if not already
-    if (activeSession && !activeSession.isWatching) {
-      currentSession.toggleWatch(activeTermId);
-    }
-
-    const lang = localStorage.getItem('hotty_gemini_language') || 'English';
-
-    // 1. Try to find persona from existing session's selected expertise
-    let targetPersonaPrompt = 'You are a helpful assistant.';
-
-    if (existingAiSession && existingAiSession.aiChatState?.selectedExpertise) {
-      const expertiseLabel = existingAiSession.aiChatState.selectedExpertise;
-      const foundPersona = currentPersonas.find(p => p.label === expertiseLabel);
-      if (foundPersona) {
-        targetPersonaPrompt = foundPersona.systemPrompt;
-      }
-    }
-    // 2. If not found (or new session), fallback to first persona if available
-    else if (currentPersonas.length > 0) {
-      targetPersonaPrompt = currentPersonas[0].systemPrompt;
-    }
-
-    const defaultPersona = targetPersonaPrompt + " When you suggest shell/terminal commands that the user can run, always enclose them in a code block marked with ```execute for direct execution.";
-
-    let systemInstruction = '';
-    let userPrompt = '';
-
-    if (type === 'analyze-watch') {
-      systemInstruction = `${defaultPersona} Answer in ${lang}.`;
-      userPrompt = `Please analyze the following terminal output and point out any errors, warnings, or findings of interest:\n\n${finalSelection}`;
-    } else if (type === 'free-format') {
-      // Open modal instead of sending immediately
-      setAskGeminiFreeFormatData({ selection: finalSelection });
-      return;
-    } else {
-      const existingCommand = currentCommands.find(c => c.id === type);
-
-      if (existingCommand) {
-        systemInstruction = `${defaultPersona} Answer in ${lang}.`;
-        if (existingCommand.id === 'root-cause') {
-          systemInstruction = `You are an expert troubleshooter. ${defaultPersona} Answer in ${lang}.`;
-        }
-        userPrompt = existingCommand.promptTemplate.replace('{selection}', finalSelection);
-      } else {
-        // Fallback
-        systemInstruction = `${defaultPersona} Answer in ${lang}.`;
-        userPrompt = `Please explain the following text:\n\n${finalSelection}`;
-      }
-    }
-
-    window.electronAPI.logDebug(`[App.tsx] Updating session state with prompt. Prompt: ${userPrompt.substring(0, 50)}...`);
-    console.log(`[App.tsx] Updating session state with prompt. Prompt: ${userPrompt.substring(0, 50)}...`);
-    currentSession.updateSessionState(aiSessionId, {
-      pendingMessage: userPrompt,
-      systemInstruction: systemInstruction
-    });
-    window.electronAPI.logDebug('[App.tsx] Session state updated.');
-    console.log('[App.tsx] Session state updated.');
-  };
-
-  useEffect(() => {
-    const removeListener = window.electronAPI.onAskGemini(handleAskGemini);
-
-    const handleCustomAskGemini = (e: Event) => {
-      const customEvent = e as CustomEvent<{ selection: string, type: string, sessionId?: string }>;
-      console.log('[App.tsx] handleCustomAskGemini triggered with detail:', customEvent.detail);
-      window.electronAPI.logDebug(`[App.tsx] handleCustomAskGemini triggered with type: ${customEvent.detail?.type}`);
-      if (customEvent.detail) {
-        handleAskGemini(customEvent.detail.selection, customEvent.detail.type, customEvent.detail.sessionId);
-      }
-    };
-
-    window.addEventListener('ask-gemini-internal', handleCustomAskGemini);
-
-    return () => {
-      removeListener();
-      window.removeEventListener('ask-gemini-internal', handleCustomAskGemini);
-    };
-  }, []); // Empty dependency array ensures listener is bound ONLY ONCE
-
-
-  // -- Settings Updaters --
-  const updateGlobalEncoding = (newEncoding: string) => {
-    setGlobalEncoding(newEncoding);
-    localStorage.setItem('hterm_global_encoding', newEncoding);
-    session.sessions.forEach(s => {
-      window.electronAPI.updateSessionEncoding(s.id, newEncoding);
-    });
-  };
-
-  const updateFontSize = (size: number) => {
-    setFontSize(size);
-    localStorage.setItem('hterm_font_size', size.toString());
-  };
-
-  const updateFontFamily = (family: string) => {
-    setFontFamily(family);
-    localStorage.setItem('hterm_font_family', family);
-  };
-
-  const updateSshKeepAliveEnabled = (enabled: boolean) => {
-    setSshKeepAliveEnabled(enabled);
-    localStorage.setItem('hterm_ssh_keepalive_enabled', enabled.toString());
-  };
-
-  const updateSshKeepAliveInterval = (interval: number) => {
-    setSshKeepAliveInterval(interval);
-    localStorage.setItem('hterm_ssh_keepalive_interval', interval.toString());
-  };
-
-  const updateTelnetKeepAliveEnabled = (enabled: boolean) => {
-    setTelnetKeepAliveEnabled(enabled);
-    localStorage.setItem('hterm_telnet_keepalive_enabled', enabled.toString());
-  };
-
-  const updateTelnetKeepAliveInterval = (interval: number) => {
-    setTelnetKeepAliveInterval(interval);
-    localStorage.setItem('hterm_telnet_keepalive_interval', interval.toString());
-  };
-
-  const updateLoggingEnabled = (enabled: boolean) => {
-    setLoggingEnabled(enabled);
-    localStorage.setItem('hterm_logging_enabled', enabled.toString());
-    // Apply to existing sessions immediately
-    window.electronAPI.updateLogging(enabled, loggingPath);
-  };
-
-  const updateLoggingPath = (path: string) => {
-    setLoggingPath(path);
-    localStorage.setItem('hterm_logging_path', path);
-    // Apply to existing sessions immediately if logging is enabled
-    if (loggingEnabled && path) {
-      window.electronAPI.updateLogging(loggingEnabled, path);
-    }
-  };
-
-  const handleSidebarPositionChange = (pos: 'left' | 'right') => {
-    setSidebarPosition(pos);
-    localStorage.setItem('hterm_sidebar_position', pos);
-  };
-
-  const handleToggleWatch = (sessionId: string) => {
-    const s = session.sessions.find(session => session.id === sessionId);
-    if (!s) return;
-
-    const isTurningOn = !s.isWatching;
-    session.toggleWatch(sessionId);
-
-    if (isTurningOn) {
-      // Find or create AI session
-      let aiSessionId = session.sessions.find(session => session.type === 'ai')?.id;
-      if (!aiSessionId) {
-        aiSessionId = session.createAISession();
-      } else {
-        // Activate existing AI session pane
-        const aiPaneId = Object.keys(pane.paneAllocations).find(id => pane.paneAllocations[id] === aiSessionId);
-        if (aiPaneId) {
-          pane.setActivePaneId(aiPaneId);
-        }
-      }
-
-      if (aiSessionId) {
-        // Link this terminal to the AI session
-        session.updateSessionState(aiSessionId, {
-          lastTargetSessionId: sessionId,
-          lastTargetSessionTitle: s.title
-        });
-      }
-    }
-  };
-
-  // Theme Change Handler
-  const updateTheme = (newTheme: 'dark' | 'light' | 'medium' | 'custom') => {
-    setTheme(newTheme);
-
-    if (newTheme === 'custom') {
-      const shouldSetColorMode = paneBackgroundMode !== 'image';
-      // Restore custom colors
-      updateTerminalForeground(customColors.foreground);
-      updateTerminalBackground(customColors.background);
-      updateTerminalBackgroundInactive(customColors.backgroundInactive);
-      updatePaneBackground(customColors.paneBackground);
-      if (shouldSetColorMode) updatePaneBackgroundMode('color');
-      return;
-    }
-
-    const themeDef = (themesData as any)[newTheme];
-    if (themeDef && themeDef.terminal) {
-      const { foreground, background, backgroundInactive, paneBackground: pBg } = themeDef.terminal;
-      updateTerminalForeground(foreground);
-      updateTerminalBackground(background);
-      updateTerminalBackgroundInactive(backgroundInactive);
-      updatePaneBackground(pBg);
-
-      const shouldSetColorMode = paneBackgroundMode !== 'image';
-      if (shouldSetColorMode) updatePaneBackgroundMode('color');
-    }
-  };
-
-  const updateTerminalForeground = (color: string) => {
-    setTerminalForeground(color);
-    localStorage.setItem('hterm_terminal_foreground', color);
-    if (theme === 'custom') {
-      localStorage.setItem('hterm_custom_terminal_foreground', color);
-      setCustomColors(prev => ({ ...prev, foreground: color }));
-    }
-  };
-
-  const updateTerminalBackground = (color: string) => {
-    setTerminalBackground(color);
-    localStorage.setItem('hterm_terminal_background', color);
-    if (theme === 'custom') {
-      localStorage.setItem('hterm_custom_terminal_background', color);
-      setCustomColors(prev => ({ ...prev, background: color }));
-    }
-  };
-
-  const updateTerminalBackgroundInactive = (color: string) => {
-    setTerminalBackgroundInactive(color);
-    localStorage.setItem('hterm_terminal_background_inactive', color);
-    if (theme === 'custom') {
-      localStorage.setItem('hterm_custom_terminal_background_inactive', color);
-      setCustomColors(prev => ({ ...prev, backgroundInactive: color }));
-    }
-  };
-
-  const updatePaneBackground = (color: string) => {
-    setPaneBackground(color);
-    localStorage.setItem('hterm_pane_background', color);
-    if (theme === 'custom') {
-      localStorage.setItem('hterm_custom_pane_background', color);
-      setCustomColors(prev => ({ ...prev, paneBackground: color }));
-    }
-  };
-
-  const updatePaneBackgroundMode = (mode: 'color' | 'image') => {
-    setPaneBackgroundMode(mode);
-    localStorage.setItem('hterm_pane_background_mode', mode);
-  };
-
-  const updatePaneBackgroundImage = (url: string) => {
-    setPaneBackgroundImage(url);
-    localStorage.setItem('hterm_pane_background_image', url);
-  };
-
-  // -- Paste Handlers --
   const cancelPaste = () => {
     setPasteContent(null);
     setPasteSessionId(null);
@@ -972,283 +276,284 @@ function App() {
     setFocusTrigger(prev => prev + 1);
   };
 
-  const handleAskGeminiSubmit = (prompt: string, selection: string) => {
-    const currentSession = sessionRef.current;
-    const currentPane = paneRef.current;
+  // ═══════════════════════════════════════════════
+  // 6. Password Cache
+  // ═══════════════════════════════════════════════
 
-    const aiSession = currentSession.sessions.find(s => s.type === 'ai');
-    if (aiSession) {
-      const lang = localStorage.getItem('hotty_gemini_language') || 'English';
-      let targetPersonaPrompt = 'You are a helpful assistant.';
-      const currentPersonas = aiPersonasRef.current;
+  const getCachedPassword = (host: string, user: string) => {
+    return passwordCache.current[`${host}:${user}`] || '';
+  };
 
-      if (aiSession.aiChatState?.selectedExpertise) {
-        const expertiseLabel = aiSession.aiChatState.selectedExpertise;
-        const foundPersona = currentPersonas.find(p => p.label === expertiseLabel);
-        if (foundPersona) {
-          targetPersonaPrompt = foundPersona.systemPrompt;
+  const saveCachedPassword = (host: string, user: string, pass: string) => {
+    if (pass) {
+      passwordCache.current[`${host}:${user}`] = pass;
+    }
+  };
+
+  // ═══════════════════════════════════════════════
+  // 7. Pane Manager
+  // ═══════════════════════════════════════════════
+
+  const pane = usePaneManager({
+    showLeftSidebar,
+    showRightSidebar,
+    showTopBar,
+    showBottomBar,
+  });
+
+  // ═══════════════════════════════════════════════
+  // 8. Session Manager
+  // ═══════════════════════════════════════════════
+
+  const session = useSessionManager({
+    globalEncoding: settings.globalEncoding,
+    sshKeepAliveEnabled: settings.sshKeepAliveEnabled,
+    sshKeepAliveInterval: settings.sshKeepAliveInterval,
+    telnetKeepAliveEnabled: settings.telnetKeepAliveEnabled,
+    telnetKeepAliveInterval: settings.telnetKeepAliveInterval,
+    loggingEnabled: settings.loggingEnabled,
+    loggingPath: settings.loggingPath,
+    lineWrapEnabled: settings.lineWrapEnabled,
+    scrollback: settings.scrollback,
+    backspaceSendsDel: settings.backspaceSendsDel,
+    onPasteRequest: handlePasteRequest,
+    onSessionConnected: () => setShowDialog(false),
+    onSessionError: (msg) => setGlobalMessage({ type: 'error', message: msg }),
+    setPaneAllocations: pane.setPaneAllocations,
+    setActivePaneId: pane.setActivePaneId,
+    showLeftSidebar,
+    showRightSidebar,
+    showTopBar,
+    showBottomBar,
+    watchBufferLimit: settings.watchBufferLimit,
+  });
+
+  // ═══════════════════════════════════════════════
+  // 9. Interactive Flow (useInteractiveFlow hook)
+  // ═══════════════════════════════════════════════
+
+  const interactiveFlow = useInteractiveFlow({
+    promptPatterns: settings.promptPatterns,
+    onFeedbackReady: (aiSessionId, resultText, termSessionId) => {
+      session.updateSessionState(aiSessionId, {
+        inputText: '',
+        pendingMessage: resultText,
+        isWaitingForTerminal: false
+      });
+      session.clearWatchBuffer(termSessionId);
+    },
+  });
+
+  // ═══════════════════════════════════════════════
+  // 10. Gemini Chat (useGeminiChat hook)
+  // ═══════════════════════════════════════════════
+
+  const geminiChat = useGeminiChat({
+    sessions: session.sessions,
+    askGeminiCommands: settings.askGeminiCommands,
+    aiPersonas: settings.aiPersonas,
+    proactiveInstruction: settings.proactiveInstruction,
+    getWatchBuffer: session.getWatchBuffer,
+    clearWatchBuffer: session.clearWatchBuffer,
+    updateSessionState: session.updateSessionState,
+    toggleWatch: session.toggleWatch,
+    createAISession: session.createAISession,
+    lastTerminalSessionId,
+    paneAllocations: pane.paneAllocations,
+    activePaneId: pane.activePaneId,
+    setActivePaneId: pane.setActivePaneId,
+  });
+
+  // ═══════════════════════════════════════════════
+  // 11. Track last active terminal
+  // ═══════════════════════════════════════════════
+
+  useEffect(() => {
+    const activeSessionId = pane.paneAllocations[pane.activePaneId || ''];
+    if (activeSessionId) {
+      const activeSession = session.sessions.find(s => s.id === activeSessionId);
+      if (activeSession && activeSession.type !== 'ai') {
+        setLastTerminalSessionId(activeSessionId);
+        lastTerminalSessionIdRef.current = activeSessionId;
+      }
+    }
+  }, [pane.activePaneId, pane.paneAllocations, session.sessions]);
+
+  // AI Focus Sync
+  useEffect(() => {
+    const handleFocus = (e: any) => {
+      const { sessionId } = e.detail;
+      const paneId = Object.keys(pane.paneAllocations).find(id => pane.paneAllocations[id] === sessionId);
+      if (paneId) {
+        pane.setActivePaneId(paneId);
+      }
+    };
+    window.addEventListener('hotty-focus-session', handleFocus);
+    return () => {
+      window.removeEventListener('hotty-focus-session', handleFocus);
+    };
+  }, [pane.paneAllocations, pane.setActivePaneId]);
+
+  // ═══════════════════════════════════════════════
+  // 12. Watch Toggle & Theme Change
+  // ═══════════════════════════════════════════════
+
+  const handleToggleWatch = (sessionId: string) => {
+    const s = session.sessions.find(session => session.id === sessionId);
+    if (!s) return;
+
+    const isTurningOn = !s.isWatching;
+    session.toggleWatch(sessionId);
+
+    if (isTurningOn) {
+      let aiSessionId = session.sessions.find(session => session.type === 'ai')?.id;
+      if (!aiSessionId) {
+        aiSessionId = session.createAISession();
+      } else {
+        const aiPaneId = Object.keys(pane.paneAllocations).find(id => pane.paneAllocations[id] === aiSessionId);
+        if (aiPaneId) {
+          pane.setActivePaneId(aiPaneId);
         }
-      } else if (currentPersonas.length > 0) {
-        targetPersonaPrompt = currentPersonas[0].systemPrompt;
       }
 
-      const systemInstruction = `${targetPersonaPrompt} Answer in ${lang}.`;
-      const userPrompt = `${prompt}\n\n\`\`\`\n${selection}\n\`\`\``;
-
-      console.log(`[Ask Gemini Modal] Submitting free format request...`);
-      currentSession.updateSessionState(aiSession.id, {
-        pendingMessage: userPrompt,
-        systemInstruction: systemInstruction,
-        lastTargetSessionId: aiSession.aiChatState?.lastTargetSessionId,
-        lastTargetSessionTitle: aiSession.aiChatState?.lastTargetSessionTitle
-      });
-      currentPane.setActivePaneId(aiSession.id);
+      if (aiSessionId) {
+        session.updateSessionState(aiSessionId, {
+          lastTargetSessionId: sessionId,
+          lastTargetSessionTitle: s.title
+        });
+      }
     }
-    setAskGeminiFreeFormatData(null);
   };
 
-  // -- Message Modal --
-  const handleCloseMessageModal = () => {
-    setGlobalMessage(null);
-    window.electronAPI.focusWindow();
+  const handleThemeChange = (newTheme: 'dark' | 'light' | 'medium' | 'custom') => {
+    if (newTheme === 'custom') {
+      const shouldSetColorMode = settings.paneBackgroundMode !== 'image';
+      updateTerminalForeground(settings.customColors.foreground);
+      updateTerminalBackground(settings.customColors.background);
+      updateTerminalBackgroundInactive(settings.customColors.backgroundInactive);
+      updatePaneBackground(settings.customColors.paneBackground);
+      if (shouldSetColorMode) updatePaneBackgroundMode('color');
+    } else if (themesData) {
+      const themeDef = (themesData as any)[newTheme];
+      if (themeDef && themeDef.terminal) {
+        const { foreground, background, backgroundInactive, paneBackground: pBg } = themeDef.terminal;
+        updateTerminalForeground(foreground);
+        updateTerminalBackground(background);
+        updateTerminalBackgroundInactive(backgroundInactive);
+        updatePaneBackground(pBg);
+        const shouldSetColorMode = settings.paneBackgroundMode !== 'image';
+        if (shouldSetColorMode) updatePaneBackgroundMode('color');
+      }
+    }
+    updateTheme(newTheme);
   };
 
+  // Handle encoding change for existing sessions
+  const handleGlobalEncodingChange = (newEncoding: string) => {
+    updateGlobalEncoding(newEncoding);
+    session.sessions.forEach(s => {
+      window.electronAPI.updateSessionEncoding(s.id, newEncoding);
+    });
+  };
 
+  // ═══════════════════════════════════════════════
+  // 13. Derived State
+  // ═══════════════════════════════════════════════
 
-  // -- Derived State --
   const orderedTabs = session.tabOrder
     .map(id => session.sessions.find(s => s.id === id))
     .filter((s): s is Session => !!s);
 
   const watchedSessionIds = session.sessions.filter(s => s.isWatching).map(s => s.id);
 
+  // ═══════════════════════════════════════════════
+  // 14. Helper: render pane content for sidebar bars
+  // ═══════════════════════════════════════════════
 
-  // -- Stable references for session management to keep the listener from re-registering --
-  const sessionSessionsRef = useRef(session.sessions);
-  const sessionUpdateStateRef = useRef(session.updateSessionState);
-  useEffect(() => {
-    sessionSessionsRef.current = session.sessions;
-    sessionUpdateStateRef.current = session.updateSessionState;
-  }, [session.sessions, session.updateSessionState]);
+  const renderPaneContent = (paneId: string, label: string) => {
+    const sessionId = pane.paneAllocations[paneId];
+    const sessionData = session.sessions.find(s => s.id === sessionId);
+    const isActive = pane.activePaneId === paneId;
 
-  const stabilizationTimersRef = useRef<{ [sessionId: string]: any }>({});
+    if (!sessionData) {
+      return (
+        <div className="empty-pane-placeholder">
+          <span className="pane-label">{label}</span>
+          <span className="drop-hint">Drop Tab Here</span>
+        </div>
+      );
+    }
 
-  // -- Global terminal data listener for interactive flows --
-  useEffect(() => {
-    const removeListener = window.electronAPI.onSessionData((sessionId, data) => {
-      // 1. Check if this session is being tracked for interactive feedback
-      const currentTracking = interactiveSessionsRef.current[sessionId];
-      if (!currentTracking) return;
+    return (
+      <PaneContent
+        session={sessionData}
+        isActive={isActive}
+        focusTrigger={focusTrigger}
+        disableFocus={showDialog || !!globalMessage}
+        // Terminal
+        terminalInstance={session.terminalRegistry.current[sessionData.id]}
+        onData={session.handleTerminalData}
+        fontSize={settings.fontSize}
+        fontFamily={settings.fontFamily}
+        terminalForeground={settings.terminalForeground}
+        terminalBackground={settings.terminalBackground}
+        terminalBackgroundInactive={settings.terminalBackgroundInactive}
+        lineWrapEnabled={settings.lineWrapEnabled}
+        askGeminiCommands={settings.askGeminiCommands}
+        enablePromptHighlight={settings.enablePromptHighlight}
+        promptHighlightColor={settings.promptHighlightColor}
+        promptPatterns={settings.promptPatterns}
+        onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
+        // AI Chat
+        showSystemPrompt={settings.showSystemPrompt}
+        aiPersonas={settings.aiPersonas}
+        lastTerminalSessionId={lastTerminalSessionId}
+        lastTerminalSessionTitle={session.sessions.find(s => s.id === lastTerminalSessionId)?.title}
+        proactiveInstruction={settings.proactiveInstruction}
+        interactiveSessionTracking={Object.values(interactiveFlow.trackings).find(t => t.aiSessionId === sessionData.id)}
+        onRunCommand={(targetId, command) => {
+          interactiveFlow.startTracking(targetId, sessionData.id, command);
+        }}
+        onShowPromptMenu={() => geminiChat.showPromptMenu(sessionData.id)}
+        onSendMessage={(text) => geminiChat.sendMessage(sessionData.id, text)}
+        onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
+      />
+    );
+  };
 
-      // 2. Clear terminal codes and normalize
-      // Enhanced ANSI and OSC stripping
-      const cleanData = data
-        .replace(/\x1b][^\x07\x1b]*(\x07|\x1b\\)/g, '') // Strip OSC sequences
-        .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '') // Strip standard ANSI
-        .replace(/\r\n/g, '\n').replace(/\r/g, '');
+  // Pane container style
+  const paneContainerStyle = (bg: string | null, bgMode: string, bgImage: string | null): React.CSSProperties => ({
+    border: '1px solid var(--border-color)',
+    display: 'flex',
+    flexDirection: 'column',
+    backgroundColor: bg || '#000000',
+    backgroundImage: bgMode === 'image' ? `url("${bgImage || ''}")` : 'none',
+    backgroundSize: bgMode === 'image' ? 'auto' : 'auto',
+    backgroundRepeat: 'repeat',
+    backgroundPosition: 'center',
+    position: 'relative',
+    flexShrink: 0,
+    margin: '2px'
+  });
 
-      // 3. Update buffer synchronously in ref and schedule state update
-      const newBuffer = currentTracking.buffer + cleanData;
-      currentTracking.buffer = newBuffer;
+  const basePaneStyle = paneContainerStyle(settings.paneBackground, settings.paneBackgroundMode, settings.paneBackgroundImage);
 
-      setInteractiveSessions(prev => ({
-        ...prev,
-        [sessionId]: { ...prev[sessionId], buffer: newBuffer }
-      }));
+  // ═══════════════════════════════════════════════
+  // 15. Early Return
+  // ═══════════════════════════════════════════════
 
-      // Cancel any existing stabilization timer if new data arrives
-      if (stabilizationTimersRef.current[sessionId]) {
-        clearTimeout(stabilizationTimersRef.current[sessionId]);
-        delete stabilizationTimersRef.current[sessionId];
-      }
-
-      // 4. Check for prompt (end of command execution)
-      const lines = newBuffer.split('\n').filter(l => l.length > 0).map(l => l.trimEnd());
-      if (lines.length === 0) return;
-
-      // Look for a prompt in the last line (trimmed)
-      const lastLine = lines[lines.length - 1].trim();
-
-      if (lastLine.length > 0) {
-        let matched = false;
-        let matchedPatternName = '';
-        for (const patternObj of promptPatterns) {
-          if (!patternObj.enabled || !patternObj.pattern) continue;
-          try {
-            // Remove ^ from pattern if we want to match anywhere in the line (merged output)
-            const patternStr = patternObj.pattern.startsWith('^') ? patternObj.pattern.substring(1) : patternObj.pattern;
-            const regex = new RegExp(`^${patternStr}$`); // FORCE whole line match
-            if (regex.test(lastLine)) {
-              matched = true;
-              matchedPatternName = patternObj.name;
-              break;
-            }
-          } catch (e) { /* ignore invalid regex */ }
-        }
-
-        if (matched) {
-          window.electronAPI.logDebug(`[Interactive Flow] Potential prompt detected (${matchedPatternName}) in session ${sessionId}. Waiting for silence...`);
-
-          // CLEAR PREVIOUS TIMER if it exists to avoid multiple executions
-          if (stabilizationTimersRef.current[sessionId]) {
-            clearTimeout(stabilizationTimersRef.current[sessionId]);
-          }
-
-          // SET STABILIZATION TIMER: Wait customizeable amount of silence before concluding
-          stabilizationTimersRef.current[sessionId] = setTimeout(() => {
-            window.electronAPI.logDebug(`[Interactive Flow] Silence confirmed for session ${sessionId}. Finalizing output.`);
-
-            // RACE CONDITION PREVENTION: Clean up everything IMMEDIATELY before processing
-            const finalTracking = interactiveSessionsRef.current[sessionId];
-            delete stabilizationTimersRef.current[sessionId];
-
-            if (!finalTracking) return;
-
-            // Immediately remove from tracking to prevent other timers from finding it
-            setInteractiveSessions(prev => {
-              const next = { ...prev };
-              delete next[sessionId];
-              return next;
-            });
-            delete interactiveSessionsRef.current[sessionId];
-
-            // Trigger AI send
-            const aiSession = sessionSessionsRef.current.find(s => s.id === finalTracking.aiSessionId);
-            if (aiSession) {
-              const resultText = `Terminal Output (Command: ${finalTracking.originalCommand}):\n\`\`\`\n${finalTracking.buffer}\n\`\`\`\n\n[Instruction]: ${proactiveInstruction}`;
-
-              // Update AI state via ref to ensure stability
-              sessionUpdateStateRef.current(finalTracking.aiSessionId, {
-                inputText: '',
-                pendingMessage: resultText,
-                isWaitingForTerminal: false
-              });
-            }
-          }, interactiveStabilizationTimeout); // Use dynamic timeout
-        }
-      }
-    });
-    return () => {
-      removeListener();
-      // Cleanup all timers on unmount
-      Object.values(stabilizationTimersRef.current).forEach(clearTimeout);
-      stabilizationTimersRef.current = {};
-    };
-    // Only re-register if promptPatterns change (which is rare/settings-driven)
-  }, [promptPatterns]);
-
-  // -- Manual send trigger and TTL cleanup for interactive flows --
-  useEffect(() => {
-    // 1. Manual push listener
-    const handleManualSend = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      const sessionId = detail.sessionId;
-      const currentTracking = interactiveSessionsRef.current[sessionId];
-
-      if (currentTracking) {
-        window.electronAPI.logDebug(`[Interactive Flow] Manual send triggered for session ${sessionId}`);
-
-        // Cleanup stabilization timer if it exists
-        if (stabilizationTimersRef.current[sessionId]) {
-          clearTimeout(stabilizationTimersRef.current[sessionId]);
-          delete stabilizationTimersRef.current[sessionId];
-        }
-
-        const resultText = `Terminal Output (Manual Send - Command: ${currentTracking.originalCommand}):\n\`\`\`\n${currentTracking.buffer}\n\`\`\``;
-
-        sessionUpdateStateRef.current(currentTracking.aiSessionId, {
-          inputText: '',
-          pendingMessage: resultText,
-          isWaitingForTerminal: false
-        });
-
-        setInteractiveSessions(prev => {
-          const next = { ...prev };
-          delete next[sessionId];
-          return next;
-        });
-        delete interactiveSessionsRef.current[sessionId];
-      }
-    };
-
-    window.addEventListener('hotty-interactive-manual-send', handleManualSend);
-
-    const handleCancelTracking = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      const sessionId = detail.sessionId;
-
-      if (interactiveSessionsRef.current[sessionId]) {
-        window.electronAPI.logDebug(`[Interactive Flow] Tracking cancelled for session ${sessionId}`);
-
-        // Cleanup timer
-        if (stabilizationTimersRef.current[sessionId]) {
-          clearTimeout(stabilizationTimersRef.current[sessionId]);
-          delete stabilizationTimersRef.current[sessionId];
-        }
-
-        // Remove from tracking
-        setInteractiveSessions(prev => {
-          const next = { ...prev };
-          delete next[sessionId];
-          return next;
-        });
-        delete interactiveSessionsRef.current[sessionId];
-      }
-    };
-
-    window.addEventListener('hotty-interactive-cancel', handleCancelTracking);
-
-    // 2. TTL Cleanup (every minute)
-    const ttlInterval = setInterval(() => {
-      const now = Date.now();
-      const MAX_TTL = 15 * 60 * 1000; // 15 minutes
-
-      setInteractiveSessions(prev => {
-        let changed = false;
-        const next = { ...prev };
-
-        Object.keys(next).forEach(sid => {
-          if (now - next[sid].startTime > MAX_TTL) {
-            window.electronAPI.logDebug(`[Interactive Flow] Cleaning up stale session ${sid} (TTL exceeded)`);
-
-            // Cleanup stabilization timer if it exists
-            if (stabilizationTimersRef.current[sid]) {
-              clearTimeout(stabilizationTimersRef.current[sid]);
-              delete stabilizationTimersRef.current[sid];
-            }
-
-            // Also update AI state to stop waiting if it's still waiting
-            sessionUpdateStateRef.current(next[sid].aiSessionId, {
-              isWaitingForTerminal: false
-            });
-
-            delete next[sid];
-            delete interactiveSessionsRef.current[sid];
-            changed = true;
-          }
-        });
-
-        return changed ? next : prev;
-      });
-    }, 60 * 1000);
-
-    return () => {
-      window.removeEventListener('hotty-interactive-manual-send', handleManualSend);
-      window.removeEventListener('hotty-interactive-cancel', handleCancelTracking);
-      clearInterval(ttlInterval);
-    };
-  }, []);
-
-  // -- Early Return --
   if (!window.electronAPI) {
     return <div style={{ color: 'white', padding: '20px' }}>Loading Electron API...</div>;
   }
 
-  // -- Render --
+  // ═══════════════════════════════════════════════
+  // 16. Render
+  // ═══════════════════════════════════════════════
+
   return (
     <div className="app-container">
       {/* Sidebar */}
-      <div className={`sidebar ${sidebarPosition === 'right' ? 'sidebar-right' : ''}`}>
+      <div className={`sidebar ${settings.sidebarPosition === 'right' ? 'sidebar-right' : ''}`}>
         <div className="sidebar-top">
           <LayoutSelector
             currentLayout={pane.layoutMode}
@@ -1263,13 +568,11 @@ function App() {
             onToggleBottomBar={() => setShowBottomBar(prev => !prev)}
           />
 
-
-
           <div
             className={`sidebar-btn ${showPaneLines ? 'sidebar-btn-active' : ''}`}
             onClick={() => setShowPaneLines(prev => !prev)}
             title="Show Tab-Pane Mapping"
-            style={{ marginTop: '10px' }} // Add margin to separate from LayoutSelector
+            style={{ marginTop: '10px' }}
             role="button"
             tabIndex={0}
           >
@@ -1281,11 +584,11 @@ function App() {
         </div>
         <div className="sidebar-bottom">
           <button
-            className={`sidebar-btn ${lineWrapEnabled ? 'sidebar-btn-active' : ''}`}
+            className={`sidebar-btn ${settings.lineWrapEnabled ? 'sidebar-btn-active' : ''}`}
             onClick={toggleLineWrap}
-            title={lineWrapEnabled ? "Disable Line Wrap" : "Enable Line Wrap"}
+            title={settings.lineWrapEnabled ? "Disable Line Wrap" : "Enable Line Wrap"}
           >
-            {lineWrapEnabled ? (
+            {settings.lineWrapEnabled ? (
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="9 10 4 15 9 20"></polyline>
                 <path d="M20 4v7a4 4 0 0 1-4 4H4"></path>
@@ -1340,103 +643,17 @@ function App() {
           </div>
           <div className="content-area" style={{ display: 'flex', flexDirection: 'row', width: '100%', height: '100%', gap: '0' }}>
 
-
+            {/* Left Sidebar */}
             {showLeftSidebar && (
               <div
                 className={`left-sidebar-pane ${pane.activePaneId === 'sidebar-left' ? 'active-pane' : ''}`}
                 data-pane-id="sidebar-left"
-                style={{
-                  width: `${leftSidebarPercent}%`,
-                  border: '1px solid var(--border-color)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  backgroundColor: paneBackground || '#000000',
-                  backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || ''}")` : 'none',
-                  backgroundSize: paneBackgroundMode === 'image' ? 'auto' : 'auto',
-                  backgroundRepeat: 'repeat',
-                  backgroundPosition: 'center',
-                  position: 'relative',
-                  flexShrink: 0,
-                  margin: '2px' // Gap all around to match grid padding
-                }}
+                style={{ ...basePaneStyle, width: `${leftSidebarPercent}%` }}
                 onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-
-
-                onDrop={(e) => {
-                  e.preventDefault();
-                  const sessionId = e.dataTransfer.getData('text/plain');
-                  if (sessionId) {
-                    pane.handleDropSession(sessionId, 'sidebar-left');
-                  }
-                }}
+                onDrop={(e) => { e.preventDefault(); const sid = e.dataTransfer.getData('text/plain'); if (sid) pane.handleDropSession(sid, 'sidebar-left'); }}
                 onClick={() => pane.setActivePaneId('sidebar-left')}
               >
-                {(() => {
-                  const sessionId = pane.paneAllocations['sidebar-left'];
-                  const sessionData = session.sessions.find(s => s.id === sessionId);
-                  const isActive = pane.activePaneId === 'sidebar-left';
-
-                  if (sessionData) {
-                    return sessionData.type === 'ai' ? (
-                      <AIChatPane
-                        sessionId={sessionData.id}
-                        initialState={sessionData.aiChatState}
-                        onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
-                        showSystemPrompt={showSystemPrompt}
-                        askGeminiCommands={askGeminiCommands}
-                        aiPersonas={aiPersonas}
-                        fontSize={fontSize}
-                        terminalBackground={terminalBackground}
-                        terminalBackgroundInactive={terminalBackgroundInactive || undefined}
-                        lastTerminalSessionId={lastTerminalSessionId}
-                        lastTerminalSessionTitle={session.sessions.find(s => s.id === lastTerminalSessionId)?.title}
-                        onShowPromptMenu={() => handleShowPromptMenu(sessionData.id)}
-                        onSendMessage={(text) => handleAISendMessage(sessionData.id, text)}
-                        proactiveInstruction={proactiveInstruction}
-                        interactiveSessionTracking={Object.values(interactiveSessions).find(t => t.aiSessionId === sessionData.id)}
-                        onRunCommand={(targetId, command) => {
-                          setInteractiveSessions(prev => ({
-                            ...prev,
-                            [targetId]: {
-                              aiSessionId: sessionData.id,
-                              buffer: '',
-                              originalCommand: command,
-                              startTime: Date.now()
-                            }
-                          }));
-                        }}
-                      />
-                    ) : (
-                      <TerminalComponent
-                        key={sessionData.id}
-                        sessionId={sessionData.id}
-                        onData={session.handleTerminalData}
-                        isActive={isActive}
-                        focusTrigger={focusTrigger}
-                        terminalInstance={session.terminalRegistry.current[sessionData.id]}
-                        disableFocus={showDialog || !!globalMessage}
-                        fontSize={fontSize}
-                        fontFamily={fontFamily}
-                        terminalForeground={terminalForeground}
-                        terminalBackground={terminalBackground}
-                        terminalBackgroundInactive={terminalBackgroundInactive || undefined}
-                        lineWrapEnabled={lineWrapEnabled}
-                        askGeminiCommands={askGeminiCommands}
-                        enablePromptHighlight={enablePromptHighlight}
-                        promptHighlightColor={promptHighlightColor}
-                        promptPatterns={promptPatterns}
-                        onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
-                      />
-                    );
-                  } else {
-                    return (
-                      <div className="empty-pane-placeholder">
-                        <span className="pane-label">Left Sidebar</span>
-                        <span className="drop-hint">Drop Tab Here</span>
-                      </div>
-                    );
-                  }
-                })()}
+                {renderPaneContent('sidebar-left', 'Left Sidebar')}
               </div>
             )}
 
@@ -1447,8 +664,7 @@ function App() {
               />
             )}
 
-
-            {/* Center Column: TopBar + Grid + BottomBar */}
+            {/* Center Column */}
             <div className="center-column" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, height: '100%', position: 'relative' }}>
 
               {/* Top Bar */}
@@ -1456,100 +672,15 @@ function App() {
                 <div
                   className={`top-bar-pane ${pane.activePaneId === 'top-bar' ? 'active-pane' : ''}`}
                   data-pane-id="top-bar"
-                  style={{
-                    height: `${topBarPercent}%`,
-                    // width: '100%', // Removed to prevent overflow with margin
-                    border: '1px solid var(--border-color)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    backgroundColor: paneBackground || '#000000',
-                    backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || ''}")` : 'none',
-                    backgroundSize: paneBackgroundMode === 'image' ? 'auto' : 'auto',
-                    backgroundRepeat: 'repeat',
-                    backgroundPosition: 'center',
-                    position: 'relative',
-                    flexShrink: 0,
-                    margin: '2px' // Gap
-                  }}
-
+                  style={{ ...basePaneStyle, height: `${topBarPercent}%` }}
                   onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const sessionId = e.dataTransfer.getData('text/plain');
-                    if (sessionId) {
-                      pane.handleDropSession(sessionId, 'top-bar'); // Use specific ID
-                    }
-                  }}
+                  onDrop={(e) => { e.preventDefault(); const sid = e.dataTransfer.getData('text/plain'); if (sid) pane.handleDropSession(sid, 'top-bar'); }}
                   onClick={() => pane.setActivePaneId('top-bar')}
                 >
-                  {/* Top Bar Content */}
-                  {(() => {
-                    const sessionId = pane.paneAllocations['top-bar'];
-                    const sessionData = session.sessions.find(s => s.id === sessionId);
-
-                    if (sessionData) {
-                      // Render session... (simplified for brevity, should duplicate logic or extract component)
-                      return sessionData.type === 'ai' ? (
-                        <AIChatPane
-                          sessionId={sessionData.id}
-                          initialState={sessionData.aiChatState}
-                          onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
-                          showSystemPrompt={showSystemPrompt}
-                          askGeminiCommands={askGeminiCommands}
-                          aiPersonas={aiPersonas}
-                          fontSize={fontSize}
-                          terminalBackground={terminalBackground}
-                          terminalBackgroundInactive={terminalBackgroundInactive || undefined}
-                          onShowPromptMenu={() => handleShowPromptMenu(sessionData.id)}
-                          onSendMessage={(text) => handleAISendMessage(sessionData.id, text)}
-                          interactiveSessionTracking={Object.values(interactiveSessions).find(t => t.aiSessionId === sessionData.id)}
-                          onRunCommand={(targetId, command) => {
-                            setInteractiveSessions(prev => ({
-                              ...prev,
-                              [targetId]: {
-                                aiSessionId: sessionData.id,
-                                buffer: '',
-                                originalCommand: command,
-                                startTime: Date.now()
-                              }
-                            }));
-                          }}
-                        />
-                      ) : (
-                        <TerminalComponent
-                          key={sessionData.id}
-                          sessionId={sessionData.id}
-                          onData={session.handleTerminalData}
-                          isActive={pane.activePaneId === 'top-bar'}
-                          focusTrigger={focusTrigger}
-                          terminalInstance={session.terminalRegistry.current[sessionData.id]}
-                          disableFocus={showDialog || !!globalMessage}
-                          fontSize={fontSize}
-                          fontFamily={fontFamily}
-                          terminalForeground={terminalForeground}
-                          terminalBackground={terminalBackground}
-                          terminalBackgroundInactive={terminalBackgroundInactive || undefined}
-                          lineWrapEnabled={lineWrapEnabled}
-                          askGeminiCommands={askGeminiCommands}
-                          enablePromptHighlight={enablePromptHighlight}
-                          promptHighlightColor={promptHighlightColor}
-                          promptPatterns={promptPatterns}
-                          onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
-                        />
-                      );
-                    } else {
-                      return (
-                        <div className="empty-pane-placeholder">
-                          <span className="pane-label">Top Bar</span>
-                          <span className="drop-hint">Drop Tab Here</span>
-                        </div>
-                      );
-                    }
-                  })()}
+                  {renderPaneContent('top-bar', 'Top Bar')}
                 </div>
               )}
 
-              {/* Top Bar Resizer */}
               {showTopBar && (
                 <div
                   className={`sidebar-resizer-h ${resizingSide === 'top' ? 'interact' : ''}`}
@@ -1557,7 +688,7 @@ function App() {
                 />
               )}
 
-              {/* Grid Layout Container */}
+              {/* Grid Layout */}
               <div style={{ flex: 1, minHeight: 0, width: '100%' }}>
                 <GridLayout
                   rows={pane.currentDims.rows}
@@ -1572,40 +703,32 @@ function App() {
                   focusTrigger={focusTrigger}
                   terminalRegistry={session.terminalRegistry.current}
                   disableFocus={showDialog || !!globalMessage}
-                  fontSize={fontSize}
-                  fontFamily={fontFamily}
-                  terminalForeground={terminalForeground}
-                  terminalBackground={terminalBackground}
-                  terminalBackgroundInactive={terminalBackgroundInactive}
-                  paneBackground={paneBackground}
-                  paneBackgroundMode={paneBackgroundMode}
-                  paneBackgroundImage={paneBackgroundImage}
-                  lineWrapEnabled={lineWrapEnabled}
-                  showSystemPrompt={showSystemPrompt}
-                  askGeminiCommands={askGeminiCommands}
-                  aiPersonas={aiPersonas}
-                  enablePromptHighlight={enablePromptHighlight}
-                  promptHighlightColor={promptHighlightColor}
-                  promptPatterns={promptPatterns}
-                  proactiveInstruction={proactiveInstruction}
-                  interactiveSessions={interactiveSessions}
+                  fontSize={settings.fontSize}
+                  fontFamily={settings.fontFamily}
+                  terminalForeground={settings.terminalForeground}
+                  terminalBackground={settings.terminalBackground}
+                  terminalBackgroundInactive={settings.terminalBackgroundInactive}
+                  paneBackground={settings.paneBackground}
+                  paneBackgroundMode={settings.paneBackgroundMode}
+                  paneBackgroundImage={settings.paneBackgroundImage}
+                  lineWrapEnabled={settings.lineWrapEnabled}
+                  showSystemPrompt={settings.showSystemPrompt}
+                  askGeminiCommands={settings.askGeminiCommands}
+                  aiPersonas={settings.aiPersonas}
+                  enablePromptHighlight={settings.enablePromptHighlight}
+                  promptHighlightColor={settings.promptHighlightColor}
+                  promptPatterns={settings.promptPatterns}
+                  proactiveInstruction={settings.proactiveInstruction}
+                  interactiveSessions={interactiveFlow.trackings}
                   onPasteRequest={(text) => {
                     const activePaneSessionId = pane.paneAllocations[pane.activePaneId || ''];
                     if (activePaneSessionId) handlePasteRequest(activePaneSessionId, text);
                   }}
                   onRunCommand={(targetId, command, aiSessionId) => {
-                    setInteractiveSessions(prev => ({
-                      ...prev,
-                      [targetId]: {
-                        aiSessionId: aiSessionId,
-                        buffer: '',
-                        originalCommand: command,
-                        startTime: Date.now()
-                      }
-                    }));
+                    interactiveFlow.startTracking(targetId, aiSessionId, command);
                   }}
-                  onSendMessage={handleAISendMessage}
-                  onShowPromptMenu={handleShowPromptMenu}
+                  onSendMessage={(aiSessionId, text) => geminiChat.sendMessage(aiSessionId, text)}
+                  onShowPromptMenu={(aiSessionId) => geminiChat.showPromptMenu(aiSessionId)}
                 />
               </div>
 
@@ -1622,104 +745,18 @@ function App() {
                 <div
                   className={`bottom-bar-pane ${pane.activePaneId === 'bottom-bar' ? 'active-pane' : ''}`}
                   data-pane-id="bottom-bar"
-                  style={{
-                    height: `${bottomBarPercent}%`,
-                    // width: '100%', // Removed to prevent overflow
-                    border: '1px solid var(--border-color)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    backgroundColor: paneBackground || '#000000',
-                    backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || ''}")` : 'none',
-                    backgroundSize: paneBackgroundMode === 'image' ? 'auto' : 'auto',
-                    backgroundRepeat: 'repeat',
-                    backgroundPosition: 'center',
-                    position: 'relative',
-                    flexShrink: 0,
-                    margin: '2px' // Gap
-                  }}
+                  style={{ ...basePaneStyle, height: `${bottomBarPercent}%` }}
                   onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const sessionId = e.dataTransfer.getData('text/plain');
-                    if (sessionId) {
-                      pane.handleDropSession(sessionId, 'bottom-bar'); // Use specific ID
-                    }
-                  }}
+                  onDrop={(e) => { e.preventDefault(); const sid = e.dataTransfer.getData('text/plain'); if (sid) pane.handleDropSession(sid, 'bottom-bar'); }}
                   onClick={() => pane.setActivePaneId('bottom-bar')}
                 >
-                  {/* Bottom Bar Content */}
-                  {(() => {
-                    const sessionId = pane.paneAllocations['bottom-bar'];
-                    const sessionData = session.sessions.find(s => s.id === sessionId);
-
-                    if (sessionData) {
-                      // Render session...
-                      return sessionData.type === 'ai' ? (
-                        <AIChatPane
-                          sessionId={sessionData.id}
-                          initialState={sessionData.aiChatState}
-                          onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
-                          showSystemPrompt={showSystemPrompt}
-                          askGeminiCommands={askGeminiCommands}
-                          aiPersonas={aiPersonas}
-                          fontSize={fontSize}
-                          terminalBackground={terminalBackground}
-                          terminalBackgroundInactive={terminalBackgroundInactive || undefined}
-                          lastTerminalSessionId={lastTerminalSessionId}
-                          lastTerminalSessionTitle={session.sessions.find(s => s.id === lastTerminalSessionId)?.title}
-                          onShowPromptMenu={() => handleShowPromptMenu(sessionData.id)}
-                          onSendMessage={(text) => handleAISendMessage(sessionData.id, text)}
-                          proactiveInstruction={proactiveInstruction}
-                          interactiveSessionTracking={Object.values(interactiveSessions).find(t => t.aiSessionId === sessionData.id)}
-                          onRunCommand={(targetId, command) => {
-                            setInteractiveSessions(prev => ({
-                              ...prev,
-                              [targetId]: {
-                                aiSessionId: sessionData.id,
-                                buffer: '',
-                                originalCommand: command,
-                                startTime: Date.now()
-                              }
-                            }));
-                          }}
-                        />
-                      ) : (
-                        <TerminalComponent
-                          key={sessionData.id}
-                          sessionId={sessionData.id}
-                          onData={session.handleTerminalData}
-                          isActive={pane.activePaneId === 'bottom-bar'}
-                          focusTrigger={focusTrigger}
-                          terminalInstance={session.terminalRegistry.current[sessionData.id]}
-                          disableFocus={showDialog || !!globalMessage}
-                          fontSize={fontSize}
-                          fontFamily={fontFamily}
-                          terminalForeground={terminalForeground}
-                          terminalBackground={terminalBackground}
-                          terminalBackgroundInactive={terminalBackgroundInactive || undefined}
-                          lineWrapEnabled={lineWrapEnabled}
-                          askGeminiCommands={askGeminiCommands}
-                          enablePromptHighlight={enablePromptHighlight}
-                          promptHighlightColor={promptHighlightColor}
-                          promptPatterns={promptPatterns}
-                          onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
-                        />
-                      );
-                    } else {
-                      return (
-                        <div className="empty-pane-placeholder">
-                          <span className="pane-label">Bottom Bar</span>
-                          <span className="drop-hint">Drop Tab Here</span>
-                        </div>
-                      );
-                    }
-                  })()}
+                  {renderPaneContent('bottom-bar', 'Bottom Bar')}
                 </div>
               )}
 
             </div>
 
-
+            {/* Right Sidebar */}
             {showRightSidebar && (
               <div
                 className={`sidebar-resizer ${resizingSide === 'right' ? 'interact' : ''}`}
@@ -1731,95 +768,12 @@ function App() {
               <div
                 className={`right-sidebar-pane ${pane.activePaneId === 'sidebar' ? 'active-pane' : ''}`}
                 data-pane-id="sidebar"
-                style={{
-                  width: `${rightSidebarPercent}%`,
-                  border: '1px solid var(--border-color)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  backgroundColor: paneBackground || '#000000',
-                  backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || ''}")` : 'none',
-                  backgroundSize: paneBackgroundMode === 'image' ? 'auto' : 'auto',
-                  backgroundRepeat: 'repeat',
-                  backgroundPosition: 'center',
-                  position: 'relative',
-                  flexShrink: 0,
-                  margin: '2px' // Gap all around to match grid padding
-                }}
+                style={{ ...basePaneStyle, width: `${rightSidebarPercent}%` }}
                 onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-
-
-                onDrop={(e) => {
-                  e.preventDefault();
-                  const sessionId = e.dataTransfer.getData('text/plain');
-                  if (sessionId) {
-                    pane.handleDropSession(sessionId, 'sidebar');
-                  }
-                }}
+                onDrop={(e) => { e.preventDefault(); const sid = e.dataTransfer.getData('text/plain'); if (sid) pane.handleDropSession(sid, 'sidebar'); }}
                 onClick={() => pane.setActivePaneId('sidebar')}
               >
-                {(() => {
-                  const sessionId = pane.paneAllocations['sidebar'];
-                  const sessionData = session.sessions.find(s => s.id === sessionId);
-                  const isActive = pane.activePaneId === 'sidebar';
-
-                  if (sessionData) {
-                    return sessionData.type === 'ai' ? (
-                      <AIChatPane
-                        sessionId={sessionData.id}
-                        initialState={sessionData.aiChatState}
-                        onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
-                        showSystemPrompt={showSystemPrompt}
-                        askGeminiCommands={askGeminiCommands}
-                        aiPersonas={aiPersonas}
-                        fontSize={fontSize}
-                        terminalBackground={terminalBackground}
-                        terminalBackgroundInactive={terminalBackgroundInactive || undefined}
-                        lastTerminalSessionId={lastTerminalSessionId}
-                        lastTerminalSessionTitle={session.sessions.find(s => s.id === lastTerminalSessionId)?.title}
-                        onShowPromptMenu={() => handleShowPromptMenu(sessionData.id)}
-                        onSendMessage={(text) => handleAISendMessage(sessionData.id, text)}
-                        proactiveInstruction={proactiveInstruction}
-                        interactiveSessionTracking={Object.values(interactiveSessions).find(t => t.aiSessionId === sessionData.id)}
-                        onRunCommand={(targetId, command) => {
-                          setInteractiveSessions(prev => ({
-                            ...prev,
-                            [targetId]: {
-                              aiSessionId: sessionData.id,
-                              buffer: '',
-                              originalCommand: command,
-                              startTime: Date.now()
-                            }
-                          }));
-                        }}
-                      />
-                    ) : (
-                      <TerminalComponent
-                        key={sessionData.id}
-                        sessionId={sessionData.id}
-                        onData={session.handleTerminalData}
-                        isActive={isActive}
-                        focusTrigger={focusTrigger}
-                        terminalInstance={session.terminalRegistry.current[sessionData.id]}
-                        disableFocus={showDialog || !!globalMessage}
-                        fontSize={fontSize}
-                        fontFamily={fontFamily}
-                        terminalForeground={terminalForeground}
-                        terminalBackground={terminalBackground}
-                        terminalBackgroundInactive={terminalBackgroundInactive || undefined}
-                        lineWrapEnabled={lineWrapEnabled}
-                        askGeminiCommands={askGeminiCommands}
-                        onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
-                      />
-                    );
-                  } else {
-                    return (
-                      <div className="empty-pane-placeholder">
-                        <span className="pane-label">Sidebar</span>
-                        <span className="drop-hint">Drop Tab Here</span>
-                      </div>
-                    );
-                  }
-                })()}
+                {renderPaneContent('sidebar', 'Sidebar')}
               </div>
             )}
           </div>
@@ -1836,99 +790,93 @@ function App() {
           />
         )}
 
-        {
-          globalMessage && (
-            <MessageModal
-              type={globalMessage.type}
-              title={globalMessage.title}
-              message={globalMessage.message}
-              onClose={handleCloseMessageModal}
-            />
-          )
-        }
+        {globalMessage && (
+          <MessageModal
+            type={globalMessage.type}
+            title={globalMessage.title}
+            message={globalMessage.message}
+            onClose={() => { setGlobalMessage(null); window.electronAPI.focusWindow(); }}
+          />
+        )}
 
-        {
-          pasteContent !== null && (
-            <PasteConfirmationModal
-              content={pasteContent}
-              onConfirm={confirmPaste}
-              onCancel={cancelPaste}
-            />
-          )
-        }
+        {pasteContent !== null && (
+          <PasteConfirmationModal
+            content={pasteContent}
+            onConfirm={confirmPaste}
+            onCancel={cancelPaste}
+          />
+        )}
 
-        {
-          askGeminiFreeFormatData !== null && (
-            <AskGeminiModal
-              isOpen={true}
-              selection={askGeminiFreeFormatData.selection}
-              onClose={() => setAskGeminiFreeFormatData(null)}
-              onSubmit={handleAskGeminiSubmit}
-            />
-          )
-        }
+        {geminiChat.askGeminiFreeFormatData !== null && (
+          <AskGeminiModal
+            isOpen={true}
+            selection={geminiChat.askGeminiFreeFormatData.selection}
+            onClose={() => geminiChat.setAskGeminiFreeFormatData(null)}
+            onSubmit={geminiChat.handleFreeFormatSubmit}
+          />
+        )}
 
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
           onLogout={session.closeAllAISessions}
-          encoding={globalEncoding}
-          onEncodingChange={updateGlobalEncoding}
-          fontSize={fontSize}
+          encoding={settings.globalEncoding}
+          onEncodingChange={handleGlobalEncodingChange}
+          fontSize={settings.fontSize}
           onFontSizeChange={updateFontSize}
-          fontFamily={fontFamily}
+          fontFamily={settings.fontFamily}
           onFontFamilyChange={updateFontFamily}
-          sshKeepAliveEnabled={sshKeepAliveEnabled}
+          sshKeepAliveEnabled={settings.sshKeepAliveEnabled}
           onSshKeepAliveEnabledChange={updateSshKeepAliveEnabled}
-          sshKeepAliveInterval={sshKeepAliveInterval}
+          sshKeepAliveInterval={settings.sshKeepAliveInterval}
           onSshKeepAliveIntervalChange={updateSshKeepAliveInterval}
-          telnetKeepAliveEnabled={telnetKeepAliveEnabled}
+          telnetKeepAliveEnabled={settings.telnetKeepAliveEnabled}
           onTelnetKeepAliveEnabledChange={updateTelnetKeepAliveEnabled}
-          telnetKeepAliveInterval={telnetKeepAliveInterval}
+          telnetKeepAliveInterval={settings.telnetKeepAliveInterval}
           onTelnetKeepAliveIntervalChange={updateTelnetKeepAliveInterval}
-          terminalForeground={terminalForeground}
+          terminalForeground={settings.terminalForeground}
           onTerminalForegroundChange={updateTerminalForeground}
-          terminalBackground={terminalBackground}
+          terminalBackground={settings.terminalBackground}
           onTerminalBackgroundChange={updateTerminalBackground}
-          terminalBackgroundInactive={terminalBackgroundInactive}
+          terminalBackgroundInactive={settings.terminalBackgroundInactive}
           onTerminalBackgroundInactiveChange={updateTerminalBackgroundInactive}
-          paneBackground={paneBackground}
+          paneBackground={settings.paneBackground}
           onPaneBackgroundChange={updatePaneBackground}
-          paneBackgroundMode={paneBackgroundMode}
+          paneBackgroundMode={settings.paneBackgroundMode}
           onPaneBackgroundModeChange={updatePaneBackgroundMode}
-          paneBackgroundImage={paneBackgroundImage}
+          paneBackgroundImage={settings.paneBackgroundImage}
           onPaneBackgroundImageChange={updatePaneBackgroundImage}
-          loggingEnabled={loggingEnabled}
+          loggingEnabled={settings.loggingEnabled}
           onLoggingEnabledChange={updateLoggingEnabled}
-          loggingPath={loggingPath}
+          loggingPath={settings.loggingPath}
           onLoggingPathChange={updateLoggingPath}
-          scrollback={scrollback}
+          scrollback={settings.scrollback}
           onScrollbackChange={updateScrollback}
-          theme={theme}
-          onThemeChange={updateTheme}
-          sidebarPosition={sidebarPosition}
-          onSidebarPositionChange={handleSidebarPositionChange}
-          showSystemPrompt={showSystemPrompt}
+          theme={settings.theme}
+          onThemeChange={handleThemeChange}
+          sidebarPosition={settings.sidebarPosition}
+          onSidebarPositionChange={updateSidebarPosition}
+          showSystemPrompt={settings.showSystemPrompt}
           onShowSystemPromptChange={updateShowSystemPrompt}
-          askGeminiCommands={askGeminiCommands}
+          askGeminiCommands={settings.askGeminiCommands}
           onAskGeminiCommandsChange={updateAskGeminiCommands}
-          aiPersonas={aiPersonas}
+          aiPersonas={settings.aiPersonas}
           onAiPersonasChange={updateAiPersonas}
-          backspaceSendsDel={backspaceSendsDel}
+          backspaceSendsDel={settings.backspaceSendsDel}
           onBackspaceSendsDelChange={updateBackspaceSendsDel}
-          rightClickPaste={rightClickPaste}
+          rightClickPaste={settings.rightClickPaste}
           onRightClickPasteChange={updateRightClickPaste}
-          enablePromptHighlight={enablePromptHighlight}
+          enablePromptHighlight={settings.enablePromptHighlight}
           onEnablePromptHighlightChange={updateEnablePromptHighlight}
-          promptHighlightColor={promptHighlightColor}
+          promptHighlightColor={settings.promptHighlightColor}
           onPromptHighlightColorChange={updatePromptHighlightColor}
-          promptPatterns={promptPatterns}
+          promptPatterns={settings.promptPatterns}
           onPromptPatternsChange={updatePromptPatterns}
-          watchBufferLimit={watchBufferLimit}
+          watchBufferLimit={settings.watchBufferLimit}
           onWatchBufferLimitChange={updateWatchBufferLimit}
-          proactiveInstruction={proactiveInstruction}
+          proactiveInstruction={settings.proactiveInstruction}
           onProactiveInstructionChange={updateProactiveInstruction}
-          interactiveStabilizationTimeout={interactiveStabilizationTimeout}
+          interactiveStabilizationTimeout={settings.interactiveStabilizationTimeout}
           onInteractiveStabilizationTimeoutChange={updateInteractiveStabilizationTimeout}
         />
         <PaneLines
