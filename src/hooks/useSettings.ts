@@ -86,6 +86,7 @@ const DEFAULT_PROMPT_PATTERNS: PromptPattern[] = [
   { id: 'fortigate', name: 'Fortigate', pattern: '^([a-zA-Z0-9_\\-\\.]+(?:\\s\\([a-zA-Z0-9_\\-\\.]+\\))?[#$])\\s*', enabled: true },
   { id: 'huawei', name: 'Huawei / Yamaha', pattern: '^([<\\[][a-zA-Z0-9_\\-\\./]+[>\\]])\\s*', enabled: true },
   { id: 'juniper', name: 'Juniper', pattern: '^([-_\\w]+@[-_\\w]+[>#])\\s*', enabled: true },
+  { id: 'paloalto', name: 'Palo Alto / Arista', pattern: '^([-_\\w.]+@[-_\\w.]+[>#])\\s*', enabled: true },
   { id: 'linux', name: 'Linux', pattern: '^([-_\\w]+@[-_\\w]+:[^$# ]*[$#])\\s*', enabled: true },
   { id: 'cmd', name: 'Command Prompt', pattern: '^([A-Za-z]:.*>)\\s*', enabled: true },
   { id: 'powershell', name: 'PowerShell', pattern: '^(PS\\s+.*>)\\s*', enabled: true }
