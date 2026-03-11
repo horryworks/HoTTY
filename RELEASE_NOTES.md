@@ -1,5 +1,19 @@
 # Release Notes - HoTTY
 
+## [v0.1.15-beta7] - 2026-03-11
+### Changed
+- **Major Refactoring & Architectural Simplification**:
+    - **App.tsx Deconstruction**: Reduced the main `App.tsx` from 1953 lines to ~900 lines (54% reduction), significantly improving maintainability and reducing the "God Object" complexity.
+    - **Custom Hooks Extraction**:
+        - **`useInteractiveFlow`**: Centralized terminal output tracking, prompt detection, and AI feedback stabilization logic.
+        - **`useGeminiChat`**: Unified Gemini API interactions, "Ask Gemini" command resolution, and context management.
+        - **`useSettings`**: Consolidated 40+ application settings into a single state with automated localStorage synchronization.
+    - **`PaneContent` Component**: Unified rendering logic for Terminal and AI Chat panes across all 5 possible workspace positions (Left/Right Sidebars, Top/Bottom Bars, and Main Grid).
+
+### Fixed
+- **Theme Synchronization**: Fixed a bug where theme changes were incomplete after the settings hook migration.
+- **Code Hygiene**: Resolved multiple unused variables, lint warnings, and type inconsistencies across the codebase.
+
 ## [v0.1.15-beta6] - 2026-03-09
 ### Added
 - **Interactive AI Improvements**:
