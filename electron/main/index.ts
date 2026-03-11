@@ -422,34 +422,39 @@ ipcMain.on('show-context-menu', (event, selection: string, commands?: { id: stri
     );
   }
 
-  // Append free format option
-  geminiSubmenu.push(
-    { type: 'separator' },
-    {
-      label: 'Free format question...',
-      click: () => { event.sender.send('ask-gemini', selection, 'free-format'); }
-    }
-  );
-
   const isWatchBuffer = selection === '__WATCH_BUFFER__';
+
+  // Append free format option only if not watch buffer
+  if (!isWatchBuffer) {
+    geminiSubmenu.push(
+      { type: 'separator' },
+      {
+        label: 'Free format question...',
+        click: () => { event.sender.send('ask-gemini', selection, 'free-format'); }
+      }
+    );
+  }
 
   const template: Electron.MenuItemConstructorOptions[] = [];
 
-  if (!isWatchBuffer) {
+  if (isWatchBuffer) {
+    // Flattened menu for sparkles button
+    geminiSubmenu.forEach(item => template.push(item));
+  } else {
+    // Original nested menu for terminal context
     template.push(
       {
         label: 'Paste',
         click: () => { event.sender.send('terminal-context-paste'); }
       },
-      { type: 'separator' }
+      { type: 'separator' },
+      {
+        label: 'Ask Gemini',
+        enabled: !!selection,
+        submenu: geminiSubmenu
+      }
     );
   }
-
-  template.push({
-    label: 'Ask Gemini',
-    enabled: isWatchBuffer || !!selection,
-    submenu: geminiSubmenu
-  });
 
   const menu = Menu.buildFromTemplate(template);
   menu.popup({ window: BrowserWindow.fromWebContents(event.sender) || undefined });

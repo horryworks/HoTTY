@@ -1605,6 +1605,7 @@ function App() {
                     }));
                   }}
                   onSendMessage={handleAISendMessage}
+                  onShowPromptMenu={handleShowPromptMenu}
                 />
               </div>
 

@@ -37,6 +37,7 @@ interface GridLayoutProps {
     onSendMessage?: (aiSessionId: string, text: string) => void;
     proactiveInstruction?: string;
     interactiveSessions?: { [sessionId: string]: any };
+    onShowPromptMenu?: (aiSessionId: string) => void;
 }
 
 export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: string]: any } }> = ({
@@ -71,7 +72,8 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     onRunCommand,
     onSendMessage,
     proactiveInstruction,
-    interactiveSessions
+    interactiveSessions,
+    onShowPromptMenu
 }) => {
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
@@ -295,9 +297,12 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     terminalBackground={terminalBackground}
                                     terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                                     proactiveInstruction={proactiveInstruction}
-                                    interactiveSessionTracking={interactiveSessions ? Object.values(interactiveSessions).find((t: any) => t.aiSessionId === session.id) : undefined}
+                                    interactiveSessionTracking={interactiveSessions ? (Object.values(interactiveSessions).find((t: any) => t.aiSessionId === session.id) as any) : undefined}
                                     onRunCommand={(targetId, command) => {
                                         if (onRunCommand) onRunCommand(targetId, command, session.id);
+                                    }}
+                                    onShowPromptMenu={() => {
+                                        if (onShowPromptMenu) onShowPromptMenu(session.id);
                                     }}
                                     onSendMessage={(text) => {
                                         if (onSendMessage) onSendMessage(session.id, text);
