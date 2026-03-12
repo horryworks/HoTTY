@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { marked } from 'marked';
 import { getTransparentColor } from '../../utils/colorUtils';
 import { STORAGE_KEYS } from '../../constants/storage';
+import { AuthenticationPanel } from './AuthenticationPanel';
 import './AIChatPane.css';
 
 interface ChatMessage {
@@ -712,23 +713,17 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             </div>
 
             {!isAuthenticated ? (
-                <div className="ai-chat-auth-container">
-                    {/* ... (auth container content - simplified for brevity or keep as is) ... */}
-                    <div className="ai-chat-auth-card">
-                        <div className="ai-chat-auth-icon"><GeminiIcon size={64} /></div>
-                        <h2>Connect to Gemini</h2>
-                        <div className="ai-chat-auth-form">
-                            <label>Client ID</label>
-                            <input type="text" value={clientId} onChange={(e) => setClientId(e.target.value)} className="ai-chat-input" />
-                            <label>Client Secret</label>
-                            <input type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} className="ai-chat-input" />
-                            <button className="ai-chat-login-btn" onClick={handleLogin} disabled={!clientId || !clientSecret || isAuthLoading}>
-                                {isAuthLoading ? 'Connecting...' : 'Sign in with Google'}
-                            </button>
-                            {authError && <div className="ai-chat-auth-error">{authError}</div>}
-                        </div>
-                    </div>
-                </div>
+                <AuthenticationPanel
+                    clientId={clientId}
+                    setClientId={setClientId}
+                    clientSecret={clientSecret}
+                    setClientSecret={setClientSecret}
+                    isAuthLoading={isAuthLoading}
+                    onLogin={handleLogin}
+                    authError={authError}
+                    fontSize={fontSize}
+                    terminalBackground={terminalBackground}
+                />
             ) : (
                 <div className="ai-chat-body">
                     {showSystemPrompt && localSystemInstruction && (

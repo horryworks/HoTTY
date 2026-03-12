@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(cd C:/Users/horry/development/HoTTY && npx tsc --noEmit 2>&1 | head -40)",
-      "Bash(cd C:/Users/horry/development/HoTTY && npx tsc --noEmit 2>&1)"
+      "Bash(cd C:/Users/horry/development/HoTTY && npx tsc --noEmit 2>&1)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

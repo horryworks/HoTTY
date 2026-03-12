@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import type { HostTreeNode, HostEntry } from '../../hooks/useHostManager';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useModalState } from '../../hooks/useModalState';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import './HostTree.css';
 
@@ -48,8 +49,8 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
     const [exportNode, setExportNode] = useState<HostTreeNode | null>(null);
-    const [editModal, setEditModal] = useState<EditModalState | null>(null);
-    const [nodeToDelete, setNodeToDelete] = useState<HostTreeNode | null>(null);
+    const [editModalOpen, openEditModal, closeEditModal, editModal] = useModalState<EditModalState>();
+    const [nodeToDeleteOpen, openNodeToDelete, closeNodeToDelete, nodeToDelete] = useModalState<HostTreeNode>();
 
     // Inline edit state
     const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -84,7 +85,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const contextMenuRef = useRef<HTMLDivElement>(null);
 
     // Focus trap for the edit modal
-    useFocusTrap(editModalRef, !!editModal);
+    useFocusTrap(editModalRef, editModalOpen);
 
     useEffect(() => {
         const handler = () => setContextMenu(null);
@@ -94,11 +95,11 @@ export const HostTree: React.FC<HostTreeProps> = ({
 
     // Handle focus when modal opens
     useEffect(() => {
-        if (editModal) {
+        if (editModalOpen) {
             setEditingNodeId(null);
             focusModal();
         }
-    }, [editModal, focusModal]);
+    }, [editModalOpen, focusModal]);
 
     const toggle = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -156,9 +157,9 @@ export const HostTree: React.FC<HostTreeProps> = ({
 
     const openAddFolder = useCallback((parentId: string | null) => {
         setFormName('');
-        setEditModal({ mode: 'folder', parentId });
+        openEditModal({ mode: 'folder', parentId });
         setContextMenu(null);
-    }, []);
+    }, [openEditModal]);
 
     const openAddHost = useCallback((parentId: string | null) => {
         setFormName('');
@@ -167,15 +168,15 @@ export const HostTree: React.FC<HostTreeProps> = ({
         setFormPort('22');
         setFormUsername('');
         setFormPassword('');
-        setEditModal({ mode: 'host', parentId });
+        openEditModal({ mode: 'host', parentId });
         setContextMenu(null);
-    }, []);
+    }, [openEditModal]);
 
     const handleExport = (node: HostTreeNode | null = null) => {
         setExportNode(node);
         setFormName('');
         setFormPassword('');
-        setEditModal({ mode: 'export', parentId: null });
+        openEditModal({ mode: 'export', parentId: null });
         setContextMenu(null);
         (window as any).electronAPI.logDebug(`Export modal opened${node ? ` for node: ${node.name}` : ' for full tree'}`);
     };
@@ -190,7 +191,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
             }
             setImportFilePath(filePath);
             setFormPassword('');
-            setEditModal({ mode: 'import', parentId });
+            openEditModal({ mode: 'import', parentId });
             setContextMenu(null);
             (window as any).electronAPI.logDebug('Import password modal opened');
         } catch (err: any) {
@@ -213,7 +214,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 const success = await (window as any).electronAPI.exportHTree(dataToExport, formPassword);
 
                 // Close modal and reset state BEFORE showing success alert
-                setEditModal(null);
+                closeEditModal();
                 setExportNode(null);
                 setFormPassword('');
 
@@ -249,7 +250,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     }
 
                     // Close modal and reset state BEFORE showing success alert
-                    setEditModal(null);
+                    closeEditModal();
                     setImportFilePath(null);
                     setFormPassword('');
 
@@ -260,7 +261,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 }
             } catch (err: any) {
                 onShowMessage?.('error', 'Import Failed', err.message);
-                // Keep password if failed, but maybe good to clear on some errors? 
+                // Keep password if failed, but maybe good to clear on some errors?
                 // Let's keep it for now so user can try again.
             }
             return;
@@ -293,7 +294,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 onAddHost(parentId, formName, entry);
             }
         }
-        setEditModal(null);
+        closeEditModal();
     };
 
     const renderNode = (node: HostTreeNode, depth: number): React.ReactNode => {
@@ -661,7 +662,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                             <button
                                 className="danger"
                                 onClick={() => {
-                                    setNodeToDelete(contextMenu.node!);
+                                    openNodeToDelete(contextMenu.node!);
                                     setContextMenu(null);
                                 }}
                             >
@@ -681,8 +682,8 @@ export const HostTree: React.FC<HostTreeProps> = ({
             )}
 
             {/* Add/Edit/Export/Import Modal */}
-            {editModal && (
-                <div className="host-edit-modal-overlay" onClick={() => setEditModal(null)} tabIndex={-1}>
+            {editModalOpen && editModal && (
+                <div className="host-edit-modal-overlay" onClick={closeEditModal} tabIndex={-1}>
                     <div
                         className="host-edit-modal"
                         ref={editModalRef}
@@ -692,7 +693,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                             e.stopPropagation();
                             if (e.key === 'Escape') {
                                 e.preventDefault();
-                                setEditModal(null);
+                                closeEditModal();
                             }
                         }}
                     >
@@ -803,7 +804,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         )}
 
                         <div className="modal-actions">
-                            <button className="btn-secondary" onClick={() => setEditModal(null)}>Cancel</button>
+                            <button className="btn-secondary" onClick={closeEditModal}>Cancel</button>
                             <button className="btn-primary" onClick={handleModalSubmit}>
                                 {editModal.mode === 'export' ? 'Export' :
                                     editModal.mode === 'import' ? 'Import' : 'Save'}
@@ -813,13 +814,13 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 </div>
             )}
 
-            {nodeToDelete && (
+            {nodeToDeleteOpen && nodeToDelete && (
                 <ConfirmModal
                     title={`Delete ${nodeToDelete.type === 'folder' ? 'Folder' : 'Host'}`}
                     message={`Are you sure you want to delete "${nodeToDelete.name}"?\nThis action cannot be undone.`}
                     onConfirm={() => {
                         onDeleteNode(nodeToDelete.id);
-                        setNodeToDelete(null);
+                        closeNodeToDelete();
                         // Ensure window focus is restored after dialog closes (just in case)
                         setTimeout(() => {
                             try {
@@ -828,7 +829,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         }, 50);
                     }}
                     onCancel={() => {
-                        setNodeToDelete(null);
+                        closeNodeToDelete();
                         setTimeout(() => {
                             try {
                                 (window as any).electronAPI.focusWindow();

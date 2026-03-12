@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useHostManager, decryptBatch, getCachedCredential, clearDecryptedCache } from '../../hooks/useHostManager';
 import type { HostTreeNode, HostEntry } from '../../hooks/useHostManager';
 import { HostTree } from './HostTree';
+import { useResize } from '../../hooks/useResize';
 import { STORAGE_KEYS } from '../../constants/storage';
 import './ConnectionDialog.css';
 
@@ -79,27 +80,19 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
     // --- Panel divider resize ---
     const [treePanelWidth, setTreePanelWidth] = useState(600); // 2:1 tree:form default ratio
-    const panelResizeState = useRef<{ startX: number; startWidth: number } | null>(null);
+    const startTreePanelWidthRef = useRef(treePanelWidth);
 
-    const handlePanelDividerMouseDown = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        const startX = e.clientX;
-        const startWidth = treePanelWidth;
-        panelResizeState.current = { startX, startWidth };
-        const onMove = (ev: MouseEvent) => {
-            const delta = ev.clientX - startX;
-            setTreePanelWidth(Math.max(150, Math.min(500, startWidth + delta)));
-        };
-        const onUp = () => {
-            panelResizeState.current = null;
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-            document.body.style.cursor = '';
-        };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-        document.body.style.cursor = 'col-resize';
-    }, [treePanelWidth]);
+    const { startResize: handlePanelDividerMouseDown } = useResize({
+        orientation: 'horizontal',
+        onMove: (dx) => {
+            setTreePanelWidth(Math.max(150, Math.min(500, startTreePanelWidthRef.current + dx)));
+        },
+    });
+
+    const handlePanelDividerMouseDownWrapped = useCallback((e: React.MouseEvent) => {
+        startTreePanelWidthRef.current = treePanelWidth;
+        handlePanelDividerMouseDown(e);
+    }, [treePanelWidth, handlePanelDividerMouseDown]);
 
     // --- Dialog size and position (absolute top/left, so resize only expands right/bottom) ---
     const [dialogSize, setDialogSize] = useState({ width: 960, height: 540 });
@@ -532,7 +525,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                     </div>
 
                     {/* Draggable vertical divider */}
-                    <div className="panel-divider" onMouseDown={handlePanelDividerMouseDown} />
+                    <div className="panel-divider" onMouseDown={handlePanelDividerMouseDownWrapped} />
 
                     {/* Right panel: Connection form */}
                     <div className="form-panel">
