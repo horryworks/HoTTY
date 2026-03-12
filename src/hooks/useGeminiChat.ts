@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Session } from './useSessionManager';
 import type { AskGeminiCommand, PersonaDefinition } from '../App';
 import { STORAGE_KEYS } from '../constants/storage';
+import * as electronService from '../services/electronService';
 
 // -- Types --
 
@@ -148,13 +149,13 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
     const selectedModel = aiSession.aiChatState?.selectedModel || 'Unspecified';
     const systemInstruction = aiSession.aiChatState?.systemInstruction || 'You are a helpful assistant.';
 
-    window.electronAPI.geminiChatSend(aiSessionId, finalMessage, selectedModel, systemInstruction);
+    electronService.geminiChatSend(aiSessionId, finalMessage, selectedModel, systemInstruction);
   }, []);
 
   // -- askGemini --
   const askGemini = useCallback((selection: string, type: string, targetSessionId?: string) => {
     const actualSelection = selection === '__WATCH_BUFFER__' ? '' : selection;
-    window.electronAPI.logDebug(`[useGeminiChat] onAskGemini triggered. Type: ${type}, Selection length: ${actualSelection?.length}`);
+    electronService.logDebug(`[useGeminiChat] onAskGemini triggered. Type: ${type}, Selection length: ${actualSelection?.length}`);
 
     const currentSessions = sessionsRef.current;
     const currentCommands = askGeminiCommandsRef.current;
@@ -177,7 +178,7 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
       : actualSelection;
 
     if (!finalSelection) {
-      window.electronAPI.logDebug('[useGeminiChat] Selection and buffer are empty, ignoring.');
+      electronService.logDebug('[useGeminiChat] Selection and buffer are empty, ignoring.');
       return;
     }
 
@@ -187,15 +188,15 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
 
     if (existingAiSession) {
       aiSessionId = existingAiSession.id;
-      window.electronAPI.logDebug(`[useGeminiChat] Found existing AI session: ${aiSessionId}`);
+      electronService.logDebug(`[useGeminiChat] Found existing AI session: ${aiSessionId}`);
       setActivePaneIdRef.current(aiSessionId);
     } else {
       const newId = createAISessionRef.current();
       if (newId) {
         aiSessionId = newId;
-        window.electronAPI.logDebug(`[useGeminiChat] Created new AI session: ${aiSessionId}`);
+        electronService.logDebug(`[useGeminiChat] Created new AI session: ${aiSessionId}`);
       } else {
-        window.electronAPI.logDebug('[useGeminiChat] Failed to create AI session (already exists?)');
+        electronService.logDebug('[useGeminiChat] Failed to create AI session (already exists?)');
         return;
       }
     }
@@ -238,7 +239,7 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
       }
     }
 
-    window.electronAPI.logDebug(`[useGeminiChat] Updating session state with prompt. Prompt: ${userPrompt.substring(0, 50)}...`);
+    electronService.logDebug(`[useGeminiChat] Updating session state with prompt. Prompt: ${userPrompt.substring(0, 50)}...`);
     updateSessionStateRef.current(aiSessionId, {
       pendingMessage: userPrompt,
       systemInstruction: systemInstruction
@@ -247,7 +248,7 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
 
   // -- showPromptMenu --
   const showPromptMenu = useCallback((aiSessionId: string) => {
-    window.electronAPI.logDebug(`[useGeminiChat] showPromptMenu for session: ${aiSessionId}`);
+    electronService.logDebug(`[useGeminiChat] showPromptMenu for session: ${aiSessionId}`);
     const currentSessions = sessionsRef.current;
     const currentCommands = askGeminiCommandsRef.current;
     const aiSession = currentSessions.find(s => s.id === aiSessionId);
@@ -257,7 +258,7 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
       { id: 'analyze-watch', label: 'Analyze Watched Output' },
       ...currentCommands.map(c => ({ id: c.id, label: c.label }))
     ];
-    window.electronAPI.showContextMenu('__WATCH_BUFFER__', menuCommands);
+    electronService.showContextMenu('__WATCH_BUFFER__', menuCommands);
   }, []);
 
   // -- handleFreeFormatSubmit --
@@ -284,14 +285,14 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
 
   // -- Register IPC listeners (once) --
   useEffect(() => {
-    const removeListener = window.electronAPI.onAskGemini((selection: string, type: string) => {
-      window.electronAPI.logDebug(`[useGeminiChat] onAskGemini IPC. Type: ${type}`);
+    const removeListener = electronService.onAskGemini((selection: string, type: string) => {
+      electronService.logDebug(`[useGeminiChat] onAskGemini IPC. Type: ${type}`);
       askGemini(selection, type);
     });
 
     const handleCustomAskGemini = (e: Event) => {
       const customEvent = e as CustomEvent<{ selection: string; type: string; sessionId?: string }>;
-      window.electronAPI.logDebug(`[useGeminiChat] handleCustomAskGemini triggered with type: ${customEvent.detail?.type}`);
+      electronService.logDebug(`[useGeminiChat] handleCustomAskGemini triggered with type: ${customEvent.detail?.type}`);
       if (customEvent.detail) {
         askGemini(customEvent.detail.selection, customEvent.detail.type, customEvent.detail.sessionId);
       }

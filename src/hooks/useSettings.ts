@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { PromptPattern, PersonaDefinition, AskGeminiCommand } from '../App';
 import { STORAGE_KEYS } from '../constants/storage';
+import * as electronService from '../services/electronService';
 
 // -- Types --
 
@@ -227,13 +228,13 @@ export function useSettings() {
 
   const updateLoggingEnabled = useCallback((v: boolean) => {
     update('loggingEnabled', v, STORAGE_KEYS.LOGGING_ENABLED);
-    window.electronAPI.updateLogging(v, settings.loggingPath);
+    electronService.updateLogging(v, settings.loggingPath);
   }, [update, settings.loggingPath]);
 
   const updateLoggingPath = useCallback((v: string) => {
     update('loggingPath', v, STORAGE_KEYS.LOGGING_PATH);
     if (settings.loggingEnabled && v) {
-      window.electronAPI.updateLogging(settings.loggingEnabled, v);
+      electronService.updateLogging(settings.loggingEnabled, v);
     }
   }, [update, settings.loggingEnabled]);
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import * as electronService from '../../services/electronService';
 
 export const ResizeGrip: React.FC = () => {
     const [isDragging, setIsDragging] = useState(false);
@@ -33,7 +34,7 @@ export const ResizeGrip: React.FC = () => {
             // the mouse should effectively be at the new width/height boundaries.
 
             // Throttle this? Electron IPC is fast enough usually.
-            window.electronAPI.setWindowSize(e.clientX, e.clientY);
+            electronService.setWindowSize(e.clientX, e.clientY);
         };
 
         const handleMouseUp = () => {

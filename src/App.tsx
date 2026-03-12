@@ -18,7 +18,10 @@ import { usePaneManager } from './hooks/usePaneManager'
 import { useSettings } from './hooks/useSettings'
 import { useInteractiveFlow } from './hooks/useInteractiveFlow'
 import { useGeminiChat } from './hooks/useGeminiChat'
+import { useSidebarLayout } from './hooks/useSidebarLayout'
+import { TerminalSettingsProvider } from './contexts/TerminalSettingsContext'
 import { STORAGE_KEYS } from './constants/storage'
+import * as electronService from './services/electronService'
 
 import '@xterm/xterm/css/xterm.css'
 import './App.css'
@@ -95,19 +98,19 @@ function App() {
   const [lastTerminalSessionId, setLastTerminalSessionId] = useState<string | null>(null);
   const lastTerminalSessionIdRef = useRef<string | null>(null);
 
-  // Layout visibility
-  const [showLeftSidebar, setShowLeftSidebar] = useState(() => localStorage.getItem(STORAGE_KEYS.UI_SHOW_LEFT_SIDEBAR) === 'true');
-  const [showRightSidebar, setShowRightSidebar] = useState(() => localStorage.getItem(STORAGE_KEYS.UI_SHOW_RIGHT_SIDEBAR) === 'true');
-  const [showTopBar, setShowTopBar] = useState(() => localStorage.getItem(STORAGE_KEYS.UI_SHOW_TOP_BAR) === 'true');
-  const [showBottomBar, setShowBottomBar] = useState(() => localStorage.getItem(STORAGE_KEYS.UI_SHOW_BOTTOM_BAR) === 'true');
+  const {
+    showLeftSidebar, setShowLeftSidebar,
+    showRightSidebar, setShowRightSidebar,
+    showTopBar, setShowTopBar,
+    showBottomBar, setShowBottomBar,
+    leftSidebarPercent,
+    rightSidebarPercent,
+    topBarPercent,
+    bottomBarPercent,
+    resizingSide,
+    handleResizeStart: handleSidebarResizeStart,
+  } = useSidebarLayout();
 
-  // Layout sizes
-  const [leftSidebarPercent, setLeftSidebarPercent] = useState(() => parseFloat(localStorage.getItem(STORAGE_KEYS.UI_LEFT_SIDEBAR_PCT) || '20'));
-  const [rightSidebarPercent, setRightSidebarPercent] = useState(() => parseFloat(localStorage.getItem(STORAGE_KEYS.UI_RIGHT_SIDEBAR_PCT) || '20'));
-  const [topBarPercent, setTopBarPercent] = useState(() => parseFloat(localStorage.getItem(STORAGE_KEYS.UI_TOP_BAR_PCT) || '20'));
-  const [bottomBarPercent, setBottomBarPercent] = useState(() => parseFloat(localStorage.getItem(STORAGE_KEYS.UI_BOTTOM_BAR_PCT) || '20'));
-
-  const [resizingSide, setResizingSide] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
   const [showPaneLines, setShowPaneLines] = useState(false);
 
   // Paste State
@@ -121,86 +124,13 @@ function App() {
   // Password Cache (In-Memory Only)
   const passwordCache = useRef<Record<string, string>>({});
 
-  // Persist UI State on change
-  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_SHOW_LEFT_SIDEBAR, String(showLeftSidebar)), [showLeftSidebar]);
-  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_SHOW_RIGHT_SIDEBAR, String(showRightSidebar)), [showRightSidebar]);
-  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_SHOW_TOP_BAR, String(showTopBar)), [showTopBar]);
-  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_SHOW_BOTTOM_BAR, String(showBottomBar)), [showBottomBar]);
-  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_LEFT_SIDEBAR_PCT, String(leftSidebarPercent)), [leftSidebarPercent]);
-  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_RIGHT_SIDEBAR_PCT, String(rightSidebarPercent)), [rightSidebarPercent]);
-  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_TOP_BAR_PCT, String(topBarPercent)), [topBarPercent]);
-  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_BOTTOM_BAR_PCT, String(bottomBarPercent)), [bottomBarPercent]);
-
   // ═══════════════════════════════════════════════
-  // 3. Sidebar Resizing
-  // ═══════════════════════════════════════════════
-
-  const sidebarResizingState = useRef<{
-    side: 'left' | 'right' | 'top' | 'bottom';
-    startPos: number;
-    startPercent: number;
-    containerSize: number;
-  } | null>(null);
-
-  const handleSidebarResizeStart = (e: React.MouseEvent, side: 'left' | 'right' | 'top' | 'bottom') => {
-    e.preventDefault();
-    e.stopPropagation();
-    setResizingSide(side);
-
-    const container = document.querySelector('.app-container');
-    const centerColumn = document.querySelector('.center-column');
-    const containerWidth = container ? container.clientWidth : window.innerWidth;
-    const containerHeight = centerColumn ? centerColumn.clientHeight : window.innerHeight;
-
-    sidebarResizingState.current = {
-      side,
-      startPos: side === 'left' || side === 'right' ? e.clientX : e.clientY,
-      startPercent: side === 'left' ? leftSidebarPercent
-        : side === 'right' ? rightSidebarPercent
-          : side === 'top' ? topBarPercent
-            : bottomBarPercent,
-      containerSize: side === 'left' || side === 'right' ? containerWidth : containerHeight
-    };
-
-    document.addEventListener('mousemove', handleSidebarResizeMove);
-    document.addEventListener('mouseup', handleSidebarResizeEnd);
-    document.body.style.cursor = (side === 'left' || side === 'right') ? 'col-resize' : 'row-resize';
-  };
-
-  const handleSidebarResizeMove = (e: MouseEvent) => {
-    if (!sidebarResizingState.current) return;
-    const { side, startPos, startPercent, containerSize } = sidebarResizingState.current;
-
-    if (side === 'left' || side === 'right') {
-      const deltaPx = side === 'left' ? e.clientX - startPos : startPos - e.clientX;
-      const deltaPercent = (deltaPx / containerSize) * 100;
-      const newPercent = Math.max(5, Math.min(80, startPercent + deltaPercent));
-      if (side === 'left') setLeftSidebarPercent(newPercent);
-      else setRightSidebarPercent(newPercent);
-    } else {
-      const deltaPx = side === 'top' ? e.clientY - startPos : startPos - e.clientY;
-      const deltaPercent = (deltaPx / containerSize) * 100;
-      const newPercent = Math.max(5, Math.min(80, startPercent + deltaPercent));
-      if (side === 'top') setTopBarPercent(newPercent);
-      else setBottomBarPercent(newPercent);
-    }
-  };
-
-  const handleSidebarResizeEnd = () => {
-    sidebarResizingState.current = null;
-    setResizingSide(null);
-    document.removeEventListener('mousemove', handleSidebarResizeMove);
-    document.removeEventListener('mouseup', handleSidebarResizeEnd);
-    document.body.style.cursor = '';
-  };
-
-  // ═══════════════════════════════════════════════
-  // 4. Initialization Effects
+  // 3. Initialization Effects
   // ═══════════════════════════════════════════════
 
   // Load themes
   useEffect(() => {
-    window.electronAPI.getThemes().then(setThemesData);
+    electronService.getThemes().then(setThemesData);
   }, []);
 
   // Apply theme
@@ -233,7 +163,7 @@ function App() {
 
   // Set Window Title
   useEffect(() => {
-    window.electronAPI.getAppVersion().then(version => {
+    electronService.getAppVersion().then(version => {
       document.title = `HoTTY v${version}`;
     });
   }, []);
@@ -263,17 +193,17 @@ function App() {
   const cancelPaste = () => {
     setPasteContent(null);
     setPasteSessionId(null);
-    window.electronAPI.focusWindow();
+    electronService.focusWindow();
     setFocusTrigger(prev => prev + 1);
   };
 
   const confirmPaste = () => {
     if (pasteSessionId && pasteContent) {
-      window.electronAPI.sendInput(pasteSessionId, pasteContent);
+      electronService.sendInput(pasteSessionId, pasteContent);
     }
     setPasteContent(null);
     setPasteSessionId(null);
-    window.electronAPI.focusWindow();
+    electronService.focusWindow();
     setFocusTrigger(prev => prev + 1);
   };
 
@@ -453,7 +383,7 @@ function App() {
   const handleGlobalEncodingChange = (newEncoding: string) => {
     updateGlobalEncoding(newEncoding);
     session.sessions.forEach(s => {
-      window.electronAPI.updateSessionEncoding(s.id, newEncoding);
+      electronService.updateSessionEncoding(s.id, newEncoding);
     });
   };
 
@@ -491,26 +421,11 @@ function App() {
         isActive={isActive}
         focusTrigger={focusTrigger}
         disableFocus={showDialog || !!globalMessage}
-        // Terminal
         terminalInstance={session.terminalRegistry.current[sessionData.id]}
         onData={session.handleTerminalData}
-        fontSize={settings.fontSize}
-        fontFamily={settings.fontFamily}
-        terminalForeground={settings.terminalForeground}
-        terminalBackground={settings.terminalBackground}
-        terminalBackgroundInactive={settings.terminalBackgroundInactive}
-        lineWrapEnabled={settings.lineWrapEnabled}
-        askGeminiCommands={settings.askGeminiCommands}
-        enablePromptHighlight={settings.enablePromptHighlight}
-        promptHighlightColor={settings.promptHighlightColor}
-        promptPatterns={settings.promptPatterns}
         onPasteRequest={(text) => handlePasteRequest(sessionData.id, text)}
-        // AI Chat
-        showSystemPrompt={settings.showSystemPrompt}
-        aiPersonas={settings.aiPersonas}
         lastTerminalSessionId={lastTerminalSessionId}
         lastTerminalSessionTitle={session.sessions.find(s => s.id === lastTerminalSessionId)?.title}
-        proactiveInstruction={settings.proactiveInstruction}
         interactiveSessionTracking={Object.values(interactiveFlow.trackings).find(t => t.aiSessionId === sessionData.id)}
         onRunCommand={(targetId, command) => {
           interactiveFlow.startTracking(targetId, sessionData.id, command);
@@ -551,7 +466,24 @@ function App() {
   // 16. Render
   // ═══════════════════════════════════════════════
 
+  const terminalSettings = {
+    fontSize: settings.fontSize,
+    fontFamily: settings.fontFamily,
+    terminalForeground: settings.terminalForeground,
+    terminalBackground: settings.terminalBackground,
+    terminalBackgroundInactive: settings.terminalBackgroundInactive,
+    lineWrapEnabled: settings.lineWrapEnabled,
+    enablePromptHighlight: settings.enablePromptHighlight,
+    promptHighlightColor: settings.promptHighlightColor,
+    promptPatterns: settings.promptPatterns,
+    askGeminiCommands: settings.askGeminiCommands,
+    showSystemPrompt: settings.showSystemPrompt,
+    aiPersonas: settings.aiPersonas,
+    proactiveInstruction: settings.proactiveInstruction,
+  };
+
   return (
+    <TerminalSettingsProvider value={terminalSettings}>
     <div className="app-container">
       {/* Sidebar */}
       <div className={`sidebar ${settings.sidebarPosition === 'right' ? 'sidebar-right' : ''}`}>
@@ -704,22 +636,9 @@ function App() {
                   focusTrigger={focusTrigger}
                   terminalRegistry={session.terminalRegistry.current}
                   disableFocus={showDialog || !!globalMessage}
-                  fontSize={settings.fontSize}
-                  fontFamily={settings.fontFamily}
-                  terminalForeground={settings.terminalForeground}
-                  terminalBackground={settings.terminalBackground}
-                  terminalBackgroundInactive={settings.terminalBackgroundInactive}
                   paneBackground={settings.paneBackground}
                   paneBackgroundMode={settings.paneBackgroundMode}
                   paneBackgroundImage={settings.paneBackgroundImage}
-                  lineWrapEnabled={settings.lineWrapEnabled}
-                  showSystemPrompt={settings.showSystemPrompt}
-                  askGeminiCommands={settings.askGeminiCommands}
-                  aiPersonas={settings.aiPersonas}
-                  enablePromptHighlight={settings.enablePromptHighlight}
-                  promptHighlightColor={settings.promptHighlightColor}
-                  promptPatterns={settings.promptPatterns}
-                  proactiveInstruction={settings.proactiveInstruction}
                   interactiveSessions={interactiveFlow.trackings}
                   onPasteRequest={(text) => {
                     const activePaneSessionId = pane.paneAllocations[pane.activePaneId || ''];
@@ -796,7 +715,7 @@ function App() {
             type={globalMessage.type}
             title={globalMessage.title}
             message={globalMessage.message}
-            onClose={() => { setGlobalMessage(null); window.electronAPI.focusWindow(); }}
+            onClose={() => { setGlobalMessage(null); electronService.focusWindow(); }}
           />
         )}
 
@@ -892,6 +811,7 @@ function App() {
         />
       </div>
     </div>
+    </TerminalSettingsProvider>
   );
 };
 

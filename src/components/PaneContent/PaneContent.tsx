@@ -2,8 +2,8 @@ import React from 'react';
 import { TerminalComponent } from '../Terminal/Terminal';
 import { AIChatPane } from '../AIChatPane/AIChatPane';
 import type { Session } from '../../hooks/useSessionManager';
-import type { PromptPattern } from '../../hooks/useInteractiveFlow';
 import type { InteractiveSessionTracking } from '../../hooks/useInteractiveFlow';
+import { useTerminalSettings } from '../../contexts/TerminalSettingsContext';
 
 // -- Types --
 
@@ -16,24 +16,11 @@ interface PaneContentProps {
   // Terminal props
   terminalInstance: any;
   onData: (sessionId: string, data: string) => void;
-  fontSize: number;
-  fontFamily: string;
-  terminalForeground: string;
-  terminalBackground: string;
-  terminalBackgroundInactive?: string;
-  lineWrapEnabled: boolean;
-  askGeminiCommands: { id: string; label: string; promptTemplate: string }[];
-  enablePromptHighlight?: boolean;
-  promptHighlightColor?: string;
-  promptPatterns?: PromptPattern[];
   onPasteRequest: (text: string) => void;
 
   // AI Chat props
-  showSystemPrompt: boolean;
-  aiPersonas: { id: string; label: string; systemPrompt: string }[];
   lastTerminalSessionId?: string | null;
   lastTerminalSessionTitle?: string | null;
-  proactiveInstruction?: string;
   interactiveSessionTracking?: InteractiveSessionTracking;
   onRunCommand?: (targetId: string, command: string) => void;
   onShowPromptMenu?: () => void;
@@ -51,29 +38,32 @@ export const PaneContent: React.FC<PaneContentProps> = ({
   // Terminal
   terminalInstance,
   onData,
-  fontSize,
-  fontFamily,
-  terminalForeground,
-  terminalBackground,
-  terminalBackgroundInactive,
-  lineWrapEnabled,
-  askGeminiCommands,
-  enablePromptHighlight,
-  promptHighlightColor,
-  promptPatterns,
   onPasteRequest,
   // AI Chat
-  showSystemPrompt,
-  aiPersonas,
   lastTerminalSessionId,
   lastTerminalSessionTitle,
-  proactiveInstruction,
   interactiveSessionTracking,
   onRunCommand,
   onShowPromptMenu,
   onSendMessage,
   onStateChange,
 }) => {
+  const {
+    fontSize,
+    fontFamily,
+    terminalForeground,
+    terminalBackground,
+    terminalBackgroundInactive,
+    lineWrapEnabled,
+    enablePromptHighlight,
+    promptHighlightColor,
+    promptPatterns,
+    askGeminiCommands,
+    showSystemPrompt,
+    aiPersonas,
+    proactiveInstruction,
+  } = useTerminalSettings();
+
   if (session.type === 'ai') {
     return (
       <AIChatPane

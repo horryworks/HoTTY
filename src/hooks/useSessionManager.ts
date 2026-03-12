@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { stripAnsiCodes } from '../utils/ansiUtils';
 import { TERMINAL_SEQUENCES } from '../constants/terminalSequences';
 import { STORAGE_KEYS } from '../constants/storage';
+import * as electronService from '../services/electronService';
 
 export interface Session {
     id: string;
@@ -102,7 +103,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         term.onSelectionChange(() => {
             const selection = term.getSelection();
             if (selection) {
-                window.electronAPI.writeClipboard(selection);
+                electronService.writeClipboard(selection);
             }
         });
 
@@ -135,7 +136,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             if (isRemoteOrSerial && !backspaceSendsDel && data === '\x7f') {
                 processedData = '\x08';
             }
-            window.electronAPI.sendInput(sessionId, processedData);
+            electronService.sendInput(sessionId, processedData);
         });
 
         return term;
@@ -160,7 +161,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
 
     // Global session data dispatcher
     useEffect(() => {
-        const removeDataListener = window.electronAPI.onSessionData((id, data) => {
+        const removeDataListener = electronService.onSessionData((id, data) => {
             const term = terminalRegistry.current[id];
             if (term) {
                 term.write(data);
@@ -198,7 +199,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
 
     // Session status & error listeners
     useEffect(() => {
-        const removeStatusListener = window.electronAPI.onSessionStatus((sessionId, status) => {
+        const removeStatusListener = electronService.onSessionStatus((sessionId, status) => {
             console.log(`Session ${sessionId} Status:`, status);
             if (status === 'connected') {
                 onSessionConnected();
@@ -207,7 +208,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             }
         });
 
-        const removeErrorListener = window.electronAPI.onSessionError((sessionId, error) => {
+        const removeErrorListener = electronService.onSessionError((sessionId, error) => {
             console.error(`Session ${sessionId} Error:`, error);
 
             // Suppress popup for common disconnection messages
@@ -303,7 +304,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             loggingEnabled,
             loggingPath
         };
-        window.electronAPI.connectSession(sessionId, fullConfig);
+        electronService.connectSession(sessionId, fullConfig);
     };
 
     const createAISession = () => {
@@ -353,9 +354,9 @@ export function useSessionManager(options: UseSessionManagerOptions) {
 
         if (session?.type === 'ai') {
             // AI sessions don't have terminal or backend connection
-            window.electronAPI.geminiChatClear(sessionId);
+            electronService.geminiChatClear(sessionId);
         } else {
-            window.electronAPI.disconnectSession(sessionId);
+            electronService.disconnectSession(sessionId);
             const term = terminalRegistry.current[sessionId];
             if (term) {
                 term.dispose();
@@ -396,7 +397,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     };
 
     const handleTerminalData = useCallback((sessionId: string, data: string) => {
-        window.electronAPI.sendInput(sessionId, data);
+        electronService.sendInput(sessionId, data);
     }, []);
 
     const toggleWatch = useCallback((sessionId: string) => {

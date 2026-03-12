@@ -1,4 +1,5 @@
 import React from 'react';
+import * as electronService from '../../services/electronService';
 
 interface AppearanceTabProps {
     theme: 'dark' | 'light' | 'medium' | 'custom';
@@ -254,7 +255,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                             />
                             <button
                                 onClick={async () => {
-                                    const path = await window.electronAPI.selectImage();
+                                    const path = await electronService.selectImage();
                                     if (path) {
                                         const url = `media:///${path.replace(/\\/g, '/')}`;
                                         onPaneBackgroundImageChange(url);

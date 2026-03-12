@@ -1,4 +1,5 @@
 import React from 'react';
+import * as electronService from '../../services/electronService';
 
 interface SSHSettingsTabProps {
     activeTab: 'ssh' | 'telnet' | 'system';
@@ -179,7 +180,7 @@ export const SSHSettingsTab: React.FC<SSHSettingsTabProps> = ({
                         />
                         <button
                             onClick={async () => {
-                                const path = await window.electronAPI.selectFolder();
+                                const path = await electronService.selectFolder();
                                 if (path) {
                                     onLoggingPathChange(path);
                                 }

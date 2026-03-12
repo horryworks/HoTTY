@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import type { PromptPattern } from '../../App';
 import { getTransparentColor } from '../../utils/colorUtils';
+import * as electronService from '../../services/electronService';
 import '@xterm/xterm/css/xterm.css';
 import './Terminal.css';
 
@@ -106,7 +107,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                         term.scrollToBottom();
 
                         if (term.cols > 0 && term.rows > 0) {
-                            window.electronAPI.resize(sessionId, term.cols, term.rows);
+                            electronService.resize(sessionId, term.cols, term.rows);
                         }
                     }
 
@@ -147,7 +148,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                             term.refresh(0, term.rows - 1);
                             term.scrollToBottom();
                             if (term.cols > 0 && term.rows > 0) {
-                                window.electronAPI.resize(sessionId, term.cols, term.rows);
+                                electronService.resize(sessionId, term.cols, term.rows);
                             }
                         }
                     } catch (e) {
@@ -198,7 +199,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                         }
                     }
                     try {
-                        window.electronAPI.resize(sessionId, terminalInstance.cols, terminalInstance.rows);
+                        electronService.resize(sessionId, terminalInstance.cols, terminalInstance.rows);
                     } catch (e) { console.error(e); }
                 }
             }, 50);
@@ -241,7 +242,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                     }
                     if (terminalInstance.cols > 0 && terminalInstance.rows > 0) {
                         try {
-                            window.electronAPI.resize(sessionId, terminalInstance.cols, terminalInstance.rows);
+                            electronService.resize(sessionId, terminalInstance.cols, terminalInstance.rows);
                         } catch (e) { console.error(e); }
                     }
                 }
@@ -384,7 +385,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                             setTimeout(() => {
                                 const selection = term.getSelection();
                                 if (selection) {
-                                    window.electronAPI.showContextMenu(selection, askGeminiCommands);
+                                    electronService.showContextMenu(selection, askGeminiCommands);
                                 }
                             }, 50);
                         });
@@ -596,8 +597,8 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
     }, [terminalInstance, enablePromptHighlight, promptHighlightColor, promptPatterns]);
 
     useEffect(() => {
-        if (!window.electronAPI.onTerminalContextPaste) return;
-        const cleanup = window.electronAPI.onTerminalContextPaste(() => {
+        if (!electronService.onTerminalContextPaste) return;
+        const cleanup = electronService.onTerminalContextPaste(() => {
             if (terminalRef.current && terminalRef.current.contains(document.activeElement)) {
                 navigator.clipboard.readText().then(text => {
                     if (text && onPasteRequest) onPasteRequest(text);
@@ -667,7 +668,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
 
                     if (selection && isOverSelection) {
                         // Text is selected AND right-click is over it -> show context menu
-                        window.electronAPI.showContextMenu(selection, askGeminiCommands);
+                        electronService.showContextMenu(selection, askGeminiCommands);
                     } else {
                         // No text selected OR right-click is outside selection -> trigger paste
                         e.preventDefault();

@@ -3,6 +3,7 @@ import { marked } from 'marked';
 import { getTransparentColor } from '../../utils/colorUtils';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { AuthenticationPanel } from './AuthenticationPanel';
+import * as electronService from '../../services/electronService';
 import './AIChatPane.css';
 
 interface ChatMessage {
@@ -180,18 +181,18 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                 let decryptedSecret = '';
 
                 if (encId) {
-                    decryptedId = await window.electronAPI.decryptSecret(encId);
+                    decryptedId = await electronService.decryptSecret(encId);
                     setClientId(decryptedId);
                 }
                 if (encSecret) {
-                    decryptedSecret = await window.electronAPI.decryptSecret(encSecret);
+                    decryptedSecret = await electronService.decryptSecret(encSecret);
                     setClientSecret(decryptedSecret);
                 }
 
                 // Attempt auto background auth if both are present
                 if (decryptedId && decryptedSecret) {
                     setIsAuthLoading(true);
-                    const success = await window.electronAPI.geminiAuthAuto(decryptedId, decryptedSecret);
+                    const success = await electronService.geminiAuthAuto(decryptedId, decryptedSecret);
                     setIsAuthenticated(success);
                     setIsAuthLoading(false);
                 }
@@ -328,7 +329,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             lastSentTextRef.current = text;
             setIsStreaming(true);
             setStreamingContent('');
-            window.electronAPI.geminiChatSend(sessionId, text, selectedModel, sysInstr);
+            electronService.geminiChatSend(sessionId, text, selectedModel, sysInstr);
         }
     }, [isAuthenticated, localPendingMessage, isStreaming, sessionId, selectedModel, initialState?.systemInstruction, localSystemInstruction, messages, lastTargetSessionId, lastTargetSessionTitle, textareaHeight]);
 
@@ -359,11 +360,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     }, [messages, inputText, selectedModel, selectedLanguage, selectedExpertise, textareaHeight, localSystemInstruction, localPendingMessage, lastTargetSessionId, lastTargetSessionTitle, isWaitingForTerminal]);
 
     useEffect(() => {
-        window.electronAPI.geminiAuthStatus().then(setIsAuthenticated);
+        electronService.geminiAuthStatus().then(setIsAuthenticated);
     }, []);
 
     useEffect(() => {
-        const removeListener = window.electronAPI.onGeminiChatResponse((data) => {
+        const removeListener = electronService.onGeminiChatResponse((data) => {
             if (data.sessionId !== sessionId) return;
 
             if (data.type === 'chunk') {
@@ -384,7 +385,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     const authTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
-        const removeListener = window.electronAPI.onGeminiAuthResult((result) => {
+        const removeListener = electronService.onGeminiAuthResult((result) => {
             if (authTimeoutRef.current) {
                 clearTimeout(authTimeoutRef.current);
                 authTimeoutRef.current = null;
@@ -459,7 +460,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
 
     useEffect(() => {
         if (isAuthenticated) {
-            window.electronAPI.geminiListModels().then(models => {
+            electronService.geminiListModels().then(models => {
                 if (models.length > 0) {
                     setAvailableModels(models);
                 }
@@ -470,8 +471,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     const handleLogin = async () => {
         if (!clientId || !clientSecret) return;
         try {
-            const encId = await window.electronAPI.encryptSecret(clientId);
-            const encSecret = await window.electronAPI.encryptSecret(clientSecret);
+            const encId = await electronService.encryptSecret(clientId);
+            const encSecret = await electronService.encryptSecret(clientSecret);
             localStorage.setItem(STORAGE_KEYS.GEMINI_CLIENT_ID, encId);
             localStorage.setItem(STORAGE_KEYS.GEMINI_CLIENT_SECRET, encSecret);
         } catch (err) {
@@ -484,11 +485,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             setAuthError('Authentication timed out. Please try again.');
             authTimeoutRef.current = null;
         }, 30000);
-        await window.electronAPI.geminiAuthStart(clientId, clientSecret);
+        await electronService.geminiAuthStart(clientId, clientSecret);
     };
 
     const handleLogout = () => {
-        window.electronAPI.geminiAuthLogout();
+        electronService.geminiAuthLogout();
         setIsAuthenticated(false);
         setMessages([]);
     };
@@ -520,8 +521,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             isWaitingForTerminal: true
         });
 
-        window.electronAPI.sendInput(lastTargetSessionId, cleanCmd + '\r');
-        window.electronAPI.focusWindow();
+        electronService.sendInput(lastTargetSessionId, cleanCmd + '\r');
+        electronService.focusWindow();
         window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: lastTargetSessionId } }));
     };
 
@@ -581,7 +582,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         if (onSendMessage) {
             onSendMessage(text);
         } else {
-            window.electronAPI.geminiChatSend(sessionId, text, selectedModel, localSystemInstruction);
+            electronService.geminiChatSend(sessionId, text, selectedModel, localSystemInstruction);
         }
     };
 
@@ -595,11 +596,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     const handleClearChat = () => {
         setMessages([]);
         setStreamingContent('');
-        window.electronAPI.geminiChatClear(sessionId);
+        electronService.geminiChatClear(sessionId);
     };
 
     const handleCancel = () => {
-        window.electronAPI.geminiChatCancel(sessionId);
+        electronService.geminiChatCancel(sessionId);
         if (streamingContent) {
             setMessages(prev => [...prev, { role: 'model', content: streamingContent + ' [cancelled]' }]);
         }

@@ -1,4 +1,5 @@
 import React from 'react';
+import * as electronService from '../../services/electronService';
 
 interface AISettingsTabProps {
     isAiAuthenticated: boolean;
@@ -63,7 +64,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         <button
                             onClick={async () => {
                                 if (confirm('Are you sure you want to logout? You will need to re-authenticate to use Gemini AI.')) {
-                                    await window.electronAPI.geminiAuthLogout();
+                                    await electronService.geminiAuthLogout();
                                     onAuthenticatedChange(false);
                                     onLogout();
                                 }

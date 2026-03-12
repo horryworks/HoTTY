@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { stripAnsiCodes } from '../utils/ansiUtils';
+import * as electronService from '../services/electronService';
 
 // -- Types --
 
@@ -72,7 +73,7 @@ export function useInteractiveFlow(options: UseInteractiveFlowOptions): UseInter
 
   const cancelTracking = useCallback((termSessionId: string) => {
     if (trackingsRef.current[termSessionId]) {
-      window.electronAPI.logDebug(`[Interactive Flow] Tracking cancelled for session ${termSessionId}`);
+      electronService.logDebug(`[Interactive Flow] Tracking cancelled for session ${termSessionId}`);
       removeTracking(termSessionId);
     }
   }, [removeTracking]);
@@ -81,7 +82,7 @@ export function useInteractiveFlow(options: UseInteractiveFlowOptions): UseInter
     const currentTracking = trackingsRef.current[termSessionId];
     if (!currentTracking) return;
 
-    window.electronAPI.logDebug(`[Interactive Flow] Manual send triggered for session ${termSessionId}`);
+    electronService.logDebug(`[Interactive Flow] Manual send triggered for session ${termSessionId}`);
 
     const resultText = `Terminal Output (Manual Send - Command: ${currentTracking.originalCommand}):\n\`\`\`\n${currentTracking.buffer}\n\`\`\``;
     const aiSessionId = currentTracking.aiSessionId;
@@ -92,7 +93,7 @@ export function useInteractiveFlow(options: UseInteractiveFlowOptions): UseInter
 
   // -- Terminal data listener for prompt detection --
   useEffect(() => {
-    const removeListener = window.electronAPI.onSessionData((sessionId, data) => {
+    const removeListener = electronService.onSessionData((sessionId, data) => {
       const currentTracking = trackingsRef.current[sessionId];
       if (!currentTracking) return;
 
@@ -130,7 +131,7 @@ export function useInteractiveFlow(options: UseInteractiveFlowOptions): UseInter
         }
 
         if (matched) {
-          window.electronAPI.logDebug(
+          electronService.logDebug(
             `[Interactive Flow] Prompt matched (${matchedPatternName}): "${lastLine.trim()}" in session ${sessionId}. Finalizing soon...`
           );
 
@@ -139,7 +140,7 @@ export function useInteractiveFlow(options: UseInteractiveFlowOptions): UseInter
           }
 
           stabilizationTimersRef.current[sessionId] = setTimeout(() => {
-            window.electronAPI.logDebug(`[Interactive Flow] Prompt confirmed for session ${sessionId}. Finalizing output.`);
+            electronService.logDebug(`[Interactive Flow] Prompt confirmed for session ${sessionId}. Finalizing output.`);
 
             const finalTracking = trackingsRef.current[sessionId];
             delete stabilizationTimersRef.current[sessionId];
@@ -181,7 +182,7 @@ export function useInteractiveFlow(options: UseInteractiveFlowOptions): UseInter
 
         Object.keys(next).forEach(sid => {
           if (now - next[sid].startTime > MAX_TTL) {
-            window.electronAPI.logDebug(`[Interactive Flow] Cleaning up stale session ${sid} (TTL exceeded)`);
+            electronService.logDebug(`[Interactive Flow] Cleaning up stale session ${sid} (TTL exceeded)`);
             if (stabilizationTimersRef.current[sid]) {
               clearTimeout(stabilizationTimersRef.current[sid]);
               delete stabilizationTimersRef.current[sid];

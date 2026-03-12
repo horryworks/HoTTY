@@ -4,6 +4,7 @@ import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { AppearanceTab } from './AppearanceTab';
 import { SSHSettingsTab } from './SSHSettingsTab';
 import { AISettingsTab } from './AISettingsTab';
+import * as electronService from '../../services/electronService';
 import './SettingsModal.css';
 
 interface SettingsModalProps {
@@ -153,9 +154,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
     React.useEffect(() => {
         if (isOpen) {
-            window.electronAPI.getAppVersion().then(setVersion);
-            window.electronAPI.getSshAlgorithms().then(setSshAlgorithms);
-            window.electronAPI.geminiAuthStatus().then(setIsAiAuthenticated);
+            electronService.getAppVersion().then(setVersion);
+            electronService.getSshAlgorithms().then(setSshAlgorithms);
+            electronService.geminiAuthStatus().then(setIsAiAuthenticated);
         }
     }, [isOpen]);
 
@@ -189,7 +190,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             algo.name === name ? { ...algo, enabled: !algo.enabled } : algo
         );
         setSshAlgorithms(newAlgorithms);
-        await window.electronAPI.saveSshAlgorithms(newAlgorithms);
+        await electronService.saveSshAlgorithms(newAlgorithms);
     };
 
     const tabsRef = React.useRef<HTMLDivElement>(null);
@@ -407,7 +408,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     href="https://github.com/horryworks/HoTTY"
                                     onClick={(e) => {
                                         e.preventDefault();
-                                        window.electronAPI.openExternal('https://github.com/horryworks/HoTTY');
+                                        electronService.openExternal('https://github.com/horryworks/HoTTY');
                                     }}
                                     style={{ color: '#64b5f6', textDecoration: 'none' }}
                                 >
@@ -430,7 +431,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     href="https://www.gnu.org/licenses/gpl-3.0.html"
                                     onClick={(e) => {
                                         e.preventDefault();
-                                        window.electronAPI.openExternal('https://www.gnu.org/licenses/gpl-3.0.html');
+                                        electronService.openExternal('https://www.gnu.org/licenses/gpl-3.0.html');
                                     }}
                                     style={{ color: '#64b5f6', textDecoration: 'none' }}
                                 >

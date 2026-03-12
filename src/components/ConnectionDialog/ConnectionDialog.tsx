@@ -4,6 +4,7 @@ import type { HostTreeNode, HostEntry } from '../../hooks/useHostManager';
 import { HostTree } from './HostTree';
 import { useResize } from '../../hooks/useResize';
 import { STORAGE_KEYS } from '../../constants/storage';
+import * as electronService from '../../services/electronService';
 import './ConnectionDialog.css';
 
 interface ConnectionDialogProps {
@@ -426,11 +427,11 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                     const encryptedMap = localStorage.getItem(STORAGE_KEYS.USERNAME_MAP) || '';
                     let usernameMap: Record<string, string> = {};
                     if (encryptedMap) {
-                        const decrypted = await window.electronAPI.decryptSecret(encryptedMap);
+                        const decrypted = await electronService.decryptSecret(encryptedMap);
                         usernameMap = JSON.parse(decrypted);
                     }
                     usernameMap[host] = finalU;
-                    const encrypted = await window.electronAPI.encryptSecret(JSON.stringify(usernameMap));
+                    const encrypted = await electronService.encryptSecret(JSON.stringify(usernameMap));
                     localStorage.setItem(STORAGE_KEYS.USERNAME_MAP, encrypted);
                 } catch (err) {
                     console.error('Failed to persist username map:', err);

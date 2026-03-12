@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { STORAGE_KEYS } from '../constants/storage';
+import * as electronService from '../services/electronService';
 
 const STORAGE_KEY = STORAGE_KEYS.HOST_TREE;
 
@@ -33,7 +34,7 @@ function generateId(): string {
 async function encryptBatch(values: (string | undefined)[]): Promise<(string | undefined)[]> {
     if (values.length === 0) return values;
     try {
-        return await window.electronAPI.encryptSecrets(values);
+        return await electronService.encryptSecrets(values);
     } catch (err) {
         console.error('[HostManager] Failed to batch encrypt credentials:', err);
         return values; // fallback: return as-is
@@ -47,7 +48,7 @@ async function encryptBatch(values: (string | undefined)[]): Promise<(string | u
 export async function decryptBatch(values: (string | undefined)[]): Promise<(string | undefined)[]> {
     if (values.length === 0) return values;
     try {
-        return await window.electronAPI.decryptSecrets(values);
+        return await electronService.decryptSecrets(values);
     } catch (err) {
         console.error('[HostManager] Failed to batch decrypt credentials:', err);
         return values; // fallback: return as-is

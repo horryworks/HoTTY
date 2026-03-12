@@ -4,6 +4,7 @@ import { AIChatPane } from '../AIChatPane/AIChatPane';
 import type { Session } from '../../hooks/useSessionManager';
 import type { PromptPattern } from '../../App';
 import { STORAGE_KEYS } from '../../constants/storage';
+import { useTerminalSettings } from '../../contexts/TerminalSettingsContext';
 import './GridLayout.css';
 
 interface GridLayoutProps {
@@ -18,25 +19,12 @@ interface GridLayoutProps {
     onData: (sessionId: string, data: string) => void;
     focusTrigger: number;
     disableFocus?: boolean;
-    fontSize: number;
-    fontFamily: string;
-    terminalForeground: string;
-    terminalBackground: string;
-    terminalBackgroundInactive?: string | null;
     paneBackground: string | null;
     paneBackgroundMode: 'color' | 'image';
     paneBackgroundImage: string | null;
-    lineWrapEnabled: boolean;
-    showSystemPrompt: boolean;
-    askGeminiCommands: { id: string; label: string; promptTemplate: string }[];
-    aiPersonas: { id: string; label: string; systemPrompt: string }[];
-    enablePromptHighlight?: boolean;
-    promptHighlightColor?: string;
-    promptPatterns?: PromptPattern[];
     onPasteRequest?: (text: string) => void;
     onRunCommand?: (targetId: string, command: string, aiSessionId: string) => void;
     onSendMessage?: (aiSessionId: string, text: string) => void;
-    proactiveInstruction?: string;
     interactiveSessions?: { [sessionId: string]: any };
     onShowPromptMenu?: (aiSessionId: string) => void;
 }
@@ -54,28 +42,31 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     focusTrigger,
     terminalRegistry,
     disableFocus,
-    fontSize,
-    fontFamily,
-    terminalForeground,
-    terminalBackground,
-    terminalBackgroundInactive,
     paneBackground,
     paneBackgroundMode,
     paneBackgroundImage,
-    lineWrapEnabled,
-    showSystemPrompt,
-    askGeminiCommands,
-    aiPersonas,
-    enablePromptHighlight,
-    promptHighlightColor,
-    promptPatterns,
     onPasteRequest,
     onRunCommand,
     onSendMessage,
-    proactiveInstruction,
     interactiveSessions,
     onShowPromptMenu
 }) => {
+    const {
+        fontSize,
+        fontFamily,
+        terminalForeground,
+        terminalBackground,
+        terminalBackgroundInactive,
+        lineWrapEnabled,
+        enablePromptHighlight,
+        promptHighlightColor,
+        promptPatterns,
+        askGeminiCommands,
+        showSystemPrompt,
+        aiPersonas,
+        proactiveInstruction,
+    } = useTerminalSettings();
+
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
     const [colSizes, setColSizes] = useState<number[]>([]);
