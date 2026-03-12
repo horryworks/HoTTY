@@ -1,5 +1,13 @@
 # Release Notes - HoTTY
 
+## [v0.1.15-beta8] - 2026-03-13
+### Fixed
+- **Sidebar/Bar Toggle**: Fixed a bug where clicking the toggle icon for Left Sidebar, Right Sidebar, Top Bar, or Bottom Bar a second time did not hide the panel. The root cause was passing a function updater (`prev => !prev`) to Zustand setters that only accept a plain boolean value.
+- **Tab-Pane Mapping Arrows**: Fixed stale arrows remaining in the "Show Tab-Pane Mapping" overlay after a bar was hidden. The `computeLines` function now depends on all four bar visibility flags (`showLeftSidebar`, `showRightSidebar`, `showTopBar`, `showBottomBar`) and re-runs whenever any of them change.
+
+### Changed
+- **Hidden AI Tab Indicator**: When a Gemini AI pane becomes hidden due to a layout reduction (fewer panes or bars), the corresponding tab now displays a reddish gradient (dark red → crimson) instead of the normal rainbow gradient, making it immediately clear that the AI session is not currently visible.
+
 ## [v0.1.15-beta7] - 2026-03-11
 ### Changed
 - **Major Refactoring & Architectural Simplification**:
