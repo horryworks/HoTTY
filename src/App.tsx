@@ -27,26 +27,9 @@ import * as electronService from './services/electronService'
 import '@xterm/xterm/css/xterm.css'
 import './App.css'
 
-// -- Exported Types (used by other modules) --
+// -- Exported Types (re-exported from types/appTypes for backward compatibility) --
 
-export interface AskGeminiCommand {
-  id: string;
-  label: string;
-  promptTemplate: string;
-}
-
-export interface PromptPattern {
-  id: string;
-  name: string;
-  pattern: string;
-  enabled: boolean;
-}
-
-export interface PersonaDefinition {
-  id: string;
-  label: string;
-  systemPrompt: string;
-}
+export type { AskGeminiCommand, PromptPattern, PersonaDefinition } from './types/appTypes';
 
 function App() {
 

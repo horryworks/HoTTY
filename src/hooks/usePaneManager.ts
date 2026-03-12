@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { STORAGE_KEYS } from '../constants/storage';
+import { usePaneStore } from '../stores/paneStore';
 import type { LayoutMode } from '../components/LayoutSelector/LayoutSelector';
 
 /** Calculate grid dimensions */
@@ -23,13 +23,8 @@ export interface PaneManagerOptions {
 }
 
 export function usePaneManager(options?: PaneManagerOptions) {
-    const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
-        return (localStorage.getItem(STORAGE_KEYS.UI_LAYOUT_MODE) as LayoutMode) || '1x1';
-    });
+    const { layoutMode, setLayoutMode } = usePaneStore();
 
-    useEffect(() => {
-        localStorage.setItem(STORAGE_KEYS.UI_LAYOUT_MODE, layoutMode);
-    }, [layoutMode]);
     const [activePaneId, setActivePaneId] = useState<string>('0');
     const [paneAllocations, setPaneAllocations] = useState<{ [paneId: string]: string | null }>({ '0': null });
 
