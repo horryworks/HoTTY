@@ -11,6 +11,7 @@ import { AskGeminiModal } from './components/AskGeminiModal/AskGeminiModal'
 import HelpModal from './components/HelpModal/HelpModal'
 import { PaneContent } from './components/PaneContent/PaneContent'
 import { PaneLines } from './components/PaneLines/PaneLines'
+import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary'
 
 import { useSessionManager } from './hooks/useSessionManager'
 import type { Session } from './hooks/useSessionManager'
@@ -586,7 +587,7 @@ function App() {
                 onDrop={(e) => { e.preventDefault(); const sid = e.dataTransfer.getData('text/plain'); if (sid) pane.handleDropSession(sid, 'sidebar-left'); }}
                 onClick={() => pane.setActivePaneId('sidebar-left')}
               >
-                {renderPaneContent('sidebar-left', 'Left Sidebar')}
+                <ErrorBoundary fallbackLabel="Left Sidebar">{renderPaneContent('sidebar-left', 'Left Sidebar')}</ErrorBoundary>
               </div>
             )}
 
@@ -610,7 +611,7 @@ function App() {
                   onDrop={(e) => { e.preventDefault(); const sid = e.dataTransfer.getData('text/plain'); if (sid) pane.handleDropSession(sid, 'top-bar'); }}
                   onClick={() => pane.setActivePaneId('top-bar')}
                 >
-                  {renderPaneContent('top-bar', 'Top Bar')}
+                  <ErrorBoundary fallbackLabel="Top Bar">{renderPaneContent('top-bar', 'Top Bar')}</ErrorBoundary>
                 </div>
               )}
 
@@ -623,6 +624,7 @@ function App() {
 
               {/* Grid Layout */}
               <div style={{ flex: 1, minHeight: 0, width: '100%' }}>
+                <ErrorBoundary fallbackLabel="Grid Layout">
                 <GridLayout
                   rows={pane.currentDims.rows}
                   cols={pane.currentDims.cols}
@@ -650,6 +652,7 @@ function App() {
                   onSendMessage={(aiSessionId, text) => geminiChat.sendMessage(aiSessionId, text)}
                   onShowPromptMenu={(aiSessionId) => geminiChat.showPromptMenu(aiSessionId)}
                 />
+                </ErrorBoundary>
               </div>
 
               {/* Bottom Bar Resizer */}
@@ -670,7 +673,7 @@ function App() {
                   onDrop={(e) => { e.preventDefault(); const sid = e.dataTransfer.getData('text/plain'); if (sid) pane.handleDropSession(sid, 'bottom-bar'); }}
                   onClick={() => pane.setActivePaneId('bottom-bar')}
                 >
-                  {renderPaneContent('bottom-bar', 'Bottom Bar')}
+                  <ErrorBoundary fallbackLabel="Bottom Bar">{renderPaneContent('bottom-bar', 'Bottom Bar')}</ErrorBoundary>
                 </div>
               )}
 
@@ -693,7 +696,7 @@ function App() {
                 onDrop={(e) => { e.preventDefault(); const sid = e.dataTransfer.getData('text/plain'); if (sid) pane.handleDropSession(sid, 'sidebar'); }}
                 onClick={() => pane.setActivePaneId('sidebar')}
               >
-                {renderPaneContent('sidebar', 'Sidebar')}
+                <ErrorBoundary fallbackLabel="Sidebar">{renderPaneContent('sidebar', 'Sidebar')}</ErrorBoundary>
               </div>
             )}
           </div>
