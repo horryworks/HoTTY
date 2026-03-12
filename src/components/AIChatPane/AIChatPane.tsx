@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { marked } from 'marked';
+import { getTransparentColor } from '../../utils/colorUtils';
+import { STORAGE_KEYS } from '../../constants/storage';
 import './AIChatPane.css';
 
 interface ChatMessage {
@@ -170,8 +172,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     useEffect(() => {
         const load = async () => {
             try {
-                const encId = localStorage.getItem('hotty_gemini_client_id') || '';
-                const encSecret = localStorage.getItem('hotty_gemini_client_secret') || '';
+                const encId = localStorage.getItem(STORAGE_KEYS.GEMINI_CLIENT_ID) || '';
+                const encSecret = localStorage.getItem(STORAGE_KEYS.GEMINI_CLIENT_SECRET) || '';
 
                 let decryptedId = '';
                 let decryptedSecret = '';
@@ -469,8 +471,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         try {
             const encId = await window.electronAPI.encryptSecret(clientId);
             const encSecret = await window.electronAPI.encryptSecret(clientSecret);
-            localStorage.setItem('hotty_gemini_client_id', encId);
-            localStorage.setItem('hotty_gemini_client_secret', encSecret);
+            localStorage.setItem(STORAGE_KEYS.GEMINI_CLIENT_ID, encId);
+            localStorage.setItem(STORAGE_KEYS.GEMINI_CLIENT_SECRET, encSecret);
         } catch (err) {
             console.error('Failed to encrypt Gemini credentials:', err);
         }
@@ -613,16 +615,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     };
 
 
-    const getTransparentColor = (hex: string) => {
-        if (hex.startsWith('#') && hex.length === 7) {
-            const r = parseInt(hex.slice(1, 3), 16);
-            const g = parseInt(hex.slice(3, 5), 16);
-            const b = parseInt(hex.slice(5, 7), 16);
-            return `rgba(${r}, ${g}, ${b}, 0.85)`;
-        }
-        return hex;
-    };
-
     const effectiveBg = getTransparentColor(terminalBackground || '#1e1e1e');
 
     return (
@@ -675,7 +667,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                                     onChange={(e) => {
                                         const lang = e.target.value;
                                         setSelectedLanguage(lang);
-                                        localStorage.setItem('hotty_gemini_language', lang);
+                                        localStorage.setItem(STORAGE_KEYS.GEMINI_LANGUAGE, lang);
                                     }}
                                     disabled={isStreaming}
                                 >
@@ -692,7 +684,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                                     onChange={(e) => {
                                         const model = e.target.value;
                                         setSelectedModel(model);
-                                        localStorage.setItem('hotty_gemini_model', model);
+                                        localStorage.setItem(STORAGE_KEYS.GEMINI_MODEL, model);
                                     }}
                                     disabled={isStreaming}
                                 >

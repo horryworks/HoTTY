@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Session } from './useSessionManager';
 import type { AskGeminiCommand, PersonaDefinition } from '../App';
+import { STORAGE_KEYS } from '../constants/storage';
 
 // -- Types --
 
@@ -210,7 +211,7 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
       toggleWatchRef.current(activeTermId);
     }
 
-    const lang = localStorage.getItem('hotty_gemini_language') || 'English';
+    const lang = localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE) || 'English';
     const expertiseLabel = existingAiSession?.aiChatState?.selectedExpertise;
     const defaultPersona = resolvePersonaPrompt(expertiseLabel);
 
@@ -265,7 +266,7 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
     const aiSession = currentSessions.find(s => s.type === 'ai');
     if (!aiSession) return;
 
-    const lang = localStorage.getItem('hotty_gemini_language') || 'English';
+    const lang = localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE) || 'English';
     const expertiseLabel = aiSession.aiChatState?.selectedExpertise;
     const basePrompt = resolvePersonaPrompt(expertiseLabel);
     const systemInstruction = `${basePrompt} Answer in ${lang}.`;

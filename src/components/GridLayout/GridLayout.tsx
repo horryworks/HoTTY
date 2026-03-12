@@ -3,6 +3,7 @@ import { TerminalComponent } from '../Terminal/Terminal';
 import { AIChatPane } from '../AIChatPane/AIChatPane';
 import type { Session } from '../../hooks/useSessionManager';
 import type { PromptPattern } from '../../App';
+import { STORAGE_KEYS } from '../../constants/storage';
 import './GridLayout.css';
 
 interface GridLayoutProps {
@@ -84,8 +85,8 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     // Initial setup & logic reset on dimension change
     useEffect(() => {
         // Try to load from localStorage first
-        const savedCols = localStorage.getItem(`hterm_ui_gridColSizes_${cols}`);
-        const savedRows = localStorage.getItem(`hterm_ui_gridRowSizes_${rows}`);
+        const savedCols = localStorage.getItem(STORAGE_KEYS.UI_GRID_COL_SIZES(cols));
+        const savedRows = localStorage.getItem(STORAGE_KEYS.UI_GRID_ROW_SIZES(rows));
 
         if (savedCols) {
             try {
@@ -111,13 +112,13 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     // Persist sizes when changed
     useEffect(() => {
         if (colSizes.length === cols && colSizes.length > 0) {
-            localStorage.setItem(`hterm_ui_gridColSizes_${cols}`, JSON.stringify(colSizes));
+            localStorage.setItem(STORAGE_KEYS.UI_GRID_COL_SIZES(cols), JSON.stringify(colSizes));
         }
     }, [colSizes, cols]);
 
     useEffect(() => {
         if (rowSizes.length === rows && rowSizes.length > 0) {
-            localStorage.setItem(`hterm_ui_gridRowSizes_${rows}`, JSON.stringify(rowSizes));
+            localStorage.setItem(STORAGE_KEYS.UI_GRID_ROW_SIZES(rows), JSON.stringify(rowSizes));
         }
     }, [rowSizes, rows]);
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { stripAnsiCodes } from '../utils/ansiUtils';
 
 // -- Types --
 
@@ -95,11 +96,7 @@ export function useInteractiveFlow(options: UseInteractiveFlowOptions): UseInter
       const currentTracking = trackingsRef.current[sessionId];
       if (!currentTracking) return;
 
-      // Strip ANSI/OSC sequences
-      const cleanData = data
-        .replace(/\x1b][^\x07\x1b]*(\x07|\x1b\\)/g, '')
-        .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')
-        .replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const cleanData = stripAnsiCodes(data);
 
       if (!cleanData.replace(/\n/g, '')) return;
 

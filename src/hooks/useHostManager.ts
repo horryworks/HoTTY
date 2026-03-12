@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
+import { STORAGE_KEYS } from '../constants/storage';
 
-const STORAGE_KEY = 'hterm_host_tree';
+const STORAGE_KEY = STORAGE_KEYS.HOST_TREE;
 
 export interface HostEntry {
     protocol: 'ssh' | 'telnet';

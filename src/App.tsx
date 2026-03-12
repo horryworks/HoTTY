@@ -18,6 +18,7 @@ import { usePaneManager } from './hooks/usePaneManager'
 import { useSettings } from './hooks/useSettings'
 import { useInteractiveFlow } from './hooks/useInteractiveFlow'
 import { useGeminiChat } from './hooks/useGeminiChat'
+import { STORAGE_KEYS } from './constants/storage'
 
 import '@xterm/xterm/css/xterm.css'
 import './App.css'
@@ -95,16 +96,16 @@ function App() {
   const lastTerminalSessionIdRef = useRef<string | null>(null);
 
   // Layout visibility
-  const [showLeftSidebar, setShowLeftSidebar] = useState(() => localStorage.getItem('hterm_ui_showLeftSidebar') === 'true');
-  const [showRightSidebar, setShowRightSidebar] = useState(() => localStorage.getItem('hterm_ui_showRightSidebar') === 'true');
-  const [showTopBar, setShowTopBar] = useState(() => localStorage.getItem('hterm_ui_showTopBar') === 'true');
-  const [showBottomBar, setShowBottomBar] = useState(() => localStorage.getItem('hterm_ui_showBottomBar') === 'true');
+  const [showLeftSidebar, setShowLeftSidebar] = useState(() => localStorage.getItem(STORAGE_KEYS.UI_SHOW_LEFT_SIDEBAR) === 'true');
+  const [showRightSidebar, setShowRightSidebar] = useState(() => localStorage.getItem(STORAGE_KEYS.UI_SHOW_RIGHT_SIDEBAR) === 'true');
+  const [showTopBar, setShowTopBar] = useState(() => localStorage.getItem(STORAGE_KEYS.UI_SHOW_TOP_BAR) === 'true');
+  const [showBottomBar, setShowBottomBar] = useState(() => localStorage.getItem(STORAGE_KEYS.UI_SHOW_BOTTOM_BAR) === 'true');
 
   // Layout sizes
-  const [leftSidebarPercent, setLeftSidebarPercent] = useState(() => parseFloat(localStorage.getItem('hterm_ui_leftSidebarPercent') || '20'));
-  const [rightSidebarPercent, setRightSidebarPercent] = useState(() => parseFloat(localStorage.getItem('hterm_ui_rightSidebarPercent') || '20'));
-  const [topBarPercent, setTopBarPercent] = useState(() => parseFloat(localStorage.getItem('hterm_ui_topBarPercent') || '20'));
-  const [bottomBarPercent, setBottomBarPercent] = useState(() => parseFloat(localStorage.getItem('hterm_ui_bottomBarPercent') || '20'));
+  const [leftSidebarPercent, setLeftSidebarPercent] = useState(() => parseFloat(localStorage.getItem(STORAGE_KEYS.UI_LEFT_SIDEBAR_PCT) || '20'));
+  const [rightSidebarPercent, setRightSidebarPercent] = useState(() => parseFloat(localStorage.getItem(STORAGE_KEYS.UI_RIGHT_SIDEBAR_PCT) || '20'));
+  const [topBarPercent, setTopBarPercent] = useState(() => parseFloat(localStorage.getItem(STORAGE_KEYS.UI_TOP_BAR_PCT) || '20'));
+  const [bottomBarPercent, setBottomBarPercent] = useState(() => parseFloat(localStorage.getItem(STORAGE_KEYS.UI_BOTTOM_BAR_PCT) || '20'));
 
   const [resizingSide, setResizingSide] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
   const [showPaneLines, setShowPaneLines] = useState(false);
@@ -121,14 +122,14 @@ function App() {
   const passwordCache = useRef<Record<string, string>>({});
 
   // Persist UI State on change
-  useEffect(() => localStorage.setItem('hterm_ui_showLeftSidebar', String(showLeftSidebar)), [showLeftSidebar]);
-  useEffect(() => localStorage.setItem('hterm_ui_showRightSidebar', String(showRightSidebar)), [showRightSidebar]);
-  useEffect(() => localStorage.setItem('hterm_ui_showTopBar', String(showTopBar)), [showTopBar]);
-  useEffect(() => localStorage.setItem('hterm_ui_showBottomBar', String(showBottomBar)), [showBottomBar]);
-  useEffect(() => localStorage.setItem('hterm_ui_leftSidebarPercent', String(leftSidebarPercent)), [leftSidebarPercent]);
-  useEffect(() => localStorage.setItem('hterm_ui_rightSidebarPercent', String(rightSidebarPercent)), [rightSidebarPercent]);
-  useEffect(() => localStorage.setItem('hterm_ui_topBarPercent', String(topBarPercent)), [topBarPercent]);
-  useEffect(() => localStorage.setItem('hterm_ui_bottomBarPercent', String(bottomBarPercent)), [bottomBarPercent]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_SHOW_LEFT_SIDEBAR, String(showLeftSidebar)), [showLeftSidebar]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_SHOW_RIGHT_SIDEBAR, String(showRightSidebar)), [showRightSidebar]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_SHOW_TOP_BAR, String(showTopBar)), [showTopBar]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_SHOW_BOTTOM_BAR, String(showBottomBar)), [showBottomBar]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_LEFT_SIDEBAR_PCT, String(leftSidebarPercent)), [leftSidebarPercent]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_RIGHT_SIDEBAR_PCT, String(rightSidebarPercent)), [rightSidebarPercent]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_TOP_BAR_PCT, String(topBarPercent)), [topBarPercent]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.UI_BOTTOM_BAR_PCT, String(bottomBarPercent)), [bottomBarPercent]);
 
   // ═══════════════════════════════════════════════
   // 3. Sidebar Resizing
@@ -205,7 +206,7 @@ function App() {
   // Apply theme
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', settings.theme);
-    localStorage.setItem('hterm_theme', settings.theme);
+    localStorage.setItem(STORAGE_KEYS.THEME, settings.theme);
     if (themesData) {
       applyTheme(settings.theme);
     }

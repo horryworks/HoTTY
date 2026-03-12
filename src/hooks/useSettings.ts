@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { PromptPattern, PersonaDefinition, AskGeminiCommand } from '../App';
+import { STORAGE_KEYS } from '../constants/storage';
 
 // -- Types --
 
@@ -139,47 +140,47 @@ function lsJSON<T>(key: string, defaultValue: T): T {
 export function useSettings() {
   // Initialize all settings from localStorage
   const [settings, setSettings] = useState<SettingsState>(() => ({
-    globalEncoding: lsGet('hterm_global_encoding', 'utf8'),
-    fontSize: lsInt('hterm_font_size', 14),
-    fontFamily: lsGet('hterm_font_family', 'Consolas, "Courier New", monospace'),
-    theme: (lsGet('hterm_theme', 'dark') as SettingsState['theme']),
-    terminalForeground: lsGet('hterm_terminal_foreground', '#ffffff'),
-    terminalBackground: lsGet('hterm_terminal_background', '#1e1e1e'),
-    terminalBackgroundInactive: lsGet('hterm_terminal_background_inactive', '#121212'),
-    paneBackground: lsGet('hterm_pane_background', '#000200'),
+    globalEncoding: lsGet(STORAGE_KEYS.GLOBAL_ENCODING, 'utf8'),
+    fontSize: lsInt(STORAGE_KEYS.FONT_SIZE, 14),
+    fontFamily: lsGet(STORAGE_KEYS.FONT_FAMILY, 'Consolas, "Courier New", monospace'),
+    theme: (lsGet(STORAGE_KEYS.THEME, 'dark') as SettingsState['theme']),
+    terminalForeground: lsGet(STORAGE_KEYS.TERMINAL_FOREGROUND, '#ffffff'),
+    terminalBackground: lsGet(STORAGE_KEYS.TERMINAL_BACKGROUND, '#1e1e1e'),
+    terminalBackgroundInactive: lsGet(STORAGE_KEYS.TERMINAL_BG_INACTIVE, '#121212'),
+    paneBackground: lsGet(STORAGE_KEYS.PANE_BACKGROUND, '#000200'),
     paneBackgroundMode: (() => {
-      const saved = localStorage.getItem('hterm_pane_background_mode');
+      const saved = localStorage.getItem(STORAGE_KEYS.PANE_BACKGROUND_MODE);
       if (saved === 'default') return 'color' as const;
       return (saved as 'color' | 'image') || 'color';
     })(),
-    paneBackgroundImage: lsGet('hterm_pane_background_image', 'HoTTY_background.svg'),
+    paneBackgroundImage: lsGet(STORAGE_KEYS.PANE_BACKGROUND_IMAGE, 'HoTTY_background.svg'),
     customColors: {
-      foreground: lsGet('hterm_custom_terminal_foreground', '#ffffff'),
-      background: lsGet('hterm_custom_terminal_background', '#1e1e1e'),
-      backgroundInactive: lsGet('hterm_custom_terminal_background_inactive', '#121212'),
-      paneBackground: lsGet('hterm_custom_pane_background', '#000200'),
+      foreground: lsGet(STORAGE_KEYS.CUSTOM_FOREGROUND, '#ffffff'),
+      background: lsGet(STORAGE_KEYS.CUSTOM_BACKGROUND, '#1e1e1e'),
+      backgroundInactive: lsGet(STORAGE_KEYS.CUSTOM_BG_INACTIVE, '#121212'),
+      paneBackground: lsGet(STORAGE_KEYS.CUSTOM_PANE_BG, '#000200'),
     },
-    sshKeepAliveEnabled: lsBool('hterm_ssh_keepalive_enabled', true),
-    sshKeepAliveInterval: lsInt('hterm_ssh_keepalive_interval', 10),
-    telnetKeepAliveEnabled: lsBool('hterm_telnet_keepalive_enabled', true),
-    telnetKeepAliveInterval: lsInt('hterm_telnet_keepalive_interval', 30),
-    loggingEnabled: lsBool('hterm_logging_enabled', false),
-    loggingPath: lsGet('hterm_logging_path', ''),
-    lineWrapEnabled: lsBool('hterm_line_wrap_enabled', true),
-    scrollback: lsInt('hterm_scrollback', 10000),
-    watchBufferLimit: lsInt('hotty_watch_buffer_limit', 500000),
-    backspaceSendsDel: lsBool('hterm_backspace_sends_del', false),
-    rightClickPaste: lsBool('hterm_right_click_paste', true),
-    showSystemPrompt: lsBool('hotty_show_system_prompt', false),
-    enablePromptHighlight: lsBool('hotty_enable_prompt_highlight', true),
-    promptHighlightColor: lsGet('hotty_prompt_highlight_color', 'rgba(255, 255, 255, 0.15)'),
-    promptPatterns: lsJSON('hotty_prompt_patterns', DEFAULT_PROMPT_PATTERNS),
-    aiPersonas: lsJSON('hotty_ai_personas', DEFAULT_PERSONAS),
-    askGeminiCommands: lsJSON('hotty_ask_gemini_commands', DEFAULT_GEMINI_COMMANDS),
-    sidebarPosition: (lsGet('hterm_sidebar_position', 'left') as 'left' | 'right'),
-    proactiveInstruction: lsGet('hotty_gemini_proactive_instruction',
+    sshKeepAliveEnabled: lsBool(STORAGE_KEYS.SSH_KEEPALIVE_ENABLED, true),
+    sshKeepAliveInterval: lsInt(STORAGE_KEYS.SSH_KEEPALIVE_INTERVAL, 10),
+    telnetKeepAliveEnabled: lsBool(STORAGE_KEYS.TELNET_KEEPALIVE_ENABLED, true),
+    telnetKeepAliveInterval: lsInt(STORAGE_KEYS.TELNET_KEEPALIVE_INTERVAL, 30),
+    loggingEnabled: lsBool(STORAGE_KEYS.LOGGING_ENABLED, false),
+    loggingPath: lsGet(STORAGE_KEYS.LOGGING_PATH, ''),
+    lineWrapEnabled: lsBool(STORAGE_KEYS.LINE_WRAP_ENABLED, true),
+    scrollback: lsInt(STORAGE_KEYS.SCROLLBACK, 10000),
+    watchBufferLimit: lsInt(STORAGE_KEYS.WATCH_BUFFER_LIMIT, 500000),
+    backspaceSendsDel: lsBool(STORAGE_KEYS.BACKSPACE_SENDS_DEL, false),
+    rightClickPaste: lsBool(STORAGE_KEYS.RIGHT_CLICK_PASTE, true),
+    showSystemPrompt: lsBool(STORAGE_KEYS.SHOW_SYSTEM_PROMPT, false),
+    enablePromptHighlight: lsBool(STORAGE_KEYS.ENABLE_PROMPT_HIGHLIGHT, true),
+    promptHighlightColor: lsGet(STORAGE_KEYS.PROMPT_HIGHLIGHT_COLOR, 'rgba(255, 255, 255, 0.15)'),
+    promptPatterns: lsJSON(STORAGE_KEYS.PROMPT_PATTERNS, DEFAULT_PROMPT_PATTERNS),
+    aiPersonas: lsJSON(STORAGE_KEYS.AI_PERSONAS, DEFAULT_PERSONAS),
+    askGeminiCommands: lsJSON(STORAGE_KEYS.ASK_GEMINI_COMMANDS, DEFAULT_GEMINI_COMMANDS),
+    sidebarPosition: (lsGet(STORAGE_KEYS.SIDEBAR_POSITION, 'left') as 'left' | 'right'),
+    proactiveInstruction: lsGet(STORAGE_KEYS.PROACTIVE_INSTRUCTION,
       'If you need more information to fulfill the user\'s request, proactively suggest terminal commands using code blocks with the "execute" language tag, like this: ```execute\\n[command]\\n```. Do not just wait for user input if the information can be gathered via the terminal.'),
-    interactiveStabilizationTimeout: lsInt('hotty_interactive_stabilization_timeout', 10000),
+    interactiveStabilizationTimeout: lsInt(STORAGE_KEYS.INTERACTIVE_STABILIZATION_TIMEOUT, 10000),
   }));
 
   // -- Generic updater with localStorage persistence --
@@ -197,95 +198,95 @@ export function useSettings() {
   // -- Specific updaters (preserving the same API as before) --
 
   const updateGlobalEncoding = useCallback((v: string) => {
-    update('globalEncoding', v, 'hterm_global_encoding');
+    update('globalEncoding', v, STORAGE_KEYS.GLOBAL_ENCODING);
   }, [update]);
 
   const updateFontSize = useCallback((v: number) => {
-    update('fontSize', v, 'hterm_font_size');
+    update('fontSize', v, STORAGE_KEYS.FONT_SIZE);
   }, [update]);
 
   const updateFontFamily = useCallback((v: string) => {
-    update('fontFamily', v, 'hterm_font_family');
+    update('fontFamily', v, STORAGE_KEYS.FONT_FAMILY);
   }, [update]);
 
   const updateSshKeepAliveEnabled = useCallback((v: boolean) => {
-    update('sshKeepAliveEnabled', v, 'hterm_ssh_keepalive_enabled');
+    update('sshKeepAliveEnabled', v, STORAGE_KEYS.SSH_KEEPALIVE_ENABLED);
   }, [update]);
 
   const updateSshKeepAliveInterval = useCallback((v: number) => {
-    update('sshKeepAliveInterval', v, 'hterm_ssh_keepalive_interval');
+    update('sshKeepAliveInterval', v, STORAGE_KEYS.SSH_KEEPALIVE_INTERVAL);
   }, [update]);
 
   const updateTelnetKeepAliveEnabled = useCallback((v: boolean) => {
-    update('telnetKeepAliveEnabled', v, 'hterm_telnet_keepalive_enabled');
+    update('telnetKeepAliveEnabled', v, STORAGE_KEYS.TELNET_KEEPALIVE_ENABLED);
   }, [update]);
 
   const updateTelnetKeepAliveInterval = useCallback((v: number) => {
-    update('telnetKeepAliveInterval', v, 'hterm_telnet_keepalive_interval');
+    update('telnetKeepAliveInterval', v, STORAGE_KEYS.TELNET_KEEPALIVE_INTERVAL);
   }, [update]);
 
   const updateLoggingEnabled = useCallback((v: boolean) => {
-    update('loggingEnabled', v, 'hterm_logging_enabled');
+    update('loggingEnabled', v, STORAGE_KEYS.LOGGING_ENABLED);
     window.electronAPI.updateLogging(v, settings.loggingPath);
   }, [update, settings.loggingPath]);
 
   const updateLoggingPath = useCallback((v: string) => {
-    update('loggingPath', v, 'hterm_logging_path');
+    update('loggingPath', v, STORAGE_KEYS.LOGGING_PATH);
     if (settings.loggingEnabled && v) {
       window.electronAPI.updateLogging(settings.loggingEnabled, v);
     }
   }, [update, settings.loggingEnabled]);
 
   const updateScrollback = useCallback((v: number) => {
-    update('scrollback', v, 'hterm_scrollback');
+    update('scrollback', v, STORAGE_KEYS.SCROLLBACK);
   }, [update]);
 
   const updateWatchBufferLimit = useCallback((v: number) => {
-    update('watchBufferLimit', v, 'hotty_watch_buffer_limit');
+    update('watchBufferLimit', v, STORAGE_KEYS.WATCH_BUFFER_LIMIT);
   }, [update]);
 
   const updateBackspaceSendsDel = useCallback((v: boolean) => {
-    update('backspaceSendsDel', v, 'hterm_backspace_sends_del');
+    update('backspaceSendsDel', v, STORAGE_KEYS.BACKSPACE_SENDS_DEL);
   }, [update]);
 
   const updateRightClickPaste = useCallback((v: boolean) => {
-    update('rightClickPaste', v, 'hterm_right_click_paste');
+    update('rightClickPaste', v, STORAGE_KEYS.RIGHT_CLICK_PASTE);
   }, [update]);
 
   const updateShowSystemPrompt = useCallback((v: boolean) => {
-    update('showSystemPrompt', v, 'hotty_show_system_prompt');
+    update('showSystemPrompt', v, STORAGE_KEYS.SHOW_SYSTEM_PROMPT);
   }, [update]);
 
   const updateEnablePromptHighlight = useCallback((v: boolean) => {
-    update('enablePromptHighlight', v, 'hotty_enable_prompt_highlight');
+    update('enablePromptHighlight', v, STORAGE_KEYS.ENABLE_PROMPT_HIGHLIGHT);
   }, [update]);
 
   const updatePromptHighlightColor = useCallback((v: string) => {
-    update('promptHighlightColor', v, 'hotty_prompt_highlight_color');
+    update('promptHighlightColor', v, STORAGE_KEYS.PROMPT_HIGHLIGHT_COLOR);
   }, [update]);
 
   const updatePromptPatterns = useCallback((v: PromptPattern[]) => {
-    update('promptPatterns', v, 'hotty_prompt_patterns');
+    update('promptPatterns', v, STORAGE_KEYS.PROMPT_PATTERNS);
   }, [update]);
 
   const updateAiPersonas = useCallback((v: PersonaDefinition[]) => {
-    update('aiPersonas', v, 'hotty_ai_personas');
+    update('aiPersonas', v, STORAGE_KEYS.AI_PERSONAS);
   }, [update]);
 
   const updateAskGeminiCommands = useCallback((v: AskGeminiCommand[]) => {
-    update('askGeminiCommands', v, 'hotty_ask_gemini_commands');
+    update('askGeminiCommands', v, STORAGE_KEYS.ASK_GEMINI_COMMANDS);
   }, [update]);
 
   const updateSidebarPosition = useCallback((v: 'left' | 'right') => {
-    update('sidebarPosition', v, 'hterm_sidebar_position');
+    update('sidebarPosition', v, STORAGE_KEYS.SIDEBAR_POSITION);
   }, [update]);
 
   const updateProactiveInstruction = useCallback((v: string) => {
-    update('proactiveInstruction', v, 'hotty_gemini_proactive_instruction');
+    update('proactiveInstruction', v, STORAGE_KEYS.PROACTIVE_INSTRUCTION);
   }, [update]);
 
   const updateInteractiveStabilizationTimeout = useCallback((v: number) => {
-    update('interactiveStabilizationTimeout', v, 'hotty_interactive_stabilization_timeout');
+    update('interactiveStabilizationTimeout', v, STORAGE_KEYS.INTERACTIVE_STABILIZATION_TIMEOUT);
   }, [update]);
 
   // -- Terminal color updaters (with custom color cache) --
@@ -293,9 +294,9 @@ export function useSettings() {
   const updateTerminalForeground = useCallback((color: string) => {
     setSettings(prev => {
       const next = { ...prev, terminalForeground: color };
-      localStorage.setItem('hterm_terminal_foreground', color);
+      localStorage.setItem(STORAGE_KEYS.TERMINAL_FOREGROUND, color);
       if (prev.theme === 'custom') {
-        localStorage.setItem('hterm_custom_terminal_foreground', color);
+        localStorage.setItem(STORAGE_KEYS.CUSTOM_FOREGROUND, color);
         next.customColors = { ...prev.customColors, foreground: color };
       }
       return next;
@@ -305,9 +306,9 @@ export function useSettings() {
   const updateTerminalBackground = useCallback((color: string) => {
     setSettings(prev => {
       const next = { ...prev, terminalBackground: color };
-      localStorage.setItem('hterm_terminal_background', color);
+      localStorage.setItem(STORAGE_KEYS.TERMINAL_BACKGROUND, color);
       if (prev.theme === 'custom') {
-        localStorage.setItem('hterm_custom_terminal_background', color);
+        localStorage.setItem(STORAGE_KEYS.CUSTOM_BACKGROUND, color);
         next.customColors = { ...prev.customColors, background: color };
       }
       return next;
@@ -317,9 +318,9 @@ export function useSettings() {
   const updateTerminalBackgroundInactive = useCallback((color: string) => {
     setSettings(prev => {
       const next = { ...prev, terminalBackgroundInactive: color };
-      localStorage.setItem('hterm_terminal_background_inactive', color);
+      localStorage.setItem(STORAGE_KEYS.TERMINAL_BG_INACTIVE, color);
       if (prev.theme === 'custom') {
-        localStorage.setItem('hterm_custom_terminal_background_inactive', color);
+        localStorage.setItem(STORAGE_KEYS.CUSTOM_BG_INACTIVE, color);
         next.customColors = { ...prev.customColors, backgroundInactive: color };
       }
       return next;
@@ -329,9 +330,9 @@ export function useSettings() {
   const updatePaneBackground = useCallback((color: string) => {
     setSettings(prev => {
       const next = { ...prev, paneBackground: color };
-      localStorage.setItem('hterm_pane_background', color);
+      localStorage.setItem(STORAGE_KEYS.PANE_BACKGROUND, color);
       if (prev.theme === 'custom') {
-        localStorage.setItem('hterm_custom_pane_background', color);
+        localStorage.setItem(STORAGE_KEYS.CUSTOM_PANE_BG, color);
         next.customColors = { ...prev.customColors, paneBackground: color };
       }
       return next;
@@ -339,23 +340,23 @@ export function useSettings() {
   }, []);
 
   const updatePaneBackgroundMode = useCallback((mode: 'color' | 'image') => {
-    update('paneBackgroundMode', mode, 'hterm_pane_background_mode');
+    update('paneBackgroundMode', mode, STORAGE_KEYS.PANE_BACKGROUND_MODE);
   }, [update]);
 
   const updatePaneBackgroundImage = useCallback((url: string) => {
-    update('paneBackgroundImage', url, 'hterm_pane_background_image');
+    update('paneBackgroundImage', url, STORAGE_KEYS.PANE_BACKGROUND_IMAGE);
   }, [update]);
 
   const toggleLineWrap = useCallback(() => {
     setSettings(prev => {
       const newValue = !prev.lineWrapEnabled;
-      localStorage.setItem('hterm_line_wrap_enabled', newValue.toString());
+      localStorage.setItem(STORAGE_KEYS.LINE_WRAP_ENABLED, newValue.toString());
       return { ...prev, lineWrapEnabled: newValue };
     });
   }, []);
 
   const updateTheme = useCallback((v: 'dark' | 'light' | 'medium' | 'custom') => {
-    update('theme', v, 'hterm_theme');
+    update('theme', v, STORAGE_KEYS.THEME);
   }, [update]);
 
   return {

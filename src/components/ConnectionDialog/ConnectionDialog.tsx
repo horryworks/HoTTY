@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useHostManager, decryptBatch, getCachedCredential, clearDecryptedCache } from '../../hooks/useHostManager';
 import type { HostTreeNode, HostEntry } from '../../hooks/useHostManager';
 import { HostTree } from './HostTree';
+import { STORAGE_KEYS } from '../../constants/storage';
 import './ConnectionDialog.css';
 
 interface ConnectionDialogProps {
@@ -198,7 +199,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
     // Host history (legacy, kept for datalist)
     const [history] = useState<string[]>(() => {
-        const saved = localStorage.getItem('hterm_host_history');
+        const saved = localStorage.getItem(STORAGE_KEYS.HOST_HISTORY);
         return saved ? JSON.parse(saved) : [];
     });
 
@@ -424,12 +425,12 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         // Save host history
         if (host) {
             const newHistory = [host, ...history.filter(h => h !== host)].slice(0, 5);
-            localStorage.setItem('hterm_host_history', JSON.stringify(newHistory));
+            localStorage.setItem(STORAGE_KEYS.HOST_HISTORY, JSON.stringify(newHistory));
 
             if (protocol === 'ssh' && username) {
                 // Persist host→username map encrypted via DPAPI
                 try {
-                    const encryptedMap = localStorage.getItem('hterm_username_map') || '';
+                    const encryptedMap = localStorage.getItem(STORAGE_KEYS.USERNAME_MAP) || '';
                     let usernameMap: Record<string, string> = {};
                     if (encryptedMap) {
                         const decrypted = await window.electronAPI.decryptSecret(encryptedMap);
@@ -437,7 +438,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                     }
                     usernameMap[host] = finalU;
                     const encrypted = await window.electronAPI.encryptSecret(JSON.stringify(usernameMap));
-                    localStorage.setItem('hterm_username_map', encrypted);
+                    localStorage.setItem(STORAGE_KEYS.USERNAME_MAP, encrypted);
                 } catch (err) {
                     console.error('Failed to persist username map:', err);
                 }

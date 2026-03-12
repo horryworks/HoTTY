@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import type { PromptPattern } from '../../App';
+import { getTransparentColor } from '../../utils/colorUtils';
 import '@xterm/xterm/css/xterm.css';
 import './Terminal.css';
 
@@ -213,17 +214,6 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             const activeBg = terminalBackground;
             const inactiveBg = terminalBackgroundInactive || terminalBackground;
             const effectiveBg = isActive ? activeBg : inactiveBg;
-
-            // Convert hex to rgba for transparency if it's a hex color
-            const getTransparentColor = (hex: string) => {
-                if (hex.startsWith('#') && hex.length === 7) {
-                    const r = parseInt(hex.slice(1, 3), 16);
-                    const g = parseInt(hex.slice(3, 5), 16);
-                    const b = parseInt(hex.slice(5, 7), 16);
-                    return `rgba(${r}, ${g}, ${b}, 0.85)`;
-                }
-                return hex;
-            };
 
             terminalInstance.options.theme = {
                 ...terminalInstance.options.theme,

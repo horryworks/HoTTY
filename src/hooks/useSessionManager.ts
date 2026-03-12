@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { stripAnsiCodes } from '../utils/ansiUtils';
+import { TERMINAL_SEQUENCES } from '../constants/terminalSequences';
+import { STORAGE_KEYS } from '../constants/storage';
 
 export interface Session {
     id: string;
@@ -89,7 +92,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         });
 
         // Apply initial line wrap state
-        term.write(lineWrapEnabled ? '\x1b[?7h' : '\x1b[?7l');
+        term.write(lineWrapEnabled ? TERMINAL_SEQUENCES.LINE_WRAP_ENABLED : TERMINAL_SEQUENCES.LINE_WRAP_DISABLED);
 
         const fitAddon = new FitAddon();
         term.loadAddon(fitAddon);
@@ -142,7 +145,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
 
     // Apply Line Wrap setting to all terminals when it changes
     useEffect(() => {
-        const sequence = lineWrapEnabled ? '\x1b[?7h' : '\x1b[?7l';
+        const sequence = lineWrapEnabled ? TERMINAL_SEQUENCES.LINE_WRAP_ENABLED : TERMINAL_SEQUENCES.LINE_WRAP_DISABLED;
         Object.values(terminalRegistry.current).forEach(term => {
             term.write(sequence);
         });
@@ -167,10 +170,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             setSessions(currentSessions => {
                 const session = currentSessions.find(s => s.id === id);
                 if (session && session.isWatching) {
-                    // Strip ANSI escape codes
-                    // eslint-disable-next-line no-control-regex
-                    let cleanData = data.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
-                    cleanData = cleanData.replace(/\r\n/g, '\n').replace(/\r/g, ''); // Normalize CRLF/CR
+                    const cleanData = stripAnsiCodes(data);
 
                     if (watchBuffers.current[id] === undefined) {
                         watchBuffers.current[id] = '';
@@ -322,8 +322,8 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             aiChatState: {
                 messages: [],
                 inputText: '',
-                selectedModel: localStorage.getItem('hotty_gemini_model') || 'Unspecified',
-                selectedLanguage: localStorage.getItem('hotty_gemini_language') || 'English',
+                selectedModel: localStorage.getItem(STORAGE_KEYS.GEMINI_MODEL) || 'Unspecified',
+                selectedLanguage: localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE) || 'English',
                 textareaHeight: 0,
                 scrollTop: 0
             }
