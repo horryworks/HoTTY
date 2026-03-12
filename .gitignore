@@ -33,3 +33,8 @@ logging
 *.sln
 *.sw?
 node_modules/
+
+# Temporary error/log text files
+*_errors.txt
+*_error.txt
+ts_error.txt
