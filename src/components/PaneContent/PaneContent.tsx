@@ -3,7 +3,7 @@ import { TerminalComponent } from '../Terminal/Terminal';
 import { AIChatPane } from '../AIChatPane/AIChatPane';
 import type { Session } from '../../hooks/useSessionManager';
 import type { InteractiveSessionTracking } from '../../hooks/useInteractiveFlow';
-import { useTerminalSettings } from '../../contexts/TerminalSettingsContext';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 // -- Types --
 
@@ -62,7 +62,7 @@ export const PaneContent: React.FC<PaneContentProps> = ({
     showSystemPrompt,
     aiPersonas,
     proactiveInstruction,
-  } = useTerminalSettings();
+  } = useSettingsStore();
 
   if (session.type === 'ai') {
     return (

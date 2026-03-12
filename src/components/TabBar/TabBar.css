@@ -294,3 +294,12 @@
 .tab.is-ai-tab .tab-close:hover {
     background-color: rgba(255, 255, 255, 0.5);
 }
+
+/* ── Hidden AI Tab: reddish gradient ── */
+.tab.is-ai-tab.hidden-tab {
+    background: linear-gradient(90deg, #7a0000, #c0392b, #e74c3c, #c0392b, #7a0000) !important;
+}
+
+.tab.is-ai-tab.hidden-tab:hover {
+    filter: brightness(1.15);
+}

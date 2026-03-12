@@ -9,7 +9,7 @@ const GeminiIcon: React.FC<{ size?: number; className?: string }> = ({ size = 24
         className={className}
         style={{ flexShrink: 0 }}
     >
-        <path d="M12 2L14.8 9.2L22 12L14.8 14.8L12 22L9.2 14.8L2L12L9.2 9.2L12 2Z" fill="url(#gemini-gradient-auth)" />
+        <path d="M12 2L14.8 9.2L22 12L14.8 14.8L12 22L9.2 14.8L2 12L9.2 9.2L12 2Z" fill="url(#gemini-gradient-auth)" />
         <defs>
             <linearGradient id="gemini-gradient-auth" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
                 <stop stopColor="#4E77FF" />

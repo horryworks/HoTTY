@@ -20,7 +20,6 @@ import { useSettings } from './hooks/useSettings'
 import { useInteractiveFlow } from './hooks/useInteractiveFlow'
 import { useGeminiChat } from './hooks/useGeminiChat'
 import { useSidebarLayout } from './hooks/useSidebarLayout'
-import { TerminalSettingsProvider } from './contexts/TerminalSettingsContext'
 import { STORAGE_KEYS } from './constants/storage'
 import * as electronService from './services/electronService'
 
@@ -450,24 +449,7 @@ function App() {
   // 16. Render
   // ═══════════════════════════════════════════════
 
-  const terminalSettings = {
-    fontSize: settings.fontSize,
-    fontFamily: settings.fontFamily,
-    terminalForeground: settings.terminalForeground,
-    terminalBackground: settings.terminalBackground,
-    terminalBackgroundInactive: settings.terminalBackgroundInactive,
-    lineWrapEnabled: settings.lineWrapEnabled,
-    enablePromptHighlight: settings.enablePromptHighlight,
-    promptHighlightColor: settings.promptHighlightColor,
-    promptPatterns: settings.promptPatterns,
-    askGeminiCommands: settings.askGeminiCommands,
-    showSystemPrompt: settings.showSystemPrompt,
-    aiPersonas: settings.aiPersonas,
-    proactiveInstruction: settings.proactiveInstruction,
-  };
-
   return (
-    <TerminalSettingsProvider value={terminalSettings}>
     <div className="app-container">
       {/* Sidebar */}
       <div className={`sidebar ${settings.sidebarPosition === 'right' ? 'sidebar-right' : ''}`}>
@@ -476,13 +458,13 @@ function App() {
             currentLayout={pane.layoutMode}
             onLayoutChange={pane.setLayoutMode}
             showLeftSidebar={showLeftSidebar}
-            onToggleLeftSidebar={() => setShowLeftSidebar(prev => !prev)}
+            onToggleLeftSidebar={() => setShowLeftSidebar(!showLeftSidebar)}
             showRightSidebar={showRightSidebar}
-            onToggleRightSidebar={() => setShowRightSidebar(prev => !prev)}
+            onToggleRightSidebar={() => setShowRightSidebar(!showRightSidebar)}
             showTopBar={showTopBar}
-            onToggleTopBar={() => setShowTopBar(prev => !prev)}
+            onToggleTopBar={() => setShowTopBar(!showTopBar)}
             showBottomBar={showBottomBar}
-            onToggleBottomBar={() => setShowBottomBar(prev => !prev)}
+            onToggleBottomBar={() => setShowBottomBar(!showBottomBar)}
           />
 
           <div
@@ -789,6 +771,10 @@ function App() {
           paneAllocations={pane.paneAllocations}
           totalPanes={pane.currentDims.rows * pane.currentDims.cols}
           visible={showPaneLines}
+          showLeftSidebar={showLeftSidebar}
+          showRightSidebar={showRightSidebar}
+          showTopBar={showTopBar}
+          showBottomBar={showBottomBar}
         />
         <ResizeGrip />
         <HelpModal
@@ -797,7 +783,6 @@ function App() {
         />
       </div>
     </div>
-    </TerminalSettingsProvider>
   );
 };
 

@@ -2,9 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TerminalComponent } from '../Terminal/Terminal';
 import { AIChatPane } from '../AIChatPane/AIChatPane';
 import type { Session } from '../../hooks/useSessionManager';
-import type { PromptPattern } from '../../App';
 import { STORAGE_KEYS } from '../../constants/storage';
-import { useTerminalSettings } from '../../contexts/TerminalSettingsContext';
+import { useSettingsStore } from '../../stores/settingsStore';
 import './GridLayout.css';
 
 interface GridLayoutProps {
@@ -65,7 +64,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
         showSystemPrompt,
         aiPersonas,
         proactiveInstruction,
-    } = useTerminalSettings();
+    } = useSettingsStore();
 
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
     // State to store track sizes (ratios). Initialized to 1 for all tracks.

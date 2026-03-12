@@ -8,7 +8,8 @@
       "Bash(cd \"C:\\\\Users\\\\horry\\\\development\\\\HoTTY\" && npm test 2>&1)",
       "Bash(npm install:*)",
       "Bash(node -e \"require\\('zustand'\\); console.log\\('zustand OK:', require\\('./node_modules/zustand/package.json'\\).version\\)\")",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "Bash(cd \"C:/Users/horry/development/HoTTY\" && npx vitest run 2>&1 | tail -20)"
     ]
   }
 }
