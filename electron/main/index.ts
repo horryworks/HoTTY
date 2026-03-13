@@ -698,6 +698,42 @@ ipcMain.handle('select-import-file', async (event) => {
   return filePaths[0];
 });
 
+// ── Log Viewer ──
+
+ipcMain.handle('list-log-files', async (_, folderPath: string) => {
+  if (!folderPath) return { error: 'No log folder configured' };
+  if (!fs.existsSync(folderPath)) return { error: 'Log folder does not exist' };
+  try {
+    const entries = fs.readdirSync(folderPath);
+    const files = entries
+      .filter(f => /\.(txt|log)$/i.test(f) && !/\.tslog$/i.test(f))
+      .map(f => {
+        const fullPath = join(folderPath, f);
+        const stat = fs.statSync(fullPath);
+        return { name: f, path: fullPath, mtime: stat.mtimeMs, size: stat.size };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    return { files };
+  } catch (err) {
+    return { error: String(err) };
+  }
+});
+
+ipcMain.handle('read-log-file', async (_, filePath: string) => {
+  if (!filePath || !/\.(txt|log|tslog)$/i.test(filePath)) return { error: 'Invalid file type' };
+  try {
+    const stat = await fs.promises.stat(filePath);
+    if (!stat.isFile()) return { error: 'File not found' };
+    const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
+    if (stat.size > MAX_SIZE) return { error: `File too large (${(stat.size / 1024 / 1024).toFixed(1)} MB). Limit is 50 MB.` };
+    const content = await fs.promises.readFile(filePath, 'utf8');
+    return { content };
+  } catch (err: any) {
+    if (err.code === 'ENOENT') return { error: 'File not found' };
+    return { error: String(err) };
+  }
+});
+
 ipcMain.handle('decrypt-import-file', async (event, { filePath, password }) => {
   logToDebugFile(`[Main] decrypt-import-file called for ${filePath}`);
   try {

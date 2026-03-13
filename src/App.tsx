@@ -286,7 +286,7 @@ function App() {
     const activeSessionId = pane.paneAllocations[pane.activePaneId || ''];
     if (activeSessionId) {
       const activeSession = session.sessions.find(s => s.id === activeSessionId);
-      if (activeSession && activeSession.type !== 'ai') {
+      if (activeSession && activeSession.type !== 'ai' && activeSession.type !== 'log-viewer') {
         setLastTerminalSessionId(activeSessionId);
         lastTerminalSessionIdRef.current = activeSessionId;
       }
@@ -675,6 +675,7 @@ function App() {
             getCachedPassword={getCachedPassword}
             saveCachedPassword={saveCachedPassword}
             onShowMessage={(type, title, message) => setGlobalMessage({ type, title, message })}
+            loggingPath={settings.loggingPath}
           />
         )}
 

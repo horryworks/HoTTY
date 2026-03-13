@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TerminalComponent } from '../Terminal/Terminal';
 import { AIChatPane } from '../AIChatPane/AIChatPane';
+import { LogViewerPane } from '../LogViewerPane/LogViewerPane';
 import type { Session } from '../../hooks/useSessionManager';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -276,7 +277,11 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
 
                     >
                         {session ? (
-                            session.type === 'ai' ? (
+                            session.type === 'log-viewer' ? (
+                                <LogViewerPane
+                                    loggingPath={session.logViewerState?.loggingPath || ''}
+                                />
+                            ) : session.type === 'ai' ? (
                                 <AIChatPane
                                     sessionId={session.id}
                                     initialState={session.aiChatState}

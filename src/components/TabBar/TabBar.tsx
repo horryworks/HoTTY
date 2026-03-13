@@ -4,7 +4,7 @@ import './TabBar.css';
 interface Tab {
     id: string;
     title: string;
-    type?: 'ssh' | 'telnet' | 'serial' | 'ai' | 'wsl' | 'local';
+    type?: 'ssh' | 'telnet' | 'serial' | 'ai' | 'wsl' | 'local' | 'log-viewer';
     aiChatState?: any;
 }
 

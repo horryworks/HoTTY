@@ -9,7 +9,10 @@ import * as electronService from '../services/electronService';
 export interface Session {
     id: string;
     title: string;
-    type: 'ssh' | 'telnet' | 'serial' | 'ai' | 'wsl' | 'local';
+    type: 'ssh' | 'telnet' | 'serial' | 'ai' | 'wsl' | 'local' | 'log-viewer';
+    logViewerState?: {
+        loggingPath: string;
+    };
     aiChatState?: {
         messages: any[]; // ChatMessage[] but avoiding circular dependency or complex imports here
         inputText: string;
@@ -266,6 +269,20 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     };
 
     const createSession = (config: any) => {
+        if (config.protocol === 'log-viewer') {
+            const sessionId = self.crypto.randomUUID();
+            const newSession: Session = {
+                id: sessionId,
+                title: 'Log Viewer',
+                type: 'log-viewer',
+                logViewerState: { loggingPath }
+            };
+            setSessions(prev => [...prev, newSession]);
+            setTabOrder(prev => [...prev, sessionId]);
+            allocateToPane(sessionId);
+            return;
+        }
+
         const sessionId = self.crypto.randomUUID();
         let title: string;
         let type: Session['type'];
@@ -337,6 +354,20 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         return sessionId;
     };
 
+    const createLogViewerSession = () => {
+        const sessionId = self.crypto.randomUUID();
+        const newSession: Session = {
+            id: sessionId,
+            title: 'Log Viewer',
+            type: 'log-viewer',
+            logViewerState: { loggingPath }
+        };
+        setSessions(prev => [...prev, newSession]);
+        setTabOrder(prev => [...prev, sessionId]);
+        allocateToPane(sessionId);
+        return sessionId;
+    };
+
     const updateSessionState = (sessionId: string, newState: Partial<Session['aiChatState']>) => {
         setSessions(prev => prev.map(s => {
             if (s.id === sessionId && s.aiChatState) {
@@ -355,6 +386,8 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         if (session?.type === 'ai') {
             // AI sessions don't have terminal or backend connection
             electronService.geminiChatClear(sessionId);
+        } else if (session?.type === 'log-viewer') {
+            // Log viewer sessions don't have terminal or backend connection
         } else {
             electronService.disconnectSession(sessionId);
             const term = terminalRegistry.current[sessionId];
@@ -444,6 +477,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         terminalRegistry,
         createSession,
         createAISession,
+        createLogViewerSession,
         updateSessionState,
         closeSession,
         closeAllAISessions,

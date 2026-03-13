@@ -46,6 +46,8 @@ export interface ElectronAPI {
     encryptSecrets: (plaintexts: (string | undefined)[]) => Promise<(string | undefined)[]>;
     decryptSecrets: (ciphertexts: (string | undefined)[]) => Promise<(string | undefined)[]>;
     updateLogging: (loggingEnabled: boolean, loggingPath: string) => void;
+    listLogFiles: (folderPath: string) => Promise<{ files?: { name: string; path: string; mtime: number; size: number }[]; error?: string }>;
+    readLogFile: (filePath: string) => Promise<{ content?: string; error?: string }>;
 }
 
 

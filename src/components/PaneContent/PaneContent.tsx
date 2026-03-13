@@ -1,6 +1,7 @@
 import React from 'react';
 import { TerminalComponent } from '../Terminal/Terminal';
 import { AIChatPane } from '../AIChatPane/AIChatPane';
+import { LogViewerPane } from '../LogViewerPane/LogViewerPane';
 import type { Session } from '../../hooks/useSessionManager';
 import type { InteractiveSessionTracking } from '../../hooks/useInteractiveFlow';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -63,6 +64,14 @@ export const PaneContent: React.FC<PaneContentProps> = ({
     aiPersonas,
     proactiveInstruction,
   } = useSettingsStore();
+
+  if (session.type === 'log-viewer') {
+    return (
+      <LogViewerPane
+        loggingPath={session.logViewerState?.loggingPath || ''}
+      />
+    );
+  }
 
   if (session.type === 'ai') {
     return (

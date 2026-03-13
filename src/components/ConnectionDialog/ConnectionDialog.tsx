@@ -14,6 +14,7 @@ interface ConnectionDialogProps {
     getCachedPassword: (host: string, user: string) => string;
     saveCachedPassword: (host: string, user: string, pass: string) => void;
     onShowMessage?: (type: 'error' | 'success' | 'info', title: string | undefined, message: string) => void;
+    loggingPath?: string;
 }
 
 interface SerialPortInfo {
@@ -28,7 +29,8 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     error,
     getCachedPassword,
     saveCachedPassword,
-    onShowMessage
+    onShowMessage,
+    loggingPath
 }) => {
     const hostManager = useHostManager();
 
@@ -415,6 +417,10 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             onConnect({ protocol, shellType: protocol });
             return;
         }
+        if (protocol === 'log-viewer') {
+            onConnect({ protocol: 'log-viewer' });
+            return;
+        }
 
         // Save host history
         if (host) {
@@ -561,11 +567,12 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                     <option value="wsl">WSL</option>
                                     <option value="cmd">Command Prompt</option>
                                     <option value="powershell">PowerShell</option>
+                                    <option value="log-viewer">Log Viewer</option>
                                 </select>
                             </div>
 
                             {/* SSH/Telnet fields */}
-                            {(protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell') && (
+                            {(protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell' && protocol !== 'log-viewer') && (
                                 <>
                                     <div className="form-group">
                                         <label>Host</label>
@@ -634,6 +641,22 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                             No WSL distributions found.
                                         </div>
                                     )}
+                                </div>
+                            )}
+
+                            {/* Log Viewer info */}
+                            {protocol === 'log-viewer' && (
+                                <div className="form-group">
+                                    <div style={{ color: '#aaa', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                                        Opens a viewer for session log files.
+                                    </div>
+                                    <div style={{ marginTop: '8px', color: '#ccc', fontSize: '0.85rem' }}>
+                                        <strong>Log Folder:</strong>{' '}
+                                        {loggingPath
+                                            ? <span style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>{loggingPath}</span>
+                                            : <span style={{ color: '#f80', fontStyle: 'italic' }}>Not configured (set in Settings → Logging)</span>
+                                        }
+                                    </div>
                                 </div>
                             )}
 
@@ -707,7 +730,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             )}
 
                             <div className="form-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                                {originalState !== null && protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell' && (
+                                {originalState !== null && protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell' && protocol !== 'log-viewer' && (
                                     <button
                                         type="button"
                                         className="btn-secondary"

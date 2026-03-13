@@ -44,3 +44,5 @@ export const decryptSecret = (ciphertext: string) => api().decryptSecret(ciphert
 export const encryptSecrets = (plaintexts: (string | undefined)[]) => api().encryptSecrets(plaintexts);
 export const decryptSecrets = (ciphertexts: (string | undefined)[]) => api().decryptSecrets(ciphertexts);
 export const updateLogging = (loggingEnabled: boolean, loggingPath: string) => api().updateLogging(loggingEnabled, loggingPath);
+export const listLogFiles = (folderPath: string) => api().listLogFiles(folderPath);
+export const readLogFile = (filePath: string) => api().readLogFile(filePath);

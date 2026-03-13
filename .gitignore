@@ -10,6 +10,7 @@ release
 .agent
 .system_generated
 .claude
+CLAUDE.md
 
 # Environment variables
 *.local
