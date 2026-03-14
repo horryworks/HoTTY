@@ -1,6 +1,6 @@
 # HoTTY テーマ設定ガイド
 
-[English version is here](file:///c:/Users/horry/development/HoTTY/THEMES_GUIDE.md)
+[English version is here](THEMES_GUIDE.md)
 
 このガイドでは、テーマファイルで利用可能なプロパティについて説明します。各テーマはアプリケーションの `resources/` ディレクトリに個別のJSONファイル（例: `dark.json`, `medium.json`, `light.json`）として定義されています。
 

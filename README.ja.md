@@ -1,8 +1,8 @@
-# HoTTY v0.1.15 - Gemini統合型高機能ターミナルエミュレータ
+# HoTTY v1.0.0-beta1 - Gemini統合型高機能ターミナルエミュレータ
 
 [English](README.md) | [日本語]
 
-**現在のバージョン: v0.1.15**
+**現在のバージョン: v1.0.0-beta1**
 
 HoTTY は、Electron、React、および TypeScript で構築された、モダンで高性能なターミナルエミュレーターです。高度なウィンドウ管理とカスタマイズオプションを備え、シームレスなターミナル体験を提供します。
 
@@ -46,7 +46,20 @@ HoTTY は、Electron、React、および TypeScript で構築された、モダ�
     - **クリーン・アンインストール**: アンインストール時にすべてのユーザーデータを削除するオプション。
 - **モダンな技術スタック**: パフォーマンスと安定性のために Electron、React、Vite を採用。
 
+## HoTTY のコア・コンセプト：AI とターミナルの融合
+
+HoTTY は単なるターミナルではなく、AI が「あなたの隣で動作を見守るパートナー」になることを目指しています。
+
+- **「見る」AI**: `Watch Gemini` を有効にすると、AI はターミナルの出力を常に把握します。エラーが出た瞬間に「何が起きたか」を尋ねることができます。
+- **「自発的」な AI**: AI はただ答えるだけでなく、`インタラクティブ調査`機能によって「このコマンドを試してみませんか？」と自ら解決策を提案し、実行結果を分析します。
+- **「迷わない」UI**: 4つのペインを自由に操れるグリッドシステムにより、ターミナルの作業画面を隠すことなく、AI チャットを最適な位置に配置できます。
+
 ## 使い方
+
+### 一般ユーザーの方
+最新のWindows用インストーラー（`.exe`）は [Releases](https://github.com/horryworks/HoTTY/releases) ページからダウンロードできます。インストーラーを実行するだけで使い始められます。
+
+### 開発者の方（ビルド手順）
 
 ### 事前準備
 
@@ -80,11 +93,9 @@ Windows環境では、付属のバッチファイルも利用可能です:
 - **SSH 接続**: 接続が頻繁に切れる場合は、設定画面で「SSH KeepAlive」の値を調整してください。
 - **WSL ターミナル**: WSL接続時にプロンプトが表示されない場合は、対象のディストリビューションが正しくインストール・初期設定されているか確認してください。HoTTYは `node-pty` を利用したネイティブなTTY接続に対応しています。
 
-## 貢献について
-
-HoTTY は個人プロジェクトです。プルリクエストの受け付けは行っていませんが、不具合報告や機能要望は [Issues](https://github.com/horryworks/HoTTY/issues) で受け付けています。詳細は [CONTRIBUTING.md](file:///c:/Users/horry/development/HoTTY/CONTRIBUTING.md) をご確認ください。
+HoTTY は個人プロジェクトです。プルリクエストの受け付けは行っていませんが、不具合報告や機能要望は [Issues](https://github.com/horryworks/HoTTY/issues) で受け付けています。詳細は [CONTRIBUTING.md](CONTRIBUTING.md) をご確認ください。
 
 ## ライセンス
 
 Copyright (c) 2026 HoTTY Contributors.
-[GPL-3.0-or-later](file:///c:/Users/horry/development/HoTTY/LICENSE) ライセンスの下で公開されています。
+[GPL-3.0-or-later](LICENSE) ライセンスの下で公開されています。

@@ -1,6 +1,6 @@
 # HoTTY Theme Configuration Guide
 
-[日本語版はこちら (Japanese version)](file:///c:/Users/horry/development/HoTTY/THEMES_GUIDE.ja.md)
+[日本語版はこちら (Japanese version)](THEMES_GUIDE.ja.md)
 
 This guide explains the properties available in theme files. Each theme is defined as an individual JSON file (e.g., `dark.json`, `medium.json`, `light.json`) located in the `resources/` directory of the application.
 

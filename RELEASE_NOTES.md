@@ -1,5 +1,26 @@
 # Release Notes - HoTTY
 
+## [v1.0.0-beta1] - 2026-03-14
+### Official Release
+We are proud to announce the formal v1.0.0 release of HoTTY! This milestone represents a stable, feature-rich terminal experience with deep Gemini AI integration.
+
+### Core Architecture & Stability
+- **Massive Refactoring**: Completed a major deconstruction of the core `App.tsx`, reducing complexity by over 50% and improving long-term maintainability.
+- **Hook-based State**: Migrated all major logic (Settings, Gemini, Terminal Flow) to specialized custom hooks for better performance and debugging.
+- **Theme Engine**: A robust, variable-based theme engine with full documentation and a visual Custom Theme Creator.
+
+### AI Capabilities
+- **Gemini 2.0 Integration**: Native support for the latest Gemini models with dynamic model discovery.
+- **Interactive Investigation**: Proactive AI that can propose terminal commands and analyze results in real-time.
+- **Watch & Analyze**: Ability to monitor terminal output and request instant analysis for debugging and learning.
+
+### User Experience
+- **Advanced Grid**: Industry-leading 2D intersection resizing and persistent layout management.
+- **Broad Protocol Support**: SSH, Telnet, Serial, WSL, and local Windows shells (CMD/PowerShell).
+- **Log Management**: Built-in Log Viewer and dedicated millisecond-precision timestamp logging.
+
+---
+
 ## [v0.1.15] - 2026-03-14
 ### Added
 - **Custom Theme Creator**: Added a built-in visual theme editor in Settings > Appearance. Users can now create and fine-tune custom color schemes directly within the app without editing JSON files manually.
@@ -66,8 +87,7 @@
 - **Manual Controls**: "Cancel" and "Send Now" buttons added to the waiting state for manual intervention.
 - **Smart Chat Scrolling**: Long AI responses now automatically scroll to the beginning of the message for improved readability.
 - **Prompt Detection Robustness**: Fixed specific edge cases in CMD and PowerShell prompt detection.
-- **Data Listener Stability**: Refactored the terminal data listener to prevent data loss.
- or stale state issues during rapid output.
+- **Data Listener Stability**: Refactored the terminal data listener to prevent data loss or stale state issues during rapid output.
 
 ## [v0.1.14-beta4] - 2026-03-08
 ### Added
@@ -220,7 +240,7 @@
 ## [0.1.7] - 2026-02-17
 
 ### Added
-- **Themes Guide**: Added [THEMES_GUIDE.md](file:///c:/Users/horry/development/HoTTY/THEMES_GUIDE.md) and [THEMES_GUIDE.ja.md](file:///c:/Users/horry/development/HoTTY/THEMES_GUIDE.ja.md) to explain the properties in `themes.json`.
+- **Themes Guide**: Added [THEMES_GUIDE.md](THEMES_GUIDE.md) and [THEMES_GUIDE.ja.md](THEMES_GUIDE.ja.md) to explain the properties in `themes.json`.
 - **Default Background Mode**: Added a "Default" option for empty pane backgrounds, allowing users to easily restore the original HoTTY logo background without manual file selection.
 - **Further Improved SSH Compatibility**: Resolved the "Unknown DH group" error observed on certain devices by explicitly allowing all Key Exchange algorithms. This ensures even better connectivity with legacy network devices and industrial hardware.
 

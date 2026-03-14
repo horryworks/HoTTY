@@ -1,8 +1,8 @@
-# HoTTY v0.1.15 - Gemini Integrated Advanced Terminal
+# HoTTY v1.0.0-beta1 - Gemini Integrated Advanced Terminal
 
 [English] | [日本語 (Japanese)](README.ja.md)
 
-**Current Version: v0.1.15**
+**Current Version: v1.0.0-beta1**
 
 Terminal emulator built with Electron, React, and TypeScript. Designed to provide a seamless terminal experience with advanced window management, deep AI integration, and extensive customization options.
 
@@ -46,7 +46,21 @@ Terminal emulator built with Electron, React, and TypeScript. Designed to provid
     - **Clean Uninstallation**: Option to fully remove user data during uninstallation.
 - **Modern Tech Stack**: Built on Electron, React, and Vite for performance and stability.
 
-## Getting Started
+## Core Concept: Synergy of Terminal & AI
+
+HoTTY is more than just a terminal; it's designed to be a partner that works right alongside you.
+
+- **"Watching" AI**: Enable `Watch Gemini` to keep the AI informed of your terminal's output in real-time. You can ask "What just happened?" the moment an error occurs.
+- **"Proactive" AI**: Using the `Interactive Investigation` feature, the AI doesn't just answer—it proposes solutions by suggesting commands and analyzing their results for you.
+- **"Seamless" UI**: With the flexible 2D grid system, you can position the AI chat pane exactly where you need it without obscuring your terminal workspace.
+
+## Installation & Getting Started
+
+### For End Users
+You can download the latest Windows installer (`.exe`) from the [Releases](https://github.com/horryworks/HoTTY/releases) page. Simply run the installer to get started.
+
+### For Developers
+If you want to build HoTTY from source:
 
 ### Prerequisites
 
@@ -80,11 +94,9 @@ Alternatively, you can use the provided batch files on Windows:
 - **SSH Connectivity**: If connections time out, check your "SSH KeepAlive" settings in the Settings modal.
 - **WSL Terminal**: If the WSL terminal doesn't show a prompt, ensure the distribution is correctly installed and initialized. HoTTY now uses `node-pty` for a native TTY experience.
 
-## Contributing
-
-HoTTY is a personal project. We do not accept Pull Requests, but bug reports and feature requests are welcome via [Issues](https://github.com/horryworks/HoTTY/issues). Please see [CONTRIBUTING.md](file:///c:/Users/horry/development/HoTTY/CONTRIBUTING.md) for details.
+HoTTY is a personal project. We do not accept Pull Requests, but bug reports and feature requests are welcome via [Issues](https://github.com/horryworks/HoTTY/issues). Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ## License
 
 Copyright (c) 2026 HoTTY Contributors.
-Licensed under the [GPL-3.0-or-later](file:///c:/Users/horry/development/HoTTY/LICENSE).
+Licensed under the [GPL-3.0-or-later](LICENSE).
