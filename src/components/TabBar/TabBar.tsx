@@ -182,19 +182,14 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
             </div>{/* end .tab-list */}
 
             <div className="tab-bar-actions">
-            {/* New Session button — Ethernet plug icon */}
+            {/* New Session button — Cable loop icon */}
             <div className="new-tab-btn" onClick={onNewTab} title="New Session">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    {/* Cable on left */}
-                    <line x1="1" y1="13" x2="4" y2="13"/>
-                    {/* Plug housing */}
-                    <rect x="4" y="8" width="12" height="10" rx="1.5"/>
-                    {/* Latch tab on top */}
-                    <path d="M7 8 L7 5 L13 5 L13 8"/>
-                    {/* Contact pins extending right */}
-                    <line x1="16" y1="10.5" x2="22" y2="10.5"/>
-                    <line x1="16" y1="13" x2="22" y2="13"/>
-                    <line x1="16" y1="15.5" x2="22" y2="15.5"/>
+                    <path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 3a8 8 0 0 1 8 7.2" />
+                    <rect x="16" y="12" width="6" height="8" rx="1" />
+                    <path d="M19 12V10" />
+                    <line x1="12" y1="8" x2="12" y2="14" />
+                    <line x1="9" y1="11" x2="15" y2="11" />
                 </svg>
             </div>
 
