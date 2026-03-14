@@ -1,4 +1,6 @@
-﻿# HoTTY v0.1.15 - Gemini Integrated Advanced Terminal
+# HoTTY v0.1.15 - Gemini Integrated Advanced Terminal
+
+[English] | [日本語 (Japanese)](README.ja.md)
 
 **Current Version: v0.1.15**
 
