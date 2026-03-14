@@ -320,7 +320,7 @@
 .log-viewer-search-btn {
     background: var(--accent-color);
     border: none;
-    color: #fff;
+    color: var(--text-on-accent);
     border-radius: 3px;
     font-size: calc(var(--font-size-base) - 2px);
     padding: 3px 10px;

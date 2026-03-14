@@ -60,7 +60,7 @@
     border: none;
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: 1.2rem;
+    font-size: calc(var(--font-size-base) + 3px);
     line-height: 1;
     padding: 0;
     z-index: 1;
@@ -104,7 +104,7 @@
     border: none;
     border-bottom: 2px solid transparent;
     padding: 7px 12px;
-    font-size: 0.95rem;
+    font-size: var(--font-size-base);
     cursor: pointer;
     border-radius: 4px 4px 0 0;
     transition: all 0.2s;
@@ -143,7 +143,7 @@
 
 .form-group label {
     font-weight: 500;
-    font-size: 0.9rem;
+    font-size: calc(var(--font-size-base) - 1px);
     color: var(--text-secondary);
 }
 
@@ -154,13 +154,13 @@
     border: 1px solid var(--border-color);
     padding: 5px 8px;
     border-radius: 4px;
-    font-size: 0.9rem;
+    font-size: calc(var(--font-size-base) - 1px);
     outline: none;
     transition: border-color 0.2s;
 }
 
 .settings-modal button {
-    font-size: 0.9rem;
+    font-size: calc(var(--font-size-base) - 1px);
     font-family: inherit;
 }
 
@@ -171,7 +171,7 @@
 
 .settings-help {
     margin: 0;
-    font-size: 0.8rem;
+    font-size: calc(var(--font-size-base) - 2px);
     color: var(--text-secondary);
     opacity: 0.8;
 }

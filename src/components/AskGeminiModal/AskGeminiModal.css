@@ -33,7 +33,7 @@
 
 .ask-gemini-modal-header h2 {
     margin: 0;
-    font-size: 1.2rem;
+    font-size: calc(var(--font-size-base) + 3px);
     color: var(--text-primary);
 }
 
@@ -41,7 +41,7 @@
     background: none;
     border: none;
     color: var(--text-secondary);
-    font-size: 1.5rem;
+    font-size: calc(var(--font-size-base) + 7px);
     cursor: pointer;
     line-height: 1;
 }
@@ -65,7 +65,7 @@
 }
 
 .ask-gemini-modal-section label {
-    font-size: 0.9rem;
+    font-size: calc(var(--font-size-base) - 1px);
     color: var(--text-secondary);
 }
 
@@ -77,7 +77,7 @@
     border-radius: 4px;
     color: var(--text-primary);
     font-family: inherit;
-    font-size: 0.95rem;
+    font-size: var(--font-size-base);
     padding: 8px;
     resize: vertical;
     box-sizing: border-box;
@@ -90,7 +90,7 @@
 
 .ask-gemini-modal-selection-preview {
     font-family: var(--font-family);
-    font-size: 0.85rem;
+    font-size: calc(var(--font-size-base) - 2px);
     background-color: var(--bg-tertiary);
     color: var(--text-primary);
     white-space: pre-wrap;

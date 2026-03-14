@@ -76,7 +76,8 @@
             "tree-meta-color": "#d4b86a",
             "active-pane-color": "#007acc",
             "hidden-item-bg": "#4a0000",
-            "hidden-item-bg-hover": "#600000"
+            "hidden-item-bg-hover": "#600000",
+            "text-on-accent": "#ffffff"
         },
         "terminal": {
             "foreground": "#ffffff",
@@ -162,7 +163,8 @@
             "tree-meta-color": "#b35c00",
             "active-pane-color": "#007acc",
             "hidden-item-bg": "#fce4e4",
-            "hidden-item-bg-hover": "#f9cdcd"
+            "hidden-item-bg-hover": "#f9cdcd",
+            "text-on-accent": "#ffffff"
         },
         "terminal": {
             "foreground": "#ffffff",
@@ -248,7 +250,8 @@
             "tree-meta-color": "#d4b86a",
             "active-pane-color": "#64b5f6",
             "hidden-item-bg": "#4a0000",
-            "hidden-item-bg-hover": "#600000"
+            "hidden-item-bg-hover": "#600000",
+            "text-on-accent": "#1a1a1a"
         },
         "terminal": {
             "foreground": "#f0f0f0",

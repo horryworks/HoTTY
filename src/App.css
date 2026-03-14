@@ -86,7 +86,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 1.2rem;
+  font-size: calc(var(--font-size-base) + 3px);
   opacity: 0.5;
   transition: all 0.2s;
 }
@@ -242,7 +242,7 @@
   color: var(--text-primary);
   padding: 6px 12px;
   border-radius: 4px;
-  font-size: 0.85rem;
+  font-size: calc(var(--font-size-base) - 2px);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -318,7 +318,7 @@
   /* Remove default arrow */
   cursor: pointer;
   margin: 0;
-  font-size: 1.05rem;
+  font-size: calc(var(--font-size-base) + 1px);
   color: var(--accent-light, #42a5f5);
   display: flex;
   align-items: center;
@@ -335,7 +335,7 @@
 
 .help-section summary::before {
   content: '▶';
-  font-size: 0.7rem;
+  font-size: calc(var(--font-size-base) - 4px);
   transition: transform 0.2s;
   opacity: 0.5;
 }
@@ -354,7 +354,7 @@
 
 .help-text {
   margin: 4px 0;
-  font-size: 0.9rem;
+  font-size: calc(var(--font-size-base) - 1px);
   line-height: 1.5;
   color: var(--text-primary);
   opacity: 0.85;
@@ -399,7 +399,7 @@
 }
 
 .marker-desc {
-  font-size: 0.85rem;
+  font-size: calc(var(--font-size-base) - 2px);
   line-height: 1.4;
 }
 
@@ -418,6 +418,6 @@
   text-align: center;
   margin-right: 8px;
   background: var(--accent-color);
-  color: white;
+  color: var(--text-on-accent);
   font-weight: bold;
 }

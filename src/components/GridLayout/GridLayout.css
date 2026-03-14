@@ -76,7 +76,7 @@
 }
 
 .drop-hint {
-    font-size: 0.9rem;
+    font-size: calc(var(--font-size-base) - 1px);
     /* Resizers (moved out of drop-hint) */
 }
 

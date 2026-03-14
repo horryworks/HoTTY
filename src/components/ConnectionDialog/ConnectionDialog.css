@@ -128,7 +128,7 @@
 
 .btn-primary {
     background-color: var(--accent-color);
-    color: white;
+    color: var(--text-on-accent);
     border: none;
     padding: 6px 12px;
     border-radius: 3px;

@@ -181,7 +181,7 @@
 /* Tab corresponding to the active pane: blue background */
 .tab.active-pane-tab {
     background-color: var(--accent-color);
-    color: #ffffff;
+    color: var(--text-on-accent);
 }
 
 /* AI Tab Button */

@@ -482,7 +482,7 @@
 .ai-chat-cancel-btn {
     padding: 0.4em 1em;
     background-color: var(--accent-color);
-    color: white;
+    color: var(--text-on-accent);
     border: none;
     border-radius: 6px;
     cursor: pointer;
@@ -537,7 +537,7 @@
     border: none;
     border-radius: 8px;
     background: linear-gradient(135deg, var(--accent-color), var(--accent-hover));
-    color: #fff;
+    color: var(--text-on-accent);
     font-size: 1.1em;
     cursor: pointer;
     display: flex;
@@ -663,7 +663,7 @@
     gap: 6px;
     padding: 0 12px;
     background-color: var(--accent-color);
-    color: #fff;
+    color: var(--text-on-accent);
     border: none;
     border-radius: 4px;
     cursor: pointer;
