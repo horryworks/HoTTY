@@ -69,6 +69,7 @@ export const PaneContent: React.FC<PaneContentProps> = ({
     return (
       <LogViewerPane
         loggingPath={session.logViewerState?.loggingPath || ''}
+        askGeminiCommands={askGeminiCommands}
       />
     );
   }

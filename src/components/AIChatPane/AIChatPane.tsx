@@ -276,7 +276,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         }
 
         // Add execution instruction and proactive instruction
-        const extraInstructions = ' When suggesting a command to run, please wrap it in ```execute\\n...\\n``` block.' + (proactiveInstruction ? ` ${proactiveInstruction}` : '');
+        const extraInstructions = ' [ABSOLUTE MANDATORY RULES - NO EXCEPTIONS] 1. Answer ONLY what the user asked. Do NOT suggest next steps, additional commands, or follow-up actions unless explicitly requested. 2. After answering, STOP. Do not continue the conversation on your own. 3. ANY shell/terminal command MUST be placed in EXACTLY ONE ```execute block per response. 4. It is STRICTLY FORBIDDEN to use more than one ```execute block in a single response. 5. It is STRICTLY FORBIDDEN to write commands as inline code, plain text, or in ```bash/```sh/```shell blocks. 6. If multiple steps are needed, combine them into a single ```execute block using && or semicolons. 7. Breaking these rules causes a critical application failure.' + (proactiveInstruction ? ` ${proactiveInstruction}` : '');
         setLocalSystemInstruction(`${basePrompt}${langInstruction}${extraInstructions}`);
 
     }, [selectedExpertise, selectedLanguage, aiPersonas]);
@@ -645,7 +645,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                                         const persona = aiPersonas?.find(p => p.label === e.target.value);
                                         if (persona) {
                                             const langInstr = selectedLanguage !== 'English' ? ` Answer in ${selectedLanguage}.` : '';
-                                            setLocalSystemInstruction(`${persona.systemPrompt}${langInstr} When you suggest shell/terminal commands that the user can run, always enclose them in a code block marked with \`\`\`execute for direct execution.`);
+                                            setLocalSystemInstruction(`${persona.systemPrompt}${langInstr} [ABSOLUTE MANDATORY RULES - NO EXCEPTIONS] 1. Answer ONLY what the user asked. Do NOT suggest next steps, additional commands, or follow-up actions unless explicitly requested. 2. After answering, STOP. Do not continue the conversation on your own. 3. ANY shell/terminal command MUST be placed in EXACTLY ONE \`\`\`execute block per response. 4. It is STRICTLY FORBIDDEN to use more than one \`\`\`execute block in a single response. 5. It is STRICTLY FORBIDDEN to write commands as inline code, plain text, or in \`\`\`bash/\`\`\`sh/\`\`\`shell blocks. 6. If multiple steps are needed, combine them into a single \`\`\`execute block using && or semicolons. 7. Breaking these rules causes a critical application failure.`);
                                         }
                                     }}
                                     disabled={isStreaming}

@@ -394,7 +394,7 @@ ipcMain.handle('list-wsl-distributions', async () => {
 
 
 // ── Context Menu ──
-ipcMain.on('show-context-menu', (event, selection: string, commands?: { id: string; label: string }[]) => {
+ipcMain.on('show-context-menu', (event, selection: string, commands?: { id: string; label: string }[], includePaste: boolean = true) => {
   const geminiSubmenu: Electron.MenuItemConstructorOptions[] = [];
 
   if (commands && commands.length > 0) {
@@ -441,19 +441,21 @@ ipcMain.on('show-context-menu', (event, selection: string, commands?: { id: stri
     // Flattened menu for sparkles button
     geminiSubmenu.forEach(item => template.push(item));
   } else {
-    // Original nested menu for terminal context
-    template.push(
-      {
-        label: 'Paste',
-        click: () => { event.sender.send('terminal-context-paste'); }
-      },
-      { type: 'separator' },
-      {
-        label: 'Ask Gemini',
-        enabled: !!selection,
-        submenu: geminiSubmenu
-      }
-    );
+    // Nested menu for context
+    if (includePaste) {
+      template.push(
+        {
+          label: 'Paste',
+          click: () => { event.sender.send('terminal-context-paste'); }
+        },
+        { type: 'separator' }
+      );
+    }
+    template.push({
+      label: 'Ask Gemini',
+      enabled: !!selection,
+      submenu: geminiSubmenu
+    });
   }
 
   const menu = Menu.buildFromTemplate(template);

@@ -27,6 +27,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
     const [dragOverInfo, setDragOverInfo] = React.useState<{ id: string, position: 'left' | 'right' } | null>(null);
     const [dragSourceIndex, setDragSourceIndex] = React.useState<number | null>(null);
     const [showFeaturesMenu, setShowFeaturesMenu] = React.useState(false);
+    const [dropdownStyle, setDropdownStyle] = React.useState<React.CSSProperties>({});
     const featuresRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
@@ -39,6 +40,20 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [showFeaturesMenu]);
+
+    const handleToggleFeaturesMenu = () => {
+        if (!showFeaturesMenu && featuresRef.current) {
+            const rect = featuresRef.current.getBoundingClientRect();
+            const dropdownWidth = 140;
+            const spaceOnRight = window.innerWidth - rect.left;
+            if (spaceOnRight >= dropdownWidth) {
+                setDropdownStyle({ left: 0, right: 'auto' });
+            } else {
+                setDropdownStyle({ right: 0, left: 'auto' });
+            }
+        }
+        setShowFeaturesMenu(v => !v);
+    };
 
     // ... (rest of drag handlers same as before) ...
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number, sessionId: string) => {
@@ -121,7 +136,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                 const isGeminiLinked = tab.type === 'ai' || isWatching || tab.id === lastTargetSessionId;
 
                 // Determine if this is a terminal capable of being watched
-                const isTerminal = tab.type ? tab.type !== 'ai' :
+                const isTerminal = tab.type ? (tab.type !== 'ai' && tab.type !== 'log-viewer') :
                     (tab.id.startsWith('ssh') || tab.id.startsWith('telnet') || tab.id.startsWith('wsl') || tab.id.startsWith('serial') || tab.id.startsWith('local'));
 
                 return (
@@ -197,7 +212,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
             <div className="features-btn" ref={featuresRef} title="Features">
                 <div
                     className={`features-btn-icon ${showFeaturesMenu ? 'active' : ''}`}
-                    onClick={() => setShowFeaturesMenu(v => !v)}
+                    onClick={handleToggleFeaturesMenu}
                 >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <rect x="3" y="3" width="7" height="7" rx="1"/>
@@ -207,7 +222,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                     </svg>
                 </div>
                 {showFeaturesMenu && (
-                    <div className="features-dropdown">
+                    <div className="features-dropdown" style={dropdownStyle}>
                         <div
                             className="features-item"
                             onClick={() => { onNewAITab(); setShowFeaturesMenu(false); }}

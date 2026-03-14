@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import * as electronService from '../../services/electronService';
+import type { AskGeminiCommand } from '../../types/appTypes';
 import './LogViewerPane.css';
 
 interface LogFile {
@@ -12,6 +13,7 @@ interface LogFile {
 
 interface LogViewerPaneProps {
     loggingPath: string;
+    askGeminiCommands?: AskGeminiCommand[];
 }
 
 const formatSize = (bytes: number): string => {
@@ -55,7 +57,7 @@ const highlightLine = (line: string, regex: RegExp): React.ReactNode => {
     return parts.length > 0 ? <>{parts}</> : line;
 };
 
-export const LogViewerPane: React.FC<LogViewerPaneProps> = ({ loggingPath }) => {
+export const LogViewerPane: React.FC<LogViewerPaneProps> = ({ loggingPath, askGeminiCommands = [] }) => {
     // File list state
     const [files, setFiles] = useState<LogFile[]>([]);
     const [listError, setListError] = useState<string | null>(null);
@@ -207,6 +209,16 @@ export const LogViewerPane: React.FC<LogViewerPaneProps> = ({ loggingPath }) => 
             }
         }
     };
+
+    // ── Context menu (Ask Gemini) ──
+
+    const handleContextMenu = useCallback((e: React.MouseEvent) => {
+        if (!askGeminiCommands.length) return;
+        const selection = window.getSelection()?.toString() ?? '';
+        if (!selection) return;
+        e.preventDefault();
+        electronService.showContextMenu(selection, askGeminiCommands, false);
+    }, [askGeminiCommands]);
 
     // ── Render ──
 
@@ -363,7 +375,7 @@ export const LogViewerPane: React.FC<LogViewerPaneProps> = ({ loggingPath }) => 
                             </div>
 
                             {/* Virtual scroll container */}
-                            <div ref={scrollContainerRef} className="log-viewer-content-lines">
+                            <div ref={scrollContainerRef} className="log-viewer-content-lines" onContextMenu={handleContextMenu}>
                                 <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
                                     {virtualItems.map(virtualRow => {
                                         const idx = virtualRow.index;

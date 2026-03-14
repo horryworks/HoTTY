@@ -116,7 +116,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     logDebug: (message: string) => ipcRenderer.send('log-debug', message),
     openExternal: (url: string) => ipcRenderer.send('open-external', url),
 
-    showContextMenu: (selection: string, commands?: { id: string; label: string }[]) => ipcRenderer.send('show-context-menu', selection, commands),
+    showContextMenu: (selection: string, commands?: { id: string; label: string }[], includePaste?: boolean) => ipcRenderer.send('show-context-menu', selection, commands, includePaste),
     onAskGemini: (callback: (selection: string, type: string) => void) => {
         const subscription = (_: any, selection: string, type: string) => callback(selection, type);
         ipcRenderer.on('ask-gemini', subscription);

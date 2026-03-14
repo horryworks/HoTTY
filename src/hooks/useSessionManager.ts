@@ -386,6 +386,15 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         if (session?.type === 'ai') {
             // AI sessions don't have terminal or backend connection
             electronService.geminiChatClear(sessionId);
+
+            // Disconnect the linked terminal's watch state when AI session closes
+            const linkedTerminalId = session.aiChatState?.lastTargetSessionId;
+            if (linkedTerminalId) {
+                delete watchBuffers.current[linkedTerminalId];
+                setSessions(prev => prev.map(s =>
+                    s.id === linkedTerminalId ? { ...s, isWatching: false, hasWatchData: false } : s
+                ));
+            }
         } else if (session?.type === 'log-viewer') {
             // Log viewer sessions don't have terminal or backend connection
         } else {
