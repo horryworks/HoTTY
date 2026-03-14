@@ -122,7 +122,10 @@ export function useInteractiveFlow(options: UseInteractiveFlowOptions): UseInter
             const regex = new RegExp(patternObj.pattern);
             const trimmedLine = lastLine.trimLeft();
             const match = regex.exec(trimmedLine);
-            if (match && match.index === 0) {
+            // match.index === 0: pattern starts at beginning of line
+            // match[0].length === trimmedLine.length: pattern covers the whole line
+            // (if there's extra text after the match, it's likely a command echo, not a real prompt)
+            if (match && match.index === 0 && match[0].length === trimmedLine.length) {
               matched = true;
               matchedPatternName = patternObj.name;
               break;
@@ -158,7 +161,7 @@ export function useInteractiveFlow(options: UseInteractiveFlowOptions): UseInter
             delete trackingsRef.current[sessionId];
 
             onFeedbackReadyRef.current(aiSessionId, resultText, sessionId);
-          }, 100);
+          }, 400);
         }
       }
     });
