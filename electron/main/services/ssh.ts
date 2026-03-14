@@ -86,7 +86,8 @@ export class SshService implements ISessionService {
 
             this.conn.shell((err, stream) => {
                 if (err) {
-                    this.window.webContents.send('session-error', { sessionId: this.sessionId, error: err.message });
+                    console.error('[SSH] Shell channel error:', err);
+                    this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Failed to open shell channel.' });
                     return;
                 }
 

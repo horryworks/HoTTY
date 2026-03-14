@@ -234,7 +234,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
             if (!formPassword || !importFilePath) return;
             try {
                 (window as any).electronAPI.logDebug('Calling decryptImportFile IPC from modal');
-                const data = await (window as any).electronAPI.decryptImportFile(importFilePath, formPassword);
+                const data = await (window as any).electronAPI.decryptImportFile(formPassword);
                 if (data && onImportData) {
                     // Extract filename from path for folder naming
                     const pathParts = importFilePath.split(/[\\/]/);

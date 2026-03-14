@@ -89,11 +89,13 @@ export class TelnetService implements ISessionService {
             });
 
             this.conn.on('error', (err: Error) => {
-                this.window.webContents.send('session-error', { sessionId: this.sessionId, error: err.message });
+                console.error('Telnet error:', err);
+                this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Connection error.' });
             });
 
         } catch (err: any) {
-            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: err.message || 'Connection failed' });
+            console.error('Telnet connect error:', err);
+            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Connection failed.' });
         }
     }
 
@@ -176,7 +178,7 @@ export class TelnetService implements ISessionService {
                 // Fallback (might not support Buffer sending properly via 'send' in legacy libs but socket usually works)
                 this.conn.send(data, { waitfor: false }).catch((err: any) => {
                     console.error('Telnet write error:', err);
-                    this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Write error: ' + err.message });
+                    this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Write error.' });
                 });
             }
         }

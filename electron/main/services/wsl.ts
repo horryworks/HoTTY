@@ -23,7 +23,7 @@ export class WslService implements ISessionService {
 
     connect(config: { distro?: string }) {
         const distro = config.distro?.trim();
-        if (distro && !/^[\w\-. ]+$/.test(distro)) {
+        if (distro && !/^[\w][\w\-.]{0,62}$/.test(distro)) {
             this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Invalid WSL distribution name' });
             return;
         }
@@ -56,7 +56,7 @@ export class WslService implements ISessionService {
 
         } catch (err: any) {
             console.error('WSL PTY Spawn Error:', err);
-            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: err.message });
+            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Failed to start WSL.' });
         }
     }
 

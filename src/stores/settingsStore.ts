@@ -155,7 +155,7 @@ const INITIAL_STATE: SettingsState = {
     terminalBackgroundInactive: '#121212',
     paneBackground: '#000200',
     paneBackgroundMode: 'color',
-    paneBackgroundImage: 'HoTTY_background.svg',
+    paneBackgroundImage: '',
     customColors: {
         foreground: '#ffffff',
         background: '#1e1e1e',

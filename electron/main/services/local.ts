@@ -59,7 +59,7 @@ export class LocalService implements ISessionService {
 
         } catch (err: any) {
             console.error('PTY Spawn Error:', err);
-            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: err.message });
+            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Failed to start shell.' });
         }
     }
 

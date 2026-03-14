@@ -69,6 +69,7 @@ async function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      webSecurity: true,
     },
     backgroundColor: '#1e1e1e',
   })
@@ -152,7 +153,9 @@ const logToDebugFile = (message: string) => {
 };
 
 ipcMain.on('log-debug', (_, message) => {
-  logToDebugFile(message);
+  if (typeof message === 'string' && message.length <= 10000) {
+    logToDebugFile(message);
+  }
 });
 
 // IPC Handlers
@@ -169,6 +172,7 @@ ipcMain.handle('open-win', (_, arg) => {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      webSecurity: true,
     },
   })
 
@@ -295,7 +299,9 @@ ipcMain.on('term-resize', (event, { sessionId, cols, rows }) => {
 ipcMain.on('set-window-size', (event, { width, height }) => {
   const eventWin = BrowserWindow.fromWebContents(event.sender);
   if (eventWin) {
-    eventWin.setSize(width, height);
+    const validWidth = Number.isInteger(width) && width >= 100 && width <= 7680 ? width : 1200;
+    const validHeight = Number.isInteger(height) && height >= 100 && height <= 4320 ? height : 800;
+    eventWin.setSize(validWidth, validHeight);
   }
 });
 
@@ -609,6 +615,16 @@ ipcMain.handle('get-themes', async () => {
   return Object.keys(themes).length > 0 ? themes : null;
 });
 
+function isValidThemeData(data: any): boolean {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return false;
+  const entries = Object.entries(data);
+  if (entries.length === 0 || entries.length > 500) return false;
+  return entries.every(([k, v]) =>
+    typeof k === 'string' && k.length <= 100 &&
+    typeof v === 'string' && (v as string).length <= 500
+  );
+}
+
 ipcMain.handle('save-custom-theme', async (_, themeKey: string, themeData: any) => {
   if (typeof themeKey !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(themeKey)) {
     return { success: false, error: 'Invalid theme name. Use only letters, numbers, hyphens, and underscores.' };
@@ -616,6 +632,9 @@ ipcMain.handle('save-custom-theme', async (_, themeKey: string, themeData: any) 
   const PROTECTED = ['dark', 'medium', 'light'];
   if (PROTECTED.includes(themeKey.toLowerCase())) {
     return { success: false, error: 'Cannot overwrite built-in theme' };
+  }
+  if (!isValidThemeData(themeData)) {
+    return { success: false, error: 'Invalid theme data.' };
   }
 
   const resourcesDir = app.isPackaged
@@ -628,7 +647,7 @@ ipcMain.handle('save-custom-theme', async (_, themeKey: string, themeData: any) 
     return { success: true };
   } catch (err) {
     console.error('Failed to save custom theme:', err);
-    return { success: false, error: String(err) };
+    return { success: false, error: 'Failed to save theme.' };
   }
 });
 

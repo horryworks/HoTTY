@@ -31,6 +31,13 @@ export class SerialService implements ISessionService {
     async connect(config: SerialConfig) {
         this.encoding = config.encoding || 'utf8';
 
+        // Validate serial port path (Windows: COM1-COM999, Linux/Mac: /dev/tty*)
+        const isValidPath = /^COM([1-9]|[1-9]\d|[1-9]\d\d)$/i.test(config.path) || /^\/dev\/tty[A-Za-z0-9]+$/.test(config.path);
+        if (!isValidPath) {
+            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Invalid serial port path.' });
+            return;
+        }
+
         const portOptions: any = {
             path: config.path,
             baudRate: config.baudRate || 9600,
@@ -59,7 +66,8 @@ export class SerialService implements ISessionService {
         });
 
         this.port.on('error', (err: Error) => {
-            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: err.message });
+            console.error('Serial port error:', err);
+            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Serial port error.' });
         });
 
         this.port.on('close', () => {
@@ -69,7 +77,8 @@ export class SerialService implements ISessionService {
         return new Promise<void>((resolve, reject) => {
             this.port!.open((err) => {
                 if (err) {
-                    this.window.webContents.send('session-error', { sessionId: this.sessionId, error: `Failed to open ${config.path}: ${err.message}` });
+                    console.error(`Failed to open serial port ${config.path}:`, err);
+                    this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Failed to open serial port.' });
                     reject(err);
                     return;
                 }

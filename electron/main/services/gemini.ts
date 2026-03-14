@@ -145,9 +145,15 @@ export class GeminiService {
           const error = parsedUrl.query.error as string;
           const receivedState = parsedUrl.query.state as string;
 
+          const securityHeaders = {
+            'Content-Type': 'text/html; charset=utf-8',
+            'X-Content-Type-Options': 'nosniff',
+            'Access-Control-Allow-Origin': 'null',
+          };
+
           // CSRF protection: validate state parameter
           if (!receivedState || receivedState !== oauthState) {
-            res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.writeHead(400, securityHeaders);
             res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#ef4444">❌ Invalid State</h1><p>Security validation failed. You may close this window.</p></div></body></html>');
             this.cleanupServer();
             win.webContents.send('gemini-auth-result', { success: false });
@@ -156,7 +162,7 @@ export class GeminiService {
           }
 
           if (error) {
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.writeHead(200, securityHeaders);
             res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#ef4444">❌ Authentication Error</h1><p>You may close this window.</p></div></body></html>');
             this.cleanupServer();
             win.webContents.send('gemini-auth-result', { success: false });
@@ -172,7 +178,7 @@ export class GeminiService {
               // Save token immediately after authenticating
               await this.saveToken();
 
-              res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+              res.writeHead(200, securityHeaders);
               res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#4ade80">✅ Authentication Successful</h1><p>You can return to HoTTY. You may close this window.</p></div></body></html>');
               this.cleanupServer();
               win.webContents.send('gemini-auth-result', { success: true });
@@ -182,8 +188,9 @@ export class GeminiService {
 
               resolve(true);
             } catch (err: any) {
-              res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-              res.end(`<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#ef4444">❌ Token Exchange Error</h1><p>${err.message}</p></div></body></html>`);
+              console.error('Gemini token exchange error:', err);
+              res.writeHead(200, securityHeaders);
+              res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#ef4444">&#10060; Token Exchange Error</h1><p>Authentication failed. You may close this window and try again.</p></div></body></html>');
               this.cleanupServer();
               win.webContents.send('gemini-auth-result', { success: false });
               resolve(false);
@@ -268,15 +275,22 @@ export class GeminiService {
     params.set('grant_type', 'authorization_code');
     params.set('code_verifier', codeVerifier);
 
-    const response = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
-    });
+    const exchangeController = new AbortController();
+    const exchangeTimeout = setTimeout(() => exchangeController.abort(), 30000);
+    let response: Response;
+    try {
+      response = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+        signal: exchangeController.signal,
+      });
+    } finally {
+      clearTimeout(exchangeTimeout);
+    }
 
     if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Token exchange failed: ${response.status} ${errorBody}`);
+      throw new Error(`Token exchange failed: ${response.status}`);
     }
 
     const data = await response.json();
@@ -299,11 +313,19 @@ export class GeminiService {
     params.set('grant_type', 'refresh_token');
 
     try {
-      const response = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString(),
-      });
+      const refreshController = new AbortController();
+      const refreshTimeout = setTimeout(() => refreshController.abort(), 15000);
+      let response: Response;
+      try {
+        response = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString(),
+          signal: refreshController.signal,
+        });
+      } finally {
+        clearTimeout(refreshTimeout);
+      }
 
       if (!response.ok) return false;
 
@@ -445,7 +467,7 @@ export class GeminiService {
       win.webContents.send('gemini-chat-response', {
         sessionId,
         type: 'error',
-        content: `Error: ${err.message}`,
+        content: 'An error occurred while communicating with Gemini. Please try again.',
       });
     } finally {
       this.abortControllers.delete(sessionId);
@@ -463,9 +485,17 @@ export class GeminiService {
     if (!token) return [];
 
     try {
-      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const listController = new AbortController();
+      const listTimeout = setTimeout(() => listController.abort(), 15000);
+      let response: Response;
+      try {
+        response = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
+          headers: { 'Authorization': `Bearer ${token}` },
+          signal: listController.signal,
+        });
+      } finally {
+        clearTimeout(listTimeout);
+      }
       if (!response.ok) return [];
 
       const data = await response.json();

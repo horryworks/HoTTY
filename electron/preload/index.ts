@@ -183,7 +183,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     readLogFile: (filePath: string) => ipcRenderer.invoke('read-log-file', filePath),
     exportHTree: (data: any, password: string) => ipcRenderer.invoke('export-htree', { data, password }),
     selectImportFile: () => ipcRenderer.invoke('select-import-file'),
-    decryptImportFile: (filePath: string, password: string) => ipcRenderer.invoke('decrypt-import-file', { filePath, password }),
+    decryptImportFile: (password: string) => ipcRenderer.invoke('decrypt-import-file', { password }),
 })
 
 
