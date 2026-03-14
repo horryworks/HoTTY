@@ -55,7 +55,7 @@
 }
 
 .host-tree-empty {
-    color: #555;
+    color: var(--text-secondary);
     font-size: 0.8rem;
     text-align: center;
     padding: 20px 12px;
@@ -85,7 +85,7 @@
 
 .host-tree-row.selected {
     background: var(--accent-color, #1a3a5c);
-    color: #fff;
+    color: var(--text-primary);
 }
 
 .tree-icon {
@@ -98,13 +98,13 @@
 }
 
 .tree-chevron {
-    color: #888;
+    color: var(--text-secondary);
     transition: transform 0.15s ease-in-out, color 0.1s;
     /* Base SVG rotation if drawn pointing right */
 }
 
 .tree-chevron:hover {
-    color: #ccc;
+    color: var(--text-primary);
 }
 
 .tree-chevron.expanded {
@@ -120,9 +120,9 @@
 
 .tree-meta {
     font-size: 0.78rem;
-    color: #d4b86a;
+    color: var(--tree-meta-color);
     flex-shrink: 0;
-    font-family: monospace;
+    font-family: var(--font-family);
     opacity: 0.85;
 }
 
@@ -133,11 +133,11 @@
 .context-menu {
     position: fixed;
     z-index: 30000;
-    background: #252525;
-    border: 1px solid #404040;
+    background: var(--context-menu-bg);
+    border: 1px solid var(--context-menu-border);
     border-radius: 6px;
     padding: 4px 0;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--modal-shadow);
     min-width: 160px;
 }
 
@@ -149,7 +149,7 @@
     text-align: left;
     background: none;
     border: none;
-    color: #ccc;
+    color: var(--context-menu-text);
     padding: 6px 14px;
     font-size: 0.88rem;
     cursor: pointer;
@@ -169,22 +169,22 @@
 }
 
 .context-menu button:hover {
-    background: #333;
-    color: #fff;
+    background: var(--context-menu-hover-bg);
+    color: var(--text-primary);
 }
 
 .context-menu button.danger {
-    color: #e05050;
+    color: var(--color-danger);
 }
 
 .context-menu button.danger:hover {
-    background: #3a1a1a;
-    color: #ff6b6b;
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
 }
 
 .context-menu-separator {
     height: 1px;
-    background: #3a3a3a;
+    background: var(--border-color);
     margin: 3px 0;
 }
 
@@ -192,7 +192,7 @@
 .host-edit-modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--modal-overlay-bg);
     z-index: 20000;
     display: flex;
     align-items: center;
@@ -202,14 +202,14 @@
 }
 
 .host-edit-modal {
-    background: #222;
-    border: 1px solid #3a3a3a;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 20px 24px;
     min-width: 320px;
     max-width: 460px;
     width: 90%;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    box-shadow: var(--modal-shadow);
     user-select: text !important;
     -webkit-user-select: text !important;
     /* Allow input focus and selection inside modal */
@@ -223,16 +223,16 @@
 
 .modal-form-group label {
     font-size: 0.8rem;
-    color: #888;
+    color: var(--text-secondary);
     margin-bottom: 4px;
 }
 
 .modal-form-group input,
 .modal-form-group select {
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
-    color: #ddd;
+    color: var(--text-primary);
     padding: 5px 8px;
     font-size: 0.9rem;
     user-select: text !important;
@@ -242,7 +242,7 @@
 .modal-form-group input:focus,
 .modal-form-group select:focus {
     outline: none;
-    border-color: #4a7fb0;
+    border-color: var(--accent-color);
 }
 
 .modal-form-row {
@@ -275,26 +275,26 @@
 }
 
 .host-tree-row.drag-over-before {
-    box-shadow: 0 -2px 0 0 #4a9eff;
+    box-shadow: 0 -2px 0 0 var(--accent-color);
     border-top-left-radius: 0;
     border-top-right-radius: 0;
 }
 
 .host-tree-row.drag-over-after {
-    box-shadow: 0 2px 0 0 #4a9eff;
+    box-shadow: 0 2px 0 0 var(--accent-color);
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
 }
 
 .host-tree-row.drag-over-inside {
-    background: rgba(74, 158, 255, 0.2);
-    box-shadow: 0 0 0 1px #4a9eff inset;
+    background: var(--color-danger-bg);
+    box-shadow: 0 0 0 1px var(--accent-color) inset;
 }
 
 /* --- Inline Edit --- */
 .tree-label-edit-input {
     background: var(--btn-bg, #2a2a2a);
-    border: 1px solid #4a9eff;
+    border: 1px solid var(--accent-color);
     border-radius: 3px;
     color: var(--text-primary, #ccc);
     padding: 1px 4px;
@@ -305,5 +305,5 @@
     min-width: 80px;
     max-width: 100%;
     outline: none;
-    box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+    box-shadow: 0 0 0 2px var(--color-danger-bg);
 }

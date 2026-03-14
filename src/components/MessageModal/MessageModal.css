@@ -4,7 +4,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.7);
+    background-color: var(--modal-overlay-bg);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -12,28 +12,28 @@
 }
 
 .message-modal {
-    background-color: #252526;
+    background-color: var(--bg-secondary);
     border-radius: 6px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--modal-shadow);
     width: 450px;
     max-width: 90vw;
     display: flex;
     flex-direction: column;
-    color: #cccccc;
+    color: var(--text-primary);
     animation: fadeIn 0.1s ease-out;
 }
 
 /* Modifiers for different types */
 .message-modal.error {
-    border: 1px solid #7a2e2e;
+    border: 1px solid var(--modal-border-error);
 }
 
 .message-modal.success {
-    border: 1px solid #2e7a3d;
+    border: 1px solid var(--modal-border-success);
 }
 
 .message-modal.info {
-    border: 1px solid #3e3e42;
+    border: 1px solid var(--modal-header-info-border);
 }
 
 @keyframes fadeIn {
@@ -51,7 +51,7 @@
 .message-modal h3 {
     margin: 0;
     padding: 12px 16px;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: 600;
     display: flex;
     align-items: center;
@@ -62,28 +62,28 @@
 
 /* Header colors per type */
 .message-modal.error h3 {
-    background-color: #3e1a1a;
-    border-bottom: 1px solid #7a2e2e;
-    color: #ffcccc;
+    background-color: var(--modal-header-error-bg);
+    border-bottom: 1px solid var(--modal-header-error-border);
+    color: var(--modal-header-error-text);
 }
 
 .message-modal.success h3 {
-    background-color: #1a3e23;
-    border-bottom: 1px solid #2e7a3d;
-    color: #ccffcc;
+    background-color: var(--modal-header-success-bg);
+    border-bottom: 1px solid var(--modal-header-success-border);
+    color: var(--modal-header-success-text);
 }
 
 .message-modal.info h3 {
-    background-color: #2d2d30;
-    border-bottom: 1px solid #3e3e42;
-    color: #ffffff;
+    background-color: var(--modal-header-info-bg);
+    border-bottom: 1px solid var(--modal-header-info-border);
+    color: var(--modal-header-info-text);
 }
 
 .message-content {
     padding: 20px 16px;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     line-height: 1.5;
-    color: #d4d4d4;
+    color: var(--text-primary);
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -92,8 +92,8 @@
     display: flex;
     justify-content: flex-end;
     padding: 12px 16px;
-    background-color: #252526;
-    border-top: 1px solid #3e3e42;
+    background-color: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
     border-bottom-left-radius: 5px;
     border-bottom-right-radius: 5px;
     gap: 12px;
@@ -103,21 +103,22 @@
     padding: 6px 20px;
     border: none;
     border-radius: 2px;
-    font-size: 13px;
+    font-size: calc(var(--font-size-base) - 1px);
     cursor: pointer;
-    background-color: #3e3e42;
-    color: #ffffff;
+    background-color: var(--btn-secondary-bg);
+    color: var(--text-primary);
     transition: background-color 0.1s;
 }
 
 .message-btn:hover {
-    background-color: #4e4e52;
+    background-color: var(--btn-secondary-hover-bg);
 }
 
 .message-btn.primary {
-    background-color: #007acc;
+    background-color: var(--accent-color);
+    color: var(--text-primary);
 }
 
 .message-btn.primary:hover {
-    background-color: #0062a3;
+    background-color: var(--accent-hover);
 }

@@ -44,8 +44,8 @@
   bottom: 0;
   pointer-events: none;
   z-index: 1000;
-  border: 3px solid #ffff00;
-  box-shadow: inset 0 0 10px #ffff00, 0 0 10px #ffff00;
+  border: 3px solid var(--active-pane-color);
+  box-shadow: inset 0 0 10px var(--active-pane-color), 0 0 10px var(--active-pane-color);
   animation: pane-flash-new 0.5s ease-out forwards;
 }
 
@@ -99,8 +99,8 @@
 
 .sidebar-btn-active {
   opacity: 1 !important;
-  background-color: rgba(0, 122, 204, 0.1) !important;
-  color: #007acc !important;
+  background-color: var(--sidebar-btn-active-bg) !important;
+  color: var(--accent-color) !important;
 }
 
 /* Main Layout (TopBar + Content) */
@@ -135,7 +135,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: var(--modal-overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -146,7 +146,7 @@
   background: var(--bg-secondary);
   padding: 20px;
   border-radius: 8px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--modal-shadow);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -155,16 +155,16 @@
 
 .cancel-btn {
   background: transparent;
-  border: 1px solid #666;
+  border: 1px solid var(--border-color);
   color: var(--text-secondary);
-  padding: 8px;
+  padding: 6px 16px;
   cursor: pointer;
   border-radius: 4px;
 }
 
 .cancel-btn:hover {
-  background: #333;
-  color: white;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .empty-state {
@@ -172,8 +172,8 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #666;
-  font-size: 14px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-base, 14px);
 }
 
 /* Sidebar Resizer */
@@ -215,14 +215,14 @@
 .terminal-selection-popover {
   position: fixed;
   z-index: 50000;
-  background: rgba(30, 30, 30, 0.85);
+  background: var(--bg-secondary);
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 6px;
   display: flex;
   gap: 4px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--modal-shadow);
   transform: translateX(-10px) translateY(-10px);
   transition: opacity 0.2s ease, transform 0.2s ease;
   opacity: 0;
@@ -239,7 +239,7 @@
 .popover-btn {
   background: transparent;
   border: none;
-  color: #e0e0e0;
+  color: var(--text-primary);
   padding: 6px 12px;
   border-radius: 4px;
   font-size: 0.85rem;
@@ -253,14 +253,14 @@
 }
 
 .popover-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--hover-bg);
+  color: var(--text-primary);
 }
 
 .popover-separator {
   width: 1px;
   height: 16px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--border-color);
   margin: 0 4px;
 }
 
@@ -284,7 +284,7 @@
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: var(--modal-overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -309,7 +309,7 @@
 }
 
 .help-section {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--border-color);
   padding-bottom: 4px;
 }
 
@@ -356,19 +356,19 @@
   margin: 4px 0;
   font-size: 0.9rem;
   line-height: 1.5;
-  color: var(--text-color);
+  color: var(--text-primary);
   opacity: 0.85;
 }
 
 .help-text code {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-tertiary);
   padding: 2px 4px;
   border-radius: 4px;
-  font-family: 'Cascadia Code', monospace;
+  font-family: var(--font-family);
 }
 
 .help-visual-guide {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bg-tertiary);
   padding: 12px;
   border-radius: 8px;
   margin: 10px 0;
@@ -391,11 +391,11 @@
 }
 
 .marker-red {
-  background-color: #f44336;
+  background-color: var(--color-danger);
 }
 
 .marker-blue {
-  background-color: #2196f3;
+  background-color: var(--accent-color);
 }
 
 .marker-desc {

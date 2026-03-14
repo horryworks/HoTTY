@@ -35,7 +35,7 @@
 }
 
 .ai-chat-title {
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: 600;
     color: var(--text-primary);
 }
@@ -53,7 +53,7 @@
     cursor: pointer;
     padding: 4px 6px;
     border-radius: 4px;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     transition: all 0.2s;
 }
 
@@ -72,7 +72,7 @@
 .ai-chat-header-item-icon {
     width: 17px;
     height: 17px;
-    color: #888;
+    color: var(--text-secondary);
     flex-shrink: 0;
 }
 
@@ -82,7 +82,7 @@
     border: 1px solid var(--border-color);
     border-radius: 4px;
     padding: 2px 6px;
-    font-size: 13px;
+    font-size: calc(var(--font-size-base) - 1px);
     height: 26px;
     outline: none;
     cursor: pointer;
@@ -140,13 +140,13 @@
 
 .ai-chat-auth-card h2 {
     color: var(--text-primary);
-    font-size: 20px;
+    font-size: calc(var(--font-size-base) + 6px);
     margin: 0 0 8px;
 }
 
 .ai-chat-auth-desc {
     color: var(--text-secondary);
-    font-size: 13px;
+    font-size: calc(var(--font-size-base) - 1px);
     margin: 0 0 24px;
     line-height: 1.5;
 }
@@ -160,7 +160,7 @@
 
 .ai-chat-auth-form label {
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: calc(var(--font-size-base) - 2px);
     font-weight: 500;
 }
 
@@ -171,7 +171,7 @@
     border: 1px solid var(--border-color);
     border-radius: 6px;
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: calc(var(--font-size-base) - 1px);
     outline: none;
     transition: border-color 0.2s;
     box-sizing: border-box;
@@ -182,7 +182,7 @@
 }
 
 .ai-chat-input::placeholder {
-    color: #555;
+    color: var(--placeholder-color);
 }
 
 .ai-chat-login-btn {
@@ -196,8 +196,8 @@
     background: linear-gradient(135deg, var(--accent-color), var(--accent-hover));
     border: none;
     border-radius: 6px;
-    color: #fff;
-    font-size: 14px;
+    color: var(--text-primary);
+    font-size: var(--font-size-base);
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
@@ -216,11 +216,11 @@
 .ai-chat-auth-error {
     margin-top: 8px;
     padding: 8px 12px;
-    background-color: rgba(239, 68, 68, 0.15);
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    background-color: var(--color-danger-bg);
+    border: 1px solid var(--color-danger-border);
     border-radius: 6px;
-    color: #ef4444;
-    font-size: 12px;
+    color: var(--color-danger);
+    font-size: calc(var(--font-size-base) - 2px);
     text-align: center;
 }
 
@@ -231,7 +231,7 @@
 .ai-chat-spinner {
     display: inline-block;
     animation: spin 1s linear infinite;
-    font-size: 18px;
+    font-size: calc(var(--font-size-base) + 4px);
 }
 
 @keyframes spin {
@@ -288,8 +288,8 @@
 }
 
 .ai-chat-welcome-icon {
-    font-size: 48px;
-    background: linear-gradient(135deg, var(--accent-color), #ab47bc);
+    font-size: calc(var(--font-size-base) * 3.5);
+    background: linear-gradient(135deg, var(--accent-color), var(--accent-secondary));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -304,7 +304,7 @@
 
 .ai-chat-welcome p {
     color: var(--ai-welcome-text);
-    font-size: 13px;
+    font-size: calc(var(--font-size-base) - 1px);
     margin: 0;
 }
 
@@ -331,7 +331,7 @@
 .ai-chat-thinking-spinner {
     display: inline-block;
     animation: spin 1s linear infinite;
-    font-size: 16px;
+    font-size: calc(var(--font-size-base) + 2px);
 }
 
 @keyframes spin {
@@ -471,7 +471,7 @@
 }
 
 .ai-chat-textarea::placeholder {
-    color: #555;
+    color: var(--placeholder-color);
 }
 
 .ai-chat-textarea:disabled {
@@ -500,12 +500,12 @@
 }
 
 .ai-chat-cancel-btn {
-    background-color: rgba(239, 68, 68, 0.2);
-    color: #ef4444;
+    background-color: var(--color-danger-bg);
+    color: var(--color-danger);
 }
 
 .ai-chat-cancel-btn:hover {
-    background-color: rgba(239, 68, 68, 0.35);
+    background-color: var(--color-danger-bg-hover);
 }
 
 .ai-chat-prompt-btn {
@@ -593,7 +593,7 @@
 
 
 .ai-chat-markdown strong {
-    color: #fff;
+    color: var(--text-primary);
     font-weight: 700;
 }
 
@@ -607,7 +607,7 @@
     color: var(--accent-color);
     padding: 1px 5px;
     border-radius: 4px;
-    font-family: 'Consolas', 'Courier New', monospace;
+    font-family: var(--font-family);
     font-size: 1em;
 }
 
@@ -667,7 +667,7 @@
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: calc(var(--font-size-base) - 2px);
     font-weight: 600;
     transition: all 0.2s;
     height: 26px;
@@ -693,7 +693,7 @@
 }
 
 .ai-run-target {
-    font-size: 11px;
+    font-size: calc(var(--font-size-base) - 3px);
     color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
@@ -701,7 +701,7 @@
 }
 
 .ai-run-target.no-target {
-    color: #884444;
+    color: var(--color-danger);
     font-style: italic;
 }
 
@@ -760,7 +760,7 @@
 
 .ai-chat-markdown hr {
     border: none;
-    border-top: 1px solid #2a2a4a;
+    border-top: 1px solid var(--border-color);
     margin: 8px 0;
 }
 

@@ -64,15 +64,13 @@
     align-items: center;
     justify-content: center;
     /* Background handled by parent grid-pane via inline styles */
-    /* background-color: #000510; */
-    /* background-color: #000510; */
-    color: #00aaff;
+    color: var(--accent-color);
     margin: 2px;
     border-radius: 4px;
 }
 
 .pane-label {
-    font-size: 2rem;
+    font-size: calc(var(--font-size-base) * 2.3);
     font-weight: bold;
     opacity: 0.2;
 }
@@ -92,7 +90,7 @@
 
 .grid-resizer-v:hover,
 .grid-resizer-v.resizing {
-    background-color: #007acc;
+    background-color: var(--accent-color);
 }
 
 .grid-resizer-h {
@@ -106,7 +104,7 @@
 
 .grid-resizer-h:hover,
 .grid-resizer-h.resizing {
-    background-color: #007acc;
+    background-color: var(--accent-color);
 }
 
 .grid-resizer-cross {
@@ -119,5 +117,5 @@
 }
 
 .grid-resizer-cross:hover {
-    background-color: #007acc;
+    background-color: var(--accent-color);
 }

@@ -7,8 +7,8 @@
 }
 
 .pane-map-label {
-    font-size: 9px;
-    color: #858585;
+    font-size: calc(var(--font-size-base) - 5px);
+    color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 4px;
@@ -27,22 +27,22 @@
     align-items: center;
     justify-content: center;
     gap: 1px;
-    font-size: 10px;
-    color: #cccccc;
+    font-size: calc(var(--font-size-base) - 4px);
+    color: var(--text-primary);
     padding: 2px 2px;
     border-radius: 3px;
-    background: #2d2d30;
+    background: var(--bg-secondary);
     transition: background 0.15s;
 }
 
 .pane-map-item.active {
-    background: #007acc;
-    color: #ffffff;
+    background: var(--accent-color);
+    color: var(--text-primary);
 }
 
 .pane-map-item.hidden-item {
-    background: #4a0000;
-    color: #999999;
+    background: var(--hidden-item-bg);
+    color: var(--text-secondary);
 }
 
 .map-tab-num {
@@ -52,16 +52,16 @@
 }
 
 .map-arrow {
-    color: #858585;
-    font-size: 9px;
+    color: var(--text-secondary);
+    font-size: calc(var(--font-size-base) - 5px);
 }
 
 .pane-map-item.active .map-arrow {
-    color: #ffffff;
+    color: var(--text-primary);
 }
 
 .pane-map-item.hidden-item .map-arrow {
-    color: #666666;
+    color: var(--text-secondary);
 }
 
 .map-pane-num {
@@ -71,5 +71,5 @@
 }
 
 .map-pane-num.no-pane {
-    color: #666666;
+    color: var(--text-secondary);
 }

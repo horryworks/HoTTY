@@ -125,6 +125,16 @@ function App() {
     }
   }, [settings.theme, themesData]);
 
+  // Apply font family from settings to CSS variable (used by all monospace/code areas)
+  useEffect(() => {
+    document.documentElement.style.setProperty('--font-family', settings.fontFamily);
+  }, [settings.fontFamily]);
+
+  // Apply font size from settings to CSS variable (used as base UI font size)
+  useEffect(() => {
+    document.documentElement.style.setProperty('--font-size-base', `${settings.fontSize}px`);
+  }, [settings.fontSize]);
+
   const applyTheme = (themeName: string) => {
     if (themeName === 'custom') return;
     const themeDef = (themesData as any)[themeName];

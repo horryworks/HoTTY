@@ -5,8 +5,8 @@
     width: 100%;
     background-color: var(--bg-primary);
     color: var(--text-primary);
-    font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 13px;
+    font-family: var(--font-family);
+    font-size: calc(var(--font-size-base) - 1px);
     overflow: hidden;
     box-sizing: border-box;
 }
@@ -26,14 +26,14 @@
 
 .log-viewer-title {
     font-weight: bold;
-    font-size: 12px;
+    font-size: calc(var(--font-size-base) - 2px);
     color: var(--text-primary);
     white-space: nowrap;
 }
 
 .log-viewer-path {
     flex: 1;
-    font-size: 11px;
+    font-size: calc(var(--font-size-base) - 3px);
     color: var(--text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -50,7 +50,7 @@
     color: var(--text-primary);
     border: 1px solid var(--border-color);
     border-radius: 3px;
-    font-size: 11px;
+    font-size: calc(var(--font-size-base) - 3px);
     cursor: pointer;
     white-space: nowrap;
     font-family: inherit;
@@ -97,7 +97,7 @@
     border-radius: 0 4px 4px 0;
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: 10px;
+    font-size: calc(var(--font-size-base) - 4px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -126,12 +126,12 @@
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     padding: 4px 6px;
-    font-size: 12px;
+    font-size: calc(var(--font-size-base) - 2px);
     border-radius: 3px;
     outline: none;
     font-family: inherit;
 }
-.log-viewer-filter input:focus { border-color: var(--accent-color, #007acc); }
+.log-viewer-filter input:focus { border-color: var(--accent-color); }
 
 .log-viewer-file-list {
     list-style: none;
@@ -154,11 +154,11 @@
 .log-viewer-file-item.selected {
     background: var(--bg-primary);
     opacity: 1;
-    border-left: 2px solid var(--accent-color, #007acc);
+    border-left: 2px solid var(--accent-color);
 }
 
 .log-viewer-file-name {
-    font-size: 12px;
+    font-size: calc(var(--font-size-base) - 2px);
     color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -166,7 +166,7 @@
 }
 
 .log-viewer-file-meta {
-    font-size: 10px;
+    font-size: calc(var(--font-size-base) - 4px);
     color: var(--text-secondary);
 }
 
@@ -187,7 +187,7 @@
     padding: 5px 10px;
     background: var(--ai-header-bg);
     border-bottom: 1px solid var(--border-color);
-    font-size: 12px;
+    font-size: calc(var(--font-size-base) - 2px);
     color: var(--text-primary);
     flex-shrink: 0;
     gap: 8px;
@@ -205,7 +205,7 @@
     align-items: center;
     gap: 4px;
     cursor: pointer;
-    font-size: 11px;
+    font-size: calc(var(--font-size-base) - 3px);
     color: var(--text-secondary);
     user-select: none;
     white-space: nowrap;
@@ -216,10 +216,10 @@
     height: 11px;
     margin: 0;
     cursor: pointer;
-    accent-color: var(--accent-color, #007acc);
+    accent-color: var(--accent-color);
 }
 .log-viewer-ts-toggle input[type="checkbox"]:checked + span {
-    color: var(--accent-color, #007acc);
+    color: var(--accent-color);
 }
 
 /* ── Search bar ── */
@@ -244,8 +244,8 @@
     min-width: 80px;
 }
 .log-viewer-search-input-wrap.error .log-viewer-search-input {
-    border-color: #e06c75;
-    background: rgba(224, 108, 117, 0.1);
+    border-color: var(--color-danger);
+    background: var(--color-danger-bg);
 }
 
 .log-viewer-search-input {
@@ -255,12 +255,12 @@
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     padding: 3px 22px 3px 6px;
-    font-size: 12px;
+    font-size: calc(var(--font-size-base) - 2px);
     border-radius: 3px;
     outline: none;
     font-family: inherit;
 }
-.log-viewer-search-input:focus { border-color: var(--accent-color, #007acc); }
+.log-viewer-search-input:focus { border-color: var(--accent-color); }
 
 .log-viewer-search-clear {
     position: absolute;
@@ -269,7 +269,7 @@
     border: none;
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: 10px;
+    font-size: calc(var(--font-size-base) - 4px);
     padding: 0;
     line-height: 1;
     border-radius: 2px;
@@ -281,7 +281,7 @@
     align-items: center;
     gap: 3px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: calc(var(--font-size-base) - 2px);
     color: var(--text-secondary);
     user-select: none;
     white-space: nowrap;
@@ -295,10 +295,10 @@
     height: 11px;
     margin: 0;
     cursor: pointer;
-    accent-color: var(--accent-color, #007acc);
+    accent-color: var(--accent-color);
 }
 .log-viewer-regex-toggle input[type="checkbox"]:checked + span {
-    color: var(--accent-color, #007acc);
+    color: var(--accent-color);
     font-weight: bold;
 }
 
@@ -307,7 +307,7 @@
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     border-radius: 3px;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     padding: 1px 6px;
     cursor: pointer;
     line-height: 1.4;
@@ -318,11 +318,11 @@
 .log-viewer-nav-btn:disabled { opacity: 0.35; cursor: default; }
 
 .log-viewer-search-btn {
-    background: var(--accent-color, #007acc);
+    background: var(--accent-color);
     border: none;
     color: #fff;
     border-radius: 3px;
-    font-size: 12px;
+    font-size: calc(var(--font-size-base) - 2px);
     padding: 3px 10px;
     cursor: pointer;
     font-family: inherit;
@@ -333,12 +333,12 @@
 .log-viewer-search-btn:disabled { opacity: 0.35; cursor: default; }
 
 .log-viewer-match-count {
-    font-size: 11px;
+    font-size: calc(var(--font-size-base) - 3px);
     color: var(--text-secondary);
     white-space: nowrap;
     padding: 0 2px;
 }
-.log-viewer-match-count.no-match { color: #e06c75; }
+.log-viewer-match-count.no-match { color: var(--color-danger); }
 
 /* ── Content lines ── */
 .log-viewer-content-lines {
@@ -351,9 +351,9 @@
 .log-line {
     display: flex;
     align-items: baseline;
-    font-size: 12px;
+    font-size: calc(var(--font-size-base) - 2px);
     line-height: 1.6;
-    font-family: 'Consolas', 'Courier New', monospace;
+    font-family: var(--font-family);
 }
 
 .log-line-match {
@@ -371,7 +371,7 @@
     flex-shrink: 0;
     width: 180px;
     padding: 0 3px;
-    font-size: 11px;
+    font-size: calc(var(--font-size-base) - 3px);
     color: var(--text-secondary);
     border-right: 1px solid var(--border-color);
     white-space: nowrap;
@@ -411,19 +411,19 @@
     justify-content: center;
     height: 100%;
     color: var(--text-secondary);
-    font-size: 13px;
+    font-size: calc(var(--font-size-base) - 1px);
     font-style: italic;
 }
 
 .log-viewer-empty {
     padding: 12px 10px;
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: calc(var(--font-size-base) - 2px);
     font-style: italic;
 }
 
 .log-viewer-error {
     padding: 10px;
-    color: #e06c75;
-    font-size: 12px;
+    color: var(--color-danger);
+    font-size: calc(var(--font-size-base) - 2px);
 }

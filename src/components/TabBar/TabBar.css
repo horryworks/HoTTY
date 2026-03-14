@@ -18,7 +18,7 @@
     color: var(--tab-text);
     border-right: 1px solid var(--border-color);
     cursor: pointer;
-    font-size: 13px;
+    font-size: calc(var(--font-size-base) - 1px);
     min-width: 120px;
     max-width: 200px;
     position: relative;
@@ -157,7 +157,7 @@
     justify-content: center;
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: 18px;
+    font-size: calc(var(--font-size-base) + 4px);
 }
 
 .new-tab-btn:hover {
@@ -166,17 +166,16 @@
 }
 
 .tab.hidden-tab {
-    background-color: #4a0000;
-    /* Dark Red */
-    color: #cccccc;
+    background-color: var(--hidden-item-bg);
+    color: var(--text-primary);
 }
 
 .tab.hidden-tab:hover {
-    background-color: #600000;
+    background-color: var(--hidden-item-bg-hover);
 }
 
 .tab.hidden-tab.active {
-    background-color: #4a0000;
+    background-color: var(--hidden-item-bg);
 }
 
 /* Tab corresponding to the active pane: blue background */

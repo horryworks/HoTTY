@@ -15,20 +15,20 @@
     justify-content: center;
     opacity: 0.5;
     transition: all 0.2s;
-    color: #888;
+    color: var(--text-secondary);
     border-radius: 4px;
 }
 
 .layout-option:hover {
     opacity: 0.8;
-    background-color: rgba(255, 255, 255, 0.1);
-    color: #fff;
+    background-color: var(--hover-bg);
+    color: var(--text-primary);
 }
 
 .layout-option.selected {
     opacity: 1;
-    color: #007acc;
-    background-color: rgba(0, 122, 204, 0.1);
+    color: var(--accent-color);
+    background-color: var(--sidebar-btn-active-bg);
 }
 
 .layout-separator {
