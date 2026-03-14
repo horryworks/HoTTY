@@ -2,6 +2,7 @@ import * as pty from 'node-pty';
 import { BrowserWindow } from 'electron';
 import * as iconv from 'iconv-lite';
 import { ISessionService } from './ISessionService';
+import { logger, sanitizeProcessEnv } from './Logger';
 
 export class LocalService implements ISessionService {
     private ptyProcess: pty.IPty | null = null;
@@ -28,24 +29,24 @@ export class LocalService implements ISessionService {
         this.encoding = config.encoding || 'utf8';
 
         const shell = config.shellType === 'powershell' ? 'powershell.exe' : 'cmd.exe';
+        logger.info('local', 'Connect attempt', { sessionId: this.sessionId, shell });
+
+        const sanitizedEnv = sanitizeProcessEnv();
 
         try {
-            console.log(`Spawning PTY Local Shell: ${shell}`);
             this.ptyProcess = pty.spawn(shell, [], {
                 name: 'xterm-256color',
                 cols: 80,
                 rows: 24,
                 cwd: process.env.HOME || process.env.USERPROFILE,
-                env: process.env as any,
+                env: sanitizedEnv,
                 encoding: 'utf8' // Internal PTY encoding
             });
 
+            logger.info('local', 'Connected', { sessionId: this.sessionId });
             this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'connected' });
 
             this.ptyProcess.onData((data: string) => {
-                // node-pty handles encoding internally if specified, 
-                // but we might need to re-encode if the user requested something specific.
-                // For now, assume UTF-8 as node-pty is good at it on Windows.
                 this.window.webContents.send('session-data', { sessionId: this.sessionId, data });
                 if (this.dataCallback) {
                     this.dataCallback(data);
@@ -53,12 +54,12 @@ export class LocalService implements ISessionService {
             });
 
             this.ptyProcess.onExit(({ exitCode, signal }) => {
-                console.log(`Local PTY Process Exited (Session ${this.sessionId}) with code: ${exitCode}, signal: ${signal}`);
+                logger.info('local', 'Process exited', { sessionId: this.sessionId, exitCode, signal });
                 this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
             });
 
         } catch (err: any) {
-            console.error('PTY Spawn Error:', err);
+            logger.error('local', 'Spawn error', { sessionId: this.sessionId, error: err.message });
             this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Failed to start shell.' });
         }
     }

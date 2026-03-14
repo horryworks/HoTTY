@@ -729,7 +729,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                                     )}
                                 </select>
                             </div>
-                            <button className="ai-chat-header-btn" onClick={handleClearChat} title="Clear chat context">🗑️</button>
+                            <button className="ai-chat-header-btn ai-chat-header-btn--danger" onClick={handleClearChat} title="Clear chat context">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                    <path d="M9 3v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5V3H9zm0 5h2v9H9V8zm4 0h2v9h-2V8z"/>
+                                </svg>
+                            </button>
                             <button className="ai-chat-header-btn" onClick={handleLogout} title="Logout">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                                     <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />

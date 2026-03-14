@@ -6,6 +6,7 @@ import * as path from 'path';
 import { join } from 'path';
 import { ISessionService } from './ISessionService';
 import { verifyHostKey } from './knownHosts';
+import { logger } from './Logger';
 
 export class SshService implements ISessionService {
     private conn: Client;
@@ -50,6 +51,9 @@ export class SshService implements ISessionService {
             ]
         };
 
+        // Allowlist of valid algorithm names per category
+        const allowedAlgorithms: Record<string, string[]> = defaultAlgorithms;
+
         try {
             const configPath = join(app.getPath('userData'), 'ssh_algorithms.json');
 
@@ -57,12 +61,13 @@ export class SshService implements ISessionService {
                 const content = fs.readFileSync(configPath, 'utf8');
                 const config = JSON.parse(content);
 
-                const result: any = {};
-                for (const key of ['kex', 'cipher', 'serverHostKey', 'hmac']) {
+                const result: Record<string, string[]> = {};
+                for (const key of ['kex', 'cipher', 'serverHostKey', 'hmac'] as const) {
                     if (config[key] && Array.isArray(config[key])) {
                         result[key] = config[key]
-                            .filter((item: any) => item.enabled)
-                            .map((item: any) => item.name);
+                            .filter((item: unknown) => typeof item === 'object' && item !== null && (item as Record<string, unknown>).enabled === true)
+                            .map((item: unknown) => (item as Record<string, unknown>).name)
+                            .filter((name: unknown): name is string => typeof name === 'string' && allowedAlgorithms[key].includes(name));
                     }
                 }
 
@@ -72,7 +77,7 @@ export class SshService implements ISessionService {
                 }
             }
         } catch (error) {
-            console.error('Failed to load SSH algorithms:', error);
+            logger.error('ssh', 'Failed to load SSH algorithms', { error: String(error) });
         }
 
         return defaultAlgorithms;
@@ -80,13 +85,15 @@ export class SshService implements ISessionService {
 
     connect(config: ConnectConfig & { encoding?: string }) {
         this.encoding = config.encoding || 'utf8';
+        logger.info('ssh', 'Connect attempt', { sessionId: this.sessionId, host: config.host, port: config.port ?? 22, user: config.username });
 
         this.conn.on('ready', () => {
+            logger.info('ssh', 'Connected', { sessionId: this.sessionId });
             this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'connected' });
 
             this.conn.shell((err, stream) => {
                 if (err) {
-                    console.error('[SSH] Shell channel error:', err);
+                    logger.error('ssh', 'Shell channel error', { sessionId: this.sessionId, error: err.message });
                     this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Failed to open shell channel.' });
                     return;
                 }
@@ -99,6 +106,7 @@ export class SshService implements ISessionService {
                 }
 
                 stream.on('close', () => {
+                    logger.info('ssh', 'Shell closed', { sessionId: this.sessionId });
                     this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
                     this.conn.end();
                 }).on('data', (data: Buffer) => {
@@ -114,8 +122,10 @@ export class SshService implements ISessionService {
             if (message === 'All configured authentication methods failed') {
                 message = 'Username or password may be incorrect';
             }
+            logger.error('ssh', 'Connection error', { sessionId: this.sessionId, error: message });
             this.window.webContents.send('session-error', { sessionId: this.sessionId, error: message });
         }).on('close', () => {
+            logger.info('ssh', 'Connection closed', { sessionId: this.sessionId });
             this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
         }).on('keyboard-interactive', (name, instructions, instructionsLang, prompts, finish) => {
             finish([config.password as string]);
@@ -142,11 +152,11 @@ export class SshService implements ISessionService {
                         }
                         verify(trusted);
                     }).catch((err) => {
-                        console.error('[KnownHosts] hostVerifier error:', err);
+                        logger.error('ssh', 'Host key verify error', { sessionId: this.sessionId, error: String(err) });
                         verify(false);
                     });
                 } catch (err) {
-                    console.error('[KnownHosts] hostVerifier parse error:', err);
+                    logger.error('ssh', 'Host key parse error', { sessionId: this.sessionId, error: String(err) });
                     verify(false);
                 }
             },

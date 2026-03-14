@@ -10,6 +10,7 @@ import { SerialPort } from 'serialport';
 import type { ISessionService } from './services/ISessionService';
 import { GeminiService } from './services/gemini';
 import { LogManager } from './services/LogManager';
+import { logger } from './services/Logger';
 import { encryptString, decryptString } from './services/dpapi';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -46,14 +47,14 @@ try {
     mediaTokens = JSON.parse(fs.readFileSync(mediaTokensPath, 'utf8'));
   }
 } catch (e) {
-  console.error('Failed to load media tokens:', e);
+  logger.error('app', 'Failed to load media tokens', { error: String(e) });
 }
 
 function saveMediaTokens() {
   try {
     fs.writeFileSync(mediaTokensPath, JSON.stringify(mediaTokens, null, 2), 'utf8');
   } catch (e) {
-    console.error('Failed to save media tokens:', e);
+    logger.error('app', 'Failed to save media tokens', { error: String(e) });
   }
 }
 
@@ -99,6 +100,15 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  logger.initialize(app.getPath('userData'));
+  logger.info('app', 'App started', {
+    version: app.getVersion(),
+    electron: process.versions.electron,
+    node: process.versions.node,
+    platform: process.platform,
+    arch: process.arch,
+  });
+
   const firstWin = await createWindow();
   geminiService = new GeminiService();
 
@@ -112,17 +122,26 @@ app.whenReady().then(async () => {
 
     const actualPath = mediaTokens[token];
     if (!actualPath) {
-      console.warn('Blocked unauthorized media protocol access or invalid token:', token);
+      logger.warn('app', 'Blocked unauthorized media token');
       return new Response('Access Denied', { status: 403 });
     }
 
     try {
       return net.fetch(pathToFileURL(actualPath).toString());
     } catch (error) {
-      console.error('Failed to handle media protocol', error);
+      logger.error('app', 'Failed to handle media protocol', { error: String(error) });
       return new Response('Internal Error', { status: 500 });
     }
   });
+});
+
+app.on('before-quit', () => {
+  sessions.forEach(s => {
+    s.service.disconnect();
+    logManager.stopLogging(s.id);
+  });
+  sessions.clear();
+  logger.close();
 });
 
 app.on('window-all-closed', () => {
@@ -140,21 +159,10 @@ app.on('activate', () => {
 })
 
 // IPC Handlers
-const debugLogPath = join(app.getPath('userData'), 'debug_gemini.log');
-
-const logToDebugFile = (message: string) => {
-  if (app.isPackaged) return; // Disable debug file logging in production
-  const timestamp = new Date().toISOString();
-  const logMessage = `[${timestamp}] ${message}\n`;
-  console.log(logMessage);
-  fs.appendFile(debugLogPath, logMessage, (err) => {
-    if (err) console.error('Failed to write request log', err);
-  });
-};
 
 ipcMain.on('log-debug', (_, message) => {
   if (typeof message === 'string' && message.length <= 10000) {
-    logToDebugFile(message);
+    logger.debug('renderer', message);
   }
 });
 
@@ -162,7 +170,7 @@ ipcMain.on('log-debug', (_, message) => {
 ipcMain.handle('open-win', (_, arg) => {
   // Input validation for 'arg' (hash)
   if (typeof arg !== 'string' || !/^[a-zA-Z0-9_-]*$/.test(arg)) {
-    console.error('Invalid window hash argument:', arg);
+    logger.warn('app', 'Invalid window hash argument');
     return;
   }
 
@@ -187,7 +195,7 @@ ipcMain.on('open-external', (_, url) => {
   if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
     shell.openExternal(url);
   } else {
-    console.warn('[Security] open-external blocked non-https URL:', url);
+    logger.warn('app', '[Security] open-external blocked non-https URL');
   }
 });
 
@@ -210,6 +218,7 @@ ipcMain.on('connect-session', async (event, { sessionId, config }) => {
 
   // Validate protocol
   if (typeof config.protocol !== 'string' || !VALID_PROTOCOLS.has(config.protocol)) {
+    logger.warn('session', 'Invalid protocol, fallback to ssh', { given: config.protocol });
     config.protocol = 'ssh';
   }
 
@@ -217,6 +226,7 @@ ipcMain.on('connect-session', async (event, { sessionId, config }) => {
   if (config.port !== undefined) {
     const port = Number(config.port);
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      logger.warn('session', 'Invalid port number', { sessionId, port: config.port });
       eventWin.webContents.send('session-error', { sessionId, error: 'Invalid port number' });
       return;
     }
@@ -329,6 +339,7 @@ ipcMain.on('update-session-encoding', (event, { sessionId, encoding }) => {
 ipcMain.on('disconnect-session', (event, sessionId) => {
   const session = sessions.get(sessionId);
   if (session) {
+    logger.info('session', 'Disconnect', { sessionId, protocol: session.protocol });
     session.service.disconnect();
     logManager.stopLogging(sessionId);
     sessions.delete(sessionId);
@@ -338,12 +349,18 @@ ipcMain.on('disconnect-session', (event, sessionId) => {
 });
 
 ipcMain.on('app-quit', () => {
+  logger.info('app', 'App quit requested');
   sessions.forEach(s => {
     s.service.disconnect();
     logManager.stopLogging(s.id);
   });
   sessions.clear();
+  logger.close();
   app.quit();
+});
+
+ipcMain.handle('open-debug-log-folder', () => {
+  shell.openPath(logger.getLogDir());
 });
 
 // Update logging for all active sessions
@@ -377,7 +394,7 @@ ipcMain.handle('list-serial-ports', async () => {
       pnpId: p.pnpId || '',
     }));
   } catch (err: any) {
-    console.error('Failed to list serial ports:', err);
+    logger.error('app', 'Failed to list serial ports', { error: String(err) });
     return [];
   }
 });
@@ -422,7 +439,7 @@ ipcMain.handle('list-wsl-distributions', async () => {
       .map(s => s.replace(/[\r\0]/g, '').trim()) // Remove \r and \0, then trim whitespace
       .filter(s => s.length > 0);
   } catch (err) {
-    console.error('Failed to list WSL distributions:', err);
+    logger.error('app', 'Failed to list WSL distributions', { error: String(err) });
     return [];
   }
 });
@@ -555,12 +572,12 @@ const getSshAlgorithmsPath = () => {
     try {
       if (fs.existsSync(defaultPath)) {
         fs.copyFileSync(defaultPath, userDataPath);
-        console.log('Initialized ssh_algorithms.json in userData');
+        logger.info('app', 'Initialized ssh_algorithms.json in userData');
       } else {
-        console.error('Default ssh_algorithms.json not found at:', defaultPath);
+        logger.error('app', 'Default ssh_algorithms.json not found', { path: defaultPath });
       }
     } catch (err) {
-      console.error('Failed to initialize ssh_algorithms.json:', err);
+      logger.error('app', 'Failed to initialize ssh_algorithms.json', { error: String(err) });
     }
   }
 
@@ -575,7 +592,7 @@ ipcMain.handle('get-ssh-algorithms', async () => {
       return JSON.parse(content);
     }
   } catch (err) {
-    console.error('Failed to get SSH algorithms:', err);
+    logger.error('app', 'Failed to get SSH algorithms', { error: String(err) });
   }
   return null;
 });
@@ -586,7 +603,7 @@ ipcMain.handle('save-ssh-algorithms', async (_, algorithms) => {
     fs.writeFileSync(algorithmsPath, JSON.stringify(algorithms, null, 2), 'utf8');
     return true;
   } catch (err) {
-    console.error('Failed to save SSH algorithms:', err);
+    logger.error('app', 'Failed to save SSH algorithms', { error: String(err) });
     return false;
   }
 });
@@ -606,11 +623,11 @@ ipcMain.handle('get-themes', async () => {
         const content = fs.readFileSync(join(resourcesDir, file), 'utf8');
         themes[themeName] = JSON.parse(content);
       } catch (err) {
-        console.error(`Failed to load theme ${file}:`, err);
+        logger.error('theme', `Failed to load theme ${file}`, { error: String(err) });
       }
     }
   } catch (err) {
-    console.error('Failed to read resources directory:', err);
+    logger.error('theme', 'Failed to read resources directory', { error: String(err) });
   }
   return Object.keys(themes).length > 0 ? themes : null;
 });
@@ -646,7 +663,7 @@ ipcMain.handle('save-custom-theme', async (_, themeKey: string, themeData: any) 
     fs.writeFileSync(filePath, JSON.stringify(themeData, null, 4), 'utf8');
     return { success: true };
   } catch (err) {
-    console.error('Failed to save custom theme:', err);
+    logger.error('theme', 'Failed to save custom theme', { error: String(err) });
     return { success: false, error: 'Failed to save theme.' };
   }
 });
@@ -671,7 +688,7 @@ ipcMain.handle('delete-custom-theme', async (_, themeKey: string) => {
     }
     return { success: true };
   } catch (err) {
-    console.error('Failed to delete custom theme:', err);
+    logger.error('theme', 'Failed to delete custom theme', { error: String(err) });
     return { success: false, error: String(err) };
   }
 });
@@ -682,7 +699,7 @@ ipcMain.handle('dpapi-encrypt', async (_, plaintext: string) => {
   try {
     return await encryptString(plaintext);
   } catch (err) {
-    console.error('[DPAPI] IPC encrypt error:', err);
+    logger.error('dpapi', 'Encrypt error', { error: String(err) });
     throw err;
   }
 });
@@ -691,7 +708,7 @@ ipcMain.handle('dpapi-decrypt', async (_, ciphertext: string) => {
   try {
     return await decryptString(ciphertext);
   } catch (err) {
-    console.error('[DPAPI] IPC decrypt error:', err);
+    logger.error('dpapi', 'Decrypt error', { error: String(err) });
     throw err;
   }
 });
@@ -700,7 +717,7 @@ ipcMain.handle('dpapi-encrypt-batch', async (_, plaintexts: (string | undefined)
   try {
     return await Promise.all(plaintexts.map(text => text ? encryptString(text) : Promise.resolve(text)));
   } catch (err) {
-    console.error('[DPAPI] IPC batch encrypt error:', err);
+    logger.error('dpapi', 'Batch encrypt error', { error: String(err) });
     throw err;
   }
 });
@@ -709,7 +726,7 @@ ipcMain.handle('dpapi-decrypt-batch', async (_, ciphertexts: (string | undefined
   try {
     return await Promise.all(ciphertexts.map(text => text ? decryptString(text) : Promise.resolve(text)));
   } catch (err) {
-    console.error('[DPAPI] IPC batch decrypt error:', err);
+    logger.error('dpapi', 'Batch decrypt error', { error: String(err) });
     throw err;
   }
 });
@@ -718,9 +735,9 @@ ipcMain.handle('dpapi-decrypt-batch', async (_, ciphertexts: (string | undefined
 const MAGIC_NUMBER = 'HOTTY';
 
 ipcMain.handle('export-htree', async (event, { data, password }) => {
-  logToDebugFile('[Main] export-htree called');
+  logger.debug('app', 'export-htree called');
   const eventWin = BrowserWindow.fromWebContents(event.sender);
-  logToDebugFile(`[Main] eventWin found: ${!!eventWin}`);
+  logger.debug('app', 'export-htree window', { found: !!eventWin });
 
   const { canceled, filePath } = await dialog.showSaveDialog(eventWin!, {
     title: 'Export Host Tree',
@@ -728,21 +745,21 @@ ipcMain.handle('export-htree', async (event, { data, password }) => {
     filters: [{ name: 'HoTTY Tree', extensions: ['htree'] }],
   });
 
-  logToDebugFile(`[Main] Save dialog result: ${JSON.stringify({ canceled, filePath })}`);
+  logger.debug('app', 'export-htree save dialog', { canceled, filePath: filePath ?? null });
   if (canceled || !filePath) return false;
 
   try {
-    logToDebugFile('[Main] Deriving key...');
+    logger.debug('app', 'export-htree deriving key');
     const salt = crypto.randomBytes(16);
     const key = crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256');
 
-    logToDebugFile('[Main] Encrypting data...');
+    logger.debug('app', 'export-htree encrypting');
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
     const encrypted = Buffer.concat([cipher.update(JSON.stringify(data), 'utf8'), cipher.final()]);
     const tag = cipher.getAuthTag();
 
-    logToDebugFile('[Main] Constructing payload...');
+    logger.debug('app', 'export-htree constructing payload');
     const payload = Buffer.concat([
       Buffer.from(MAGIC_NUMBER),
       salt,
@@ -752,16 +769,16 @@ ipcMain.handle('export-htree', async (event, { data, password }) => {
     ]);
 
     fs.writeFileSync(filePath, payload);
-    logToDebugFile('[Main] Export successful');
+    logger.info('app', 'export-htree success');
     return true;
   } catch (err: any) {
-    logToDebugFile(`[Main] Export failed: ${err.message}`);
+    logger.error('app', 'export-htree failed', { error: err.message });
     throw err;
   }
 });
 
 ipcMain.handle('select-import-file', async (event) => {
-  logToDebugFile('[Main] select-import-file called');
+  logger.debug('app', 'select-import-file called');
   const eventWin = BrowserWindow.fromWebContents(event.sender);
   const { canceled, filePaths } = await dialog.showOpenDialog(eventWin!, {
     title: 'Select HoTTY Tree File',
@@ -769,7 +786,7 @@ ipcMain.handle('select-import-file', async (event) => {
     properties: ['openFile'],
   });
 
-  logToDebugFile(`[Main] Open dialog result: canceled=${canceled}`);
+  logger.debug('app', 'select-import-file dialog', { canceled });
   if (canceled || filePaths.length === 0) return null;
   // Store server-side; decrypt-import-file will use this, not a renderer-supplied path
   pendingImportFilePath = filePaths[0];
@@ -811,7 +828,7 @@ ipcMain.handle('read-log-file', async (_, filePath: string) => {
     return resolvedLower.startsWith(prefix);
   });
   if (!inAllowedDir) {
-    console.warn('[Security] read-log-file blocked:', resolvedPath);
+    logger.warn('app', '[Security] read-log-file blocked path traversal attempt');
     return { error: 'Access denied: file is outside the configured log directory' };
   }
 
@@ -835,13 +852,13 @@ ipcMain.handle('decrypt-import-file', async (event, { password }) => {
   }
   const filePath = pendingImportFilePath;
   pendingImportFilePath = null; // Single-use: clear after consuming
-  logToDebugFile('[Main] decrypt-import-file called');
+  logger.debug('app', 'decrypt-import-file called');
   try {
-    logToDebugFile('[Main] Reading file...');
+    logger.debug('app', 'decrypt-import-file reading');
     const payload = fs.readFileSync(filePath);
 
     const magic = payload.subarray(0, 5).toString();
-    logToDebugFile(`[Main] Magic number check: ${magic}`);
+    logger.debug('app', 'decrypt-import-file magic check', { valid: magic === MAGIC_NUMBER });
     if (magic !== MAGIC_NUMBER) {
       throw new Error('Not a valid HoTTY tree file');
     }
@@ -851,18 +868,18 @@ ipcMain.handle('decrypt-import-file', async (event, { password }) => {
     const tag = payload.subarray(33, 33 + 16);
     const encrypted = payload.subarray(49);
 
-    logToDebugFile('[Main] Deriving key for import...');
+    logger.debug('app', 'decrypt-import-file deriving key');
     const key = crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256');
 
-    logToDebugFile('[Main] Decrypting data...');
+    logger.debug('app', 'decrypt-import-file decrypting');
     const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
     decipher.setAuthTag(tag);
     const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
 
-    logToDebugFile('[Main] Decryption successful');
+    logger.info('app', 'decrypt-import-file success');
     return JSON.parse(decrypted.toString('utf8'));
   } catch (err: any) {
-    logToDebugFile(`[Main] Decryption failed: ${err.message}`);
+    logger.error('app', 'decrypt-import-file failed', { error: err.message });
     throw new Error('Invalid password or corrupted file.');
   }
 });

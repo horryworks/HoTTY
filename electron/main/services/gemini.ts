@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { encryptString, decryptString } from './dpapi';
+import { logger } from './Logger';
 
 interface TokenData {
   access_token: string;
@@ -50,9 +51,9 @@ export class GeminiService {
       const jsonString = JSON.stringify(dataToSave);
       const encrypted = await encryptString(jsonString);
       fs.writeFileSync(this.getTokenFilePath(), encrypted, 'utf8');
-      console.log('Gemini token saved successfully.');
-    } catch (err) {
-      console.error('Failed to save Gemini token:', err);
+      logger.debug('gemini', 'Token saved');
+    } catch (err: any) {
+      logger.error('gemini', 'Failed to save token', { error: err.message });
     }
   }
 
@@ -85,8 +86,8 @@ export class GeminiService {
       const success = await this.refreshAccessToken();
       return success;
 
-    } catch (err) {
-      console.error('Failed to load Gemini token:', err);
+    } catch (err: any) {
+      logger.error('gemini', 'Failed to load token', { error: err.message });
       return false;
     }
   }
@@ -110,15 +111,15 @@ export class GeminiService {
       if (success) {
         // Validate that the stored clientId/secret matches what we were passed
         if (this.clientId !== clientId || this.clientSecret !== clientSecret) {
-          console.log("Gemini auto-auth failed: saved credentials do not match provided credentials.");
+          logger.warn('gemini', 'Auto-auth failed: credentials mismatch');
           this.logout();
           return false;
         }
         return true;
       }
       return false;
-    } catch (err) {
-      console.error('Auto auth error:', err);
+    } catch (err: any) {
+      logger.error('gemini', 'Auto-auth error', { error: err.message });
       return false;
     }
   }
@@ -128,6 +129,7 @@ export class GeminiService {
   async startAuth(win: BrowserWindow, clientId: string, clientSecret: string): Promise<boolean> {
     this.clientId = clientId;
     this.clientSecret = clientSecret;
+    logger.info('gemini', 'Auth start');
 
     return new Promise((resolve) => {
       const codeVerifier = crypto.randomBytes(32).toString('base64url');
@@ -153,6 +155,7 @@ export class GeminiService {
 
           // CSRF protection: validate state parameter
           if (!receivedState || receivedState !== oauthState) {
+            logger.warn('gemini', 'Auth CSRF validation failed');
             res.writeHead(400, securityHeaders);
             res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#ef4444">❌ Invalid State</h1><p>Security validation failed. You may close this window.</p></div></body></html>');
             this.cleanupServer();
@@ -162,6 +165,7 @@ export class GeminiService {
           }
 
           if (error) {
+            logger.warn('gemini', 'Auth callback error', { error });
             res.writeHead(200, securityHeaders);
             res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#ef4444">❌ Authentication Error</h1><p>You may close this window.</p></div></body></html>');
             this.cleanupServer();
@@ -178,6 +182,7 @@ export class GeminiService {
               // Save token immediately after authenticating
               await this.saveToken();
 
+              logger.info('gemini', 'Auth success');
               res.writeHead(200, securityHeaders);
               res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#4ade80">✅ Authentication Successful</h1><p>You can return to HoTTY. You may close this window.</p></div></body></html>');
               this.cleanupServer();
@@ -188,7 +193,7 @@ export class GeminiService {
 
               resolve(true);
             } catch (err: any) {
-              console.error('Gemini token exchange error:', err);
+              logger.error('gemini', 'Token exchange error', { error: err.message });
               res.writeHead(200, securityHeaders);
               res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#ef4444">&#10060; Token Exchange Error</h1><p>Authentication failed. You may close this window and try again.</p></div></body></html>');
               this.cleanupServer();
@@ -463,7 +468,7 @@ export class GeminiService {
         // Cancelled by user, no error to send
         return;
       }
-      console.error('Gemini chat error:', err);
+      logger.error('gemini', 'Chat error', { sessionId, error: err.message });
       win.webContents.send('gemini-chat-response', {
         sessionId,
         type: 'error',
@@ -511,6 +516,7 @@ export class GeminiService {
   }
 
   logout(): void {
+    logger.info('gemini', 'Logout');
     this.tokenData = null;
     this.clientId = null;
     this.clientSecret = null;
@@ -522,8 +528,8 @@ export class GeminiService {
       if (fs.existsSync(tokenPath)) {
         fs.unlinkSync(tokenPath);
       }
-    } catch (err) {
-      console.error('Failed to delete Gemini token file:', err);
+    } catch (err: any) {
+      logger.error('gemini', 'Failed to delete token file', { error: err.message });
     }
   }
 

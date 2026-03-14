@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron';
 import { Telnet, ConnectOptions } from 'telnet-client';
 import * as iconv from 'iconv-lite';
 import { ISessionService } from './ISessionService';
+import { logger } from './Logger';
 
 export class TelnetService implements ISessionService {
     private conn: Telnet & { socket?: any; opts?: any };
@@ -47,8 +48,10 @@ export class TelnetService implements ISessionService {
             (params as any).disableLogon = false;
         }
 
+        logger.info('telnet', 'Connect attempt', { sessionId: this.sessionId, host: config.host, port: config.port || 23 });
         try {
             await this.conn.connect(params);
+            logger.info('telnet', 'Connected', { sessionId: this.sessionId });
             this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'connected' });
 
             // Start keepalive if configured
@@ -85,16 +88,17 @@ export class TelnetService implements ISessionService {
             });
 
             this.conn.on('close', () => {
+                logger.info('telnet', 'Connection closed', { sessionId: this.sessionId });
                 this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
             });
 
             this.conn.on('error', (err: Error) => {
-                console.error('Telnet error:', err);
+                logger.error('telnet', 'Connection error', { sessionId: this.sessionId, error: err.message });
                 this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Connection error.' });
             });
 
         } catch (err: any) {
-            console.error('Telnet connect error:', err);
+            logger.error('telnet', 'Connect failed', { sessionId: this.sessionId, error: err.message });
             this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Connection failed.' });
         }
     }
@@ -177,7 +181,7 @@ export class TelnetService implements ISessionService {
             } else {
                 // Fallback (might not support Buffer sending properly via 'send' in legacy libs but socket usually works)
                 this.conn.send(data, { waitfor: false }).catch((err: any) => {
-                    console.error('Telnet write error:', err);
+                    logger.error('telnet', 'Write error', { sessionId: this.sessionId, error: err.message });
                     this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Write error.' });
                 });
             }
@@ -214,7 +218,7 @@ export class TelnetService implements ISessionService {
                     // console.log(`[Telnet] Sent resize: ${cols}x${rows}`);
                 }
             } catch (e) {
-                console.warn('Failed to send telnet resize', e);
+                logger.warn('telnet', 'Failed to send telnet resize', { sessionId: this.sessionId, error: String(e) });
             }
         }
     }

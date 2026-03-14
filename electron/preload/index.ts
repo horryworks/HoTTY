@@ -184,6 +184,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     exportHTree: (data: any, password: string) => ipcRenderer.invoke('export-htree', { data, password }),
     selectImportFile: () => ipcRenderer.invoke('select-import-file'),
     decryptImportFile: (password: string) => ipcRenderer.invoke('decrypt-import-file', { password }),
+    openDebugLogFolder: () => ipcRenderer.invoke('open-debug-log-folder'),
 })
 
 

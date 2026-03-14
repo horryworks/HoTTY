@@ -147,6 +147,17 @@
     color: var(--text-secondary);
 }
 
+.form-group--section {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+}
+
+.settings-button {
+    padding: 4px 8px;
+    cursor: pointer;
+}
+
 .settings-select,
 .settings-input {
     background-color: var(--input-bg);

@@ -2,6 +2,7 @@ import { SerialPort } from 'serialport';
 import { BrowserWindow } from 'electron';
 import * as iconv from 'iconv-lite';
 import { ISessionService } from './ISessionService';
+import { logger } from './Logger';
 
 export interface SerialConfig {
     path: string;         // COM port (e.g., 'COM3')
@@ -30,10 +31,12 @@ export class SerialService implements ISessionService {
 
     async connect(config: SerialConfig) {
         this.encoding = config.encoding || 'utf8';
+        logger.info('serial', 'Connect attempt', { sessionId: this.sessionId, path: config.path, baudRate: config.baudRate });
 
         // Validate serial port path (Windows: COM1-COM999, Linux/Mac: /dev/tty*)
         const isValidPath = /^COM([1-9]|[1-9]\d|[1-9]\d\d)$/i.test(config.path) || /^\/dev\/tty[A-Za-z0-9]+$/.test(config.path);
         if (!isValidPath) {
+            logger.warn('serial', 'Invalid port path', { sessionId: this.sessionId, path: config.path });
             this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Invalid serial port path.' });
             return;
         }
@@ -66,22 +69,24 @@ export class SerialService implements ISessionService {
         });
 
         this.port.on('error', (err: Error) => {
-            console.error('Serial port error:', err);
+            logger.error('serial', 'Port error', { sessionId: this.sessionId, error: err.message });
             this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Serial port error.' });
         });
 
         this.port.on('close', () => {
+            logger.info('serial', 'Port closed', { sessionId: this.sessionId });
             this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
         });
 
         return new Promise<void>((resolve, reject) => {
             this.port!.open((err) => {
                 if (err) {
-                    console.error(`Failed to open serial port ${config.path}:`, err);
+                    logger.error('serial', 'Failed to open port', { sessionId: this.sessionId, path: config.path, error: err.message });
                     this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Failed to open serial port.' });
                     reject(err);
                     return;
                 }
+                logger.info('serial', 'Connected', { sessionId: this.sessionId });
                 this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'connected' });
                 resolve();
             });

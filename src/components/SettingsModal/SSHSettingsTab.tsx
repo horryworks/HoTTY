@@ -242,6 +242,19 @@ export const SSHSettingsTab: React.FC<SSHSettingsTabProps> = ({
                 </div>
                 <p className="settings-help">If enabled, right-clicking the terminal will read the clipboard and show the paste confirmation dialog instead of the context menu.</p>
             </div>
+
+            <div className="form-group form-group--section">
+                <label>Debug Log</label>
+                <div>
+                    <button
+                        className="settings-button"
+                        onClick={() => electronService.openDebugLogFolder()}
+                    >
+                        Open Debug Log Folder
+                    </button>
+                </div>
+                <p className="settings-help">Application debug logs are saved here. Share the latest log file when reporting a bug.</p>
+            </div>
         </div>
     );
 };

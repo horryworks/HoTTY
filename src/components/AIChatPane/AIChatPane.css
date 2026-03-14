@@ -62,6 +62,15 @@
     color: var(--text-primary);
 }
 
+.ai-chat-header-btn--danger {
+    color: var(--color-danger);
+}
+
+.ai-chat-header-btn--danger:hover {
+    background-color: var(--color-danger-bg);
+    color: var(--color-danger);
+}
+
 .ai-chat-header-item {
     display: flex;
     align-items: center;

@@ -1,6 +1,6 @@
 const api = () => window.electronAPI;
 
-export const connectSession = (sessionId: string, config: any) => api().connectSession(sessionId, config);
+export const connectSession = (sessionId: string, config: Record<string, unknown>) => api().connectSession(sessionId, config);
 export const disconnectSession = (sessionId: string) => api().disconnectSession(sessionId);
 export const sendInput = (sessionId: string, data: string) => api().sendInput(sessionId, data);
 export const resize = (sessionId: string, cols: number, rows: number) => api().resize(sessionId, cols, rows);
@@ -35,10 +35,10 @@ export const showContextMenu = (selection: string, commands?: { id: string; labe
 export const onAskGemini = (callback: (selection: string, type: string) => void) => api().onAskGemini(callback);
 export const onTerminalContextPaste = (callback: () => void) => api().onTerminalContextPaste(callback);
 export const getSshAlgorithms = () => api().getSshAlgorithms();
-export const saveSshAlgorithms = (algorithms: any) => api().saveSshAlgorithms(algorithms);
+export const saveSshAlgorithms = (algorithms: Record<string, string[]>) => api().saveSshAlgorithms(algorithms);
 export const getThemes = () => api().getThemes();
-export const saveThemes = (themes: any) => api().saveThemes(themes);
-export const saveCustomTheme = (themeKey: string, themeData: any) => api().saveCustomTheme(themeKey, themeData);
+export const saveThemes = (themes: Record<string, Record<string, unknown>>) => api().saveThemes(themes);
+export const saveCustomTheme = (themeKey: string, themeData: Record<string, unknown>) => api().saveCustomTheme(themeKey, themeData);
 export const deleteCustomTheme = (themeKey: string) => api().deleteCustomTheme(themeKey);
 
 export const encryptSecret = (plaintext: string) => api().encryptSecret(plaintext);
@@ -48,3 +48,4 @@ export const decryptSecrets = (ciphertexts: (string | undefined)[]) => api().dec
 export const updateLogging = (loggingEnabled: boolean, loggingPath: string) => api().updateLogging(loggingEnabled, loggingPath);
 export const listLogFiles = (folderPath: string) => api().listLogFiles(folderPath);
 export const readLogFile = (filePath: string) => api().readLogFile(filePath);
+export const openDebugLogFolder = () => api().openDebugLogFolder();
