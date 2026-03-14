@@ -18,13 +18,27 @@ interface TabBarProps {
     onToggleWatch?: (id: string) => void;
     onNewTab: () => void;
     onNewAITab: () => void;
+    onNewLogViewer: () => void;
     onTabReorder: (fromIndex: number, toIndex: number) => void;
     lastTargetSessionId?: string | null;
 }
 
-export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessionIds, watchedSessionIds = [], onTabClick, onTabClose, onToggleWatch, onNewTab, onNewAITab, onTabReorder, lastTargetSessionId }) => {
+export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessionIds, watchedSessionIds = [], onTabClick, onTabClose, onToggleWatch, onNewTab, onNewAITab, onNewLogViewer, onTabReorder, lastTargetSessionId }) => {
     const [dragOverInfo, setDragOverInfo] = React.useState<{ id: string, position: 'left' | 'right' } | null>(null);
     const [dragSourceIndex, setDragSourceIndex] = React.useState<number | null>(null);
+    const [showFeaturesMenu, setShowFeaturesMenu] = React.useState(false);
+    const featuresRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        if (!showFeaturesMenu) return;
+        const handleClickOutside = (e: MouseEvent) => {
+            if (featuresRef.current && !featuresRef.current.contains(e.target as Node)) {
+                setShowFeaturesMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showFeaturesMenu]);
 
     // ... (rest of drag handlers same as before) ...
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number, sessionId: string) => {
@@ -97,18 +111,8 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
     };
 
     return (
-        <div className="tab-bar" onMouseLeave={() => setDragOverInfo(null)}>
-            <div className="ai-tab-btn" onClick={onNewAITab} title="AI Chat">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M13.5 3.5C14.3 6.9 16.9 9.5 20.3 10.5C21.9 10.9 21.9 13.1 20.3 13.5C16.9 14.5 14.3 17.1 13.5 20.5C13.1 22.1 10.9 22.1 10.5 20.5C9.7 17.1 7.1 14.5 3.7 13.5C2.1 13.1 2.1 10.9 3.7 10.5C7.1 9.5 9.7 6.9 10.5 3.5C10.9 1.9 13.1 1.9 13.5 3.5Z" fill="url(#gemini-gradient)" />
-                    <defs>
-                        <linearGradient id="gemini-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stopColor="#4E86F8" />
-                            <stop offset="100%" stopColor="#D64669" />
-                        </linearGradient>
-                    </defs>
-                </svg>
-            </div>
+        <div className="tab-bar">
+            <div className="tab-list" onMouseLeave={() => setDragOverInfo(null)}>
             {tabs.map((tab, index) => {
                 const isHidden = !visibleSessionIds.includes(tab.id);
                 const isActivePane = activeTabId === tab.id;
@@ -175,7 +179,71 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                     </div>
                 )
             })}
-            <div className="new-tab-btn" onClick={onNewTab} title="New Tab">+</div>
+            </div>{/* end .tab-list */}
+
+            <div className="tab-bar-actions">
+            {/* New Session button — Ethernet plug icon */}
+            <div className="new-tab-btn" onClick={onNewTab} title="New Session">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    {/* Cable on left */}
+                    <line x1="1" y1="13" x2="4" y2="13"/>
+                    {/* Plug housing */}
+                    <rect x="4" y="8" width="12" height="10" rx="1.5"/>
+                    {/* Latch tab on top */}
+                    <path d="M7 8 L7 5 L13 5 L13 8"/>
+                    {/* Contact pins extending right */}
+                    <line x1="16" y1="10.5" x2="22" y2="10.5"/>
+                    <line x1="16" y1="13" x2="22" y2="13"/>
+                    <line x1="16" y1="15.5" x2="22" y2="15.5"/>
+                </svg>
+            </div>
+
+            {/* Features button — 2×2 grid icon */}
+            <div className="features-btn" ref={featuresRef} title="Features">
+                <div
+                    className={`features-btn-icon ${showFeaturesMenu ? 'active' : ''}`}
+                    onClick={() => setShowFeaturesMenu(v => !v)}
+                >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="3" width="7" height="7" rx="1"/>
+                        <rect x="14" y="3" width="7" height="7" rx="1"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1"/>
+                        <rect x="14" y="14" width="7" height="7" rx="1"/>
+                    </svg>
+                </div>
+                {showFeaturesMenu && (
+                    <div className="features-dropdown">
+                        <div
+                            className="features-item"
+                            onClick={() => { onNewAITab(); setShowFeaturesMenu(false); }}
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M13.5 3.5C14.3 6.9 16.9 9.5 20.3 10.5C21.9 10.9 21.9 13.1 20.3 13.5C16.9 14.5 14.3 17.1 13.5 20.5C13.1 22.1 10.9 22.1 10.5 20.5C9.7 17.1 7.1 14.5 3.7 13.5C2.1 13.1 2.1 10.9 3.7 10.5C7.1 9.5 9.7 6.9 10.5 3.5C10.9 1.9 13.1 1.9 13.5 3.5Z" fill="url(#feat-gemini-gradient)" />
+                                <defs>
+                                    <linearGradient id="feat-gemini-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stopColor="#4E86F8" />
+                                        <stop offset="100%" stopColor="#D64669" />
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                            Gemini
+                        </div>
+                        <div
+                            className="features-item"
+                            onClick={() => { onNewLogViewer(); setShowFeaturesMenu(false); }}
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                                <line x1="8" y1="13" x2="16" y2="13"/>
+                                <line x1="8" y1="17" x2="14" y2="17"/>
+                            </svg>
+                            Log Viewer
+                        </div>
+                    </div>
+                )}
+            </div>
+            </div>{/* end .tab-bar-actions */}
         </div>
     );
 };

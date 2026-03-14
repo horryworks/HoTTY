@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { ConnectionDialog } from './components/ConnectionDialog/ConnectionDialog'
+import { ConnectionDialog } from './components/SessionDialog/SessionDialog'
 import { TabBar } from './components/TabBar/TabBar'
 import { ResizeGrip } from './components/ResizeGrip/ResizeGrip'
 import { PasteConfirmationModal } from './components/PasteConfirmationModal/PasteConfirmationModal'
@@ -161,7 +161,7 @@ function App() {
     });
   }, []);
 
-  // Global keyboard shortcut: Ctrl+N → open New Connection dialog
+  // Global keyboard shortcut: Ctrl+N → open New Session dialog
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === 'n') {
@@ -546,6 +546,7 @@ function App() {
               onToggleWatch={handleToggleWatch}
               onNewTab={() => setShowDialog(true)}
               onNewAITab={() => session.createAISession()}
+              onNewLogViewer={() => session.createLogViewerSession()}
               onTabReorder={session.handleTabReorder}
               lastTargetSessionId={session.sessions.find(s => s.type === 'ai')?.aiChatState?.lastTargetSessionId}
             />

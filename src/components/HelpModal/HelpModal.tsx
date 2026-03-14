@@ -39,7 +39,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                         <summary>🌳 Organizing the Host Tree</summary>
                         <div className="help-section-body">
                             <p className="help-text">
-                                <strong>Drag & Drop:</strong> You can reorder hosts and folders by dragging them in the "New Connection" dialog.
+                                <strong>Drag & Drop:</strong> You can reorder hosts and folders by dragging them in the "New Session" dialog.
                             </p>
                             <p className="help-text" style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
                                 📦 <strong>Export & Import:</strong> Use the
@@ -141,7 +141,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                         <summary>⌨️ Shortcuts</summary>
                         <div className="help-section-body">
                             <ul className="shortcuts-list">
-                                <li><code>Ctrl + N</code> New Connection Dialog</li>
+                                <li><code>Ctrl + N</code> New Session Dialog</li>
                                 <li><code>Ctrl + W</code> Close current tab</li>
                                 <li><code>Ctrl + C</code> Clear selection / Send SIGINT</li>
                                 <li><code>Ctrl + V</code> Paste to terminal (with security check)</li>

@@ -5,7 +5,7 @@ import { HostTree } from './HostTree';
 import { useResize } from '../../hooks/useResize';
 import { STORAGE_KEYS } from '../../constants/storage';
 import * as electronService from '../../services/electronService';
-import './ConnectionDialog.css';
+import './SessionDialog.css';
 
 interface ConnectionDialogProps {
     onConnect: (config: any) => void;
@@ -503,7 +503,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                     style={{ position: 'absolute', top: '10px', right: '10px', background: 'transparent', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1, zIndex: 1 }}
                 >✕</button>
 
-                <h2 style={{ marginTop: 0, paddingRight: '20px', marginBottom: '10px' }}>New Connection</h2>
+                <h2 style={{ marginTop: 0, paddingRight: '20px', marginBottom: '10px' }}>New Session</h2>
 
                 {error && (
                     <div style={{ color: '#ff6b6b', marginBottom: '8px', padding: '8px 10px', backgroundColor: 'rgba(255,0,0,0.1)', borderRadius: '4px', fontSize: '0.9rem' }}>
@@ -567,7 +567,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                     <option value="wsl">WSL</option>
                                     <option value="cmd">Command Prompt</option>
                                     <option value="powershell">PowerShell</option>
-                                    <option value="log-viewer">Log Viewer</option>
+
                                 </select>
                             </div>
 

@@ -5,8 +5,23 @@
     align-items: center;
     padding-left: 0px;
     user-select: none;
-    overflow-x: auto;
+    overflow: visible;
     --gemini-rainbow: linear-gradient(90deg, #4E86F8, #46B5D1, #8E54E9, #D64669);
+}
+
+.tab-list {
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    height: 100%;
+}
+
+.tab-bar-actions {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    height: 100%;
+    position: relative;
 }
 
 .tab {
@@ -157,12 +172,81 @@
     justify-content: center;
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: calc(var(--font-size-base) + 4px);
+    flex-shrink: 0;
 }
 
 .new-tab-btn:hover {
     background-color: var(--bg-tertiary);
     color: var(--text-primary);
+}
+
+.new-tab-btn svg {
+    transition: transform 0.2s;
+}
+
+.new-tab-btn:hover svg {
+    transform: scale(1.1);
+}
+
+/* Features button */
+.features-btn {
+    position: relative;
+    width: 35px;
+    height: 35px;
+    flex-shrink: 0;
+}
+
+.features-btn-icon {
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.features-btn-icon:hover,
+.features-btn-icon.active {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.features-btn-icon svg {
+    transition: transform 0.2s;
+}
+
+.features-btn-icon:hover svg {
+    transform: scale(1.1);
+}
+
+.features-dropdown {
+    position: absolute;
+    top: 35px;
+    right: 0;
+    background-color: var(--sidebar-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px;
+    min-width: 140px;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.features-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-primary);
+    font-size: calc(var(--font-size-base) - 1px);
+    white-space: nowrap;
+}
+
+.features-item:hover {
+    background-color: var(--bg-primary);
 }
 
 .tab.hidden-tab {
@@ -184,34 +268,6 @@
     color: var(--text-on-accent);
 }
 
-/* AI Tab Button */
-.ai-tab-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 35px;
-    /* Perfect square matching bar height */
-    height: 35px;
-    flex-shrink: 0;
-    cursor: pointer;
-    border-right: 1px solid var(--border-color);
-    transition: background-color 0.2s;
-}
-
-.ai-tab-btn svg {
-    width: 20px;
-    /* Slightly smaller for better balance in 35px bar */
-    height: 20px;
-    transition: transform 0.2s;
-}
-
-.ai-tab-btn:hover {
-    background-color: var(--bg-primary);
-}
-
-.ai-tab-btn:hover svg {
-    transform: scale(1.1);
-}
 
 @keyframes watch-pulse {
     0% {
