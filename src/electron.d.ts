@@ -32,13 +32,15 @@ export interface ElectronAPI {
     onGeminiChatResponse: (callback: (data: { sessionId: string, type: string, content: string }) => void) => () => void;
 
     // Context Menu
-    showContextMenu: (selection: string, commands?: { id: string; label: string }[]) => void;
+    showContextMenu: (selection: string, commands?: { id: string; label: string }[], includePaste?: boolean) => void;
     onAskGemini: (callback: (selection: string, type: string) => void) => () => void;
     onTerminalContextPaste: (callback: () => void) => () => void;
     getSshAlgorithms: () => Promise<any>;
     saveSshAlgorithms: (algorithms: any) => Promise<boolean>;
     getThemes: () => Promise<any>;
     saveThemes: (themes: any) => Promise<boolean>;
+    saveCustomTheme: (themeKey: string, themeData: any) => Promise<{ success: boolean; error?: string }>;
+    deleteCustomTheme: (themeKey: string) => Promise<{ success: boolean; error?: string }>;
 
     // Credential encryption (Windows DPAPI)
     encryptSecret: (plaintext: string) => Promise<string>;

@@ -1,5 +1,22 @@
 # Release Notes - HoTTY
 
+## [v0.1.15] - 2026-03-14
+### Added
+- **Custom Theme Creator**: Added a built-in visual theme editor in Settings > Appearance. Users can now create and fine-tune custom color schemes directly within the app without editing JSON files manually.
+- **Log Viewer**: Added a built-in log file viewer as a new session type (`Log Viewer`). Select it from the protocol dropdown in the New Connection dialog to open a dedicated pane for browsing and viewing saved session log files. The viewer reads log files from the configured logging folder.
+- **Timestamp Log (`.tslog`)**: Each log session now generates a companion `.tslog` file alongside the main `.txt` log. The `.tslog` file records the precise timestamp (millisecond precision) for each line of output, enabling accurate post-session time analysis.
+
+### Changed
+- **Full Theme Enforcement**: All UI components now consistently use CSS variables (`var(--xxx)`) for colors and fonts. Eliminated all hard-coded color values and font sizes across the entire codebase for complete theme compliance.
+- **Gemini Command Response Behavior**: Improved how Gemini detects and handles the end of its responses, making AI command execution more reliable and predictable.
+- **Gemini System Prompt Adjustment**: Refined the built-in system prompt for clearer, more consistent AI behavior in terminal-integrated workflows.
+- **New Session Icon**: Updated the "New Session" button icon for improved visual clarity.
+- **Tab Bar Improvements**: Refined tab bar styling and interaction for a cleaner, more theme-consistent appearance.
+
+### Fixed
+- **Sidebar/Bar Toggle**: Fixed a bug where clicking the toggle icon for Left Sidebar, Right Sidebar, Top Bar, or Bottom Bar a second time did not hide the panel.
+- **Tab-Pane Mapping Arrows**: Fixed stale arrows remaining in the "Show Tab-Pane Mapping" overlay after a bar was hidden.
+
 ## [v0.1.15-beta9] - 2026-03-13
 ### Added
 - **Log Viewer**: Added a built-in log file viewer as a new session type (`Log Viewer`). Select it from the protocol dropdown in the New Connection dialog to open a dedicated pane for browsing and viewing saved session log files. The viewer reads log files from the configured logging folder.
