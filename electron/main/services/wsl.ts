@@ -22,10 +22,15 @@ export class WslService implements ISessionService {
     }
 
     connect(config: { distro?: string }) {
-        const args = config.distro ? ['-d', config.distro] : [];
+        const distro = config.distro?.trim();
+        if (distro && !/^[\w\-. ]+$/.test(distro)) {
+            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Invalid WSL distribution name' });
+            return;
+        }
+        const args = distro ? ['-d', distro] : [];
 
         try {
-            console.log(`Spawning WSL PTY: wsl.exe ${args.join(' ')}`);
+            console.log(`Spawning WSL PTY: wsl.exe ${distro ? `-d ${distro}` : '(default)'}`);
             this.ptyProcess = pty.spawn('wsl.exe', args, {
                 name: 'xterm-256color',
                 cols: 80,

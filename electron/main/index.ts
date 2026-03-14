@@ -1,6 +1,6 @@
 import { app, BrowserWindow, shell, ipcMain, dialog, Menu, MenuItem } from 'electron';
 import { release } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { SshService } from './services/ssh';
 import { TelnetService } from './services/telnet';
 import { SerialService } from './services/serial';
@@ -29,6 +29,11 @@ if (!app.requestSingleInstanceLock()) {
 const windows = new Set<BrowserWindow>();
 let geminiService: GeminiService | null = null;
 const logManager = new LogManager();
+
+// Security: track directories the user has explicitly allowed for log access
+const allowedLogDirs = new Set<string>();
+// Security: path selected server-side by select-import-file, used by decrypt-import-file
+let pendingImportFilePath: string | null = null;
 
 const preload = join(__dirname, '../preload/index.js')
 const url = process.env.VITE_DEV_SERVER_URL
@@ -137,6 +142,7 @@ app.on('activate', () => {
 const debugLogPath = join(app.getPath('userData'), 'debug_gemini.log');
 
 const logToDebugFile = (message: string) => {
+  if (app.isPackaged) return; // Disable debug file logging in production
   const timestamp = new Date().toISOString();
   const logMessage = `[${timestamp}] ${message}\n`;
   console.log(logMessage);
@@ -174,7 +180,11 @@ ipcMain.handle('open-win', (_, arg) => {
 })
 
 ipcMain.on('open-external', (_, url) => {
-  shell.openExternal(url);
+  if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
+    shell.openExternal(url);
+  } else {
+    console.warn('[Security] open-external blocked non-https URL:', url);
+  }
 });
 
 // Session Management
@@ -188,9 +198,26 @@ interface Session {
 
 const sessions = new Map<string, Session>();
 
+const VALID_PROTOCOLS = new Set(['ssh', 'telnet', 'serial', 'wsl', 'cmd', 'powershell', 'local']);
+
 ipcMain.on('connect-session', async (event, { sessionId, config }) => {
   const eventWin = BrowserWindow.fromWebContents(event.sender);
   if (!eventWin) return;
+
+  // Validate protocol
+  if (typeof config.protocol !== 'string' || !VALID_PROTOCOLS.has(config.protocol)) {
+    config.protocol = 'ssh';
+  }
+
+  // Validate port range
+  if (config.port !== undefined) {
+    const port = Number(config.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      eventWin.webContents.send('session-error', { sessionId, error: 'Invalid port number' });
+      return;
+    }
+    config.port = port;
+  }
 
   // Cleanup existing if reusing ID (shouldn't happen with UUIDs but good safety)
   if (sessions.has(sessionId)) {
@@ -199,7 +226,7 @@ ipcMain.on('connect-session', async (event, { sessionId, config }) => {
     sessions.delete(sessionId);
   }
 
-  const protocol = config.protocol || 'ssh';
+  const protocol = config.protocol;
   let service: ISessionService;
 
   if (protocol === 'ssh') {
@@ -315,6 +342,9 @@ ipcMain.on('app-quit', () => {
 
 // Update logging for all active sessions
 ipcMain.on('update-logging', (event, { loggingEnabled, loggingPath }) => {
+  if (loggingEnabled && loggingPath) {
+    allowedLogDirs.add(resolve(loggingPath));
+  }
   sessions.forEach((session, sessionId) => {
     if (loggingEnabled && loggingPath) {
       // Start logging if not already logging
@@ -580,6 +610,9 @@ ipcMain.handle('get-themes', async () => {
 });
 
 ipcMain.handle('save-custom-theme', async (_, themeKey: string, themeData: any) => {
+  if (typeof themeKey !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(themeKey)) {
+    return { success: false, error: 'Invalid theme name. Use only letters, numbers, hyphens, and underscores.' };
+  }
   const PROTECTED = ['dark', 'medium', 'light'];
   if (PROTECTED.includes(themeKey.toLowerCase())) {
     return { success: false, error: 'Cannot overwrite built-in theme' };
@@ -600,6 +633,9 @@ ipcMain.handle('save-custom-theme', async (_, themeKey: string, themeData: any) 
 });
 
 ipcMain.handle('delete-custom-theme', async (_, themeKey: string) => {
+  if (typeof themeKey !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(themeKey)) {
+    return { success: false, error: 'Invalid theme name.' };
+  }
   const PROTECTED = ['dark', 'medium', 'light'];
   if (PROTECTED.includes(themeKey.toLowerCase())) {
     return { success: false, error: 'Cannot delete built-in theme' };
@@ -714,8 +750,10 @@ ipcMain.handle('select-import-file', async (event) => {
     properties: ['openFile'],
   });
 
-  logToDebugFile(`[Main] Open dialog result: ${JSON.stringify({ canceled, filePaths })}`);
+  logToDebugFile(`[Main] Open dialog result: canceled=${canceled}`);
   if (canceled || filePaths.length === 0) return null;
+  // Store server-side; decrypt-import-file will use this, not a renderer-supplied path
+  pendingImportFilePath = filePaths[0];
   return filePaths[0];
 });
 
@@ -723,13 +761,16 @@ ipcMain.handle('select-import-file', async (event) => {
 
 ipcMain.handle('list-log-files', async (_, folderPath: string) => {
   if (!folderPath) return { error: 'No log folder configured' };
-  if (!fs.existsSync(folderPath)) return { error: 'Log folder does not exist' };
+  const resolvedFolder = resolve(folderPath);
+  if (!fs.existsSync(resolvedFolder)) return { error: 'Log folder does not exist' };
+  // Trust explicitly listed folder for subsequent read-log-file calls
+  allowedLogDirs.add(resolvedFolder);
   try {
-    const entries = fs.readdirSync(folderPath);
+    const entries = fs.readdirSync(resolvedFolder);
     const files = entries
       .filter(f => /\.(txt|log)$/i.test(f) && !/\.tslog$/i.test(f))
       .map(f => {
-        const fullPath = join(folderPath, f);
+        const fullPath = join(resolvedFolder, f);
         const stat = fs.statSync(fullPath);
         return { name: f, path: fullPath, mtime: stat.mtimeMs, size: stat.size };
       })
@@ -742,12 +783,25 @@ ipcMain.handle('list-log-files', async (_, folderPath: string) => {
 
 ipcMain.handle('read-log-file', async (_, filePath: string) => {
   if (!filePath || !/\.(txt|log|tslog)$/i.test(filePath)) return { error: 'Invalid file type' };
+
+  // Path traversal protection: file must be within an allowed log directory
+  const resolvedPath = resolve(filePath);
+  const resolvedLower = resolvedPath.toLowerCase();
+  const inAllowedDir = [...allowedLogDirs].some(dir => {
+    const prefix = (dir.endsWith(sep) ? dir : dir + sep).toLowerCase();
+    return resolvedLower.startsWith(prefix);
+  });
+  if (!inAllowedDir) {
+    console.warn('[Security] read-log-file blocked:', resolvedPath);
+    return { error: 'Access denied: file is outside the configured log directory' };
+  }
+
   try {
-    const stat = await fs.promises.stat(filePath);
+    const stat = await fs.promises.stat(resolvedPath);
     if (!stat.isFile()) return { error: 'File not found' };
     const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
     if (stat.size > MAX_SIZE) return { error: `File too large (${(stat.size / 1024 / 1024).toFixed(1)} MB). Limit is 50 MB.` };
-    const content = await fs.promises.readFile(filePath, 'utf8');
+    const content = await fs.promises.readFile(resolvedPath, 'utf8');
     return { content };
   } catch (err: any) {
     if (err.code === 'ENOENT') return { error: 'File not found' };
@@ -755,8 +809,14 @@ ipcMain.handle('read-log-file', async (_, filePath: string) => {
   }
 });
 
-ipcMain.handle('decrypt-import-file', async (event, { filePath, password }) => {
-  logToDebugFile(`[Main] decrypt-import-file called for ${filePath}`);
+ipcMain.handle('decrypt-import-file', async (event, { password }) => {
+  // Use only the server-side path stored by select-import-file (never trust renderer-supplied path)
+  if (!pendingImportFilePath) {
+    throw new Error('No import file selected. Please select a file first.');
+  }
+  const filePath = pendingImportFilePath;
+  pendingImportFilePath = null; // Single-use: clear after consuming
+  logToDebugFile('[Main] decrypt-import-file called');
   try {
     logToDebugFile('[Main] Reading file...');
     const payload = fs.readFileSync(filePath);

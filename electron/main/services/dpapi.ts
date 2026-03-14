@@ -44,7 +44,6 @@ function runPowerShell(script: string, input: string): Promise<string> {
 
 /**
  * Encrypts a plaintext string using Windows DPAPI (CurrentUser scope).
- * On non-Windows platforms, returns a base64-encoded plaintext as a fallback.
  * @param plaintext - The string to encrypt.
  * @returns A prefixed, base64-encoded ciphertext string.
  */
@@ -52,8 +51,12 @@ export async function encryptString(plaintext: string): Promise<string> {
     if (!plaintext) return plaintext;
 
     if (process.platform !== 'win32') {
-        // Fallback for non-Windows: base64 encode only (no real encryption)
-        return DPAPI_PREFIX + Buffer.from(plaintext, 'utf8').toString('base64');
+        throw new Error('Credential encryption requires Windows (DPAPI). HoTTY is a Windows-only application.');
+    }
+
+    const MAX_INPUT_SIZE = 1 * 1024 * 1024; // 1 MB
+    if (Buffer.byteLength(plaintext, 'utf8') > MAX_INPUT_SIZE) {
+        throw new Error('Input exceeds maximum size for encryption (1 MB)');
     }
 
     try {
@@ -78,7 +81,6 @@ export async function encryptString(plaintext: string): Promise<string> {
 
 /**
  * Decrypts a DPAPI-encrypted string produced by encryptString().
- * On non-Windows platforms, decodes the base64 fallback.
  * If the value is not DPAPI-encrypted (legacy plaintext), returns it as-is.
  * @param ciphertext - The prefixed, base64-encoded ciphertext string.
  * @returns The original plaintext string.
@@ -91,12 +93,11 @@ export async function decryptString(ciphertext: string): Promise<string> {
         return ciphertext;
     }
 
-    const base64Data = ciphertext.slice(DPAPI_PREFIX.length);
-
     if (process.platform !== 'win32') {
-        // Fallback for non-Windows: base64 decode only
-        return Buffer.from(base64Data, 'base64').toString('utf8');
+        throw new Error('Credential decryption requires Windows (DPAPI). HoTTY is a Windows-only application.');
     }
+
+    const base64Data = ciphertext.slice(DPAPI_PREFIX.length);
 
     try {
         const script = `

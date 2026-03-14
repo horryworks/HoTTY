@@ -135,6 +135,7 @@ export class GeminiService {
         .createHash('sha256')
         .update(codeVerifier)
         .digest('base64url');
+      const oauthState = crypto.randomBytes(16).toString('hex');
 
       this.authServer = http.createServer(async (req, res) => {
         const parsedUrl = url.parse(req.url || '', true);
@@ -142,6 +143,17 @@ export class GeminiService {
         if (parsedUrl.pathname === '/callback') {
           const code = parsedUrl.query.code as string;
           const error = parsedUrl.query.error as string;
+          const receivedState = parsedUrl.query.state as string;
+
+          // CSRF protection: validate state parameter
+          if (!receivedState || receivedState !== oauthState) {
+            res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#ef4444">❌ Invalid State</h1><p>Security validation failed. You may close this window.</p></div></body></html>');
+            this.cleanupServer();
+            win.webContents.send('gemini-auth-result', { success: false });
+            resolve(false);
+            return;
+          }
 
           if (error) {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -194,6 +206,7 @@ export class GeminiService {
         authUrl.searchParams.set('code_challenge_method', 'S256');
         authUrl.searchParams.set('access_type', 'offline');
         authUrl.searchParams.set('prompt', 'consent');
+        authUrl.searchParams.set('state', oauthState);
 
         const authWin = new BrowserWindow({
           width: 600,
@@ -203,6 +216,7 @@ export class GeminiService {
           webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            sandbox: true,
           },
           autoHideMenuBar: true,
         });
