@@ -38,6 +38,8 @@ export const getSshAlgorithms = () => api().getSshAlgorithms();
 export const saveSshAlgorithms = (algorithms: any) => api().saveSshAlgorithms(algorithms);
 export const getThemes = () => api().getThemes();
 export const saveThemes = (themes: any) => api().saveThemes(themes);
+export const saveCustomTheme = (themeKey: string, themeData: any) => api().saveCustomTheme(themeKey, themeData);
+export const deleteCustomTheme = (themeKey: string) => api().deleteCustomTheme(themeKey);
 
 export const encryptSecret = (plaintext: string) => api().encryptSecret(plaintext);
 export const decryptSecret = (ciphertext: string) => api().decryptSecret(ciphertext);

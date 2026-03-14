@@ -4,6 +4,8 @@ import * as electronService from '../../services/electronService';
 interface AppearanceTabProps {
     theme: string;
     onThemeChange: (theme: string) => void;
+    onOpenCustomThemeCreator: () => void;
+    onDeleteTheme: (theme: string) => void;
     themesData: Record<string, { name: string; variables: Record<string, string>; terminal: Record<string, string> }> | null;
     sidebarPosition: 'left' | 'right';
     onSidebarPositionChange: (position: 'left' | 'right') => void;
@@ -30,6 +32,8 @@ interface AppearanceTabProps {
 export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     theme,
     onThemeChange,
+    onOpenCustomThemeCreator,
+    onDeleteTheme,
     themesData,
     sidebarPosition,
     onSidebarPositionChange,
@@ -86,6 +90,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                 <label>Theme</label>
                 {(() => {
                     const THEME_ORDER = ['dark', 'medium', 'light'];
+                    const isDefault = THEME_ORDER.includes(theme);
                     const themeKeys = themesData
                         ? [
                             ...THEME_ORDER.filter(k => k in themesData),
@@ -93,19 +98,44 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                           ]
                         : ['dark', 'medium', 'light'];
                     return (
-                        <select
-                            value={theme}
-                            onChange={(e) => onThemeChange(e.target.value)}
-                            className="settings-select"
-                        >
-                            {themeKeys.map(key => (
-                                <option key={key} value={key}>
-                                    {themesData?.[key]?.name ?? key.charAt(0).toUpperCase() + key.slice(1)}
-                                </option>
-                            ))}
-                        </select>
+                        <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <select
+                                    value={theme}
+                                    onChange={(e) => onThemeChange(e.target.value)}
+                                    className="settings-select"
+                                    style={{ flex: 1 }}
+                                >
+                                    {themeKeys.map(key => (
+                                        <option key={key} value={key}>
+                                            {themesData?.[key]?.name ?? key.charAt(0).toUpperCase() + key.slice(1)}
+                                        </option>
+                                    ))}
+                                </select>
+                                {!isDefault && (
+                                    <button
+                                        onClick={() => {
+                                            const name = themesData?.[theme]?.name ?? theme;
+                                            if (confirm(`Delete theme "${name}"?\nThis cannot be undone.`)) {
+                                                onDeleteTheme(theme);
+                                            }
+                                        }}
+                                        title="Delete this custom theme"
+                                        style={{ padding: '5px 10px', cursor: 'pointer', color: 'var(--color-danger)', backgroundColor: 'var(--color-danger-bg)', border: '1px solid var(--color-danger-border)', borderRadius: '4px', whiteSpace: 'nowrap' }}
+                                    >
+                                        🗑 Delete
+                                    </button>
+                                )}
+                            </div>
+                        </>
                     );
                 })()}
+                <button
+                    onClick={onOpenCustomThemeCreator}
+                    style={{ marginTop: '8px', padding: '5px 12px', cursor: 'pointer', fontSize: 'var(--font-size-base)' }}
+                >
+                    + Create Custom Theme
+                </button>
             </div>
 
             <div className="form-group">

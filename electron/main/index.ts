@@ -577,6 +577,48 @@ ipcMain.handle('get-themes', async () => {
   return Object.keys(themes).length > 0 ? themes : null;
 });
 
+ipcMain.handle('save-custom-theme', async (_, themeKey: string, themeData: any) => {
+  const PROTECTED = ['dark', 'medium', 'light'];
+  if (PROTECTED.includes(themeKey.toLowerCase())) {
+    return { success: false, error: 'Cannot overwrite built-in theme' };
+  }
+
+  const resourcesDir = app.isPackaged
+    ? join(process.resourcesPath, 'resources')
+    : join(app.getAppPath(), 'resources');
+
+  const filePath = join(resourcesDir, `${themeKey}.json`);
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(themeData, null, 4), 'utf8');
+    return { success: true };
+  } catch (err) {
+    console.error('Failed to save custom theme:', err);
+    return { success: false, error: String(err) };
+  }
+});
+
+ipcMain.handle('delete-custom-theme', async (_, themeKey: string) => {
+  const PROTECTED = ['dark', 'medium', 'light'];
+  if (PROTECTED.includes(themeKey.toLowerCase())) {
+    return { success: false, error: 'Cannot delete built-in theme' };
+  }
+
+  const resourcesDir = app.isPackaged
+    ? join(process.resourcesPath, 'resources')
+    : join(app.getAppPath(), 'resources');
+
+  const filePath = join(resourcesDir, `${themeKey}.json`);
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    return { success: true };
+  } catch (err) {
+    console.error('Failed to delete custom theme:', err);
+    return { success: false, error: String(err) };
+  }
+});
+
 // ── DPAPI Credential Protection ──
 
 ipcMain.handle('dpapi-encrypt', async (_, plaintext: string) => {

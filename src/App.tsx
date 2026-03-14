@@ -9,6 +9,7 @@ import { GridLayout } from './components/GridLayout/GridLayout'
 import { MessageModal } from './components/MessageModal/MessageModal'
 import { AskGeminiModal } from './components/AskGeminiModal/AskGeminiModal'
 import HelpModal from './components/HelpModal/HelpModal'
+import { CustomThemeCreator } from './components/CustomThemeCreator/CustomThemeCreator'
 import { PaneContent } from './components/PaneContent/PaneContent'
 import { PaneLines } from './components/PaneLines/PaneLines'
 import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary'
@@ -103,6 +104,7 @@ function App() {
   // Settings / Help Modal
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isCustomThemeCreatorOpen, setIsCustomThemeCreatorOpen] = useState(false);
 
   // Password Cache (In-Memory Only)
   const passwordCache = useRef<Record<string, string>>({});
@@ -361,6 +363,26 @@ function App() {
       }
     }
     updateTheme(newTheme);
+  };
+
+  const handleDeleteTheme = async (themeKey: string) => {
+    await electronService.deleteCustomTheme(themeKey);
+    const newThemesData = await electronService.getThemes();
+    setThemesData(newThemesData);
+    handleThemeChange('dark');
+  };
+
+  const handleCustomThemeCreatorSave = async (themeKey: string) => {
+    const newThemesData = await electronService.getThemes();
+    setThemesData(newThemesData);
+    setIsCustomThemeCreatorOpen(false);
+    handleThemeChange(themeKey);
+  };
+
+  const handleCustomThemeCreatorCancel = () => {
+    setIsCustomThemeCreatorOpen(false);
+    // Restore current theme CSS variables
+    if (themesData) applyTheme(settings.theme);
   };
 
   // Handle encoding change for existing sessions
@@ -740,6 +762,8 @@ function App() {
           onScrollbackChange={updateScrollback}
           theme={settings.theme}
           onThemeChange={handleThemeChange}
+          onOpenCustomThemeCreator={() => setIsCustomThemeCreatorOpen(true)}
+          onDeleteTheme={handleDeleteTheme}
           sidebarPosition={settings.sidebarPosition}
           onSidebarPositionChange={updateSidebarPosition}
           showSystemPrompt={settings.showSystemPrompt}
@@ -774,6 +798,15 @@ function App() {
           showTopBar={showTopBar}
           showBottomBar={showBottomBar}
         />
+        {themesData && (
+          <CustomThemeCreator
+            isOpen={isCustomThemeCreatorOpen}
+            themesData={themesData}
+            currentTheme={settings.theme}
+            onSave={handleCustomThemeCreatorSave}
+            onCancel={handleCustomThemeCreatorCancel}
+          />
+        )}
         <ResizeGrip />
         <HelpModal
           isOpen={isHelpOpen}

@@ -41,6 +41,8 @@ interface SettingsModalProps {
     onScrollbackChange: (lines: number) => void;
     theme: string;
     onThemeChange: (theme: string) => void;
+    onOpenCustomThemeCreator: () => void;
+    onDeleteTheme: (theme: string) => void;
     sidebarPosition: 'left' | 'right';
     onSidebarPositionChange: (position: 'left' | 'right') => void;
     showSystemPrompt: boolean;
@@ -100,6 +102,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onScrollbackChange,
     theme,
     onThemeChange,
+    onOpenCustomThemeCreator,
+    onDeleteTheme,
     sidebarPosition,
     onSidebarPositionChange,
     showSystemPrompt,
@@ -304,6 +308,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <AppearanceTab
                             theme={theme}
                             onThemeChange={onThemeChange}
+                            onOpenCustomThemeCreator={onOpenCustomThemeCreator}
+                            onDeleteTheme={onDeleteTheme}
                             themesData={themesData}
                             sidebarPosition={sidebarPosition}
                             onSidebarPositionChange={onSidebarPositionChange}
