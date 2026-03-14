@@ -12,7 +12,7 @@ export interface SettingsState {
     fontFamily: string;
 
     // Theme
-    theme: 'dark' | 'light' | 'medium' | 'custom';
+    theme: string;
 
     // Terminal Colors
     terminalForeground: string;
@@ -87,7 +87,7 @@ export interface SettingsActions {
     updateGlobalEncoding: (v: string) => void;
     updateFontSize: (v: number) => void;
     updateFontFamily: (v: string) => void;
-    updateTheme: (v: 'dark' | 'light' | 'medium' | 'custom') => void;
+    updateTheme: (v: string) => void;
     updateTerminalForeground: (color: string) => void;
     updateTerminalBackground: (color: string) => void;
     updateTerminalBackgroundInactive: (color: string) => void;
@@ -196,37 +196,10 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
             updateFontFamily: (v) => set({ fontFamily: v }),
             updateTheme: (v) => set({ theme: v }),
 
-            updateTerminalForeground: (color) => set((prev) => {
-                const next: Partial<SettingsState> = { terminalForeground: color };
-                if (prev.theme === 'custom') {
-                    next.customColors = { ...prev.customColors, foreground: color };
-                }
-                return next;
-            }),
-
-            updateTerminalBackground: (color) => set((prev) => {
-                const next: Partial<SettingsState> = { terminalBackground: color };
-                if (prev.theme === 'custom') {
-                    next.customColors = { ...prev.customColors, background: color };
-                }
-                return next;
-            }),
-
-            updateTerminalBackgroundInactive: (color) => set((prev) => {
-                const next: Partial<SettingsState> = { terminalBackgroundInactive: color };
-                if (prev.theme === 'custom') {
-                    next.customColors = { ...prev.customColors, backgroundInactive: color };
-                }
-                return next;
-            }),
-
-            updatePaneBackground: (color) => set((prev) => {
-                const next: Partial<SettingsState> = { paneBackground: color };
-                if (prev.theme === 'custom') {
-                    next.customColors = { ...prev.customColors, paneBackground: color };
-                }
-                return next;
-            }),
+            updateTerminalForeground: (color) => set({ terminalForeground: color }),
+            updateTerminalBackground: (color) => set({ terminalBackground: color }),
+            updateTerminalBackgroundInactive: (color) => set({ terminalBackgroundInactive: color }),
+            updatePaneBackground: (color) => set({ paneBackground: color }),
 
             updatePaneBackgroundMode: (mode) => set({ paneBackgroundMode: mode }),
             updatePaneBackgroundImage: (url) => set({ paneBackgroundImage: url }),

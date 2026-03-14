@@ -2,16 +2,11 @@ import React from 'react';
 import * as electronService from '../../services/electronService';
 
 interface AppearanceTabProps {
-    theme: 'dark' | 'light' | 'medium' | 'custom';
-    onThemeChange: (theme: 'dark' | 'light' | 'medium' | 'custom') => void;
+    theme: string;
+    onThemeChange: (theme: string) => void;
+    themesData: Record<string, { name: string; variables: Record<string, string>; terminal: Record<string, string> }> | null;
     sidebarPosition: 'left' | 'right';
     onSidebarPositionChange: (position: 'left' | 'right') => void;
-    terminalForeground: string;
-    onTerminalForegroundChange: (color: string) => void;
-    terminalBackground: string;
-    onTerminalBackgroundChange: (color: string) => void;
-    terminalBackgroundInactive: string;
-    onTerminalBackgroundInactiveChange: (color: string) => void;
     paneBackground: string;
     onPaneBackgroundChange: (color: string) => void;
     paneBackgroundMode: 'color' | 'image';
@@ -35,14 +30,9 @@ interface AppearanceTabProps {
 export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     theme,
     onThemeChange,
+    themesData,
     sidebarPosition,
     onSidebarPositionChange,
-    terminalForeground,
-    onTerminalForegroundChange,
-    terminalBackground,
-    onTerminalBackgroundChange,
-    terminalBackgroundInactive,
-    onTerminalBackgroundInactiveChange,
     paneBackground,
     onPaneBackgroundChange,
     paneBackgroundMode,
@@ -94,115 +84,29 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
 
             <div className="form-group">
                 <label>Theme</label>
-                <div style={{ display: 'flex', gap: '15px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
-                        <input
-                            type="radio"
-                            name="theme"
-                            value="dark"
-                            checked={theme === 'dark'}
-                            onChange={() => onThemeChange('dark')}
-                            style={{ marginRight: '6px' }}
-                        />
-                        Dark
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
-                        <input
-                            type="radio"
-                            name="theme"
-                            value="medium"
-                            checked={theme === 'medium'}
-                            onChange={() => onThemeChange('medium')}
-                            style={{ marginRight: '6px' }}
-                        />
-                        Medium
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
-                        <input
-                            type="radio"
-                            name="theme"
-                            value="light"
-                            checked={theme === 'light'}
-                            onChange={() => onThemeChange('light')}
-                            style={{ marginRight: '6px' }}
-                        />
-                        Light
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
-                        <input
-                            type="radio"
-                            name="theme"
-                            value="custom"
-                            checked={theme === 'custom'}
-                            onChange={() => onThemeChange('custom')}
-                            style={{ marginRight: '6px' }}
-                        />
-                        Custom
-                    </label>
-                </div>
+                {(() => {
+                    const THEME_ORDER = ['dark', 'medium', 'light'];
+                    const themeKeys = themesData
+                        ? [
+                            ...THEME_ORDER.filter(k => k in themesData),
+                            ...Object.keys(themesData).filter(k => !THEME_ORDER.includes(k)),
+                          ]
+                        : ['dark', 'medium', 'light'];
+                    return (
+                        <select
+                            value={theme}
+                            onChange={(e) => onThemeChange(e.target.value)}
+                            className="settings-select"
+                        >
+                            {themeKeys.map(key => (
+                                <option key={key} value={key}>
+                                    {themesData?.[key]?.name ?? key.charAt(0).toUpperCase() + key.slice(1)}
+                                </option>
+                            ))}
+                        </select>
+                    );
+                })()}
             </div>
-
-            {theme === 'custom' && (
-                <div className="form-group">
-                    <label>Colors (Custom Theme)</label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                        <div>
-                            <label style={{ color: '#ccc' }}>Terminal Text</label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input
-                                    type="color"
-                                    value={terminalForeground}
-                                    onChange={(e) => onTerminalForegroundChange(e.target.value)}
-                                    style={{ border: 'none', width: '30px', height: '30px', cursor: 'pointer', padding: 0, backgroundColor: 'transparent' }}
-                                />
-                                <input
-                                    type="text"
-                                    value={terminalForeground}
-                                    onChange={(e) => onTerminalForegroundChange(e.target.value)}
-                                    className="settings-input"
-                                    style={{ width: '80px', padding: '4px' }}
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <label style={{ color: '#ccc' }}>Active Background</label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input
-                                    type="color"
-                                    value={terminalBackground}
-                                    onChange={(e) => onTerminalBackgroundChange(e.target.value)}
-                                    style={{ border: 'none', width: '30px', height: '30px', cursor: 'pointer', padding: 0, backgroundColor: 'transparent' }}
-                                />
-                                <input
-                                    type="text"
-                                    value={terminalBackground}
-                                    onChange={(e) => onTerminalBackgroundChange(e.target.value)}
-                                    className="settings-input"
-                                    style={{ width: '80px', padding: '4px' }}
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <label style={{ color: '#ccc' }}>Inactive Background</label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input
-                                    type="color"
-                                    value={terminalBackgroundInactive}
-                                    onChange={(e) => onTerminalBackgroundInactiveChange(e.target.value)}
-                                    style={{ border: 'none', width: '30px', height: '30px', cursor: 'pointer', padding: 0, backgroundColor: 'transparent' }}
-                                />
-                                <input
-                                    type="text"
-                                    value={terminalBackgroundInactive}
-                                    onChange={(e) => onTerminalBackgroundInactiveChange(e.target.value)}
-                                    className="settings-input"
-                                    style={{ width: '80px', padding: '4px' }}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             <div className="form-group">
                 <label>Empty Pane Background</label>

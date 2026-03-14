@@ -357,12 +357,12 @@
 }
 
 .log-line-match {
-    background: rgba(255, 200, 0, 0.12);
+    background: var(--search-highlight-bg);
 }
 
 .log-line-current {
-    background: rgba(255, 200, 0, 0.28);
-    outline: 1px solid rgba(255, 200, 0, 0.6);
+    background: var(--search-highlight-current-bg);
+    outline: 1px solid var(--search-highlight-current-border);
     outline-offset: -1px;
 }
 
@@ -393,15 +393,15 @@
 
 /* Inline text match highlight */
 .log-search-mark {
-    background: rgba(255, 200, 0, 0.6);
-    color: #000;
+    background: var(--search-highlight-mark-bg);
+    color: var(--search-highlight-mark-text);
     border-radius: 2px;
     padding: 0 1px;
 }
 
 .log-line-current .log-search-mark {
-    background: #ffc800;
-    color: #000;
+    background: var(--search-highlight-mark-solid);
+    color: var(--search-highlight-mark-text);
 }
 
 /* ── Misc ── */

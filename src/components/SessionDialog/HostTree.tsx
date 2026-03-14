@@ -511,7 +511,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     onClick={() => openAddFolder(getTargetParentId())}
                     style={{ cursor: 'pointer' }}
                 >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ffcc00' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-folder)' }}>
                         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                         <line x1="12" y1="11" x2="12" y2="17"></line>
                         <line x1="9" y1="14" x2="15" y2="14"></line>
@@ -524,7 +524,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     onClick={() => openAddHost(getTargetParentId())}
                     style={{ cursor: 'pointer' }}
                 >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#4a9eff' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-host)' }}>
                         <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
                         <line x1="8" y1="21" x2="16" y2="21"></line>
                         <line x1="12" y1="17" x2="12" y2="21"></line>
@@ -538,7 +538,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     onClick={() => handleExport(null)}
                     style={{ cursor: 'pointer' }}
                 >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ff6b6b' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-danger)' }}>
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                         <polyline points="17 8 12 3 7 8"></polyline>
                         <line x1="12" y1="3" x2="12" y2="15"></line>
@@ -551,7 +551,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     onClick={() => handleImport(null)}
                     style={{ cursor: 'pointer' }}
                 >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#51cf66' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--success-color)' }}>
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                         <polyline points="7 10 12 15 17 10"></polyline>
                         <line x1="12" y1="15" x2="12" y2="3"></line>
@@ -579,7 +579,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         <>
                             <button onClick={() => openAddFolder(contextMenu.node?.id ?? null)}>
                                 <span className="menu-icon-wrapper">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ffcc00' }}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-folder)' }}>
                                         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                                         <line x1="12" y1="11" x2="12" y2="17"></line>
                                         <line x1="9" y1="14" x2="15" y2="14"></line>
@@ -589,7 +589,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                             </button>
                             <button onClick={() => openAddHost(contextMenu.node?.id ?? null)}>
                                 <span className="menu-icon-wrapper">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#4a9eff' }}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-host)' }}>
                                         <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
                                         <line x1="8" y1="21" x2="16" y2="21"></line>
                                         <line x1="12" y1="17" x2="12" y2="21"></line>
@@ -611,7 +611,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                     }}
                                 >
                                     <span className="menu-icon-wrapper">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ff922b' }}>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-warning)' }}>
                                             <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
                                         </svg>
                                     </span>
@@ -622,7 +622,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                 onClick={() => handleExport(contextMenu.node)}
                             >
                                 <span className="menu-icon-wrapper">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ff6b6b' }}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-danger)' }}>
                                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                         <polyline points="17 8 12 3 7 8"></polyline>
                                         <line x1="12" y1="3" x2="12" y2="15"></line>
@@ -635,7 +635,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                     onClick={() => handleImport(contextMenu.node!.id)}
                                 >
                                     <span className="menu-icon-wrapper">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#51cf66' }}>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--success-color)' }}>
                                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                             <polyline points="7 10 12 15 17 10"></polyline>
                                             <line x1="12" y1="15" x2="12" y2="3"></line>
@@ -652,7 +652,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                     }}
                                 >
                                     <span className="menu-icon-wrapper">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#4a9eff' }}>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-host)' }}>
                                             <path d="M18 15l-6-6-6 6"></path>
                                         </svg>
                                     </span>
@@ -667,7 +667,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                 }}
                             >
                                 <span className="menu-icon-wrapper">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#fa5252' }}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-danger)' }}>
                                         <polyline points="3 6 5 6 21 6"></polyline>
                                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                                         <line x1="10" y1="11" x2="10" y2="17"></line>
@@ -731,7 +731,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                     onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
                                     autoComplete="new-password"
                                 />
-                                <p style={{ fontSize: '0.75rem', color: '#888', marginTop: '4px' }}>
+                                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
                                     {editModal.mode === 'export'
                                         ? 'This password will be required to import the file later.'
                                         : 'Enter the password that was used to export this file.'}

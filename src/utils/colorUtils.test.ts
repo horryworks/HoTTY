@@ -32,8 +32,12 @@ describe('hexToRgba', () => {
 });
 
 describe('getTransparentColor', () => {
-    it('applies 0.85 alpha to a hex color', () => {
-        expect(getTransparentColor('#1e1e1e')).toBe('rgba(30, 30, 30, 0.85)');
+    it('returns the hex color unchanged', () => {
+        expect(getTransparentColor('#1e1e1e')).toBe('#1e1e1e');
+    });
+
+    it('returns white unchanged', () => {
+        expect(getTransparentColor('#ffffff')).toBe('#ffffff');
     });
 
     it('passes through non-hex values unchanged', () => {

@@ -553,51 +553,28 @@ ipcMain.handle('save-ssh-algorithms', async (_, algorithms) => {
   }
 });
 
-const getThemesPath = () => {
-  const userDataPath = join(app.getPath('userData'), 'themes.json');
-
-  if (!fs.existsSync(userDataPath)) {
-    const defaultPath = app.isPackaged
-      ? join(process.resourcesPath, 'resources', 'themes.json')
-      : join(app.getAppPath(), 'resources', 'themes.json');
-
-    try {
-      if (fs.existsSync(defaultPath)) {
-        fs.copyFileSync(defaultPath, userDataPath);
-        console.log('Initialized themes.json in userData');
-      } else {
-        console.error('Default themes.json not found at:', defaultPath);
-      }
-    } catch (err) {
-      console.error('Failed to initialize themes.json:', err);
-    }
-  }
-
-  return userDataPath;
-};
-
 ipcMain.handle('get-themes', async () => {
+  const resourcesDir = app.isPackaged
+    ? join(process.resourcesPath, 'resources')
+    : join(app.getAppPath(), 'resources');
+
+  const themes: Record<string, any> = {};
   try {
-    const themesPath = getThemesPath();
-    if (fs.existsSync(themesPath)) {
-      const content = fs.readFileSync(themesPath, 'utf8');
-      return JSON.parse(content);
+    const files = fs.readdirSync(resourcesDir);
+    for (const file of files) {
+      if (!file.endsWith('.json') || file === 'ssh_algorithms.json') continue;
+      const themeName = file.replace('.json', '');
+      try {
+        const content = fs.readFileSync(join(resourcesDir, file), 'utf8');
+        themes[themeName] = JSON.parse(content);
+      } catch (err) {
+        console.error(`Failed to load theme ${file}:`, err);
+      }
     }
   } catch (err) {
-    console.error('Failed to get themes:', err);
+    console.error('Failed to read resources directory:', err);
   }
-  return null;
-});
-
-ipcMain.handle('save-themes', async (_, themes) => {
-  try {
-    const themesPath = getThemesPath();
-    fs.writeFileSync(themesPath, JSON.stringify(themes, null, 2), 'utf8');
-    return true;
-  } catch (err) {
-    console.error('Failed to save themes:', err);
-    return false;
-  }
+  return Object.keys(themes).length > 0 ? themes : null;
 });
 
 // ── DPAPI Credential Protection ──

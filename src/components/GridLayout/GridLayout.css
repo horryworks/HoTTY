@@ -32,30 +32,6 @@
 */
 
 
-/* 
-   Active/Inactive Pane Overlay Logic:
-   - Base: create an overlay element on every pane.
-   - Default: Inactive pane overlay (mostly transparent or specific for Light theme).
-   - Active: Active pane overlay (light for Dark/Medium, transparent for Light).
-   - Colors are defined in index.css variables: --pane-overlay-active, --pane-overlay-inactive.
-*/
-.grid-pane::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    pointer-events: none;
-    z-index: 1;
-    background-color: var(--pane-overlay-inactive);
-    transition: background-color 0.1s;
-}
-
-/* Override for Active Pane */
-.grid-pane.active-pane::after {
-    background-color: var(--pane-overlay-active);
-}
 
 .empty-pane-placeholder {
     flex: 1;

@@ -100,66 +100,27 @@ describe('settingsStore — toggleLineWrap', () => {
     });
 });
 
-describe('settingsStore — terminal color updaters (non-custom theme)', () => {
-    it('updateTerminalForeground only updates terminalForeground when theme is not custom', () => {
+describe('settingsStore — terminal color updaters', () => {
+    it('updateTerminalForeground updates terminalForeground', () => {
         useSettingsStore.getState().updateTheme('dark');
-        const prevCustom = useSettingsStore.getState().customColors;
         useSettingsStore.getState().updateTerminalForeground('#aabbcc');
-        const s = useSettingsStore.getState();
-        expect(s.terminalForeground).toBe('#aabbcc');
-        expect(s.customColors).toBe(prevCustom); // customColors unchanged
+        expect(useSettingsStore.getState().terminalForeground).toBe('#aabbcc');
     });
 
-    it('updateTerminalBackground only updates terminalBackground when theme is not custom', () => {
+    it('updateTerminalBackground updates terminalBackground', () => {
         useSettingsStore.getState().updateTheme('light');
-        const prevCustom = useSettingsStore.getState().customColors;
         useSettingsStore.getState().updateTerminalBackground('#112233');
-        const s = useSettingsStore.getState();
-        expect(s.terminalBackground).toBe('#112233');
-        expect(s.customColors).toBe(prevCustom);
-    });
-});
-
-describe('settingsStore — terminal color updaters (custom theme)', () => {
-    beforeEach(() => {
-        useSettingsStore.getState().updateTheme('custom');
+        expect(useSettingsStore.getState().terminalBackground).toBe('#112233');
     });
 
-    it('updateTerminalForeground also updates customColors.foreground', () => {
-        useSettingsStore.getState().updateTerminalForeground('#ff0000');
-        const s = useSettingsStore.getState();
-        expect(s.terminalForeground).toBe('#ff0000');
-        expect(s.customColors.foreground).toBe('#ff0000');
-    });
-
-    it('updateTerminalBackground also updates customColors.background', () => {
-        useSettingsStore.getState().updateTerminalBackground('#00ff00');
-        const s = useSettingsStore.getState();
-        expect(s.terminalBackground).toBe('#00ff00');
-        expect(s.customColors.background).toBe('#00ff00');
-    });
-
-    it('updateTerminalBackgroundInactive also updates customColors.backgroundInactive', () => {
+    it('updateTerminalBackgroundInactive updates terminalBackgroundInactive', () => {
         useSettingsStore.getState().updateTerminalBackgroundInactive('#0000ff');
-        const s = useSettingsStore.getState();
-        expect(s.terminalBackgroundInactive).toBe('#0000ff');
-        expect(s.customColors.backgroundInactive).toBe('#0000ff');
+        expect(useSettingsStore.getState().terminalBackgroundInactive).toBe('#0000ff');
     });
 
-    it('updatePaneBackground also updates customColors.paneBackground', () => {
+    it('updatePaneBackground updates paneBackground', () => {
         useSettingsStore.getState().updatePaneBackground('#123456');
-        const s = useSettingsStore.getState();
-        expect(s.paneBackground).toBe('#123456');
-        expect(s.customColors.paneBackground).toBe('#123456');
-    });
-
-    it('updating one color does not affect other customColors fields', () => {
-        const before = useSettingsStore.getState().customColors;
-        useSettingsStore.getState().updateTerminalForeground('#ffffff');
-        const after = useSettingsStore.getState().customColors;
-        expect(after.background).toBe(before.background);
-        expect(after.backgroundInactive).toBe(before.backgroundInactive);
-        expect(after.paneBackground).toBe(before.paneBackground);
+        expect(useSettingsStore.getState().paneBackground).toBe('#123456');
     });
 });
 

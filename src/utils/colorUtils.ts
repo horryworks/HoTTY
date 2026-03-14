@@ -13,8 +13,8 @@ export function hexToRgba(hex: string, alpha: number): string {
 }
 
 /**
- * Convert a hex color to rgba with 0.85 alpha (used for terminal/pane backgrounds).
+ * Return the hex color as-is (fully opaque, used for terminal/pane backgrounds).
  */
 export function getTransparentColor(hex: string): string {
-    return hexToRgba(hex, 0.85);
+    return hex;
 }

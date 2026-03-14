@@ -25,12 +25,8 @@ interface SettingsModalProps {
     onTelnetKeepAliveEnabledChange: (enabled: boolean) => void;
     telnetKeepAliveInterval: number;
     onTelnetKeepAliveIntervalChange: (interval: number) => void;
-    terminalForeground: string;
-    onTerminalForegroundChange: (color: string) => void;
-    terminalBackground: string;
-    onTerminalBackgroundChange: (color: string) => void;
-    terminalBackgroundInactive: string;
-    onTerminalBackgroundInactiveChange: (color: string) => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    themesData: Record<string, any> | null;
     paneBackground: string;
     onPaneBackgroundChange: (color: string) => void;
     paneBackgroundMode: 'color' | 'image';
@@ -43,8 +39,8 @@ interface SettingsModalProps {
     onLoggingPathChange: (path: string) => void;
     scrollback: number;
     onScrollbackChange: (lines: number) => void;
-    theme: 'dark' | 'light' | 'medium' | 'custom';
-    onThemeChange: (theme: 'dark' | 'light' | 'medium' | 'custom') => void;
+    theme: string;
+    onThemeChange: (theme: string) => void;
     sidebarPosition: 'left' | 'right';
     onSidebarPositionChange: (position: 'left' | 'right') => void;
     showSystemPrompt: boolean;
@@ -89,12 +85,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onTelnetKeepAliveEnabledChange,
     telnetKeepAliveInterval,
     onTelnetKeepAliveIntervalChange,
-    terminalForeground,
-    onTerminalForegroundChange,
-    terminalBackground,
-    onTerminalBackgroundChange,
-    terminalBackgroundInactive,
-    onTerminalBackgroundInactiveChange,
+    themesData,
     paneBackground,
     onPaneBackgroundChange,
     paneBackgroundMode,
@@ -313,14 +304,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <AppearanceTab
                             theme={theme}
                             onThemeChange={onThemeChange}
+                            themesData={themesData}
                             sidebarPosition={sidebarPosition}
                             onSidebarPositionChange={onSidebarPositionChange}
-                            terminalForeground={terminalForeground}
-                            onTerminalForegroundChange={onTerminalForegroundChange}
-                            terminalBackground={terminalBackground}
-                            onTerminalBackgroundChange={onTerminalBackgroundChange}
-                            terminalBackgroundInactive={terminalBackgroundInactive}
-                            onTerminalBackgroundInactiveChange={onTerminalBackgroundInactiveChange}
                             paneBackground={paneBackground}
                             onPaneBackgroundChange={onPaneBackgroundChange}
                             paneBackgroundMode={paneBackgroundMode}

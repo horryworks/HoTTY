@@ -136,7 +136,6 @@ function App() {
   }, [settings.fontSize]);
 
   const applyTheme = (themeName: string) => {
-    if (themeName === 'custom') return;
     const themeDef = (themesData as any)[themeName];
     if (themeDef) {
       if (themeDef.variables) {
@@ -349,15 +348,8 @@ function App() {
     }
   };
 
-  const handleThemeChange = (newTheme: 'dark' | 'light' | 'medium' | 'custom') => {
-    if (newTheme === 'custom') {
-      const shouldSetColorMode = settings.paneBackgroundMode !== 'image';
-      updateTerminalForeground(settings.customColors.foreground);
-      updateTerminalBackground(settings.customColors.background);
-      updateTerminalBackgroundInactive(settings.customColors.backgroundInactive);
-      updatePaneBackground(settings.customColors.paneBackground);
-      if (shouldSetColorMode) updatePaneBackgroundMode('color');
-    } else if (themesData) {
+  const handleThemeChange = (newTheme: string) => {
+    if (themesData) {
       const themeDef = (themesData as any)[newTheme];
       if (themeDef && themeDef.terminal) {
         const { foreground, background, backgroundInactive, paneBackground: pBg } = themeDef.terminal;
@@ -365,8 +357,7 @@ function App() {
         updateTerminalBackground(background);
         updateTerminalBackgroundInactive(backgroundInactive);
         updatePaneBackground(pBg);
-        const shouldSetColorMode = settings.paneBackgroundMode !== 'image';
-        if (shouldSetColorMode) updatePaneBackgroundMode('color');
+        if (settings.paneBackgroundMode !== 'image') updatePaneBackgroundMode('color');
       }
     }
     updateTheme(newTheme);
@@ -734,12 +725,7 @@ function App() {
           onTelnetKeepAliveEnabledChange={updateTelnetKeepAliveEnabled}
           telnetKeepAliveInterval={settings.telnetKeepAliveInterval}
           onTelnetKeepAliveIntervalChange={updateTelnetKeepAliveInterval}
-          terminalForeground={settings.terminalForeground}
-          onTerminalForegroundChange={updateTerminalForeground}
-          terminalBackground={settings.terminalBackground}
-          onTerminalBackgroundChange={updateTerminalBackground}
-          terminalBackgroundInactive={settings.terminalBackgroundInactive}
-          onTerminalBackgroundInactiveChange={updateTerminalBackgroundInactive}
+          themesData={themesData}
           paneBackground={settings.paneBackground}
           onPaneBackgroundChange={updatePaneBackground}
           paneBackgroundMode={settings.paneBackgroundMode}

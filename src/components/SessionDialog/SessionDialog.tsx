@@ -500,13 +500,13 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                 />
                 <button
                     onClick={onClose}
-                    style={{ position: 'absolute', top: '10px', right: '10px', background: 'transparent', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1, zIndex: 1 }}
+                    style={{ position: 'absolute', top: '10px', right: '10px', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1, zIndex: 1 }}
                 >✕</button>
 
                 <h2 style={{ marginTop: 0, paddingRight: '20px', marginBottom: '10px' }}>New Session</h2>
 
                 {error && (
-                    <div style={{ color: '#ff6b6b', marginBottom: '8px', padding: '8px 10px', backgroundColor: 'rgba(255,0,0,0.1)', borderRadius: '4px', fontSize: '0.9rem' }}>
+                    <div style={{ color: 'var(--color-danger)', marginBottom: '8px', padding: '8px 10px', backgroundColor: 'var(--color-danger-bg)', borderRadius: '4px', fontSize: '0.9rem' }}>
                         {error}
                     </div>
                 )}
@@ -637,7 +637,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                             {wslDistros.map(d => <option key={d} value={d}>{d}</option>)}
                                         </select>
                                     ) : (
-                                        <div style={{ color: '#aaa', fontSize: '0.9rem', fontStyle: 'italic' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontStyle: 'italic' }}>
                                             No WSL distributions found.
                                         </div>
                                     )}
@@ -647,14 +647,14 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             {/* Log Viewer info */}
                             {protocol === 'log-viewer' && (
                                 <div className="form-group">
-                                    <div style={{ color: '#aaa', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5' }}>
                                         Opens a viewer for session log files.
                                     </div>
-                                    <div style={{ marginTop: '8px', color: '#ccc', fontSize: '0.85rem' }}>
+                                    <div style={{ marginTop: '8px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                                         <strong>Log Folder:</strong>{' '}
                                         {loggingPath
                                             ? <span style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>{loggingPath}</span>
-                                            : <span style={{ color: '#f80', fontStyle: 'italic' }}>Not configured (set in Settings → Logging)</span>
+                                            : <span style={{ color: 'var(--color-warning)', fontStyle: 'italic' }}>Not configured (set in Settings → Logging)</span>
                                         }
                                     </div>
                                 </div>
