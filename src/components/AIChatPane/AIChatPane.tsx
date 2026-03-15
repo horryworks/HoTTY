@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { marked } from 'marked';
 import { getTransparentColor } from '../../utils/colorUtils';
 import { STORAGE_KEYS } from '../../constants/storage';
+import { calcGeminiCost } from '../../constants/geminiPricing';
 import { AuthenticationPanel } from './AuthenticationPanel';
 import * as electronService from '../../services/electronService';
 import './AIChatPane.css';
@@ -276,6 +277,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
 
     const [isStreaming, setIsStreaming] = useState(false);
     const [streamingContent, setStreamingContent] = useState('');
+    const [totalInputTokens, setTotalInputTokens] = useState(0);
+    const [totalOutputTokens, setTotalOutputTokens] = useState(0);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -402,6 +405,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                 setMessages(prev => [...prev, { role: 'model', content: data.content }]);
                 setStreamingContent('');
                 setIsStreaming(false);
+                if (data.usageMetadata) {
+                    setTotalInputTokens(prev => prev + (data.usageMetadata!.promptTokenCount || 0));
+                    setTotalOutputTokens(prev => prev + (data.usageMetadata!.candidatesTokenCount || 0));
+                }
             } else if (data.type === 'error') {
                 setMessages(prev => [...prev, { role: 'model', content: `⚠️ ${data.content}` }]);
                 setStreamingContent('');
@@ -625,8 +632,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     const handleClearChat = () => {
         setMessages([]);
         setStreamingContent('');
+        setTotalInputTokens(0);
+        setTotalOutputTokens(0);
         electronService.geminiChatClear(sessionId);
     };
+
 
     const handleCancel = () => {
         electronService.geminiChatCancel(sessionId);
@@ -876,6 +886,13 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                         {isStreaming && <button className="ai-chat-cancel-btn" onClick={handleCancel}>■</button>}
                         <button className="ai-chat-send-btn" onClick={handleSend} disabled={!inputText.trim() || isStreaming || selectedModel === 'Unspecified'}>➤</button>
                     </div>
+                    {(totalInputTokens > 0 || totalOutputTokens > 0) && (
+                        <div className="ai-token-status">
+                            <span>{totalInputTokens.toLocaleString()} in / {totalOutputTokens.toLocaleString()} out tokens</span>
+                            <span className="ai-token-status-sep">·</span>
+                            <span>~${calcGeminiCost(totalInputTokens, totalOutputTokens, selectedModel).toFixed(4)}</span>
+                        </div>
+                    )}
                 </div>
             )}
         </div >

@@ -28,7 +28,7 @@ export const geminiListModels = () => api().geminiListModels();
 export const geminiChatCancel = (sessionId: string) => api().geminiChatCancel(sessionId);
 export const geminiChatClear = (sessionId: string) => api().geminiChatClear(sessionId);
 export const onGeminiAuthResult = (callback: (result: { success: boolean }) => void) => api().onGeminiAuthResult(callback);
-export const onGeminiChatResponse = (callback: (data: { sessionId: string; type: string; content: string }) => void) => api().onGeminiChatResponse(callback);
+export const onGeminiChatResponse = (callback: (data: { sessionId: string; type: string; content: string; usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } }) => void) => api().onGeminiChatResponse(callback);
 
 export const showContextMenu = (selection: string, commands?: { id: string; label: string }[], includePaste?: boolean) => api().showContextMenu(selection, commands, includePaste);
 export const onAskGemini = (callback: (selection: string, type: string) => void) => api().onAskGemini(callback);

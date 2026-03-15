@@ -443,6 +443,7 @@ export class GeminiService {
       }
 
       let fullResponse = '';
+      let lastUsageMetadata: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } | null = null;
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -470,6 +471,9 @@ export class GeminiService {
                   content: text,
                 });
               }
+              if (parsed?.usageMetadata) {
+                lastUsageMetadata = parsed.usageMetadata;
+              }
             } catch {
               // skip malformed JSON chunks
             }
@@ -482,6 +486,7 @@ export class GeminiService {
         sessionId,
         type: 'done',
         content: fullResponse,
+        usageMetadata: lastUsageMetadata,
       });
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {

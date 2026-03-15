@@ -458,6 +458,22 @@
     flex-shrink: 0;
 }
 
+.ai-token-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 12px;
+    background-color: var(--sidebar-bg);
+    font-size: 0.78em;
+    color: var(--text-secondary);
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+
+.ai-token-status-sep {
+    opacity: 0.4;
+}
+
 .ai-chat-textarea {
     flex: 1;
     background-color: var(--input-bg);
