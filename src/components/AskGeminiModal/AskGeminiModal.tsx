@@ -19,6 +19,7 @@ export const AskGeminiModal: React.FC<AskGeminiModalProps> = ({
 
     useEffect(() => {
         if (isOpen) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setPrompt('');
             // Focus textarea when modal opens
             setTimeout(() => {

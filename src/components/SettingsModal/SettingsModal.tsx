@@ -25,8 +25,7 @@ interface SettingsModalProps {
     onTelnetKeepAliveEnabledChange: (enabled: boolean) => void;
     telnetKeepAliveInterval: number;
     onTelnetKeepAliveIntervalChange: (interval: number) => void;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    themesData: Record<string, any> | null;
+    themesData: Record<string, { name?: string; variables?: Record<string, string>; terminal?: Record<string, string> }> | null;
     paneBackground: string;
     onPaneBackgroundChange: (color: string) => void;
     paneBackgroundMode: 'color' | 'image';
@@ -133,7 +132,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const [activeTab, setActiveTab] = React.useState<'appearance' | 'ssh' | 'telnet' | 'system' | 'ai' | 'about'>('system');
     const [version, setVersion] = React.useState<string>('');
     const [isAiAuthenticated, setIsAiAuthenticated] = React.useState<boolean>(false);
-    const [sshAlgorithms, setSshAlgorithms] = React.useState<any>(null);
+    const [sshAlgorithms, setSshAlgorithms] = React.useState<Record<string, { name: string; enabled: boolean }[]> | null>(null);
     const modalRef = useRef<HTMLDivElement>(null);
     const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -181,7 +180,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const handleAlgorithmToggle = async (category: string, name: string) => {
         if (!sshAlgorithms) return;
         const newAlgorithms = { ...sshAlgorithms };
-        newAlgorithms[category] = newAlgorithms[category].map((algo: any) =>
+        newAlgorithms[category] = newAlgorithms[category].map((algo) =>
             algo.name === name ? { ...algo, enabled: !algo.enabled } : algo
         );
         setSshAlgorithms(newAlgorithms);
@@ -310,7 +309,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             onThemeChange={onThemeChange}
                             onOpenCustomThemeCreator={onOpenCustomThemeCreator}
                             onDeleteTheme={onDeleteTheme}
-                            themesData={themesData}
+                            themesData={themesData as Record<string, { name: string; variables: Record<string, string>; terminal: Record<string, string> }> | null}
                             sidebarPosition={sidebarPosition}
                             onSidebarPositionChange={onSidebarPositionChange}
                             paneBackground={paneBackground}

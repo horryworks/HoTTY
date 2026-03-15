@@ -1,4 +1,4 @@
-import { BrowserWindow, shell, app, ipcMain } from 'electron';
+import { BrowserWindow, app, ipcMain } from 'electron';
 import * as http from 'http';
 import * as url from 'url';
 import * as crypto from 'crypto';
@@ -6,6 +6,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { encryptString, decryptString } from './dpapi';
 import { logger } from './Logger';
+
+/** Constant-time string comparison to prevent timing attacks on secrets. */
+function safeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+/** Allowlist pattern for Gemini model names (e.g. "gemini-1.5-flash"). */
+const VALID_MODEL_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
 interface TokenData {
   access_token: string;
@@ -52,8 +63,8 @@ export class GeminiService {
       const encrypted = await encryptString(jsonString);
       fs.writeFileSync(this.getTokenFilePath(), encrypted, 'utf8');
       logger.debug('gemini', 'Token saved');
-    } catch (err: any) {
-      logger.error('gemini', 'Failed to save token', { error: err.message });
+    } catch (err: unknown) {
+      logger.error('gemini', 'Failed to save token', { error: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -86,8 +97,8 @@ export class GeminiService {
       const success = await this.refreshAccessToken();
       return success;
 
-    } catch (err: any) {
-      logger.error('gemini', 'Failed to load token', { error: err.message });
+    } catch (err: unknown) {
+      logger.error('gemini', 'Failed to load token', { error: err instanceof Error ? err.message : String(err) });
       return false;
     }
   }
@@ -96,7 +107,7 @@ export class GeminiService {
 
   async autoAuth(clientId: string, clientSecret: string): Promise<boolean> {
     // If we're already authenticated and have a valid token (or can refresh one), just return true.
-    if (this.isAuthenticated() && this.clientId === clientId && this.clientSecret === clientSecret) {
+    if (this.isAuthenticated() && safeCompare(this.clientId, clientId) && safeCompare(this.clientSecret, clientSecret)) {
       const token = await this.getValidToken();
       if (token) return true;
     }
@@ -110,7 +121,7 @@ export class GeminiService {
       const success = await this.loadToken();
       if (success) {
         // Validate that the stored clientId/secret matches what we were passed
-        if (this.clientId !== clientId || this.clientSecret !== clientSecret) {
+        if (!safeCompare(this.clientId, clientId) || !safeCompare(this.clientSecret, clientSecret)) {
           logger.warn('gemini', 'Auto-auth failed: credentials mismatch');
           this.logout();
           return false;
@@ -118,8 +129,8 @@ export class GeminiService {
         return true;
       }
       return false;
-    } catch (err: any) {
-      logger.error('gemini', 'Auto-auth error', { error: err.message });
+    } catch (err: unknown) {
+      logger.error('gemini', 'Auto-auth error', { error: err instanceof Error ? err.message : String(err) });
       return false;
     }
   }
@@ -176,7 +187,7 @@ export class GeminiService {
 
           if (code) {
             try {
-              const port = (this.authServer!.address() as any).port;
+              const port = (this.authServer!.address() as { port: number }).port;
               await this.exchangeCodeForToken(code, clientId, clientSecret, codeVerifier, `http://localhost:${port}/callback`);
 
               // Save token immediately after authenticating
@@ -192,8 +203,8 @@ export class GeminiService {
               ipcMain.emit('gemini-auth-result-internal');
 
               resolve(true);
-            } catch (err: any) {
-              logger.error('gemini', 'Token exchange error', { error: err.message });
+            } catch (err: unknown) {
+              logger.error('gemini', 'Token exchange error', { error: err instanceof Error ? err.message : String(err) });
               res.writeHead(200, securityHeaders);
               res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#ef4444">&#10060; Token Exchange Error</h1><p>Authentication failed. You may close this window and try again.</p></div></body></html>');
               this.cleanupServer();
@@ -205,7 +216,7 @@ export class GeminiService {
       });
 
       this.authServer.listen(0, '127.0.0.1', () => {
-        const port = (this.authServer!.address() as any).port;
+        const port = (this.authServer!.address() as { port: number }).port;
         const redirectUri = `http://localhost:${port}/callback`;
         const scope = 'https://www.googleapis.com/auth/generative-language.retriever';
 
@@ -371,6 +382,15 @@ export class GeminiService {
   // -- Chat --
 
   async sendMessage(win: BrowserWindow, sessionId: string, message: string, model: string = 'gemini-1.5-flash', systemInstruction?: string): Promise<void> {
+    if (!VALID_MODEL_PATTERN.test(model)) {
+      win.webContents.send('gemini-chat-response', {
+        sessionId,
+        type: 'error',
+        content: 'Invalid model name.',
+      });
+      return;
+    }
+
     const token = await this.getValidToken();
     if (!token) {
       win.webContents.send('gemini-chat-response', {
@@ -393,7 +413,7 @@ export class GeminiService {
         parts: [{ text: msg.content }],
       }));
 
-      const requestBody: any = { contents };
+      const requestBody: Record<string, unknown> = { contents };
 
       if (systemInstruction) {
         requestBody.system_instruction = {
@@ -463,12 +483,12 @@ export class GeminiService {
         type: 'done',
         content: fullResponse,
       });
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
         // Cancelled by user, no error to send
         return;
       }
-      logger.error('gemini', 'Chat error', { sessionId, error: err.message });
+      logger.error('gemini', 'Chat error', { sessionId, error: err instanceof Error ? err.message : String(err) });
       win.webContents.send('gemini-chat-response', {
         sessionId,
         type: 'error',
@@ -505,8 +525,8 @@ export class GeminiService {
 
       const data = await response.json();
       return (data.models || [])
-        .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
-        .map((m: any) => ({
+        .filter((m: { supportedGenerationMethods?: string[]; name: string; displayName: string }) => m.supportedGenerationMethods?.includes('generateContent'))
+        .map((m: { name: string; displayName: string }) => ({
           name: m.name.replace('models/', ''),
           displayName: m.displayName
         }));
@@ -528,8 +548,8 @@ export class GeminiService {
       if (fs.existsSync(tokenPath)) {
         fs.unlinkSync(tokenPath);
       }
-    } catch (err: any) {
-      logger.error('gemini', 'Failed to delete token file', { error: err.message });
+    } catch (err: unknown) {
+      logger.error('gemini', 'Failed to delete token file', { error: err instanceof Error ? err.message : String(err) });
     }
   }
 

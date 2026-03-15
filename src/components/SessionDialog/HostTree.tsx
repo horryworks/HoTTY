@@ -73,9 +73,9 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 modalInputRef.current.focus();
                 // Ensure the window itself has focus (critical after native alerts in Electron)
                 try {
-                    (window as any).electronAPI.focusWindow();
+                    window.electronAPI.focusWindow();
                     window.focus();
-                } catch (e) { }
+                } catch { /* focus best-effort */ }
             }
         }, 200);
     }, []);
@@ -96,6 +96,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
     // Handle focus when modal opens
     useEffect(() => {
         if (editModalOpen) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setEditingNodeId(null);
             focusModal();
         }
@@ -178,24 +179,24 @@ export const HostTree: React.FC<HostTreeProps> = ({
         setFormPassword('');
         openEditModal({ mode: 'export', parentId: null });
         setContextMenu(null);
-        (window as any).electronAPI.logDebug(`Export modal opened${node ? ` for node: ${node.name}` : ' for full tree'}`);
+        window.electronAPI.logDebug(`Export modal opened${node ? ` for node: ${node.name}` : ' for full tree'}`);
     };
 
     const handleImport = async (parentId: string | null = null) => {
-        (window as any).electronAPI.logDebug(`Import button clicked${parentId ? ` for parent: ${parentId}` : ''}`);
+        window.electronAPI.logDebug(`Import button clicked${parentId ? ` for parent: ${parentId}` : ''}`);
         try {
-            const filePath = await (window as any).electronAPI.selectImportFile();
+            const filePath = await window.electronAPI.selectImportFile();
             if (!filePath) {
-                (window as any).electronAPI.logDebug('Import file selection cancelled');
+                window.electronAPI.logDebug('Import file selection cancelled');
                 return;
             }
             setImportFilePath(filePath);
             setFormPassword('');
             openEditModal({ mode: 'import', parentId });
             setContextMenu(null);
-            (window as any).electronAPI.logDebug('Import password modal opened');
-        } catch (err: any) {
-            onShowMessage?.('error', 'Import Error', 'Failed to open file: ' + err.message);
+            window.electronAPI.logDebug('Import password modal opened');
+        } catch (err: unknown) {
+            onShowMessage?.('error', 'Import Error', 'Failed to open file: ' + (err instanceof Error ? err.message : String(err)));
         }
     };
 
@@ -208,10 +209,10 @@ export const HostTree: React.FC<HostTreeProps> = ({
         if (mode === 'export') {
             if (!formPassword) return;
             try {
-                (window as any).electronAPI.logDebug('Calling exportHTree IPC from modal');
+                window.electronAPI.logDebug('Calling exportHTree IPC from modal');
                 // Use selected node or full tree
                 const dataToExport = exportNode ? [exportNode] : tree;
-                const success = await (window as any).electronAPI.exportHTree(dataToExport, formPassword);
+                const success = await window.electronAPI.exportHTree(dataToExport, formPassword);
 
                 // Close modal and reset state BEFORE showing success alert
                 closeEditModal();
@@ -224,8 +225,8 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         focusModal();
                     }, 50);
                 }
-            } catch (err: any) {
-                onShowMessage?.('error', 'Export Failed', err.message);
+            } catch (err: unknown) {
+                onShowMessage?.('error', 'Export Failed', err instanceof Error ? err.message : String(err));
             }
             return;
         }
@@ -233,8 +234,8 @@ export const HostTree: React.FC<HostTreeProps> = ({
         if (mode === 'import') {
             if (!formPassword || !importFilePath) return;
             try {
-                (window as any).electronAPI.logDebug('Calling decryptImportFile IPC from modal');
-                const data = await (window as any).electronAPI.decryptImportFile(formPassword);
+                window.electronAPI.logDebug('Calling decryptImportFile IPC from modal');
+                const data = await window.electronAPI.decryptImportFile(formPassword);
                 if (data && onImportData) {
                     // Extract filename from path for folder naming
                     const pathParts = importFilePath.split(/[\\/]/);
@@ -259,8 +260,8 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         focusModal();
                     }, 50);
                 }
-            } catch (err: any) {
-                onShowMessage?.('error', 'Import Failed', err.message);
+            } catch (err: unknown) {
+                onShowMessage?.('error', 'Import Failed', err instanceof Error ? err.message : String(err));
                 // Keep password if failed, but maybe good to clear on some errors?
                 // Let's keep it for now so user can try again.
             }
@@ -824,16 +825,16 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         // Ensure window focus is restored after dialog closes (just in case)
                         setTimeout(() => {
                             try {
-                                (window as any).electronAPI.focusWindow();
-                            } catch (e) { }
+                                window.electronAPI.focusWindow();
+                            } catch { /* focus best-effort */ }
                         }, 50);
                     }}
                     onCancel={() => {
                         closeNodeToDelete();
                         setTimeout(() => {
                             try {
-                                (window as any).electronAPI.focusWindow();
-                            } catch (e) { }
+                                window.electronAPI.focusWindow();
+                            } catch { /* focus best-effort */ }
                         }, 50);
                     }}
                 />

@@ -369,8 +369,8 @@
 /* Timestamp column */
 .log-line-timestamp {
     flex-shrink: 0;
-    width: 180px;
-    padding: 0 3px;
+    min-width: max-content;
+    padding: 0 8px 0 4px;
     font-size: calc(var(--font-size-base) - 3px);
     color: var(--text-secondary);
     border-right: 1px solid var(--border-color);

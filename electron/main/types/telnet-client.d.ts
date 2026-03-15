@@ -8,12 +8,19 @@ declare module 'telnet-client' {
         timeout?: number;
         negotiationMandatory?: boolean;
         sendTimeout?: number;
-        [key: string]: any;
+        disableLogon?: boolean;
+        stripShellPrompt?: boolean;
+        terminalWidth?: number;
+        terminalHeight?: number;
+        irs?: string;
+        ors?: string;
+        echoLines?: number;
+        [key: string]: unknown;
     }
 
     export interface SendOptions {
         waitfor?: boolean | RegExp | string;
-        [key: string]: any;
+        [key: string]: unknown;
     }
 
     export class Telnet extends EventEmitter {
@@ -22,6 +29,6 @@ declare module 'telnet-client' {
         send(data: string, options?: SendOptions): Promise<string>;
         end(): Promise<void>;
         destroy(): Promise<void>;
-        socket: any; // Expose socket for direct writes
+        socket: Socket | null; // Expose socket for direct writes
     }
 }

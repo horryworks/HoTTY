@@ -17,6 +17,7 @@ export function useResize({ onMove, orientation = 'both', cursor }: UseResizeOpt
     const [isResizing, setIsResizing] = useState(false);
     const startPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
     const onMoveRef = useRef(onMove);
+    // eslint-disable-next-line react-hooks/refs
     onMoveRef.current = onMove;
 
     const getCursor = () => {

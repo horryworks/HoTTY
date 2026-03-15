@@ -35,9 +35,9 @@ export const showContextMenu = (selection: string, commands?: { id: string; labe
 export const onAskGemini = (callback: (selection: string, type: string) => void) => api().onAskGemini(callback);
 export const onTerminalContextPaste = (callback: () => void) => api().onTerminalContextPaste(callback);
 export const getSshAlgorithms = () => api().getSshAlgorithms();
-export const saveSshAlgorithms = (algorithms: Record<string, string[]>) => api().saveSshAlgorithms(algorithms);
+export const saveSshAlgorithms = (algorithms: Record<string, { name: string; enabled: boolean }[]>) => api().saveSshAlgorithms(algorithms);
 export const getThemes = () => api().getThemes();
-export const saveThemes = (themes: Record<string, Record<string, unknown>>) => api().saveThemes(themes);
+export const saveThemes = (themes: Record<string, { name?: string; variables?: Record<string, string>; terminal?: Record<string, string> }>) => api().saveThemes(themes);
 export const saveCustomTheme = (themeKey: string, themeData: Record<string, unknown>) => api().saveCustomTheme(themeKey, themeData);
 export const deleteCustomTheme = (themeKey: string) => api().deleteCustomTheme(themeKey);
 

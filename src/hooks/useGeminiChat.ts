@@ -131,7 +131,7 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
     const aiSession = currentSessions.find(s => s.id === aiSessionId);
     if (!aiSession || aiSession.type !== 'ai') return;
 
-    let terminalId = aiSession.aiChatState?.lastTargetSessionId;
+    const terminalId = aiSession.aiChatState?.lastTargetSessionId;
     let prependedContext = '';
 
     if (terminalId && !text.startsWith('Terminal Output (Command:')) {

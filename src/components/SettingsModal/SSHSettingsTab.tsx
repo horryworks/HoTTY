@@ -21,7 +21,7 @@ interface SSHSettingsTabProps {
     onBackspaceSendsDelChange: (sendsDel: boolean) => void;
     rightClickPaste: boolean;
     onRightClickPasteChange: (enabled: boolean) => void;
-    sshAlgorithms: any;
+    sshAlgorithms: Record<string, { name: string; enabled: boolean }[]>;
     onAlgorithmToggle: (category: string, name: string) => void;
 }
 
@@ -91,7 +91,7 @@ export const SSHSettingsTab: React.FC<SSHSettingsTabProps> = ({
                                         {category === 'serverHostKey' ? 'Server Host Key' : category}
                                     </h4>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px' }}>
-                                        {sshAlgorithms[category].map((algo: any) => (
+                                        {sshAlgorithms[category].map((algo) => (
                                             <label key={algo.name} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px', alignItems: 'center', fontWeight: 'normal', cursor: 'pointer' }}>
                                                 <input
                                                     type="checkbox"

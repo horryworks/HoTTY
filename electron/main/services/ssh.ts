@@ -2,7 +2,6 @@ import { Client, ClientChannel, ConnectConfig } from 'ssh2';
 import { BrowserWindow, app } from 'electron';
 import * as iconv from 'iconv-lite';
 import * as fs from 'fs';
-import * as path from 'path';
 import { join } from 'path';
 import { ISessionService } from './ISessionService';
 import { verifyHostKey } from './knownHosts';
@@ -107,11 +106,15 @@ export class SshService implements ISessionService {
 
                 stream.on('close', () => {
                     logger.info('ssh', 'Shell closed', { sessionId: this.sessionId });
-                    this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
+                    if (!this.window.isDestroyed()) {
+                        this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
+                    }
                     this.conn.end();
                 }).on('data', (data: Buffer) => {
                     const text = iconv.decode(data, this.encoding);
-                    this.window.webContents.send('session-data', { sessionId: this.sessionId, data: text });
+                    if (!this.window.isDestroyed()) {
+                        this.window.webContents.send('session-data', { sessionId: this.sessionId, data: text });
+                    }
                     if (this.dataCallback) {
                         this.dataCallback(text);
                     }
@@ -123,10 +126,14 @@ export class SshService implements ISessionService {
                 message = 'Username or password may be incorrect';
             }
             logger.error('ssh', 'Connection error', { sessionId: this.sessionId, error: message });
-            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: message });
+            if (!this.window.isDestroyed()) {
+                this.window.webContents.send('session-error', { sessionId: this.sessionId, error: message });
+            }
         }).on('close', () => {
             logger.info('ssh', 'Connection closed', { sessionId: this.sessionId });
-            this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
+            if (!this.window.isDestroyed()) {
+                this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
+            }
         }).on('keyboard-interactive', (name, instructions, instructionsLang, prompts, finish) => {
             finish([config.password as string]);
         }).connect({

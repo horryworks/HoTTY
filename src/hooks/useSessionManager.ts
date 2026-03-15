@@ -14,7 +14,7 @@ export interface Session {
         loggingPath: string;
     };
     aiChatState?: {
-        messages: any[]; // ChatMessage[] but avoiding circular dependency or complex imports here
+        messages: { role: string; content: string }[]; // ChatMessage shape, avoiding circular dependency
         inputText: string;
         pendingMessage?: string;
         systemInstruction?: string;
@@ -100,7 +100,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
 
         const fitAddon = new FitAddon();
         term.loadAddon(fitAddon);
-        (term as any)._fitAddon = fitAddon;
+        (term as Terminal & { _fitAddon?: FitAddon })._fitAddon = fitAddon;
 
         // Clipboard: copy on select
         term.onSelectionChange(() => {
@@ -200,6 +200,47 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         return () => removeDataListener();
     }, [watchBufferLimit]); // Need watchBufferLimit to be bound
 
+    const closeSession = (sessionId: string) => {
+        const session = sessions.find(s => s.id === sessionId);
+
+        if (session?.type === 'ai') {
+            // AI sessions don't have terminal or backend connection
+            electronService.geminiChatClear(sessionId);
+
+            // Disconnect the linked terminal's watch state when AI session closes
+            const linkedTerminalId = session.aiChatState?.lastTargetSessionId;
+            if (linkedTerminalId) {
+                delete watchBuffers.current[linkedTerminalId];
+                setSessions(prev => prev.map(s =>
+                    s.id === linkedTerminalId ? { ...s, isWatching: false, hasWatchData: false } : s
+                ));
+            }
+        } else if (session?.type === 'log-viewer') {
+            // Log viewer sessions don't have terminal or backend connection
+        } else {
+            electronService.disconnectSession(sessionId);
+            const term = terminalRegistry.current[sessionId];
+            if (term) {
+                term.dispose();
+                delete terminalRegistry.current[sessionId];
+            }
+        }
+
+        // Cleanup watch buffer
+        delete watchBuffers.current[sessionId];
+
+        setSessions(prev => prev.filter(s => s.id !== sessionId));
+        setTabOrder(prev => prev.filter(id => id !== sessionId));
+
+        setPaneAllocations(prev => {
+            const next = { ...prev };
+            Object.keys(next).forEach(paneId => {
+                if (next[paneId] === sessionId) next[paneId] = null;
+            });
+            return next;
+        });
+    };
+
     // Session status & error listeners
     useEffect(() => {
         const removeStatusListener = electronService.onSessionStatus((sessionId, status) => {
@@ -268,7 +309,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         });
     };
 
-    const createSession = (config: any) => {
+    const createSession = (config: Record<string, unknown>) => {
         if (config.protocol === 'log-viewer') {
             const sessionId = self.crypto.randomUUID();
             const newSession: Session = {
@@ -378,47 +419,6 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             }
             return s;
         }));
-    };
-
-    const closeSession = (sessionId: string) => {
-        const session = sessions.find(s => s.id === sessionId);
-
-        if (session?.type === 'ai') {
-            // AI sessions don't have terminal or backend connection
-            electronService.geminiChatClear(sessionId);
-
-            // Disconnect the linked terminal's watch state when AI session closes
-            const linkedTerminalId = session.aiChatState?.lastTargetSessionId;
-            if (linkedTerminalId) {
-                delete watchBuffers.current[linkedTerminalId];
-                setSessions(prev => prev.map(s =>
-                    s.id === linkedTerminalId ? { ...s, isWatching: false, hasWatchData: false } : s
-                ));
-            }
-        } else if (session?.type === 'log-viewer') {
-            // Log viewer sessions don't have terminal or backend connection
-        } else {
-            electronService.disconnectSession(sessionId);
-            const term = terminalRegistry.current[sessionId];
-            if (term) {
-                term.dispose();
-                delete terminalRegistry.current[sessionId];
-            }
-        }
-
-        // Cleanup watch buffer
-        delete watchBuffers.current[sessionId];
-
-        setSessions(prev => prev.filter(s => s.id !== sessionId));
-        setTabOrder(prev => prev.filter(id => id !== sessionId));
-
-        setPaneAllocations(prev => {
-            const next = { ...prev };
-            Object.keys(next).forEach(paneId => {
-                if (next[paneId] === sessionId) next[paneId] = null;
-            });
-            return next;
-        });
     };
 
     const closeAllAISessions = () => {

@@ -4,6 +4,7 @@ import { AIChatPane } from '../AIChatPane/AIChatPane';
 import { LogViewerPane } from '../LogViewerPane/LogViewerPane';
 import type { Session } from '../../hooks/useSessionManager';
 import type { InteractiveSessionTracking } from '../../hooks/useInteractiveFlow';
+import type { Terminal } from '@xterm/xterm';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 // -- Types --
@@ -15,7 +16,7 @@ interface PaneContentProps {
   disableFocus: boolean;
 
   // Terminal props
-  terminalInstance: any;
+  terminalInstance: Terminal | undefined;
   onData: (sessionId: string, data: string) => void;
   onPasteRequest: (text: string) => void;
 
@@ -26,7 +27,7 @@ interface PaneContentProps {
   onRunCommand?: (targetId: string, command: string) => void;
   onShowPromptMenu?: () => void;
   onSendMessage?: (text: string) => void;
-  onStateChange?: (newState: any) => void;
+  onStateChange?: (newState: Partial<Session['aiChatState']>) => void;
 }
 
 // -- Component --

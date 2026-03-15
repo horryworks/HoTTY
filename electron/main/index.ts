@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, dialog, Menu, MenuItem } from 'electron';
+import { app, BrowserWindow, shell, ipcMain, dialog, Menu, clipboard, protocol, net } from 'electron';
 import { release } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { SshService } from './services/ssh';
@@ -12,9 +12,10 @@ import { GeminiService } from './services/gemini';
 import { LogManager } from './services/LogManager';
 import { logger } from './services/Logger';
 import { encryptString, decryptString } from './services/dpapi';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
-const execAsync = promisify(exec);
+import { pathToFileURL } from 'url';
+const execFileAsync = promisify(execFile);
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
@@ -37,7 +38,6 @@ const allowedLogDirs = new Set<string>();
 let pendingImportFilePath: string | null = null;
 
 const preload = join(__dirname, '../preload/index.js')
-const url = process.env.VITE_DEV_SERVER_URL
 const indexHtml = join(process.env.DIST || 'dist', 'index.html')
 
 const mediaTokensPath = join(app.getPath('userData'), 'media_tokens.json');
@@ -109,13 +109,10 @@ app.whenReady().then(async () => {
     arch: process.arch,
   });
 
-  const firstWin = await createWindow();
+  await createWindow();
   geminiService = new GeminiService();
 
   // Register 'media' protocol to serve local files
-  const { protocol, net } = require('electron');
-  const { pathToFileURL } = require('url');
-
   protocol.handle('media', (request: Request) => {
     // The URL comes as media:///token or media://token
     const token = request.url.replace(/^media:\/\/\/?/, '').split(/[?#]/)[0];
@@ -317,7 +314,7 @@ ipcMain.on('set-window-size', (event, { width, height }) => {
 
 ipcMain.on('write-clipboard', (event, text) => {
   if (text) {
-    require('electron').clipboard.writeText(text);
+    clipboard.writeText(text);
   }
 });
 
@@ -393,7 +390,7 @@ ipcMain.handle('list-serial-ports', async () => {
       manufacturer: p.manufacturer || '',
       pnpId: p.pnpId || '',
     }));
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error('app', 'Failed to list serial ports', { error: String(err) });
     return [];
   }
@@ -434,7 +431,7 @@ ipcMain.handle('select-folder', async (event) => {
 
 ipcMain.handle('list-wsl-distributions', async () => {
   try {
-    const { stdout } = await execAsync('wsl.exe --list --quiet');
+    const { stdout } = await execFileAsync('wsl.exe', ['--list', '--quiet']);
     return stdout.split('\n')
       .map(s => s.replace(/[\r\0]/g, '').trim()) // Remove \r and \0, then trim whitespace
       .filter(s => s.length > 0);
@@ -613,7 +610,7 @@ ipcMain.handle('get-themes', async () => {
     ? join(process.resourcesPath, 'resources')
     : join(app.getAppPath(), 'resources');
 
-  const themes: Record<string, any> = {};
+  const themes: Record<string, Record<string, unknown>> = {};
   try {
     const files = fs.readdirSync(resourcesDir);
     for (const file of files) {
@@ -632,7 +629,7 @@ ipcMain.handle('get-themes', async () => {
   return Object.keys(themes).length > 0 ? themes : null;
 });
 
-function isValidThemeData(data: any): boolean {
+function isValidThemeData(data: unknown): boolean {
   if (typeof data !== 'object' || data === null || Array.isArray(data)) return false;
   const entries = Object.entries(data);
   if (entries.length === 0 || entries.length > 500) return false;
@@ -642,7 +639,7 @@ function isValidThemeData(data: any): boolean {
   );
 }
 
-ipcMain.handle('save-custom-theme', async (_, themeKey: string, themeData: any) => {
+ipcMain.handle('save-custom-theme', async (_, themeKey: string, themeData: unknown) => {
   if (typeof themeKey !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(themeKey)) {
     return { success: false, error: 'Invalid theme name. Use only letters, numbers, hyphens, and underscores.' };
   }
@@ -771,8 +768,8 @@ ipcMain.handle('export-htree', async (event, { data, password }) => {
     fs.writeFileSync(filePath, payload);
     logger.info('app', 'export-htree success');
     return true;
-  } catch (err: any) {
-    logger.error('app', 'export-htree failed', { error: err.message });
+  } catch (err: unknown) {
+    logger.error('app', 'export-htree failed', { error: err instanceof Error ? err.message : String(err) });
     throw err;
   }
 });
@@ -839,8 +836,8 @@ ipcMain.handle('read-log-file', async (_, filePath: string) => {
     if (stat.size > MAX_SIZE) return { error: `File too large (${(stat.size / 1024 / 1024).toFixed(1)} MB). Limit is 50 MB.` };
     const content = await fs.promises.readFile(resolvedPath, 'utf8');
     return { content };
-  } catch (err: any) {
-    if (err.code === 'ENOENT') return { error: 'File not found' };
+  } catch (err: unknown) {
+    if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'ENOENT') return { error: 'File not found' };
     return { error: String(err) };
   }
 });
@@ -878,8 +875,8 @@ ipcMain.handle('decrypt-import-file', async (event, { password }) => {
 
     logger.info('app', 'decrypt-import-file success');
     return JSON.parse(decrypted.toString('utf8'));
-  } catch (err: any) {
-    logger.error('app', 'decrypt-import-file failed', { error: err.message });
+  } catch (err: unknown) {
+    logger.error('app', 'decrypt-import-file failed', { error: err instanceof Error ? err.message : String(err) });
     throw new Error('Invalid password or corrupted file.');
   }
 });

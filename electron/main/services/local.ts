@@ -1,6 +1,5 @@
 import * as pty from 'node-pty';
 import { BrowserWindow } from 'electron';
-import * as iconv from 'iconv-lite';
 import { ISessionService } from './ISessionService';
 import { logger, sanitizeProcessEnv } from './Logger';
 
@@ -47,7 +46,9 @@ export class LocalService implements ISessionService {
             this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'connected' });
 
             this.ptyProcess.onData((data: string) => {
-                this.window.webContents.send('session-data', { sessionId: this.sessionId, data });
+                if (!this.window.isDestroyed()) {
+                    this.window.webContents.send('session-data', { sessionId: this.sessionId, data });
+                }
                 if (this.dataCallback) {
                     this.dataCallback(data);
                 }
@@ -55,11 +56,13 @@ export class LocalService implements ISessionService {
 
             this.ptyProcess.onExit(({ exitCode, signal }) => {
                 logger.info('local', 'Process exited', { sessionId: this.sessionId, exitCode, signal });
-                this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
+                if (!this.window.isDestroyed()) {
+                    this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
+                }
             });
 
-        } catch (err: any) {
-            logger.error('local', 'Spawn error', { sessionId: this.sessionId, error: err.message });
+        } catch (err: unknown) {
+            logger.error('local', 'Spawn error', { sessionId: this.sessionId, error: err instanceof Error ? err.message : String(err) });
             this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Failed to start shell.' });
         }
     }

@@ -33,6 +33,7 @@ export function usePaneManager(options?: PaneManagerOptions) {
     // Sync pane slots when layout changes
     useEffect(() => {
         const totalPanes = currentDims.rows * currentDims.cols;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setPaneAllocations(prev => {
             // Check for active sessions that would be lost
             // Filter out 'sidebar' or other non-numeric keys from grid logic
@@ -60,7 +61,7 @@ export function usePaneManager(options?: PaneManagerOptions) {
                 }
 
                 // Fill with active sessions up to capacity
-                activeEntries.slice(0, totalPanes).forEach((([_, sessionId], index) => {
+                activeEntries.slice(0, totalPanes).forEach((([ , sessionId], index) => {
                     next[index.toString()] = sessionId;
                 }));
                 return next;

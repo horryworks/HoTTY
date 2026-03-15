@@ -48,6 +48,7 @@ export function useSidebarLayout() {
         setResizingSide(null);
         document.removeEventListener('mousemove', handleSidebarResizeMove);
         document.removeEventListener('mouseup', handleSidebarResizeEnd);
+        // eslint-disable-next-line react-hooks/immutability
         document.body.style.cursor = '';
     };
 

@@ -5,7 +5,7 @@ import { ISessionService } from './ISessionService';
 import { logger } from './Logger';
 
 export class TelnetService implements ISessionService {
-    private conn: Telnet & { socket?: any; opts?: any };
+    private conn: Telnet & { opts?: { terminalWidth?: number; terminalHeight?: number } };
     private window: BrowserWindow;
     private sessionId: string;
     private encoding: string = 'utf8';
@@ -24,12 +24,12 @@ export class TelnetService implements ISessionService {
         this.encoding = encoding;
     }
 
-    async connect(config: any) {
-        this.encoding = config.encoding || 'utf8';
+    async connect(config: Record<string, unknown>) {
+        this.encoding = (config.encoding as string) || 'utf8';
 
         const params: ConnectOptions = {
-            host: config.host,
-            port: config.port || 23,
+            host: config.host as string,
+            port: (config.port as number) || 23,
             negotiationMandatory: false, // Revert to false to fix connection issues
             timeout: 3000,
             sendTimeout: 3000,
@@ -43,9 +43,9 @@ export class TelnetService implements ISessionService {
         };
 
         if (config.username) {
-            (params as any).username = config.username;
-            (params as any).password = config.password || '';
-            (params as any).disableLogon = false;
+            (params as ConnectOptions & { username?: string; password?: string }).username = config.username as string;
+            (params as ConnectOptions & { username?: string; password?: string }).password = (config.password as string) || '';
+            params.disableLogon = false;
         }
 
         logger.info('telnet', 'Connect attempt', { sessionId: this.sessionId, host: config.host, port: config.port || 23 });
@@ -55,8 +55,8 @@ export class TelnetService implements ISessionService {
             this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'connected' });
 
             // Start keepalive if configured
-            if (config.telnetKeepAliveInterval && config.telnetKeepAliveInterval > 0) {
-                this.startKeepalive(config.telnetKeepAliveInterval);
+            if (config.telnetKeepAliveInterval && (config.telnetKeepAliveInterval as number) > 0) {
+                this.startKeepalive(config.telnetKeepAliveInterval as number);
             }
 
             // Apply cached resize if exists
@@ -81,7 +81,9 @@ export class TelnetService implements ISessionService {
                 // Decode using iconv-lite
                 const text = iconv.decode(cleanData, this.encoding);
 
-                this.window.webContents.send('session-data', { sessionId: this.sessionId, data: text });
+                if (!this.window.isDestroyed()) {
+                    this.window.webContents.send('session-data', { sessionId: this.sessionId, data: text });
+                }
                 if (this.dataCallback) {
                     this.dataCallback(text);
                 }
@@ -89,16 +91,20 @@ export class TelnetService implements ISessionService {
 
             this.conn.on('close', () => {
                 logger.info('telnet', 'Connection closed', { sessionId: this.sessionId });
-                this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
+                if (!this.window.isDestroyed()) {
+                    this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
+                }
             });
 
             this.conn.on('error', (err: Error) => {
                 logger.error('telnet', 'Connection error', { sessionId: this.sessionId, error: err.message });
-                this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Connection error.' });
+                if (!this.window.isDestroyed()) {
+                    this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Connection error.' });
+                }
             });
 
-        } catch (err: any) {
-            logger.error('telnet', 'Connect failed', { sessionId: this.sessionId, error: err.message });
+        } catch (err: unknown) {
+            logger.error('telnet', 'Connect failed', { sessionId: this.sessionId, error: err instanceof Error ? err.message : String(err) });
             this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Connection failed.' });
         }
     }
@@ -115,8 +121,6 @@ export class TelnetService implements ISessionService {
     private stripTelnetIAC(data: Buffer): Buffer {
         const IAC = 255;
         const DONT = 254;
-        const DO = 253;
-        const WONT = 252;
         const WILL = 251;
         const SB = 250;
         const SE = 240;
@@ -180,8 +184,8 @@ export class TelnetService implements ISessionService {
                 this.conn.socket.write(buffer);
             } else {
                 // Fallback (might not support Buffer sending properly via 'send' in legacy libs but socket usually works)
-                this.conn.send(data, { waitfor: false }).catch((err: any) => {
-                    logger.error('telnet', 'Write error', { sessionId: this.sessionId, error: err.message });
+                this.conn.send(data, { waitfor: false }).catch((err: unknown) => {
+                    logger.error('telnet', 'Write error', { sessionId: this.sessionId, error: err instanceof Error ? err.message : String(err) });
                     this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Write error.' });
                 });
             }
@@ -251,7 +255,7 @@ export class TelnetService implements ISessionService {
                 if (this.conn.socket && typeof this.conn.socket.write === 'function') {
                     this.conn.socket.write(IAC_NOP);
                 }
-            } catch (e) {
+            } catch {
                 // Connection may already be closed; stop keepalive
                 this.stopKeepalive();
             }
@@ -270,7 +274,7 @@ export class TelnetService implements ISessionService {
         if (this.conn) {
             try {
                 this.conn.end();
-            } catch (e) {
+            } catch {
                 // ignore
             }
         }

@@ -1,11 +1,12 @@
 import React from 'react';
+import type { Session } from '../../hooks/useSessionManager';
 import './TabBar.css';
 
 interface Tab {
     id: string;
     title: string;
     type?: 'ssh' | 'telnet' | 'serial' | 'ai' | 'wsl' | 'local' | 'log-viewer';
-    aiChatState?: any;
+    aiChatState?: Session['aiChatState'];
 }
 
 interface TabBarProps {
@@ -98,7 +99,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                     draggedIndex = parsed.index;
                 }
             }
-        } catch (err) {
+        } catch {
             // fallback to state
         }
 

@@ -160,7 +160,7 @@ describe('settingsStore — persist to localStorage', () => {
         useSettingsStore.getState().updateFontSize(20);
         const stored = JSON.parse(localStorage.getItem('hotty-settings') ?? '{}');
         const keys = Object.keys(stored.state);
-        const hasFunctions = keys.some(k => typeof (stored.state as any)[k] === 'function');
+        const hasFunctions = keys.some(k => typeof (stored.state as Record<string, unknown>)[k] === 'function');
         expect(hasFunctions).toBe(false);
     });
 });

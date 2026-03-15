@@ -96,14 +96,12 @@ export const PaneLines: React.FC<PaneLinesProps> = ({
 
     useEffect(() => {
         // Initial compute
-        let animationFrameId: number;
-
         const update = () => {
             computeLines();
         };
 
         // Defer effectively to next frame to ensure DOM layout is settled
-        animationFrameId = requestAnimationFrame(update);
+        const animationFrameId = requestAnimationFrame(update);
 
         window.addEventListener('resize', update);
         return () => {

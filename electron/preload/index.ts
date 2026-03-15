@@ -33,7 +33,7 @@ const safeDOM = {
  * https://projects.lukehaas.me/css-loaders
  * https://matejkustec.github.io/SpinThatShit
  */
-function useLoading() {
+function createLoading() {
     const className = `loaders-css__square-spin`
     const styleContent = `
 @keyframes square-spin {
@@ -66,9 +66,12 @@ function useLoading() {
     const oDiv = document.createElement('div')
 
     oStyle.id = 'app-loading-style'
-    oStyle.innerHTML = styleContent
+    oStyle.textContent = styleContent
     oDiv.className = 'app-loading-wrap'
-    oDiv.innerHTML = `<div class="${className}"><div></div></div>`
+    const oInner = document.createElement('div')
+    oInner.className = className
+    oInner.appendChild(document.createElement('div'))
+    oDiv.appendChild(oInner)
 
     return {
         appendLoading() {
@@ -84,23 +87,19 @@ function useLoading() {
 
 // ----------------------------------------------------------------------
 
-// ... existing code ...
-
 import { contextBridge, ipcRenderer } from 'electron'
 
-// ... existing code ...
-
-const { appendLoading, removeLoading } = useLoading()
+const { appendLoading, removeLoading } = createLoading()
 domReady().then(appendLoading)
 
 window.onmessage = (ev) => {
-    ev.data.payload === 'removeLoading' && removeLoading()
+    if (ev.data.payload === 'removeLoading') removeLoading()
 }
 
 setTimeout(removeLoading, 4999)
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    connectSession: (sessionId: string, config: any) => ipcRenderer.send('connect-session', { sessionId, config }),
+    connectSession: (sessionId: string, config: Record<string, unknown>) => ipcRenderer.send('connect-session', { sessionId, config }),
     disconnectSession: (sessionId: string) => ipcRenderer.send('disconnect-session', sessionId),
     sendInput: (sessionId: string, data: string) => ipcRenderer.send('term-input', { sessionId, data }),
     resize: (sessionId: string, cols: number, rows: number) => ipcRenderer.send('term-resize', { sessionId, cols, rows }),
@@ -118,7 +117,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     showContextMenu: (selection: string, commands?: { id: string; label: string }[], includePaste?: boolean) => ipcRenderer.send('show-context-menu', selection, commands, includePaste),
     onAskGemini: (callback: (selection: string, type: string) => void) => {
-        const subscription = (_: any, selection: string, type: string) => callback(selection, type);
+        const subscription = (_event: unknown, selection: string, type: string) => callback(selection, type);
         ipcRenderer.on('ask-gemini', subscription);
         return () => ipcRenderer.removeListener('ask-gemini', subscription);
     },
@@ -130,17 +129,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // New Event Listeners
     onSessionData: (callback: (sessionId: string, data: string) => void) => {
-        const subscription = (_: any, { sessionId, data }: { sessionId: string, data: string }) => callback(sessionId, data);
+        const subscription = (_event: unknown, { sessionId, data }: { sessionId: string, data: string }) => callback(sessionId, data);
         ipcRenderer.on('session-data', subscription);
         return () => ipcRenderer.removeListener('session-data', subscription);
     },
     onSessionStatus: (callback: (sessionId: string, status: string) => void) => {
-        const subscription = (_: any, { sessionId, status }: { sessionId: string, status: string }) => callback(sessionId, status);
+        const subscription = (_event: unknown, { sessionId, status }: { sessionId: string, status: string }) => callback(sessionId, status);
         ipcRenderer.on('session-status', subscription);
         return () => ipcRenderer.removeListener('session-status', subscription);
     },
     onSessionError: (callback: (sessionId: string, error: string) => void) => {
-        const subscription = (_: any, { sessionId, error }: { sessionId: string, error: string }) => callback(sessionId, error);
+        const subscription = (_event: unknown, { sessionId, error }: { sessionId: string, error: string }) => callback(sessionId, error);
         ipcRenderer.on('session-error', subscription);
         return () => ipcRenderer.removeListener('session-error', subscription);
     },
@@ -159,20 +158,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     geminiChatCancel: (sessionId: string) => ipcRenderer.send('gemini-chat-cancel', sessionId),
     geminiChatClear: (sessionId: string) => ipcRenderer.send('gemini-chat-clear', sessionId),
     onGeminiAuthResult: (callback: (result: { success: boolean }) => void) => {
-        const subscription = (_: any, result: { success: boolean }) => callback(result);
+        const subscription = (_event: unknown, result: { success: boolean }) => callback(result);
         ipcRenderer.on('gemini-auth-result', subscription);
         return () => ipcRenderer.removeListener('gemini-auth-result', subscription);
     },
     onGeminiChatResponse: (callback: (data: { sessionId: string, type: string, content: string }) => void) => {
-        const subscription = (_: any, data: { sessionId: string, type: string, content: string }) => callback(data);
+        const subscription = (_event: unknown, data: { sessionId: string, type: string, content: string }) => callback(data);
         ipcRenderer.on('gemini-chat-response', subscription);
         return () => ipcRenderer.removeListener('gemini-chat-response', subscription);
     },
     getSshAlgorithms: () => ipcRenderer.invoke('get-ssh-algorithms'),
-    saveSshAlgorithms: (algorithms: any) => ipcRenderer.invoke('save-ssh-algorithms', algorithms),
+    saveSshAlgorithms: (algorithms: Record<string, { name: string; enabled: boolean }[]>) => ipcRenderer.invoke('save-ssh-algorithms', algorithms),
     getThemes: () => ipcRenderer.invoke('get-themes'),
-    saveThemes: (themes: any) => ipcRenderer.invoke('save-themes', themes),
-    saveCustomTheme: (themeKey: string, themeData: any) => ipcRenderer.invoke('save-custom-theme', themeKey, themeData),
+    saveThemes: (themes: Record<string, { name?: string; variables?: Record<string, string>; terminal?: Record<string, string> }>) => ipcRenderer.invoke('save-themes', themes),
+    saveCustomTheme: (themeKey: string, themeData: Record<string, unknown>) => ipcRenderer.invoke('save-custom-theme', themeKey, themeData),
     deleteCustomTheme: (themeKey: string) => ipcRenderer.invoke('delete-custom-theme', themeKey),
     encryptSecret: (plaintext: string) => ipcRenderer.invoke('dpapi-encrypt', plaintext),
     decryptSecret: (ciphertext: string) => ipcRenderer.invoke('dpapi-decrypt', ciphertext),
@@ -181,7 +180,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateLogging: (loggingEnabled: boolean, loggingPath: string) => ipcRenderer.send('update-logging', { loggingEnabled, loggingPath }),
     listLogFiles: (folderPath: string) => ipcRenderer.invoke('list-log-files', folderPath),
     readLogFile: (filePath: string) => ipcRenderer.invoke('read-log-file', filePath),
-    exportHTree: (data: any, password: string) => ipcRenderer.invoke('export-htree', { data, password }),
+    exportHTree: (data: unknown[], password: string) => ipcRenderer.invoke('export-htree', { data, password }),
     selectImportFile: () => ipcRenderer.invoke('select-import-file'),
     decryptImportFile: (password: string) => ipcRenderer.invoke('decrypt-import-file', { password }),
     openDebugLogFolder: () => ipcRenderer.invoke('open-debug-log-folder'),

@@ -41,7 +41,17 @@ export class SerialService implements ISessionService {
             return;
         }
 
-        const portOptions: any = {
+        const portOptions: {
+            path: string;
+            baudRate: number;
+            dataBits: number;
+            parity: string;
+            stopBits: number;
+            autoOpen: boolean;
+            rtscts?: boolean;
+            xon?: boolean;
+            xoff?: boolean;
+        } = {
             path: config.path,
             baudRate: config.baudRate || 9600,
             dataBits: config.dataBits || 8,
@@ -62,7 +72,9 @@ export class SerialService implements ISessionService {
 
         this.port.on('data', (data: Buffer) => {
             const text = iconv.decode(data, this.encoding);
-            this.window.webContents.send('session-data', { sessionId: this.sessionId, data: text });
+            if (!this.window.isDestroyed()) {
+                this.window.webContents.send('session-data', { sessionId: this.sessionId, data: text });
+            }
             if (this.dataCallback) {
                 this.dataCallback(text);
             }
@@ -70,12 +82,16 @@ export class SerialService implements ISessionService {
 
         this.port.on('error', (err: Error) => {
             logger.error('serial', 'Port error', { sessionId: this.sessionId, error: err.message });
-            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Serial port error.' });
+            if (!this.window.isDestroyed()) {
+                this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Serial port error.' });
+            }
         });
 
         this.port.on('close', () => {
             logger.info('serial', 'Port closed', { sessionId: this.sessionId });
-            this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
+            if (!this.window.isDestroyed()) {
+                this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
+            }
         });
 
         return new Promise<void>((resolve, reject) => {
@@ -100,6 +116,7 @@ export class SerialService implements ISessionService {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     resize(_cols: number, _rows: number) {
         // No-op: serial ports have no terminal size concept
     }

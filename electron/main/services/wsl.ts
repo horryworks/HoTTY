@@ -14,7 +14,8 @@ export class WslService implements ISessionService {
         this.sessionId = sessionId;
     }
 
-    setEncoding(encoding: string) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    setEncoding(_encoding: string) {
         // node-pty handles encoding internally, but we satisfy the interface
     }
 
@@ -48,7 +49,9 @@ export class WslService implements ISessionService {
             this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'connected' });
 
             this.ptyProcess.onData((data: string) => {
-                this.window.webContents.send('session-data', { sessionId: this.sessionId, data });
+                if (!this.window.isDestroyed()) {
+                    this.window.webContents.send('session-data', { sessionId: this.sessionId, data });
+                }
                 if (this.dataCallback) {
                     this.dataCallback(data);
                 }
@@ -56,11 +59,13 @@ export class WslService implements ISessionService {
 
             this.ptyProcess.onExit(({ exitCode, signal }) => {
                 logger.info('wsl', 'Process exited', { sessionId: this.sessionId, exitCode, signal });
-                this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
+                if (!this.window.isDestroyed()) {
+                    this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'disconnected' });
+                }
             });
 
-        } catch (err: any) {
-            logger.error('wsl', 'Spawn error', { sessionId: this.sessionId, error: err.message });
+        } catch (err: unknown) {
+            logger.error('wsl', 'Spawn error', { sessionId: this.sessionId, error: err instanceof Error ? err.message : String(err) });
             this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Failed to start WSL.' });
         }
     }

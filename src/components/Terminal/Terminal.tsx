@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
+import type { IMarker, IDecoration } from '@xterm/xterm';
+import type { FitAddon } from '@xterm/addon-fit';
 import type { PromptPattern } from '../../App';
 import { getTransparentColor } from '../../utils/colorUtils';
 import * as electronService from '../../services/electronService';
@@ -50,6 +52,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
         if (!terminalRef.current || !terminalInstance) return;
 
         const term = terminalInstance;
+        // eslint-disable-next-line react-hooks/immutability
         term.options.allowTransparency = true;
 
         // Open or Re-attach terminal
@@ -57,7 +60,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             if (!terminalRef.current) return;
 
             const container = terminalRef.current;
-            const fitAddon = (term as any)._fitAddon;
+            const fitAddon = (term as Terminal & { _fitAddon?: FitAddon })._fitAddon;
 
             console.log('[Terminal] Attaching xterm instance to div');
 
@@ -131,7 +134,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
 
         const handleResize = () => {
             if (terminalRef.current?.offsetParent) {
-                const fitAddon = (term as any)._fitAddon;
+                const fitAddon = (term as Terminal & { _fitAddon?: FitAddon })._fitAddon;
                 if (fitAddon) {
                     try {
                         const proposed = fitAddon.proposeDimensions();
@@ -185,7 +188,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             }
 
             setTimeout(() => {
-                const fitAddon = (terminalInstance as any)._fitAddon;
+                const fitAddon = (terminalInstance as Terminal & { _fitAddon?: FitAddon })._fitAddon;
                 if (fitAddon) {
                     const proposed = fitAddon.proposeDimensions();
                     if (proposed) {
@@ -209,7 +212,9 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
     // Update Font & Theme Settings
     useEffect(() => {
         if (terminalInstance) {
+            // eslint-disable-next-line react-hooks/immutability
             if (fontSize) terminalInstance.options.fontSize = fontSize;
+            // eslint-disable-next-line react-hooks/immutability
             if (fontFamily) terminalInstance.options.fontFamily = fontFamily;
 
             const activeBg = terminalBackground;
@@ -227,7 +232,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             // Force refresh if needed (usually handled by xterm internally on options change, but let's be safe)
             // ... triggering resize/fit if necessary
             setTimeout(() => {
-                const fitAddon = (terminalInstance as any)._fitAddon;
+                const fitAddon = (terminalInstance as Terminal & { _fitAddon?: FitAddon })._fitAddon;
                 if (fitAddon) {
                     const proposed = fitAddon.proposeDimensions();
                     if (proposed) {
@@ -255,7 +260,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
         if (!terminalInstance || !enablePromptHighlight || !promptPatterns) return;
 
         const term = terminalInstance;
-        let activeLines: { marker: any, decoration: any, isPrompt: boolean, element?: HTMLElement }[] = [];
+        let activeLines: { marker: IMarker, decoration: IDecoration, isPrompt: boolean, element?: HTMLElement }[] = [];
         let lastClickedMarkerLine: number | null = null;
 
         const evaluateLine = (bufferY: number) => {
@@ -306,7 +311,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                         isPrompt = true;
                         break;
                     }
-                } catch (e) { }
+                } catch { /* ignore */ }
             }
 
             if (existing && existing.isPrompt === isPrompt) {
@@ -390,7 +395,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                             }, 50);
                         });
 
-                        const handleMarkerSelection = (e: MouseEvent, marker: any) => {
+                        const handleMarkerSelection = (e: MouseEvent, marker: IMarker) => {
 
                             const currentLine = marker.line;
 
@@ -554,7 +559,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
 
             for (let i = e.start; i <= e.end; i++) {
                 // ydisp is not exposed in the TypeScript types for IBuffer but it exists
-                const bufferY = (buffer as any).ydisp + i;
+                const bufferY = ((buffer as { ydisp?: number }).ydisp ?? 0) + i;
                 if (bufferY >= 0 && bufferY < buffer.length) {
                     evaluateLine(bufferY);
                 }
@@ -562,7 +567,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
         });
 
         // Ensure all lines are decorated immediately upon mount or once the terminal is opened
-        let attachCheckInterval: any = null;
+        let attachCheckInterval: ReturnType<typeof setInterval> | null = null;
         const scanAllLines = () => {
             if (!term.buffer.active) return;
             // Scan through all lines available so far up to the cursor
@@ -634,7 +639,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                     if (selection) {
                         // Check if click is actually over the selection rect
                         try {
-                            const core = (terminalInstance as any)._core;
+                            const core = (terminalInstance as Terminal & { _core?: { _mouseService?: { getCoords: (...args: unknown[]) => number[] | null }; mouseService?: { getCoords: (...args: unknown[]) => number[] | null } } })._core;
                             const mouseService = core?._mouseService || core?.mouseService; // Depending on xterm.js version
 
                             if (mouseService && typeof mouseService.getCoords === 'function') {

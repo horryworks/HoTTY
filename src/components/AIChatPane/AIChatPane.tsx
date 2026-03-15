@@ -323,6 +323,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             const sysInstr = initialState?.systemInstruction || localSystemInstruction;
 
             setLocalPendingMessage(undefined);
+            // eslint-disable-next-line react-hooks/immutability
             processedPendingMessageRef.current = text; // Mark as processed
 
             // CRITICAL: Clear pendingMessage in central state as well
@@ -363,6 +364,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     // Keep ref to onStateChange to avoid effect re-triggering
     const onStateChangeRef = useRef(onStateChange);
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/immutability
         onStateChangeRef.current = onStateChange;
     }, [onStateChange]);
 
@@ -408,6 +410,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         });
         return () => removeListener();
     }, [sessionId]);
+
+    const [authError, setAuthError] = useState<string | null>(null);
+    const [availableModels, setAvailableModels] = useState<{ name: string; displayName: string }[]>([]);
 
     const authTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -481,9 +486,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             });
         }
     };
-
-    const [authError, setAuthError] = useState<string | null>(null);
-    const [availableModels, setAvailableModels] = useState<{ name: string; displayName: string }[]>([]);
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -730,12 +732,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                                 </select>
                             </div>
                             <button className="ai-chat-header-btn ai-chat-header-btn--danger" onClick={handleClearChat} title="Clear chat context">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
                                     <path d="M9 3v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5V3H9zm0 5h2v9H9V8zm4 0h2v9h-2V8z"/>
                                 </svg>
                             </button>
                             <button className="ai-chat-header-btn" onClick={handleLogout} title="Logout">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
                                     <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
                                 </svg>
                             </button>
@@ -822,6 +824,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                                         {interactiveSessionTracking && (
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
                                                 <div style={{ fontSize: '10px', opacity: 0.6, display: 'flex', gap: '12px' }}>
+                                                    {/* eslint-disable-next-line react-hooks/purity */}
                                                     <span>Elapsed: {Math.floor((Date.now() - interactiveSessionTracking.startTime) / 1000)}s</span>
                                                     <span>Data: {new Intl.NumberFormat().format(interactiveSessionTracking.buffer.length)} bytes</span>
                                                 </div>

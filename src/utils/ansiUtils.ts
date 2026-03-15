@@ -5,6 +5,7 @@
 export function stripAnsiCodes(data: string): string {
     return data
         // Strip OSC sequences (e.g. window title)
+        // eslint-disable-next-line no-control-regex
         .replace(/\x1b][^\x07\x1b]*(\x07|\x1b\\)/g, '')
         // Strip CSI / other escape sequences
         // eslint-disable-next-line no-control-regex

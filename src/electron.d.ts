@@ -1,5 +1,5 @@
 export interface ElectronAPI {
-    connectSession: (sessionId: string, config: any) => void;
+    connectSession: (sessionId: string, config: Record<string, unknown>) => void;
     disconnectSession: (sessionId: string) => void;
     sendInput: (sessionId: string, data: string) => void;
     resize: (sessionId: string, cols: number, rows: number) => void;
@@ -15,6 +15,7 @@ export interface ElectronAPI {
     selectImage: () => Promise<string | null>;
     selectFolder: () => Promise<string | null>;
     authorizeMediaPath: (path: string) => Promise<void>;
+    listWslDistributions: () => Promise<string[]>;
     getAppVersion: () => Promise<string>;
     logDebug: (message: string) => void;
     openExternal: (url: string) => void;
@@ -35,12 +36,18 @@ export interface ElectronAPI {
     showContextMenu: (selection: string, commands?: { id: string; label: string }[], includePaste?: boolean) => void;
     onAskGemini: (callback: (selection: string, type: string) => void) => () => void;
     onTerminalContextPaste: (callback: () => void) => () => void;
-    getSshAlgorithms: () => Promise<any>;
-    saveSshAlgorithms: (algorithms: any) => Promise<boolean>;
-    getThemes: () => Promise<any>;
-    saveThemes: (themes: any) => Promise<boolean>;
-    saveCustomTheme: (themeKey: string, themeData: any) => Promise<{ success: boolean; error?: string }>;
+    getSshAlgorithms: () => Promise<Record<string, { name: string; enabled: boolean }[]>>;
+    saveSshAlgorithms: (algorithms: Record<string, { name: string; enabled: boolean }[]>) => Promise<boolean>;
+    getThemes: () => Promise<Record<string, { name?: string; variables?: Record<string, string>; terminal?: Record<string, string> }>>;
+    saveThemes: (themes: Record<string, { name?: string; variables?: Record<string, string>; terminal?: Record<string, string> }>) => Promise<boolean>;
+    saveCustomTheme: (themeKey: string, themeData: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
     deleteCustomTheme: (themeKey: string) => Promise<{ success: boolean; error?: string }>;
+
+    // Host tree import/export
+    exportHTree: (data: unknown[], password: string) => Promise<boolean>;
+    selectImportFile: () => Promise<string | null>;
+    decryptImportFile: (password: string) => Promise<unknown>;
+    openDebugLogFolder: () => Promise<void>;
 
     // Credential encryption (Windows DPAPI)
     encryptSecret: (plaintext: string) => Promise<string>;

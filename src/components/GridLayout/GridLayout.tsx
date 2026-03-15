@@ -3,6 +3,8 @@ import { TerminalComponent } from '../Terminal/Terminal';
 import { AIChatPane } from '../AIChatPane/AIChatPane';
 import { LogViewerPane } from '../LogViewerPane/LogViewerPane';
 import type { Session } from '../../hooks/useSessionManager';
+import type { InteractiveSessionTracking } from '../../hooks/useInteractiveFlow';
+import type { Terminal } from '@xterm/xterm';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { useSettingsStore } from '../../stores/settingsStore';
 import './GridLayout.css';
@@ -11,7 +13,7 @@ interface GridLayoutProps {
     rows: number;
     cols: number;
     sessions: Session[];
-    updateSessionState: (sessionId: string, newState: any) => void;
+    updateSessionState: (sessionId: string, newState: Partial<Session['aiChatState']>) => void;
     paneAllocations: { [paneId: string]: string | null };
     activePaneId: string | null;
     onPaneClick: (paneId: string) => void;
@@ -25,11 +27,11 @@ interface GridLayoutProps {
     onPasteRequest?: (text: string) => void;
     onRunCommand?: (targetId: string, command: string, aiSessionId: string) => void;
     onSendMessage?: (aiSessionId: string, text: string) => void;
-    interactiveSessions?: { [sessionId: string]: any };
+    interactiveSessions?: { [sessionId: string]: InteractiveSessionTracking };
     onShowPromptMenu?: (aiSessionId: string) => void;
 }
 
-export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: string]: any } }> = ({
+export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: string]: Terminal } }> = ({
     rows,
     cols,
     sessions,
@@ -82,7 +84,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
         if (savedCols) {
             try {
                 setColSizes(JSON.parse(savedCols));
-            } catch (e) {
+            } catch {
                 setColSizes(new Array(cols).fill(1));
             }
         } else {
@@ -92,7 +94,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
         if (savedRows) {
             try {
                 setRowSizes(JSON.parse(savedRows));
-            } catch (e) {
+            } catch {
                 setRowSizes(new Array(rows).fill(1));
             }
         } else {
@@ -293,7 +295,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     terminalBackground={terminalBackground}
                                     terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                                     proactiveInstruction={proactiveInstruction}
-                                    interactiveSessionTracking={interactiveSessions ? (Object.values(interactiveSessions).find((t: any) => t.aiSessionId === session.id) as any) : undefined}
+                                    interactiveSessionTracking={interactiveSessions ? Object.values(interactiveSessions).find((t) => t.aiSessionId === session.id) : undefined}
                                     onRunCommand={(targetId, command) => {
                                         if (onRunCommand) onRunCommand(targetId, command, session.id);
                                     }}

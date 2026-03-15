@@ -8,7 +8,7 @@ import * as electronService from '../../services/electronService';
 import './SessionDialog.css';
 
 interface ConnectionDialogProps {
-    onConnect: (config: any) => void;
+    onConnect: (config: Record<string, unknown>) => void;
     onClose: () => void;
     error?: string | null;
     getCachedPassword: (host: string, user: string) => string;
@@ -44,6 +44,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
     // Ref to track selectedHostId inside the event listener (avoids stale closure)
     const selectedHostIdRef = useRef<string | null>(null);
+    // eslint-disable-next-line react-hooks/refs
     selectedHostIdRef.current = selectedHostId;
 
     // Submit the form when Enter is pressed:
@@ -202,14 +203,14 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     // Fetch resources when protocol changes
     useEffect(() => {
         if (protocol === 'serial') {
-            (window as any).electronAPI.listSerialPorts().then((ports: SerialPortInfo[]) => {
+            window.electronAPI.listSerialPorts().then((ports: SerialPortInfo[]) => {
                 setSerialPorts(ports);
                 if (ports.length > 0) {
                     setSerialPath(prev => prev || ports[0].path);
                 }
             });
         } else if (protocol === 'wsl') {
-            (window as any).electronAPI.listWslDistributions().then((distros: string[]) => {
+            window.electronAPI.listWslDistributions().then((distros: string[]) => {
                 setWslDistros(distros);
                 if (distros.length > 0) {
                     setSelectedDistro(prev => prev || distros[0]);

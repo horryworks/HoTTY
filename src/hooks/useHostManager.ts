@@ -199,6 +199,7 @@ export function useHostManager() {
     // On mount: load raw (encrypted) tree from localStorage and set it immediately for 0-latency UI render.
     useEffect(() => {
         const raw = loadRawTree();
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setTree(raw);
 
         // --- Eager Pre-Decryption ---

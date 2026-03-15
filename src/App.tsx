@@ -31,6 +31,8 @@ import './App.css'
 
 export type { AskGeminiCommand, PromptPattern, PersonaDefinition } from './types/appTypes';
 
+type ThemeDefinition = { name?: string; variables?: Record<string, string>; terminal?: { foreground?: string; background?: string; backgroundInactive?: string; paneBackground?: string } };
+
 function App() {
 
   // ═══════════════════════════════════════════════
@@ -75,7 +77,7 @@ function App() {
   // 2. UI State
   // ═══════════════════════════════════════════════
 
-  const [themesData, setThemesData] = useState<any>(null);
+  const [themesData, setThemesData] = useState<Record<string, ThemeDefinition> | null>(null);
   const [showDialog, setShowDialog] = useState(true);
   const [globalMessage, setGlobalMessage] = useState<{ type: 'error' | 'success' | 'info', title?: string, message: string } | null>(null);
   const [focusTrigger, setFocusTrigger] = useState(0);
@@ -118,27 +120,9 @@ function App() {
     electronService.getThemes().then(setThemesData);
   }, []);
 
-  // Apply theme
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', settings.theme);
-    localStorage.setItem(STORAGE_KEYS.THEME, settings.theme);
-    if (themesData) {
-      applyTheme(settings.theme);
-    }
-  }, [settings.theme, themesData]);
-
-  // Apply font family from settings to CSS variable (used by all monospace/code areas)
-  useEffect(() => {
-    document.documentElement.style.setProperty('--font-family', settings.fontFamily);
-  }, [settings.fontFamily]);
-
-  // Apply font size from settings to CSS variable (used as base UI font size)
-  useEffect(() => {
-    document.documentElement.style.setProperty('--font-size-base', `${settings.fontSize}px`);
-  }, [settings.fontSize]);
-
   const applyTheme = (themeName: string) => {
-    const themeDef = (themesData as any)[themeName];
+    if (!themesData) return;
+    const themeDef = themesData[themeName];
     if (themeDef) {
       if (themeDef.variables) {
         Object.entries(themeDef.variables).forEach(([key, value]) => {
@@ -154,6 +138,26 @@ function App() {
       }
     }
   };
+
+  // Apply theme
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', settings.theme);
+    localStorage.setItem(STORAGE_KEYS.THEME, settings.theme);
+    if (themesData) {
+      applyTheme(settings.theme);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.theme, themesData]);
+
+  // Apply font family from settings to CSS variable (used by all monospace/code areas)
+  useEffect(() => {
+    document.documentElement.style.setProperty('--font-family', settings.fontFamily);
+  }, [settings.fontFamily]);
+
+  // Apply font size from settings to CSS variable (used as base UI font size)
+  useEffect(() => {
+    document.documentElement.style.setProperty('--font-size-base', `${settings.fontSize}px`);
+  }, [settings.fontSize]);
 
   // Set Window Title
   useEffect(() => {
@@ -306,16 +310,16 @@ function App() {
 
   // AI Focus Sync
   useEffect(() => {
-    const handleFocus = (e: any) => {
+    const handleFocus = (e: CustomEvent<{ sessionId: string }>) => {
       const { sessionId } = e.detail;
       const paneId = Object.keys(pane.paneAllocations).find(id => pane.paneAllocations[id] === sessionId);
       if (paneId) {
         pane.setActivePaneId(paneId);
       }
     };
-    window.addEventListener('hotty-focus-session', handleFocus);
+    window.addEventListener('hotty-focus-session', handleFocus as EventListener);
     return () => {
-      window.removeEventListener('hotty-focus-session', handleFocus);
+      window.removeEventListener('hotty-focus-session', handleFocus as EventListener);
     };
   }, [pane.paneAllocations, pane.setActivePaneId]);
 
@@ -352,7 +356,7 @@ function App() {
 
   const handleThemeChange = (newTheme: string) => {
     if (themesData) {
-      const themeDef = (themesData as any)[newTheme];
+      const themeDef = themesData[newTheme];
       if (themeDef && themeDef.terminal) {
         const { foreground, background, backgroundInactive, paneBackground: pBg } = themeDef.terminal;
         updateTerminalForeground(foreground);
@@ -801,7 +805,7 @@ function App() {
         {themesData && (
           <CustomThemeCreator
             isOpen={isCustomThemeCreatorOpen}
-            themesData={themesData}
+            themesData={themesData as Record<string, { name: string; variables: Record<string, string>; terminal: Record<string, string> }>}
             currentTheme={settings.theme}
             onSave={handleCustomThemeCreatorSave}
             onCancel={handleCustomThemeCreatorCancel}

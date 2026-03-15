@@ -5,7 +5,7 @@
  */
 export interface ISessionService {
     /** Connect to remote host */
-    connect(config: any): void | Promise<void>;
+    connect(config: Record<string, unknown>): void | Promise<void>;
 
     /** Send data (user input) to remote host */
     write(data: string): void;
