@@ -354,7 +354,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             onBackspaceSendsDelChange={onBackspaceSendsDelChange}
                             rightClickPaste={rightClickPaste}
                             onRightClickPasteChange={onRightClickPasteChange}
-                            sshAlgorithms={sshAlgorithms}
+                            sshAlgorithms={sshAlgorithms ?? {}}
                             onAlgorithmToggle={handleAlgorithmToggle}
                         />
                     )}

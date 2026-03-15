@@ -131,10 +131,10 @@ function App() {
       }
       if (themeDef.terminal) {
         const { foreground, background, backgroundInactive, paneBackground: pBg } = themeDef.terminal;
-        updateTerminalForeground(foreground);
-        updateTerminalBackground(background);
-        updateTerminalBackgroundInactive(backgroundInactive);
-        updatePaneBackground(pBg);
+        updateTerminalForeground(foreground ?? '');
+        updateTerminalBackground(background ?? '');
+        updateTerminalBackgroundInactive(backgroundInactive ?? '');
+        updatePaneBackground(pBg ?? '');
       }
     }
   };
@@ -360,10 +360,10 @@ function App() {
       const themeDef = themesData[newTheme];
       if (themeDef && themeDef.terminal) {
         const { foreground, background, backgroundInactive, paneBackground: pBg } = themeDef.terminal;
-        updateTerminalForeground(foreground);
-        updateTerminalBackground(background);
-        updateTerminalBackgroundInactive(backgroundInactive);
-        updatePaneBackground(pBg);
+        updateTerminalForeground(foreground ?? '');
+        updateTerminalBackground(background ?? '');
+        updateTerminalBackgroundInactive(backgroundInactive ?? '');
+        updatePaneBackground(pBg ?? '');
         if (settings.paneBackgroundMode !== 'image') updatePaneBackgroundMode('color');
       }
     }

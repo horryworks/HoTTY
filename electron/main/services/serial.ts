@@ -29,14 +29,15 @@ export class SerialService implements ISessionService {
         this.encoding = encoding;
     }
 
-    async connect(config: SerialConfig) {
-        this.encoding = config.encoding || 'utf8';
-        logger.info('serial', 'Connect attempt', { sessionId: this.sessionId, path: config.path, baudRate: config.baudRate });
+    async connect(config: Record<string, unknown>) {
+        const serialConfig = config as unknown as SerialConfig;
+        this.encoding = serialConfig.encoding || 'utf8';
+        logger.info('serial', 'Connect attempt', { sessionId: this.sessionId, path: serialConfig.path, baudRate: serialConfig.baudRate });
 
         // Validate serial port path (Windows: COM1-COM999, Linux/Mac: /dev/tty*)
-        const isValidPath = /^COM([1-9]|[1-9]\d|[1-9]\d\d)$/i.test(config.path) || /^\/dev\/tty[A-Za-z0-9]+$/.test(config.path);
+        const isValidPath = /^COM([1-9]|[1-9]\d|[1-9]\d\d)$/i.test(serialConfig.path) || /^\/dev\/tty[A-Za-z0-9]+$/.test(serialConfig.path);
         if (!isValidPath) {
-            logger.warn('serial', 'Invalid port path', { sessionId: this.sessionId, path: config.path });
+            logger.warn('serial', 'Invalid port path', { sessionId: this.sessionId, path: serialConfig.path });
             this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Invalid serial port path.' });
             return;
         }
@@ -52,18 +53,18 @@ export class SerialService implements ISessionService {
             xon?: boolean;
             xoff?: boolean;
         } = {
-            path: config.path,
-            baudRate: config.baudRate || 9600,
-            dataBits: config.dataBits || 8,
-            parity: config.parity || 'none',
-            stopBits: config.stopBits || 1,
+            path: serialConfig.path,
+            baudRate: serialConfig.baudRate || 9600,
+            dataBits: serialConfig.dataBits || 8,
+            parity: serialConfig.parity || 'none',
+            stopBits: serialConfig.stopBits || 1,
             autoOpen: false,
         };
 
         // Flow control
-        if (config.flowControl === 'rts/cts') {
+        if (serialConfig.flowControl === 'rts/cts') {
             portOptions.rtscts = true;
-        } else if (config.flowControl === 'xon/xoff') {
+        } else if (serialConfig.flowControl === 'xon/xoff') {
             portOptions.xon = true;
             portOptions.xoff = true;
         }

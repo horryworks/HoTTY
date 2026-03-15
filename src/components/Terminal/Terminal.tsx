@@ -584,7 +584,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             attachCheckInterval = setInterval(() => {
                 if (term.element) {
                     scanAllLines();
-                    clearInterval(attachCheckInterval);
+                    if (attachCheckInterval !== null) clearInterval(attachCheckInterval);
                 }
             }, 100);
         }

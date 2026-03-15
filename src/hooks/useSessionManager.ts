@@ -14,7 +14,7 @@ export interface Session {
         loggingPath: string;
     };
     aiChatState?: {
-        messages: { role: string; content: string }[]; // ChatMessage shape, avoiding circular dependency
+        messages: { role: "user" | "model"; content: string }[]; // ChatMessage shape, avoiding circular dependency
         inputText: string;
         pendingMessage?: string;
         systemInstruction?: string;

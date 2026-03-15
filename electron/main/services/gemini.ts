@@ -107,7 +107,7 @@ export class GeminiService {
 
   async autoAuth(clientId: string, clientSecret: string): Promise<boolean> {
     // If we're already authenticated and have a valid token (or can refresh one), just return true.
-    if (this.isAuthenticated() && safeCompare(this.clientId, clientId) && safeCompare(this.clientSecret, clientSecret)) {
+    if (this.isAuthenticated() && this.clientId !== null && this.clientSecret !== null && safeCompare(this.clientId, clientId) && safeCompare(this.clientSecret, clientSecret)) {
       const token = await this.getValidToken();
       if (token) return true;
     }
@@ -121,7 +121,7 @@ export class GeminiService {
       const success = await this.loadToken();
       if (success) {
         // Validate that the stored clientId/secret matches what we were passed
-        if (!safeCompare(this.clientId, clientId) || !safeCompare(this.clientSecret, clientSecret)) {
+        if (this.clientId === null || this.clientSecret === null || !safeCompare(this.clientId, clientId) || !safeCompare(this.clientSecret, clientSecret)) {
           logger.warn('gemini', 'Auto-auth failed: credentials mismatch');
           this.logout();
           return false;

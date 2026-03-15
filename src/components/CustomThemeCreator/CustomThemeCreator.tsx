@@ -248,7 +248,7 @@ export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
 
         setSaving(true);
         try {
-            const result = await electronService.saveCustomTheme(key, themeData);
+            const result = await electronService.saveCustomTheme(key, themeData as unknown as Record<string, unknown>);
             if (result.success) {
                 onSave(key);
             } else {

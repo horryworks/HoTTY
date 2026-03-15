@@ -326,7 +326,13 @@ ipcMain.on('focus-window', (event) => {
   }
 });
 
+const ALLOWED_ENCODINGS = new Set(['utf8', 'shift_jis', 'euc-jp']);
+
 ipcMain.on('update-session-encoding', (event, { sessionId, encoding }) => {
+  if (!ALLOWED_ENCODINGS.has(encoding)) {
+    logger.warn('session', 'Invalid encoding rejected', { sessionId, encoding });
+    return;
+  }
   const session = sessions.get(sessionId);
   if (session) {
     session.service.setEncoding(encoding);

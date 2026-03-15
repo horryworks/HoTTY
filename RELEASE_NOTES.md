@@ -19,6 +19,9 @@ We are proud to announce the formal v1.0.0 release of HoTTY! This milestone repr
 - **Broad Protocol Support**: SSH, Telnet, Serial, WSL, and local Windows shells (CMD/PowerShell).
 - **Log Management**: Built-in Log Viewer and dedicated millisecond-precision timestamp logging.
 
+### Security
+- **IPC Input Validation**: Added allowlist validation for the `update-session-encoding` IPC handler, rejecting unrecognized encoding values before they reach session services.
+
 ---
 
 ## [v0.1.15] - 2026-03-14

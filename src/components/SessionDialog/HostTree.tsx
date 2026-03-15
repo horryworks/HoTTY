@@ -243,7 +243,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     const fileName = fileNameWithExt.replace(/\.[^/.]+$/, "");
 
                     const currentParentId = parentId;
-                    const folderId = await onImportData(data, currentParentId ? '' : `Imported_${fileName}`, currentParentId);
+                    const folderId = await onImportData(data as HostTreeNode[], currentParentId ? '' : `Imported_${fileName}`, currentParentId);
 
                     // Auto-expand the target folder
                     if (folderId) {

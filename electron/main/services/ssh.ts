@@ -139,7 +139,7 @@ export class SshService implements ISessionService {
         }).connect({
             ...config,
             tryKeyboard: true,
-            algorithms: this.getAlgorithms(),
+            algorithms: this.getAlgorithms() as ConnectConfig['algorithms'],
             hostVerifier: (hostKey: Buffer, verify: (result: boolean) => void) => {
                 try {
                     // Extract key type from the key buffer (first 4 bytes = length, then key type string)
