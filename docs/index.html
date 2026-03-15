@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HoTTY — Gemini-Integrated Terminal Emulator</title>
+  <meta name="description" content="HoTTY is a modern terminal emulator for Windows supporting SSH, Telnet, Serial, WSL, and Local connections — with built-in Google Gemini AI integration." />
+  <link rel="icon" href="assets/images/HoTTY_logo.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<!-- Navigation -->
+<nav>
+  <div class="nav-inner">
+    <a class="nav-brand" href="#">
+      <img class="nav-logo" src="assets/images/HoTTY_logo.png" alt="HoTTY logo" />
+      HoTTY
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#ai">AI Integration</a></li>
+      <li><a href="#themes">Themes</a></li>
+      <li><a href="https://github.com/horryworks/HoTTY" target="_blank">GitHub</a></li>
+    </ul>
+    <div class="nav-lang">
+      <button class="lang-btn active" data-lang="en">EN</button>
+      <button class="lang-btn" data-lang="ja" onclick="location.href='ja/index.html'">JA</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge">v1.0.0-beta1 &nbsp;·&nbsp; Now Available</div>
+    <img class="hero-logo" src="assets/images/HoTTY_logo.png" alt="HoTTY" />
+    <h1>Your Terminal,<br/>Powered by AI</h1>
+    <p class="hero-sub">
+      A modern Windows terminal emulator with SSH, Telnet, Serial, WSL & Local shell support —
+      and a built-in Google Gemini AI assistant that watches, analyzes, and acts.
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="https://github.com/horryworks/HoTTY/releases" target="_blank">
+        ⬇ Download for Windows
+      </a>
+      <a class="btn btn-secondary" href="https://github.com/horryworks/HoTTY" target="_blank">
+        ★ View on GitHub
+      </a>
+    </div>
+  </div>
+
+  <!-- Terminal Preview -->
+  <div class="terminal-preview">
+    <div class="terminal-titlebar">
+      <div class="terminal-dot dot-red"></div>
+      <div class="terminal-dot dot-yellow"></div>
+      <div class="terminal-dot dot-green"></div>
+      <div class="terminal-title">HoTTY — user@server:~</div>
+    </div>
+    <div class="terminal-body">
+      <div><span class="t-prompt">user@server</span><span class="t-cmd">:~$ </span><span class="t-cmd">systemctl status nginx</span></div>
+      <div><span class="t-out">● nginx.service - A high performance web server</span></div>
+      <div><span class="t-out">&nbsp;&nbsp; Loaded: loaded (/lib/systemd/system/nginx.service)</span></div>
+      <div><span class="t-out">&nbsp;&nbsp; Active: </span><span class="t-highlight">failed</span><span class="t-out"> (Result: exit-code)</span></div>
+      <br />
+      <div><span class="t-ai">✦ Gemini: </span><span class="t-out">Nginx has failed. Let me check the error logs for you.</span></div>
+      <div class="t-ai">&nbsp;&nbsp;&nbsp;Proposed command:</div>
+      <div><span class="t-cmd">&nbsp;&nbsp;&nbsp;$ journalctl -u nginx --since "5 min ago" --no-pager</span></div>
+      <br />
+      <div><span class="t-prompt">user@server</span><span class="t-cmd">:~$ </span><span class="t-cursor"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="section" id="features">
+  <div class="section-inner">
+    <div class="section-header">
+      <div class="section-label">// features</div>
+      <h2 class="section-title">Everything You Need in One Terminal</h2>
+      <p class="section-desc">
+        From legacy network devices to modern cloud servers — HoTTY handles every connection type with a flexible workspace layout.
+      </p>
+    </div>
+
+    <div class="features-grid">
+
+      <div class="feature-card">
+        <div class="feature-icon">🔌</div>
+        <div class="feature-title">Multi-Protocol Support</div>
+        <div class="feature-desc">
+          Connect to anything — from modern cloud servers to legacy Cisco hardware.
+          WSL distributions are auto-discovered.
+        </div>
+        <div class="protocol-list">
+          <span class="proto-badge proto-ssh">SSH</span>
+          <span class="proto-badge proto-telnet">Telnet</span>
+          <span class="proto-badge proto-serial">Serial</span>
+          <span class="proto-badge proto-wsl">WSL</span>
+          <span class="proto-badge proto-local">Local</span>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">⊞</div>
+        <div class="feature-title">Advanced Grid Layout</div>
+        <div class="feature-desc">
+          Flexible multi-pane workspace with Top/Bottom Bars and Left/Right Sidebars.
+          Drag pane junctions to resize all 4 panels at once. Layout is saved automatically.
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🎨</div>
+        <div class="feature-title">Visual Theme Creator</div>
+        <div class="feature-desc">
+          Three built-in themes (Dark, Medium, Light) plus a fully customizable mode.
+          Fine-tune every UI color interactively — no JSON editing required.
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">📡</div>
+        <div class="feature-title">Session Management</div>
+        <div class="feature-desc">
+          Persistent fonts, encoding, and color settings across sessions.
+          SSH & Telnet KeepAlive prevents idle disconnects. Passwords stay in memory only.
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">📋</div>
+        <div class="feature-title">Log Viewer</div>
+        <div class="feature-desc">
+          Open saved session logs directly inside HoTTY as a dedicated tab.
+          Millisecond-precision timestamps for precise debugging.
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <div class="feature-title">Security First</div>
+        <div class="feature-desc">
+          Sandboxed Electron execution, path traversal protection, IPC input validation,
+          and Content Security Policy. Known_hosts management built in.
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- AI Integration -->
+<section class="section section-alt" id="ai">
+  <div class="section-inner">
+    <div class="ai-section">
+
+      <div class="ai-text">
+        <div class="section-label">// gemini ai</div>
+        <h2>An AI That Works Right Beside You</h2>
+        <p>
+          HoTTY is more than a terminal. With Google Gemini built in, your AI assistant
+          watches, understands, and acts on your terminal output in real time.
+        </p>
+        <ul class="ai-points">
+          <li class="ai-point">
+            <div class="ai-point-icon">👁</div>
+            <div class="ai-point-text">
+              <strong>Watch Gemini</strong>
+              <span>Monitor terminal output and request instant analysis — Explain, Research, or Suggest Fixes.</span>
+            </div>
+          </li>
+          <li class="ai-point">
+            <div class="ai-point-icon">🔍</div>
+            <div class="ai-point-text">
+              <strong>Interactive Investigation</strong>
+              <span>AI proactively proposes commands, captures results, and continues analysis automatically.</span>
+            </div>
+          </li>
+          <li class="ai-point">
+            <div class="ai-point-icon">💬</div>
+            <div class="ai-point-text">
+              <strong>Free Format Questions</strong>
+              <span>Right-click selected text to ask custom questions directly from the terminal context menu.</span>
+            </div>
+          </li>
+          <li class="ai-point">
+            <div class="ai-point-icon">⚡</div>
+            <div class="ai-point-text">
+              <strong>Dynamic Model Selection</strong>
+              <span>Automatically discovers all available Gemini models from your API key.</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="ai-visual">
+        <div class="terminal-titlebar">
+          <div class="terminal-dot dot-red"></div>
+          <div class="terminal-dot dot-yellow"></div>
+          <div class="terminal-dot dot-green"></div>
+          <div class="terminal-title">Gemini Chat</div>
+        </div>
+        <div class="ai-chat">
+          <div class="chat-msg user">
+            <div class="chat-avatar avatar-user">U</div>
+            <div class="chat-bubble bubble-user">
+              Nginx just failed. Can you investigate?
+            </div>
+          </div>
+          <div class="chat-msg">
+            <div class="chat-avatar avatar-ai">G</div>
+            <div class="chat-bubble bubble-ai">
+              I'll check the system logs to identify the cause of the Nginx failure.
+              <div class="chat-exec">```execute<br/>journalctl -u nginx --since "10 min ago" --no-pager | tail -30```</div>
+            </div>
+          </div>
+          <div class="chat-msg user">
+            <div class="chat-avatar avatar-user">U</div>
+            <div class="chat-bubble bubble-user">
+              [output captured — analyzing...]
+            </div>
+          </div>
+          <div class="chat-msg">
+            <div class="chat-avatar avatar-ai">G</div>
+            <div class="chat-bubble bubble-ai">
+              Found it — port 80 is already in use by Apache. Let me stop it and restart Nginx.
+              <div class="chat-exec">```execute<br/>systemctl stop apache2 &amp;&amp; systemctl start nginx```</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- Theme Gallery -->
+<section class="section" id="themes">
+  <div class="section-inner">
+    <div class="section-header">
+      <div class="section-label">// themes</div>
+      <h2 class="section-title">Built for Every Environment</h2>
+      <p class="section-desc">
+        Choose from three built-in themes or create your own with the visual theme editor.
+        Every color, background, and font is customizable.
+      </p>
+    </div>
+
+    <div class="theme-gallery">
+      <div class="theme-card theme-dark">
+        <div class="theme-preview">
+          <div class="theme-bar"></div>
+          <div class="theme-terminal">
+            <div class="theme-line"></div>
+            <div class="theme-line"></div>
+          </div>
+        </div>
+        <div class="theme-name">🌑 Dark</div>
+      </div>
+
+      <div class="theme-card theme-medium">
+        <div class="theme-preview">
+          <div class="theme-bar"></div>
+          <div class="theme-terminal">
+            <div class="theme-line"></div>
+            <div class="theme-line"></div>
+          </div>
+        </div>
+        <div class="theme-name">🌓 Medium</div>
+      </div>
+
+      <div class="theme-card theme-light">
+        <div class="theme-preview">
+          <div class="theme-bar"></div>
+          <div class="theme-terminal">
+            <div class="theme-line"></div>
+            <div class="theme-line"></div>
+          </div>
+        </div>
+        <div class="theme-name">☀ Light</div>
+      </div>
+    </div>
+
+    <p style="text-align:center; color: var(--text-muted); font-size: 0.85rem; margin-top: 24px;">
+      Plus <strong style="color: var(--text-secondary)">Custom mode</strong> — adjust every UI color interactively and save as your own theme.
+      Theme files are stored in <code style="color: var(--accent); font-family: var(--font-mono); font-size: 0.8rem;">%APPDATA%/HoTTY/themes.json</code>.
+    </p>
+  </div>
+</section>
+
+<!-- Download -->
+<section class="download-section" id="download">
+  <div class="download-inner">
+    <h2>Ready to Try HoTTY?</h2>
+    <p>Download the Windows installer and get started in seconds. No configuration required.</p>
+    <a class="btn btn-primary" href="https://github.com/horryworks/HoTTY/releases" target="_blank" style="font-size:1rem; padding: 14px 32px;">
+      ⬇ Download HoTTY v1.0.0-beta1
+    </a>
+    <div class="download-meta">
+      <span>🪟 Windows x64</span>
+      <span>📦 NSIS Installer</span>
+      <span>⚖ GPL-3.0</span>
+      <span>🆓 Free &amp; Open Source</span>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-links">
+      <a href="https://github.com/horryworks/HoTTY" target="_blank">GitHub</a>
+      <a href="https://github.com/horryworks/HoTTY/releases" target="_blank">Releases</a>
+      <a href="https://github.com/horryworks/HoTTY/issues" target="_blank">Issues</a>
+      <a href="https://github.com/horryworks/HoTTY/blob/main/LICENSE" target="_blank">License</a>
+      <a href="ja/">日本語</a>
+    </div>
+    <p>Copyright &copy; 2026 HoTTY Contributors. Licensed under GPL-3.0-or-later.</p>
+    <p style="margin-top:6px; font-size:0.78rem; opacity:0.6;">Built with Electron &middot; React &middot; TypeScript &middot; Google Gemini</p>
+  </div>
+</footer>
+
+<script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HoTTY — Gemini統合型高機能ターミナルエミュレータ</title>
+  <meta name="description" content="HoTTY は SSH, Telnet, Serial, WSL, ローカルシェルに対応した、Google Gemini AI を内蔵したモダンなWindows向けターミナルエミュレーターです。" />
+  <link rel="icon" href="../assets/images/HoTTY_logo.png" />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+
+<!-- Navigation -->
+<nav>
+  <div class="nav-inner">
+    <a class="nav-brand" href="#">
+      <img class="nav-logo" src="../assets/images/HoTTY_logo.png" alt="HoTTY logo" />
+      HoTTY
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">機能</a></li>
+      <li><a href="#ai">AI統合</a></li>
+      <li><a href="#themes">テーマ</a></li>
+      <li><a href="https://github.com/horryworks/HoTTY" target="_blank">GitHub</a></li>
+    </ul>
+    <div class="nav-lang">
+      <button class="lang-btn" data-lang="en" onclick="location.href='../index.html'">EN</button>
+      <button class="lang-btn active" data-lang="ja">JA</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge">v1.0.0-beta1 &nbsp;·&nbsp; リリース中</div>
+    <img class="hero-logo" src="../assets/images/HoTTY_logo.png" alt="HoTTY" />
+    <h1>あなたのターミナルに、<br/>AIという相棒を。</h1>
+    <p class="hero-sub">
+      SSH、Telnet、Serial、WSL、ローカルシェルに対応したモダンなWindowsターミナルエミュレーター。
+      Google Gemini AIが隣でリアルタイムに監視・分析・実行まで行います。
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="https://github.com/horryworks/HoTTY/releases" target="_blank">
+        ⬇ Windows版をダウンロード
+      </a>
+      <a class="btn btn-secondary" href="https://github.com/horryworks/HoTTY" target="_blank">
+        ★ GitHubで見る
+      </a>
+    </div>
+  </div>
+
+  <!-- Terminal Preview -->
+  <div class="terminal-preview">
+    <div class="terminal-titlebar">
+      <div class="terminal-dot dot-red"></div>
+      <div class="terminal-dot dot-yellow"></div>
+      <div class="terminal-dot dot-green"></div>
+      <div class="terminal-title">HoTTY — user@server:~</div>
+    </div>
+    <div class="terminal-body">
+      <div><span class="t-prompt">user@server</span><span class="t-cmd">:~$ </span><span class="t-cmd">systemctl status nginx</span></div>
+      <div><span class="t-out">● nginx.service - A high performance web server</span></div>
+      <div><span class="t-out">&nbsp;&nbsp; Loaded: loaded (/lib/systemd/system/nginx.service)</span></div>
+      <div><span class="t-out">&nbsp;&nbsp; Active: </span><span class="t-highlight">failed</span><span class="t-out"> (Result: exit-code)</span></div>
+      <br />
+      <div><span class="t-ai">✦ Gemini: </span><span class="t-out">Nginxが落ちています。エラーログを確認します。</span></div>
+      <div class="t-ai">&nbsp;&nbsp;&nbsp;提案コマンド:</div>
+      <div><span class="t-cmd">&nbsp;&nbsp;&nbsp;$ journalctl -u nginx --since "5 min ago" --no-pager</span></div>
+      <br />
+      <div><span class="t-prompt">user@server</span><span class="t-cmd">:~$ </span><span class="t-cursor"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="section" id="features">
+  <div class="section-inner">
+    <div class="section-header">
+      <div class="section-label">// 機能</div>
+      <h2 class="section-title">一台のターミナルで、すべてに対応</h2>
+      <p class="section-desc">
+        最新クラウドサーバーから古いCiscoネットワーク機器まで — HoTTYはあらゆる接続に対応し、柔軟なワークスペースで作業を加速します。
+      </p>
+    </div>
+
+    <div class="features-grid">
+
+      <div class="feature-card">
+        <div class="feature-icon">🔌</div>
+        <div class="feature-title">マルチプロトコル対応</div>
+        <div class="feature-desc">
+          クラウドから古いネットワーク機器まで、あらゆる接続先に対応。
+          WSLのディストリビューションは自動検出されます。
+        </div>
+        <div class="protocol-list">
+          <span class="proto-badge proto-ssh">SSH</span>
+          <span class="proto-badge proto-telnet">Telnet</span>
+          <span class="proto-badge proto-serial">Serial</span>
+          <span class="proto-badge proto-wsl">WSL</span>
+          <span class="proto-badge proto-local">ローカル</span>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">⊞</div>
+        <div class="feature-title">高度なグリッドレイアウト</div>
+        <div class="feature-desc">
+          トップ/ボトムバーと左右サイドバーを組み合わせた柔軟なワークスペース。
+          4ペインの交点をドラッグして縦横同時にリサイズ。レイアウトは自動保存。
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🎨</div>
+        <div class="feature-title">ビジュアルテーマクリエイター</div>
+        <div class="feature-desc">
+          Dark・Medium・Lightの3テーマに加え、Customモードで配色を完全にカスタマイズ。
+          UIカラーを直感的に調整 — JSONの手動編集は不要。
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">📡</div>
+        <div class="feature-title">セッション管理</div>
+        <div class="feature-desc">
+          フォント・エンコーディング・配色設定を自動保存。
+          SSH/Telnet KeepAliveでアイドル切断を防止。パスワードはメモリ内のみで管理。
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">📋</div>
+        <div class="feature-title">ログビューアー</div>
+        <div class="feature-desc">
+          保存済みのセッションログをHoTTY内の専用タブで直接閲覧。
+          ミリ秒精度のタイムスタンプで精密なデバッグが可能。
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <div class="feature-title">セキュリティ優先設計</div>
+        <div class="feature-desc">
+          Electronサンドボックス実行、パストラバーサル保護、IPC入力検証、
+          コンテンツセキュリティポリシー。known_hosts管理も内蔵。
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- AI Integration -->
+<section class="section section-alt" id="ai">
+  <div class="section-inner">
+    <div class="ai-section">
+
+      <div class="ai-text">
+        <div class="section-label">// gemini ai</div>
+        <h2>隣で動くAIという相棒</h2>
+        <p>
+          HoTTYは単なるターミナルではありません。Google Geminiを内蔵し、
+          AIがターミナルの出力をリアルタイムで監視・理解・実行します。
+        </p>
+        <ul class="ai-points">
+          <li class="ai-point">
+            <div class="ai-point-icon">👁</div>
+            <div class="ai-point-text">
+              <strong>Watch Gemini（出力監視）</strong>
+              <span>ターミナル出力を監視し、「説明」「原因調査」「修正提案」などのプロンプトで即時解析依頼。</span>
+            </div>
+          </li>
+          <li class="ai-point">
+            <div class="ai-point-icon">🔍</div>
+            <div class="ai-point-text">
+              <strong>インタラクティブ調査</strong>
+              <span>AIが自発的に調査コマンドを提案し、実行結果を自動キャプチャして解析を継続。</span>
+            </div>
+          </li>
+          <li class="ai-point">
+            <div class="ai-point-icon">💬</div>
+            <div class="ai-point-text">
+              <strong>フリーフォーマット質問</strong>
+              <span>選択したテキストを右クリックして、コンテキストメニューから自由に質問を送信。</span>
+            </div>
+          </li>
+          <li class="ai-point">
+            <div class="ai-point-icon">⚡</div>
+            <div class="ai-point-text">
+              <strong>ダイナミックモデル選択</strong>
+              <span>APIキーから利用可能なGeminiモデルを自動取得してリスト表示。</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="ai-visual">
+        <div class="terminal-titlebar">
+          <div class="terminal-dot dot-red"></div>
+          <div class="terminal-dot dot-yellow"></div>
+          <div class="terminal-dot dot-green"></div>
+          <div class="terminal-title">Gemini Chat</div>
+        </div>
+        <div class="ai-chat">
+          <div class="chat-msg user">
+            <div class="chat-avatar avatar-user">U</div>
+            <div class="chat-bubble bubble-user">
+              Nginxが落ちた。調査して。
+            </div>
+          </div>
+          <div class="chat-msg">
+            <div class="chat-avatar avatar-ai">G</div>
+            <div class="chat-bubble bubble-ai">
+              システムログを確認してNginxの障害原因を特定します。
+              <div class="chat-exec">```execute<br/>journalctl -u nginx --since "10 min ago" --no-pager | tail -30```</div>
+            </div>
+          </div>
+          <div class="chat-msg user">
+            <div class="chat-avatar avatar-user">U</div>
+            <div class="chat-bubble bubble-user">
+              [出力キャプチャ完了 — 解析中...]
+            </div>
+          </div>
+          <div class="chat-msg">
+            <div class="chat-avatar avatar-ai">G</div>
+            <div class="chat-bubble bubble-ai">
+              原因が判明しました。ポート80がApacheに使われています。停止してNginxを再起動します。
+              <div class="chat-exec">```execute<br/>systemctl stop apache2 &amp;&amp; systemctl start nginx```</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- Theme Gallery -->
+<section class="section" id="themes">
+  <div class="section-inner">
+    <div class="section-header">
+      <div class="section-label">// テーマ</div>
+      <h2 class="section-title">どんな環境にも合うテーマを</h2>
+      <p class="section-desc">
+        3種類のプリセットテーマから選ぶか、ビジュアルテーマエディタで完全にカスタマイズ。
+        すべての色・背景・フォントを自由に設定できます。
+      </p>
+    </div>
+
+    <div class="theme-gallery">
+      <div class="theme-card theme-dark">
+        <div class="theme-preview">
+          <div class="theme-bar"></div>
+          <div class="theme-terminal">
+            <div class="theme-line"></div>
+            <div class="theme-line"></div>
+          </div>
+        </div>
+        <div class="theme-name">🌑 ダーク</div>
+      </div>
+
+      <div class="theme-card theme-medium">
+        <div class="theme-preview">
+          <div class="theme-bar"></div>
+          <div class="theme-terminal">
+            <div class="theme-line"></div>
+            <div class="theme-line"></div>
+          </div>
+        </div>
+        <div class="theme-name">🌓 ミディアム</div>
+      </div>
+
+      <div class="theme-card theme-light">
+        <div class="theme-preview">
+          <div class="theme-bar"></div>
+          <div class="theme-terminal">
+            <div class="theme-line"></div>
+            <div class="theme-line"></div>
+          </div>
+        </div>
+        <div class="theme-name">☀ ライト</div>
+      </div>
+    </div>
+
+    <p style="text-align:center; color: var(--text-muted); font-size: 0.85rem; margin-top: 24px;">
+      さらに <strong style="color: var(--text-secondary)">Customモード</strong> — 全UIカラーをリアルタイムで調整してオリジナルテーマとして保存。
+      テーマファイルは <code style="color: var(--accent); font-family: var(--font-mono); font-size: 0.8rem;">%APPDATA%/HoTTY/themes.json</code> に保存されます。
+    </p>
+  </div>
+</section>
+
+<!-- Download -->
+<section class="download-section" id="download">
+  <div class="download-inner">
+    <h2>HoTTYを試してみる</h2>
+    <p>Windowsインストーラーをダウンロードして、すぐに使い始めましょう。設定不要です。</p>
+    <a class="btn btn-primary" href="https://github.com/horryworks/HoTTY/releases" target="_blank" style="font-size:1rem; padding: 14px 32px;">
+      ⬇ HoTTY v1.0.0-beta1 をダウンロード
+    </a>
+    <div class="download-meta">
+      <span>🪟 Windows x64</span>
+      <span>📦 NSSIインストーラー</span>
+      <span>⚖ GPL-3.0</span>
+      <span>🆓 無料・オープンソース</span>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-links">
+      <a href="https://github.com/horryworks/HoTTY" target="_blank">GitHub</a>
+      <a href="https://github.com/horryworks/HoTTY/releases" target="_blank">リリース</a>
+      <a href="https://github.com/horryworks/HoTTY/issues" target="_blank">Issues</a>
+      <a href="https://github.com/horryworks/HoTTY/blob/main/LICENSE" target="_blank">ライセンス</a>
+      <a href="../">English</a>
+    </div>
+    <p>Copyright &copy; 2026 HoTTY Contributors. GPL-3.0-or-later ライセンスの下で公開。</p>
+    <p style="margin-top:6px; font-size:0.78rem; opacity:0.6;">Electron &middot; React &middot; TypeScript &middot; Google Gemini で構築</p>
+  </div>
+</footer>
+
+<script src="../js/main.js"></script>
+</body>
+</html>
