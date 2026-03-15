@@ -42,9 +42,22 @@ const indexHtml = join(process.env.DIST || 'dist', 'index.html')
 
 const mediaTokensPath = join(app.getPath('userData'), 'media_tokens.json');
 let mediaTokens: Record<string, string> = {};
+const MEDIA_TOKENS_MAX_SIZE = 100 * 1024; // 100 KB
 try {
   if (fs.existsSync(mediaTokensPath)) {
-    mediaTokens = JSON.parse(fs.readFileSync(mediaTokensPath, 'utf8'));
+    const stat = fs.statSync(mediaTokensPath);
+    if (stat.size <= MEDIA_TOKENS_MAX_SIZE) {
+      const raw = JSON.parse(fs.readFileSync(mediaTokensPath, 'utf8'));
+      // Schema validation: only accept string → string mappings
+      if (raw && typeof raw === 'object' && !Array.isArray(raw) &&
+          Object.values(raw).every(v => typeof v === 'string')) {
+        mediaTokens = raw as Record<string, string>;
+      } else {
+        logger.warn('app', 'media_tokens.json has unexpected schema, ignoring');
+      }
+    } else {
+      logger.warn('app', 'media_tokens.json exceeds size limit, ignoring');
+    }
   }
 } catch (e) {
   logger.error('app', 'Failed to load media tokens', { error: String(e) });
@@ -118,13 +131,20 @@ app.whenReady().then(async () => {
     const token = request.url.replace(/^media:\/\/\/?/, '').split(/[?#]/)[0];
 
     const actualPath = mediaTokens[token];
-    if (!actualPath) {
+    if (!actualPath || typeof actualPath !== 'string') {
       logger.warn('app', 'Blocked unauthorized media token');
       return new Response('Access Denied', { status: 403 });
     }
 
     try {
-      return net.fetch(pathToFileURL(actualPath).toString());
+      // Resolve symlinks to get the real path and confirm it is a regular file
+      const realPath = fs.realpathSync(actualPath);
+      const stat = fs.statSync(realPath);
+      if (!stat.isFile()) {
+        logger.warn('app', 'Media token path is not a regular file');
+        return new Response('Access Denied', { status: 403 });
+      }
+      return net.fetch(pathToFileURL(realPath).toString());
     } catch (error) {
       logger.error('app', 'Failed to handle media protocol', { error: String(error) });
       return new Response('Internal Error', { status: 500 });
@@ -238,6 +258,24 @@ ipcMain.on('connect-session', async (event, { sessionId, config }) => {
   }
 
   const protocol = config.protocol;
+
+  // Validate WSL distro against the list of installed distributions
+  if (protocol === 'wsl' && config.distro) {
+    try {
+      const { stdout } = await execFileAsync('wsl.exe', ['--list', '--quiet']);
+      const validDistros = stdout.split('\n')
+        .map((s: string) => s.replace(/[\r\0]/g, '').trim())
+        .filter((s: string) => s.length > 0);
+      if (!validDistros.includes(config.distro)) {
+        logger.warn('session', 'Unknown WSL distribution', { distro: config.distro });
+        eventWin.webContents.send('session-error', { sessionId, error: 'Unknown WSL distribution' });
+        return;
+      }
+    } catch {
+      // wsl.exe not available — let WslService handle the error at spawn time
+    }
+  }
+
   let service: ISessionService;
 
   if (protocol === 'ssh') {
@@ -587,10 +625,17 @@ const getSshAlgorithmsPath = () => {
   return userDataPath;
 };
 
+const SSH_ALGORITHMS_MAX_SIZE = 100 * 1024; // 100 KB
+
 ipcMain.handle('get-ssh-algorithms', async () => {
   try {
     const algorithmsPath = getSshAlgorithmsPath();
     if (fs.existsSync(algorithmsPath)) {
+      const stat = fs.statSync(algorithmsPath);
+      if (stat.size > SSH_ALGORITHMS_MAX_SIZE) {
+        logger.warn('app', 'ssh_algorithms.json exceeds size limit');
+        return null;
+      }
       const content = fs.readFileSync(algorithmsPath, 'utf8');
       return JSON.parse(content);
     }
@@ -611,6 +656,10 @@ ipcMain.handle('save-ssh-algorithms', async (_, algorithms) => {
   }
 });
 
+const THEME_FILE_MAX_SIZE = 100 * 1024; // 100 KB
+// Windows reserved device names that must not be used as filenames
+const WINDOWS_RESERVED_NAMES = /^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])$/i;
+
 ipcMain.handle('get-themes', async () => {
   const resourcesDir = app.isPackaged
     ? join(process.resourcesPath, 'resources')
@@ -623,7 +672,13 @@ ipcMain.handle('get-themes', async () => {
       if (!file.endsWith('.json') || file === 'ssh_algorithms.json') continue;
       const themeName = file.replace('.json', '');
       try {
-        const content = fs.readFileSync(join(resourcesDir, file), 'utf8');
+        const filePath = join(resourcesDir, file);
+        const stat = fs.statSync(filePath);
+        if (stat.size > THEME_FILE_MAX_SIZE) {
+          logger.warn('theme', `Theme file ${file} exceeds size limit, skipping`);
+          continue;
+        }
+        const content = fs.readFileSync(filePath, 'utf8');
         themes[themeName] = JSON.parse(content);
       } catch (err) {
         logger.error('theme', `Failed to load theme ${file}`, { error: String(err) });
@@ -649,6 +704,9 @@ ipcMain.handle('save-custom-theme', async (_, themeKey: string, themeData: unkno
   if (typeof themeKey !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(themeKey)) {
     return { success: false, error: 'Invalid theme name. Use only letters, numbers, hyphens, and underscores.' };
   }
+  if (WINDOWS_RESERVED_NAMES.test(themeKey)) {
+    return { success: false, error: 'Invalid theme name.' };
+  }
   const PROTECTED = ['dark', 'medium', 'light'];
   if (PROTECTED.includes(themeKey.toLowerCase())) {
     return { success: false, error: 'Cannot overwrite built-in theme' };
@@ -673,6 +731,9 @@ ipcMain.handle('save-custom-theme', async (_, themeKey: string, themeData: unkno
 
 ipcMain.handle('delete-custom-theme', async (_, themeKey: string) => {
   if (typeof themeKey !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(themeKey)) {
+    return { success: false, error: 'Invalid theme name.' };
+  }
+  if (WINDOWS_RESERVED_NAMES.test(themeKey)) {
     return { success: false, error: 'Invalid theme name.' };
   }
   const PROTECTED = ['dark', 'medium', 'light'];
@@ -823,12 +884,24 @@ ipcMain.handle('list-log-files', async (_, folderPath: string) => {
 ipcMain.handle('read-log-file', async (_, filePath: string) => {
   if (!filePath || !/\.(txt|log|tslog)$/i.test(filePath)) return { error: 'Invalid file type' };
 
+  // Resolve symlinks to prevent symlink traversal attacks
+  let realFilePath: string;
+  try {
+    realFilePath = fs.realpathSync(resolve(filePath));
+  } catch {
+    return { error: 'File not found' };
+  }
+
   // Path traversal protection: file must be within an allowed log directory
-  const resolvedPath = resolve(filePath);
-  const resolvedLower = resolvedPath.toLowerCase();
+  const resolvedLower = realFilePath.toLowerCase();
   const inAllowedDir = [...allowedLogDirs].some(dir => {
-    const prefix = (dir.endsWith(sep) ? dir : dir + sep).toLowerCase();
-    return resolvedLower.startsWith(prefix);
+    try {
+      const realDir = fs.realpathSync(dir);
+      const prefix = (realDir.endsWith(sep) ? realDir : realDir + sep).toLowerCase();
+      return resolvedLower.startsWith(prefix);
+    } catch {
+      return false;
+    }
   });
   if (!inAllowedDir) {
     logger.warn('app', '[Security] read-log-file blocked path traversal attempt');
@@ -836,11 +909,11 @@ ipcMain.handle('read-log-file', async (_, filePath: string) => {
   }
 
   try {
-    const stat = await fs.promises.stat(resolvedPath);
+    const stat = await fs.promises.stat(realFilePath);
     if (!stat.isFile()) return { error: 'File not found' };
     const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
     if (stat.size > MAX_SIZE) return { error: `File too large (${(stat.size / 1024 / 1024).toFixed(1)} MB). Limit is 50 MB.` };
-    const content = await fs.promises.readFile(resolvedPath, 'utf8');
+    const content = await fs.promises.readFile(realFilePath, 'utf8');
     return { content };
   } catch (err: unknown) {
     if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'ENOENT') return { error: 'File not found' };

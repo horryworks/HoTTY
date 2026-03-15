@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calcGeminiCost } from '../../constants/geminiPricing';
+import { sanitizeHtml } from '../../utils/htmlUtils';
 
 describe('calcGeminiCost', () => {
     it('returns 0 for zero tokens', () => {
@@ -32,5 +33,45 @@ describe('calcGeminiCost', () => {
 
     it('falls back to gemini-1.5-flash rates for unknown model', () => {
         expect(calcGeminiCost(1_000_000, 1_000_000, 'gemini-unknown-model')).toBeCloseTo(0.375);
+    });
+});
+
+describe('sanitizeHtml', () => {
+    it('removes <script> tags', () => {
+        const result = sanitizeHtml('<p>hello</p><script>alert(1)</script>');
+        expect(result).not.toContain('<script');
+        expect(result).toContain('hello');
+    });
+
+    it('removes <style> tags (CSS injection prevention)', () => {
+        const result = sanitizeHtml('<p>hi</p><style>@import "javascript:alert(1)"</style>');
+        expect(result).not.toContain('<style');
+        expect(result).not.toContain('@import');
+    });
+
+    it('removes inline event handlers', () => {
+        const result = sanitizeHtml('<p onclick="alert(1)">click</p>');
+        expect(result).not.toContain('onclick');
+    });
+
+    it('removes javascript: href', () => {
+        const result = sanitizeHtml('<a href="javascript:alert(1)">link</a>');
+        expect(result).not.toContain('javascript:');
+    });
+
+    it('removes data: src', () => {
+        const result = sanitizeHtml('<img src="data:text/html,<script>alert(1)</script>">');
+        expect(result).not.toMatch(/src\s*=\s*["']data:/i);
+    });
+
+    it('removes <iframe> tags', () => {
+        const result = sanitizeHtml('<iframe src="https://evil.com"></iframe>');
+        expect(result).not.toContain('<iframe');
+    });
+
+    it('preserves safe HTML', () => {
+        const result = sanitizeHtml('<p><strong>hello</strong> <a href="https://example.com">link</a></p>');
+        expect(result).toContain('<strong>hello</strong>');
+        expect(result).toContain('href="https://example.com"');
     });
 });

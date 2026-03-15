@@ -15,8 +15,9 @@ function safeCompare(a: string, b: string): boolean {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-/** Allowlist pattern for Gemini model names (e.g. "gemini-1.5-flash"). */
-const VALID_MODEL_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+/** Allowlist pattern for Gemini model names (e.g. "gemini-1.5-flash").
+ *  Requires alphanumeric start/end and forbids consecutive separators (., -, _). */
+const VALID_MODEL_PATTERN = /^[a-zA-Z0-9]+([._-][a-zA-Z0-9]+)*$/;
 
 interface TokenData {
   access_token: string;
@@ -138,6 +139,12 @@ export class GeminiService {
   // -- OAuth 2.0 Flow --
 
   async startAuth(win: BrowserWindow, clientId: string, clientSecret: string): Promise<boolean> {
+    // Validate credential format: non-empty, max 512 chars, printable ASCII only
+    const CRED_PATTERN = /^[\x21-\x7E]{1,512}$/;
+    if (!CRED_PATTERN.test(clientId) || !CRED_PATTERN.test(clientSecret)) {
+      logger.warn('gemini', 'Auth rejected: invalid credential format');
+      return false;
+    }
     this.clientId = clientId;
     this.clientSecret = clientSecret;
     logger.info('gemini', 'Auth start');
