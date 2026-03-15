@@ -546,7 +546,7 @@ ipcMain.on('show-context-menu', (event, selection: string, commands?: { id: stri
       );
     }
     template.push({
-      label: 'Ask Gemini',
+      label: 'Ask AI',
       enabled: !!selection,
       submenu: geminiSubmenu
     });

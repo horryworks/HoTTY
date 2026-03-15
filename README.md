@@ -32,9 +32,10 @@ Terminal emulator built with Electron, React, and TypeScript. Designed to provid
     - **Secure Credential Handling**: SSH passwords are cached in memory only and never written to disk.
     - **Log Viewer**: Open and view saved session log files directly inside HoTTY as a dedicated tab.
 - **AI Integration**:
+    - **Supported AI**: Google Gemini. Additional AI providers are planned for future releases.
     - **Gemini Chat**: Built-in AI assistant pane powered by Google Gemini.
     - **Interactive Investigation**: AI can proactively propose investigation commands, capture results, and continue analysis automatically.
-    - **Watch Gemini (Output Monitoring)**: Watch and record terminal output, requesting direct analysis from Gemini with tailored prompts (Explain, Research, Suggest Fixes).
+    - **AI Monitor (Output Monitoring)**: Watch and record terminal output, requesting direct analysis from AI with tailored prompts (Explain, Research, Suggest Fixes).
     - **Smart Chat Scrolling**: AI responses automatically scroll to the beginning of the message for better readability of long outputs.
     - **Free Format Questions**: Ask custom questions directly from the terminal via the right-click context menu.
     - **Context Aware**: Helper for coding, debugging, or general questions within the terminal environment.
@@ -50,7 +51,7 @@ Terminal emulator built with Electron, React, and TypeScript. Designed to provid
 
 HoTTY is more than just a terminal; it's designed to be a partner that works right alongside you.
 
-- **"Watching" AI**: Enable `Watch Gemini` to keep the AI informed of your terminal's output in real-time. You can ask "What just happened?" the moment an error occurs.
+- **"Watching" AI**: Enable `AI Monitor` to keep the AI informed of your terminal's output in real-time. You can ask "What just happened?" the moment an error occurs.
 - **"Proactive" AI**: Using the `Interactive Investigation` feature, the AI doesn't just answer—it proposes solutions by suggesting commands and analyzing their results for you.
 - **"Seamless" UI**: With the flexible 2D grid system, you can position the AI chat pane exactly where you need it without obscuring your terminal workspace.
 

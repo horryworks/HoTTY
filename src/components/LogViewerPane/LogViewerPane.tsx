@@ -212,7 +212,7 @@ export const LogViewerPane: React.FC<LogViewerPaneProps> = ({ loggingPath, askGe
         }
     };
 
-    // ── Context menu (Ask Gemini) ──
+    // ── Context menu (Ask AI) ──
 
     const handleContextMenu = useCallback((e: React.MouseEvent) => {
         if (!askGeminiCommands.length) return;

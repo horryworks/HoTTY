@@ -60,7 +60,7 @@ We are proud to announce the formal v1.0.0 release of HoTTY! This milestone repr
     - **App.tsx Deconstruction**: Reduced the main `App.tsx` from 1953 lines to ~900 lines (54% reduction), significantly improving maintainability and reducing the "God Object" complexity.
     - **Custom Hooks Extraction**:
         - **`useInteractiveFlow`**: Centralized terminal output tracking, prompt detection, and AI feedback stabilization logic.
-        - **`useGeminiChat`**: Unified Gemini API interactions, "Ask Gemini" command resolution, and context management.
+        - **`useGeminiChat`**: Unified Gemini API interactions, "Ask AI" command resolution, and context management.
         - **`useSettings`**: Consolidated 40+ application settings into a single state with automated localStorage synchronization.
     - **`PaneContent` Component**: Unified rendering logic for Terminal and AI Chat panes across all 5 possible workspace positions (Left/Right Sidebars, Top/Bottom Bars, and Main Grid).
 
@@ -94,18 +94,18 @@ We are proud to announce the formal v1.0.0 release of HoTTY! This milestone repr
 
 ## [v0.1.14-beta4] - 2026-03-08
 ### Added
-- **Watch Gemini**:
+- **AI Monitor**:
     - Introduced a "Watch" (👁️) feature for terminal sessions. When enabled, terminal output is recorded into an in-memory buffer.
-    - **Tab Ask Button**: A new "✨ Ask" button appears on watched tabs. Clicking it opens a context menu with "Analyze Watched Output" and custom Gemini commands.
+    - **Tab Ask Button**: A new "✨ Ask" button appears on watched tabs. Clicking it opens a context menu with "Analyze Watched Output" and custom AI commands.
     - **Smart Buffer Limit**: Added a "Watch Buffer Limit" setting in Settings > AI to control the size of the recorded context (default: 500,000 characters).
-- **Refined AI Tab Activation**: Clicking "Ask Gemini" now automatically focuses the target terminal tab before opening the AI chat to ensure correct context.
+- **Refined AI Tab Activation**: Clicking "Ask AI" now automatically focuses the target terminal tab before opening the AI chat to ensure correct context.
 - **Improved UI Visuals**:
     - Replaced Watch status emojis with clean, theme-aware SVG icons.
     - Added a gentle pulsing animation to the active Watch icon for better visibility.
 - **Ask Button Safety**: The ✨ Ask button is automatically disabled when the watch buffer is empty to prevent non-actionable states.
 
 ### Fixed
-- **Context Menu Context**: Fixed an issue where the wrong terminal context was read when using "Ask Gemini" from background tabs.
+- **Context Menu Context**: Fixed an issue where the wrong terminal context was read when using "Ask AI" from background tabs.
 - **Clean Context Menus**: Removed unnecessary options like "Paste" when opening Gemini menus from the tab bar ✨ button.
 
 ### Added
@@ -262,11 +262,11 @@ We are proud to announce the formal v1.0.0 release of HoTTY! This milestone repr
 
 ### Changed
 - **Persona System Improvements**:
-  - Fixed an issue where "Ask Gemini" would default to the "General Helper" persona instead of the selected one.
+  - Fixed an issue where "Ask AI" would default to the "General Helper" persona instead of the selected one.
   - Ensured that the System Prompt is properly sent with manual chat messages, preserving the selected persona during conversation.
   - Removed the redundant Persona dropdown in the manual input area for a cleaner UI.
 - **UI/UX Refinements**:
-  - Reordered the "Settings -> AI" tabs to "Ask Gemini Commands", "Personas", and "Debugging".
+  - Reordered the "Settings -> AI" tabs to "Ask AI Commands", "Personas", and "Debugging".
   - Fixed text wrapping issues for "Show System Prompt" and "Enable Logging" labels in Settings.
 - **AI Content Enriched**:
   - **New Commands**: Added "Explain code", "Interpret log", "Root cause analysis", and "Fix this" commands with improved prompt templates.
@@ -313,7 +313,7 @@ We are proud to announce the formal v1.0.0 release of HoTTY! This milestone repr
   - Improved color contrast for better readability.
 - **App Icon**: Fixed the application icon configuration to ensure it appears correctly in the Windows taskbar and installer.
 - **Settings UI**:
-  - **Ask Gemini Commands**:
+  - **Ask AI Commands**:
     - Fixed text area overflow issue.
     - Added drag-and-drop support for reordering commands.
 

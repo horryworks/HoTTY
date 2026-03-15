@@ -68,7 +68,7 @@ export interface SettingsState {
     // AI Personas
     aiPersonas: PersonaDefinition[];
 
-    // Ask Gemini Commands
+    // Ask AI Commands
     askGeminiCommands: AskGeminiCommand[];
 
     // Sidebar Position

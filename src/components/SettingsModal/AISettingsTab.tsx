@@ -122,7 +122,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                 </div>
             </div>
 
-            <label style={{ marginBottom: '10px', display: 'block' }}>Ask Gemini Commands</label>
+            <label style={{ marginBottom: '10px', display: 'block' }}>Ask AI Commands</label>
 
             <div className="command-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
                 {askGeminiCommands?.map((cmd, index) => (

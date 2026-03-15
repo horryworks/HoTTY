@@ -158,7 +158,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                             {isTerminal && onToggleWatch && (
                                 <div
                                     className={`tab-watch-btn ${isWatching ? 'watching' : ''}`}
-                                    title={isWatching ? "Linked with Gemini (Monitoring)" : "Link with Gemini"}
+                                    title={isWatching ? "AI Monitor (Active)" : "Monitor with AI"}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onToggleWatch(tab.id);

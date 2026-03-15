@@ -53,7 +53,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                 <li><code>Ctrl + W</code> Close current tab</li>
                                 <li><code>Ctrl + C</code> Clear selection / Send SIGINT</li>
                                 <li><code>Ctrl + V</code> Paste to terminal (with security check)</li>
-                                <li><code>Ctrl + Enter</code> Send message in Ask Gemini dialog</li>
+                                <li><code>Ctrl + Enter</code> Send message in Ask AI dialog</li>
                                 <li><code>Escape</code> Close modal / dialog</li>
                             </ul>
                         </div>
@@ -164,7 +164,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                 </div>
                             </div>
                             <p className="help-text small">
-                                💡 <strong>Tip:</strong> Click a marker to select the entire block. Right-click it to quickly ask Gemini about that specific output.
+                                💡 <strong>Tip:</strong> Click a marker to select the entire block. Right-click it to quickly ask AI about that specific output.
                             </p>
                         </div>
                     </details>
@@ -193,7 +193,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                 <strong>Open AI Chat:</strong> Click the <strong><GeminiIcon /></strong> icon in the tab bar (Features menu) to open a new Gemini AI chat tab. Multiple AI chat tabs can be open simultaneously.
                             </p>
                             <p className="help-text">
-                                <strong>Ask Gemini:</strong> Right-click on selected text or a <strong>Terminal Marker</strong> to open the context menu and select "Ask Gemini". Choose from built-in commands ("What is this?", "Research root cause", etc.) or your own custom commands.
+                                <strong>Ask AI:</strong> Right-click on selected text or a <strong>Terminal Marker</strong> to open the context menu and select "Ask AI". Choose from built-in commands ("What is this?", "Research root cause", etc.) or your own custom commands.
                             </p>
                             <p className="help-text">
                                 <strong>Personas:</strong> In the AI chat tab, use the persona selector to switch between AI roles (General Helper, Network Expert, Security Analyst, etc.). Each persona uses a different system prompt optimized for that domain.
@@ -214,10 +214,10 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                             <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: 0 }}>
                                 <li>Click the <strong><GeminiWatchIcon /></strong> icon on any terminal tab to start watching. The icon turns blue and the tab gets a rainbow highlight.</li>
                                 <li>Run commands as usual. All output is captured into a buffer.</li>
-                                <li>In your <strong>AI chat tab</strong>, click <strong>"Ask Gemini"</strong> and select the watched session to send the entire captured log to Gemini for analysis.</li>
+                                <li>In your <strong>AI chat tab</strong>, click <strong>"Ask AI"</strong> and select the watched session to send the entire captured log to AI for analysis.</li>
                             </ol>
                             <p className="help-text small">
-                                💡 <strong>Tip:</strong> Ideal for troubleshooting long-running commands or tailing logs—let it collect output and ask Gemini to summarize or find errors when you're ready.
+                                💡 <strong>Tip:</strong> Ideal for troubleshooting long-running commands or tailing logs—let it collect output and ask AI to summarize or find errors when you're ready.
                                 The buffer size limit can be adjusted in <strong>Settings → AI → Watch Buffer Limit</strong>.
                             </p>
                         </div>
@@ -228,7 +228,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                         <summary>🛠️ Customizing AI Commands & Personas</summary>
                         <div className="help-section-body">
                             <p className="help-text">
-                                <strong>Custom Ask Gemini Commands:</strong> In <strong>Settings → AI → Ask Gemini Commands</strong>, add, edit, reorder, or delete the commands that appear in the right-click context menu. Use the <code>{'{selection}'}</code> placeholder to inject the selected text into your prompt template.
+                                <strong>Custom Ask AI Commands:</strong> In <strong>Settings → AI → Ask AI Commands</strong>, add, edit, reorder, or delete the commands that appear in the right-click context menu. Use the <code>{'{selection}'}</code> placeholder to inject the selected text into your prompt template.
                             </p>
                             <p className="help-text">
                                 <strong>Custom Personas:</strong> In <strong>Settings → AI → Personas</strong>, create personas with custom system prompts. The chosen persona is applied as the initial system instruction for every new AI chat session.

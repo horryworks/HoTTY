@@ -52,7 +52,7 @@ export const AskGeminiModal: React.FC<AskGeminiModalProps> = ({
         <div className="ask-gemini-modal-overlay" onClick={onClose}>
             <div className="ask-gemini-modal-content" onClick={(e) => e.stopPropagation()}>
                 <div className="ask-gemini-modal-header">
-                    <h2>Ask Gemini</h2>
+                    <h2>Ask AI</h2>
                     <button className="ask-gemini-modal-close-btn" onClick={onClose} title="Close">×</button>
                 </div>
 
