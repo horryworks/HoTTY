@@ -174,8 +174,15 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                                         position: 'relative'
                                     }}
                                 >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M13.5 3.5C14.3 6.9 16.9 9.5 20.3 10.5C21.9 10.9 21.9 13.1 20.3 13.5C16.9 14.5 14.3 17.1 13.5 20.5C13.1 22.1 10.9 22.1 10.5 20.5C9.7 17.1 7.1 14.5 3.7 13.5C2.1 13.1 2.1 10.9 3.7 10.5C7.1 9.5 9.7 6.9 10.5 3.5C10.9 1.9 13.1 1.9 13.5 3.5Z" fill={isWatching ? "url(#gemini-gradient)" : "currentColor"} />
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={`ai-icon-svg ${isWatching ? 'pulse' : ''}`}>
+                                        <circle cx="12" cy="12" r="10" fill={isWatching ? "url(#ai-glow-gradient)" : "currentColor"} opacity={isWatching ? "1" : "0.7"} />
+                                        <circle cx="12" cy="12" r="6" fill={isWatching ? "#E0FFE0" : "currentColor"} opacity={isWatching ? "0.9" : "0.4"} />
+                                        <defs>
+                                            <linearGradient id="ai-glow-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                <stop offset="0%" stopColor="#00FF80" />
+                                                <stop offset="100%" stopColor="#00D1FF" />
+                                            </linearGradient>
+                                        </defs>
                                     </svg>
                                 </div>
                             )}
@@ -228,16 +235,17 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                             className="features-item"
                             onClick={() => { onNewAITab(); setShowFeaturesMenu(false); }}
                         >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M13.5 3.5C14.3 6.9 16.9 9.5 20.3 10.5C21.9 10.9 21.9 13.1 20.3 13.5C16.9 14.5 14.3 17.1 13.5 20.5C13.1 22.1 10.9 22.1 10.5 20.5C9.7 17.1 7.1 14.5 3.7 13.5C2.1 13.1 2.1 10.9 3.7 10.5C7.1 9.5 9.7 6.9 10.5 3.5C10.9 1.9 13.1 1.9 13.5 3.5Z" fill="url(#feat-gemini-gradient)" />
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="12" cy="12" r="10" fill="url(#feat-ai-gradient)" />
+                                <circle cx="12" cy="12" r="6" fill="#E0FFE0" opacity="0.9" />
                                 <defs>
-                                    <linearGradient id="feat-gemini-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                        <stop offset="0%" stopColor="#4E86F8" />
-                                        <stop offset="100%" stopColor="#D64669" />
+                                    <linearGradient id="feat-ai-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stopColor="#00FF80" />
+                                        <stop offset="100%" stopColor="#00D1FF" />
                                     </linearGradient>
                                 </defs>
                             </svg>
-                            Gemini
+                            AI Chat
                         </div>
                         <div
                             className="features-item"

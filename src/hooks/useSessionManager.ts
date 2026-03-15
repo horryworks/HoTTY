@@ -443,9 +443,10 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         electronService.sendInput(sessionId, data);
     }, []);
 
-    const toggleWatch = useCallback((sessionId: string) => {
+    const toggleWatch = useCallback((sessionId: string, aiSessionId?: string) => {
         setSessions(prev => {
             const isTurningOn = !prev.find(s => s.id === sessionId)?.isWatching;
+            const targetTitle = prev.find(s => s.id === sessionId)?.title ?? '';
 
             return prev.map(s => {
                 if (s.id === sessionId) {
@@ -464,6 +465,16 @@ export function useSessionManager(options: UseSessionManagerOptions) {
                     // Turn OFF others if we are turning ON a new one
                     delete watchBuffers.current[s.id];
                     return { ...s, isWatching: false, hasWatchData: false };
+                } else if (isTurningOn && aiSessionId && s.id === aiSessionId && s.aiChatState) {
+                    // Update lastTargetSessionId in the same render to avoid flicker
+                    return {
+                        ...s,
+                        aiChatState: {
+                            ...s.aiChatState,
+                            lastTargetSessionId: sessionId,
+                            lastTargetSessionTitle: targetTitle,
+                        }
+                    };
                 }
                 return s;
             });

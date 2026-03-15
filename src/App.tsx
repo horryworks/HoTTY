@@ -333,7 +333,6 @@ function App() {
     if (!s) return;
 
     const isTurningOn = !s.isWatching;
-    session.toggleWatch(sessionId);
 
     if (isTurningOn) {
       let aiSessionId = session.sessions.find(session => session.type === 'ai')?.id;
@@ -345,13 +344,10 @@ function App() {
           pane.setActivePaneId(aiPaneId);
         }
       }
-
-      if (aiSessionId) {
-        session.updateSessionState(aiSessionId, {
-          lastTargetSessionId: sessionId,
-          lastTargetSessionTitle: s.title
-        });
-      }
+      // Pass aiSessionId so toggleWatch can update lastTargetSessionId atomically
+      session.toggleWatch(sessionId, aiSessionId);
+    } else {
+      session.toggleWatch(sessionId);
     }
   };
 
