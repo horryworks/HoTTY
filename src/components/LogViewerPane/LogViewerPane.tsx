@@ -28,6 +28,7 @@ const formatDate = (ms: number): string => {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const buildRegex = (query: string, useRegex: boolean): RegExp | null => {
     if (!query) return null;
     try {
@@ -90,6 +91,7 @@ export const LogViewerPane: React.FC<LogViewerPaneProps> = ({ loggingPath, askGe
     const hasTimestamps = timestamps !== null && timestamps.length > 0;
 
     // ── Virtual scroller ──
+    // eslint-disable-next-line react-hooks/incompatible-library
     const virtualizer = useVirtualizer({
         count: lines.length,
         getScrollElement: () => scrollContainerRef.current,

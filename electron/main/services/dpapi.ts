@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { logger } from './Logger';
 
 const DPAPI_PREFIX = '[DPAPI]';
 
@@ -86,7 +87,7 @@ export async function encryptString(plaintext: string): Promise<string> {
         const result = await runPowerShell(script, plaintext);
         return DPAPI_PREFIX + result.trim();
     } catch (err) {
-        console.error('[DPAPI] Encryption failed:', err);
+        logger.error('dpapi', 'Encryption failed', { error: String(err) });
         throw new Error('Failed to encrypt credential using DPAPI');
     }
 }
@@ -127,7 +128,7 @@ export async function decryptString(ciphertext: string): Promise<string> {
         const result = await runPowerShell(script, base64Data);
         return result;
     } catch (err) {
-        console.error('[DPAPI] Decryption failed:', err);
+        logger.error('dpapi', 'Decryption failed', { error: String(err) });
         throw new Error('Failed to decrypt credential using DPAPI');
     }
 }

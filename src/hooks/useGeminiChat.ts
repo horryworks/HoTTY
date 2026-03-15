@@ -304,6 +304,7 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
       removeListener();
       window.removeEventListener('ask-gemini-internal', handleCustomAskGemini);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dep array - uses refs internally
 
   return {

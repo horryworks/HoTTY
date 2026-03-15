@@ -15,7 +15,6 @@ export const onSessionError = (callback: (sessionId: string, error: string) => v
 export const listSerialPorts = () => api().listSerialPorts();
 export const selectImage = () => api().selectImage();
 export const selectFolder = () => api().selectFolder();
-export const authorizeMediaPath = (path: string) => api().authorizeMediaPath(path);
 export const getAppVersion = () => api().getAppVersion();
 export const logDebug = (message: string) => api().logDebug(message);
 export const openExternal = (url: string) => api().openExternal(url);
@@ -37,7 +36,6 @@ export const onTerminalContextPaste = (callback: () => void) => api().onTerminal
 export const getSshAlgorithms = () => api().getSshAlgorithms();
 export const saveSshAlgorithms = (algorithms: Record<string, { name: string; enabled: boolean }[]>) => api().saveSshAlgorithms(algorithms);
 export const getThemes = () => api().getThemes();
-export const saveThemes = (themes: Record<string, { name?: string; variables?: Record<string, string>; terminal?: Record<string, string> }>) => api().saveThemes(themes);
 export const saveCustomTheme = (themeKey: string, themeData: Record<string, unknown>) => api().saveCustomTheme(themeKey, themeData);
 export const deleteCustomTheme = (themeKey: string) => api().deleteCustomTheme(themeKey);
 

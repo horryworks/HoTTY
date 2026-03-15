@@ -321,6 +321,7 @@ function App() {
     return () => {
       window.removeEventListener('hotty-focus-session', handleFocus as EventListener);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pane.paneAllocations, pane.setActivePaneId]);
 
   // ═══════════════════════════════════════════════

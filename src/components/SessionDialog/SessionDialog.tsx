@@ -44,7 +44,6 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
     // Ref to track selectedHostId inside the event listener (avoids stale closure)
     const selectedHostIdRef = useRef<string | null>(null);
-    // eslint-disable-next-line react-hooks/refs
     selectedHostIdRef.current = selectedHostId;
 
     // Submit the form when Enter is pressed:
@@ -315,6 +314,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             username: e.protocol === 'ssh' ? u : undefined,
             password: e.protocol === 'ssh' ? finalPass : undefined,
         });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [getCachedPassword, onConnect]);
 
     // Check if current form is dirty compared to original state

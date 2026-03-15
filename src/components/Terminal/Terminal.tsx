@@ -52,7 +52,6 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
         if (!terminalRef.current || !terminalInstance) return;
 
         const term = terminalInstance;
-        // eslint-disable-next-line react-hooks/immutability
         term.options.allowTransparency = true;
 
         // Open or Re-attach terminal
@@ -178,6 +177,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                 term.element.parentElement.removeChild(term.element);
             }
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sessionId, terminalInstance, disableFocus, lineWrapEnabled]); // Added lineWrapEnabled dependency
 
     // Handle Resizing / Focus
@@ -207,14 +207,13 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                 }
             }, 50);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isActive, sessionId, focusTrigger, terminalInstance, disableFocus, lineWrapEnabled]);
 
     // Update Font & Theme Settings
     useEffect(() => {
         if (terminalInstance) {
-            // eslint-disable-next-line react-hooks/immutability
             if (fontSize) terminalInstance.options.fontSize = fontSize;
-            // eslint-disable-next-line react-hooks/immutability
             if (fontFamily) terminalInstance.options.fontFamily = fontFamily;
 
             const activeBg = terminalBackground;
@@ -253,6 +252,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                 }
             }, 10);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [terminalInstance, fontSize, fontFamily, terminalForeground, terminalBackground, terminalBackgroundInactive, isActive, lineWrapEnabled]);
 
     // Prompt Highlighting Logic
@@ -599,6 +599,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             });
             activeLines = [];
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [terminalInstance, enablePromptHighlight, promptHighlightColor, promptPatterns]);
 
     useEffect(() => {

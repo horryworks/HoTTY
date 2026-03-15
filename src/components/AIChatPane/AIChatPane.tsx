@@ -306,6 +306,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         const extraInstructions = ' [ABSOLUTE MANDATORY RULES - NO EXCEPTIONS] 1. Answer ONLY what the user asked. Do NOT suggest next steps, additional commands, or follow-up actions unless explicitly requested. 2. After answering, STOP. Do not continue the conversation on your own. 3. ANY shell/terminal command MUST be placed in EXACTLY ONE ```execute block per response. 4. It is STRICTLY FORBIDDEN to use more than one ```execute block in a single response. 5. It is STRICTLY FORBIDDEN to write commands as inline code, plain text, or in ```bash/```sh/```shell blocks. 6. If multiple steps are needed, combine them into a single ```execute block using && or semicolons. 7. Breaking these rules causes a critical application failure.' + (proactiveInstruction ? ` ${proactiveInstruction}` : '');
         setLocalSystemInstruction(`${basePrompt}${langInstruction}${extraInstructions}`);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedExpertise, selectedLanguage, aiPersonas]);
 
 
@@ -323,7 +324,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             const sysInstr = initialState?.systemInstruction || localSystemInstruction;
 
             setLocalPendingMessage(undefined);
-            // eslint-disable-next-line react-hooks/immutability
             processedPendingMessageRef.current = text; // Mark as processed
 
             // CRITICAL: Clear pendingMessage in central state as well
@@ -359,12 +359,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             setStreamingContent('');
             electronService.geminiChatSend(sessionId, text, selectedModel, sysInstr);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAuthenticated, localPendingMessage, isStreaming, sessionId, selectedModel, initialState?.systemInstruction, localSystemInstruction, messages, lastTargetSessionId, lastTargetSessionTitle, textareaHeight]);
 
     // Keep ref to onStateChange to avoid effect re-triggering
     const onStateChangeRef = useRef(onStateChange);
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/immutability
         onStateChangeRef.current = onStateChange;
     }, [onStateChange]);
 
@@ -824,7 +824,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                                         {interactiveSessionTracking && (
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
                                                 <div style={{ fontSize: '10px', opacity: 0.6, display: 'flex', gap: '12px' }}>
-                                                    {/* eslint-disable-next-line react-hooks/purity */}
                                                     <span>Elapsed: {Math.floor((Date.now() - interactiveSessionTracking.startTime) / 1000)}s</span>
                                                     <span>Data: {new Intl.NumberFormat().format(interactiveSessionTracking.buffer.length)} bytes</span>
                                                 </div>

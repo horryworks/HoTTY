@@ -14,7 +14,6 @@ export interface ElectronAPI {
     listSerialPorts: () => Promise<{ path: string; manufacturer: string; pnpId: string }[]>;
     selectImage: () => Promise<string | null>;
     selectFolder: () => Promise<string | null>;
-    authorizeMediaPath: (path: string) => Promise<void>;
     listWslDistributions: () => Promise<string[]>;
     getAppVersion: () => Promise<string>;
     logDebug: (message: string) => void;
@@ -39,7 +38,6 @@ export interface ElectronAPI {
     getSshAlgorithms: () => Promise<Record<string, { name: string; enabled: boolean }[]>>;
     saveSshAlgorithms: (algorithms: Record<string, { name: string; enabled: boolean }[]>) => Promise<boolean>;
     getThemes: () => Promise<Record<string, { name?: string; variables?: Record<string, string>; terminal?: Record<string, string> }>>;
-    saveThemes: (themes: Record<string, { name?: string; variables?: Record<string, string>; terminal?: Record<string, string> }>) => Promise<boolean>;
     saveCustomTheme: (themeKey: string, themeData: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
     deleteCustomTheme: (themeKey: string) => Promise<{ success: boolean; error?: string }>;
 

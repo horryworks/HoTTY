@@ -272,6 +272,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             removeStatusListener();
             removeErrorListener();
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const allocateToPane = (sessionId: string) => {

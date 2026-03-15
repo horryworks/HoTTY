@@ -35,10 +35,6 @@ export const PaneLines: React.FC<PaneLinesProps> = ({
     paneAllocations,
     totalPanes,
     visible,
-    showLeftSidebar,
-    showRightSidebar,
-    showTopBar,
-    showBottomBar,
 }) => {
     const [lines, setLines] = useState<LineData[]>([]);
     const baseId = useId(); // Unique ID for this component instance
@@ -92,7 +88,7 @@ export const PaneLines: React.FC<PaneLinesProps> = ({
             console.error("Error computing pane lines:", e);
             setLines([]); // Fallback to empty lines on error
         }
-    }, [paneAllocations, totalPanes, visible, showLeftSidebar, showRightSidebar, showTopBar, showBottomBar]);
+    }, [paneAllocations, totalPanes, visible]);
 
     useEffect(() => {
         // Initial compute
