@@ -1,5 +1,13 @@
 # リリースノート - HoTTY
 
+## [v1.0.0-beta3] - 2026-03-16
+
+### 改善
+- **テストカバレッジ**: 全ての機能コードに対するテストカバレッジを100%達成しました。これまでテストが存在しなかった全モジュール（Electronメインプロセスのサービス群: `Logger`、`LogManager`、`dpapi`、`knownHosts`、`GeminiService`、`SshService`、`TelnetService`、`SerialService`、`WslService`、`LocalService`）、`geminiPricing`ユーティリティ、およびルート `App` コンポーネントにユニットテストを追加しました。合計: 58ファイル / 701テスト。
+- **ESLint 設定**: テストファイルで TypeScript の private メンバーにアクセスするために必要な `@typescript-eslint/no-explicit-any` を、テストファイルに限定して許可するオーバーライドを追加しました。
+
+---
+
 ## [v1.0.0-beta2] - 2026-03-16
 
 ### 新機能

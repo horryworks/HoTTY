@@ -28,4 +28,11 @@ module.exports = tseslint.config(
       ],
     },
   },
+  {
+    // Test files may use `any` for accessing private members in TypeScript
+    files: ['**/*.test.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
 );

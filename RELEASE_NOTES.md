@@ -1,5 +1,13 @@
 # Release Notes - HoTTY
 
+## [v1.0.0-beta3] - 2026-03-16
+
+### Improved
+- **Test Coverage**: Achieved 100% test coverage for all functional code. Added unit tests for all previously untested modules including Electron main-process services (`Logger`, `LogManager`, `dpapi`, `knownHosts`, `GeminiService`, `SshService`, `TelnetService`, `SerialService`, `WslService`, `LocalService`), the `geminiPricing` utility, and the root `App` component. Total test count: 701 tests across 58 files.
+- **ESLint Config**: Added a test-file override to allow `@typescript-eslint/no-explicit-any` in test files, which is necessary for accessing TypeScript private members in unit tests.
+
+---
+
 ## [v1.0.0-beta2] - 2026-03-16
 
 ### New Features
