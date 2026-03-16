@@ -18,6 +18,7 @@ import { pathToFileURL } from 'url';
 const execFileAsync = promisify(execFile);
 import * as fs from 'fs';
 import * as crypto from 'crypto';
+import { isNewerVersion } from '../../src/utils/versionUtils';
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
 
 // Set application name for Windows 10+ notifications
@@ -112,6 +113,27 @@ async function createWindow() {
   return newWin;
 }
 
+async function checkForUpdates(win: BrowserWindow): Promise<void> {
+  try {
+    const res = await net.fetch('https://api.github.com/repos/horryworks/HoTTY/releases/latest', {
+      headers: { 'User-Agent': `HoTTY/${app.getVersion()}` },
+    });
+    if (!res.ok) return;
+    const data = await res.json() as { tag_name?: string; prerelease?: boolean; html_url?: string };
+    if (!data.tag_name || data.prerelease) return;
+    const latestVersion = data.tag_name.replace(/^v/, '');
+    const currentVersion = app.getVersion();
+    if (isNewerVersion(latestVersion, currentVersion)) {
+      win.webContents.send('update-available', {
+        version: latestVersion,
+        releaseUrl: data.html_url ?? '',
+      });
+    }
+  } catch (e) {
+    logger.warn('app', 'Update check failed', { error: String(e) });
+  }
+}
+
 app.whenReady().then(async () => {
   logger.initialize(app.getPath('userData'));
   logger.info('app', 'App started', {
@@ -122,8 +144,9 @@ app.whenReady().then(async () => {
     arch: process.arch,
   });
 
-  await createWindow();
+  const win = await createWindow();
   geminiService = new GeminiService();
+  win.webContents.once('did-finish-load', () => { checkForUpdates(win); });
 
   // Register 'media' protocol to serve local files
   protocol.handle('media', (request: Request) => {

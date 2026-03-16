@@ -183,6 +183,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     selectImportFile: () => ipcRenderer.invoke('select-import-file'),
     decryptImportFile: (password: string) => ipcRenderer.invoke('decrypt-import-file', { password }),
     openDebugLogFolder: () => ipcRenderer.invoke('open-debug-log-folder'),
+    onUpdateAvailable: (callback: (data: { version: string; releaseUrl: string }) => void) => {
+        const subscription = (_event: unknown, data: { version: string; releaseUrl: string }) => callback(data);
+        ipcRenderer.on('update-available', subscription);
+        return () => ipcRenderer.removeListener('update-available', subscription);
+    },
 })
 
 

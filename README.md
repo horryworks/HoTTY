@@ -1,8 +1,8 @@
-# HoTTY v1.0.0-beta1 - Gemini Integrated Advanced Terminal
+# HoTTY v1.0.0-beta2 - AI Integrated Advanced Terminal
 
 [English] | [日本語 (Japanese)](README.ja.md)
 
-**Current Version: v1.0.0-beta1**
+**Current Version: v1.0.0-beta2**
 
 Terminal emulator built with Electron, React, and TypeScript. Designed to provide a seamless terminal experience with advanced window management, deep AI integration, and extensive customization options.
 
@@ -33,18 +33,20 @@ Terminal emulator built with Electron, React, and TypeScript. Designed to provid
     - **Log Viewer**: Open and view saved session log files directly inside HoTTY as a dedicated tab.
 - **AI Integration**:
     - **Supported AI**: Google Gemini. Additional AI providers are planned for future releases.
-    - **Gemini Chat**: Built-in AI assistant pane powered by Google Gemini.
+    - **AI Chat**: Built-in AI assistant pane for interactive terminal support.
     - **Interactive Investigation**: AI can proactively propose investigation commands, capture results, and continue analysis automatically.
     - **AI Monitor (Output Monitoring)**: Watch and record terminal output, requesting direct analysis from AI with tailored prompts (Explain, Research, Suggest Fixes).
     - **Smart Chat Scrolling**: AI responses automatically scroll to the beginning of the message for better readability of long outputs.
     - **Free Format Questions**: Ask custom questions directly from the terminal via the right-click context menu.
     - **Context Aware**: Helper for coding, debugging, or general questions within the terminal environment.
     - **Dynamic Models**: Automatically creates a list of available models from your API key.
-    - **Reliable Command Execution**: Refined Gemini response parsing ensures terminal commands are always correctly extracted and executed.
+    - **Reliable Command Execution**: Refined AI response parsing ensures terminal commands are always correctly extracted and executed.
 - **Security & Reliability**:
     - **Path Traversal Protection**: Secure `media://` protocol with path validation.
     - **Sandboxed Execution**: Enhanced security with Electron's sandbox mode.
+    - **XSS Protection**: AI chat output is sanitized using DOMPurify to prevent cross-site scripting attacks.
     - **Clean Uninstallation**: Option to fully remove user data during uninstallation.
+- **Update Notification**: Automatically checks for new releases on GitHub at startup and shows a non-blocking banner when an update is available.
 - **Modern Tech Stack**: Built on Electron, React, and Vite for performance and stability.
 
 ## Core Concept: Synergy of Terminal & AI

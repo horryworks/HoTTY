@@ -10,7 +10,7 @@ class MockResizeObserver {
 }
 
 beforeAll(() => {
-    global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    (globalThis as unknown as { ResizeObserver: typeof ResizeObserver }).ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
 });
 
 vi.mock('@xterm/xterm/css/xterm.css', () => ({}));

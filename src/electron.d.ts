@@ -55,6 +55,9 @@ export interface ElectronAPI {
     updateLogging: (loggingEnabled: boolean, loggingPath: string) => void;
     listLogFiles: (folderPath: string) => Promise<{ files?: { name: string; path: string; mtime: number; size: number }[]; error?: string }>;
     readLogFile: (filePath: string) => Promise<{ content?: string; error?: string }>;
+
+    // Update notification
+    onUpdateAvailable: (callback: (data: { version: string; releaseUrl: string }) => void) => () => void;
 }
 
 

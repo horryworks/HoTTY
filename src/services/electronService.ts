@@ -47,3 +47,4 @@ export const updateLogging = (loggingEnabled: boolean, loggingPath: string) => a
 export const listLogFiles = (folderPath: string) => api().listLogFiles(folderPath);
 export const readLogFile = (filePath: string) => api().readLogFile(filePath);
 export const openDebugLogFolder = () => api().openDebugLogFolder();
+export const onUpdateAvailable = (callback: (data: { version: string; releaseUrl: string }) => void) => api().onUpdateAvailable(callback);

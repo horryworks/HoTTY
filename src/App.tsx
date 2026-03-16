@@ -9,6 +9,7 @@ import { GridLayout } from './components/GridLayout/GridLayout'
 import { MessageModal } from './components/MessageModal/MessageModal'
 import { AskGeminiModal } from './components/AskGeminiModal/AskGeminiModal'
 import HelpModal from './components/HelpModal/HelpModal'
+import { UpdateNotification } from './components/UpdateNotification/UpdateNotification'
 import { CustomThemeCreator } from './components/CustomThemeCreator/CustomThemeCreator'
 import { PaneContent } from './components/PaneContent/PaneContent'
 import { PaneLines } from './components/PaneLines/PaneLines'
@@ -103,6 +104,9 @@ function App() {
   const [pasteContent, setPasteContent] = useState<string | null>(null);
   const [pasteSessionId, setPasteSessionId] = useState<string | null>(null);
 
+  // Update notification
+  const [updateInfo, setUpdateInfo] = useState<{ version: string; releaseUrl: string } | null>(null);
+
   // Settings / Help Modal
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -164,6 +168,14 @@ function App() {
     electronService.getAppVersion().then(version => {
       document.title = `HoTTY v${version}`;
     });
+  }, []);
+
+  // Listen for update-available from main process
+  useEffect(() => {
+    const cleanup = electronService.onUpdateAvailable((data) => {
+      setUpdateInfo(data);
+    });
+    return cleanup;
   }, []);
 
   // Global keyboard shortcut: Ctrl+N → open New Session dialog
@@ -549,6 +561,13 @@ function App() {
 
       <div className="main-layout" data-last-terminal={lastTerminalSessionId || ''}>
         <>
+          {updateInfo && (
+            <UpdateNotification
+              version={updateInfo.version}
+              releaseUrl={updateInfo.releaseUrl}
+              onDismiss={() => setUpdateInfo(null)}
+            />
+          )}
           <div className="top-bar">
             <TabBar
               tabs={orderedTabs}

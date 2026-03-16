@@ -1,0 +1,59 @@
+.update-notification {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 12px;
+    background-color: var(--update-notification-bg, #1a3a5c);
+    border-bottom: 1px solid var(--update-notification-border, #2a5a8c);
+    color: var(--update-notification-text, #a8d4f5);
+    font-size: calc(var(--font-size-base) * 0.9);
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.update-notification-icon {
+    font-size: calc(var(--font-size-base) * 1.1);
+    color: var(--update-notification-accent, #5aafff);
+    flex-shrink: 0;
+}
+
+.update-notification-text {
+    flex: 1;
+}
+
+.update-notification-text strong {
+    color: var(--update-notification-accent, #5aafff);
+}
+
+.update-notification-download {
+    padding: 2px 10px;
+    background-color: var(--update-notification-btn-bg, #1e6bb8);
+    color: var(--update-notification-btn-text, #ffffff);
+    border: 1px solid var(--update-notification-btn-border, #2a85d8);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: calc(var(--font-size-base) * 0.85);
+    font-family: var(--font-family);
+    flex-shrink: 0;
+    transition: background-color 0.15s;
+}
+
+.update-notification-download:hover {
+    background-color: var(--update-notification-btn-hover, #2a85d8);
+}
+
+.update-notification-dismiss {
+    background: none;
+    border: none;
+    color: var(--update-notification-text, #a8d4f5);
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: calc(var(--font-size-base) * 0.85);
+    opacity: 0.7;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.update-notification-dismiss:hover {
+    opacity: 1;
+}

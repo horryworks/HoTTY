@@ -1,5 +1,21 @@
 # Release Notes - HoTTY
 
+## [v1.0.0-beta2] - 2026-03-16
+
+### New Features
+- **Update Notification**: The app now automatically checks for new releases on GitHub at startup. When a newer version is available, a non-blocking banner is displayed at the top of the window with a download link. Pre-release versions are excluded from this check.
+
+### Security
+- **XSS Fix**: Replaced the custom HTML sanitization function with [DOMPurify](https://github.com/cure53/DOMPurify) for AI chat output rendering. This eliminates potential XSS attack vectors via SVG `onload`, data URIs, and other bypass techniques not covered by the previous implementation.
+
+### Bug Fixes
+- **Watch Tab Switch**: Fixed a bug where switching the watched tab caused incorrect behavior in the AI session state.
+
+### Changed
+- **Generalized AI Feature Names**: AI-related features and UI labels are no longer tied to a specific provider name. The app now uses generic terms (e.g., "AI Chat" instead of "Gemini Chat", "AI Monitor" instead of "Gemini Monitor") to better reflect future multi-provider support.
+
+---
+
 ## [v1.0.0-beta1] - 2026-03-14
 ### Official Release
 We are proud to announce the formal v1.0.0 release of HoTTY! This milestone represents a stable, feature-rich terminal experience with deep Gemini AI integration.
