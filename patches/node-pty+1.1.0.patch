@@ -1,0 +1,34 @@
+diff --git a/node_modules/node-pty/deps/winpty/src/gen/GenVersion.h b/node_modules/node-pty/deps/winpty/src/gen/GenVersion.h
+new file mode 100644
+index 0000000..68c2499
+--- /dev/null
++++ b/node_modules/node-pty/deps/winpty/src/gen/GenVersion.h
+@@ -0,0 +1,3 @@
++// AUTO-GENERATED
++const char GenVersion_Version[] = "0.4.4-dev";
++const char GenVersion_Commit[] = "none";
+diff --git a/node_modules/node-pty/deps/winpty/src/winpty.gyp b/node_modules/node-pty/deps/winpty/src/winpty.gyp
+index 1ac5758..2ad2919 100644
+--- a/node_modules/node-pty/deps/winpty/src/winpty.gyp
++++ b/node_modules/node-pty/deps/winpty/src/winpty.gyp
+@@ -10,7 +10,7 @@
+     #    make -j4 CXX=i686-w64-mingw32-g++ LDFLAGS="-static -static-libgcc -static-libstdc++"
+ 
+     'variables': {
+-        'WINPTY_COMMIT_HASH%': '<!(cmd /c "cd shared && GetCommitHash.bat")',
++        'WINPTY_COMMIT_HASH%': 'none',
+     },
+     'target_defaults' : {
+         'defines' : [
+@@ -20,9 +20,8 @@
+             'NOMINMAX',
+         ],
+         'include_dirs': [
+-            # Add the 'src/gen' directory to the include path and force gyp to
+-            # run the script (re)generating the version header.
+-            '<!(cmd /c "cd shared && UpdateGenVersion.bat <(WINPTY_COMMIT_HASH)")',
++            # Pre-generated GenVersion.h is placed in src/gen/
++            'gen',
+         ]
+     },
+     'targets' : [
