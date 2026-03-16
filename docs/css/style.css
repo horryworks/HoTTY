@@ -93,6 +93,9 @@ nav {
 .nav-logo {
   width: 28px;
   height: 28px;
+  background-color: #fff;
+  border-radius: 6px;
+  padding: 2px;
 }
 
 .nav-links {
