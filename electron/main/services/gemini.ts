@@ -78,20 +78,24 @@ export class GeminiService {
       const decrypted = await decryptString(encrypted);
       if (!decrypted) return false;
 
-      const data = JSON.parse(decrypted);
+      const raw = JSON.parse(decrypted);
+      const refreshToken = typeof raw?.refresh_token === 'string' ? raw.refresh_token : '';
+      const clientId = typeof raw?.client_id === 'string' ? raw.client_id : '';
+      const clientSecret = typeof raw?.client_secret === 'string' ? raw.client_secret : '';
+      const obtainedAt = typeof raw?.obtained_at === 'number' ? raw.obtained_at : 0;
 
-      if (!data.refresh_token || !data.client_id || !data.client_secret) {
+      if (!refreshToken || !clientId || !clientSecret) {
         return false;
       }
 
-      this.clientId = data.client_id;
-      this.clientSecret = data.client_secret;
+      this.clientId = clientId;
+      this.clientSecret = clientSecret;
       this.tokenData = {
         access_token: '', // We don't save access token since it expires quickly
-        refresh_token: data.refresh_token,
+        refresh_token: refreshToken,
         expires_in: 0,
         token_type: 'Bearer',
-        obtained_at: data.obtained_at || 0,
+        obtained_at: obtainedAt,
       };
 
       // Try reading and refreshing access token

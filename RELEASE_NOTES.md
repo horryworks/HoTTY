@@ -1,5 +1,15 @@
 # Release Notes - HoTTY
 
+## [v1.0.0-beta4] - 2026-03-17
+
+### Bug Fixes
+- **Update Notification**: Fixed a bug where the update notification was not displayed when a newer version used a pre-release version string (e.g., `1.0.0-beta3` vs `1.0.0-beta2`). The version comparison logic now correctly handles pre-release suffixes such as `-beta3`.
+
+### Security
+- **Deserialization Hardening**: Strengthened input validation in `GeminiService.loadToken()`. Each field from the decrypted token file is now extracted individually with explicit type checks, preventing unexpected properties from being assigned.
+
+---
+
 ## [v1.0.0-beta3] - 2026-03-16
 
 ### Improved
