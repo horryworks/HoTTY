@@ -15,7 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package && rimraf node_modules/cpu-features"
   },
   "build": {
     "appId": "com.hotty.terminal",
