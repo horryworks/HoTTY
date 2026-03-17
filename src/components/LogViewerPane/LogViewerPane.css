@@ -328,6 +328,9 @@
     font-family: inherit;
     flex-shrink: 0;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 .log-viewer-search-btn:hover:not(:disabled) { opacity: 0.85; }
 .log-viewer-search-btn:disabled { opacity: 0.35; cursor: default; }

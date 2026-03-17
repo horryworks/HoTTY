@@ -86,6 +86,19 @@ export const LogViewerPane: React.FC<LogViewerPaneProps> = ({ loggingPath, askGe
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
 
+    // Ctrl+F to focus search input
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.ctrlKey && e.key === 'f') {
+                e.preventDefault();
+                searchInputRef.current?.focus();
+                searchInputRef.current?.select();
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
     const lines = useMemo(() => content ? content.split('\n') : [], [content]);
     const matchingSet = useMemo(() => new Set(matchingLines), [matchingLines]);
     const hasTimestamps = timestamps !== null && timestamps.length > 0;
@@ -357,6 +370,17 @@ export const LogViewerPane: React.FC<LogViewerPaneProps> = ({ loggingPath, askGe
                                     disabled={matchingLines.length === 0}
                                     title="Next match"
                                 >&#8681;</button>
+                                <button
+                                    className="log-viewer-search-btn"
+                                    onClick={() => selectedFile && handleSelectFile(selectedFile)}
+                                    title="Reload file"
+                                >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="23 4 23 10 17 10"></polyline>
+                                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                                    </svg>
+                                    Refresh
+                                </button>
                                 <button
                                     className="log-viewer-search-btn"
                                     onClick={handleSearch}

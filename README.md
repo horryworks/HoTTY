@@ -1,8 +1,8 @@
-# HoTTY v1.0.0-beta4 - AI Integrated Advanced Terminal
+# HoTTY v1.0.0-beta5 - AI Integrated Advanced Terminal
 
 [English] | [日本語 (Japanese)](README.ja.md)
 
-**Current Version: v1.0.0-beta4**
+**Current Version: v1.0.0-beta5**
 
 Terminal emulator built with Electron, React, and TypeScript. Designed to provide a seamless terminal experience with advanced window management, deep AI integration, and extensive customization options.
 
@@ -30,7 +30,7 @@ Terminal emulator built with Electron, React, and TypeScript. Designed to provid
     - **SSH KeepAlive**: Stay connected to SSH hosts without timeouts.
     - **Telnet KeepAlive**: Dual-layer keepalive (TCP + Telnet NOP) to prevent idle disconnects on Telnet sessions. Configurable in Settings > Telnet.
     - **Secure Credential Handling**: SSH passwords are cached in memory only and never written to disk.
-    - **Log Viewer**: Open and view saved session log files directly inside HoTTY as a dedicated tab.
+    - **Log Viewer**: Open and view saved session log files directly inside HoTTY as a dedicated tab. Supports text/regex search, Ctrl+F to focus search, and a Refresh button to reload the current file.
 - **AI Integration**:
     - **Supported AI**: Google Gemini. Additional AI providers are planned for future releases.
     - **AI Chat**: Built-in AI assistant pane for interactive terminal support.

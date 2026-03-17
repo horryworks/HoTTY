@@ -25,7 +25,7 @@ export class WslService implements ISessionService {
 
     connect(config: { distro?: string }) {
         const distro = config.distro?.trim();
-        if (distro && !/^[\w][\w\-.]{0,62}$/.test(distro)) {
+        if (distro && !/^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,62}$/.test(distro)) {
             logger.warn('wsl', 'Invalid distro name', { sessionId: this.sessionId, distro });
             this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Invalid WSL distribution name' });
             return;

@@ -53,14 +53,12 @@ export class GeminiService {
     if (!this.tokenData || !this.tokenData.refresh_token) return;
 
     try {
-      const dataToSave = {
+      const jsonString = JSON.stringify({
         refresh_token: this.tokenData.refresh_token,
         client_id: this.clientId,
         client_secret: this.clientSecret,
         obtained_at: this.tokenData.obtained_at
-      };
-
-      const jsonString = JSON.stringify(dataToSave);
+      });
       const encrypted = await encryptString(jsonString);
       fs.writeFileSync(this.getTokenFilePath(), encrypted, 'utf8');
       logger.debug('gemini', 'Token saved');

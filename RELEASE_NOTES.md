@@ -1,5 +1,12 @@
 # Release Notes - HoTTY
 
+## [v1.0.0-beta5] - 2026-03-17
+
+### Improved
+- **Log Viewer - Search UX**: Added a `Ctrl+F` keyboard shortcut to instantly focus the search input in the Log Viewer pane. Also added a **Refresh** button to the search toolbar, allowing the currently open log file to be reloaded without re-selecting it from the file list.
+
+---
+
 ## [v1.0.0-beta4] - 2026-03-17
 
 ### Bug Fixes

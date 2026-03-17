@@ -230,6 +230,25 @@ describe('LogViewerPane', () => {
 
     // ── Search ──
 
+    it('Ctrl+F focuses the search input', async () => {
+        mockListLogFiles.mockResolvedValue({
+            files: [{ name: 'test.txt', path: '/logs/test.txt', mtime: Date.now(), size: 50 }],
+        });
+        mockReadLogFile.mockImplementation(async (path: string) => {
+            if (path.endsWith('.tslog')) return { error: 'not found' };
+            return { content: 'foo\nbar' };
+        });
+
+        render(<LogViewerPane loggingPath="/logs" />);
+        await waitFor(() => screen.getByText('test.txt'));
+        fireEvent.click(screen.getByText('test.txt'));
+        await waitFor(() => screen.getByText('foo'));
+
+        const searchInput = screen.getByPlaceholderText('Search…');
+        fireEvent.keyDown(document, { key: 'f', ctrlKey: true });
+        expect(document.activeElement).toBe(searchInput);
+    });
+
     it('Search button is disabled when query is empty', async () => {
         mockListLogFiles.mockResolvedValue({
             files: [{ name: 'test.txt', path: '/logs/test.txt', mtime: Date.now(), size: 50 }],
@@ -288,6 +307,32 @@ describe('LogViewerPane', () => {
 
         await waitFor(() =>
             expect(screen.getByText('No matches')).toBeInTheDocument()
+        );
+    });
+
+    it('Refresh button reloads the selected file', async () => {
+        mockListLogFiles.mockResolvedValue({
+            files: [{ name: 'test.txt', path: '/logs/test.txt', mtime: Date.now(), size: 50 }],
+        });
+        mockReadLogFile.mockImplementation(async (path: string) => {
+            if (path.endsWith('.tslog')) return { error: 'not found' };
+            return { content: 'initial content' };
+        });
+
+        render(<LogViewerPane loggingPath="/logs" />);
+        await waitFor(() => screen.getByText('test.txt'));
+        fireEvent.click(screen.getByText('test.txt'));
+        await waitFor(() => screen.getByText('initial content'));
+
+        mockReadLogFile.mockImplementation(async (path: string) => {
+            if (path.endsWith('.tslog')) return { error: 'not found' };
+            return { content: 'refreshed content' };
+        });
+
+        fireEvent.click(screen.getByTitle('Reload file'));
+
+        await waitFor(() =>
+            expect(screen.getByText('refreshed content')).toBeInTheDocument()
         );
     });
 
