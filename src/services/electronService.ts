@@ -19,6 +19,20 @@ export const getAppVersion = () => api().getAppVersion();
 export const logDebug = (message: string) => api().logDebug(message);
 export const openExternal = (url: string) => api().openExternal(url);
 
+export const aiAuthStart = (credentials: unknown) => api().aiAuthStart(credentials);
+export const aiAuthAuto = (credentials: unknown) => api().aiAuthAuto(credentials);
+export const aiAuthStatus = () => api().aiAuthStatus();
+export const aiAuthLogout = () => api().aiAuthLogout();
+export const aiChatSend = (sessionId: string, message: string, model: string, systemInstruction?: string) => api().aiChatSend(sessionId, message, model, systemInstruction);
+export const aiListModels = () => api().aiListModels();
+export const aiChatCancel = (sessionId: string) => api().aiChatCancel(sessionId);
+export const aiChatClear = (sessionId: string) => api().aiChatClear(sessionId);
+export const aiListProviders = () => api().aiListProviders();
+export const aiSetProvider = (providerId: string) => api().aiSetProvider(providerId);
+export const selectServiceAccountKeyFile = () => api().selectServiceAccountKeyFile();
+export const onAiAuthResult = (callback: (result: { success: boolean }) => void) => api().onAiAuthResult(callback);
+export const onAiChatResponse = (callback: (data: { sessionId: string; type: string; content: string; usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } }) => void) => api().onAiChatResponse(callback);
+
 export const geminiAuthStart = (clientId: string, clientSecret: string) => api().geminiAuthStart(clientId, clientSecret);
 export const geminiAuthAuto = (clientId: string, clientSecret: string) => api().geminiAuthAuto(clientId, clientSecret);
 export const geminiAuthStatus = () => api().geminiAuthStatus();

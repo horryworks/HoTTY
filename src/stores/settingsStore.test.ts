@@ -31,6 +31,14 @@ describe('settingsStore — default state', () => {
         expect(s.promptPatterns.length).toBeGreaterThan(0);
         expect(s.aiPersonas.length).toBeGreaterThan(0);
         expect(s.askGeminiCommands.length).toBeGreaterThan(0);
+        expect(s.activeAiProvider).toBe('gemini');
+    });
+
+    it('updateActiveAiProvider switches the active provider', () => {
+        useSettingsStore.getState().updateActiveAiProvider('vertexai');
+        expect(useSettingsStore.getState().activeAiProvider).toBe('vertexai');
+        useSettingsStore.getState().updateActiveAiProvider('gemini');
+        expect(useSettingsStore.getState().activeAiProvider).toBe('gemini');
     });
 });
 

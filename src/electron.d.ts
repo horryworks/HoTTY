@@ -19,7 +19,22 @@ export interface ElectronAPI {
     logDebug: (message: string) => void;
     openExternal: (url: string) => void;
 
-    // Gemini AI
+    // AI (provider-agnostic)
+    aiAuthStart: (credentials: unknown) => Promise<boolean>;
+    aiAuthAuto: (credentials: unknown) => Promise<boolean>;
+    aiAuthStatus: () => Promise<boolean>;
+    aiAuthLogout: () => void;
+    aiChatSend: (sessionId: string, message: string, model: string, systemInstruction?: string) => void;
+    aiListModels: () => Promise<{ name: string; displayName: string }[]>;
+    aiChatCancel: (sessionId: string) => void;
+    aiChatClear: (sessionId: string) => void;
+    aiListProviders: () => Promise<{ id: string; displayName: string; authType: string }[]>;
+    aiSetProvider: (providerId: string) => Promise<void>;
+    selectServiceAccountKeyFile: () => Promise<string | null>;
+    onAiAuthResult: (callback: (result: { success: boolean }) => void) => () => void;
+    onAiChatResponse: (callback: (data: { sessionId: string; type: string; content: string; usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } }) => void) => () => void;
+
+    // Gemini AI (backward compatibility)
     geminiAuthStart: (clientId: string, clientSecret: string) => Promise<boolean>;
     geminiAuthAuto: (clientId: string, clientSecret: string) => Promise<boolean>;
     geminiAuthStatus: () => Promise<boolean>;

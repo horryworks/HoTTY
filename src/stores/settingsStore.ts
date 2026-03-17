@@ -79,6 +79,9 @@ export interface SettingsState {
 
     // Interactive Stabilization Timeout
     interactiveStabilizationTimeout: number;
+
+    // Active AI Provider
+    activeAiProvider: 'gemini' | 'vertexai';
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
@@ -114,6 +117,7 @@ export interface SettingsActions {
     updateSidebarPosition: (v: 'left' | 'right') => void;
     updateProactiveInstruction: (v: string) => void;
     updateInteractiveStabilizationTimeout: (v: number) => void;
+    updateActiveAiProvider: (v: 'gemini' | 'vertexai') => void;
 }
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
@@ -182,6 +186,7 @@ const INITIAL_STATE: SettingsState = {
     sidebarPosition: 'left',
     proactiveInstruction: 'If you need more information to fulfill the user\'s request, proactively suggest terminal commands using code blocks with the "execute" language tag, like this: ```execute\\n[command]\\n```. Do not just wait for user input if the information can be gathered via the terminal.',
     interactiveStabilizationTimeout: 10000,
+    activeAiProvider: 'gemini',
 };
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -236,6 +241,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
             updateSidebarPosition: (v) => set({ sidebarPosition: v }),
             updateProactiveInstruction: (v) => set({ proactiveInstruction: v }),
             updateInteractiveStabilizationTimeout: (v) => set({ interactiveStabilizationTimeout: v }),
+            updateActiveAiProvider: (v) => set({ activeAiProvider: v }),
         }),
         {
             name: 'hotty-settings',

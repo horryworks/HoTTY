@@ -4,6 +4,8 @@ import { getTransparentColor } from '../../utils/colorUtils';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { calcGeminiCost } from '../../constants/geminiPricing';
 import { AuthenticationPanel } from './AuthenticationPanel';
+import { VertexAIAuthPanel } from './VertexAIAuthPanel';
+import { useSettingsStore } from '../../stores/settingsStore';
 import * as electronService from '../../services/electronService';
 import './AIChatPane.css';
 
@@ -173,10 +175,40 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     const [clientId, setClientId] = useState<string>('');
     const [clientSecret, setClientSecret] = useState<string>('');
 
+    // Vertex AI auth state
+    const [vertexProjectId, setVertexProjectId] = useState<string>(
+        () => localStorage.getItem(STORAGE_KEYS.VERTEXAI_PROJECT_ID) || ''
+    );
+    const [vertexLocation, setVertexLocation] = useState<string>(
+        () => localStorage.getItem(STORAGE_KEYS.VERTEXAI_LOCATION) || 'us-central1'
+    );
+    const [vertexAuthType, setVertexAuthType] = useState<'adc' | 'service_account'>(
+        () => (localStorage.getItem(STORAGE_KEYS.VERTEXAI_AUTH_TYPE) as 'adc' | 'service_account') || 'adc'
+    );
+    const [vertexKeyFilePath, setVertexKeyFilePath] = useState<string>(
+        () => localStorage.getItem(STORAGE_KEYS.VERTEXAI_KEY_FILE_PATH) || ''
+    );
+
+    const activeAiProvider = useSettingsStore(s => s.activeAiProvider);
+
     // Load encrypted credentials and attempt auto-auth on mount
     useEffect(() => {
         const load = async () => {
             try {
+                if (activeAiProvider === 'vertexai') {
+                    const projectId = localStorage.getItem(STORAGE_KEYS.VERTEXAI_PROJECT_ID) || '';
+                    const location = localStorage.getItem(STORAGE_KEYS.VERTEXAI_LOCATION) || '';
+                    if (projectId && location) {
+                        setIsAuthLoading(true);
+                        await electronService.aiSetProvider('vertexai');
+                        const success = await electronService.aiAuthAuto({ projectId, location });
+                        setIsAuthenticated(success);
+                        setIsAuthLoading(false);
+                    }
+                    return;
+                }
+
+                // Gemini auth
                 const encId = localStorage.getItem(STORAGE_KEYS.GEMINI_CLIENT_ID) || '';
                 const encSecret = localStorage.getItem(STORAGE_KEYS.GEMINI_CLIENT_SECRET) || '';
 
@@ -192,7 +224,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                     setClientSecret(decryptedSecret);
                 }
 
-                // Attempt auto background auth if both are present
                 if (decryptedId && decryptedSecret) {
                     setIsAuthLoading(true);
                     const success = await electronService.geminiAuthAuto(decryptedId, decryptedSecret);
@@ -200,12 +231,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                     setIsAuthLoading(false);
                 }
             } catch (err) {
-                console.error('Failed to decrypt Gemini credentials or auto-auth:', err);
+                console.error('Failed to auto-auth:', err);
                 setIsAuthLoading(false);
             }
         };
         load();
-    }, []);
+    }, [activeAiProvider]);
 
     // Chat state - initialize from props if available
     const [messages, setMessages] = useState<ChatMessage[]>(initialState?.messages || []);
@@ -371,7 +402,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     }, []);
 
     useEffect(() => {
-        const removeListener = electronService.onGeminiChatResponse((data) => {
+        const removeListener = electronService.onAiChatResponse((data) => {
             if (data.sessionId !== sessionId) return;
 
             if (data.type === 'chunk') {
@@ -480,7 +511,34 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     }, [isAuthenticated]);
 
     const handleLogin = async () => {
-        if (!clientId || !clientSecret) return;
+        setIsAuthLoading(true);
+        setAuthError(null);
+        authTimeoutRef.current = setTimeout(() => {
+            setIsAuthLoading(false);
+            setAuthError('Authentication timed out. Please try again.');
+            authTimeoutRef.current = null;
+        }, 30000);
+
+        if (activeAiProvider === 'vertexai') {
+            localStorage.setItem(STORAGE_KEYS.VERTEXAI_PROJECT_ID, vertexProjectId);
+            localStorage.setItem(STORAGE_KEYS.VERTEXAI_LOCATION, vertexLocation);
+            localStorage.setItem(STORAGE_KEYS.VERTEXAI_AUTH_TYPE, vertexAuthType);
+            localStorage.setItem(STORAGE_KEYS.VERTEXAI_KEY_FILE_PATH, vertexKeyFilePath);
+            await electronService.aiSetProvider('vertexai');
+            await electronService.aiAuthStart({
+                projectId: vertexProjectId,
+                location: vertexLocation,
+                authType: vertexAuthType,
+                keyFilePath: vertexKeyFilePath || undefined,
+            });
+            return;
+        }
+
+        if (!clientId || !clientSecret) {
+            if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
+            setIsAuthLoading(false);
+            return;
+        }
         try {
             const encId = await electronService.encryptSecret(clientId);
             const encSecret = await electronService.encryptSecret(clientSecret);
@@ -489,18 +547,15 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         } catch (err) {
             console.error('Failed to encrypt Gemini credentials:', err);
         }
-        setIsAuthLoading(true);
-        setAuthError(null);
-        authTimeoutRef.current = setTimeout(() => {
-            setIsAuthLoading(false);
-            setAuthError('Authentication timed out. Please try again.');
-            authTimeoutRef.current = null;
-        }, 30000);
         await electronService.geminiAuthStart(clientId, clientSecret);
     };
 
     const handleLogout = () => {
-        electronService.geminiAuthLogout();
+        if (activeAiProvider === 'vertexai') {
+            electronService.aiAuthLogout();
+        } else {
+            electronService.geminiAuthLogout();
+        }
         setIsAuthenticated(false);
         setMessages([]);
     };
@@ -732,17 +787,33 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             </div>
 
             {!isAuthenticated ? (
-                <AuthenticationPanel
-                    clientId={clientId}
-                    setClientId={setClientId}
-                    clientSecret={clientSecret}
-                    setClientSecret={setClientSecret}
-                    isAuthLoading={isAuthLoading}
-                    onLogin={handleLogin}
-                    authError={authError}
-                    fontSize={fontSize}
-                    terminalBackground={terminalBackground}
-                />
+                activeAiProvider === 'vertexai' ? (
+                    <VertexAIAuthPanel
+                        projectId={vertexProjectId}
+                        setProjectId={setVertexProjectId}
+                        location={vertexLocation}
+                        setLocation={setVertexLocation}
+                        authType={vertexAuthType}
+                        setAuthType={setVertexAuthType}
+                        keyFilePath={vertexKeyFilePath}
+                        setKeyFilePath={setVertexKeyFilePath}
+                        isAuthLoading={isAuthLoading}
+                        onLogin={handleLogin}
+                        authError={authError}
+                    />
+                ) : (
+                    <AuthenticationPanel
+                        clientId={clientId}
+                        setClientId={setClientId}
+                        clientSecret={clientSecret}
+                        setClientSecret={setClientSecret}
+                        isAuthLoading={isAuthLoading}
+                        onLogin={handleLogin}
+                        authError={authError}
+                        fontSize={fontSize}
+                        terminalBackground={terminalBackground}
+                    />
+                )
             ) : (
                 <div className="ai-chat-body">
                     {showSystemPrompt && localSystemInstruction && (

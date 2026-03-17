@@ -148,7 +148,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // We strictly move to session-based but keep types valid if needed. 
     // Ideally we remove them.
 
-    // Gemini AI
+    // AI (provider-agnostic) - new channels
+    aiAuthStart: (credentials: unknown) => ipcRenderer.invoke('ai-auth-start', { credentials }),
+    aiAuthAuto: (credentials: unknown) => ipcRenderer.invoke('ai-auth-auto', { credentials }),
+    aiAuthStatus: () => ipcRenderer.invoke('ai-auth-status'),
+    aiAuthLogout: () => ipcRenderer.send('ai-auth-logout'),
+    aiChatSend: (sessionId: string, message: string, model: string, systemInstruction?: string) => ipcRenderer.send('ai-chat-send', { sessionId, message, model, systemInstruction }),
+    aiListModels: () => ipcRenderer.invoke('ai-list-models'),
+    aiChatCancel: (sessionId: string) => ipcRenderer.send('ai-chat-cancel', sessionId),
+    aiChatClear: (sessionId: string) => ipcRenderer.send('ai-chat-clear', sessionId),
+    aiListProviders: () => ipcRenderer.invoke('ai-list-providers'),
+    aiSetProvider: (providerId: string) => ipcRenderer.invoke('ai-set-provider', providerId),
+    selectServiceAccountKeyFile: () => ipcRenderer.invoke('select-service-account-key-file'),
+    onAiAuthResult: (callback: (result: { success: boolean }) => void) => {
+        const subscription = (_event: unknown, result: { success: boolean }) => callback(result);
+        ipcRenderer.on('ai-auth-result', subscription);
+        return () => ipcRenderer.removeListener('ai-auth-result', subscription);
+    },
+    onAiChatResponse: (callback: (data: { sessionId: string, type: string, content: string }) => void) => {
+        const subscription = (_event: unknown, data: { sessionId: string, type: string, content: string }) => callback(data);
+        ipcRenderer.on('ai-chat-response', subscription);
+        return () => ipcRenderer.removeListener('ai-chat-response', subscription);
+    },
+
+    // Gemini AI (backward compatibility)
     geminiAuthStart: (clientId: string, clientSecret: string) => ipcRenderer.invoke('gemini-auth-start', { clientId, clientSecret }),
     geminiAuthAuto: (clientId: string, clientSecret: string) => ipcRenderer.invoke('gemini-auth-auto', { clientId, clientSecret }),
     geminiAuthStatus: () => ipcRenderer.invoke('gemini-auth-status'),

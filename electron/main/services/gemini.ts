@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { encryptString, decryptString } from './dpapi';
 import { logger } from './Logger';
+import { ChatResponseData } from './ai/IAIProvider';
 
 /** Constant-time string comparison to prevent timing attacks on secrets. */
 function safeCompare(a: string, b: string): boolean {
@@ -140,7 +141,7 @@ export class GeminiService {
 
   // -- OAuth 2.0 Flow --
 
-  async startAuth(win: BrowserWindow, clientId: string, clientSecret: string): Promise<boolean> {
+  async startAuth(win: BrowserWindow, clientId: string, clientSecret: string, onAuthResult: (result: { success: boolean }) => void): Promise<boolean> {
     // Validate credential format: non-empty, max 512 chars, printable ASCII only
     const CRED_PATTERN = /^[\x21-\x7E]{1,512}$/;
     if (!CRED_PATTERN.test(clientId) || !CRED_PATTERN.test(clientSecret)) {
@@ -179,7 +180,7 @@ export class GeminiService {
             res.writeHead(400, securityHeaders);
             res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#ef4444">❌ Invalid State</h1><p>Security validation failed. You may close this window.</p></div></body></html>');
             this.cleanupServer();
-            win.webContents.send('gemini-auth-result', { success: false });
+            onAuthResult({ success: false });
             resolve(false);
             return;
           }
@@ -189,7 +190,7 @@ export class GeminiService {
             res.writeHead(200, securityHeaders);
             res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#ef4444">❌ Authentication Error</h1><p>You may close this window.</p></div></body></html>');
             this.cleanupServer();
-            win.webContents.send('gemini-auth-result', { success: false });
+            onAuthResult({ success: false });
             resolve(false);
             return;
           }
@@ -206,7 +207,7 @@ export class GeminiService {
               res.writeHead(200, securityHeaders);
               res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#4ade80">✅ Authentication Successful</h1><p>You can return to HoTTY. You may close this window.</p></div></body></html>');
               this.cleanupServer();
-              win.webContents.send('gemini-auth-result', { success: true });
+              onAuthResult({ success: true });
 
               // Trigger internal event to close window
               ipcMain.emit('gemini-auth-result-internal');
@@ -217,7 +218,7 @@ export class GeminiService {
               res.writeHead(200, securityHeaders);
               res.end('<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#ef4444">&#10060; Token Exchange Error</h1><p>Authentication failed. You may close this window and try again.</p></div></body></html>');
               this.cleanupServer();
-              win.webContents.send('gemini-auth-result', { success: false });
+              onAuthResult({ success: false });
               resolve(false);
             }
           }
@@ -259,7 +260,7 @@ export class GeminiService {
           // If user closes the window manually before callback happens
           if (this.authServer) {
             this.cleanupServer();
-            win.webContents.send('gemini-auth-result', { success: false });
+            onAuthResult({ success: false });
             resolve(false);
           }
         });
@@ -278,7 +279,7 @@ export class GeminiService {
       setTimeout(() => {
         if (this.authServer) {
           this.cleanupServer();
-          win.webContents.send('gemini-auth-result', { success: false });
+          onAuthResult({ success: false });
           resolve(false);
         }
       }, 5 * 60 * 1000);
@@ -390,23 +391,15 @@ export class GeminiService {
 
   // -- Chat --
 
-  async sendMessage(win: BrowserWindow, sessionId: string, message: string, model: string = 'gemini-1.5-flash', systemInstruction?: string): Promise<void> {
+  async sendMessage(onResponse: (data: ChatResponseData) => void, sessionId: string, message: string, model: string = 'gemini-1.5-flash', systemInstruction?: string): Promise<void> {
     if (!VALID_MODEL_PATTERN.test(model)) {
-      win.webContents.send('gemini-chat-response', {
-        sessionId,
-        type: 'error',
-        content: 'Invalid model name.',
-      });
+      onResponse({ sessionId, type: 'error', content: 'Invalid model name.' });
       return;
     }
 
     const token = await this.getValidToken();
     if (!token) {
-      win.webContents.send('gemini-chat-response', {
-        sessionId,
-        type: 'error',
-        content: 'Authentication expired. Please sign in again.',
-      });
+      onResponse({ sessionId, type: 'error', content: 'Authentication expired. Please sign in again.' });
       return;
     }
 
@@ -474,11 +467,7 @@ export class GeminiService {
               const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text || '';
               if (text) {
                 fullResponse += text;
-                win.webContents.send('gemini-chat-response', {
-                  sessionId,
-                  type: 'chunk',
-                  content: text,
-                });
+                onResponse({ sessionId, type: 'chunk', content: text });
               }
               if (parsed?.usageMetadata) {
                 lastUsageMetadata = parsed.usageMetadata;
@@ -491,23 +480,14 @@ export class GeminiService {
       }
 
       history.push({ role: 'model', content: fullResponse });
-      win.webContents.send('gemini-chat-response', {
-        sessionId,
-        type: 'done',
-        content: fullResponse,
-        usageMetadata: lastUsageMetadata,
-      });
+      onResponse({ sessionId, type: 'done', content: fullResponse, usageMetadata: lastUsageMetadata ?? undefined });
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
         // Cancelled by user, no error to send
         return;
       }
       logger.error('gemini', 'Chat error', { sessionId, error: err instanceof Error ? err.message : String(err) });
-      win.webContents.send('gemini-chat-response', {
-        sessionId,
-        type: 'error',
-        content: 'An error occurred while communicating with Gemini. Please try again.',
-      });
+      onResponse({ sessionId, type: 'error', content: 'An error occurred while communicating with Gemini. Please try again.' });
     } finally {
       this.abortControllers.delete(sessionId);
     }

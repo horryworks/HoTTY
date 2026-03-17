@@ -15,6 +15,7 @@ vi.mock('../../services/electronService', () => ({
     logDebug: vi.fn(),
     getAppVersion: vi.fn(() => Promise.resolve('1.0.0')),
     geminiAuthLogout: vi.fn(() => Promise.resolve()),
+    aiSetProvider: vi.fn(() => Promise.resolve()),
 }));
 
 const baseProps = {
@@ -48,6 +49,21 @@ describe('AISettingsTab', () => {
     it('renders without crashing', () => {
         const { container } = render(<AISettingsTab {...baseProps} />);
         expect(container).toBeTruthy();
+    });
+
+    it('renders AI Provider section', () => {
+        render(<AISettingsTab {...baseProps} />);
+        expect(screen.getByText('AI Provider')).toBeInTheDocument();
+    });
+
+    it('renders Google AI Studio option in provider dropdown', () => {
+        render(<AISettingsTab {...baseProps} />);
+        expect(screen.getByText('Google AI Studio (Gemini)')).toBeInTheDocument();
+    });
+
+    it('renders Vertex AI option in provider dropdown', () => {
+        render(<AISettingsTab {...baseProps} />);
+        expect(screen.getByText('Google Cloud Vertex AI')).toBeInTheDocument();
     });
 
     it('renders Google Account Authentication label', () => {

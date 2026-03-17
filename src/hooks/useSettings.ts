@@ -41,6 +41,7 @@ export function useSettings() {
         sidebarPosition: store.sidebarPosition,
         proactiveInstruction: store.proactiveInstruction,
         interactiveStabilizationTimeout: store.interactiveStabilizationTimeout,
+        activeAiProvider: store.activeAiProvider,
     };
 
     return {
@@ -75,5 +76,6 @@ export function useSettings() {
         updateSidebarPosition: store.updateSidebarPosition,
         updateProactiveInstruction: store.updateProactiveInstruction,
         updateInteractiveStabilizationTimeout: store.updateInteractiveStabilizationTimeout,
+        updateActiveAiProvider: store.updateActiveAiProvider,
     };
 }

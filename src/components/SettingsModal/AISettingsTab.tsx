@@ -1,5 +1,6 @@
 import React from 'react';
 import * as electronService from '../../services/electronService';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 interface AISettingsTabProps {
     isAiAuthenticated: boolean;
@@ -46,8 +47,38 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
     onDrop,
     onDragEnd,
 }) => {
+    const activeAiProvider = useSettingsStore(s => s.activeAiProvider);
+    const updateActiveAiProvider = useSettingsStore(s => s.updateActiveAiProvider);
+
     return (
         <div className="form-group">
+            <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
+                <label style={{ marginBottom: '10px', display: 'block' }}>AI Provider</label>
+                <select
+                    value={activeAiProvider}
+                    onChange={(e) => {
+                        const provider = e.target.value as 'gemini' | 'vertexai';
+                        updateActiveAiProvider(provider);
+                        electronService.aiSetProvider(provider);
+                    }}
+                    style={{
+                        padding: '6px 10px',
+                        cursor: 'pointer',
+                        backgroundColor: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-color)',
+                        color: 'var(--text-primary)',
+                        borderRadius: '3px',
+                        width: '220px',
+                    }}
+                >
+                    <option value="gemini">Google AI Studio (Gemini)</option>
+                    <option value="vertexai">Google Cloud Vertex AI</option>
+                </select>
+                <p className="settings-help" style={{ marginTop: '8px' }}>
+                    Select the AI provider to use for the chat panel.
+                </p>
+            </div>
+
             <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
                 <label style={{ marginBottom: '10px', display: 'block' }}>Google Account Authentication</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>

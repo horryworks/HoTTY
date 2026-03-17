@@ -121,11 +121,11 @@ describe('GeminiService — logout', () => {
 describe('GeminiService — sendMessage validation', () => {
     it('sends error for invalid model name', async () => {
         const service = new GeminiService();
-        const win = makeMockWin();
+        const onResponse = vi.fn();
 
-        await service.sendMessage(win, 'session1', 'hello', 'invalid model!');
+        await service.sendMessage(onResponse, 'session1', 'hello', 'invalid model!');
 
-        expect(win.webContents.send).toHaveBeenCalledWith('gemini-chat-response', {
+        expect(onResponse).toHaveBeenCalledWith({
             sessionId: 'session1',
             type: 'error',
             content: 'Invalid model name.',
@@ -134,24 +134,24 @@ describe('GeminiService — sendMessage validation', () => {
 
     it('accepts valid model names', async () => {
         const service = new GeminiService();
-        const win = makeMockWin();
+        const onResponse = vi.fn();
 
         // Force a null token so it fails with "auth expired" not "invalid model"
         (service as any).tokenData = null;
 
-        await service.sendMessage(win, 'session1', 'hello', 'gemini-1.5-flash');
+        await service.sendMessage(onResponse, 'session1', 'hello', 'gemini-1.5-flash');
 
-        const call = win.webContents.send.mock.calls[0];
-        expect(call[1].content).not.toBe('Invalid model name.');
+        const call = onResponse.mock.calls[0][0];
+        expect(call.content).not.toBe('Invalid model name.');
     });
 
     it('sends auth-expired error when not authenticated', async () => {
         const service = new GeminiService();
-        const win = makeMockWin();
+        const onResponse = vi.fn();
 
-        await service.sendMessage(win, 'session1', 'hello', 'gemini-1.5-flash');
+        await service.sendMessage(onResponse, 'session1', 'hello', 'gemini-1.5-flash');
 
-        expect(win.webContents.send).toHaveBeenCalledWith('gemini-chat-response', {
+        expect(onResponse).toHaveBeenCalledWith({
             sessionId: 'session1',
             type: 'error',
             content: 'Authentication expired. Please sign in again.',
@@ -160,11 +160,11 @@ describe('GeminiService — sendMessage validation', () => {
 
     it('rejects model names with consecutive separators', async () => {
         const service = new GeminiService();
-        const win = makeMockWin();
+        const onResponse = vi.fn();
 
-        await service.sendMessage(win, 's1', 'hello', 'gemini--flash');
+        await service.sendMessage(onResponse, 's1', 'hello', 'gemini--flash');
 
-        expect(win.webContents.send).toHaveBeenCalledWith('gemini-chat-response', expect.objectContaining({
+        expect(onResponse).toHaveBeenCalledWith(expect.objectContaining({
             type: 'error',
             content: 'Invalid model name.',
         }));
@@ -187,24 +187,27 @@ describe('GeminiService — startAuth credential validation', () => {
     it('rejects empty clientId', async () => {
         const service = new GeminiService();
         const win = makeMockWin();
+        const onAuthResult = vi.fn();
 
-        const result = await service.startAuth(win, '', 'secret');
+        const result = await service.startAuth(win, '', 'secret', onAuthResult);
         expect(result).toBe(false);
     });
 
     it('rejects clientId longer than 512 chars', async () => {
         const service = new GeminiService();
         const win = makeMockWin();
+        const onAuthResult = vi.fn();
 
-        const result = await service.startAuth(win, 'x'.repeat(513), 'secret');
+        const result = await service.startAuth(win, 'x'.repeat(513), 'secret', onAuthResult);
         expect(result).toBe(false);
     });
 
     it('rejects credentials with non-printable ASCII', async () => {
         const service = new GeminiService();
         const win = makeMockWin();
+        const onAuthResult = vi.fn();
 
-        const result = await service.startAuth(win, 'valid-id', 'secret with spaces');
+        const result = await service.startAuth(win, 'valid-id', 'secret with spaces', onAuthResult);
         expect(result).toBe(false);
     });
 });

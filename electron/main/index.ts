@@ -8,7 +8,10 @@ import { WslService } from './services/wsl';
 import { LocalService } from './services/local';
 import { SerialPort } from 'serialport';
 import type { ISessionService } from './services/ISessionService';
-import { GeminiService } from './services/gemini';
+import { AIProviderRegistry } from './services/ai/AIProviderRegistry';
+import { AIService } from './services/ai/AIService';
+import { GeminiProvider } from './services/ai/providers/gemini/GeminiProvider';
+import { VertexAIProvider } from './services/ai/providers/vertexai/VertexAIProvider';
 import { LogManager } from './services/LogManager';
 import { logger } from './services/Logger';
 import { encryptString, decryptString } from './services/dpapi';
@@ -30,7 +33,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 const windows = new Set<BrowserWindow>();
-let geminiService: GeminiService | null = null;
+let aiService: AIService | null = null;
 const logManager = new LogManager();
 
 // Security: track directories the user has explicitly allowed for log access
@@ -145,7 +148,10 @@ app.whenReady().then(async () => {
   });
 
   const win = await createWindow();
-  geminiService = new GeminiService();
+  const registry = new AIProviderRegistry();
+  registry.register(new GeminiProvider());
+  registry.register(new VertexAIProvider());
+  aiService = new AIService(registry, 'gemini');
   win.webContents.once('did-finish-load', () => { checkForUpdates(win); });
 
   // Register 'media' protocol to serve local files
@@ -579,45 +585,114 @@ ipcMain.on('show-context-menu', (event, selection: string, commands?: { id: stri
   menu.popup({ window: BrowserWindow.fromWebContents(event.sender) || undefined });
 });
 
-// ── Gemini AI IPC Handlers ──
+// ── AI IPC Handlers ──
 
-ipcMain.handle('gemini-auth-start', async (event, { clientId, clientSecret }) => {
-  if (!geminiService) return false;
+// Provider-agnostic ai-* channels (new)
+ipcMain.handle('ai-auth-start', async (event, { credentials }) => {
+  if (!aiService) return false;
   const eventWin = BrowserWindow.fromWebContents(event.sender);
   if (!eventWin) return false;
-  return await geminiService.startAuth(eventWin, clientId, clientSecret);
+  return await aiService.authenticate(eventWin, credentials, (result) => {
+    eventWin.webContents.send('ai-auth-result', result);
+    eventWin.webContents.send('gemini-auth-result', result);
+  });
+});
+
+ipcMain.handle('ai-auth-auto', async (_, { credentials }) => {
+  if (!aiService) return false;
+  return await aiService.autoAuth(credentials);
+});
+
+ipcMain.handle('ai-auth-status', () => {
+  return aiService?.getAuthStatus().authenticated ?? false;
+});
+
+ipcMain.on('ai-auth-logout', () => {
+  aiService?.logout();
+});
+
+ipcMain.on('ai-chat-send', async (event, { sessionId, message, model, systemInstruction }) => {
+  if (!aiService) return;
+  const eventWin = BrowserWindow.fromWebContents(event.sender);
+  if (!eventWin) return;
+  await aiService.sendMessage(eventWin, sessionId, message, model, systemInstruction);
+});
+
+ipcMain.on('ai-chat-cancel', (_, sessionId: string) => {
+  aiService?.cancelMessage(sessionId);
+});
+
+ipcMain.handle('ai-list-models', async () => {
+  return await aiService?.listModels() ?? [];
+});
+
+ipcMain.on('ai-chat-clear', (_, sessionId: string) => {
+  aiService?.clearHistory(sessionId);
+});
+
+ipcMain.handle('ai-list-providers', () => {
+  return aiService?.listProviders() ?? [];
+});
+
+ipcMain.handle('ai-set-provider', (_, providerId: unknown) => {
+  if (typeof providerId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(providerId)) {
+    logger.warn('app', 'ai-set-provider: invalid provider id');
+    return;
+  }
+  aiService?.setActiveProvider(providerId);
+});
+
+ipcMain.handle('select-service-account-key-file', async (event) => {
+  const eventWin = BrowserWindow.fromWebContents(event.sender);
+  const { canceled, filePaths } = await dialog.showOpenDialog(eventWin!, {
+    properties: ['openFile'],
+    filters: [{ name: 'JSON Key File', extensions: ['json'] }],
+  });
+  if (canceled || filePaths.length === 0) return null;
+  return filePaths[0];
+});
+
+// Gemini-specific aliases (backward compatibility)
+ipcMain.handle('gemini-auth-start', async (event, { clientId, clientSecret }) => {
+  if (!aiService) return false;
+  const eventWin = BrowserWindow.fromWebContents(event.sender);
+  if (!eventWin) return false;
+  return await aiService.authenticate(eventWin, { clientId, clientSecret }, (result) => {
+    eventWin.webContents.send('gemini-auth-result', result);
+    eventWin.webContents.send('ai-auth-result', result);
+  });
 });
 
 ipcMain.handle('gemini-auth-auto', async (_, { clientId, clientSecret }) => {
-  if (!geminiService) return false;
-  return await geminiService.autoAuth(clientId, clientSecret);
+  if (!aiService) return false;
+  return await aiService.autoAuth({ clientId, clientSecret });
 });
 
 ipcMain.handle('gemini-auth-status', () => {
-  return geminiService?.isAuthenticated() || false;
+  return aiService?.getAuthStatus().authenticated ?? false;
 });
 
 ipcMain.on('gemini-auth-logout', () => {
-  geminiService?.logout();
+  aiService?.logout();
 });
 
 ipcMain.on('gemini-chat-send', async (event, { sessionId, message, model, systemInstruction }) => {
-  if (!geminiService) return;
+  if (!aiService) return;
   const eventWin = BrowserWindow.fromWebContents(event.sender);
   if (!eventWin) return;
-  await geminiService.sendMessage(eventWin, sessionId, message, model, systemInstruction);
+  await aiService.sendMessage(eventWin, sessionId, message, model, systemInstruction);
 });
 
 ipcMain.on('gemini-chat-cancel', (_, sessionId: string) => {
-  geminiService?.cancelMessage(sessionId);
+  aiService?.cancelMessage(sessionId);
 });
 
 ipcMain.handle('gemini-list-models', async () => {
-  return await geminiService?.listModels() || [];
+  return await aiService?.listModels() ?? [];
 });
 
 ipcMain.on('gemini-chat-clear', (_, sessionId: string) => {
-  geminiService?.clearHistory(sessionId);
+  aiService?.clearHistory(sessionId);
 });
 
 ipcMain.handle('get-app-version', () => {
