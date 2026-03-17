@@ -66,6 +66,7 @@ interface SettingsModalProps {
     onProactiveInstructionChange: (instruction: string) => void;
     interactiveStabilizationTimeout: number;
     onInteractiveStabilizationTimeoutChange: (timeout: number) => void;
+    updateInfo?: { version: string; releaseUrl: string } | null;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -127,6 +128,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onProactiveInstructionChange,
     interactiveStabilizationTimeout,
     onInteractiveStabilizationTimeoutChange,
+    updateInfo,
 }) => {
     const { position, onMouseDown: onHeaderMouseDown } = useDraggable();
     const [activeTab, setActiveTab] = React.useState<'appearance' | 'ssh' | 'telnet' | 'system' | 'ai' | 'about'>('system');
@@ -388,7 +390,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div className="about-content" style={{ textAlign: 'center', padding: '20px 0' }}>
                             <img src="./HoTTY_logo.png" alt="HoTTY Logo" width="64" height="64" style={{ marginBottom: '16px', borderRadius: '12px', backgroundColor: '#fff', padding: '4px' }} />
                             <h2 style={{ margin: '0 0 8px 0' }}>HoTTY</h2>
-                            <p style={{ color: '#aaa', margin: '0 0 16px 0' }}>v{version}</p>
+                            <p style={{ color: '#aaa', margin: '0 0 8px 0' }}>v{version}</p>
+
+                            {updateInfo && (
+                                <div style={{ margin: '0 0 16px 0' }}>
+                                    <button
+                                        className="about-download-btn"
+                                        onClick={() => electronService.openExternal(updateInfo.releaseUrl)}
+                                    >
+                                        &#8595; Download v{updateInfo.version}
+                                    </button>
+                                </div>
+                            )}
 
                             <p style={{ fontWeight: 'bold', margin: '0 0 8px 0' }}>
                                 Katsumasa "Horry" Horiuchi

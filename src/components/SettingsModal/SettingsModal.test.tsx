@@ -175,4 +175,26 @@ describe('SettingsModal', () => {
             expect(getAppVersion).toHaveBeenCalled();
         });
     });
+
+    it('shows download button in About tab when updateInfo is provided', async () => {
+        const updateInfo = { version: '2.0.0', releaseUrl: 'https://example.com/release' };
+        await renderAndSettle(<SettingsModal {...baseProps} updateInfo={updateInfo} />);
+        fireEvent.click(screen.getByText('About'));
+        expect(screen.getByText(/Download v2\.0\.0/)).toBeInTheDocument();
+    });
+
+    it('does not show download button in About tab when updateInfo is null', async () => {
+        await renderAndSettle(<SettingsModal {...baseProps} updateInfo={null} />);
+        fireEvent.click(screen.getByText('About'));
+        expect(screen.queryByText(/Download v/)).not.toBeInTheDocument();
+    });
+
+    it('calls openExternal with releaseUrl when download button is clicked', async () => {
+        const { openExternal } = await import('../../services/electronService');
+        const updateInfo = { version: '2.0.0', releaseUrl: 'https://example.com/release' };
+        await renderAndSettle(<SettingsModal {...baseProps} updateInfo={updateInfo} />);
+        fireEvent.click(screen.getByText('About'));
+        fireEvent.click(screen.getByText(/Download v2\.0\.0/));
+        expect(openExternal).toHaveBeenCalledWith('https://example.com/release');
+    });
 });

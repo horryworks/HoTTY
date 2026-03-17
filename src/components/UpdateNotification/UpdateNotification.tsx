@@ -6,9 +6,11 @@ interface UpdateNotificationProps {
     version: string;
     releaseUrl: string;
     onDismiss: () => void;
+    onSkip: () => void;
+    onNeverNotify: () => void;
 }
 
-export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ version, releaseUrl, onDismiss }) => {
+export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ version, releaseUrl, onDismiss, onSkip, onNeverNotify }) => {
     const handleDownload = () => {
         electronService.openExternal(releaseUrl);
         onDismiss();
@@ -18,12 +20,18 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ version,
         <div className="update-notification">
             <span className="update-notification-icon">&#8593;</span>
             <span className="update-notification-text">
-                新しいバージョン <strong>v{version}</strong> が公開されています
+                A new version <strong>v{version}</strong> is available
             </span>
             <button className="update-notification-download" onClick={handleDownload}>
-                ダウンロード
+                Download
             </button>
-            <button className="update-notification-dismiss" onClick={onDismiss} title="閉じる">
+            <button className="update-notification-skip" onClick={onSkip}>
+                Skip this version
+            </button>
+            <button className="update-notification-skip" onClick={onNeverNotify}>
+                Never Notify
+            </button>
+            <button className="update-notification-dismiss" onClick={onDismiss} title="Close">
                 &#10005;
             </button>
         </div>

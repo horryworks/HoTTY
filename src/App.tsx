@@ -173,7 +173,11 @@ function App() {
   // Listen for update-available from main process
   useEffect(() => {
     const cleanup = electronService.onUpdateAvailable((data) => {
-      setUpdateInfo(data);
+      if (localStorage.getItem(STORAGE_KEYS.NEVER_NOTIFY_UPDATE) === 'true') return;
+      const skipped = localStorage.getItem(STORAGE_KEYS.SKIPPED_UPDATE_VERSION);
+      if (skipped !== data.version) {
+        setUpdateInfo(data);
+      }
     });
     return cleanup;
   }, []);
@@ -566,6 +570,14 @@ function App() {
               version={updateInfo.version}
               releaseUrl={updateInfo.releaseUrl}
               onDismiss={() => setUpdateInfo(null)}
+              onSkip={() => {
+                localStorage.setItem(STORAGE_KEYS.SKIPPED_UPDATE_VERSION, updateInfo.version);
+                setUpdateInfo(null);
+              }}
+              onNeverNotify={() => {
+                localStorage.setItem(STORAGE_KEYS.NEVER_NOTIFY_UPDATE, 'true');
+                setUpdateInfo(null);
+              }}
             />
           )}
           <div className="top-bar">
@@ -808,6 +820,7 @@ function App() {
           onProactiveInstructionChange={updateProactiveInstruction}
           interactiveStabilizationTimeout={settings.interactiveStabilizationTimeout}
           onInteractiveStabilizationTimeoutChange={updateInteractiveStabilizationTimeout}
+          updateInfo={updateInfo}
         />
         <PaneLines
           paneAllocations={pane.paneAllocations}

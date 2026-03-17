@@ -3,7 +3,10 @@
 ## [v1.0.0-beta5] - 2026-03-17
 
 ### Improved
-- **Log Viewer - Search UX**: Added a `Ctrl+F` keyboard shortcut to instantly focus the search input in the Log Viewer pane. Also added a **Refresh** button to the search toolbar, allowing the currently open log file to be reloaded without re-selecting it from the file list.
+- **Update Notification**: Enhanced the update notification banner with two new action buttons:
+    - **Skip this version**: Dismisses the banner and suppresses it for the current version only. The notification will reappear if a newer version is released.
+    - **Never Notify**: Permanently disables all update notifications. This preference is saved to localStorage.
+- **Update Notification in Settings**: When an update is available, a download button for the new version now also appears in **Settings > About**, giving quick access to the latest release from within the settings dialog.
 
 ---
 

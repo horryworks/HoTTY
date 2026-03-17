@@ -67,4 +67,8 @@ export const STORAGE_KEYS = {
     ASK_GEMINI_COMMANDS:             'hotty_ask_gemini_commands',
     PROACTIVE_INSTRUCTION:           'hotty_gemini_proactive_instruction',
     INTERACTIVE_STABILIZATION_TIMEOUT: 'hotty_interactive_stabilization_timeout',
+
+    // Update
+    SKIPPED_UPDATE_VERSION: 'hotty_skipped_update_version',
+    NEVER_NOTIFY_UPDATE:    'hotty_never_notify_update',
 } as const;

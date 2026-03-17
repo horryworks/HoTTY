@@ -46,7 +46,7 @@ Terminal emulator built with Electron, React, and TypeScript. Designed to provid
     - **Sandboxed Execution**: Enhanced security with Electron's sandbox mode.
     - **XSS Protection**: AI chat output is sanitized using DOMPurify to prevent cross-site scripting attacks.
     - **Clean Uninstallation**: Option to fully remove user data during uninstallation.
-- **Update Notification**: Automatically checks for new releases on GitHub at startup and shows a non-blocking banner when an update is available.
+- **Update Notification**: Automatically checks for new releases on GitHub at startup and shows a non-blocking banner when an update is available. Options to **Skip this version** or **Never Notify** let you control notification behavior. A download link is also shown in **Settings > About** when an update is pending.
 - **Modern Tech Stack**: Built on Electron, React, and Vite for performance and stability.
 
 ## Core Concept: Synergy of Terminal & AI
