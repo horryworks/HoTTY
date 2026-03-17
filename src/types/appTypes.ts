@@ -1,4 +1,4 @@
-export interface AskGeminiCommand {
+export interface AskAiCommand {
     id: string;
     label: string;
     promptTemplate: string;

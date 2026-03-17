@@ -30,7 +30,7 @@ vi.mock('../../stores/settingsStore', () => ({
             promptHighlightColor: '#ffff00',
             promptPatterns: [],
             aiPersonas: [],
-            askGeminiCommands: [],
+            askAiCommands: [],
             sidebarPosition: 'right',
             proactiveInstruction: '',
             interactiveStabilizationTimeout: 400,

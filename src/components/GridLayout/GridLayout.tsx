@@ -63,7 +63,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
         enablePromptHighlight,
         promptHighlightColor,
         promptPatterns,
-        askGeminiCommands,
+        askAiCommands,
         showSystemPrompt,
         aiPersonas,
         proactiveInstruction,
@@ -289,7 +289,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     initialState={session.aiChatState}
                                     onStateChange={(newState) => updateSessionState(session.id, newState)}
                                     showSystemPrompt={showSystemPrompt}
-                                    askGeminiCommands={askGeminiCommands}
+                                    askAiCommands={askAiCommands}
                                     aiPersonas={aiPersonas}
                                     fontSize={fontSize}
                                     terminalBackground={terminalBackground}
@@ -321,7 +321,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     terminalBackground={terminalBackground}
                                     terminalBackgroundInactive={terminalBackgroundInactive || undefined}
                                     lineWrapEnabled={lineWrapEnabled}
-                                    askGeminiCommands={askGeminiCommands}
+                                    askAiCommands={askAiCommands}
                                     enablePromptHighlight={enablePromptHighlight}
                                     promptHighlightColor={promptHighlightColor}
                                     promptPatterns={promptPatterns}

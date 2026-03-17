@@ -60,7 +60,7 @@ export const PaneContent: React.FC<PaneContentProps> = ({
     enablePromptHighlight,
     promptHighlightColor,
     promptPatterns,
-    askGeminiCommands,
+    askAiCommands,
     showSystemPrompt,
     aiPersonas,
     proactiveInstruction,
@@ -70,7 +70,7 @@ export const PaneContent: React.FC<PaneContentProps> = ({
     return (
       <LogViewerPane
         loggingPath={session.logViewerState?.loggingPath || ''}
-        askGeminiCommands={askGeminiCommands}
+        askAiCommands={askAiCommands}
       />
     );
   }
@@ -82,7 +82,7 @@ export const PaneContent: React.FC<PaneContentProps> = ({
         initialState={session.aiChatState}
         onStateChange={onStateChange ? (newState) => onStateChange(newState) : undefined}
         showSystemPrompt={showSystemPrompt}
-        askGeminiCommands={askGeminiCommands}
+        askAiCommands={askAiCommands}
         aiPersonas={aiPersonas}
         fontSize={fontSize}
         terminalBackground={terminalBackground}
@@ -113,7 +113,7 @@ export const PaneContent: React.FC<PaneContentProps> = ({
       terminalBackground={terminalBackground}
       terminalBackgroundInactive={terminalBackgroundInactive}
       lineWrapEnabled={lineWrapEnabled}
-      askGeminiCommands={askGeminiCommands}
+      askAiCommands={askAiCommands}
       enablePromptHighlight={enablePromptHighlight}
       promptHighlightColor={promptHighlightColor}
       promptPatterns={promptPatterns}

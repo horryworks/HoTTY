@@ -7,7 +7,7 @@ import { SettingsModal } from './components/SettingsModal/SettingsModal'
 import { LayoutSelector } from './components/LayoutSelector/LayoutSelector'
 import { GridLayout } from './components/GridLayout/GridLayout'
 import { MessageModal } from './components/MessageModal/MessageModal'
-import { AskGeminiModal } from './components/AskGeminiModal/AskGeminiModal'
+import { AskAiModal } from './components/AskAiModal/AskAiModal'
 import HelpModal from './components/HelpModal/HelpModal'
 import { UpdateNotification } from './components/UpdateNotification/UpdateNotification'
 import { CustomThemeCreator } from './components/CustomThemeCreator/CustomThemeCreator'
@@ -20,7 +20,7 @@ import type { Session } from './hooks/useSessionManager'
 import { usePaneManager } from './hooks/usePaneManager'
 import { useSettings } from './hooks/useSettings'
 import { useInteractiveFlow } from './hooks/useInteractiveFlow'
-import { useGeminiChat } from './hooks/useGeminiChat'
+import { useAiChat } from './hooks/useAiChat'
 import { useSidebarLayout } from './hooks/useSidebarLayout'
 import { STORAGE_KEYS } from './constants/storage'
 import * as electronService from './services/electronService'
@@ -30,7 +30,7 @@ import './App.css'
 
 // -- Exported Types (re-exported from types/appTypes for backward compatibility) --
 
-export type { AskGeminiCommand, PromptPattern, PersonaDefinition } from './types/appTypes';
+export type { AskAiCommand, PromptPattern, PersonaDefinition } from './types/appTypes';
 
 type ThemeDefinition = { name?: string; variables?: Record<string, string>; terminal?: { foreground?: string; background?: string; backgroundInactive?: string; paneBackground?: string } };
 
@@ -61,7 +61,7 @@ function App() {
     updatePromptHighlightColor,
     updatePromptPatterns,
     updateAiPersonas,
-    updateAskGeminiCommands,
+    updateAskAiCommands,
     updateSidebarPosition,
     updateProactiveInstruction,
     updateInteractiveStabilizationTimeout,
@@ -290,12 +290,12 @@ function App() {
   });
 
   // ═══════════════════════════════════════════════
-  // 10. Gemini Chat (useGeminiChat hook)
+  // 10. AI Chat (useAiChat hook)
   // ═══════════════════════════════════════════════
 
-  const geminiChat = useGeminiChat({
+  const aiChat = useAiChat({
     sessions: session.sessions,
-    askGeminiCommands: settings.askGeminiCommands,
+    askAiCommands: settings.askAiCommands,
     aiPersonas: settings.aiPersonas,
     proactiveInstruction: settings.proactiveInstruction,
     getWatchBuffer: session.getWatchBuffer,
@@ -453,8 +453,8 @@ function App() {
         onRunCommand={(targetId, command) => {
           interactiveFlow.startTracking(targetId, sessionData.id, command);
         }}
-        onShowPromptMenu={() => geminiChat.showPromptMenu(sessionData.id)}
-        onSendMessage={(text) => geminiChat.sendMessage(sessionData.id, text)}
+        onShowPromptMenu={() => aiChat.showPromptMenu(sessionData.id)}
+        onSendMessage={(text) => aiChat.sendMessage(sessionData.id, text)}
         onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
       />
     );
@@ -670,8 +670,8 @@ function App() {
                   onRunCommand={(targetId, command, aiSessionId) => {
                     interactiveFlow.startTracking(targetId, aiSessionId, command);
                   }}
-                  onSendMessage={(aiSessionId, text) => geminiChat.sendMessage(aiSessionId, text)}
-                  onShowPromptMenu={(aiSessionId) => geminiChat.showPromptMenu(aiSessionId)}
+                  onSendMessage={(aiSessionId, text) => aiChat.sendMessage(aiSessionId, text)}
+                  onShowPromptMenu={(aiSessionId) => aiChat.showPromptMenu(aiSessionId)}
                 />
                 </ErrorBoundary>
               </div>
@@ -752,12 +752,12 @@ function App() {
           />
         )}
 
-        {geminiChat.askGeminiFreeFormatData !== null && (
-          <AskGeminiModal
+        {aiChat.askAiFreeFormatData !== null && (
+          <AskAiModal
             isOpen={true}
-            selection={geminiChat.askGeminiFreeFormatData.selection}
-            onClose={() => geminiChat.setAskGeminiFreeFormatData(null)}
-            onSubmit={geminiChat.handleFreeFormatSubmit}
+            selection={aiChat.askAiFreeFormatData.selection}
+            onClose={() => aiChat.setAskAiFreeFormatData(null)}
+            onSubmit={aiChat.handleFreeFormatSubmit}
           />
         )}
 
@@ -800,8 +800,8 @@ function App() {
           onSidebarPositionChange={updateSidebarPosition}
           showSystemPrompt={settings.showSystemPrompt}
           onShowSystemPromptChange={updateShowSystemPrompt}
-          askGeminiCommands={settings.askGeminiCommands}
-          onAskGeminiCommandsChange={updateAskGeminiCommands}
+          askAiCommands={settings.askAiCommands}
+          onAskAiCommandsChange={updateAskAiCommands}
           aiPersonas={settings.aiPersonas}
           onAiPersonasChange={updateAiPersonas}
           backspaceSendsDel={settings.backspaceSendsDel}

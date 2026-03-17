@@ -30,13 +30,17 @@ describe('settingsStore — default state', () => {
         expect(s.sidebarPosition).toBe('left');
         expect(s.promptPatterns.length).toBeGreaterThan(0);
         expect(s.aiPersonas.length).toBeGreaterThan(0);
-        expect(s.askGeminiCommands.length).toBeGreaterThan(0);
-        expect(s.activeAiProvider).toBe('gemini');
+        expect(s.askAiCommands.length).toBeGreaterThan(0);
+        expect(s.activeAiProvider).toBe('vertexai');
     });
 
-    it('updateActiveAiProvider switches the active provider', () => {
+    it('updateActiveAiProvider switches between all supported providers', () => {
         useSettingsStore.getState().updateActiveAiProvider('vertexai');
         expect(useSettingsStore.getState().activeAiProvider).toBe('vertexai');
+        useSettingsStore.getState().updateActiveAiProvider('openai');
+        expect(useSettingsStore.getState().activeAiProvider).toBe('openai');
+        useSettingsStore.getState().updateActiveAiProvider('anthropic');
+        expect(useSettingsStore.getState().activeAiProvider).toBe('anthropic');
         useSettingsStore.getState().updateActiveAiProvider('gemini');
         expect(useSettingsStore.getState().activeAiProvider).toBe('gemini');
     });

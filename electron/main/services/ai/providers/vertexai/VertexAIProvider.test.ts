@@ -67,6 +67,77 @@ describe('VertexAIProvider — initial state', () => {
     });
 });
 
+// ── listModels — dynamic fetch ────────────────────────────────────────────────
+
+describe('VertexAIProvider — listModels', () => {
+    it('returns hardcoded list when not authenticated', async () => {
+        const provider = new VertexAIProvider();
+        const models = await provider.listModels();
+        expect(models.length).toBeGreaterThan(0);
+        expect(models.some(m => m.name.includes('gemini'))).toBe(true);
+    });
+
+    it('fetches models from API when authenticated', async () => {
+        const provider = new VertexAIProvider();
+        (provider as any).config = { projectId: 'my-project-123', location: 'us-central1', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                publisherModels: [
+                    { name: 'publishers/google/models/gemini-2.0-flash', displayName: 'Gemini 2.0 Flash' },
+                    { name: 'publishers/google/models/gemini-1.5-pro', displayName: 'Gemini 1.5 Pro' },
+                    { name: 'publishers/google/models/text-bison', displayName: 'Text Bison' },
+                ],
+            }),
+        }));
+
+        const models = await provider.listModels();
+        expect(models).toHaveLength(2); // text-bison filtered out
+        expect(models[0].name).toBe('gemini-2.0-flash');
+        expect(models[0].displayName).toBe('Gemini 2.0 Flash');
+        expect(models[1].name).toBe('gemini-1.5-pro');
+    });
+
+    it('falls back to hardcoded list when API returns non-ok status', async () => {
+        const provider = new VertexAIProvider();
+        (provider as any).config = { projectId: 'my-project-123', location: 'us-central1', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403 }));
+
+        const models = await provider.listModels();
+        expect(models.some(m => m.name.includes('gemini'))).toBe(true);
+        expect(models.some(m => m.name === 'gemini-2.0-flash-001')).toBe(true);
+    });
+
+    it('falls back to hardcoded list when API returns no Gemini models', async () => {
+        const provider = new VertexAIProvider();
+        (provider as any).config = { projectId: 'my-project-123', location: 'us-central1', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ publisherModels: [{ name: 'publishers/google/models/text-bison', displayName: 'Text Bison' }] }),
+        }));
+
+        const models = await provider.listModels();
+        expect(models.some(m => m.name === 'gemini-2.0-flash-001')).toBe(true);
+    });
+
+    it('falls back to hardcoded list on fetch error', async () => {
+        const provider = new VertexAIProvider();
+        (provider as any).config = { projectId: 'my-project-123', location: 'us-central1', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network error')));
+
+        const models = await provider.listModels();
+        expect(models.some(m => m.name === 'gemini-2.0-flash-001')).toBe(true);
+    });
+});
+
 // ── cancelMessage / clearHistory ──────────────────────────────────────────────
 
 describe('VertexAIProvider — cancelMessage / clearHistory', () => {

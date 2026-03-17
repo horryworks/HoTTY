@@ -20,7 +20,7 @@ interface TerminalProps {
     terminalBackground: string;
     terminalBackgroundInactive?: string;
     lineWrapEnabled: boolean;
-    askGeminiCommands?: { id: string; label: string; promptTemplate: string }[];
+    askAiCommands?: { id: string; label: string; promptTemplate: string }[];
     enablePromptHighlight?: boolean;
     promptHighlightColor?: string;
     promptPatterns?: PromptPattern[];
@@ -39,7 +39,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
     terminalBackground,
     terminalBackgroundInactive,
     lineWrapEnabled,
-    askGeminiCommands,
+    askAiCommands,
     enablePromptHighlight,
     promptHighlightColor,
     promptPatterns,
@@ -390,7 +390,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                             setTimeout(() => {
                                 const selection = term.getSelection();
                                 if (selection) {
-                                    electronService.showContextMenu(selection, askGeminiCommands);
+                                    electronService.showContextMenu(selection, askAiCommands);
                                 }
                             }, 50);
                         });
@@ -674,7 +674,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
 
                     if (selection && isOverSelection) {
                         // Text is selected AND right-click is over it -> show context menu
-                        electronService.showContextMenu(selection, askGeminiCommands);
+                        electronService.showContextMenu(selection, askAiCommands);
                     } else {
                         // No text selected OR right-click is outside selection -> trigger paste
                         e.preventDefault();

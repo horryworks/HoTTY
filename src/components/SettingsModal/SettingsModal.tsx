@@ -46,8 +46,8 @@ interface SettingsModalProps {
     onSidebarPositionChange: (position: 'left' | 'right') => void;
     showSystemPrompt: boolean;
     onShowSystemPromptChange: (show: boolean) => void;
-    askGeminiCommands: { id: string; label: string; promptTemplate: string }[];
-    onAskGeminiCommandsChange: (commands: { id: string; label: string; promptTemplate: string }[]) => void;
+    askAiCommands: { id: string; label: string; promptTemplate: string }[];
+    onAskAiCommandsChange: (commands: { id: string; label: string; promptTemplate: string }[]) => void;
     aiPersonas: { id: string; label: string; systemPrompt: string }[];
     onAiPersonasChange: (personas: { id: string; label: string; systemPrompt: string }[]) => void;
     backspaceSendsDel: boolean;
@@ -108,8 +108,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onSidebarPositionChange,
     showSystemPrompt,
     onShowSystemPromptChange,
-    askGeminiCommands,
-    onAskGeminiCommandsChange,
+    askAiCommands,
+    onAskAiCommandsChange,
     aiPersonas,
     onAiPersonasChange,
     backspaceSendsDel,
@@ -152,7 +152,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         if (isOpen) {
             electronService.getAppVersion().then(setVersion);
             electronService.getSshAlgorithms().then(setSshAlgorithms);
-            electronService.geminiAuthStatus().then(setIsAiAuthenticated);
+            electronService.aiAuthStatus().then(setIsAiAuthenticated);
         }
     }, [isOpen]);
 
@@ -234,13 +234,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
     const handleDrop = (e: React.DragEvent<HTMLDivElement>, dropIndex: number) => {
         e.preventDefault();
-        if (draggedIndex === null || draggedIndex === dropIndex || !askGeminiCommands) return;
+        if (draggedIndex === null || draggedIndex === dropIndex || !askAiCommands) return;
 
-        const newCommands = [...askGeminiCommands];
+        const newCommands = [...askAiCommands];
         const [movedItem] = newCommands.splice(draggedIndex, 1);
         newCommands.splice(dropIndex, 0, movedItem);
 
-        onAskGeminiCommandsChange(newCommands);
+        onAskAiCommandsChange(newCommands);
         setDraggedIndex(null);
     };
 
@@ -370,8 +370,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             onWatchBufferLimitChange={onWatchBufferLimitChange}
                             interactiveStabilizationTimeout={interactiveStabilizationTimeout}
                             onInteractiveStabilizationTimeoutChange={onInteractiveStabilizationTimeoutChange}
-                            askGeminiCommands={askGeminiCommands}
-                            onAskGeminiCommandsChange={onAskGeminiCommandsChange}
+                            askAiCommands={askAiCommands}
+                            onAskAiCommandsChange={onAskAiCommandsChange}
                             aiPersonas={aiPersonas}
                             onAiPersonasChange={onAiPersonasChange}
                             proactiveInstruction={proactiveInstruction}

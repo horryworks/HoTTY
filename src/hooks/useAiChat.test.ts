@@ -1,16 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useGeminiChat } from './useGeminiChat';
+import { useAiChat } from './useAiChat';
 import * as electronService from '../services/electronService';
 import type { Session } from './useSessionManager';
-import type { AskGeminiCommand, PersonaDefinition } from '../types/appTypes';
+import type { AskAiCommand, PersonaDefinition } from '../types/appTypes';
 
 // ── Mocks ──
 
 vi.mock('../App', () => ({}));
 
 vi.mock('../services/electronService', () => ({
-    geminiChatSend: vi.fn(),
+    aiChatSend: vi.fn(),
     logDebug: vi.fn(),
     showContextMenu: vi.fn(),
     onAskGemini: vi.fn(() => vi.fn()),
@@ -20,7 +20,7 @@ vi.mock('../services/electronService', () => ({
 
 const makeAISession = (id: string): Session => ({
     id,
-    title: 'Gemini AI',
+    title: 'AI Chat',
     type: 'ai' as const,
     aiChatState: {
         messages: [],
@@ -41,10 +41,10 @@ const makeTerminalSession = (id: string): Session => ({
 
 const makeOptions = (
     sessions: Session[] = [],
-    overrides: Partial<Parameters<typeof useGeminiChat>[0]> = {}
-): Parameters<typeof useGeminiChat>[0] => ({
+    overrides: Partial<Parameters<typeof useAiChat>[0]> = {}
+): Parameters<typeof useAiChat>[0] => ({
     sessions,
-    askGeminiCommands: [] as AskGeminiCommand[],
+    askAiCommands: [] as AskAiCommand[],
     aiPersonas: [] as PersonaDefinition[],
     proactiveInstruction: '',
     getWatchBuffer: vi.fn(() => ''),
@@ -64,77 +64,77 @@ beforeEach(() => {
     localStorage.clear();
 });
 
-// ── askGeminiFreeFormatData ──
+// ── askAiFreeFormatData ──
 
-describe('useGeminiChat — askGeminiFreeFormatData', () => {
+describe('useAiChat — askAiFreeFormatData', () => {
     it('is null initially', () => {
-        const { result } = renderHook(() => useGeminiChat(makeOptions()));
-        expect(result.current.askGeminiFreeFormatData).toBeNull();
+        const { result } = renderHook(() => useAiChat(makeOptions()));
+        expect(result.current.askAiFreeFormatData).toBeNull();
     });
 
-    it('setAskGeminiFreeFormatData updates the state', () => {
-        const { result } = renderHook(() => useGeminiChat(makeOptions()));
+    it('setAskAiFreeFormatData updates the state', () => {
+        const { result } = renderHook(() => useAiChat(makeOptions()));
 
         act(() => {
-            result.current.setAskGeminiFreeFormatData({ selection: 'hello world' });
+            result.current.setAskAiFreeFormatData({ selection: 'hello world' });
         });
 
-        expect(result.current.askGeminiFreeFormatData).toEqual({ selection: 'hello world' });
+        expect(result.current.askAiFreeFormatData).toEqual({ selection: 'hello world' });
     });
 
-    it('setAskGeminiFreeFormatData can reset to null', () => {
-        const { result } = renderHook(() => useGeminiChat(makeOptions()));
+    it('setAskAiFreeFormatData can reset to null', () => {
+        const { result } = renderHook(() => useAiChat(makeOptions()));
 
         act(() => {
-            result.current.setAskGeminiFreeFormatData({ selection: 'text' });
+            result.current.setAskAiFreeFormatData({ selection: 'text' });
         });
         act(() => {
-            result.current.setAskGeminiFreeFormatData(null);
+            result.current.setAskAiFreeFormatData(null);
         });
 
-        expect(result.current.askGeminiFreeFormatData).toBeNull();
+        expect(result.current.askAiFreeFormatData).toBeNull();
     });
 });
 
 // ── sendMessage ──
 
-describe('useGeminiChat — sendMessage', () => {
-    it('calls electronService.geminiChatSend with correct args when session is AI type', () => {
+describe('useAiChat — sendMessage', () => {
+    it('calls electronService.aiChatSend with correct args when session is AI type', () => {
         const aiSession = makeAISession('ai-1');
-        const { result } = renderHook(() => useGeminiChat(makeOptions([aiSession])));
+        const { result } = renderHook(() => useAiChat(makeOptions([aiSession])));
 
         act(() => {
-            result.current.sendMessage('ai-1', 'Hello Gemini');
+            result.current.sendMessage('ai-1', 'Hello AI');
         });
 
-        expect(electronService.geminiChatSend).toHaveBeenCalledTimes(1);
-        expect(electronService.geminiChatSend).toHaveBeenCalledWith(
+        expect(electronService.aiChatSend).toHaveBeenCalledTimes(1);
+        expect(electronService.aiChatSend).toHaveBeenCalledWith(
             'ai-1',
-            'Hello Gemini',
+            'Hello AI',
             'gemini-1.5-flash',
             'You are helpful.'
         );
     });
 
     it('does nothing when the session id does not exist in sessions', () => {
-        const { result } = renderHook(() => useGeminiChat(makeOptions([])));
+        const { result } = renderHook(() => useAiChat(makeOptions([])));
 
         act(() => {
             result.current.sendMessage('nonexistent', 'Hello');
         });
 
-        expect(electronService.geminiChatSend).not.toHaveBeenCalled();
+        expect(electronService.aiChatSend).not.toHaveBeenCalled();
     });
 
     it('does nothing when the session is not an AI type', () => {
         const termSession = makeTerminalSession('term-1');
-        const { result } = renderHook(() => useGeminiChat(makeOptions([termSession])));
+        const { result } = renderHook(() => useAiChat(makeOptions([termSession])));
 
         act(() => {
             result.current.sendMessage('term-1', 'Hello');
         });
 
-        expect(electronService.geminiChatSend).not.toHaveBeenCalled();
+        expect(electronService.aiChatSend).not.toHaveBeenCalled();
     });
 
     it('prepends watched buffer context when the linked terminal is watching', () => {
@@ -154,7 +154,7 @@ describe('useGeminiChat — sendMessage', () => {
         const clearWatchBuffer = vi.fn();
 
         const { result } = renderHook(() =>
-            useGeminiChat(
+            useAiChat(
                 makeOptions([aiSession, termSession], { getWatchBuffer, clearWatchBuffer })
             )
         );
@@ -163,8 +163,8 @@ describe('useGeminiChat — sendMessage', () => {
             result.current.sendMessage('ai-1', 'Analyze this');
         });
 
-        expect(electronService.geminiChatSend).toHaveBeenCalledTimes(1);
-        const [, message] = (electronService.geminiChatSend as ReturnType<typeof vi.fn>).mock.calls[0];
+        expect(electronService.aiChatSend).toHaveBeenCalledTimes(1);
+        const [, message] = (electronService.aiChatSend as ReturnType<typeof vi.fn>).mock.calls[0];
         expect(message).toContain('watched output');
         expect(message).toContain('Analyze this');
         expect(clearWatchBuffer).toHaveBeenCalledWith('term-1');
@@ -173,10 +173,10 @@ describe('useGeminiChat — sendMessage', () => {
 
 // ── showPromptMenu ──
 
-describe('useGeminiChat — showPromptMenu', () => {
+describe('useAiChat — showPromptMenu', () => {
     it('calls electronService.showContextMenu when the session is AI type', () => {
         const aiSession = makeAISession('ai-1');
-        const { result } = renderHook(() => useGeminiChat(makeOptions([aiSession])));
+        const { result } = renderHook(() => useAiChat(makeOptions([aiSession])));
 
         act(() => {
             result.current.showPromptMenu('ai-1');
@@ -187,7 +187,7 @@ describe('useGeminiChat — showPromptMenu', () => {
 
     it('passes __WATCH_BUFFER__ as the first arg to showContextMenu', () => {
         const aiSession = makeAISession('ai-1');
-        const { result } = renderHook(() => useGeminiChat(makeOptions([aiSession])));
+        const { result } = renderHook(() => useAiChat(makeOptions([aiSession])));
 
         act(() => {
             result.current.showPromptMenu('ai-1');
@@ -198,7 +198,7 @@ describe('useGeminiChat — showPromptMenu', () => {
     });
 
     it('does nothing when session is not found', () => {
-        const { result } = renderHook(() => useGeminiChat(makeOptions([])));
+        const { result } = renderHook(() => useAiChat(makeOptions([])));
 
         act(() => {
             result.current.showPromptMenu('nonexistent');
@@ -209,7 +209,7 @@ describe('useGeminiChat — showPromptMenu', () => {
 
     it('does nothing when session is not AI type', () => {
         const termSession = makeTerminalSession('term-1');
-        const { result } = renderHook(() => useGeminiChat(makeOptions([termSession])));
+        const { result } = renderHook(() => useAiChat(makeOptions([termSession])));
 
         act(() => {
             result.current.showPromptMenu('term-1');
@@ -218,13 +218,13 @@ describe('useGeminiChat — showPromptMenu', () => {
         expect(electronService.showContextMenu).not.toHaveBeenCalled();
     });
 
-    it('includes askGeminiCommands labels in the context menu items', () => {
+    it('includes askAiCommands labels in the context menu items', () => {
         const aiSession = makeAISession('ai-1');
-        const commands: AskGeminiCommand[] = [
+        const commands: AskAiCommand[] = [
             { id: 'explain', label: 'Explain this', promptTemplate: 'Explain: {selection}' },
         ];
         const { result } = renderHook(() =>
-            useGeminiChat(makeOptions([aiSession], { askGeminiCommands: commands }))
+            useAiChat(makeOptions([aiSession], { askAiCommands: commands }))
         );
 
         act(() => {
@@ -239,14 +239,14 @@ describe('useGeminiChat — showPromptMenu', () => {
 
 // ── handleFreeFormatSubmit ──
 
-describe('useGeminiChat — handleFreeFormatSubmit', () => {
+describe('useAiChat — handleFreeFormatSubmit', () => {
     it('calls updateSessionState with pendingMessage and systemInstruction', () => {
         const aiSession = makeAISession('ai-1');
         const updateSessionState = vi.fn();
         const setActivePaneId = vi.fn();
 
         const { result } = renderHook(() =>
-            useGeminiChat(makeOptions([aiSession], { updateSessionState, setActivePaneId }))
+            useAiChat(makeOptions([aiSession], { updateSessionState, setActivePaneId }))
         );
 
         act(() => {
@@ -262,26 +262,26 @@ describe('useGeminiChat — handleFreeFormatSubmit', () => {
         expect(newState.pendingMessage).toContain('some selected text');
     });
 
-    it('clears askGeminiFreeFormatData after submit', () => {
+    it('clears askAiFreeFormatData after submit', () => {
         const aiSession = makeAISession('ai-1');
-        const { result } = renderHook(() => useGeminiChat(makeOptions([aiSession])));
+        const { result } = renderHook(() => useAiChat(makeOptions([aiSession])));
 
         act(() => {
-            result.current.setAskGeminiFreeFormatData({ selection: 'text' });
+            result.current.setAskAiFreeFormatData({ selection: 'text' });
         });
-        expect(result.current.askGeminiFreeFormatData).not.toBeNull();
+        expect(result.current.askAiFreeFormatData).not.toBeNull();
 
         act(() => {
             result.current.handleFreeFormatSubmit('My prompt', 'text');
         });
 
-        expect(result.current.askGeminiFreeFormatData).toBeNull();
+        expect(result.current.askAiFreeFormatData).toBeNull();
     });
 
     it('does nothing when no AI session exists', () => {
         const updateSessionState = vi.fn();
         const { result } = renderHook(() =>
-            useGeminiChat(makeOptions([], { updateSessionState }))
+            useAiChat(makeOptions([], { updateSessionState }))
         );
 
         act(() => {
@@ -296,7 +296,7 @@ describe('useGeminiChat — handleFreeFormatSubmit', () => {
         const setActivePaneId = vi.fn();
 
         const { result } = renderHook(() =>
-            useGeminiChat(makeOptions([aiSession], { setActivePaneId }))
+            useAiChat(makeOptions([aiSession], { setActivePaneId }))
         );
 
         act(() => {

@@ -1,4 +1,4 @@
-.ask-gemini-modal-overlay {
+.ask-ai-modal-overlay {
     position: fixed;
     top: 0;
     left: 0;
@@ -11,7 +11,7 @@
     z-index: 9999;
 }
 
-.ask-gemini-modal-content {
+.ask-ai-modal-content {
     background-color: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: 8px;
@@ -23,7 +23,7 @@
     box-shadow: var(--modal-shadow);
 }
 
-.ask-gemini-modal-header {
+.ask-ai-modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -31,13 +31,13 @@
     border-bottom: 1px solid var(--border-color);
 }
 
-.ask-gemini-modal-header h2 {
+.ask-ai-modal-header h2 {
     margin: 0;
     font-size: calc(var(--font-size-base) + 3px);
     color: var(--text-primary);
 }
 
-.ask-gemini-modal-close-btn {
+.ask-ai-modal-close-btn {
     background: none;
     border: none;
     color: var(--text-secondary);
@@ -46,11 +46,11 @@
     line-height: 1;
 }
 
-.ask-gemini-modal-close-btn:hover {
+.ask-ai-modal-close-btn:hover {
     color: var(--text-primary);
 }
 
-.ask-gemini-modal-body {
+.ask-ai-modal-body {
     padding: 16px;
     display: flex;
     flex-direction: column;
@@ -58,19 +58,19 @@
     overflow-y: auto;
 }
 
-.ask-gemini-modal-section {
+.ask-ai-modal-section {
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.ask-gemini-modal-section label {
+.ask-ai-modal-section label {
     font-size: calc(var(--font-size-base) - 1px);
     color: var(--text-secondary);
 }
 
-.ask-gemini-modal-prompt-input,
-.ask-gemini-modal-selection-preview {
+.ask-ai-modal-prompt-input,
+.ask-ai-modal-selection-preview {
     width: 100%;
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);
@@ -83,12 +83,12 @@
     box-sizing: border-box;
 }
 
-.ask-gemini-modal-prompt-input:focus {
+.ask-ai-modal-prompt-input:focus {
     outline: none;
     border-color: var(--accent-color);
 }
 
-.ask-gemini-modal-selection-preview {
+.ask-ai-modal-selection-preview {
     font-family: var(--font-family);
     font-size: calc(var(--font-size-base) - 2px);
     background-color: var(--bg-tertiary);
@@ -97,7 +97,7 @@
     word-break: break-all;
 }
 
-.ask-gemini-modal-footer {
+.ask-ai-modal-footer {
     display: flex;
     justify-content: flex-end;
     gap: 8px;

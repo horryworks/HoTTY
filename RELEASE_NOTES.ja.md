@@ -1,5 +1,23 @@
 # リリースノート - HoTTY
 
+## [v1.0.0-beta6] - 2026-03-18
+
+> ⚠️ **プレビューリリース** — Vertex AI、Anthropic、OpenAI の各プロバイダー連携は十分にテストされていません。本番環境では引き続き Gemini の使用を推奨します。
+
+### 新機能
+- **マルチプロバイダー AI 対応**: AI バックエンドを完全にプロバイダー非依存のアーキテクチャに刷新しました。設定 > AI から使用するプロバイダーを選択可能になりました：
+    - **Google Gemini** (Google AI Studio) — 既存の Gemini OAuth フローをそのまま使用。変更なし。
+    - **Vertex AI** (Google Cloud) — Application Default Credentials (ADC) またはサービスアカウントキーファイルによる認証をサポート。
+    - **OpenAI** — OpenAI API キーで接続。
+    - **Anthropic** — Anthropic API キーで接続。
+- **プロバイダー専用認証パネル**: 各プロバイダーに対応した専用認証パネルを追加しました。
+
+### 変更
+- **AI アーキテクチャの刷新**: 内部 AI 通信をプロバイダー非依存の `AIService` / `IAIProvider` 抽象化で統一しました。IPC チャネルは新しい `ai-*` プレフィックスに移行し、下位互換性のために `gemini-*` エイリアスを維持しています。
+- **`useGeminiChat` を `useAiChat` に置き換え**: フロントエンドの AI チャットフックをプロバイダー非依存の `useAiChat` として書き直し、旧 `AskGeminiModal` を `AskAiModal` に置き換えました。
+
+---
+
 ## [v1.0.0-beta5] - 2026-03-17
 
 ### 改善

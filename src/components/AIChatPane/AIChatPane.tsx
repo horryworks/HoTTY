@@ -5,6 +5,8 @@ import { STORAGE_KEYS } from '../../constants/storage';
 import { calcGeminiCost } from '../../constants/geminiPricing';
 import { AuthenticationPanel } from './AuthenticationPanel';
 import { VertexAIAuthPanel } from './VertexAIAuthPanel';
+import { OpenAIAuthPanel } from './OpenAIAuthPanel';
+import { AnthropicAuthPanel } from './AnthropicAuthPanel';
 import { useSettingsStore } from '../../stores/settingsStore';
 import * as electronService from '../../services/electronService';
 import './AIChatPane.css';
@@ -49,7 +51,7 @@ interface AIChatPaneProps {
     onShowPromptMenu?: () => void;
     onSendMessage?: (text: string) => void;
     showSystemPrompt: boolean;
-    askGeminiCommands: { id: string; label: string; promptTemplate: string }[];
+    askAiCommands: { id: string; label: string; promptTemplate: string }[];
     aiPersonas: { id: string; label: string; systemPrompt: string }[];
     fontSize?: number;
     isActive?: boolean;
@@ -191,8 +193,15 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
 
     const activeAiProvider = useSettingsStore(s => s.activeAiProvider);
 
-    // Load encrypted credentials and attempt auto-auth on mount
+    // OpenAI auth state
+    const [openaiApiKey, setOpenaiApiKey] = useState<string>('');
+
+    // Anthropic auth state
+    const [anthropicApiKey, setAnthropicApiKey] = useState<string>('');
+
+    // Load credentials and attempt auto-auth on mount / provider change
     useEffect(() => {
+        setIsAuthenticated(false);
         const load = async () => {
             try {
                 if (activeAiProvider === 'vertexai') {
@@ -205,6 +214,24 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                         setIsAuthenticated(success);
                         setIsAuthLoading(false);
                     }
+                    return;
+                }
+
+                if (activeAiProvider === 'openai') {
+                    setIsAuthLoading(true);
+                    await electronService.aiSetProvider('openai');
+                    const success = await electronService.aiAuthAuto({});
+                    setIsAuthenticated(success);
+                    setIsAuthLoading(false);
+                    return;
+                }
+
+                if (activeAiProvider === 'anthropic') {
+                    setIsAuthLoading(true);
+                    await electronService.aiSetProvider('anthropic');
+                    const success = await electronService.aiAuthAuto({});
+                    setIsAuthenticated(success);
+                    setIsAuthLoading(false);
                     return;
                 }
 
@@ -366,7 +393,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             lastSentTextRef.current = text;
             setIsStreaming(true);
             setStreamingContent('');
-            electronService.geminiChatSend(sessionId, text, selectedModel, sysInstr);
+            electronService.aiChatSend(sessionId, text, selectedModel, sysInstr);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAuthenticated, localPendingMessage, isStreaming, sessionId, selectedModel, initialState?.systemInstruction, localSystemInstruction, messages, lastTargetSessionId, lastTargetSessionTitle, textareaHeight]);
@@ -398,7 +425,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     }, [messages, inputText, selectedModel, selectedLanguage, selectedExpertise, textareaHeight, localSystemInstruction, localPendingMessage, lastTargetSessionId, lastTargetSessionTitle, isWaitingForTerminal]);
 
     useEffect(() => {
-        electronService.geminiAuthStatus().then(setIsAuthenticated);
+        electronService.aiAuthStatus().then(setIsAuthenticated);
     }, []);
 
     useEffect(() => {
@@ -430,7 +457,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     const authTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
-        const removeListener = electronService.onGeminiAuthResult((result) => {
+        const removeListener = electronService.onAiAuthResult((result) => {
             if (authTimeoutRef.current) {
                 clearTimeout(authTimeoutRef.current);
                 authTimeoutRef.current = null;
@@ -502,7 +529,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
 
     useEffect(() => {
         if (isAuthenticated) {
-            electronService.geminiListModels().then(models => {
+            electronService.aiListModels().then(models => {
                 if (models.length > 0) {
                     setAvailableModels(models);
                 }
@@ -534,6 +561,28 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             return;
         }
 
+        if (activeAiProvider === 'openai') {
+            if (!openaiApiKey) {
+                if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
+                setIsAuthLoading(false);
+                return;
+            }
+            await electronService.aiSetProvider('openai');
+            await electronService.aiAuthStart({ apiKey: openaiApiKey });
+            return;
+        }
+
+        if (activeAiProvider === 'anthropic') {
+            if (!anthropicApiKey) {
+                if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
+                setIsAuthLoading(false);
+                return;
+            }
+            await electronService.aiSetProvider('anthropic');
+            await electronService.aiAuthStart({ apiKey: anthropicApiKey });
+            return;
+        }
+
         if (!clientId || !clientSecret) {
             if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
             setIsAuthLoading(false);
@@ -551,10 +600,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     };
 
     const handleLogout = () => {
-        if (activeAiProvider === 'vertexai') {
-            electronService.aiAuthLogout();
-        } else {
+        if (activeAiProvider === 'gemini') {
             electronService.geminiAuthLogout();
+        } else {
+            electronService.aiAuthLogout();
         }
         setIsAuthenticated(false);
         setMessages([]);
@@ -648,7 +697,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         if (onSendMessage) {
             onSendMessage(text);
         } else {
-            electronService.geminiChatSend(sessionId, text, selectedModel, localSystemInstruction);
+            electronService.aiChatSend(sessionId, text, selectedModel, localSystemInstruction);
         }
     };
 
@@ -664,12 +713,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         setStreamingContent('');
         setTotalInputTokens(0);
         setTotalOutputTokens(0);
-        electronService.geminiChatClear(sessionId);
+        electronService.aiChatClear(sessionId);
     };
 
 
     const handleCancel = () => {
-        electronService.geminiChatCancel(sessionId);
+        electronService.aiChatCancel(sessionId);
         if (streamingContent) {
             setMessages(prev => [...prev, { role: 'model', content: streamingContent + ' [cancelled]' }]);
         }
@@ -797,6 +846,22 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                         setAuthType={setVertexAuthType}
                         keyFilePath={vertexKeyFilePath}
                         setKeyFilePath={setVertexKeyFilePath}
+                        isAuthLoading={isAuthLoading}
+                        onLogin={handleLogin}
+                        authError={authError}
+                    />
+                ) : activeAiProvider === 'openai' ? (
+                    <OpenAIAuthPanel
+                        apiKey={openaiApiKey}
+                        setApiKey={setOpenaiApiKey}
+                        isAuthLoading={isAuthLoading}
+                        onLogin={handleLogin}
+                        authError={authError}
+                    />
+                ) : activeAiProvider === 'anthropic' ? (
+                    <AnthropicAuthPanel
+                        apiKey={anthropicApiKey}
+                        setApiKey={setAnthropicApiKey}
                         isAuthLoading={isAuthLoading}
                         onLogin={handleLogin}
                         authError={authError}

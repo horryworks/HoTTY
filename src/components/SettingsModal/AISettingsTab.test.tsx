@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AISettingsTab } from './AISettingsTab';
 
 vi.mock('../../services/electronService', () => ({
@@ -14,7 +14,8 @@ vi.mock('../../services/electronService', () => ({
     openDebugLogFolder: vi.fn(),
     logDebug: vi.fn(),
     getAppVersion: vi.fn(() => Promise.resolve('1.0.0')),
-    geminiAuthLogout: vi.fn(() => Promise.resolve()),
+    aiAuthLogout: vi.fn(() => Promise.resolve()),
+    aiAuthStatus: vi.fn(() => Promise.resolve(false)),
     aiSetProvider: vi.fn(() => Promise.resolve()),
 }));
 
@@ -26,8 +27,8 @@ const baseProps = {
     onWatchBufferLimitChange: vi.fn(),
     interactiveStabilizationTimeout: 400,
     onInteractiveStabilizationTimeoutChange: vi.fn(),
-    askGeminiCommands: [],
-    onAskGeminiCommandsChange: vi.fn(),
+    askAiCommands: [],
+    onAskAiCommandsChange: vi.fn(),
     aiPersonas: [],
     onAiPersonasChange: vi.fn(),
     proactiveInstruction: '',
@@ -66,9 +67,19 @@ describe('AISettingsTab', () => {
         expect(screen.getByText('Google Cloud Vertex AI')).toBeInTheDocument();
     });
 
-    it('renders Google Account Authentication label', () => {
+    it('renders OpenAI option in provider dropdown', () => {
         render(<AISettingsTab {...baseProps} />);
-        expect(screen.getByText('Google Account Authentication')).toBeInTheDocument();
+        expect(screen.getByText('OpenAI')).toBeInTheDocument();
+    });
+
+    it('renders Anthropic option in provider dropdown', () => {
+        render(<AISettingsTab {...baseProps} />);
+        expect(screen.getByText('Anthropic (Claude)')).toBeInTheDocument();
+    });
+
+    it('renders AI Provider Authentication label', () => {
+        render(<AISettingsTab {...baseProps} />);
+        expect(screen.getByText('AI Provider Authentication')).toBeInTheDocument();
     });
 
     it('shows "Not Authenticated" status when not authenticated', () => {
@@ -83,12 +94,12 @@ describe('AISettingsTab', () => {
 
     it('shows logout button when authenticated', () => {
         render(<AISettingsTab {...baseProps} isAiAuthenticated={true} />);
-        expect(screen.getByText('Logout from Gemini')).toBeInTheDocument();
+        expect(screen.getByText('Logout')).toBeInTheDocument();
     });
 
     it('does not show logout button when not authenticated', () => {
         render(<AISettingsTab {...baseProps} isAiAuthenticated={false} />);
-        expect(screen.queryByText('Logout from Gemini')).not.toBeInTheDocument();
+        expect(screen.queryByText('Logout')).not.toBeInTheDocument();
     });
 
     it('renders Watch Buffer Limit section', () => {
@@ -132,19 +143,19 @@ describe('AISettingsTab', () => {
         expect(resetButtons.length).toBeGreaterThan(0);
     });
 
-    it('calls onAskGeminiCommandsChange when Add Command is clicked', () => {
-        const onAskGeminiCommandsChange = vi.fn();
-        render(<AISettingsTab {...baseProps} onAskGeminiCommandsChange={onAskGeminiCommandsChange} />);
+    it('calls onAskAiCommandsChange when Add Command is clicked', () => {
+        const onAskAiCommandsChange = vi.fn();
+        render(<AISettingsTab {...baseProps} onAskAiCommandsChange={onAskAiCommandsChange} />);
         fireEvent.click(screen.getByText('+ Add Command'));
-        expect(onAskGeminiCommandsChange).toHaveBeenCalledTimes(1);
-        const newCommands = onAskGeminiCommandsChange.mock.calls[0][0];
+        expect(onAskAiCommandsChange).toHaveBeenCalledTimes(1);
+        const newCommands = onAskAiCommandsChange.mock.calls[0][0];
         expect(newCommands).toHaveLength(1);
         expect(newCommands[0].label).toBe('New Command');
     });
 
     it('renders existing ask gemini commands', () => {
         const commands = [{ id: 'cmd1', label: 'Test Command', promptTemplate: 'Test {selection}' }];
-        render(<AISettingsTab {...baseProps} askGeminiCommands={commands} />);
+        render(<AISettingsTab {...baseProps} askAiCommands={commands} />);
         expect(screen.getByDisplayValue('Test Command')).toBeInTheDocument();
     });
 
@@ -180,6 +191,48 @@ describe('AISettingsTab', () => {
         const showSystemPromptCheckbox = checkboxes[checkboxes.length - 1];
         fireEvent.click(showSystemPromptCheckbox);
         expect(onShowSystemPromptChange).toHaveBeenCalled();
+    });
+
+    it('calls aiAuthStatus and onAuthenticatedChange when provider changes', async () => {
+        const { aiAuthStatus } = await import('../../services/electronService');
+        (aiAuthStatus as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+        const onAuthenticatedChange = vi.fn();
+        render(<AISettingsTab {...baseProps} onAuthenticatedChange={onAuthenticatedChange} />);
+        const select = screen.getByRole('combobox');
+        fireEvent.change(select, { target: { value: 'vertexai' } });
+        await waitFor(() => {
+            expect(aiAuthStatus).toHaveBeenCalled();
+            expect(onAuthenticatedChange).toHaveBeenCalledWith(true);
+        });
+    });
+
+    it('shows privacy warning when Google AI Studio (Gemini) is selected', async () => {
+        render(<AISettingsTab {...baseProps} />);
+        const select = screen.getByRole('combobox');
+        fireEvent.change(select, { target: { value: 'gemini' } });
+        await waitFor(() => {
+            expect(screen.getByText(/Privacy Notice/)).toBeInTheDocument();
+        });
+    });
+
+    it('does not show privacy warning when non-Gemini provider is selected', async () => {
+        render(<AISettingsTab {...baseProps} />);
+        const select = screen.getByRole('combobox');
+        fireEvent.change(select, { target: { value: 'vertexai' } });
+        await waitFor(() => {
+            expect(screen.queryByText(/Privacy Notice/)).not.toBeInTheDocument();
+        });
+    });
+
+    it('dismisses privacy warning when OK is clicked', async () => {
+        render(<AISettingsTab {...baseProps} />);
+        const select = screen.getByRole('combobox');
+        fireEvent.change(select, { target: { value: 'gemini' } });
+        await waitFor(() => {
+            expect(screen.getByText(/Privacy Notice/)).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByText('OK'));
+        expect(screen.queryByText(/Privacy Notice/)).not.toBeInTheDocument();
     });
 
     it('renders Proactive Investigation Instruction textarea', () => {

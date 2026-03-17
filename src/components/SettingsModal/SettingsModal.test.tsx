@@ -14,8 +14,8 @@ vi.mock('../../services/electronService', () => ({
     openDebugLogFolder: vi.fn(),
     logDebug: vi.fn(),
     getAppVersion: vi.fn(() => Promise.resolve('1.0.0')),
-    geminiAuthStatus: vi.fn(() => Promise.resolve(false)),
-    geminiAuthLogout: vi.fn(),
+    aiAuthStatus: vi.fn(() => Promise.resolve(false)),
+    aiAuthLogout: vi.fn(),
     openExternal: vi.fn(),
 }));
 
@@ -69,8 +69,8 @@ const baseProps = {
     onSidebarPositionChange: vi.fn(),
     showSystemPrompt: false,
     onShowSystemPromptChange: vi.fn(),
-    askGeminiCommands: [],
-    onAskGeminiCommandsChange: vi.fn(),
+    askAiCommands: [],
+    onAskAiCommandsChange: vi.fn(),
     aiPersonas: [],
     onAiPersonasChange: vi.fn(),
     backspaceSendsDel: false,
@@ -151,7 +151,7 @@ describe('SettingsModal', () => {
     it('switches to AI tab when clicked', async () => {
         await renderAndSettle(<SettingsModal {...baseProps} />);
         fireEvent.click(screen.getByText('AI'));
-        expect(screen.getByText('Google Account Authentication')).toBeInTheDocument();
+        expect(screen.getByText('AI Provider Authentication')).toBeInTheDocument();
     });
 
     it('switches to About tab when clicked', async () => {

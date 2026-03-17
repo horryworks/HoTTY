@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import './AskGeminiModal.css';
+import './AskAiModal.css';
 
-interface AskGeminiModalProps {
+interface AskAiModalProps {
     isOpen: boolean;
     selection: string;
     onClose: () => void;
     onSubmit: (prompt: string, selection: string) => void;
 }
 
-export const AskGeminiModal: React.FC<AskGeminiModalProps> = ({
+export const AskAiModal: React.FC<AskAiModalProps> = ({
     isOpen,
     selection,
     onClose,
@@ -49,19 +49,19 @@ export const AskGeminiModal: React.FC<AskGeminiModalProps> = ({
     };
 
     return (
-        <div className="ask-gemini-modal-overlay" onClick={onClose}>
-            <div className="ask-gemini-modal-content" onClick={(e) => e.stopPropagation()}>
-                <div className="ask-gemini-modal-header">
+        <div className="ask-ai-modal-overlay" onClick={onClose}>
+            <div className="ask-ai-modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="ask-ai-modal-header">
                     <h2>Ask AI</h2>
-                    <button className="ask-gemini-modal-close-btn" onClick={onClose} title="Close">×</button>
+                    <button className="ask-ai-modal-close-btn" onClick={onClose} title="Close">×</button>
                 </div>
 
-                <div className="ask-gemini-modal-body">
-                    <div className="ask-gemini-modal-section">
+                <div className="ask-ai-modal-body">
+                    <div className="ask-ai-modal-section">
                         <label>Your Question:</label>
                         <textarea
                             ref={textareaRef}
-                            className="ask-gemini-modal-prompt-input"
+                            className="ask-ai-modal-prompt-input"
                             placeholder="What would you like to ask about the selection? (Ctrl+Enter to Ask)"
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
@@ -70,10 +70,10 @@ export const AskGeminiModal: React.FC<AskGeminiModalProps> = ({
                         />
                     </div>
 
-                    <div className="ask-gemini-modal-section">
+                    <div className="ask-ai-modal-section">
                         <label>Selected Text:</label>
                         <textarea
-                            className="ask-gemini-modal-selection-preview"
+                            className="ask-ai-modal-selection-preview"
                             value={selection}
                             readOnly
                             rows={6}
@@ -81,7 +81,7 @@ export const AskGeminiModal: React.FC<AskGeminiModalProps> = ({
                     </div>
                 </div>
 
-                <div className="ask-gemini-modal-footer">
+                <div className="ask-ai-modal-footer">
                     <button className="btn-secondary" onClick={onClose}>Cancel</button>
                     <button
                         className="btn-primary"

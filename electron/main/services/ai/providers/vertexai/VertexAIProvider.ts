@@ -409,12 +409,61 @@ export class VertexAIProvider implements IAIProvider {
     this.chatHistories.delete(sessionId);
   }
 
-  async listModels(): Promise<ModelInfo[]> {
+  private getHardcodedModels(): ModelInfo[] {
     return [
       { name: 'gemini-2.5-pro-preview-05-06', displayName: 'Gemini 2.5 Pro Preview (Vertex AI)' },
       { name: 'gemini-2.0-flash-001', displayName: 'Gemini 2.0 Flash (Vertex AI)' },
       { name: 'gemini-1.5-pro-002', displayName: 'Gemini 1.5 Pro (Vertex AI)' },
       { name: 'gemini-1.5-flash-002', displayName: 'Gemini 1.5 Flash (Vertex AI)' },
     ];
+  }
+
+  async listModels(): Promise<ModelInfo[]> {
+    if (!this.config) return this.getHardcodedModels();
+    const token = await this.getValidToken();
+    if (!token) return this.getHardcodedModels();
+
+    try {
+      const { location } = this.config;
+      const ctrl = new AbortController();
+      const timeout = setTimeout(() => ctrl.abort(), 15000);
+      let response: Response;
+      try {
+        response = await fetch(
+          `https://${location}-aiplatform.googleapis.com/v1/publishers/google/models`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: ctrl.signal,
+          },
+        );
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      if (!response.ok) {
+        logger.warn('vertexai', 'listModels API failed, using hardcoded list', { status: response.status });
+        return this.getHardcodedModels();
+      }
+
+      const data = await response.json() as { publisherModels?: { name: string; displayName?: string }[] };
+      const publisherModels = data.publisherModels ?? [];
+      const geminiModels: ModelInfo[] = publisherModels
+        .filter(m => m.name?.includes('gemini'))
+        .map(m => {
+          const modelId = m.name.split('/').pop() ?? m.name;
+          return { name: modelId, displayName: m.displayName ?? modelId };
+        });
+
+      if (geminiModels.length === 0) {
+        logger.warn('vertexai', 'No Gemini models found in API response, using hardcoded list');
+        return this.getHardcodedModels();
+      }
+
+      logger.debug('vertexai', `listModels: fetched ${geminiModels.length} models from API`);
+      return geminiModels;
+    } catch (err: unknown) {
+      logger.warn('vertexai', 'listModels fetch error, using hardcoded list', { error: err instanceof Error ? err.message : String(err) });
+      return this.getHardcodedModels();
+    }
   }
 }

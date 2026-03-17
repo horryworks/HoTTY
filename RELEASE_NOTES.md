@@ -1,5 +1,23 @@
 # Release Notes - HoTTY
 
+## [v1.0.0-beta6] - 2026-03-18
+
+> ⚠️ **Preview Release** — AI provider integrations (Vertex AI, Anthropic, OpenAI) are not fully tested. Gemini remains the recommended production option.
+
+### New Features
+- **Multi-Provider AI Support**: The AI backend has been fully generalized. You can now select your AI provider from Settings > AI:
+    - **Google Gemini** (Google AI Studio) — existing Gemini OAuth flow, unchanged.
+    - **Vertex AI** (Google Cloud) — supports Application Default Credentials (ADC) and Service Account Key File authentication.
+    - **OpenAI** — connect using an OpenAI API key.
+    - **Anthropic** — connect using an Anthropic API key.
+- **Provider-Specific Auth Panels**: Each provider has a dedicated authentication panel with the appropriate credential fields.
+
+### Changed
+- **AI Architecture Refactored**: Internal AI communication has been unified under a provider-agnostic `AIService` / `IAIProvider` abstraction. All IPC channels now use the new `ai-*` prefix; legacy `gemini-*` aliases are retained for backward compatibility.
+- **`useGeminiChat` replaced by `useAiChat`**: The front-end AI chat hook has been rewritten as a provider-agnostic `useAiChat`, and the old `AskGeminiModal` has been replaced by `AskAiModal`.
+
+---
+
 ## [v1.0.0-beta5] - 2026-03-17
 
 ### Improved

@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Session } from './useSessionManager';
-import type { AskGeminiCommand, PersonaDefinition } from '../App';
+import type { AskAiCommand, PersonaDefinition } from '../App';
 import { STORAGE_KEYS } from '../constants/storage';
 import * as electronService from '../services/electronService';
 
 // -- Types --
 
-interface UseGeminiChatOptions {
+interface UseAiChatOptions {
   sessions: Session[];
-  askGeminiCommands: AskGeminiCommand[];
+  askAiCommands: AskAiCommand[];
   aiPersonas: PersonaDefinition[];
   proactiveInstruction: string;
   getWatchBuffer: (sessionId: string) => string;
@@ -22,21 +22,21 @@ interface UseGeminiChatOptions {
   setActivePaneId: (id: string) => void;
 }
 
-interface UseGeminiChatReturn {
+interface UseAiChatReturn {
   sendMessage: (aiSessionId: string, text: string) => void;
-  askGemini: (selection: string, type: string, targetSessionId?: string) => void;
+  askAi: (selection: string, type: string, targetSessionId?: string) => void;
   showPromptMenu: (aiSessionId: string) => void;
-  askGeminiFreeFormatData: { selection: string } | null;
-  setAskGeminiFreeFormatData: (data: { selection: string } | null) => void;
+  askAiFreeFormatData: { selection: string } | null;
+  setAskAiFreeFormatData: (data: { selection: string } | null) => void;
   handleFreeFormatSubmit: (prompt: string, selection: string) => void;
 }
 
 // -- Hook --
 
-export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatReturn {
+export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
   const {
     sessions,
-    askGeminiCommands,
+    askAiCommands,
     aiPersonas,
     getWatchBuffer,
     clearWatchBuffer,
@@ -49,11 +49,11 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
     setActivePaneId,
   } = options;
 
-  const [askGeminiFreeFormatData, setAskGeminiFreeFormatData] = useState<{ selection: string } | null>(null);
+  const [askAiFreeFormatData, setAskAiFreeFormatData] = useState<{ selection: string } | null>(null);
 
   // Refs for stable access in callbacks
   const sessionsRef = useRef(sessions);
-  const askGeminiCommandsRef = useRef(askGeminiCommands);
+  const askAiCommandsRef = useRef(askAiCommands);
   const aiPersonasRef = useRef(aiPersonas);
   const lastTerminalSessionIdRef = useRef(lastTerminalSessionId);
   const paneAllocationsRef = useRef(paneAllocations);
@@ -61,7 +61,7 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
 
   useEffect(() => {
     sessionsRef.current = sessions;
-    askGeminiCommandsRef.current = askGeminiCommands;
+    askAiCommandsRef.current = askAiCommands;
     aiPersonasRef.current = aiPersonas;
     lastTerminalSessionIdRef.current = lastTerminalSessionId;
     paneAllocationsRef.current = paneAllocations;
@@ -149,16 +149,16 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
     const selectedModel = aiSession.aiChatState?.selectedModel || 'Unspecified';
     const systemInstruction = aiSession.aiChatState?.systemInstruction || 'You are a helpful assistant.';
 
-    electronService.geminiChatSend(aiSessionId, finalMessage, selectedModel, systemInstruction);
+    electronService.aiChatSend(aiSessionId, finalMessage, selectedModel, systemInstruction);
   }, []);
 
-  // -- askGemini --
-  const askGemini = useCallback((selection: string, type: string, targetSessionId?: string) => {
+  // -- askAi --
+  const askAi = useCallback((selection: string, type: string, targetSessionId?: string) => {
     const actualSelection = selection === '__WATCH_BUFFER__' ? '' : selection;
-    electronService.logDebug(`[useGeminiChat] onAskGemini triggered. Type: ${type}, Selection length: ${actualSelection?.length}`);
+    electronService.logDebug(`[useAiChat] onAskAi triggered. Type: ${type}, Selection length: ${actualSelection?.length}`);
 
     const currentSessions = sessionsRef.current;
-    const currentCommands = askGeminiCommandsRef.current;
+    const currentCommands = askAiCommandsRef.current;
 
     // Resolve target terminal
     const { activeTermId, activeSession } = resolveTargetTerminal(targetSessionId);
@@ -178,7 +178,7 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
       : actualSelection;
 
     if (!finalSelection) {
-      electronService.logDebug('[useGeminiChat] Selection and buffer are empty, ignoring.');
+      electronService.logDebug('[useAiChat] Selection and buffer are empty, ignoring.');
       return;
     }
 
@@ -188,15 +188,15 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
 
     if (existingAiSession) {
       aiSessionId = existingAiSession.id;
-      electronService.logDebug(`[useGeminiChat] Found existing AI session: ${aiSessionId}`);
+      electronService.logDebug(`[useAiChat] Found existing AI session: ${aiSessionId}`);
       setActivePaneIdRef.current(aiSessionId);
     } else {
       const newId = createAISessionRef.current();
       if (newId) {
         aiSessionId = newId;
-        electronService.logDebug(`[useGeminiChat] Created new AI session: ${aiSessionId}`);
+        electronService.logDebug(`[useAiChat] Created new AI session: ${aiSessionId}`);
       } else {
-        electronService.logDebug('[useGeminiChat] Failed to create AI session (already exists?)');
+        electronService.logDebug('[useAiChat] Failed to create AI session (already exists?)');
         return;
       }
     }
@@ -223,7 +223,7 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
       systemInstruction = `${defaultPersona} Answer in ${lang}.`;
       userPrompt = `Please analyze the following terminal output and point out any errors, warnings, or findings of interest:\n\n${finalSelection}`;
     } else if (type === 'free-format') {
-      setAskGeminiFreeFormatData({ selection: finalSelection });
+      setAskAiFreeFormatData({ selection: finalSelection });
       return;
     } else {
       const existingCommand = currentCommands.find(c => c.id === type);
@@ -239,7 +239,7 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
       }
     }
 
-    electronService.logDebug(`[useGeminiChat] Updating session state with prompt. Prompt: ${userPrompt.substring(0, 50)}...`);
+    electronService.logDebug(`[useAiChat] Updating session state with prompt. Prompt: ${userPrompt.substring(0, 50)}...`);
     updateSessionStateRef.current(aiSessionId, {
       pendingMessage: userPrompt,
       systemInstruction: systemInstruction
@@ -248,9 +248,9 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
 
   // -- showPromptMenu --
   const showPromptMenu = useCallback((aiSessionId: string) => {
-    electronService.logDebug(`[useGeminiChat] showPromptMenu for session: ${aiSessionId}`);
+    electronService.logDebug(`[useAiChat] showPromptMenu for session: ${aiSessionId}`);
     const currentSessions = sessionsRef.current;
-    const currentCommands = askGeminiCommandsRef.current;
+    const currentCommands = askAiCommandsRef.current;
     const aiSession = currentSessions.find(s => s.id === aiSessionId);
     if (!aiSession || aiSession.type !== 'ai') return;
 
@@ -280,39 +280,39 @@ export function useGeminiChat(options: UseGeminiChatOptions): UseGeminiChatRetur
       lastTargetSessionTitle: aiSession.aiChatState?.lastTargetSessionTitle
     });
     setActivePaneIdRef.current(aiSession.id);
-    setAskGeminiFreeFormatData(null);
+    setAskAiFreeFormatData(null);
   }, [resolvePersonaPrompt]);
 
   // -- Register IPC listeners (once) --
   useEffect(() => {
     const removeListener = electronService.onAskGemini((selection: string, type: string) => {
-      electronService.logDebug(`[useGeminiChat] onAskGemini IPC. Type: ${type}`);
-      askGemini(selection, type);
+      electronService.logDebug(`[useAiChat] onAskGemini IPC. Type: ${type}`);
+      askAi(selection, type);
     });
 
-    const handleCustomAskGemini = (e: Event) => {
+    const handleCustomAskAi = (e: Event) => {
       const customEvent = e as CustomEvent<{ selection: string; type: string; sessionId?: string }>;
-      electronService.logDebug(`[useGeminiChat] handleCustomAskGemini triggered with type: ${customEvent.detail?.type}`);
+      electronService.logDebug(`[useAiChat] handleCustomAskAi triggered with type: ${customEvent.detail?.type}`);
       if (customEvent.detail) {
-        askGemini(customEvent.detail.selection, customEvent.detail.type, customEvent.detail.sessionId);
+        askAi(customEvent.detail.selection, customEvent.detail.type, customEvent.detail.sessionId);
       }
     };
 
-    window.addEventListener('ask-gemini-internal', handleCustomAskGemini);
+    window.addEventListener('ask-gemini-internal', handleCustomAskAi);
 
     return () => {
       removeListener();
-      window.removeEventListener('ask-gemini-internal', handleCustomAskGemini);
+      window.removeEventListener('ask-gemini-internal', handleCustomAskAi);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dep array - uses refs internally
 
   return {
     sendMessage,
-    askGemini,
+    askAi,
     showPromptMenu,
-    askGeminiFreeFormatData,
-    setAskGeminiFreeFormatData,
+    askAiFreeFormatData,
+    setAskAiFreeFormatData,
     handleFreeFormatSubmit,
   };
 }

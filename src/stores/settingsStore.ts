@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { PromptPattern, PersonaDefinition, AskGeminiCommand } from '../types/appTypes';
+import type { PromptPattern, PersonaDefinition, AskAiCommand } from '../types/appTypes';
 import * as electronService from '../services/electronService';
 
 // ── State shape ──────────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ export interface SettingsState {
     aiPersonas: PersonaDefinition[];
 
     // Ask AI Commands
-    askGeminiCommands: AskGeminiCommand[];
+    askAiCommands: AskAiCommand[];
 
     // Sidebar Position
     sidebarPosition: 'left' | 'right';
@@ -81,7 +81,7 @@ export interface SettingsState {
     interactiveStabilizationTimeout: number;
 
     // Active AI Provider
-    activeAiProvider: 'gemini' | 'vertexai';
+    activeAiProvider: 'gemini' | 'vertexai' | 'openai' | 'anthropic';
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
@@ -113,11 +113,11 @@ export interface SettingsActions {
     updatePromptHighlightColor: (v: string) => void;
     updatePromptPatterns: (v: PromptPattern[]) => void;
     updateAiPersonas: (v: PersonaDefinition[]) => void;
-    updateAskGeminiCommands: (v: AskGeminiCommand[]) => void;
+    updateAskAiCommands: (v: AskAiCommand[]) => void;
     updateSidebarPosition: (v: 'left' | 'right') => void;
     updateProactiveInstruction: (v: string) => void;
     updateInteractiveStabilizationTimeout: (v: number) => void;
-    updateActiveAiProvider: (v: 'gemini' | 'vertexai') => void;
+    updateActiveAiProvider: (v: 'gemini' | 'vertexai' | 'openai' | 'anthropic') => void;
 }
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
@@ -142,7 +142,7 @@ const DEFAULT_PERSONAS: PersonaDefinition[] = [
     { id: 'security-analyst', label: 'Security Analyst', systemPrompt: 'You are a Cybersecurity Analyst. Analyze logs and configurations for potential vulnerabilities, threats, and indicators of compromise (IoCs). Recommend mitigation strategies based on industry standards (NIST/CIS).' },
 ];
 
-const DEFAULT_GEMINI_COMMANDS: AskGeminiCommand[] = [
+const DEFAULT_AI_COMMANDS: AskAiCommand[] = [
     { id: 'what-is-this', label: 'What is this?', promptTemplate: 'Explain the following text or code snippet concisely:\n\n{selection}' },
     { id: 'what-does-it-mean', label: 'What does it mean?', promptTemplate: 'Interpret the meaning of this log entry or message and its implications:\n\n{selection}' },
     { id: 'root-cause', label: 'Research root cause', promptTemplate: 'Analyze the following error or issue, identify 3 potential root causes, and suggest verification steps for each:\n\n{selection}' },
@@ -182,11 +182,11 @@ const INITIAL_STATE: SettingsState = {
     promptHighlightColor: 'rgba(255, 255, 255, 0.15)',
     promptPatterns: DEFAULT_PROMPT_PATTERNS,
     aiPersonas: DEFAULT_PERSONAS,
-    askGeminiCommands: DEFAULT_GEMINI_COMMANDS,
+    askAiCommands: DEFAULT_AI_COMMANDS,
     sidebarPosition: 'left',
     proactiveInstruction: 'If you need more information to fulfill the user\'s request, proactively suggest terminal commands using code blocks with the "execute" language tag, like this: ```execute\\n[command]\\n```. Do not just wait for user input if the information can be gathered via the terminal.',
     interactiveStabilizationTimeout: 10000,
-    activeAiProvider: 'gemini',
+    activeAiProvider: 'vertexai',
 };
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -237,7 +237,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
             updatePromptHighlightColor: (v) => set({ promptHighlightColor: v }),
             updatePromptPatterns: (v) => set({ promptPatterns: v }),
             updateAiPersonas: (v) => set({ aiPersonas: v }),
-            updateAskGeminiCommands: (v) => set({ askGeminiCommands: v }),
+            updateAskAiCommands: (v) => set({ askAiCommands: v }),
             updateSidebarPosition: (v) => set({ sidebarPosition: v }),
             updateProactiveInstruction: (v) => set({ proactiveInstruction: v }),
             updateInteractiveStabilizationTimeout: (v) => set({ interactiveStabilizationTimeout: v }),

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import * as electronService from '../../services/electronService';
-import type { AskGeminiCommand } from '../../types/appTypes';
+import type { AskAiCommand } from '../../types/appTypes';
 import './LogViewerPane.css';
 
 interface LogFile {
@@ -13,7 +13,7 @@ interface LogFile {
 
 interface LogViewerPaneProps {
     loggingPath: string;
-    askGeminiCommands?: AskGeminiCommand[];
+    askAiCommands?: AskAiCommand[];
 }
 
 const formatSize = (bytes: number): string => {
@@ -58,7 +58,7 @@ const highlightLine = (line: string, regex: RegExp): React.ReactNode => {
     return parts.length > 0 ? <>{parts}</> : line;
 };
 
-export const LogViewerPane: React.FC<LogViewerPaneProps> = ({ loggingPath, askGeminiCommands = [] }) => {
+export const LogViewerPane: React.FC<LogViewerPaneProps> = ({ loggingPath, askAiCommands = [] }) => {
     // File list state
     const [files, setFiles] = useState<LogFile[]>([]);
     const [listError, setListError] = useState<string | null>(null);
@@ -228,12 +228,12 @@ export const LogViewerPane: React.FC<LogViewerPaneProps> = ({ loggingPath, askGe
     // ── Context menu (Ask AI) ──
 
     const handleContextMenu = useCallback((e: React.MouseEvent) => {
-        if (!askGeminiCommands.length) return;
+        if (!askAiCommands.length) return;
         const selection = window.getSelection()?.toString() ?? '';
         if (!selection) return;
         e.preventDefault();
-        electronService.showContextMenu(selection, askGeminiCommands, false);
-    }, [askGeminiCommands]);
+        electronService.showContextMenu(selection, askAiCommands, false);
+    }, [askAiCommands]);
 
     // ── Render ──
 

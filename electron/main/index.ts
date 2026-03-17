@@ -12,6 +12,8 @@ import { AIProviderRegistry } from './services/ai/AIProviderRegistry';
 import { AIService } from './services/ai/AIService';
 import { GeminiProvider } from './services/ai/providers/gemini/GeminiProvider';
 import { VertexAIProvider } from './services/ai/providers/vertexai/VertexAIProvider';
+import { OpenAIProvider } from './services/ai/providers/openai/OpenAIProvider';
+import { AnthropicProvider } from './services/ai/providers/anthropic/AnthropicProvider';
 import { LogManager } from './services/LogManager';
 import { logger } from './services/Logger';
 import { encryptString, decryptString } from './services/dpapi';
@@ -151,6 +153,8 @@ app.whenReady().then(async () => {
   const registry = new AIProviderRegistry();
   registry.register(new GeminiProvider());
   registry.register(new VertexAIProvider());
+  registry.register(new OpenAIProvider());
+  registry.register(new AnthropicProvider());
   aiService = new AIService(registry, 'gemini');
   win.webContents.once('did-finish-load', () => { checkForUpdates(win); });
 

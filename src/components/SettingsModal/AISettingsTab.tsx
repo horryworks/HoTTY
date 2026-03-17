@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import * as electronService from '../../services/electronService';
 import { useSettingsStore } from '../../stores/settingsStore';
+import '../ConfirmModal/ConfirmModal.css';
 
 interface AISettingsTabProps {
     isAiAuthenticated: boolean;
@@ -10,8 +11,8 @@ interface AISettingsTabProps {
     onWatchBufferLimitChange: (limit: number) => void;
     interactiveStabilizationTimeout: number;
     onInteractiveStabilizationTimeoutChange: (timeout: number) => void;
-    askGeminiCommands: { id: string; label: string; promptTemplate: string }[];
-    onAskGeminiCommandsChange: (commands: { id: string; label: string; promptTemplate: string }[]) => void;
+    askAiCommands: { id: string; label: string; promptTemplate: string }[];
+    onAskAiCommandsChange: (commands: { id: string; label: string; promptTemplate: string }[]) => void;
     aiPersonas: { id: string; label: string; systemPrompt: string }[];
     onAiPersonasChange: (personas: { id: string; label: string; systemPrompt: string }[]) => void;
     proactiveInstruction: string;
@@ -33,8 +34,8 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
     onWatchBufferLimitChange,
     interactiveStabilizationTimeout,
     onInteractiveStabilizationTimeoutChange,
-    askGeminiCommands,
-    onAskGeminiCommandsChange,
+    askAiCommands,
+    onAskAiCommandsChange,
     aiPersonas,
     onAiPersonasChange,
     proactiveInstruction,
@@ -49,6 +50,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
 }) => {
     const activeAiProvider = useSettingsStore(s => s.activeAiProvider);
     const updateActiveAiProvider = useSettingsStore(s => s.updateActiveAiProvider);
+    const [showGeminiWarning, setShowGeminiWarning] = useState(false);
 
     return (
         <div className="form-group">
@@ -56,10 +58,15 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                 <label style={{ marginBottom: '10px', display: 'block' }}>AI Provider</label>
                 <select
                     value={activeAiProvider}
-                    onChange={(e) => {
-                        const provider = e.target.value as 'gemini' | 'vertexai';
+                    onChange={async (e) => {
+                        const provider = e.target.value as 'gemini' | 'vertexai' | 'openai' | 'anthropic';
                         updateActiveAiProvider(provider);
-                        electronService.aiSetProvider(provider);
+                        await electronService.aiSetProvider(provider);
+                        const authStatus = await electronService.aiAuthStatus();
+                        onAuthenticatedChange(authStatus);
+                        if (provider === 'gemini') {
+                            setShowGeminiWarning(true);
+                        }
                     }}
                     style={{
                         padding: '6px 10px',
@@ -71,8 +78,10 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         width: '220px',
                     }}
                 >
-                    <option value="gemini">Google AI Studio (Gemini)</option>
                     <option value="vertexai">Google Cloud Vertex AI</option>
+                    <option value="gemini">Google AI Studio (Gemini)</option>
+                    <option value="anthropic">Anthropic (Claude)</option>
+                    <option value="openai">OpenAI</option>
                 </select>
                 <p className="settings-help" style={{ marginTop: '8px' }}>
                     Select the AI provider to use for the chat panel.
@@ -80,7 +89,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
             </div>
 
             <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
-                <label style={{ marginBottom: '10px', display: 'block' }}>Google Account Authentication</label>
+                <label style={{ marginBottom: '10px', display: 'block' }}>AI Provider Authentication</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{
@@ -94,8 +103,8 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                     {isAiAuthenticated && (
                         <button
                             onClick={async () => {
-                                if (confirm('Are you sure you want to logout? You will need to re-authenticate to use Gemini AI.')) {
-                                    await electronService.geminiAuthLogout();
+                                if (confirm('Are you sure you want to logout? You will need to re-authenticate to use the AI provider.')) {
+                                    await electronService.aiAuthLogout();
                                     onAuthenticatedChange(false);
                                     onLogout();
                                 }
@@ -109,7 +118,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                                 borderRadius: '3px'
                             }}
                         >
-                            Logout from Gemini
+                            Logout
                         </button>
                     )}
                 </div>
@@ -156,7 +165,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
             <label style={{ marginBottom: '10px', display: 'block' }}>Ask AI Commands</label>
 
             <div className="command-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
-                {askGeminiCommands?.map((cmd, index) => (
+                {askAiCommands?.map((cmd, index) => (
                     <div
                         key={cmd.id}
                         draggable
@@ -184,9 +193,9 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                                 type="text"
                                 value={cmd.label}
                                 onChange={(e) => {
-                                    const newCommands = [...askGeminiCommands];
+                                    const newCommands = [...askAiCommands];
                                     newCommands[index] = { ...cmd, label: e.target.value };
-                                    onAskGeminiCommandsChange(newCommands);
+                                    onAskAiCommandsChange(newCommands);
                                 }}
                                 placeholder="Label"
                                 className="settings-input"
@@ -194,8 +203,8 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                             />
                             <button
                                 onClick={() => {
-                                    const newCommands = askGeminiCommands.filter((_, i) => i !== index);
-                                    onAskGeminiCommandsChange(newCommands);
+                                    const newCommands = askAiCommands.filter((_, i) => i !== index);
+                                    onAskAiCommandsChange(newCommands);
                                 }}
                                 style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
                             >
@@ -205,9 +214,9 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         <textarea
                             value={cmd.promptTemplate}
                             onChange={(e) => {
-                                const newCommands = [...askGeminiCommands];
+                                const newCommands = [...askAiCommands];
                                 newCommands[index] = { ...cmd, promptTemplate: e.target.value };
-                                onAskGeminiCommandsChange(newCommands);
+                                onAskAiCommandsChange(newCommands);
                             }}
                             placeholder="Prompt Template ({selection} will be replaced)"
                             className="settings-input"
@@ -232,7 +241,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                     onClick={() => {
                         const id = crypto.randomUUID();
                         const newCommand = { id, label: 'New Command', promptTemplate: '{selection}' };
-                        onAskGeminiCommandsChange([...(askGeminiCommands || []), newCommand]);
+                        onAskAiCommandsChange([...(askAiCommands || []), newCommand]);
                     }}
                     style={{ padding: '6px 12px', cursor: 'pointer' }}
                 >
@@ -247,7 +256,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                                 { id: 'root-cause', label: 'Research root cause', promptTemplate: 'Analyze the following error or issue, identify 3 potential root causes, and suggest verification steps for each:\n\n{selection}' },
                                 { id: 'fix-this', label: 'Fix this', promptTemplate: 'Suggest a fix or improvement for the selected code or configuration:\n\n{selection}' },
                             ];
-                            onAskGeminiCommandsChange(DEFAULT_COMMANDS);
+                            onAskAiCommandsChange(DEFAULT_COMMANDS);
                         }
                     }}
                     style={{ padding: '6px 12px', cursor: 'pointer' }}
@@ -349,7 +358,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         Reset Defaults
                     </button>
                 </div>
-                <p className="settings-help">The default system instruction sent to Gemini when starting a new session.</p>
+                <p className="settings-help">The default system instruction sent to the AI when starting a new session.</p>
             </div>
 
             <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
@@ -357,7 +366,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                 <textarea
                     value={proactiveInstruction}
                     onChange={(e) => onProactiveInstructionChange(e.target.value)}
-                    placeholder="Instruction to encourage Gemini to gather more info..."
+                    placeholder="Instruction to encourage the AI to gather more info..."
                     className="settings-input"
                     style={{
                         width: '100%',
@@ -369,7 +378,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                     }}
                 />
                 <p className="settings-help" style={{ marginTop: '8px' }}>
-                    This instruction is appended to the system prompt and terminal output responses to encourage Gemini to proactively search for information.
+                    This instruction is appended to the system prompt and terminal output responses to encourage the AI to proactively search for information.
                 </p>
             </div>
 
@@ -386,6 +395,27 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                 </label>
             </div>
             <p className="settings-help">Display hidden system instructions in the chat view.</p>
+
+            {showGeminiWarning && (
+                <div className="confirm-modal-overlay">
+                    <div className="confirm-modal">
+                        <h3>⚠️ Privacy Notice</h3>
+                        <div className="confirm-content">
+                            Google AI Studio (Gemini) may use your input and output data for AI training if you are on the free tier (no billing configured).{'\n\n'}
+                            If you have not set up billing on your Google account, your conversation data may be used to improve Google's AI models.{'\n\n'}
+                            To opt out, enable billing on your Google Cloud project.
+                        </div>
+                        <div className="confirm-modal-actions">
+                            <button
+                                className="confirm-btn"
+                                onClick={() => setShowGeminiWarning(false)}
+                            >
+                                OK
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
