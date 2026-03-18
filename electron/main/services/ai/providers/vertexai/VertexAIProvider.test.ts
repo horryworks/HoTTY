@@ -77,30 +77,58 @@ describe('VertexAIProvider — listModels', () => {
         expect(models.some(m => m.name.includes('gemini'))).toBe(true);
     });
 
-    it('fetches models from API when authenticated', async () => {
+    it('fetches models from multiple publishers when authenticated', async () => {
         const provider = new VertexAIProvider();
-        (provider as any).config = { projectId: 'my-project-123', location: 'us-central1', authType: 'adc' };
+        const projectId = 'my-project-123';
+        (provider as any).config = { projectId, location: 'asia-northeast1', authType: 'adc' };
         (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
 
-        const fetchMock = vi.fn().mockResolvedValue({
-            ok: true,
-            json: async () => ({
-                publisherModels: [
-                    { name: 'publishers/google/models/gemini-2.0-flash', displayName: 'Gemini 2.0 Flash' },
-                    { name: 'publishers/google/models/gemini-1.5-pro', displayName: 'Gemini 1.5 Pro' },
-                    { name: 'publishers/google/models/text-bison', displayName: 'Text Bison' },
-                ],
-            }),
+        const fetchMock = vi.fn().mockImplementation((url: string) => {
+            if (url.includes('publishers/google/models')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: async () => ({
+                        publisherModels: [{ name: 'publishers/google/models/gemini-1.5-pro', displayName: 'Gemini 1.5 Pro' }]
+                    }),
+                });
+            }
+            if (url.includes('publishers/anthropic/models')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: async () => ({
+                        publisherModels: [{ name: 'publishers/anthropic/models/claude-3', displayName: 'Claude 3' }]
+                    }),
+                });
+            }
+            return Promise.resolve({ ok: true, json: async () => ({ publisherModels: [] }) });
         });
         vi.stubGlobal('fetch', fetchMock);
 
         const models = await provider.listModels();
-        expect(models).toHaveLength(2);
-        expect(models[0].name).toBe('gemini-2.0-flash');
-        expect(models[1].name).toBe('gemini-1.5-pro');
+        
+        expect(models.length).toBeGreaterThanOrEqual(2);
+        
+        const googleModel = models.find(m => m.name === 'publishers/google/models/gemini-1.5-pro');
+        expect(googleModel).toBeDefined();
+        expect(googleModel?.displayName).toBe('Gemini 1.5 Pro (Google)');
 
-        const expectedUrl = 'https://us-central1-aiplatform.googleapis.com/v1beta1/publishers/google/models';
-        expect(fetchMock).toHaveBeenCalledWith(expectedUrl, expect.anything());
+        const anthropicModel = models.find(m => m.name === 'publishers/anthropic/models/claude-3');
+        expect(anthropicModel).toBeDefined();
+        expect(anthropicModel?.displayName).toBe('Claude 3 (Anthropic)');
+
+        // Verified sorting: google should be first
+        expect(models[0].name).toContain('publishers/google');
+
+        // Verify us-central1 was used for listing regardless of config location
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining('https://us-central1-aiplatform.googleapis.com'),
+            expect.objectContaining({
+                headers: expect.objectContaining({
+                    'X-Goog-User-Project': projectId,
+                    'Authorization': 'Bearer token'
+                })
+            })
+        );
     });
 
     it('falls back to hardcoded list when API returns non-ok status', async () => {
@@ -430,24 +458,27 @@ describe('VertexAIProvider — logout', () => {
 // ── sendMessage — validation ──────────────────────────────────────────────────
 
 describe('VertexAIProvider — sendMessage validation', () => {
-    it('sends error for invalid model name', async () => {
+    it('accepts model name with slash', async () => {
         const provider = new VertexAIProvider();
         const onResponse = vi.fn();
+        (provider as any).config = { projectId: 'p', location: 'l', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 't', expires_at: Date.now() + 3600 };
+        
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: { getReader: () => ({ read: () => Promise.resolve({ done: true }) }) } }));
 
-        await provider.sendMessage(onResponse, 'session1', 'hello', 'invalid model!');
-
-        expect(onResponse).toHaveBeenCalledWith(expect.objectContaining({
-            sessionId: 'session1',
+        await provider.sendMessage(onResponse, 'session1', 'hello', 'publishers/anthropic/models/claude-3');
+        
+        expect(onResponse).not.toHaveBeenCalledWith(expect.objectContaining({
             type: 'error',
             content: 'Invalid model name.',
         }));
     });
 
-    it('rejects model names with consecutive separators', async () => {
+    it('rejects model names with true invalid characters', async () => {
         const provider = new VertexAIProvider();
         const onResponse = vi.fn();
 
-        await provider.sendMessage(onResponse, 'session1', 'hello', 'gemini--flash');
+        await provider.sendMessage(onResponse, 'session1', 'hello', 'gemini!@#');
 
         expect(onResponse).toHaveBeenCalledWith(expect.objectContaining({
             type: 'error',

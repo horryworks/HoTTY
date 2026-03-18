@@ -6,7 +6,7 @@ import { IAIProvider, AuthStatus, ModelInfo, ChatResponseData, TokenUsage } from
 import { encryptString, decryptString } from '../../../dpapi';
 import { logger } from '../../../Logger';
 
-const VALID_MODEL_PATTERN = /^[a-zA-Z0-9]+([._-][a-zA-Z0-9]+)*$/;
+const VALID_MODEL_PATTERN = /^[a-zA-Z0-9/\._-]+$/;
 // GCP project IDs: 6-30 chars, lowercase letters/digits/hyphens, starts with letter
 const VALID_PROJECT_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 const VALID_LOCATION_PATTERN = /^[a-z][a-z0-9-]+$/;
@@ -330,7 +330,9 @@ export class VertexAIProvider implements IAIProvider {
     history.push({ role: 'user', content: message });
 
     const { projectId, location } = this.config;
-    const apiUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:streamGenerateContent?alt=sse`;
+    // Handle both short model names (backward compat) and full resource names from Model Garden
+    const modelPath = model.startsWith('publishers/') ? model : `publishers/google/models/${model}`;
+    const apiUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/${modelPath}:streamGenerateContent?alt=sse`;
 
     const contents = history.map(msg => ({ role: msg.role, parts: [{ text: msg.content }] }));
     const requestBody: Record<string, unknown> = { contents };
@@ -428,48 +430,76 @@ export class VertexAIProvider implements IAIProvider {
     const token = await this.getValidToken();
     if (!token) return this.getHardcodedModels();
 
+    const { projectId } = this.config;
+    const publishers = ['google', 'anthropic', 'meta', 'mistral'];
+    const allModels: ModelInfo[] = [];
+
+    // Use us-central1 as the main Model Garden endpoint for reliable listing across publishers
+    const listingLocation = 'us-central1';
+
     try {
-      const { location } = this.config;
-      const ctrl = new AbortController();
-      const timeout = setTimeout(() => ctrl.abort(), 15000);
-      let response: Response;
-      const url = `https://${location}-aiplatform.googleapis.com/v1beta1/publishers/google/models`;
-      logger.debug('vertexai', 'Listing models', { url });
-      try {
-        response = await fetch(
-          url,
-          {
-            headers: { Authorization: `Bearer ${token}` },
+      const results = await Promise.allSettled(publishers.map(async (pub) => {
+        const url = `https://${listingLocation}-aiplatform.googleapis.com/v1beta1/publishers/${pub}/models`;
+        logger.debug('vertexai', `Listing models for publisher: ${pub}`, { url });
+        
+        const ctrl = new AbortController();
+        const timeout = setTimeout(() => ctrl.abort(), 10000);
+        
+        try {
+          const response = await fetch(url, {
+            headers: { 
+              'Authorization': `Bearer ${token}`,
+              'X-Goog-User-Project': projectId,
+            },
             signal: ctrl.signal,
-          },
-        );
-      } finally {
-        clearTimeout(timeout);
+          });
+
+          if (!response.ok) {
+            logger.warn('vertexai', `listModels for ${pub} failed`, { status: response.status });
+            return [];
+          }
+
+          const data = await response.json() as { publisherModels?: { name: string; displayName?: string }[] };
+          const publisherModels = data.publisherModels ?? [];
+          
+          return publisherModels.map(m => {
+            const shortName = m.name.split('/').pop() ?? m.name;
+            const pubPrefix = pub.charAt(0).toUpperCase() + pub.slice(1);
+            return {
+              name: m.name, // Full path for sendMessage compatibility
+              displayName: m.displayName ? `${m.displayName} (${pubPrefix})` : `${shortName} (${pubPrefix})`,
+            };
+          });
+        } finally {
+          clearTimeout(timeout);
+        }
+      }));
+
+      for (const res of results) {
+        if (res.status === 'fulfilled') {
+          allModels.push(...res.value);
+        }
       }
 
-      if (!response.ok) {
-        logger.warn('vertexai', 'listModels API failed, using hardcoded list', { status: response.status });
-        return this.getHardcodedModels();
-      }
-
-      const data = await response.json() as { publisherModels?: { name: string; displayName?: string }[] };
-      const publisherModels = data.publisherModels ?? [];
-      const geminiModels: ModelInfo[] = publisherModels
-        .filter(m => m.name?.includes('gemini'))
-        .map(m => {
-          const modelId = m.name.split('/').pop() ?? m.name;
-          return { name: modelId, displayName: m.displayName ?? modelId };
-        });
-
-      if (geminiModels.length === 0) {
+      const hasGemini = allModels.some(m => m.name.toLowerCase().includes('gemini'));
+      if (!hasGemini) {
         logger.warn('vertexai', 'No Gemini models found in API response, using hardcoded list');
         return this.getHardcodedModels();
       }
 
-      logger.debug('vertexai', `listModels: fetched ${geminiModels.length} models from API`);
-      return geminiModels;
+      // Sort models to put Google/Gemini first
+      allModels.sort((a, b) => {
+        const aIsGoogle = a.name.includes('publishers/google');
+        const bIsGoogle = b.name.includes('publishers/google');
+        if (aIsGoogle && !bIsGoogle) return -1;
+        if (!aIsGoogle && bIsGoogle) return 1;
+        return a.displayName.localeCompare(b.displayName);
+      });
+
+      logger.debug('vertexai', `listModels: fetched total ${allModels.length} models from API`);
+      return allModels;
     } catch (err: unknown) {
-      logger.warn('vertexai', 'listModels fetch error, using hardcoded list', { error: err instanceof Error ? err.message : String(err) });
+      logger.warn('vertexai', 'listModels consolidate error, using hardcoded list', { error: err instanceof Error ? err.message : String(err) });
       return this.getHardcodedModels();
     }
   }
