@@ -13,6 +13,7 @@ export const onSessionData = (callback: (sessionId: string, data: string) => voi
 export const onSessionStatus = (callback: (sessionId: string, status: string) => void) => api().onSessionStatus(callback);
 export const onSessionError = (callback: (sessionId: string, error: string) => void) => api().onSessionError(callback);
 export const listSerialPorts = () => api().listSerialPorts();
+export const listSystemFonts = () => api().listSystemFonts();
 export const selectImage = () => api().selectImage();
 export const selectFolder = () => api().selectFolder();
 export const getAppVersion = () => api().getAppVersion();

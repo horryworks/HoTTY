@@ -14,6 +14,7 @@ vi.mock('../../services/electronService', () => ({
     openDebugLogFolder: vi.fn(),
     logDebug: vi.fn(),
     getAppVersion: vi.fn(() => Promise.resolve('1.0.0')),
+    listSystemFonts: vi.fn(() => Promise.resolve(['Consolas', 'Courier New', 'Lucida Console'])),
 }));
 
 const baseProps = {

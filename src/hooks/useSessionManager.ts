@@ -5,6 +5,7 @@ import { stripAnsiCodes } from '../utils/ansiUtils';
 import { TERMINAL_SEQUENCES } from '../constants/terminalSequences';
 import { STORAGE_KEYS } from '../constants/storage';
 import * as electronService from '../services/electronService';
+import { useSettingsStore } from '../stores/settingsStore';
 
 export interface Session {
     id: string;
@@ -82,6 +83,22 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     const [tabOrder, setTabOrder] = useState<string[]>([]);
     const terminalRegistry = useRef<{ [sessionId: string]: Terminal }>({});
     const watchBuffers = useRef<{ [sessionId: string]: string }>({});
+
+    const activeAiProvider = useSettingsStore(s => s.activeAiProvider);
+    const aiProviderLabels: Record<string, string> = {
+        gemini: 'Gemini AI',
+        vertexai: 'Vertex AI',
+        openai: 'OpenAI',
+        anthropic: 'Anthropic',
+    };
+
+    // Sync AI tab title when provider changes
+    useEffect(() => {
+        const aiTitle = aiProviderLabels[activeAiProvider] ?? 'AI';
+        setSessions(prev =>
+            prev.map(s => s.type === 'ai' ? { ...s, title: aiTitle } : s)
+        );
+    }, [activeAiProvider]);
 
     // Terminal instance factory
     const createTerminalInstance = (sessionId: string, type?: Session['type']) => {
@@ -369,15 +386,16 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     const createAISession = () => {
         // Only one AI session allowed
         const existingAI = sessions.find(s => s.type === 'ai');
+        const aiTitle = aiProviderLabels[activeAiProvider] ?? 'AI';
         if (existingAI) {
-            onSessionError('Only one Gemini AI session can be open at a time.');
+            onSessionError(`Only one ${aiTitle} session can be open at a time.`);
             return;
         }
 
         const sessionId = self.crypto.randomUUID();
         const newSession: Session = {
             id: sessionId,
-            title: 'Gemini AI',
+            title: aiTitle,
             type: 'ai',
             aiChatState: {
                 messages: [],

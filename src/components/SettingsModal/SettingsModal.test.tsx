@@ -17,6 +17,7 @@ vi.mock('../../services/electronService', () => ({
     aiAuthStatus: vi.fn(() => Promise.resolve(false)),
     aiAuthLogout: vi.fn(),
     openExternal: vi.fn(),
+    listSystemFonts: vi.fn(() => Promise.resolve(['Consolas', 'Courier New', 'Lucida Console'])),
 }));
 
 vi.mock('../../hooks/useDraggable', () => ({

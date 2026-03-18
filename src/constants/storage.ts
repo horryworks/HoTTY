@@ -78,4 +78,7 @@ export const STORAGE_KEYS = {
     // Update
     SKIPPED_UPDATE_VERSION: 'hotty_skipped_update_version',
     NEVER_NOTIFY_UPDATE:    'hotty_never_notify_update',
+
+    // Font cache
+    SYSTEM_FONTS_CACHE: 'hotty_system_fonts_cache',
 } as const;

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import * as electronService from '../../services/electronService';
+import { STORAGE_KEYS } from '../../constants/storage';
 
 interface AppearanceTabProps {
     theme: string;
@@ -56,6 +57,42 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     promptPatterns,
     onPromptPatternsChange,
 }) => {
+    const [systemFonts, setSystemFonts] = useState<string[]>([]);
+    const [fontScanning, setFontScanning] = useState(false);
+
+    function isMonospace(fontName: string): boolean {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return true;
+        ctx.font = `16px "${fontName}"`;
+        return ctx.measureText('W').width === ctx.measureText('i').width;
+    }
+
+    async function scanAndCacheFonts() {
+        setFontScanning(true);
+        try {
+            const all = await electronService.listSystemFonts();
+            const monospace = all.filter(isMonospace);
+            setSystemFonts(monospace);
+            localStorage.setItem(STORAGE_KEYS.SYSTEM_FONTS_CACHE, JSON.stringify(monospace));
+        } finally {
+            setFontScanning(false);
+        }
+    }
+
+    useEffect(() => {
+        const cached = localStorage.getItem(STORAGE_KEYS.SYSTEM_FONTS_CACHE);
+        if (cached) {
+            try {
+                setSystemFonts(JSON.parse(cached));
+                return;
+            } catch {
+                // corrupted cache — fall through to rescan
+            }
+        }
+        scanAndCacheFonts();
+    }, []);
+
     return (
         <>
             <div className="form-group">
@@ -206,16 +243,31 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
 
             <div className="form-group">
                 <label>Font Family</label>
-                <select
-                    value={fontFamily}
-                    onChange={(e) => onFontFamilyChange(e.target.value)}
-                    className="settings-select"
-                >
-                    <option value='Consolas, "Courier New", monospace'>Consolas / Courier New</option>
-                    <option value='"Cascadia Code", "Fira Code", monospace'>Cascadia / Fira Code</option>
-                    <option value='"MesloLGS NF", "DejaVu Sans Mono", monospace'>MesloLGS NF / DejaVu</option>
-                    <option value="monospace">System Monospace</option>
-                </select>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <select
+                        value={fontFamily}
+                        onChange={(e) => onFontFamilyChange(e.target.value)}
+                        className="settings-select"
+                        style={{ flex: 1 }}
+                        disabled={fontScanning}
+                    >
+                        <option value="monospace">System Monospace (default)</option>
+                        {systemFonts.map(font => (
+                            <option key={font} value={`"${font}", monospace`}>{font}</option>
+                        ))}
+                    </select>
+                    <button
+                        onClick={() => {
+                            localStorage.removeItem(STORAGE_KEYS.SYSTEM_FONTS_CACHE);
+                            scanAndCacheFonts();
+                        }}
+                        disabled={fontScanning}
+                        style={{ padding: '5px 10px', cursor: fontScanning ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
+                        title="Rescan installed fonts"
+                    >
+                        {fontScanning ? 'Scanning...' : 'Rescan'}
+                    </button>
+                </div>
             </div>
 
             <div className="form-group">

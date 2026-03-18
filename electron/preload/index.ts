@@ -111,6 +111,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     selectImage: () => ipcRenderer.invoke('select-image'),
     selectFolder: () => ipcRenderer.invoke('select-folder'),
     listWslDistributions: () => ipcRenderer.invoke('list-wsl-distributions'),
+    listSystemFonts: () => ipcRenderer.invoke('list-system-fonts'),
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
     logDebug: (message: string) => ipcRenderer.send('log-debug', message),
     openExternal: (url: string) => ipcRenderer.send('open-external', url),

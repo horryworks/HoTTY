@@ -518,6 +518,21 @@ ipcMain.handle('list-wsl-distributions', async () => {
   }
 });
 
+ipcMain.handle('list-system-fonts', async () => {
+  try {
+    const script = '[System.Reflection.Assembly]::LoadWithPartialName("System.Drawing") | Out-Null; ' +
+      '(New-Object System.Drawing.Text.InstalledFontCollection).Families | ' +
+      'Select-Object -ExpandProperty Name';
+    const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', script]);
+    return stdout.split('\n')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+  } catch (err) {
+    logger.error('app', 'Failed to list system fonts', { error: String(err) });
+    return [];
+  }
+});
+
 
 
 // ── Context Menu ──

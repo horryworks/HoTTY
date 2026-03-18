@@ -1,22 +1,20 @@
 import React from 'react';
 
-// Gemini diamond icon — gradient fill (matches Features menu in TabBar)
-const GeminiIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'inline', verticalAlign: 'middle', marginInline: '2px' }}>
-        <path d="M13.5 3.5C14.3 6.9 16.9 9.5 20.3 10.5C21.9 10.9 21.9 13.1 20.3 13.5C16.9 14.5 14.3 17.1 13.5 20.5C13.1 22.1 10.9 22.1 10.5 20.5C9.7 17.1 7.1 14.5 3.7 13.5C2.1 13.1 2.1 10.9 3.7 10.5C7.1 9.5 9.7 6.9 10.5 3.5C10.9 1.9 13.1 1.9 13.5 3.5Z" fill="url(#help-gemini-gradient)" />
-        <defs>
-            <linearGradient id="help-gemini-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#4E86F8" />
-                <stop offset="100%" stopColor="#D64669" />
-            </linearGradient>
-        </defs>
+// Inline icon matching the Features button (2×2 grid) in TabBar
+const FeaturesIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline', verticalAlign: 'middle', marginInline: '2px' }}>
+        <rect x="3" y="3" width="7" height="7" rx="1"/>
+        <rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/>
+        <rect x="14" y="14" width="7" height="7" rx="1"/>
     </svg>
 );
 
-// Gemini diamond icon — monochrome (matches tab Watch button in TabBar)
-const GeminiWatchIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'inline', verticalAlign: 'middle', marginInline: '2px', color: 'var(--text-color)' }}>
-        <path d="M13.5 3.5C14.3 6.9 16.9 9.5 20.3 10.5C21.9 10.9 21.9 13.1 20.3 13.5C16.9 14.5 14.3 17.1 13.5 20.5C13.1 22.1 10.9 22.1 10.5 20.5C9.7 17.1 7.1 14.5 3.7 13.5C2.1 13.1 2.1 10.9 3.7 10.5C7.1 9.5 9.7 6.9 10.5 3.5C10.9 1.9 13.1 1.9 13.5 3.5Z" fill="currentColor" />
+// Inline icon matching the Watch button (concentric circles) in TabBar
+const WatchIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ display: 'inline', verticalAlign: 'middle', marginInline: '2px' }}>
+        <circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.7" />
+        <circle cx="12" cy="12" r="6" fill="currentColor" opacity="0.4" />
     </svg>
 );
 
@@ -185,12 +183,12 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                         </div>
                     </details>
 
-                    {/* ── Gemini AI Chat ── */}
+                    {/* ── AI Chat ── */}
                     <details className="help-section" open>
-                        <summary><GeminiIcon /> Gemini AI Chat</summary>
+                        <summary>✨ AI Chat</summary>
                         <div className="help-section-body">
                             <p className="help-text">
-                                <strong>Open AI Chat:</strong> Click the <strong><GeminiIcon /></strong> icon in the tab bar (Features menu) to open a new Gemini AI chat tab. Multiple AI chat tabs can be open simultaneously.
+                                <strong>Open AI Chat:</strong> Click the <strong><FeaturesIcon /></strong> (Features) icon in the tab bar, then select <strong>"AI Chat"</strong> from the menu. Multiple AI chat tabs can be open simultaneously.
                             </p>
                             <p className="help-text">
                                 <strong>Ask AI:</strong> Right-click on selected text or a <strong>Terminal Marker</strong> to open the context menu and select "Ask AI". Choose from built-in commands ("What is this?", "Research root cause", etc.) or your own custom commands.
@@ -199,26 +197,81 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                 <strong>Personas:</strong> In the AI chat tab, use the persona selector to switch between AI roles (General Helper, Network Expert, Security Analyst, etc.). Each persona uses a different system prompt optimized for that domain.
                             </p>
                             <p className="help-text small">
-                                🔗 <strong>First-time setup:</strong> Authenticate with your Google Account in <strong>Settings → AI</strong>. For OAuth2 setup, follow the <a href="https://ai.google.dev/gemini-api/docs/oauth" target="_blank" rel="noreferrer">Official Google Guide</a> to obtain your Client ID and Client Secret.
+                                🔗 <strong>First-time setup:</strong> Select your AI provider in <strong>Settings → AI → AI Provider</strong>, then authenticate. See the <strong>AI Setup & Authentication</strong> section below for provider-specific instructions.
                             </p>
                         </div>
                     </details>
 
                     {/* ── Watch Mode ── */}
                     <details className="help-section">
-                        <summary><GeminiWatchIcon /> Watch Mode (AI Monitoring)</summary>
+                        <summary><WatchIcon /> Watch Mode (AI Monitoring)</summary>
                         <div className="help-section-body">
                             <p className="help-text">
-                                Watch Mode lets Gemini monitor a terminal session's output and analyze it on demand.
+                                Watch Mode lets AI monitor a terminal session's output and analyze it on demand.
                             </p>
                             <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: 0 }}>
-                                <li>Click the <strong><GeminiWatchIcon /></strong> icon on any terminal tab to start watching. The icon turns blue and the tab gets a rainbow highlight.</li>
+                                <li>Click the <strong><WatchIcon /></strong> icon on any terminal tab to start watching. The icon turns blue and the tab gets a rainbow highlight.</li>
                                 <li>Run commands as usual. All output is captured into a buffer.</li>
                                 <li>In your <strong>AI chat tab</strong>, click <strong>"Ask AI"</strong> and select the watched session to send the entire captured log to AI for analysis.</li>
                             </ol>
                             <p className="help-text small">
                                 💡 <strong>Tip:</strong> Ideal for troubleshooting long-running commands or tailing logs—let it collect output and ask AI to summarize or find errors when you're ready.
                                 The buffer size limit can be adjusted in <strong>Settings → AI → Watch Buffer Limit</strong>.
+                            </p>
+                        </div>
+                    </details>
+
+                    {/* ── AI Setup & Authentication ── */}
+                    <details className="help-section">
+                        <summary>🔑 AI Setup & Authentication</summary>
+                        <div className="help-section-body">
+                            <p className="help-text">
+                                Select your AI provider in <strong>Settings → AI → AI Provider</strong>. Each provider requires a different authentication method:
+                            </p>
+                            <table className="help-auth-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.92em', marginBottom: '8px' }}>
+                                <thead>
+                                    <tr>
+                                        <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)', paddingRight: '12px' }}>Provider</th>
+                                        <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)', paddingRight: '12px' }}>Auth Method</th>
+                                        <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)' }}>How to obtain</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}><strong>Google AI Studio<br />(Gemini)</strong></td>
+                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}>OAuth2<br />(Client ID + Secret)</td>
+                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>
+                                            Create an OAuth 2.0 Client ID in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">Google Cloud Console</a> → APIs &amp; Services → Credentials.
+                                            Follow the <a href="https://ai.google.dev/gemini-api/docs/oauth" target="_blank" rel="noreferrer">Official Guide</a> for the full walkthrough.
+                                            <br />⚠️ Free-tier accounts may have data used for model training. Enable billing to opt out.
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}><strong>Google Cloud<br />Vertex AI</strong></td>
+                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}>ADC or<br />Service Account</td>
+                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>
+                                            <strong>ADC:</strong> Run <code>gcloud auth application-default login</code> on your machine. HoTTY reads credentials from <code>~/.config/gcloud/application_default_credentials.json</code> automatically.
+                                            <br /><strong>Service Account:</strong> Download a JSON key file from Google Cloud Console and provide the path in Settings.
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}><strong>Anthropic<br />(Claude)</strong></td>
+                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}>API Key</td>
+                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>
+                                            Obtain an API key from <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer">console.anthropic.com</a> → API Keys, then enter it in <strong>Settings → AI</strong>.
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}><strong>OpenAI</strong></td>
+                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}>API Key</td>
+                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>
+                                            Obtain an API key from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">platform.openai.com</a> → API Keys, then enter it in <strong>Settings → AI</strong>.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <p className="help-text small">
+                                🔒 API keys and tokens are encrypted with Windows DPAPI and stored locally — they are never transmitted outside your machine except to the respective AI provider.
                             </p>
                         </div>
                     </details>
@@ -234,7 +287,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                 <strong>Custom Personas:</strong> In <strong>Settings → AI → Personas</strong>, create personas with custom system prompts. The chosen persona is applied as the initial system instruction for every new AI chat session.
                             </p>
                             <p className="help-text">
-                                <strong>Proactive Investigation:</strong> In <strong>Settings → AI</strong>, set a standing instruction that Gemini applies proactively when analyzing terminal output in Watch Mode.
+                                <strong>Proactive Investigation:</strong> In <strong>Settings → AI</strong>, set a standing instruction that the AI applies proactively when analyzing terminal output in Watch Mode.
                             </p>
                         </div>
                     </details>

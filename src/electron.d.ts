@@ -15,6 +15,7 @@ export interface ElectronAPI {
     selectImage: () => Promise<string | null>;
     selectFolder: () => Promise<string | null>;
     listWslDistributions: () => Promise<string[]>;
+    listSystemFonts: () => Promise<string[]>;
     getAppVersion: () => Promise<string>;
     logDebug: (message: string) => void;
     openExternal: (url: string) => void;
