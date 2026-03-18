@@ -53,8 +53,10 @@ export class OpenAIProvider implements IAIProvider {
       const ctrl = new AbortController();
       const timeout = setTimeout(() => ctrl.abort(), 15000);
       let response: Response;
+      const url = 'https://api.openai.com/v1/models';
+      logger.debug('openai', 'Validating API key', { url });
       try {
-        response = await fetch('https://api.openai.com/v1/models', {
+        response = await fetch(url, {
           headers: { Authorization: `Bearer ${creds.apiKey}` },
           signal: ctrl.signal,
         });
@@ -148,8 +150,10 @@ export class OpenAIProvider implements IAIProvider {
     const abortController = new AbortController();
     this.abortControllers.set(sessionId, abortController);
 
+    const url = 'https://api.openai.com/v1/chat/completions';
+    logger.debug('openai', 'Sending message', { url, model });
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -243,8 +247,10 @@ export class OpenAIProvider implements IAIProvider {
       const ctrl = new AbortController();
       const timeout = setTimeout(() => ctrl.abort(), 10000);
       let response: Response;
+      const url = 'https://api.openai.com/v1/models';
+      logger.debug('openai', 'Listing models', { url });
       try {
-        response = await fetch('https://api.openai.com/v1/models', {
+        response = await fetch(url, {
           headers: { Authorization: `Bearer ${this.apiKey}` },
           signal: ctrl.signal,
         });

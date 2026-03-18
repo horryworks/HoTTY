@@ -96,7 +96,9 @@ export class VertexAIProvider implements IAIProvider {
           params.set('client_secret', this.refreshData.client_secret!);
           params.set('refresh_token', this.refreshData.refresh_token!);
           params.set('grant_type', 'refresh_token');
-          response = await fetch('https://oauth2.googleapis.com/token', {
+          const url = 'https://oauth2.googleapis.com/token';
+          logger.debug('vertexai', 'Refreshing access token', { url, type: this.refreshData.type });
+          response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: params.toString(),
@@ -107,7 +109,9 @@ export class VertexAIProvider implements IAIProvider {
           const params = new URLSearchParams();
           params.set('grant_type', 'urn:ietf:params:oauth:grant-type:jwt-bearer');
           params.set('assertion', jwt);
-          response = await fetch('https://oauth2.googleapis.com/token', {
+          const url = 'https://oauth2.googleapis.com/token';
+          logger.debug('vertexai', 'Refreshing access token', { url, type: this.refreshData.type });
+          response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: params.toString(),
@@ -337,6 +341,7 @@ export class VertexAIProvider implements IAIProvider {
     const abortController = new AbortController();
     this.abortControllers.set(sessionId, abortController);
 
+    logger.debug('vertexai', 'Sending message', { apiUrl, model });
     try {
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -411,7 +416,7 @@ export class VertexAIProvider implements IAIProvider {
 
   private getHardcodedModels(): ModelInfo[] {
     return [
-      { name: 'gemini-2.5-pro-preview-05-06', displayName: 'Gemini 2.5 Pro Preview (Vertex AI)' },
+      { name: 'gemini-1.5-pro-preview-05-06', displayName: 'Gemini 1.5 Pro Preview (Vertex AI)' },
       { name: 'gemini-2.0-flash-001', displayName: 'Gemini 2.0 Flash (Vertex AI)' },
       { name: 'gemini-1.5-pro-002', displayName: 'Gemini 1.5 Pro (Vertex AI)' },
       { name: 'gemini-1.5-flash-002', displayName: 'Gemini 1.5 Flash (Vertex AI)' },
@@ -424,13 +429,15 @@ export class VertexAIProvider implements IAIProvider {
     if (!token) return this.getHardcodedModels();
 
     try {
-      const { location } = this.config;
+      const { projectId, location } = this.config;
       const ctrl = new AbortController();
       const timeout = setTimeout(() => ctrl.abort(), 15000);
       let response: Response;
+      const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models`;
+      logger.debug('vertexai', 'Listing models', { url });
       try {
         response = await fetch(
-          `https://${location}-aiplatform.googleapis.com/v1/publishers/google/models`,
+          url,
           {
             headers: { Authorization: `Bearer ${token}` },
             signal: ctrl.signal,

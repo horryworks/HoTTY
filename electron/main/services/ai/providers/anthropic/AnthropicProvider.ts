@@ -53,8 +53,10 @@ export class AnthropicProvider implements IAIProvider {
       const ctrl = new AbortController();
       const timeout = setTimeout(() => ctrl.abort(), 15000);
       let response: Response;
+      const url = 'https://api.anthropic.com/v1/models';
+      logger.debug('anthropic', 'Validating API key', { url });
       try {
-        response = await fetch('https://api.anthropic.com/v1/models', {
+        response = await fetch(url, {
           headers: {
             'x-api-key': creds.apiKey,
             'anthropic-version': '2023-06-01',
@@ -153,8 +155,10 @@ export class AnthropicProvider implements IAIProvider {
       body.system = systemInstruction;
     }
 
+    const url = 'https://api.anthropic.com/v1/messages';
+    logger.debug('anthropic', 'Sending message', { url, model });
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -253,8 +257,10 @@ export class AnthropicProvider implements IAIProvider {
       const ctrl = new AbortController();
       const timeout = setTimeout(() => ctrl.abort(), 10000);
       let response: Response;
+      const url = 'https://api.anthropic.com/v1/models';
+      logger.debug('anthropic', 'Listing models', { url });
       try {
-        response = await fetch('https://api.anthropic.com/v1/models', {
+        response = await fetch(url, {
           headers: {
             'x-api-key': this.apiKey,
             'anthropic-version': '2023-06-01',

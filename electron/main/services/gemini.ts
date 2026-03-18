@@ -254,7 +254,9 @@ export class GeminiService {
           autoHideMenuBar: true,
         });
 
-        authWin.loadURL(authUrl.toString());
+        const finalUrl = authUrl.toString();
+        logger.debug('gemini', 'Opening auth URL', { url: finalUrl });
+        authWin.loadURL(finalUrl);
 
         authWin.on('closed', () => {
           // If user closes the window manually before callback happens
@@ -304,8 +306,10 @@ export class GeminiService {
     const exchangeController = new AbortController();
     const exchangeTimeout = setTimeout(() => exchangeController.abort(), 30000);
     let response: Response;
+    const url = 'https://oauth2.googleapis.com/token';
+    logger.debug('gemini', 'Exchanging code for token', { url });
     try {
-      response = await fetch('https://oauth2.googleapis.com/token', {
+      response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: params.toString(),
@@ -338,12 +342,14 @@ export class GeminiService {
     params.set('refresh_token', this.tokenData.refresh_token);
     params.set('grant_type', 'refresh_token');
 
+    const url = 'https://oauth2.googleapis.com/token';
     try {
       const refreshController = new AbortController();
       const refreshTimeout = setTimeout(() => refreshController.abort(), 15000);
       let response: Response;
+      logger.debug('gemini', 'Refreshing access token', { url });
       try {
-        response = await fetch('https://oauth2.googleapis.com/token', {
+        response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: params.toString(),
@@ -426,8 +432,11 @@ export class GeminiService {
       const abortController = new AbortController();
       this.abortControllers.set(sessionId, abortController);
 
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
+      logger.debug('gemini', 'Sending message', { url, model });
+
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`,
+        url,
         {
           method: 'POST',
           headers: {
@@ -507,8 +516,10 @@ export class GeminiService {
       const listController = new AbortController();
       const listTimeout = setTimeout(() => listController.abort(), 15000);
       let response: Response;
+      const url = 'https://generativelanguage.googleapis.com/v1beta/models';
+      logger.debug('gemini', 'Listing models', { url });
       try {
-        response = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
+        response = await fetch(url, {
           headers: { 'Authorization': `Bearer ${token}` },
           signal: listController.signal,
         });

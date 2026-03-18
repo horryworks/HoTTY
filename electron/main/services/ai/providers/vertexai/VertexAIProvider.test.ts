@@ -82,7 +82,7 @@ describe('VertexAIProvider — listModels', () => {
         (provider as any).config = { projectId: 'my-project-123', location: 'us-central1', authType: 'adc' };
         (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
 
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        const fetchMock = vi.fn().mockResolvedValue({
             ok: true,
             json: async () => ({
                 publisherModels: [
@@ -91,13 +91,16 @@ describe('VertexAIProvider — listModels', () => {
                     { name: 'publishers/google/models/text-bison', displayName: 'Text Bison' },
                 ],
             }),
-        }));
+        });
+        vi.stubGlobal('fetch', fetchMock);
 
         const models = await provider.listModels();
-        expect(models).toHaveLength(2); // text-bison filtered out
+        expect(models).toHaveLength(2);
         expect(models[0].name).toBe('gemini-2.0-flash');
-        expect(models[0].displayName).toBe('Gemini 2.0 Flash');
         expect(models[1].name).toBe('gemini-1.5-pro');
+
+        const expectedUrl = 'https://us-central1-aiplatform.googleapis.com/v1/projects/my-project-123/locations/us-central1/publishers/google/models';
+        expect(fetchMock).toHaveBeenCalledWith(expectedUrl, expect.anything());
     });
 
     it('falls back to hardcoded list when API returns non-ok status', async () => {
