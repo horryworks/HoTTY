@@ -429,11 +429,11 @@ export class VertexAIProvider implements IAIProvider {
     if (!token) return this.getHardcodedModels();
 
     try {
-      const { projectId, location } = this.config;
+      const { location } = this.config;
       const ctrl = new AbortController();
       const timeout = setTimeout(() => ctrl.abort(), 15000);
       let response: Response;
-      const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models`;
+      const url = `https://${location}-aiplatform.googleapis.com/v1beta1/publishers/google/models`;
       logger.debug('vertexai', 'Listing models', { url });
       try {
         response = await fetch(

@@ -99,7 +99,7 @@ describe('VertexAIProvider — listModels', () => {
         expect(models[0].name).toBe('gemini-2.0-flash');
         expect(models[1].name).toBe('gemini-1.5-pro');
 
-        const expectedUrl = 'https://us-central1-aiplatform.googleapis.com/v1/projects/my-project-123/locations/us-central1/publishers/google/models';
+        const expectedUrl = 'https://us-central1-aiplatform.googleapis.com/v1beta1/publishers/google/models';
         expect(fetchMock).toHaveBeenCalledWith(expectedUrl, expect.anything());
     });
 
