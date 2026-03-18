@@ -332,7 +332,7 @@ export class VertexAIProvider implements IAIProvider {
     const { projectId, location } = this.config;
     // Handle both short model names (backward compat) and full resource names from Model Garden
     const modelPath = model.startsWith('publishers/') ? model : `publishers/google/models/${model}`;
-    const apiUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/${modelPath}:streamGenerateContent?alt=sse`;
+    const apiUrl = `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${location}/${modelPath}:streamGenerateContent?alt=sse`;
 
     const contents = history.map(msg => ({ role: msg.role, parts: [{ text: msg.content }] }));
     const requestBody: Record<string, unknown> = { contents };
@@ -434,8 +434,8 @@ export class VertexAIProvider implements IAIProvider {
     const publishers = ['google', 'anthropic', 'meta', 'mistral'];
     const allModels: ModelInfo[] = [];
 
-    // Use us-central1 as the main Model Garden endpoint for reliable listing across publishers
-    const listingLocation = 'us-central1';
+    // Use the configured location to list models available in that specific region
+    const listingLocation = this.config.location;
 
     try {
       const results = await Promise.allSettled(publishers.map(async (pub) => {
@@ -459,17 +459,44 @@ export class VertexAIProvider implements IAIProvider {
             return [];
           }
 
-          const data = await response.json() as { publisherModels?: { name: string; displayName?: string }[] };
+          const data = await response.json() as { 
+            publisherModels?: { 
+              name: string; 
+              displayName?: string;
+              supportedActions?: string[];
+            }[] 
+          };
           const publisherModels = data.publisherModels ?? [];
           
-          return publisherModels.map(m => {
-            const shortName = m.name.split('/').pop() ?? m.name;
-            const pubPrefix = pub.charAt(0).toUpperCase() + pub.slice(1);
-            return {
-              name: m.name, // Full path for sendMessage compatibility
-              displayName: m.displayName ? `${m.displayName} (${pubPrefix})` : `${shortName} (${pubPrefix})`,
-            };
-          });
+          return publisherModels
+            .filter(m => {
+              const shortName = m.name.split('/').pop()?.toLowerCase() ?? '';
+              
+              // Only support Google models for now as sendMessage is hardcoded for Gemini API
+              if (pub !== 'google') return false;
+
+              // Filter for Gemini models
+              if (!shortName.includes('gemini')) return false;
+
+              // Filter for models known to support streamGenerateContent
+              // As of now, gemini-1.0, gemini-1.5, and gemini-2.0 are supported.
+              // We exclude "future" or "placeholder" models like gemini-3.1 or gemini-2.5 
+              // that appear in the catalog but often return 404 when called.
+              const isSupportedVersion = 
+                shortName.startsWith('gemini-1.0') || 
+                shortName.startsWith('gemini-1.5') || 
+                shortName.startsWith('gemini-2.0');
+              
+              return isSupportedVersion;
+            })
+            .map(m => {
+              const shortName = m.name.split('/').pop() ?? m.name;
+              const pubPrefix = pub.charAt(0).toUpperCase() + pub.slice(1);
+              return {
+                name: m.name, // Full path for sendMessage compatibility
+                displayName: m.displayName ? `${m.displayName} (${pubPrefix})` : `${shortName} (${pubPrefix})`,
+              };
+            });
         } finally {
           clearTimeout(timeout);
         }

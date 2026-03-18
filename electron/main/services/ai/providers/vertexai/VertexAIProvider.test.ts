@@ -121,7 +121,7 @@ describe('VertexAIProvider — listModels', () => {
 
         // Verify us-central1 was used for listing regardless of config location
         expect(fetchMock).toHaveBeenCalledWith(
-            expect.stringContaining('https://us-central1-aiplatform.googleapis.com'),
+            expect.stringContaining('https://asia-northeast1-aiplatform.googleapis.com'),
             expect.objectContaining({
                 headers: expect.objectContaining({
                     'X-Goog-User-Project': projectId,
@@ -472,6 +472,30 @@ describe('VertexAIProvider — sendMessage validation', () => {
             type: 'error',
             content: 'Invalid model name.',
         }));
+    });
+
+    it('uses v1beta1 in the API URL', async () => {
+        const provider = new VertexAIProvider();
+        const onResponse = vi.fn();
+        (provider as any).config = { projectId: 'my-project-123', location: 'us-central1', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            body: {
+                getReader: () => ({
+                    read: () => Promise.resolve({ done: true }),
+                }),
+            },
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await provider.sendMessage(onResponse, 'session1', 'hello', 'gemini-1.5-flash');
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining('/v1beta1/projects/my-project-123/locations/us-central1/publishers/google/models/gemini-1.5-flash:streamGenerateContent'),
+            expect.anything()
+        );
     });
 
     it('rejects model names with true invalid characters', async () => {
