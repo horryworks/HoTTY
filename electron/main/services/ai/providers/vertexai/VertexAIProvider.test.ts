@@ -82,12 +82,17 @@ describe('VertexAIProvider — listModels', () => {
         (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
 
         const fetchMock = vi.fn().mockImplementation((url: string) => {
+            // Verification requests (countTokens endpoint)
+            if (url.includes(':countTokens')) {
+                return Promise.resolve({ ok: true });
+            }
             if (url.includes('/publishers/google/models')) {
                 return Promise.resolve({
                     ok: true,
                     json: async () => ({
                         publisherModels: [
-                            { name: 'publishers/google/models/gemini-1.5-pro', displayName: 'Gemini 1.5 Pro' },
+                            { name: 'publishers/google/models/gemini-1.5-pro', displayName: 'Gemini 1.5 Pro', supportedActions: { openGenerationAiStudio: { references: {} } } },
+                            { name: 'publishers/google/models/imageclassification-efficientnet', displayName: 'EfficientNet', supportedActions: { openNotebook: { references: {} } } },
                         ],
                     }),
                 });
@@ -97,7 +102,7 @@ describe('VertexAIProvider — listModels', () => {
                     ok: true,
                     json: async () => ({
                         publisherModels: [
-                            { name: 'publishers/anthropic/models/claude-3', displayName: 'Claude 3' },
+                            { name: 'publishers/anthropic/models/claude-3', displayName: 'Claude 3', supportedActions: { openGenerationAiStudio: { references: {} } } },
                         ],
                     }),
                 });
@@ -133,6 +138,93 @@ describe('VertexAIProvider — listModels', () => {
             `https://${location}-aiplatform.googleapis.com/v1beta1/publishers/anthropic/models`,
             expect.anything()
         );
+    });
+
+    it('excludes models that are not accessible in the project (verification 404)', async () => {
+        const provider = new VertexAIProvider();
+        const projectId = 'my-project-123';
+        const location = 'us-central1';
+        (provider as any).config = { projectId, location, authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        const fetchMock = vi.fn().mockImplementation((url: string) => {
+            // Verification: only gemini-2.5-flash is accessible
+            if (url.includes(':countTokens')) {
+                return Promise.resolve({ ok: url.includes('gemini-2.5-flash') });
+            }
+            return Promise.resolve({
+                ok: true,
+                json: async () => ({
+                    publisherModels: [
+                        { name: 'publishers/google/models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', supportedActions: { openGenerationAiStudio: {} } },
+                        { name: 'publishers/google/models/gemini-2.0-flash-001', displayName: 'Gemini 2.0 Flash 001', supportedActions: { openGenerationAiStudio: {} } },
+                    ],
+                }),
+            });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const models = await provider.listModels();
+        expect(models.some(m => m.name.includes('gemini-2.5-flash'))).toBe(true);
+        expect(models.some(m => m.name.includes('gemini-2.0-flash-001'))).toBe(false);
+    });
+
+    it('excludes models without openGenerationAiStudio from results', async () => {
+        const provider = new VertexAIProvider();
+        const projectId = 'my-project-123';
+        (provider as any).config = { projectId, location: 'us-central1', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes(':countTokens')) return Promise.resolve({ ok: true });
+            return Promise.resolve({
+                ok: true,
+                json: async () => ({
+                    publisherModels: [
+                        { name: 'publishers/google/models/gemini-2.0-flash', displayName: 'Gemini 2.0 Flash', supportedActions: { openGenerationAiStudio: { references: {} } } },
+                        { name: 'publishers/google/models/imagen-3', displayName: 'Imagen 3', supportedActions: { openNotebook: { references: {} } } },
+                        { name: 'publishers/meta/models/faster-r-cnn', displayName: 'Faster R-CNN', supportedActions: { openNotebook: { references: {} } } },
+                    ],
+                }),
+            });
+        }));
+
+        const models = await provider.listModels();
+        expect(models.some(m => m.name.includes('gemini-2.0-flash'))).toBe(true);
+        expect(models.some(m => m.name.includes('imagen-3'))).toBe(false);
+        expect(models.some(m => m.name.includes('faster-r-cnn'))).toBe(false);
+    });
+
+    it('excludes video/audio/image models by name keyword', async () => {
+        const provider = new VertexAIProvider();
+        const projectId = 'my-project-123';
+        (provider as any).config = { projectId, location: 'us-central1', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes(':countTokens')) return Promise.resolve({ ok: true });
+            return Promise.resolve({
+                ok: true,
+                json: async () => ({
+                    publisherModels: [
+                        { name: 'publishers/google/models/gemini-2.0-flash', displayName: 'Gemini 2.0 Flash', supportedActions: { openGenerationAiStudio: {} } },
+                        { name: 'publishers/google/models/imagen-3', displayName: 'Imagen 3', supportedActions: { openGenerationAiStudio: {} } },
+                        { name: 'publishers/google/models/veo-2', displayName: 'Veo 2', supportedActions: { openGenerationAiStudio: {} } },
+                        { name: 'publishers/google/models/chirp-2', displayName: 'Chirp 2', supportedActions: { openGenerationAiStudio: {} } },
+                        { name: 'publishers/google/models/text-to-speech-hd', displayName: 'TTS HD', supportedActions: { openGenerationAiStudio: {} } },
+                        { name: 'publishers/google/models/lyria-2', displayName: 'Lyria 2', supportedActions: { openGenerationAiStudio: {} } },
+                    ],
+                }),
+            });
+        }));
+
+        const models = await provider.listModels();
+        expect(models.some(m => m.name.includes('gemini-2.0-flash'))).toBe(true);
+        expect(models.some(m => m.name.includes('imagen-3'))).toBe(false);
+        expect(models.some(m => m.name.includes('veo-2'))).toBe(false);
+        expect(models.some(m => m.name.includes('chirp-2'))).toBe(false);
+        expect(models.some(m => m.name.includes('text-to-speech-hd'))).toBe(false);
+        expect(models.some(m => m.name.includes('lyria-2'))).toBe(false);
     });
 
     it('returns empty list when API returns non-ok status for all publishers', async () => {

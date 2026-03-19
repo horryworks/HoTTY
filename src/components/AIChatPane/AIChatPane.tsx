@@ -7,6 +7,7 @@ import { AuthenticationPanel } from './AuthenticationPanel';
 import { VertexAIAuthPanel } from './VertexAIAuthPanel';
 import { OpenAIAuthPanel } from './OpenAIAuthPanel';
 import { AnthropicAuthPanel } from './AnthropicAuthPanel';
+import { MessageModal } from '../MessageModal/MessageModal';
 import { useSettingsStore } from '../../stores/settingsStore';
 import * as electronService from '../../services/electronService';
 import './AIChatPane.css';
@@ -472,6 +473,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
 
     const [authError, setAuthError] = useState<string | null>(null);
     const [availableModels, setAvailableModels] = useState<{ name: string; displayName: string }[]>([]);
+    const [modelLoadError, setModelLoadError] = useState(false);
 
     const authTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -551,7 +553,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             electronService.aiListModels().then(models => {
                 if (models.length > 0) {
                     setAvailableModels(models);
+                } else {
+                    setModelLoadError(true);
                 }
+            }).catch(() => {
+                setModelLoadError(true);
             });
         }
     }, [isAuthenticated]);
@@ -759,6 +765,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
 
     return (
         <div className="ai-chat-pane" style={{ fontSize: `${fontSize}px`, backgroundColor: effectiveBg }}>
+            {modelLoadError && (
+                <MessageModal
+                    type="error"
+                    title="Model List Unavailable"
+                    message="Failed to retrieve the AI model list. Please check your authentication and network connection, then try reconnecting."
+                    onClose={() => setModelLoadError(false)}
+                />
+            )}
             <div className="ai-chat-header">
                 <div className="ai-chat-header-left">
                     <div className="ai-chat-logo">

@@ -220,4 +220,61 @@ describe('GeminiService — listModels', () => {
         const result = await service.listModels();
         expect(result).toEqual([]);
     });
+
+    it('includes text generation models and excludes non-text models', async () => {
+        const mockFetch = vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/models')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        models: [
+                            // Text models — should be included
+                            { name: 'models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', supportedGenerationMethods: ['generateContent', 'countTokens', 'batchGenerateContent'] },
+                            { name: 'models/gemini-2.0-flash', displayName: 'Gemini 2.0 Flash', supportedGenerationMethods: ['generateContent', 'countTokens', 'createCachedContent', 'batchGenerateContent'] },
+                            { name: 'models/gemma-3-27b-it', displayName: 'Gemma 3 27B', supportedGenerationMethods: ['generateContent', 'countTokens'] },
+                            // TTS — should be excluded (keyword: tts)
+                            { name: 'models/gemini-2.5-flash-preview-tts', displayName: 'Gemini 2.5 Flash Preview TTS', supportedGenerationMethods: ['countTokens', 'generateContent'] },
+                            // Image generation — should be excluded (keyword: image)
+                            { name: 'models/gemini-2.5-flash-image', displayName: 'Gemini 2.5 Flash Image', supportedGenerationMethods: ['generateContent', 'countTokens', 'batchGenerateContent'] },
+                            // Image generation with internal codename — should be excluded (keyword: nano-banana)
+                            { name: 'models/nano-banana-pro-preview', displayName: 'Nano Banana Pro', supportedGenerationMethods: ['generateContent', 'countTokens', 'batchGenerateContent'] },
+                            // Robotics — should be excluded (keyword: robotics)
+                            { name: 'models/gemini-robotics-er-1.5-preview', displayName: 'Gemini Robotics-ER', supportedGenerationMethods: ['generateContent', 'countTokens'] },
+                            // Embedding — should be excluded (no generateContent)
+                            { name: 'models/gemini-embedding-001', displayName: 'Gemini Embedding 001', supportedGenerationMethods: ['embedContent', 'countTextTokens'] },
+                            // AQA — should be excluded (no generateContent)
+                            { name: 'models/aqa', displayName: 'AQA', supportedGenerationMethods: ['generateAnswer'] },
+                            // Video — should be excluded (no generateContent)
+                            { name: 'models/veo-2.0-generate-001', displayName: 'Veo 2', supportedGenerationMethods: ['predictLongRunning'] },
+                        ],
+                    }),
+                });
+            }
+            return Promise.resolve({ ok: false });
+        });
+
+        const service = new GeminiService();
+        (service as any).tokenData = {
+            access_token: 'test-token',
+            expires_in: 3600,
+            token_type: 'Bearer',
+            obtained_at: Date.now(),
+        };
+        const originalFetch = global.fetch;
+        global.fetch = mockFetch as any;
+        try {
+            const models = await service.listModels();
+            expect(models).toHaveLength(3);
+            expect(models.map(m => m.name)).toEqual(['gemini-2.5-flash', 'gemini-2.0-flash', 'gemma-3-27b-it']);
+            // Verify excluded models are absent
+            const names = models.map(m => m.name);
+            expect(names.some(n => n.includes('tts'))).toBe(false);
+            expect(names.some(n => n.includes('image'))).toBe(false);
+            expect(names.some(n => n.includes('nano-banana'))).toBe(false);
+            expect(names.some(n => n.includes('robotics'))).toBe(false);
+            expect(names.some(n => n.includes('embedding'))).toBe(false);
+        } finally {
+            global.fetch = originalFetch;
+        }
+    });
 });

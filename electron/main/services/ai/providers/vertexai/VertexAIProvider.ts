@@ -6,10 +6,16 @@ import { IAIProvider, AuthStatus, ModelInfo, ChatResponseData, TokenUsage } from
 import { encryptString, decryptString } from '../../../dpapi';
 import { logger } from '../../../Logger';
 
-const VALID_MODEL_PATTERN = /^[a-zA-Z0-9/\._-]+$/;
+const VALID_MODEL_PATTERN = /^[a-zA-Z0-9/._-]+$/;
 // GCP project IDs: 6-30 chars, lowercase letters/digits/hyphens, starts with letter
 const VALID_PROJECT_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 const VALID_LOCATION_PATTERN = /^[a-z][a-z0-9-]+$/;
+
+// Keywords indicating non-text (video / audio / image) models to exclude from the model list
+const NON_TEXT_MODEL_KEYWORDS = [
+  'imagen', 'veo', 'chirp', 'speech', 'audio', 'video',
+  'lyria', 'voice', 'stable-diffusion', 'flux', 'text-to-speech',
+];
 
 interface VertexAIConfig {
   projectId: string;
@@ -442,8 +448,13 @@ export class VertexAIProvider implements IAIProvider {
               logger.debug('vertexai', `No models for publisher ${publisher}`, { status: res.status });
               return [] as { name: string; displayName?: string }[];
             }
-            const data = await res.json() as { publisherModels?: { name: string; displayName?: string }[] };
-            return data.publisherModels ?? [];
+            const data = await res.json() as { publisherModels?: { name: string; displayName?: string; supportedActions?: Record<string, unknown> }[] };
+            return (data.publisherModels ?? [])
+              .filter(m => !!m.supportedActions?.['openGenerationAiStudio'])
+              .filter(m => {
+                const shortName = m.name.split('/').pop()?.toLowerCase() ?? '';
+                return !NON_TEXT_MODEL_KEYWORDS.some(kw => shortName.includes(kw));
+              });
           }),
         ),
       );
@@ -469,8 +480,41 @@ export class VertexAIProvider implements IAIProvider {
         return [];
       }
 
+      // Verify each model is actually accessible in this project via countTokens
+      // (same auth path as streamGenerateContent, but lightweight — no inference call)
+      const verifyCtrl = new AbortController();
+      const verifyTimeout = setTimeout(() => verifyCtrl.abort(), 20000);
+      let verifiedModels: ModelInfo[];
+      try {
+        const verifyResults = await Promise.allSettled(
+          allModels.map(m =>
+            fetch(`${base}/projects/${projectId}/locations/${location}/${m.name}:countTokens`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'X-Goog-User-Project': projectId,
+              },
+              body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'x' }] }] }),
+              signal: verifyCtrl.signal,
+            }).then(res => (res.ok ? m : null)),
+          ),
+        );
+        verifiedModels = verifyResults
+          .filter((r): r is PromiseFulfilledResult<ModelInfo | null> => r.status === 'fulfilled')
+          .map(r => r.value)
+          .filter((m): m is ModelInfo => m !== null);
+      } finally {
+        clearTimeout(verifyTimeout);
+      }
+
+      if (verifiedModels.length === 0) {
+        logger.warn('vertexai', 'No accessible models found for this project');
+        return [];
+      }
+
       // Sort: Google first, then alphabetically by displayName
-      allModels.sort((a, b) => {
+      verifiedModels.sort((a, b) => {
         const aIsGoogle = a.name.includes('publishers/google');
         const bIsGoogle = b.name.includes('publishers/google');
         if (aIsGoogle && !bIsGoogle) return -1;
@@ -478,8 +522,8 @@ export class VertexAIProvider implements IAIProvider {
         return a.displayName.localeCompare(b.displayName);
       });
 
-      logger.debug('vertexai', `listModels: fetched ${allModels.length} models`);
-      return allModels;
+      logger.debug('vertexai', `listModels: fetched ${verifiedModels.length} models`);
+      return verifiedModels;
     } catch (err: unknown) {
       logger.warn('vertexai', 'listModels error', { error: err instanceof Error ? err.message : String(err) });
       return [];

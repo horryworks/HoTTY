@@ -20,6 +20,11 @@ function safeCompare(a: string, b: string): boolean {
  *  Requires alphanumeric start/end and forbids consecutive separators (., -, _). */
 const VALID_MODEL_PATTERN = /^[a-zA-Z0-9]+([._-][a-zA-Z0-9]+)*$/;
 
+// Keywords indicating non-text (TTS / image / specialized) models to exclude from the model list
+const NON_TEXT_MODEL_KEYWORDS = [
+  'tts', 'image', 'robotics', 'computer-use', 'nano-banana',
+];
+
 interface TokenData {
   access_token: string;
   refresh_token?: string;
@@ -526,16 +531,29 @@ export class GeminiService {
       } finally {
         clearTimeout(listTimeout);
       }
-      if (!response.ok) return [];
+      if (!response.ok) {
+        logger.debug('gemini', 'listModels response error', { status: response.status });
+        return [];
+      }
 
       const data = await response.json();
-      return (data.models || [])
-        .filter((m: { supportedGenerationMethods?: string[]; name: string; displayName: string }) => m.supportedGenerationMethods?.includes('generateContent'))
+      logger.debug('gemini', 'listModels raw response', { models: JSON.stringify(data.models) });
+      const filtered = (data.models || [])
+        .filter((m: { supportedGenerationMethods?: string[]; name: string; displayName: string }) =>
+          m.supportedGenerationMethods?.includes('generateContent')
+        )
+        .filter((m: { name: string }) => {
+          const shortName = m.name.split('/').pop()?.toLowerCase() ?? '';
+          return !NON_TEXT_MODEL_KEYWORDS.some(kw => shortName.includes(kw));
+        })
         .map((m: { name: string; displayName: string }) => ({
           name: m.name.replace('models/', ''),
           displayName: m.displayName
         }));
-    } catch {
+      logger.debug('gemini', 'listModels filtered result', { count: filtered.length, names: filtered.map((m: { name: string }) => m.name) });
+      return filtered;
+    } catch (err: unknown) {
+      logger.debug('gemini', 'listModels error', { error: err instanceof Error ? err.message : String(err) });
       return [];
     }
   }

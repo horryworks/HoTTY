@@ -7,6 +7,13 @@ import { STORAGE_KEYS } from '../constants/storage';
 import * as electronService from '../services/electronService';
 import { useSettingsStore } from '../stores/settingsStore';
 
+const AI_PROVIDER_LABELS: Record<string, string> = {
+    gemini: 'Gemini AI',
+    vertexai: 'Vertex AI',
+    openai: 'OpenAI',
+    anthropic: 'Anthropic',
+};
+
 export interface Session {
     id: string;
     title: string;
@@ -85,16 +92,9 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     const watchBuffers = useRef<{ [sessionId: string]: string }>({});
 
     const activeAiProvider = useSettingsStore(s => s.activeAiProvider);
-    const aiProviderLabels: Record<string, string> = {
-        gemini: 'Gemini AI',
-        vertexai: 'Vertex AI',
-        openai: 'OpenAI',
-        anthropic: 'Anthropic',
-    };
-
     // Sync AI tab title when provider changes
     useEffect(() => {
-        const aiTitle = aiProviderLabels[activeAiProvider] ?? 'AI';
+        const aiTitle = AI_PROVIDER_LABELS[activeAiProvider] ?? 'AI';
         setSessions(prev =>
             prev.map(s => s.type === 'ai' ? { ...s, title: aiTitle } : s)
         );
@@ -386,7 +386,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     const createAISession = () => {
         // Only one AI session allowed
         const existingAI = sessions.find(s => s.type === 'ai');
-        const aiTitle = aiProviderLabels[activeAiProvider] ?? 'AI';
+        const aiTitle = AI_PROVIDER_LABELS[activeAiProvider] ?? 'AI';
         if (existingAI) {
             onSessionError(`Only one ${aiTitle} session can be open at a time.`);
             return;
