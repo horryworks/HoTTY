@@ -75,6 +75,9 @@ export const STORAGE_KEYS = {
     PROACTIVE_INSTRUCTION:           'hotty_gemini_proactive_instruction',
     INTERACTIVE_STABILIZATION_TIMEOUT: 'hotty_interactive_stabilization_timeout',
 
+    // AI auth
+    AI_EXPLICIT_LOGOUT: 'hotty_ai_explicit_logout',
+
     // Update
     SKIPPED_UPDATE_VERSION: 'hotty_skipped_update_version',
     NEVER_NOTIFY_UPDATE:    'hotty_never_notify_update',

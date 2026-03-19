@@ -5,11 +5,12 @@ import './ConfirmModal.css';
 export interface ConfirmModalProps {
     title?: string;
     message: string;
+    confirmLabel?: string;
     onConfirm: () => void;
     onCancel: () => void;
 }
 
-export const ConfirmModal: React.FC<ConfirmModalProps> = ({ title = 'Confirm', message, onConfirm, onCancel }) => {
+export const ConfirmModal: React.FC<ConfirmModalProps> = ({ title = 'Confirm', message, confirmLabel = 'Delete', onConfirm, onCancel }) => {
     const { position, onMouseDown: onHeaderMouseDown } = useDraggable();
     const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -51,7 +52,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({ title = 'Confirm', m
                         className="confirm-btn danger"
                         onClick={onConfirm}
                     >
-                        Delete
+                        {confirmLabel}
                     </button>
                 </div>
             </div>

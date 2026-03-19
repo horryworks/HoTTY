@@ -7,7 +7,6 @@ import { encryptString, decryptString } from '../../../dpapi';
 import { logger } from '../../../Logger';
 
 const VALID_MODEL_PATTERN = /^[a-zA-Z0-9/\._-]+$/;
-const FALLBACK_PUBLISHERS = ['google', 'anthropic', 'meta', 'mistral'];
 // GCP project IDs: 6-30 chars, lowercase letters/digits/hyphens, starts with letter
 const VALID_PROJECT_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 const VALID_LOCATION_PATTERN = /^[a-z][a-z0-9-]+$/;
@@ -417,126 +416,60 @@ export class VertexAIProvider implements IAIProvider {
     this.chatHistories.delete(sessionId);
   }
 
-  private getHardcodedModels(): ModelInfo[] {
-    return [
-      { name: 'gemini-1.5-pro-preview-05-06', displayName: 'Gemini 1.5 Pro Preview (Vertex AI)' },
-      { name: 'gemini-2.0-flash-001', displayName: 'Gemini 2.0 Flash (Vertex AI)' },
-      { name: 'gemini-1.5-pro-002', displayName: 'Gemini 1.5 Pro (Vertex AI)' },
-      { name: 'gemini-1.5-flash-002', displayName: 'Gemini 1.5 Flash (Vertex AI)' },
-    ];
-  }
-
-  private async fetchAvailablePublishers(token: string, projectId: string, location: string): Promise<string[]> {
-    const url = `https://${location}-aiplatform.googleapis.com/v1beta1/publishers`;
-    logger.debug('vertexai', 'Fetching available publishers', { url });
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 10000);
-    try {
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'X-Goog-User-Project': projectId,
-        },
-        signal: ctrl.signal,
-      });
-      if (!response.ok) {
-        logger.warn('vertexai', 'Failed to list publishers, falling back to google only', { status: response.status });
-        return FALLBACK_PUBLISHERS;
-      }
-      const data = await response.json() as { publishers?: { name: string }[] };
-      const publishers = (data.publishers ?? [])
-        .map(p => p.name.split('/').pop())
-        .filter((p): p is string => !!p);
-      if (publishers.length === 0) {
-        logger.warn('vertexai', 'No publishers returned from API, falling back to google only');
-        return FALLBACK_PUBLISHERS;
-      }
-      logger.debug('vertexai', `Found ${publishers.length} publishers`, { publishers });
-      return publishers;
-    } catch (err: unknown) {
-      logger.warn('vertexai', 'Failed to fetch publishers, falling back to google only', { error: err instanceof Error ? err.message : String(err) });
-      return FALLBACK_PUBLISHERS;
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  private async fetchModelsForPublisher(
-    publisher: string,
-    token: string,
-    projectId: string,
-    location: string,
-  ): Promise<ModelInfo[]> {
-    const url = `https://${location}-aiplatform.googleapis.com/v1beta1/publishers/${publisher}/models`;
-    logger.debug('vertexai', `Listing models for publisher: ${publisher}`, { url });
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 10000);
-    try {
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'X-Goog-User-Project': projectId,
-        },
-        signal: ctrl.signal,
-      });
-      if (!response.ok) {
-        logger.warn('vertexai', `listModels for ${publisher} failed`, { status: response.status });
-        return [];
-      }
-      const data = await response.json() as {
-        publisherModels?: {
-          name: string;
-          displayName?: string;
-          supportedActions?: string[];
-        }[];
-      };
-      const publisherModels = data.publisherModels ?? [];
-      return publisherModels
-        .map(m => {
-          const shortName = m.name.split('/').pop() ?? m.name;
-          const pubPrefix = publisher.charAt(0).toUpperCase() + publisher.slice(1);
-          return {
-            name: m.name, // Full path for sendMessage compatibility
-            displayName: m.displayName ? `${m.displayName} (${pubPrefix})` : `${shortName} (${pubPrefix})`,
-          };
-        });
-    } catch (err: unknown) {
-      logger.warn('vertexai', `Failed to fetch models for publisher ${publisher}`, { error: err instanceof Error ? err.message : String(err) });
-      return [];
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
   async listModels(): Promise<ModelInfo[]> {
-    if (!this.config) return this.getHardcodedModels();
+    if (!this.config) return [];
     const token = await this.getValidToken();
-    if (!token) return this.getHardcodedModels();
+    if (!token) return [];
 
-    const { projectId, location: listingLocation } = this.config;
-    const allModels: ModelInfo[] = [];
+    const { projectId, location } = this.config;
+    const publishers = ['google', 'anthropic', 'meta', 'mistral-ai', 'cohere'];
+    const base = `https://${location}-aiplatform.googleapis.com/v1beta1`;
+    logger.debug('vertexai', 'Fetching models from publishers', { publishers, base });
 
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 15000);
     try {
-      // Step 1: Fetch available publishers dynamically
-      const publishers = await this.fetchAvailablePublishers(token, projectId, listingLocation);
-
-      // Step 2: Fetch models for each publisher in parallel
       const results = await Promise.allSettled(
-        publishers.map(pub => this.fetchModelsForPublisher(pub, token, projectId, listingLocation)),
+        publishers.map(publisher =>
+          fetch(`${base}/publishers/${publisher}/models`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'X-Goog-User-Project': projectId,
+            },
+            signal: ctrl.signal,
+          }).then(async res => {
+            if (!res.ok) {
+              logger.debug('vertexai', `No models for publisher ${publisher}`, { status: res.status });
+              return [] as { name: string; displayName?: string }[];
+            }
+            const data = await res.json() as { publisherModels?: { name: string; displayName?: string }[] };
+            return data.publisherModels ?? [];
+          }),
+        ),
       );
 
-      for (const res of results) {
-        if (res.status === 'fulfilled') {
-          allModels.push(...res.value);
+      const allModels: ModelInfo[] = [];
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          for (const m of result.value) {
+            const parts = m.name.split('/');
+            const publisher = parts[1] ?? '';
+            const shortName = parts[parts.length - 1] ?? m.name;
+            const pubPrefix = publisher.charAt(0).toUpperCase() + publisher.slice(1);
+            allModels.push({
+              name: m.name,
+              displayName: m.displayName ? `${m.displayName} (${pubPrefix})` : `${shortName} (${pubPrefix})`,
+            });
+          }
         }
       }
 
       if (allModels.length === 0) {
-        logger.warn('vertexai', 'No models found in API response, using hardcoded list');
-        return this.getHardcodedModels();
+        logger.warn('vertexai', 'No models found from any publisher');
+        return [];
       }
 
-      // Sort models to put Google/Gemini first
+      // Sort: Google first, then alphabetically by displayName
       allModels.sort((a, b) => {
         const aIsGoogle = a.name.includes('publishers/google');
         const bIsGoogle = b.name.includes('publishers/google');
@@ -545,11 +478,13 @@ export class VertexAIProvider implements IAIProvider {
         return a.displayName.localeCompare(b.displayName);
       });
 
-      logger.debug('vertexai', `listModels: fetched total ${allModels.length} models from API`);
+      logger.debug('vertexai', `listModels: fetched ${allModels.length} models`);
       return allModels;
     } catch (err: unknown) {
-      logger.warn('vertexai', 'listModels consolidate error, using hardcoded list', { error: err instanceof Error ? err.message : String(err) });
-      return this.getHardcodedModels();
+      logger.warn('vertexai', 'listModels error', { error: err instanceof Error ? err.message : String(err) });
+      return [];
+    } finally {
+      clearTimeout(timeout);
     }
   }
 }

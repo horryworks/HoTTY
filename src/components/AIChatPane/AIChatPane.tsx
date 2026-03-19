@@ -202,6 +202,13 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     // Load credentials and attempt auto-auth on mount / provider change
     useEffect(() => {
         setIsAuthenticated(false);
+
+        // Skip auto-auth if the user explicitly logged out
+        if (localStorage.getItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT)) {
+            localStorage.removeItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT);
+            return;
+        }
+
         const load = async () => {
             try {
                 if (activeAiProvider === 'vertexai') {
@@ -209,29 +216,38 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                     const location = localStorage.getItem(STORAGE_KEYS.VERTEXAI_LOCATION) || '';
                     if (projectId && location) {
                         setIsAuthLoading(true);
-                        await electronService.aiSetProvider('vertexai');
-                        const success = await electronService.aiAuthAuto({ projectId, location });
-                        setIsAuthenticated(success);
-                        setIsAuthLoading(false);
+                        try {
+                            await electronService.aiSetProvider('vertexai');
+                            const success = await electronService.aiAuthAuto({ projectId, location });
+                            setIsAuthenticated(success);
+                        } finally {
+                            setIsAuthLoading(false);
+                        }
                     }
                     return;
                 }
 
                 if (activeAiProvider === 'openai') {
                     setIsAuthLoading(true);
-                    await electronService.aiSetProvider('openai');
-                    const success = await electronService.aiAuthAuto({});
-                    setIsAuthenticated(success);
-                    setIsAuthLoading(false);
+                    try {
+                        await electronService.aiSetProvider('openai');
+                        const success = await electronService.aiAuthAuto({});
+                        setIsAuthenticated(success);
+                    } finally {
+                        setIsAuthLoading(false);
+                    }
                     return;
                 }
 
                 if (activeAiProvider === 'anthropic') {
                     setIsAuthLoading(true);
-                    await electronService.aiSetProvider('anthropic');
-                    const success = await electronService.aiAuthAuto({});
-                    setIsAuthenticated(success);
-                    setIsAuthLoading(false);
+                    try {
+                        await electronService.aiSetProvider('anthropic');
+                        const success = await electronService.aiAuthAuto({});
+                        setIsAuthenticated(success);
+                    } finally {
+                        setIsAuthLoading(false);
+                    }
                     return;
                 }
 
@@ -253,9 +269,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
 
                 if (decryptedId && decryptedSecret) {
                     setIsAuthLoading(true);
-                    const success = await electronService.geminiAuthAuto(decryptedId, decryptedSecret);
-                    setIsAuthenticated(success);
-                    setIsAuthLoading(false);
+                    try {
+                        const success = await electronService.geminiAuthAuto(decryptedId, decryptedSecret);
+                        setIsAuthenticated(success);
+                    } finally {
+                        setIsAuthLoading(false);
+                    }
                 }
             } catch (err) {
                 console.error('Failed to auto-auth:', err);
@@ -600,6 +619,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     };
 
     const handleLogout = () => {
+        localStorage.setItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT, '1');
         if (activeAiProvider === 'gemini') {
             electronService.geminiAuthLogout();
         } else {
@@ -809,15 +829,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                                     disabled={isStreaming}
                                 >
                                     {selectedModel === 'Unspecified' && <option value="Unspecified">Select a model...</option>}
-                                    {availableModels && availableModels.length > 0 ? availableModels.map(m => (
+                                    {availableModels && availableModels.map(m => (
                                         <option key={m.name} value={m.name}>{m.displayName}</option>
-                                    )) : (
-                                        <>
-                                            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                                            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                                            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                                        </>
-                                    )}
+                                    ))}
                                 </select>
                             </div>
                             <button className="ai-chat-header-btn ai-chat-header-btn--danger" onClick={handleClearChat} title="Clear chat context">

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import * as electronService from '../../services/electronService';
 import { useSettingsStore } from '../../stores/settingsStore';
-import '../ConfirmModal/ConfirmModal.css';
+import { STORAGE_KEYS } from '../../constants/storage';
+import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 
 interface AISettingsTabProps {
     isAiAuthenticated: boolean;
@@ -51,8 +52,10 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
     const activeAiProvider = useSettingsStore(s => s.activeAiProvider);
     const updateActiveAiProvider = useSettingsStore(s => s.updateActiveAiProvider);
     const [showGeminiWarning, setShowGeminiWarning] = useState(false);
+    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
     return (
+        <>
         <div className="form-group">
             <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
                 <label style={{ marginBottom: '10px', display: 'block' }}>AI Provider</label>
@@ -102,13 +105,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                     </div>
                     {isAiAuthenticated && (
                         <button
-                            onClick={async () => {
-                                if (confirm('Are you sure you want to logout? You will need to re-authenticate to use the AI provider.')) {
-                                    await electronService.aiAuthLogout();
-                                    onAuthenticatedChange(false);
-                                    onLogout();
-                                }
-                            }}
+                            onClick={() => setShowLogoutConfirm(true)}
                             style={{
                                 padding: '6px 12px',
                                 cursor: 'pointer',
@@ -417,5 +414,21 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                 </div>
             )}
         </div>
+        {showLogoutConfirm && (
+            <ConfirmModal
+                title="Logout"
+                message="Are you sure you want to logout? You will need to re-authenticate to use the AI provider."
+                confirmLabel="Logout"
+                onConfirm={async () => {
+                    setShowLogoutConfirm(false);
+                    localStorage.setItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT, '1');
+                    await electronService.aiAuthLogout();
+                    onAuthenticatedChange(false);
+                    onLogout();
+                }}
+                onCancel={() => setShowLogoutConfirm(false)}
+            />
+        )}
+        </>
     );
 };
