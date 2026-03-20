@@ -202,14 +202,14 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     // Fetch resources when protocol changes
     useEffect(() => {
         if (protocol === 'serial') {
-            window.electronAPI.listSerialPorts().then((ports: SerialPortInfo[]) => {
+            electronService.listSerialPorts().then((ports: SerialPortInfo[]) => {
                 setSerialPorts(ports);
                 if (ports.length > 0) {
                     setSerialPath(prev => prev || ports[0].path);
                 }
             });
         } else if (protocol === 'wsl') {
-            window.electronAPI.listWslDistributions().then((distros: string[]) => {
+            electronService.listWslDistributions().then((distros: string[]) => {
                 setWslDistros(distros);
                 if (distros.length > 0) {
                     setSelectedDistro(prev => prev || distros[0]);

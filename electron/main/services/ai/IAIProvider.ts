@@ -53,4 +53,10 @@ export interface IAIProvider {
   clearHistory(sessionId: string): void;
 
   listModels(): Promise<ModelInfo[]>;
+
+  /** Set the deployment location/region (e.g. Vertex AI regions). */
+  setLocation?(location: string): void;
+
+  /** List available locations/regions for this provider. */
+  listLocations?(): Promise<string[]>;
 }

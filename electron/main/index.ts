@@ -613,7 +613,6 @@ ipcMain.handle('ai-auth-start', async (event, { credentials }) => {
   if (!eventWin) return false;
   return await aiService.authenticate(eventWin, credentials, (result) => {
     eventWin.webContents.send('ai-auth-result', result);
-    eventWin.webContents.send('gemini-auth-result', result);
   });
 });
 
@@ -645,12 +644,24 @@ ipcMain.handle('ai-list-models', async () => {
   return await aiService?.listModels() ?? [];
 });
 
+ipcMain.handle('ai-list-locations', async () => {
+  return await aiService?.listLocations() ?? [];
+});
+
 ipcMain.on('ai-chat-clear', (_, sessionId: string) => {
   aiService?.clearHistory(sessionId);
 });
 
 ipcMain.handle('ai-list-providers', () => {
   return aiService?.listProviders() ?? [];
+});
+
+ipcMain.handle('ai-set-location', (_, location: unknown) => {
+  if (typeof location !== 'string' || !/^(?:global|[a-z][a-z0-9-]+)$/.test(location)) {
+    logger.warn('app', 'ai-set-location: invalid location');
+    return;
+  }
+  aiService?.setLocation(location);
 });
 
 ipcMain.handle('ai-set-provider', (_, providerId: unknown) => {
@@ -669,49 +680,6 @@ ipcMain.handle('select-service-account-key-file', async (event) => {
   });
   if (canceled || filePaths.length === 0) return null;
   return filePaths[0];
-});
-
-// Gemini-specific aliases (backward compatibility)
-ipcMain.handle('gemini-auth-start', async (event, { clientId, clientSecret }) => {
-  if (!aiService) return false;
-  const eventWin = BrowserWindow.fromWebContents(event.sender);
-  if (!eventWin) return false;
-  return await aiService.authenticate(eventWin, { clientId, clientSecret }, (result) => {
-    eventWin.webContents.send('gemini-auth-result', result);
-    eventWin.webContents.send('ai-auth-result', result);
-  });
-});
-
-ipcMain.handle('gemini-auth-auto', async (_, { clientId, clientSecret }) => {
-  if (!aiService) return false;
-  return await aiService.autoAuth({ clientId, clientSecret });
-});
-
-ipcMain.handle('gemini-auth-status', () => {
-  return aiService?.getAuthStatus().authenticated ?? false;
-});
-
-ipcMain.on('gemini-auth-logout', () => {
-  aiService?.logout();
-});
-
-ipcMain.on('gemini-chat-send', async (event, { sessionId, message, model, systemInstruction }) => {
-  if (!aiService) return;
-  const eventWin = BrowserWindow.fromWebContents(event.sender);
-  if (!eventWin) return;
-  await aiService.sendMessage(eventWin, sessionId, message, model, systemInstruction);
-});
-
-ipcMain.on('gemini-chat-cancel', (_, sessionId: string) => {
-  aiService?.cancelMessage(sessionId);
-});
-
-ipcMain.handle('gemini-list-models', async () => {
-  return await aiService?.listModels() ?? [];
-});
-
-ipcMain.on('gemini-chat-clear', (_, sessionId: string) => {
-  aiService?.clearHistory(sessionId);
 });
 
 ipcMain.handle('get-app-version', () => {
@@ -980,8 +948,10 @@ ipcMain.handle('list-log-files', async (_, folderPath: string) => {
   if (!folderPath) return { error: 'No log folder configured' };
   const resolvedFolder = resolve(folderPath);
   if (!fs.existsSync(resolvedFolder)) return { error: 'Log folder does not exist' };
-  // Trust explicitly listed folder for subsequent read-log-file calls
-  allowedLogDirs.add(resolvedFolder);
+  // Only allow reading from directories already registered via update-logging
+  if (![...allowedLogDirs].some(dir => resolvedFolder === dir)) {
+    return { error: 'Log folder is not in the allowed list' };
+  }
   try {
     const entries = fs.readdirSync(resolvedFolder);
     const files = entries

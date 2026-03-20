@@ -32,4 +32,27 @@ describe('HelpModal', () => {
         render(<HelpModal {...baseProps} />);
         expect(screen.getByText(/Shortcuts/)).toBeInTheDocument();
     });
+
+    it('renders the AI Quick Start Guide section', () => {
+        render(<HelpModal {...baseProps} />);
+        expect(screen.getByText(/AI Quick Start Guide/)).toBeInTheDocument();
+    });
+
+    it('renders the AI Features Overview section', () => {
+        render(<HelpModal {...baseProps} />);
+        expect(screen.getByText(/AI Features Overview/)).toBeInTheDocument();
+    });
+
+    it('renders the Choosing an AI Provider section with experimental notices', () => {
+        render(<HelpModal {...baseProps} />);
+        expect(screen.getByText(/Choosing an AI Provider/)).toBeInTheDocument();
+        // Verify experimental/untested notices are present for Anthropic and OpenAI
+        const experimentalLabels = screen.getAllByText(/untested/);
+        expect(experimentalLabels.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('renders the AI Setup & Authentication section', () => {
+        render(<HelpModal {...baseProps} />);
+        expect(screen.getByText(/AI Setup & Authentication/)).toBeInTheDocument();
+    });
 });

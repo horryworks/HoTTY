@@ -1,8 +1,32 @@
 # Release Notes - HoTTY
 
-## [v1.0.0-beta6] - 2026-03-18
+## [v1.0.0-beta7] - 2026-03-20
 
 > ⚠️ **Preview Release** — AI provider integrations (Vertex AI, Anthropic, OpenAI) are not fully tested. Gemini remains the recommended production option.
+
+### Improved
+- **Vertex AI Implementation**: Comprehensive improvements to the Vertex AI provider:
+    - **Region-Aware Model Discovery**: Added `ai-list-locations` and `ai-set-location` IPC channels, enabling dynamic region selection for Vertex AI model retrieval.
+    - **Global Endpoint Support**: The Vertex AI provider now correctly handles the `global` location, routing requests to `aiplatform.googleapis.com` instead of region-prefixed endpoints.
+    - **Publisher-Specific Routing**: Vertex AI chat requests are now routed through publisher-specific implementations to handle API format differences between Google and third-party Model Garden publishers.
+- **Multi-Provider Cost Tracking**: Replaced the Gemini-only `calcGeminiCost` with a unified `calcAICost` function that supports pricing tables for Gemini, OpenAI, and Anthropic models. Per-response cost is now accumulated and displayed in the AI chat pane.
+- **Help Modal Rewrite**: The Help modal's AI section has been rewritten as an "AI Quick Start Guide" with a streamlined 3-step onboarding flow and a new "AI Provider Comparison" section.
+- **Provider Switch Cleanup**: Switching the active AI provider now clears chat history, streaming state, and token counters to prevent stale data from carrying over.
+
+### Changed
+- **Legacy Gemini IPC Removed**: All backward-compatible `gemini-*` IPC aliases (`gemini-auth-start`, `gemini-auth-auto`, `gemini-auth-status`, `gemini-auth-logout`, `gemini-chat-send`, `gemini-list-models`, `gemini-chat-cancel`, `gemini-chat-clear`) and their preload bindings have been removed. All AI communication now uses the unified `ai-*` channels exclusively.
+- **Direct API Access Cleanup**: Replaced remaining direct `window.electronAPI` calls in `HostTree`, `SessionDialog`, and `AppearanceTab` with the typed `electronService` wrapper, ensuring consistent API access patterns across the codebase.
+
+### Security
+- **Log Folder Access Hardened**: The `list-log-files` IPC handler now only allows reading from directories that were previously registered via `update-logging`, preventing arbitrary directory listing.
+
+### Bug Fixes
+- **AI Pane Focus on Re-login**: Fixed an issue where the AI chat pane lost focus after logging out and logging back in to an AI provider.
+- **AI Tab Name**: Fixed a hard-coded AI tab name that was not reflecting the selected provider.
+
+---
+
+## [v1.0.0-beta6] - 2026-03-18
 
 ### New Features
 - **Multi-Provider AI Support**: The AI backend has been fully generalized. You can now select your AI provider from Settings > AI:

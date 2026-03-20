@@ -222,7 +222,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
 
         if (session?.type === 'ai') {
             // AI sessions don't have terminal or backend connection
-            electronService.geminiChatClear(sessionId);
+            electronService.aiChatClear(sessionId);
 
             // Disconnect the linked terminal's watch state when AI session closes
             const linkedTerminalId = session.aiChatState?.lastTargetSessionId;
@@ -400,7 +400,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             aiChatState: {
                 messages: [],
                 inputText: '',
-                selectedModel: localStorage.getItem(STORAGE_KEYS.GEMINI_MODEL) || 'Unspecified',
+                selectedModel: localStorage.getItem(STORAGE_KEYS.AI_SELECTED_MODEL_PER_PROVIDER(activeAiProvider)) || localStorage.getItem(STORAGE_KEYS.AI_SELECTED_MODEL) || 'Unspecified',
                 selectedLanguage: localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE) || 'English',
                 textareaHeight: 0,
                 scrollTop: 0

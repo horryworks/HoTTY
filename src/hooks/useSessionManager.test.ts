@@ -32,7 +32,7 @@ vi.mock('../services/electronService', () => ({
     onSessionData: vi.fn(() => vi.fn()),
     onSessionStatus: vi.fn(() => vi.fn()),
     onSessionError: vi.fn(() => vi.fn()),
-    geminiChatClear: vi.fn(),
+    aiChatClear: vi.fn(),
     logDebug: vi.fn(),
 }));
 
@@ -195,12 +195,12 @@ describe('useSessionManager — closeSession', () => {
         expect(electronService.disconnectSession).toHaveBeenCalledWith(sessionId);
     });
 
-    it('calls electronService.geminiChatClear for AI sessions', () => {
+    it('calls electronService.aiChatClear for AI sessions', () => {
         const { result } = renderHook(() => useSessionManager(makeOptions()));
         act(() => { result.current.createAISession(); });
         const sessionId = result.current.sessions[0].id;
         act(() => { result.current.closeSession(sessionId); });
-        expect(electronService.geminiChatClear).toHaveBeenCalledWith(sessionId);
+        expect(electronService.aiChatClear).toHaveBeenCalledWith(sessionId);
     });
 });
 

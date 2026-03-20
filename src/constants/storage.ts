@@ -55,7 +55,8 @@ export const STORAGE_KEYS = {
     GEMINI_CLIENT_ID:      'hotty_gemini_client_id',
     GEMINI_CLIENT_SECRET:  'hotty_gemini_client_secret',
     GEMINI_LANGUAGE:       'hotty_gemini_language',
-    GEMINI_MODEL:          'hotty_gemini_model',
+    AI_SELECTED_MODEL:     'hotty_ai_selected_model',
+    AI_SELECTED_MODEL_PER_PROVIDER: (provider: string) => `hotty_ai_selected_model_${provider}`,
 
     // AI provider selection
     ACTIVE_AI_PROVIDER:       'hotty_active_ai_provider',
@@ -63,6 +64,7 @@ export const STORAGE_KEYS = {
     VERTEXAI_LOCATION:        'hotty_vertexai_location',
     VERTEXAI_AUTH_TYPE:       'hotty_vertexai_auth_type',
     VERTEXAI_KEY_FILE_PATH:   'hotty_vertexai_key_file_path',
+    VERTEXAI_SELECTED_REGION: 'hotty_vertexai_selected_region',
 
     // HoTTY features
     WATCH_BUFFER_LIMIT:              'hotty_watch_buffer_limit',

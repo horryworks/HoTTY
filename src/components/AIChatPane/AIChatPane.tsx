@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { marked } from 'marked';
 import { getTransparentColor } from '../../utils/colorUtils';
 import { STORAGE_KEYS } from '../../constants/storage';
-import { calcGeminiCost } from '../../constants/geminiPricing';
+import { calcAICost } from '../../constants/aiPricing';
 import { AuthenticationPanel } from './AuthenticationPanel';
 import { VertexAIAuthPanel } from './VertexAIAuthPanel';
 import { OpenAIAuthPanel } from './OpenAIAuthPanel';
@@ -183,7 +183,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         () => localStorage.getItem(STORAGE_KEYS.VERTEXAI_PROJECT_ID) || ''
     );
     const [vertexLocation, setVertexLocation] = useState<string>(
-        () => localStorage.getItem(STORAGE_KEYS.VERTEXAI_LOCATION) || 'us-central1'
+        () => localStorage.getItem(STORAGE_KEYS.VERTEXAI_LOCATION) || ''
     );
     const [vertexAuthType, setVertexAuthType] = useState<'adc' | 'service_account'>(
         () => (localStorage.getItem(STORAGE_KEYS.VERTEXAI_AUTH_TYPE) as 'adc' | 'service_account') || 'adc'
@@ -191,6 +191,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     const [vertexKeyFilePath, setVertexKeyFilePath] = useState<string>(
         () => localStorage.getItem(STORAGE_KEYS.VERTEXAI_KEY_FILE_PATH) || ''
     );
+    const [selectedRegion, setSelectedRegion] = useState<string>(
+        () => localStorage.getItem(STORAGE_KEYS.VERTEXAI_SELECTED_REGION) || localStorage.getItem(STORAGE_KEYS.VERTEXAI_LOCATION) || ''
+    );
+    const [availableRegions, setAvailableRegions] = useState<string[]>([]);
+    const [isLoadingModels, setIsLoadingModels] = useState(false);
 
     const activeAiProvider = useSettingsStore(s => s.activeAiProvider);
 
@@ -201,7 +206,24 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     const [anthropicApiKey, setAnthropicApiKey] = useState<string>('');
 
     // Load credentials and attempt auto-auth on mount / provider change
+    const prevProviderRef = useRef(activeAiProvider);
+    const sessionIdRef = useRef(sessionId);
+    sessionIdRef.current = sessionId;
     useEffect(() => {
+        // Clear chat when provider changes (not on initial mount)
+        if (prevProviderRef.current !== activeAiProvider) {
+            prevProviderRef.current = activeAiProvider;
+            setMessages([]);
+            setStreamingContent('');
+            setTotalInputTokens(0);
+            setTotalOutputTokens(0);
+            setTotalCost(null);
+            setSelectedModel('Unspecified');
+            if (sessionIdRef.current) {
+                electronService.aiChatClear(sessionIdRef.current);
+            }
+        }
+
         setIsAuthenticated(false);
 
         // Skip auto-auth if the user explicitly logged out
@@ -252,7 +274,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                     return;
                 }
 
-                // Gemini auth
+                // Gemini (Google AI Studio) auth
                 const encId = localStorage.getItem(STORAGE_KEYS.GEMINI_CLIENT_ID) || '';
                 const encSecret = localStorage.getItem(STORAGE_KEYS.GEMINI_CLIENT_SECRET) || '';
 
@@ -271,7 +293,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                 if (decryptedId && decryptedSecret) {
                     setIsAuthLoading(true);
                     try {
-                        const success = await electronService.geminiAuthAuto(decryptedId, decryptedSecret);
+                        await electronService.aiSetProvider('gemini');
+                        const success = await electronService.aiAuthAuto({ clientId: decryptedId, clientSecret: decryptedSecret });
                         setIsAuthenticated(success);
                     } finally {
                         setIsAuthLoading(false);
@@ -289,6 +312,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     const [messages, setMessages] = useState<ChatMessage[]>(initialState?.messages || []);
     const [inputText, setInputText] = useState(initialState?.inputText || '');
     const [selectedModel, setSelectedModel] = useState(initialState?.selectedModel || 'Unspecified');
+    const selectedModelRef = useRef(selectedModel);
+    selectedModelRef.current = selectedModel;
     const [selectedLanguage, setSelectedLanguage] = useState(initialState?.selectedLanguage || 'English');
     const [selectedExpertise, setSelectedExpertise] = useState(initialState?.selectedExpertise || 'General Helper');
     const [textareaHeight, setTextareaHeight] = useState(initialState?.textareaHeight || 0);
@@ -332,6 +357,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
     const [streamingContent, setStreamingContent] = useState('');
     const [totalInputTokens, setTotalInputTokens] = useState(0);
     const [totalOutputTokens, setTotalOutputTokens] = useState(0);
+    const [totalCost, setTotalCost] = useState<number | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -459,8 +485,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                 setStreamingContent('');
                 setIsStreaming(false);
                 if (data.usageMetadata) {
-                    setTotalInputTokens(prev => prev + (data.usageMetadata!.promptTokenCount || 0));
-                    setTotalOutputTokens(prev => prev + (data.usageMetadata!.candidatesTokenCount || 0));
+                    const inTokens = data.usageMetadata!.promptTokenCount || 0;
+                    const outTokens = data.usageMetadata!.candidatesTokenCount || 0;
+                    setTotalInputTokens(prev => prev + inTokens);
+                    setTotalOutputTokens(prev => prev + outTokens);
+                    const responseCost = calcAICost(inTokens, outTokens, selectedModelRef.current);
+                    if (responseCost !== null) {
+                        setTotalCost(prev => (prev ?? 0) + responseCost);
+                    }
                 }
             } else if (data.type === 'error') {
                 setMessages(prev => [...prev, { role: 'model', content: `⚠️ ${data.content}` }]);
@@ -550,17 +582,69 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
 
     useEffect(() => {
         if (isAuthenticated) {
-            electronService.aiListModels().then(models => {
-                if (models.length > 0) {
-                    setAvailableModels(models);
-                } else {
+            setIsLoadingModels(true);
+            setModelLoadError(false);
+            const load = async () => {
+                try {
+                    if (activeAiProvider === 'vertexai') {
+                        await electronService.aiSetLocation(selectedRegion);
+                        // Fetch available regions in background
+                        electronService.aiListLocations().then(locations => {
+                            if (locations.length > 0) setAvailableRegions(locations);
+                        }).catch(() => { /* ignore — fallback to selectedRegion only */ });
+                    }
+                    const models = await electronService.aiListModels();
+                    if (models.length > 0) {
+                        setAvailableModels(models);
+                        // Restore last-used model for this provider, or keep current if still available
+                        setSelectedModel(prev => {
+                            // If switching providers, try to restore the saved model for the new provider
+                            const savedModel = localStorage.getItem(STORAGE_KEYS.AI_SELECTED_MODEL_PER_PROVIDER(activeAiProvider));
+                            const candidate = prev === 'Unspecified' && savedModel ? savedModel : prev;
+                            if (candidate === 'Unspecified') return 'Unspecified';
+                            const stillAvailable = models.some(m => m.name === candidate);
+                            return stillAvailable ? candidate : 'Unspecified';
+                        });
+                    } else {
+                        setModelLoadError(true);
+                    }
+                } catch {
                     setModelLoadError(true);
+                } finally {
+                    setIsLoadingModels(false);
                 }
-            }).catch(() => {
-                setModelLoadError(true);
-            });
+            };
+            load();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAuthenticated]);
+
+    const handleRegionChange = async (region: string) => {
+        setSelectedRegion(region);
+        localStorage.setItem(STORAGE_KEYS.VERTEXAI_SELECTED_REGION, region);
+        setSelectedModel('Unspecified');
+        setAvailableModels([]);
+        setModelLoadError(false);
+        setIsLoadingModels(true);
+        try {
+            await electronService.aiSetLocation(region);
+            const models = await electronService.aiListModels();
+            if (models.length > 0) {
+                setAvailableModels(models);
+                // Restore last-used model for this provider if available
+                const savedModel = localStorage.getItem(STORAGE_KEYS.AI_SELECTED_MODEL_PER_PROVIDER(activeAiProvider));
+                if (savedModel && models.some(m => m.name === savedModel)) {
+                    setSelectedModel(savedModel);
+                }
+            } else {
+                setModelLoadError(true);
+            }
+        } catch {
+            setModelLoadError(true);
+        } finally {
+            setIsLoadingModels(false);
+        }
+    };
 
     const handleLogin = async () => {
         setIsAuthLoading(true);
@@ -576,6 +660,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             localStorage.setItem(STORAGE_KEYS.VERTEXAI_LOCATION, vertexLocation);
             localStorage.setItem(STORAGE_KEYS.VERTEXAI_AUTH_TYPE, vertexAuthType);
             localStorage.setItem(STORAGE_KEYS.VERTEXAI_KEY_FILE_PATH, vertexKeyFilePath);
+            // Set auth location as default region
+            setSelectedRegion(vertexLocation);
+            localStorage.setItem(STORAGE_KEYS.VERTEXAI_SELECTED_REGION, vertexLocation);
             await electronService.aiSetProvider('vertexai');
             await electronService.aiAuthStart({
                 projectId: vertexProjectId,
@@ -621,16 +708,13 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         } catch (err) {
             console.error('Failed to encrypt Gemini credentials:', err);
         }
-        await electronService.geminiAuthStart(clientId, clientSecret);
+        await electronService.aiSetProvider('gemini');
+        await electronService.aiAuthStart({ clientId, clientSecret });
     };
 
     const handleLogout = () => {
         localStorage.setItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT, '1');
-        if (activeAiProvider === 'gemini') {
-            electronService.geminiAuthLogout();
-        } else {
-            electronService.aiAuthLogout();
-        }
+        electronService.aiAuthLogout();
         setIsAuthenticated(false);
         setMessages([]);
     };
@@ -739,6 +823,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
         setStreamingContent('');
         setTotalInputTokens(0);
         setTotalOutputTokens(0);
+        setTotalCost(null);
         electronService.aiChatClear(sessionId);
     };
 
@@ -830,6 +915,29 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                                     ))}
                                 </select>
                             </div>
+                            {activeAiProvider === 'vertexai' && (
+                                <div className="ai-chat-header-item">
+                                    <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <title>Region</title>
+                                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                                        <circle cx="12" cy="10" r="3" />
+                                    </svg>
+                                    <select
+                                        className="ai-chat-model-select"
+                                        style={{ width: '130px' }}
+                                        value={selectedRegion}
+                                        onChange={(e) => handleRegionChange(e.target.value)}
+                                        disabled={isStreaming || isLoadingModels}
+                                    >
+                                        {(availableRegions.length > 0
+                                            ? availableRegions
+                                            : [selectedRegion]
+                                        ).map(r => (
+                                            <option key={r} value={r}>{r}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                             <div className="ai-chat-header-item">
                                 <select
                                     className="ai-chat-model-select"
@@ -838,11 +946,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                                     onChange={(e) => {
                                         const model = e.target.value;
                                         setSelectedModel(model);
-                                        localStorage.setItem(STORAGE_KEYS.GEMINI_MODEL, model);
+                                        localStorage.setItem(STORAGE_KEYS.AI_SELECTED_MODEL, model);
+                                        localStorage.setItem(STORAGE_KEYS.AI_SELECTED_MODEL_PER_PROVIDER(activeAiProvider), model);
                                     }}
-                                    disabled={isStreaming}
+                                    disabled={isStreaming || isLoadingModels}
                                 >
-                                    {selectedModel === 'Unspecified' && <option value="Unspecified">Select a model...</option>}
+                                    {selectedModel === 'Unspecified' && <option value="Unspecified">{isLoadingModels ? 'Loading...' : 'Select a model...'}</option>}
                                     {availableModels && availableModels.map(m => (
                                         <option key={m.name} value={m.name}>{m.displayName}</option>
                                     ))}
@@ -1028,8 +1137,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
                     {(totalInputTokens > 0 || totalOutputTokens > 0) && (
                         <div className="ai-token-status">
                             <span>{totalInputTokens.toLocaleString()} in / {totalOutputTokens.toLocaleString()} out tokens</span>
-                            <span className="ai-token-status-sep">·</span>
-                            <span>~${calcGeminiCost(totalInputTokens, totalOutputTokens, selectedModel).toFixed(4)}</span>
+                            {totalCost !== null && (
+                                <>
+                                    <span className="ai-token-status-sep">·</span>
+                                    <span>~${totalCost.toFixed(4)}</span>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>

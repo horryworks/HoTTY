@@ -183,21 +183,52 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                         </div>
                     </details>
 
-                    {/* ── AI Chat ── */}
+                    {/* ── AI Quick Start Guide ── */}
                     <details className="help-section" open>
-                        <summary>✨ AI Chat</summary>
+                        <summary>✨ AI Quick Start Guide</summary>
                         <div className="help-section-body">
                             <p className="help-text">
-                                <strong>Open AI Chat:</strong> Click the <strong><FeaturesIcon /></strong> (Features) icon in the tab bar, then select <strong>"AI Chat"</strong> from the menu. Multiple AI chat tabs can be open simultaneously.
+                                HoTTY has built-in AI that can analyze terminal output, explain errors, suggest fixes, and even execute commands for you. Here's how to get started in 3 steps:
                             </p>
+                            <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: 0 }}>
+                                <li>
+                                    <strong>Choose a provider:</strong> Go to <strong>Settings → AI → AI Provider</strong> and select one. <strong>Google AI Studio (Gemini)</strong> or <strong>Vertex AI</strong> are recommended — see the comparison table below.
+                                </li>
+                                <li>
+                                    <strong>Authenticate:</strong> Open an AI Chat tab (<strong><FeaturesIcon /></strong> → AI Chat) and follow the on-screen prompts to sign in or enter your credentials.
+                                </li>
+                                <li>
+                                    <strong>Start chatting:</strong> Type a question, or right-click on terminal text and choose <strong>"Ask AI"</strong> to get instant analysis.
+                                </li>
+                            </ol>
+                            <p className="help-text small" style={{ marginTop: '6px' }}>
+                                💡 That's it! You can start asking questions right away — no complex configuration needed.
+                            </p>
+                        </div>
+                    </details>
+
+                    {/* ── AI Features Overview ── */}
+                    <details className="help-section">
+                        <summary>💬 AI Features Overview</summary>
+                        <div className="help-section-body">
+                            <p className="help-text" style={{ marginBottom: '4px' }}><strong>AI Chat</strong></p>
                             <p className="help-text">
-                                <strong>Ask AI:</strong> Right-click on selected text or a <strong>Terminal Marker</strong> to open the context menu and select "Ask AI". Choose from built-in commands ("What is this?", "Research root cause", etc.) or your own custom commands.
+                                Click <strong><FeaturesIcon /></strong> (Features) in the tab bar → <strong>"AI Chat"</strong> to open a chat tab. You can open multiple AI chat tabs simultaneously. Type your question and press <code>Ctrl + Enter</code> to send.
                             </p>
+
+                            <p className="help-text" style={{ marginBottom: '4px' }}><strong>Ask AI (Right-Click)</strong></p>
                             <p className="help-text">
-                                <strong>Personas:</strong> In the AI chat tab, use the persona selector to switch between AI roles (General Helper, Network Expert, Security Analyst, etc.). Each persona uses a different system prompt optimized for that domain.
+                                Select text in the terminal or click a <strong>Terminal Marker</strong>, then right-click → <strong>"Ask AI"</strong>. Choose from built-in commands like "What is this?", "Research root cause", or "Fix this" — or add your own custom commands in Settings.
                             </p>
-                            <p className="help-text small">
-                                🔗 <strong>First-time setup:</strong> Select your AI provider in <strong>Settings → AI → AI Provider</strong>, then authenticate. See the <strong>AI Setup & Authentication</strong> section below for provider-specific instructions.
+
+                            <p className="help-text" style={{ marginBottom: '4px' }}><strong>Interactive Mode (Command Execution)</strong></p>
+                            <p className="help-text">
+                                When the AI suggests a command, it can send it directly to your terminal session for execution. You'll see the command before it runs, so you stay in control.
+                            </p>
+
+                            <p className="help-text" style={{ marginBottom: '4px' }}><strong>Personas</strong></p>
+                            <p className="help-text">
+                                Switch between AI roles (General Helper, Network Expert, Security Analyst, etc.) using the persona selector at the top of the chat. Each persona has a system prompt tailored for that domain.
                             </p>
                         </div>
                     </details>
@@ -207,7 +238,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                         <summary><WatchIcon /> Watch Mode (AI Monitoring)</summary>
                         <div className="help-section-body">
                             <p className="help-text">
-                                Watch Mode lets AI monitor a terminal session's output and analyze it on demand.
+                                Watch Mode lets AI monitor a terminal session's output and analyze it on demand — ideal for long-running commands or log tailing.
                             </p>
                             <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: 0 }}>
                                 <li>Click the <strong><WatchIcon /></strong> icon on any terminal tab to start watching. The icon turns blue and the tab gets a rainbow highlight.</li>
@@ -215,63 +246,104 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                 <li>In your <strong>AI chat tab</strong>, click <strong>"Ask AI"</strong> and select the watched session to send the entire captured log to AI for analysis.</li>
                             </ol>
                             <p className="help-text small">
-                                💡 <strong>Tip:</strong> Ideal for troubleshooting long-running commands or tailing logs—let it collect output and ask AI to summarize or find errors when you're ready.
+                                💡 <strong>Tip:</strong> Let it collect output and ask AI to summarize or find errors when you're ready.
                                 The buffer size limit can be adjusted in <strong>Settings → AI → Watch Buffer Limit</strong>.
+                            </p>
+                        </div>
+                    </details>
+
+                    {/* ── AI Provider Comparison ── */}
+                    <details className="help-section">
+                        <summary>🔑 Choosing an AI Provider</summary>
+                        <div className="help-section-body">
+                            <p className="help-text">
+                                HoTTY supports four AI providers. Choose the one that best fits your needs:
+                            </p>
+                            <table className="help-auth-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.92em', marginBottom: '8px' }}>
+                                <thead>
+                                    <tr>
+                                        <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)', paddingRight: '8px' }}>Provider</th>
+                                        <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)', paddingRight: '8px' }}>Best For</th>
+                                        <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)', paddingRight: '8px' }}>Auth</th>
+                                        <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)' }}>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}><strong>Google AI Studio<br />(Gemini)</strong></td>
+                                        <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>Personal use, free tier available</td>
+                                        <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>OAuth2</td>
+                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>✅ Fully tested</td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}><strong>Google Cloud<br />Vertex AI</strong></td>
+                                        <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>Enterprise / production use</td>
+                                        <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>ADC / Service Account</td>
+                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>✅ Fully tested</td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}><strong>Anthropic<br />(Claude)</strong></td>
+                                        <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>Claude models via API key</td>
+                                        <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>API Key</td>
+                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>⚠️ Experimental<br /><span style={{ fontSize: '0.85em', opacity: 0.8 }}>(untested — may not work as expected)</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}><strong>OpenAI</strong></td>
+                                        <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>GPT models via API key</td>
+                                        <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>API Key</td>
+                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>⚠️ Experimental<br /><span style={{ fontSize: '0.85em', opacity: 0.8 }}>(untested — may not work as expected)</span></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <p className="help-text small">
+                                💡 <strong>Recommendation:</strong> If you're unsure, start with <strong>Google AI Studio (Gemini)</strong> — it has a free tier and is the most thoroughly tested provider.
                             </p>
                         </div>
                     </details>
 
                     {/* ── AI Setup & Authentication ── */}
                     <details className="help-section">
-                        <summary>🔑 AI Setup & Authentication</summary>
+                        <summary>🔧 AI Setup & Authentication</summary>
                         <div className="help-section-body">
-                            <p className="help-text">
-                                Select your AI provider in <strong>Settings → AI → AI Provider</strong>. Each provider requires a different authentication method:
+
+                            <p className="help-text" style={{ marginBottom: '2px' }}><strong>Google AI Studio (Gemini) — OAuth2 Setup</strong></p>
+                            <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 10px 0' }}>
+                                <li>Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">Google Cloud Console</a> → APIs &amp; Services → Credentials.</li>
+                                <li>Create an <strong>OAuth 2.0 Client ID</strong> (Desktop application type). See the <a href="https://ai.google.dev/gemini-api/docs/oauth" target="_blank" rel="noreferrer">Official Guide</a> for a full walkthrough.</li>
+                                <li>In HoTTY, select <strong>Google AI Studio</strong> as your provider, open an AI Chat tab, and enter your Client ID and Client Secret.</li>
+                                <li>Click <strong>"Sign in with Google"</strong> — a browser window will open for authorization.</li>
+                            </ol>
+                            <p className="help-text small" style={{ marginBottom: '10px' }}>
+                                ⚠️ Free-tier accounts may have data used for model training. Enable billing on your Google Cloud project to opt out.
                             </p>
-                            <table className="help-auth-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.92em', marginBottom: '8px' }}>
-                                <thead>
-                                    <tr>
-                                        <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)', paddingRight: '12px' }}>Provider</th>
-                                        <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)', paddingRight: '12px' }}>Auth Method</th>
-                                        <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)' }}>How to obtain</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}><strong>Google AI Studio<br />(Gemini)</strong></td>
-                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}>OAuth2<br />(Client ID + Secret)</td>
-                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>
-                                            Create an OAuth 2.0 Client ID in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">Google Cloud Console</a> → APIs &amp; Services → Credentials.
-                                            Follow the <a href="https://ai.google.dev/gemini-api/docs/oauth" target="_blank" rel="noreferrer">Official Guide</a> for the full walkthrough.
-                                            <br />⚠️ Free-tier accounts may have data used for model training. Enable billing to opt out.
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}><strong>Google Cloud<br />Vertex AI</strong></td>
-                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}>ADC or<br />Service Account</td>
-                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>
-                                            <strong>ADC:</strong> Run <code>gcloud auth application-default login</code> on your machine. HoTTY reads credentials from <code>~/.config/gcloud/application_default_credentials.json</code> automatically.
-                                            <br /><strong>Service Account:</strong> Download a JSON key file from Google Cloud Console and provide the path in Settings.
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}><strong>Anthropic<br />(Claude)</strong></td>
-                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}>API Key</td>
-                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>
-                                            Obtain an API key from <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer">console.anthropic.com</a> → API Keys, then enter it in <strong>Settings → AI</strong>.
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}><strong>OpenAI</strong></td>
-                                        <td style={{ padding: '6px 12px 6px 0', verticalAlign: 'top' }}>API Key</td>
-                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>
-                                            Obtain an API key from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">platform.openai.com</a> → API Keys, then enter it in <strong>Settings → AI</strong>.
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+
+                            <p className="help-text" style={{ marginBottom: '2px' }}><strong>Google Cloud Vertex AI — ADC or Service Account</strong></p>
+                            <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 10px 0' }}>
+                                <li><strong>ADC (easiest):</strong> Install the <a href="https://cloud.google.com/sdk/docs/install" target="_blank" rel="noreferrer">Google Cloud CLI</a>, then run:<br /><code>gcloud auth application-default login</code><br />HoTTY detects these credentials automatically.</li>
+                                <li><strong>Service Account:</strong> Download a JSON key file from Google Cloud Console → IAM → Service Accounts, then provide the file path in Settings.</li>
+                                <li>Enter your <strong>Google Cloud Project ID</strong> and select a <strong>Region</strong> in the AI Chat tab.</li>
+                            </ol>
+
+                            <p className="help-text" style={{ marginBottom: '2px' }}><strong>Anthropic (Claude) — API Key</strong> <span style={{ fontSize: '0.85em', opacity: 0.7 }}>(⚠️ Experimental)</span></p>
+                            <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 4px 0' }}>
+                                <li>Obtain an API key from <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer">console.anthropic.com</a> → API Keys.</li>
+                                <li>In HoTTY, select <strong>Anthropic</strong> as your provider, open an AI Chat tab, and enter your API key.</li>
+                            </ol>
+                            <p className="help-text small" style={{ marginBottom: '10px' }}>
+                                ⚠️ This provider is experimental and has not been fully tested. Some features (Watch Mode, Interactive Mode, etc.) may not work as expected. Please report any issues you encounter.
+                            </p>
+
+                            <p className="help-text" style={{ marginBottom: '2px' }}><strong>OpenAI — API Key</strong> <span style={{ fontSize: '0.85em', opacity: 0.7 }}>(⚠️ Experimental)</span></p>
+                            <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 4px 0' }}>
+                                <li>Obtain an API key from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">platform.openai.com</a> → API Keys.</li>
+                                <li>In HoTTY, select <strong>OpenAI</strong> as your provider, open an AI Chat tab, and enter your API key.</li>
+                            </ol>
+                            <p className="help-text small" style={{ marginBottom: '10px' }}>
+                                ⚠️ This provider is experimental and has not been fully tested. Some features (Watch Mode, Interactive Mode, etc.) may not work as expected. Please report any issues you encounter.
+                            </p>
+
                             <p className="help-text small">
-                                🔒 API keys and tokens are encrypted with Windows DPAPI and stored locally — they are never transmitted outside your machine except to the respective AI provider.
+                                🔒 All credentials are encrypted with Windows DPAPI and stored locally — they are never transmitted outside your machine except to the respective AI provider.
                             </p>
                         </div>
                     </details>

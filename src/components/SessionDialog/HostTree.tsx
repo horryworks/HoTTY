@@ -3,6 +3,7 @@ import type { HostTreeNode, HostEntry } from '../../hooks/useHostManager';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useModalState } from '../../hooks/useModalState';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
+import * as electronService from '../../services/electronService';
 import './HostTree.css';
 
 interface ContextMenuState {
@@ -73,7 +74,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 modalInputRef.current.focus();
                 // Ensure the window itself has focus (critical after native alerts in Electron)
                 try {
-                    window.electronAPI.focusWindow();
+                    electronService.focusWindow();
                     window.focus();
                 } catch { /* focus best-effort */ }
             }
@@ -179,22 +180,22 @@ export const HostTree: React.FC<HostTreeProps> = ({
         setFormPassword('');
         openEditModal({ mode: 'export', parentId: null });
         setContextMenu(null);
-        window.electronAPI.logDebug(`Export modal opened${node ? ` for node: ${node.name}` : ' for full tree'}`);
+        electronService.logDebug(`Export modal opened${node ? ` for node: ${node.name}` : ' for full tree'}`);
     };
 
     const handleImport = async (parentId: string | null = null) => {
-        window.electronAPI.logDebug(`Import button clicked${parentId ? ` for parent: ${parentId}` : ''}`);
+        electronService.logDebug(`Import button clicked${parentId ? ` for parent: ${parentId}` : ''}`);
         try {
-            const filePath = await window.electronAPI.selectImportFile();
+            const filePath = await electronService.selectImportFile();
             if (!filePath) {
-                window.electronAPI.logDebug('Import file selection cancelled');
+                electronService.logDebug('Import file selection cancelled');
                 return;
             }
             setImportFilePath(filePath);
             setFormPassword('');
             openEditModal({ mode: 'import', parentId });
             setContextMenu(null);
-            window.electronAPI.logDebug('Import password modal opened');
+            electronService.logDebug('Import password modal opened');
         } catch (err: unknown) {
             onShowMessage?.('error', 'Import Error', 'Failed to open file: ' + (err instanceof Error ? err.message : String(err)));
         }
@@ -209,10 +210,10 @@ export const HostTree: React.FC<HostTreeProps> = ({
         if (mode === 'export') {
             if (!formPassword) return;
             try {
-                window.electronAPI.logDebug('Calling exportHTree IPC from modal');
+                electronService.logDebug('Calling exportHTree IPC from modal');
                 // Use selected node or full tree
                 const dataToExport = exportNode ? [exportNode] : tree;
-                const success = await window.electronAPI.exportHTree(dataToExport, formPassword);
+                const success = await electronService.exportHTree(dataToExport, formPassword);
 
                 // Close modal and reset state BEFORE showing success alert
                 closeEditModal();
@@ -234,8 +235,8 @@ export const HostTree: React.FC<HostTreeProps> = ({
         if (mode === 'import') {
             if (!formPassword || !importFilePath) return;
             try {
-                window.electronAPI.logDebug('Calling decryptImportFile IPC from modal');
-                const data = await window.electronAPI.decryptImportFile(formPassword);
+                electronService.logDebug('Calling decryptImportFile IPC from modal');
+                const data = await electronService.decryptImportFile(formPassword);
                 if (data && onImportData) {
                     // Extract filename from path for folder naming
                     const pathParts = importFilePath.split(/[\\/]/);
@@ -825,7 +826,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         // Ensure window focus is restored after dialog closes (just in case)
                         setTimeout(() => {
                             try {
-                                window.electronAPI.focusWindow();
+                                electronService.focusWindow();
                             } catch { /* focus best-effort */ }
                         }, 50);
                     }}
@@ -833,7 +834,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         closeNodeToDelete();
                         setTimeout(() => {
                             try {
-                                window.electronAPI.focusWindow();
+                                electronService.focusWindow();
                             } catch { /* focus best-effort */ }
                         }, 50);
                     }}

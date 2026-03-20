@@ -1,8 +1,8 @@
-# HoTTY v1.0.0-beta6 - AI Integrated Advanced Terminal
+# HoTTY v1.0.0-beta7 - AI Integrated Advanced Terminal
 
 [English] | [日本語 (Japanese)](README.ja.md)
 
-**Current Version: v1.0.0-beta6**
+**Current Version: v1.0.0-beta7**
 
 Terminal emulator built with Electron, React, and TypeScript. Designed to provide a seamless terminal experience with advanced window management, deep AI integration, and extensive customization options.
 

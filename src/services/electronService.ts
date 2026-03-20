@@ -26,24 +26,15 @@ export const aiAuthStatus = () => api().aiAuthStatus();
 export const aiAuthLogout = () => api().aiAuthLogout();
 export const aiChatSend = (sessionId: string, message: string, model: string, systemInstruction?: string) => api().aiChatSend(sessionId, message, model, systemInstruction);
 export const aiListModels = () => api().aiListModels();
+export const aiListLocations = () => api().aiListLocations();
 export const aiChatCancel = (sessionId: string) => api().aiChatCancel(sessionId);
 export const aiChatClear = (sessionId: string) => api().aiChatClear(sessionId);
 export const aiListProviders = () => api().aiListProviders();
+export const aiSetLocation = (location: string) => api().aiSetLocation(location);
 export const aiSetProvider = (providerId: string) => api().aiSetProvider(providerId);
 export const selectServiceAccountKeyFile = () => api().selectServiceAccountKeyFile();
 export const onAiAuthResult = (callback: (result: { success: boolean }) => void) => api().onAiAuthResult(callback);
 export const onAiChatResponse = (callback: (data: { sessionId: string; type: string; content: string; usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } }) => void) => api().onAiChatResponse(callback);
-
-export const geminiAuthStart = (clientId: string, clientSecret: string) => api().geminiAuthStart(clientId, clientSecret);
-export const geminiAuthAuto = (clientId: string, clientSecret: string) => api().geminiAuthAuto(clientId, clientSecret);
-export const geminiAuthStatus = () => api().geminiAuthStatus();
-export const geminiAuthLogout = () => api().geminiAuthLogout();
-export const geminiChatSend = (sessionId: string, message: string, model: string, systemInstruction?: string) => api().geminiChatSend(sessionId, message, model, systemInstruction);
-export const geminiListModels = () => api().geminiListModels();
-export const geminiChatCancel = (sessionId: string) => api().geminiChatCancel(sessionId);
-export const geminiChatClear = (sessionId: string) => api().geminiChatClear(sessionId);
-export const onGeminiAuthResult = (callback: (result: { success: boolean }) => void) => api().onGeminiAuthResult(callback);
-export const onGeminiChatResponse = (callback: (data: { sessionId: string; type: string; content: string; usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } }) => void) => api().onGeminiChatResponse(callback);
 
 export const showContextMenu = (selection: string, commands?: { id: string; label: string }[], includePaste?: boolean) => api().showContextMenu(selection, commands, includePaste);
 export const onAskGemini = (callback: (selection: string, type: string) => void) => api().onAskGemini(callback);
@@ -62,4 +53,8 @@ export const updateLogging = (loggingEnabled: boolean, loggingPath: string) => a
 export const listLogFiles = (folderPath: string) => api().listLogFiles(folderPath);
 export const readLogFile = (filePath: string) => api().readLogFile(filePath);
 export const openDebugLogFolder = () => api().openDebugLogFolder();
+export const listWslDistributions = () => api().listWslDistributions();
+export const exportHTree = (data: unknown[], password: string) => api().exportHTree(data, password);
+export const selectImportFile = () => api().selectImportFile();
+export const decryptImportFile = (password: string) => api().decryptImportFile(password);
 export const onUpdateAvailable = (callback: (data: { version: string; releaseUrl: string }) => void) => api().onUpdateAvailable(callback);

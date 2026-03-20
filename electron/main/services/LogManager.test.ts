@@ -66,8 +66,8 @@ describe('LogManager — startLogging', () => {
 
     it('creates a .tslog file alongside the .txt file', async () => {
         manager.startLogging('s1', { loggingEnabled: true, loggingPath: tempDir, host: 'host', protocol: 'telnet' });
-        const log = (manager as any).logs.get('s1') as { stream: fs.WriteStream };
-        await waitForOpen(log.stream);
+        const log = (manager as any).logs.get('s1') as { stream: fs.WriteStream; tsStream: fs.WriteStream };
+        await Promise.all([waitForOpen(log.stream), waitForOpen(log.tsStream)]);
 
         const tsLogs = fs.readdirSync(tempDir).filter(f => f.endsWith('.tslog'));
         expect(tsLogs).toHaveLength(1);

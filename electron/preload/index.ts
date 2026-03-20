@@ -156,9 +156,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     aiAuthLogout: () => ipcRenderer.send('ai-auth-logout'),
     aiChatSend: (sessionId: string, message: string, model: string, systemInstruction?: string) => ipcRenderer.send('ai-chat-send', { sessionId, message, model, systemInstruction }),
     aiListModels: () => ipcRenderer.invoke('ai-list-models'),
+    aiListLocations: () => ipcRenderer.invoke('ai-list-locations'),
     aiChatCancel: (sessionId: string) => ipcRenderer.send('ai-chat-cancel', sessionId),
     aiChatClear: (sessionId: string) => ipcRenderer.send('ai-chat-clear', sessionId),
     aiListProviders: () => ipcRenderer.invoke('ai-list-providers'),
+    aiSetLocation: (location: string) => ipcRenderer.invoke('ai-set-location', location),
     aiSetProvider: (providerId: string) => ipcRenderer.invoke('ai-set-provider', providerId),
     selectServiceAccountKeyFile: () => ipcRenderer.invoke('select-service-account-key-file'),
     onAiAuthResult: (callback: (result: { success: boolean }) => void) => {
@@ -172,25 +174,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return () => ipcRenderer.removeListener('ai-chat-response', subscription);
     },
 
-    // Gemini AI (backward compatibility)
-    geminiAuthStart: (clientId: string, clientSecret: string) => ipcRenderer.invoke('gemini-auth-start', { clientId, clientSecret }),
-    geminiAuthAuto: (clientId: string, clientSecret: string) => ipcRenderer.invoke('gemini-auth-auto', { clientId, clientSecret }),
-    geminiAuthStatus: () => ipcRenderer.invoke('gemini-auth-status'),
-    geminiAuthLogout: () => ipcRenderer.send('gemini-auth-logout'),
-    geminiChatSend: (sessionId: string, message: string, model: string, systemInstruction?: string) => ipcRenderer.send('gemini-chat-send', { sessionId, message, model, systemInstruction }),
-    geminiListModels: () => ipcRenderer.invoke('gemini-list-models'),
-    geminiChatCancel: (sessionId: string) => ipcRenderer.send('gemini-chat-cancel', sessionId),
-    geminiChatClear: (sessionId: string) => ipcRenderer.send('gemini-chat-clear', sessionId),
-    onGeminiAuthResult: (callback: (result: { success: boolean }) => void) => {
-        const subscription = (_event: unknown, result: { success: boolean }) => callback(result);
-        ipcRenderer.on('gemini-auth-result', subscription);
-        return () => ipcRenderer.removeListener('gemini-auth-result', subscription);
-    },
-    onGeminiChatResponse: (callback: (data: { sessionId: string, type: string, content: string }) => void) => {
-        const subscription = (_event: unknown, data: { sessionId: string, type: string, content: string }) => callback(data);
-        ipcRenderer.on('gemini-chat-response', subscription);
-        return () => ipcRenderer.removeListener('gemini-chat-response', subscription);
-    },
     getSshAlgorithms: () => ipcRenderer.invoke('get-ssh-algorithms'),
     saveSshAlgorithms: (algorithms: Record<string, { name: string; enabled: boolean }[]>) => ipcRenderer.invoke('save-ssh-algorithms', algorithms),
     getThemes: () => ipcRenderer.invoke('get-themes'),

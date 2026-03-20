@@ -13,18 +13,13 @@ vi.mock('../../hooks/useModalState', () => ({
 vi.mock('../ConfirmModal/ConfirmModal', () => ({
     ConfirmModal: () => null,
 }));
-
-// Mock window.electronAPI since HostTree calls it directly
-Object.defineProperty(window, 'electronAPI', {
-    value: {
-        focusWindow: vi.fn(),
-        logDebug: vi.fn(),
-        selectImportFile: vi.fn(() => Promise.resolve(null)),
-        exportHTree: vi.fn(() => Promise.resolve(true)),
-        decryptImportFile: vi.fn(() => Promise.resolve(null)),
-    },
-    writable: true,
-});
+vi.mock('../../services/electronService', () => ({
+    focusWindow: vi.fn(),
+    logDebug: vi.fn(),
+    selectImportFile: vi.fn(() => Promise.resolve(null)),
+    exportHTree: vi.fn(() => Promise.resolve(true)),
+    decryptImportFile: vi.fn(() => Promise.resolve(null)),
+}));
 
 const baseProps = {
     tree: [] as HostTreeNode[],

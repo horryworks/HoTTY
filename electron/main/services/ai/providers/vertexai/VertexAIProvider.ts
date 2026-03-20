@@ -9,12 +9,27 @@ import { logger } from '../../../Logger';
 const VALID_MODEL_PATTERN = /^[a-zA-Z0-9/._-]+$/;
 // GCP project IDs: 6-30 chars, lowercase letters/digits/hyphens, starts with letter
 const VALID_PROJECT_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
-const VALID_LOCATION_PATTERN = /^[a-z][a-z0-9-]+$/;
+const VALID_LOCATION_PATTERN = /^(?:global|[a-z][a-z0-9-]+)$/;
+
+/** Build the Vertex AI API base URL, handling the global endpoint correctly. */
+function vertexBaseUrl(loc: string, apiVersion: string): string {
+  const host = loc === 'global'
+    ? 'aiplatform.googleapis.com'
+    : `${loc}-aiplatform.googleapis.com`;
+  return `https://${host}/${apiVersion}`;
+}
+
+/** Build a resource path prefix like `projects/{pid}/locations/{loc}`. */
+function vertexResourcePrefix(projectId: string, loc: string): string {
+  return `projects/${projectId}/locations/${loc}`;
+}
 
 // Keywords indicating non-text (video / audio / image) models to exclude from the model list
 const NON_TEXT_MODEL_KEYWORDS = [
-  'imagen', 'veo', 'chirp', 'speech', 'audio', 'video',
-  'lyria', 'voice', 'stable-diffusion', 'flux', 'text-to-speech',
+  'imagen', 'imagegeneration', 'imagetext', 'veo', 'chirp',
+  'speech', 'audio', 'video', 'lyria', 'voice',
+  'stable-diffusion', 'flux', 'text-to-speech',
+  'translate', 'virtual-try-on',
 ];
 
 interface VertexAIConfig {
@@ -292,6 +307,13 @@ export class VertexAIProvider implements IAIProvider {
     return { authenticated: this.tokenData !== null && !this.isTokenExpired() };
   }
 
+  setLocation(location: string): void {
+    if (!this.config) return;
+    if (!VALID_LOCATION_PATTERN.test(location)) return;
+    this.config = { ...this.config, location };
+    logger.debug('vertexai', 'Location changed', { location });
+  }
+
   logout(): void {
     logger.info('vertexai', 'Logout');
     this.tokenData = null;
@@ -335,10 +357,43 @@ export class VertexAIProvider implements IAIProvider {
     const history = this.chatHistories.get(sessionId)!;
     history.push({ role: 'user', content: message });
 
-    const { projectId, location } = this.config;
-    // Handle both short model names (backward compat) and full resource names from Model Garden
+    const abortController = new AbortController();
+    this.abortControllers.set(sessionId, abortController);
+
+    // Route to publisher-specific implementation to handle API format differences
     const modelPath = model.startsWith('publishers/') ? model : `publishers/google/models/${model}`;
-    const apiUrl = `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${location}/${modelPath}:streamGenerateContent?alt=sse`;
+    const publisher = modelPath.split('/')[1] ?? 'google';
+
+    try {
+      let result: { fullResponse: string; usageMetadata?: TokenUsage };
+      if (publisher === 'anthropic') {
+        result = await this.callAnthropicApi(sessionId, modelPath, history, systemInstruction, token, abortController.signal, onResponse);
+      } else {
+        result = await this.callGoogleApi(sessionId, modelPath, history, systemInstruction, token, abortController.signal, onResponse);
+      }
+      history.push({ role: 'model', content: result.fullResponse });
+      onResponse({ sessionId, type: 'done', content: result.fullResponse, usageMetadata: result.usageMetadata });
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.error('vertexai', 'Chat error', { sessionId, error: errMsg });
+      onResponse({ sessionId, type: 'error', content: this.formatUserErrorMessage(errMsg, model) });
+    } finally {
+      this.abortControllers.delete(sessionId);
+    }
+  }
+
+  private async callGoogleApi(
+    sessionId: string,
+    modelPath: string,
+    history: ChatMessage[],
+    systemInstruction: string | undefined,
+    token: string,
+    signal: AbortSignal,
+    onResponse: (data: ChatResponseData) => void,
+  ): Promise<{ fullResponse: string; usageMetadata?: TokenUsage }> {
+    const { projectId, location } = this.config!;
+    const apiUrl = `${vertexBaseUrl(location, 'v1beta1')}/${vertexResourcePrefix(projectId, location)}/${modelPath}:streamGenerateContent?alt=sse`;
 
     const contents = history.map(msg => ({ role: msg.role, parts: [{ text: msg.content }] }));
     const requestBody: Record<string, unknown> = { contents };
@@ -346,68 +401,163 @@ export class VertexAIProvider implements IAIProvider {
       requestBody.system_instruction = { parts: [{ text: systemInstruction }] };
     }
 
-    const abortController = new AbortController();
-    this.abortControllers.set(sessionId, abortController);
-
-    logger.debug('vertexai', 'Sending message', { apiUrl, model });
-    try {
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(requestBody),
-        signal: abortController.signal,
-      });
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        throw new Error(`API error ${response.status}: ${errorBody}`);
-      }
-
-      let fullResponse = '';
-      let lastUsageMetadata: TokenUsage | null = null;
-      const reader = response.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const jsonStr = line.slice(6).trim();
-            if (!jsonStr) continue;
-            try {
-              const parsed = JSON.parse(jsonStr);
-              const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-              if (text) {
-                fullResponse += text;
-                onResponse({ sessionId, type: 'chunk', content: text });
-              }
-              if (parsed?.usageMetadata) {
-                lastUsageMetadata = parsed.usageMetadata;
-              }
-            } catch {
-              // skip malformed JSON chunks
-            }
-          }
-        }
-      }
-
-      history.push({ role: 'model', content: fullResponse });
-      onResponse({ sessionId, type: 'done', content: fullResponse, usageMetadata: lastUsageMetadata ?? undefined });
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') return;
-      logger.error('vertexai', 'Chat error', { sessionId, error: err instanceof Error ? err.message : String(err) });
-      onResponse({ sessionId, type: 'error', content: 'An error occurred while communicating with Vertex AI. Please try again.' });
-    } finally {
-      this.abortControllers.delete(sessionId);
+    logger.debug('vertexai', 'Sending message (Google)', { apiUrl });
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(requestBody),
+      signal,
+    });
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`API error ${response.status}: ${errorBody}`);
     }
+
+    let fullResponse = '';
+    let usageMetadata: TokenUsage | undefined;
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr) continue;
+        try {
+          const parsed = JSON.parse(jsonStr);
+          const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          if (text) {
+            fullResponse += text;
+            onResponse({ sessionId, type: 'chunk', content: text });
+          }
+          if (parsed?.usageMetadata) usageMetadata = parsed.usageMetadata;
+        } catch { /* skip malformed JSON chunks */ }
+      }
+    }
+    return { fullResponse, usageMetadata };
+  }
+
+  private async callAnthropicApi(
+    sessionId: string,
+    modelPath: string,
+    history: ChatMessage[],
+    systemInstruction: string | undefined,
+    token: string,
+    signal: AbortSignal,
+    onResponse: (data: ChatResponseData) => void,
+  ): Promise<{ fullResponse: string; usageMetadata?: TokenUsage }> {
+    const { projectId, location } = this.config!;
+    const apiUrl = `${vertexBaseUrl(location, 'v1')}/${vertexResourcePrefix(projectId, location)}/${modelPath}:streamRawPredict`;
+
+    // Anthropic uses 'assistant' instead of 'model' for the AI role
+    const messages = history.map(msg => ({
+      role: msg.role === 'model' ? 'assistant' : 'user',
+      content: msg.content,
+    }));
+    const requestBody: Record<string, unknown> = {
+      anthropic_version: 'vertex-2023-10-16',
+      messages,
+      max_tokens: 8096,
+      stream: true,
+    };
+    if (systemInstruction) {
+      requestBody.system = systemInstruction;
+    }
+
+    logger.debug('vertexai', 'Sending message (Anthropic)', { apiUrl });
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'X-Goog-User-Project': projectId,
+      },
+      body: JSON.stringify(requestBody),
+      signal,
+    });
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`API error ${response.status}: ${errorBody}`);
+    }
+
+    let fullResponse = '';
+    let inputTokens = 0;
+    let outputTokens = 0;
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr) continue;
+        try {
+          const parsed = JSON.parse(jsonStr);
+          if (parsed?.type === 'content_block_delta' && parsed?.delta?.type === 'text_delta') {
+            const text = parsed.delta.text || '';
+            if (text) {
+              fullResponse += text;
+              onResponse({ sessionId, type: 'chunk', content: text });
+            }
+          } else if (parsed?.type === 'message_start') {
+            inputTokens = parsed?.message?.usage?.input_tokens ?? 0;
+          } else if (parsed?.type === 'message_delta') {
+            outputTokens = parsed?.usage?.output_tokens ?? 0;
+          }
+        } catch { /* skip malformed JSON chunks */ }
+      }
+    }
+
+    const usageMetadata: TokenUsage = {
+      promptTokenCount: inputTokens,
+      candidatesTokenCount: outputTokens,
+      totalTokenCount: inputTokens + outputTokens,
+    };
+    return { fullResponse, usageMetadata };
+  }
+
+  private formatUserErrorMessage(errMsg: string, model: string): string {
+    const shortModel = model.split('/').pop() ?? model;
+
+    // Region not supported for this model
+    if (/not servable in region/i.test(errMsg)) {
+      const regionMatch = errMsg.match(/region\s+(\S+)/);
+      const region = regionMatch?.[1]?.replace(/[.]$/, '') ?? 'the current region';
+      return `"${shortModel}" is not available in region "${region}". Try switching to a supported region (e.g. us-east5, europe-west1) in AI settings.`;
+    }
+
+    // Model not found or not enabled
+    if (/not found|does not have access/i.test(errMsg)) {
+      return `"${shortModel}" is not enabled in your GCP project. Please enable the model in the Google Cloud Console (Vertex AI > Model Garden) and try again.`;
+    }
+
+    // Permission denied
+    if (/permission denied|forbidden/i.test(errMsg)) {
+      return `Permission denied for "${shortModel}". Check that your GCP account has access to this model.`;
+    }
+
+    // Quota exceeded
+    if (/quota|rate limit|resource exhausted/i.test(errMsg)) {
+      return `Quota exceeded for "${shortModel}". Your GCP project may need a quota increase for this model. See: https://cloud.google.com/vertex-ai/docs/generative-ai/quotas-genai`;
+    }
+
+    // Generic with status code
+    const statusMatch = errMsg.match(/API error (\d+)/);
+    if (statusMatch) {
+      return `"${shortModel}" returned error ${statusMatch[1]}. Please check your Vertex AI configuration and try again.`;
+    }
+
+    return 'An error occurred while communicating with Vertex AI. Please try again.';
   }
 
   cancelMessage(sessionId: string): void {
@@ -422,6 +572,41 @@ export class VertexAIProvider implements IAIProvider {
     this.chatHistories.delete(sessionId);
   }
 
+  async listLocations(): Promise<string[]> {
+    if (!this.config) return [];
+    const token = await this.getValidToken();
+    if (!token) return [];
+
+    const { projectId, location } = this.config;
+    const url = `${vertexBaseUrl(location, 'v1')}/projects/${projectId}/locations`;
+    logger.debug('vertexai', 'Fetching locations', { url });
+
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 15000);
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Goog-User-Project': projectId,
+        },
+        signal: ctrl.signal,
+      });
+      if (!response.ok) {
+        logger.warn('vertexai', 'Failed to fetch locations', { status: response.status });
+        return [];
+      }
+      const data = await response.json() as { locations?: { locationId: string }[] };
+      const locations = (data.locations ?? []).map(l => l.locationId).sort();
+      logger.debug('vertexai', `listLocations: fetched ${locations.length} locations`);
+      return locations;
+    } catch (err: unknown) {
+      logger.warn('vertexai', 'listLocations error', { error: err instanceof Error ? err.message : String(err) });
+      return [];
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async listModels(): Promise<ModelInfo[]> {
     if (!this.config) return [];
     const token = await this.getValidToken();
@@ -429,15 +614,17 @@ export class VertexAIProvider implements IAIProvider {
 
     const { projectId, location } = this.config;
     const publishers = ['google', 'anthropic', 'meta', 'mistral-ai', 'cohere'];
-    const base = `https://${location}-aiplatform.googleapis.com/v1beta1`;
-    logger.debug('vertexai', 'Fetching models from publishers', { publishers, base });
+    // Use us-central1 for the model catalog (most complete), but verify in the target region
+    const catalogRegion = 'us-central1';
+    const catalogBase = `https://${catalogRegion}-aiplatform.googleapis.com/v1beta1`;
+    logger.debug('vertexai', 'Fetching models from publishers', { publishers, catalogRegion, targetRegion: location });
 
     const ctrl = new AbortController();
     const timeout = setTimeout(() => ctrl.abort(), 15000);
     try {
       const results = await Promise.allSettled(
         publishers.map(publisher =>
-          fetch(`${base}/publishers/${publisher}/models`, {
+          fetch(`${catalogBase}/publishers/${publisher}/models`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'X-Goog-User-Project': projectId,
@@ -449,12 +636,21 @@ export class VertexAIProvider implements IAIProvider {
               return [] as { name: string; displayName?: string }[];
             }
             const data = await res.json() as { publisherModels?: { name: string; displayName?: string; supportedActions?: Record<string, unknown> }[] };
-            return (data.publisherModels ?? [])
-              .filter(m => !!m.supportedActions?.['openGenerationAiStudio'])
+            const allPublisherModels = data.publisherModels ?? [];
+            const withAiStudio = allPublisherModels
+              .filter(m => !!m.supportedActions?.['openGenerationAiStudio']);
+            const textModels = withAiStudio
               .filter(m => {
                 const shortName = m.name.split('/').pop()?.toLowerCase() ?? '';
                 return !NON_TEXT_MODEL_KEYWORDS.some(kw => shortName.includes(kw));
               });
+            logger.debug('vertexai', `Catalog: ${publisher}`, {
+              total: allPublisherModels.length,
+              withAiStudio: withAiStudio.length,
+              textModels: textModels.length,
+              names: textModels.map(m => m.name.split('/').pop()),
+            });
+            return textModels;
           }),
         ),
       );
@@ -480,33 +676,97 @@ export class VertexAIProvider implements IAIProvider {
         return [];
       }
 
-      // Verify each model is actually accessible in this project via countTokens
-      // (same auth path as streamGenerateContent, but lightweight — no inference call)
+      // Verify model accessibility per publisher.
+      // Google models: use countTokens (lightweight, no inference).
+      // Anthropic models: use streamRawPredict with empty messages — a 422 validation
+      // error means the model is accessible; 404/400 "not servable" means it is not.
+      const googleModels = allModels.filter(m => m.name.startsWith('publishers/google/'));
+      const anthropicModels = allModels.filter(m => m.name.startsWith('publishers/anthropic/'));
+      const otherModels = allModels.filter(m =>
+        !m.name.startsWith('publishers/google/') && !m.name.startsWith('publishers/anthropic/'),
+      );
+
       const verifyCtrl = new AbortController();
       const verifyTimeout = setTimeout(() => verifyCtrl.abort(), 20000);
-      let verifiedModels: ModelInfo[];
+      let verifiedGoogleModels: ModelInfo[];
+      let verifiedAnthropicModels: ModelInfo[];
       try {
-        const verifyResults = await Promise.allSettled(
-          allModels.map(m =>
-            fetch(`${base}/projects/${projectId}/locations/${location}/${m.name}:countTokens`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'X-Goog-User-Project': projectId,
-              },
-              body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'x' }] }] }),
-              signal: verifyCtrl.signal,
-            }).then(res => (res.ok ? m : null)),
+        const [googleResults, anthropicResults] = await Promise.all([
+          Promise.allSettled(
+            googleModels.map(m =>
+              fetch(`${vertexBaseUrl(location, 'v1beta1')}/${vertexResourcePrefix(projectId, location)}/${m.name}:countTokens`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                  'X-Goog-User-Project': projectId,
+                },
+                body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'x' }] }] }),
+                signal: verifyCtrl.signal,
+              }).then(async res => {
+                if (res.ok) return m;
+                if (res.status === 429) {
+                  logger.debug('vertexai', `Model quota exhausted: ${m.name}`);
+                  return { ...m, displayName: `${m.displayName} [Quota limit]` };
+                }
+                const body = await res.text().catch(() => '');
+                logger.debug('vertexai', `Google model verification failed: ${m.name}`, { status: res.status, body: body.slice(0, 200) });
+                return null;
+              }),
+            ),
           ),
-        );
-        verifiedModels = verifyResults
+          Promise.allSettled(
+            anthropicModels.map(m =>
+              fetch(
+                `${vertexBaseUrl(location, 'v1')}/${vertexResourcePrefix(projectId, location)}/${m.name}:streamRawPredict`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'X-Goog-User-Project': projectId,
+                  },
+                  body: JSON.stringify({
+                    anthropic_version: 'vertex-2023-10-16',
+                    messages: [],
+                    max_tokens: 1,
+                  }),
+                  signal: verifyCtrl.signal,
+                },
+              ).then(async res => {
+                // 422 = validation error (model is accessible, just invalid request)
+                // 200 would also be fine but unlikely with empty messages
+                if (res.ok || res.status === 422) return m;
+                // 429 = quota exhausted — model exists but unusable right now
+                if (res.status === 429) {
+                  logger.debug('vertexai', `Model quota exhausted: ${m.name}`);
+                  return { ...m, displayName: `${m.displayName} [Quota limit]` };
+                }
+                const body = await res.text().catch(() => '');
+                // 400 "not servable in region" or 404 "not found" means inaccessible
+                if (res.status === 404 || /not servable in region/i.test(body)) {
+                  logger.debug('vertexai', `Model not accessible: ${m.name}`, { status: res.status });
+                  return null;
+                }
+                // Other 400 errors (e.g. validation) mean the model IS accessible
+                return m;
+              }),
+            ),
+          ),
+        ]);
+        verifiedGoogleModels = googleResults
+          .filter((r): r is PromiseFulfilledResult<ModelInfo | null> => r.status === 'fulfilled')
+          .map(r => r.value)
+          .filter((m): m is ModelInfo => m !== null);
+        verifiedAnthropicModels = anthropicResults
           .filter((r): r is PromiseFulfilledResult<ModelInfo | null> => r.status === 'fulfilled')
           .map(r => r.value)
           .filter((m): m is ModelInfo => m !== null);
       } finally {
         clearTimeout(verifyTimeout);
       }
+
+      const verifiedModels = [...verifiedGoogleModels, ...verifiedAnthropicModels, ...otherModels];
 
       if (verifiedModels.length === 0) {
         logger.warn('vertexai', 'No accessible models found for this project');
@@ -522,7 +782,9 @@ export class VertexAIProvider implements IAIProvider {
         return a.displayName.localeCompare(b.displayName);
       });
 
-      logger.debug('vertexai', `listModels: fetched ${verifiedModels.length} models`);
+      logger.debug('vertexai', `listModels: ${verifiedModels.length} models verified in region "${location}"`, {
+        models: verifiedModels.map(m => m.displayName),
+      });
       return verifiedModels;
     } catch (err: unknown) {
       logger.warn('vertexai', 'listModels error', { error: err instanceof Error ? err.message : String(err) });

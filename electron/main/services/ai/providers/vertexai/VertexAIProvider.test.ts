@@ -86,6 +86,11 @@ describe('VertexAIProvider — listModels', () => {
             if (url.includes(':countTokens')) {
                 return Promise.resolve({ ok: true });
             }
+            // Anthropic verification requests (streamRawPredict)
+            if (url.includes(':streamRawPredict')) {
+                // Return 400 with validation error (model IS accessible)
+                return Promise.resolve({ ok: false, status: 400, text: async () => 'messages: should be non-empty' });
+            }
             if (url.includes('/publishers/google/models')) {
                 return Promise.resolve({
                     ok: true,
@@ -124,9 +129,9 @@ describe('VertexAIProvider — listModels', () => {
         // Google sorted first
         expect(models[0].name).toContain('publishers/google');
 
-        // Called for each publisher with correct location and headers
+        // Catalog fetched from us-central1, not the configured location
         expect(fetchMock).toHaveBeenCalledWith(
-            `https://${location}-aiplatform.googleapis.com/v1beta1/publishers/google/models`,
+            'https://us-central1-aiplatform.googleapis.com/v1beta1/publishers/google/models',
             expect.objectContaining({
                 headers: expect.objectContaining({
                     'X-Goog-User-Project': projectId,
@@ -135,9 +140,16 @@ describe('VertexAIProvider — listModels', () => {
             })
         );
         expect(fetchMock).toHaveBeenCalledWith(
-            `https://${location}-aiplatform.googleapis.com/v1beta1/publishers/anthropic/models`,
+            'https://us-central1-aiplatform.googleapis.com/v1beta1/publishers/anthropic/models',
             expect.anything()
         );
+        // Verification uses the configured location
+        const verificationCalls = fetchMock.mock.calls.filter(
+            (c: any[]) => (c[0] as string).includes(':countTokens') || (c[0] as string).includes(':streamRawPredict')
+        );
+        for (const call of verificationCalls) {
+            expect(call[0]).toContain(`${location}-aiplatform.googleapis.com`);
+        }
     });
 
     it('excludes models that are not accessible in the project (verification 404)', async () => {
@@ -148,7 +160,6 @@ describe('VertexAIProvider — listModels', () => {
         (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
 
         const fetchMock = vi.fn().mockImplementation((url: string) => {
-            // Verification: only gemini-2.5-flash is accessible
             if (url.includes(':countTokens')) {
                 return Promise.resolve({ ok: url.includes('gemini-2.5-flash') });
             }
@@ -167,6 +178,174 @@ describe('VertexAIProvider — listModels', () => {
         const models = await provider.listModels();
         expect(models.some(m => m.name.includes('gemini-2.5-flash'))).toBe(true);
         expect(models.some(m => m.name.includes('gemini-2.0-flash-001'))).toBe(false);
+    });
+
+    it('verifies Anthropic models via streamRawPredict and includes accessible ones', async () => {
+        const provider = new VertexAIProvider();
+        (provider as any).config = { projectId: 'my-project-123', location: 'us-central1', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            // countTokens always fails (as it does for Anthropic models on Vertex AI)
+            if (url.includes(':countTokens')) return Promise.resolve({ ok: false, status: 404 });
+            // Anthropic verification: accessible model returns 400 (validation error)
+            if (url.includes(':streamRawPredict')) {
+                return Promise.resolve({ ok: false, status: 400, text: async () => 'messages: should be non-empty' });
+            }
+            return Promise.resolve({
+                ok: true,
+                json: async () => ({
+                    publisherModels: [
+                        { name: 'publishers/anthropic/models/claude-sonnet-4-6', displayName: 'Claude Sonnet 4.6', supportedActions: { openGenerationAiStudio: {} } },
+                        { name: 'publishers/google/models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', supportedActions: { openGenerationAiStudio: {} } },
+                    ],
+                }),
+            });
+        }));
+
+        const models = await provider.listModels();
+        // Anthropic model passes verification (400 = accessible, just invalid request)
+        expect(models.some(m => m.name.includes('claude-sonnet-4-6'))).toBe(true);
+        // Google model is excluded because countTokens fails
+        expect(models.some(m => m.name.includes('gemini-2.5-flash'))).toBe(false);
+    });
+
+    it('excludes Anthropic models not accessible in the current region', async () => {
+        const provider = new VertexAIProvider();
+        (provider as any).config = { projectId: 'my-project-123', location: 'us-central1', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes(':countTokens')) return Promise.resolve({ ok: true });
+            if (url.includes(':streamRawPredict')) {
+                if (url.includes('claude-sonnet-4-6')) {
+                    // Not servable in this region
+                    return Promise.resolve({
+                        ok: false,
+                        status: 400,
+                        text: async () => JSON.stringify({ error: { message: 'Publisher Model is not servable in region us-central1.' } }),
+                    });
+                }
+                if (url.includes('claude-haiku-4-5')) {
+                    // Not found / not enabled
+                    return Promise.resolve({ ok: false, status: 404, text: async () => 'Not found' });
+                }
+                // Accessible model
+                return Promise.resolve({ ok: false, status: 400, text: async () => 'messages: should be non-empty' });
+            }
+            return Promise.resolve({
+                ok: true,
+                json: async () => ({
+                    publisherModels: [
+                        { name: 'publishers/anthropic/models/claude-sonnet-4-6', displayName: 'Claude Sonnet 4.6', supportedActions: { openGenerationAiStudio: {} } },
+                        { name: 'publishers/anthropic/models/claude-haiku-4-5', displayName: 'Claude Haiku 4.5', supportedActions: { openGenerationAiStudio: {} } },
+                        { name: 'publishers/anthropic/models/claude-sonnet-4-5', displayName: 'Claude Sonnet 4.5', supportedActions: { openGenerationAiStudio: {} } },
+                        { name: 'publishers/google/models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', supportedActions: { openGenerationAiStudio: {} } },
+                    ],
+                }),
+            });
+        }));
+
+        const models = await provider.listModels();
+        // Not servable in region → excluded
+        expect(models.some(m => m.name.includes('claude-sonnet-4-6'))).toBe(false);
+        // 404 not found → excluded
+        expect(models.some(m => m.name.includes('claude-haiku-4-5'))).toBe(false);
+        // Accessible (400 validation error) → included
+        expect(models.some(m => m.name.includes('claude-sonnet-4-5'))).toBe(true);
+        // Google model passes countTokens → included
+        expect(models.some(m => m.name.includes('gemini-2.5-flash'))).toBe(true);
+    });
+
+    it('marks models with quota limit warning when verification returns 429', async () => {
+        const provider = new VertexAIProvider();
+        (provider as any).config = { projectId: 'my-project-123', location: 'us-east5', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes(':countTokens')) {
+                // Google model: gemini-2.5-flash OK, gemini-2.5-pro quota exhausted
+                if (url.includes('gemini-2.5-flash')) return Promise.resolve({ ok: true });
+                return Promise.resolve({ ok: false, status: 429 });
+            }
+            if (url.includes(':streamRawPredict')) {
+                // Anthropic model: quota exhausted
+                return Promise.resolve({ ok: false, status: 429 });
+            }
+            return Promise.resolve({
+                ok: true,
+                json: async () => ({
+                    publisherModels: [
+                        { name: 'publishers/google/models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', supportedActions: { openGenerationAiStudio: {} } },
+                        { name: 'publishers/google/models/gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', supportedActions: { openGenerationAiStudio: {} } },
+                        { name: 'publishers/anthropic/models/claude-sonnet-4-6', displayName: 'Claude Sonnet 4.6', supportedActions: { openGenerationAiStudio: {} } },
+                    ],
+                }),
+            });
+        }));
+
+        const models = await provider.listModels();
+        // Normal model
+        const flash = models.find(m => m.name.includes('gemini-2.5-flash'));
+        expect(flash?.displayName).toBe('Gemini 2.5 Flash (Google)');
+        // Quota-limited Google model
+        const pro = models.find(m => m.name.includes('gemini-2.5-pro'));
+        expect(pro?.displayName).toContain('[Quota limit]');
+        // Quota-limited Anthropic model
+        const claude = models.find(m => m.name.includes('claude-sonnet-4-6'));
+        expect(claude?.displayName).toContain('[Quota limit]');
+    });
+
+    it('uses global endpoint URL when location is "global"', async () => {
+        const provider = new VertexAIProvider();
+        const projectId = 'my-project-123';
+        (provider as any).config = { projectId, location: 'global', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        const fetchMock = vi.fn().mockImplementation((url: string) => {
+            if (url.includes(':countTokens')) return Promise.resolve({ ok: true });
+            if (url.includes(':streamRawPredict')) return Promise.resolve({ ok: false, status: 422 });
+            if (url.includes('publishers/google/models')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: async () => ({
+                        publisherModels: [
+                            { name: 'publishers/google/models/gemini-3-flash-preview', displayName: 'Gemini 3 Flash', supportedActions: { openGenerationAiStudio: {} } },
+                        ],
+                    }),
+                });
+            }
+            if (url.includes('publishers/anthropic/models')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: async () => ({
+                        publisherModels: [
+                            { name: 'publishers/anthropic/models/claude-sonnet-4-6', displayName: 'Claude Sonnet 4.6', supportedActions: { openGenerationAiStudio: {} } },
+                        ],
+                    }),
+                });
+            }
+            return Promise.resolve({ ok: true, json: async () => ({ publisherModels: [] }) });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const models = await provider.listModels();
+        expect(models).toHaveLength(2);
+
+        // Catalog should use us-central1 (regional)
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining('us-central1-aiplatform.googleapis.com'),
+            expect.anything()
+        );
+
+        // Verification should use global endpoint (no region prefix)
+        const verifyCalls = fetchMock.mock.calls.filter(
+            (c: any[]) => (c[0] as string).includes(':countTokens') || (c[0] as string).includes(':streamRawPredict')
+        );
+        for (const call of verifyCalls) {
+            expect(call[0]).toMatch(/^https:\/\/aiplatform\.googleapis\.com\//);
+            expect(call[0]).toContain('locations/global');
+        }
     });
 
     it('excludes models without openGenerationAiStudio from results', async () => {
@@ -550,6 +729,82 @@ describe('VertexAIProvider — logout', () => {
     });
 });
 
+// ── listLocations ────────────────────────────────────────────────────────────
+
+describe('VertexAIProvider — listLocations', () => {
+    it('returns location IDs from the API', async () => {
+        const provider = new VertexAIProvider();
+        (provider as any).config = { projectId: 'my-project-123', location: 'us-central1', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                locations: [
+                    { locationId: 'us-central1' },
+                    { locationId: 'us-east5' },
+                    { locationId: 'europe-west4' },
+                ],
+            }),
+        }));
+
+        const locations = await provider.listLocations();
+        expect(locations).toEqual(['europe-west4', 'us-central1', 'us-east5']);
+    });
+
+    it('returns empty array when not authenticated', async () => {
+        const provider = new VertexAIProvider();
+        const locations = await provider.listLocations();
+        expect(locations).toEqual([]);
+    });
+
+    it('returns empty array on API error', async () => {
+        const provider = new VertexAIProvider();
+        (provider as any).config = { projectId: 'my-project-123', location: 'us-central1', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403 }));
+
+        const locations = await provider.listLocations();
+        expect(locations).toEqual([]);
+    });
+});
+
+// ── setLocation ──────────────────────────────────────────────────────────────
+
+describe('VertexAIProvider — setLocation', () => {
+    it('updates the location used by API calls', async () => {
+        const provider = new VertexAIProvider();
+        (provider as any).config = { projectId: 'my-project-123', location: 'us-central1', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        provider.setLocation('us-east5');
+        expect((provider as any).config.location).toBe('us-east5');
+
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true, body: { getReader: () => ({ read: () => Promise.resolve({ done: true }) }) } });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await provider.sendMessage(vi.fn(), 'session1', 'hi', 'publishers/anthropic/models/claude-sonnet-4-6');
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining('us-east5-aiplatform.googleapis.com'),
+            expect.anything(),
+        );
+    });
+
+    it('ignores invalid location strings', () => {
+        const provider = new VertexAIProvider();
+        (provider as any).config = { projectId: 'my-project-123', location: 'us-central1', authType: 'adc' };
+
+        provider.setLocation('INVALID!');
+        expect((provider as any).config.location).toBe('us-central1');
+    });
+
+    it('does nothing when not authenticated', () => {
+        const provider = new VertexAIProvider();
+        expect(() => provider.setLocation('us-east5')).not.toThrow();
+    });
+});
+
 // ── sendMessage — validation ──────────────────────────────────────────────────
 
 describe('VertexAIProvider — sendMessage validation', () => {
@@ -591,6 +846,46 @@ describe('VertexAIProvider — sendMessage validation', () => {
             expect.stringContaining('/v1beta1/projects/my-project-123/locations/us-central1/publishers/google/models/gemini-1.5-flash:streamGenerateContent'),
             expect.anything()
         );
+    });
+
+    it('uses v1 and streamRawPredict for Anthropic models', async () => {
+        const provider = new VertexAIProvider();
+        const onResponse = vi.fn();
+        (provider as any).config = { projectId: 'my-project-123', location: 'us-east5', authType: 'adc' };
+        (provider as any).tokenData = { access_token: 'token', expires_at: Date.now() + 3600000 };
+
+        const sseChunk = [
+            'data: {"type":"message_start","message":{"usage":{"input_tokens":10,"output_tokens":1}}}',
+            'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}',
+            'data: {"type":"message_delta","usage":{"output_tokens":5}}',
+            'data: {"type":"message_stop"}',
+        ].join('\n') + '\n';
+        const encoder = new TextEncoder();
+        let callCount = 0;
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            body: {
+                getReader: () => ({
+                    read: () => {
+                        if (callCount++ === 0) return Promise.resolve({ done: false, value: encoder.encode(sseChunk) });
+                        return Promise.resolve({ done: true });
+                    },
+                }),
+            },
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await provider.sendMessage(onResponse, 'session1', 'hi', 'publishers/anthropic/models/claude-sonnet-4-6');
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining('/v1/projects/my-project-123/locations/us-east5/publishers/anthropic/models/claude-sonnet-4-6:streamRawPredict'),
+            expect.anything(),
+        );
+        expect(onResponse).toHaveBeenCalledWith(expect.objectContaining({ type: 'chunk', content: 'Hello' }));
+        expect(onResponse).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'done',
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        }));
     });
 
     it('rejects model names with true invalid characters', async () => {
@@ -669,5 +964,70 @@ describe('VertexAIProvider — autoAuth', () => {
         const result = await provider.autoAuth({ projectId: 'my-project-123', location: 'us-central1' });
         expect(result).toBe(true);
         expect(provider.getAuthStatus().authenticated).toBe(true);
+    });
+});
+
+// ── formatUserErrorMessage ────────────────────────────────────────────────────
+
+describe('VertexAIProvider — formatUserErrorMessage', () => {
+    it('returns region-specific message for "not servable in region" errors', () => {
+        const provider = new VertexAIProvider();
+        const msg = (provider as any).formatUserErrorMessage(
+            'API error 400: [{"error":{"message":"Publisher Model is not servable in region us-central1."}}]',
+            'publishers/anthropic/models/claude-sonnet-4-6',
+        );
+        expect(msg).toContain('claude-sonnet-4-6');
+        expect(msg).toContain('us-central1');
+        expect(msg).toContain('not available in region');
+    });
+
+    it('returns model-not-enabled message for "not found" errors', () => {
+        const provider = new VertexAIProvider();
+        const msg = (provider as any).formatUserErrorMessage(
+            'API error 404: [{"error":{"message":"Publisher Model was not found or your project does not have access to it."}}]',
+            'publishers/anthropic/models/claude-haiku-4-5',
+        );
+        expect(msg).toContain('claude-haiku-4-5');
+        expect(msg).toContain('not enabled');
+    });
+
+    it('returns permission-denied message for 403 errors', () => {
+        const provider = new VertexAIProvider();
+        const msg = (provider as any).formatUserErrorMessage(
+            'API error 403: Permission denied',
+            'publishers/google/models/gemini-2.5-pro',
+        );
+        expect(msg).toContain('gemini-2.5-pro');
+        expect(msg).toContain('Permission denied');
+    });
+
+    it('returns quota message for rate-limit errors', () => {
+        const provider = new VertexAIProvider();
+        const msg = (provider as any).formatUserErrorMessage(
+            'API error 429: Resource exhausted',
+            'publishers/google/models/gemini-2.5-pro',
+        );
+        expect(msg).toContain('gemini-2.5-pro');
+        expect(msg).toContain('Quota exceeded');
+        expect(msg).toContain('quota increase');
+    });
+
+    it('returns generic message with status code for unknown errors', () => {
+        const provider = new VertexAIProvider();
+        const msg = (provider as any).formatUserErrorMessage(
+            'API error 500: Internal server error',
+            'publishers/google/models/gemini-2.5-pro',
+        );
+        expect(msg).toContain('gemini-2.5-pro');
+        expect(msg).toContain('error 500');
+    });
+
+    it('returns fallback message for unrecognized error format', () => {
+        const provider = new VertexAIProvider();
+        const msg = (provider as any).formatUserErrorMessage(
+            'something went wrong',
+            'gemini-2.5-pro',
+        );
+        expect(msg).toBe('An error occurred while communicating with Vertex AI. Please try again.');
     });
 });

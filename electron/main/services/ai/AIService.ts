@@ -69,8 +69,6 @@ export class AIService {
     await provider.sendMessage(
       (data: ChatResponseData) => {
         win.webContents.send('ai-chat-response', data);
-        // Also send provider-specific channel for backward compatibility
-        win.webContents.send(`${provider.id}-chat-response`, data);
       },
       sessionId,
       message,
@@ -85,6 +83,14 @@ export class AIService {
 
   clearHistory(sessionId: string): void {
     this.getActiveProvider().clearHistory(sessionId);
+  }
+
+  setLocation(location: string): void {
+    this.getActiveProvider().setLocation?.(location);
+  }
+
+  async listLocations(): Promise<string[]> {
+    return await this.getActiveProvider().listLocations?.() ?? [];
   }
 
   async listModels(): Promise<ModelInfo[]> {

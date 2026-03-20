@@ -6,8 +6,12 @@ import {
     resize,
     writeClipboard,
     logDebug,
-    geminiChatSend,
+    aiChatSend,
     encryptSecret,
+    listWslDistributions,
+    exportHTree,
+    selectImportFile,
+    decryptImportFile,
 } from './electronService';
 
 const mockAPI = {
@@ -28,16 +32,21 @@ const mockAPI = {
     getAppVersion: vi.fn(),
     logDebug: vi.fn(),
     openExternal: vi.fn(),
-    geminiAuthStart: vi.fn(),
-    geminiAuthAuto: vi.fn(),
-    geminiAuthStatus: vi.fn(),
-    geminiAuthLogout: vi.fn(),
-    geminiChatSend: vi.fn(),
-    geminiListModels: vi.fn(),
-    geminiChatCancel: vi.fn(),
-    geminiChatClear: vi.fn(),
-    onGeminiAuthResult: vi.fn(),
-    onGeminiChatResponse: vi.fn(),
+    aiAuthStart: vi.fn(),
+    aiAuthAuto: vi.fn(),
+    aiAuthStatus: vi.fn(),
+    aiAuthLogout: vi.fn(),
+    aiChatSend: vi.fn(),
+    aiListModels: vi.fn(),
+    aiListLocations: vi.fn(),
+    aiChatCancel: vi.fn(),
+    aiChatClear: vi.fn(),
+    aiListProviders: vi.fn(),
+    aiSetLocation: vi.fn(),
+    aiSetProvider: vi.fn(),
+    selectServiceAccountKeyFile: vi.fn(),
+    onAiAuthResult: vi.fn(),
+    onAiChatResponse: vi.fn(),
     showContextMenu: vi.fn(),
     onAskGemini: vi.fn(),
     onTerminalContextPaste: vi.fn(),
@@ -54,6 +63,11 @@ const mockAPI = {
     listLogFiles: vi.fn(),
     readLogFile: vi.fn(),
     openDebugLogFolder: vi.fn(),
+    listWslDistributions: vi.fn(),
+    exportHTree: vi.fn(),
+    selectImportFile: vi.fn(),
+    decryptImportFile: vi.fn(),
+    onUpdateAvailable: vi.fn(),
 };
 
 beforeEach(() => {
@@ -149,11 +163,11 @@ describe('electronService', () => {
         });
     });
 
-    describe('geminiChatSend', () => {
-        it('calls api().geminiChatSend with all four arguments including systemInstruction', () => {
-            geminiChatSend('session-5', 'What is the CPU usage?', 'gemini-pro', 'You are a helpful assistant.');
-            expect(mockAPI.geminiChatSend).toHaveBeenCalledOnce();
-            expect(mockAPI.geminiChatSend).toHaveBeenCalledWith(
+    describe('aiChatSend', () => {
+        it('calls api().aiChatSend with all four arguments including systemInstruction', () => {
+            aiChatSend('session-5', 'What is the CPU usage?', 'gemini-pro', 'You are a helpful assistant.');
+            expect(mockAPI.aiChatSend).toHaveBeenCalledOnce();
+            expect(mockAPI.aiChatSend).toHaveBeenCalledWith(
                 'session-5',
                 'What is the CPU usage?',
                 'gemini-pro',
@@ -161,17 +175,50 @@ describe('electronService', () => {
             );
         });
 
-        it('calls api().geminiChatSend with undefined systemInstruction when omitted', () => {
-            geminiChatSend('session-6', 'Hello', 'gemini-flash');
-            expect(mockAPI.geminiChatSend).toHaveBeenCalledOnce();
-            expect(mockAPI.geminiChatSend).toHaveBeenCalledWith('session-6', 'Hello', 'gemini-flash', undefined);
+        it('calls api().aiChatSend with undefined systemInstruction when omitted', () => {
+            aiChatSend('session-6', 'Hello', 'gemini-flash');
+            expect(mockAPI.aiChatSend).toHaveBeenCalledOnce();
+            expect(mockAPI.aiChatSend).toHaveBeenCalledWith('session-6', 'Hello', 'gemini-flash', undefined);
         });
 
         it('passes through the return value', () => {
             const promise = Promise.resolve({ text: 'response' });
-            mockAPI.geminiChatSend.mockReturnValue(promise);
-            const result = geminiChatSend('s5', 'msg', 'model');
+            mockAPI.aiChatSend.mockReturnValue(promise);
+            const result = aiChatSend('s5', 'msg', 'model');
             expect(result).toBe(promise);
+        });
+    });
+
+    describe('listWslDistributions', () => {
+        it('calls api().listWslDistributions', () => {
+            mockAPI.listWslDistributions.mockReturnValue(Promise.resolve(['Ubuntu', 'Debian']));
+            listWslDistributions();
+            expect(mockAPI.listWslDistributions).toHaveBeenCalledOnce();
+        });
+    });
+
+    describe('exportHTree', () => {
+        it('calls api().exportHTree with the correct arguments', () => {
+            const data = [{ name: 'host1' }];
+            exportHTree(data, 'password123');
+            expect(mockAPI.exportHTree).toHaveBeenCalledOnce();
+            expect(mockAPI.exportHTree).toHaveBeenCalledWith(data, 'password123');
+        });
+    });
+
+    describe('selectImportFile', () => {
+        it('calls api().selectImportFile', () => {
+            mockAPI.selectImportFile.mockReturnValue(Promise.resolve('/path/to/file.htree'));
+            selectImportFile();
+            expect(mockAPI.selectImportFile).toHaveBeenCalledOnce();
+        });
+    });
+
+    describe('decryptImportFile', () => {
+        it('calls api().decryptImportFile with the correct password', () => {
+            decryptImportFile('mypassword');
+            expect(mockAPI.decryptImportFile).toHaveBeenCalledOnce();
+            expect(mockAPI.decryptImportFile).toHaveBeenCalledWith('mypassword');
         });
     });
 

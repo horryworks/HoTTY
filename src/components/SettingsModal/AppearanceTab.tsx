@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import * as electronService from '../../services/electronService';
 import { STORAGE_KEYS } from '../../constants/storage';
 
@@ -68,7 +68,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
         return ctx.measureText('W').width === ctx.measureText('i').width;
     }
 
-    async function scanAndCacheFonts() {
+    const scanAndCacheFonts = useCallback(async () => {
         setFontScanning(true);
         try {
             const all = await electronService.listSystemFonts();
@@ -78,7 +78,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
         } finally {
             setFontScanning(false);
         }
-    }
+    }, []);
 
     useEffect(() => {
         const cached = localStorage.getItem(STORAGE_KEYS.SYSTEM_FONTS_CACHE);
@@ -91,7 +91,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
             }
         }
         scanAndCacheFonts();
-    }, []);
+    }, [scanAndCacheFonts]);
 
     return (
         <>

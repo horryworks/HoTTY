@@ -27,25 +27,15 @@ export interface ElectronAPI {
     aiAuthLogout: () => void;
     aiChatSend: (sessionId: string, message: string, model: string, systemInstruction?: string) => void;
     aiListModels: () => Promise<{ name: string; displayName: string }[]>;
+    aiListLocations: () => Promise<string[]>;
     aiChatCancel: (sessionId: string) => void;
     aiChatClear: (sessionId: string) => void;
     aiListProviders: () => Promise<{ id: string; displayName: string; authType: string }[]>;
+    aiSetLocation: (location: string) => Promise<void>;
     aiSetProvider: (providerId: string) => Promise<void>;
     selectServiceAccountKeyFile: () => Promise<string | null>;
     onAiAuthResult: (callback: (result: { success: boolean }) => void) => () => void;
     onAiChatResponse: (callback: (data: { sessionId: string; type: string; content: string; usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } }) => void) => () => void;
-
-    // Gemini AI (backward compatibility)
-    geminiAuthStart: (clientId: string, clientSecret: string) => Promise<boolean>;
-    geminiAuthAuto: (clientId: string, clientSecret: string) => Promise<boolean>;
-    geminiAuthStatus: () => Promise<boolean>;
-    geminiAuthLogout: () => void;
-    geminiChatSend: (sessionId: string, message: string, model: string, systemInstruction?: string) => void;
-    geminiListModels: () => Promise<{ name: string; displayName: string }[]>;
-    geminiChatCancel: (sessionId: string) => void;
-    geminiChatClear: (sessionId: string) => void;
-    onGeminiAuthResult: (callback: (result: { success: boolean }) => void) => () => void;
-    onGeminiChatResponse: (callback: (data: { sessionId: string, type: string, content: string }) => void) => () => void;
 
     // Context Menu
     showContextMenu: (selection: string, commands?: { id: string; label: string }[], includePaste?: boolean) => void;

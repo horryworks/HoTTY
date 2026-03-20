@@ -93,6 +93,30 @@ describe('AIService', () => {
         expect(models).toEqual([{ name: 'model-1', displayName: 'Model 1' }]);
     });
 
+    it('setLocation delegates to provider if setLocation exists', () => {
+        provider.setLocation = vi.fn();
+        service.setLocation('us-east5');
+        expect(provider.setLocation).toHaveBeenCalledWith('us-east5');
+    });
+
+    it('setLocation does not throw when provider has no setLocation', () => {
+        delete provider.setLocation;
+        expect(() => service.setLocation('us-east5')).not.toThrow();
+    });
+
+    it('listLocations delegates to provider if listLocations exists', async () => {
+        provider.listLocations = vi.fn(async () => ['us-central1', 'us-east1']);
+        const locations = await service.listLocations();
+        expect(provider.listLocations).toHaveBeenCalled();
+        expect(locations).toEqual(['us-central1', 'us-east1']);
+    });
+
+    it('listLocations returns empty array when provider has no listLocations', async () => {
+        delete provider.listLocations;
+        const locations = await service.listLocations();
+        expect(locations).toEqual([]);
+    });
+
     it('cancelMessage delegates to active provider', () => {
         service.cancelMessage('session-1');
         expect(provider.cancelMessage).toHaveBeenCalledWith('session-1');
@@ -103,7 +127,7 @@ describe('AIService', () => {
         expect(provider.clearHistory).toHaveBeenCalledWith('session-1');
     });
 
-    it('sendMessage sends ai-chat-response and provider-specific channel', async () => {
+    it('sendMessage sends ai-chat-response', async () => {
         const win = makeMockWin();
         vi.mocked(provider.sendMessage).mockImplementation(async (onResponse) => {
             const data: ChatResponseData = { sessionId: 'sess', type: 'done', content: 'hi' };
@@ -113,7 +137,7 @@ describe('AIService', () => {
         await service.sendMessage(win, 'sess', 'hello', 'model-1');
 
         expect(win.webContents.send).toHaveBeenCalledWith('ai-chat-response', expect.objectContaining({ sessionId: 'sess' }));
-        expect(win.webContents.send).toHaveBeenCalledWith('mock-chat-response', expect.objectContaining({ sessionId: 'sess' }));
+        expect(win.webContents.send).toHaveBeenCalledTimes(1);
     });
 
     it('authenticate delegates to active provider with onResult callback', async () => {

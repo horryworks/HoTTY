@@ -26,8 +26,10 @@ vi.mock('./HostTree', () => ({
 }));
 vi.mock('../../services/electronService', () => ({
     listSerialPorts: vi.fn(() => Promise.resolve([])),
+    listWslDistributions: vi.fn(() => Promise.resolve([])),
     getSshAlgorithms: vi.fn(() => Promise.resolve({})),
     logDebug: vi.fn(),
+    focusWindow: vi.fn(),
 }));
 vi.mock('../../constants/storage', () => ({
     STORAGE_KEYS: {
@@ -37,17 +39,6 @@ vi.mock('../../constants/storage', () => ({
         UI_DIALOG_POS: 'dialog-pos',
     },
 }));
-
-// Mock window.electronAPI for serial/WSL calls used directly
-Object.defineProperty(window, 'electronAPI', {
-    value: {
-        listSerialPorts: vi.fn(() => Promise.resolve([])),
-        listWslDistributions: vi.fn(() => Promise.resolve([])),
-        focusWindow: vi.fn(),
-        logDebug: vi.fn(),
-    },
-    writable: true,
-});
 
 const baseProps = {
     onConnect: vi.fn(),
