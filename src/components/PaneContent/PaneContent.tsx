@@ -6,6 +6,7 @@ import type { Session } from '../../hooks/useSessionManager';
 import type { InteractiveSessionTracking } from '../../hooks/useInteractiveFlow';
 import type { Terminal } from '@xterm/xterm';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useShallow } from 'zustand/react/shallow';
 
 // -- Types --
 
@@ -32,7 +33,7 @@ interface PaneContentProps {
 
 // -- Component --
 
-export const PaneContent: React.FC<PaneContentProps> = ({
+export const PaneContent: React.FC<PaneContentProps> = React.memo(({
   session,
   isActive,
   focusTrigger,
@@ -64,7 +65,21 @@ export const PaneContent: React.FC<PaneContentProps> = ({
     showSystemPrompt,
     aiPersonas,
     proactiveInstruction,
-  } = useSettingsStore();
+  } = useSettingsStore(useShallow(s => ({
+    fontSize: s.fontSize,
+    fontFamily: s.fontFamily,
+    terminalForeground: s.terminalForeground,
+    terminalBackground: s.terminalBackground,
+    terminalBackgroundInactive: s.terminalBackgroundInactive,
+    lineWrapEnabled: s.lineWrapEnabled,
+    enablePromptHighlight: s.enablePromptHighlight,
+    promptHighlightColor: s.promptHighlightColor,
+    promptPatterns: s.promptPatterns,
+    askAiCommands: s.askAiCommands,
+    showSystemPrompt: s.showSystemPrompt,
+    aiPersonas: s.aiPersonas,
+    proactiveInstruction: s.proactiveInstruction,
+  })));
 
   if (session.type === 'log-viewer') {
     return (
@@ -120,4 +135,4 @@ export const PaneContent: React.FC<PaneContentProps> = ({
       onPasteRequest={onPasteRequest}
     />
   );
-};
+});

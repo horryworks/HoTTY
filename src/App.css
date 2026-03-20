@@ -45,7 +45,7 @@
   pointer-events: none;
   z-index: 1000;
   border: 3px solid var(--active-pane-color);
-  box-shadow: inset 0 0 10px var(--active-pane-color), 0 0 10px var(--active-pane-color);
+  box-shadow: inset 0 0 8px var(--active-pane-color);
   animation: pane-flash-new 0.5s ease-out forwards;
 }
 
@@ -216,7 +216,7 @@
   position: fixed;
   z-index: 50000;
   background: var(--bg-secondary);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(4px);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 6px;

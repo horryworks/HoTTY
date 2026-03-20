@@ -83,10 +83,6 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                 if (!container || container.clientWidth === 0 || container.clientHeight === 0) return false;
 
                 try {
-                    if (typeof term.clearTextureAtlas === 'function') {
-                        term.clearTextureAtlas();
-                    }
-
                     if (fitAddon) {
                         if (lineWrapEnabled) {
                             // Normal Wrap Mode: Just Fit
@@ -99,7 +95,6 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                             // No Wrap Mode: Horizontal Scrollbar
                             const proposed = fitAddon.proposeDimensions();
                             if (proposed) {
-                                // Keep proposed rows (height fit), enforce huge cols
                                 const newCols = Math.max(proposed.cols, 5000);
                                 term.resize(newCols, proposed.rows);
                             }
@@ -120,12 +115,13 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                 return true;
             };
 
-            // ... (retry logic)
+            // Single retry with rAF if initial draw fails (container not yet sized)
             if (!forceRedraw()) {
-                const retryDelays = [16, 50, 150];
-                retryDelays.forEach(delay => setTimeout(() => forceRedraw(), delay));
-            } else {
-                setTimeout(() => forceRedraw(), 100);
+                requestAnimationFrame(() => {
+                    if (!forceRedraw()) {
+                        setTimeout(() => forceRedraw(), 100);
+                    }
+                });
             }
         };
 
@@ -689,4 +685,4 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
     );
 };
 
-export const TerminalComponent = TerminalComponentBase;
+export const TerminalComponent = React.memo(TerminalComponentBase);

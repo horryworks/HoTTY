@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { ConnectionDialog } from './components/SessionDialog/SessionDialog'
 import { TabBar } from './components/TabBar/TabBar'
 import { ResizeGrip } from './components/ResizeGrip/ResizeGrip'
@@ -475,7 +475,43 @@ function App() {
     margin: '2px'
   });
 
-  const basePaneStyle = paneContainerStyle(settings.paneBackground, settings.paneBackgroundMode, settings.paneBackgroundImage);
+  const basePaneStyle = useMemo(() =>
+    paneContainerStyle(settings.paneBackground, settings.paneBackgroundMode, settings.paneBackgroundImage),
+    [settings.paneBackground, settings.paneBackgroundMode, settings.paneBackgroundImage]
+  );
+
+  // Sidebar/bar drag-drop handlers (memoized to avoid re-renders)
+  const handleSidebarDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const handleSidebarDrop = useCallback((paneId: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    const sid = e.dataTransfer.getData('text/plain');
+    if (sid) pane.handleDropSession(sid, paneId);
+  }, [pane.handleDropSession]);
+
+  const handlePaneActivate = useCallback((paneId: string) => () => {
+    pane.setActivePaneId(paneId);
+  }, [pane.setActivePaneId]);
+
+  // GridLayout callback handlers (memoized)
+  const handleGridPasteRequest = useCallback((text: string) => {
+    const activePaneSessionId = pane.paneAllocations[pane.activePaneId || ''];
+    if (activePaneSessionId) handlePasteRequest(activePaneSessionId, text);
+  }, [pane.paneAllocations, pane.activePaneId]);
+
+  const handleGridRunCommand = useCallback((targetId: string, command: string, aiSessionId: string) => {
+    interactiveFlow.startTracking(targetId, aiSessionId, command);
+  }, [interactiveFlow.startTracking]);
+
+  const handleGridSendMessage = useCallback((aiSessionId: string, text: string) => {
+    aiChat.sendMessage(aiSessionId, text);
+  }, [aiChat.sendMessage]);
+
+  const handleGridShowPromptMenu = useCallback((aiSessionId: string) => {
+    aiChat.showPromptMenu(aiSessionId);
+  }, [aiChat.showPromptMenu]);
 
   // ═══════════════════════════════════════════════
   // 15. Early Return
@@ -604,9 +640,9 @@ function App() {
                 className={`left-sidebar-pane ${pane.activePaneId === 'sidebar-left' ? 'active-pane' : ''}`}
                 data-pane-id="sidebar-left"
                 style={{ ...basePaneStyle, width: `${leftSidebarPercent}%` }}
-                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-                onDrop={(e) => { e.preventDefault(); const sid = e.dataTransfer.getData('text/plain'); if (sid) pane.handleDropSession(sid, 'sidebar-left'); }}
-                onClick={() => pane.setActivePaneId('sidebar-left')}
+                onDragOver={handleSidebarDragOver}
+                onDrop={handleSidebarDrop('sidebar-left')}
+                onClick={handlePaneActivate('sidebar-left')}
               >
                 <ErrorBoundary fallbackLabel="Left Sidebar">{renderPaneContent('sidebar-left', 'Left Sidebar')}</ErrorBoundary>
               </div>
@@ -628,9 +664,9 @@ function App() {
                   className={`top-bar-pane ${pane.activePaneId === 'top-bar' ? 'active-pane' : ''}`}
                   data-pane-id="top-bar"
                   style={{ ...basePaneStyle, height: `${topBarPercent}%` }}
-                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-                  onDrop={(e) => { e.preventDefault(); const sid = e.dataTransfer.getData('text/plain'); if (sid) pane.handleDropSession(sid, 'top-bar'); }}
-                  onClick={() => pane.setActivePaneId('top-bar')}
+                  onDragOver={handleSidebarDragOver}
+                  onDrop={handleSidebarDrop('top-bar')}
+                  onClick={handlePaneActivate('top-bar')}
                 >
                   <ErrorBoundary fallbackLabel="Top Bar">{renderPaneContent('top-bar', 'Top Bar')}</ErrorBoundary>
                 </div>
@@ -663,15 +699,10 @@ function App() {
                   paneBackgroundMode={settings.paneBackgroundMode}
                   paneBackgroundImage={settings.paneBackgroundImage}
                   interactiveSessions={interactiveFlow.trackings}
-                  onPasteRequest={(text) => {
-                    const activePaneSessionId = pane.paneAllocations[pane.activePaneId || ''];
-                    if (activePaneSessionId) handlePasteRequest(activePaneSessionId, text);
-                  }}
-                  onRunCommand={(targetId, command, aiSessionId) => {
-                    interactiveFlow.startTracking(targetId, aiSessionId, command);
-                  }}
-                  onSendMessage={(aiSessionId, text) => aiChat.sendMessage(aiSessionId, text)}
-                  onShowPromptMenu={(aiSessionId) => aiChat.showPromptMenu(aiSessionId)}
+                  onPasteRequest={handleGridPasteRequest}
+                  onRunCommand={handleGridRunCommand}
+                  onSendMessage={handleGridSendMessage}
+                  onShowPromptMenu={handleGridShowPromptMenu}
                 />
                 </ErrorBoundary>
               </div>
@@ -690,9 +721,9 @@ function App() {
                   className={`bottom-bar-pane ${pane.activePaneId === 'bottom-bar' ? 'active-pane' : ''}`}
                   data-pane-id="bottom-bar"
                   style={{ ...basePaneStyle, height: `${bottomBarPercent}%` }}
-                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-                  onDrop={(e) => { e.preventDefault(); const sid = e.dataTransfer.getData('text/plain'); if (sid) pane.handleDropSession(sid, 'bottom-bar'); }}
-                  onClick={() => pane.setActivePaneId('bottom-bar')}
+                  onDragOver={handleSidebarDragOver}
+                  onDrop={handleSidebarDrop('bottom-bar')}
+                  onClick={handlePaneActivate('bottom-bar')}
                 >
                   <ErrorBoundary fallbackLabel="Bottom Bar">{renderPaneContent('bottom-bar', 'Bottom Bar')}</ErrorBoundary>
                 </div>
@@ -713,9 +744,9 @@ function App() {
                 className={`right-sidebar-pane ${pane.activePaneId === 'sidebar' ? 'active-pane' : ''}`}
                 data-pane-id="sidebar"
                 style={{ ...basePaneStyle, width: `${rightSidebarPercent}%` }}
-                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-                onDrop={(e) => { e.preventDefault(); const sid = e.dataTransfer.getData('text/plain'); if (sid) pane.handleDropSession(sid, 'sidebar'); }}
-                onClick={() => pane.setActivePaneId('sidebar')}
+                onDragOver={handleSidebarDragOver}
+                onDrop={handleSidebarDrop('sidebar')}
+                onClick={handlePaneActivate('sidebar')}
               >
                 <ErrorBoundary fallbackLabel="Sidebar">{renderPaneContent('sidebar', 'Sidebar')}</ErrorBoundary>
               </div>

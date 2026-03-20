@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { TerminalComponent } from '../Terminal/Terminal';
 import { AIChatPane } from '../AIChatPane/AIChatPane';
 import { LogViewerPane } from '../LogViewerPane/LogViewerPane';
@@ -7,6 +7,7 @@ import type { InteractiveSessionTracking } from '../../hooks/useInteractiveFlow'
 import type { Terminal } from '@xterm/xterm';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useShallow } from 'zustand/react/shallow';
 import './GridLayout.css';
 
 interface GridLayoutProps {
@@ -67,7 +68,21 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
         showSystemPrompt,
         aiPersonas,
         proactiveInstruction,
-    } = useSettingsStore();
+    } = useSettingsStore(useShallow(s => ({
+        fontSize: s.fontSize,
+        fontFamily: s.fontFamily,
+        terminalForeground: s.terminalForeground,
+        terminalBackground: s.terminalBackground,
+        terminalBackgroundInactive: s.terminalBackgroundInactive,
+        lineWrapEnabled: s.lineWrapEnabled,
+        enablePromptHighlight: s.enablePromptHighlight,
+        promptHighlightColor: s.promptHighlightColor,
+        promptPatterns: s.promptPatterns,
+        askAiCommands: s.askAiCommands,
+        showSystemPrompt: s.showSystemPrompt,
+        aiPersonas: s.aiPersonas,
+        proactiveInstruction: s.proactiveInstruction,
+    })));
 
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
@@ -158,91 +173,105 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
         else document.body.style.cursor = 'move';
     };
 
+    const resizeRafId = useRef<number | null>(null);
+
     const handleResizeMove = useCallback((e: MouseEvent) => {
         if (!resizingState.current) return;
 
-        const { type, index, rowIndex, startPos, startSizes, startRowSizes, gridSize } = resizingState.current;
-        const minSize = 0.1;
+        // Throttle with rAF — only process one mousemove per animation frame
+        if (resizeRafId.current !== null) return;
 
-        // Handle Column Resizing
-        if (type === 'col' || type === 'both') {
-            const currentPos = e.clientX;
-            const deltaPx = currentPos - startPos.x;
-            const totalFr = startSizes.reduce((sum, val) => sum + val, 0);
-            const deltaFr = (deltaPx * totalFr) / gridSize.width;
+        const clientX = e.clientX;
+        const clientY = e.clientY;
 
-            const newSizes = [...startSizes];
-            let sLeft = startSizes[index] + deltaFr;
-            let sRight = startSizes[index + 1] - deltaFr;
+        resizeRafId.current = requestAnimationFrame(() => {
+            resizeRafId.current = null;
+            if (!resizingState.current) return;
 
-            if (sLeft < minSize) {
-                sLeft = minSize;
-                sRight = startSizes[index] + startSizes[index + 1] - minSize;
-            }
-            if (sRight < minSize) {
-                sRight = minSize;
-                sLeft = startSizes[index] + startSizes[index + 1] - minSize;
-            }
+            const { type, index, rowIndex, startPos, startSizes, startRowSizes, gridSize } = resizingState.current;
+            const minSize = 0.1;
 
-            newSizes[index] = sLeft;
-            newSizes[index + 1] = sRight;
-            setColSizes(newSizes);
-        }
+            // Handle Column Resizing
+            if (type === 'col' || type === 'both') {
+                const deltaPx = clientX - startPos.x;
+                const totalFr = startSizes.reduce((sum, val) => sum + val, 0);
+                const deltaFr = (deltaPx * totalFr) / gridSize.width;
 
-        // Handle Row Resizing
-        if ((type === 'row' || type === 'both') && startRowSizes) {
-            // For 'row', index is the row index. For 'both', rowIndex is the row index.
-            const rIndex = type === 'row' ? index : rowIndex!;
+                const newSizes = [...startSizes];
+                let sLeft = startSizes[index] + deltaFr;
+                let sRight = startSizes[index + 1] - deltaFr;
 
-            const currentPos = e.clientY;
-            const deltaPx = currentPos - startPos.y;
-            const totalFr = startRowSizes.reduce((sum, val) => sum + val, 0);
-            const deltaFr = (deltaPx * totalFr) / gridSize.height;
+                if (sLeft < minSize) {
+                    sLeft = minSize;
+                    sRight = startSizes[index] + startSizes[index + 1] - minSize;
+                }
+                if (sRight < minSize) {
+                    sRight = minSize;
+                    sLeft = startSizes[index] + startSizes[index + 1] - minSize;
+                }
 
-            const newSizes = [...startRowSizes];
-            let sTop = startRowSizes[rIndex] + deltaFr;
-            let sBottom = startRowSizes[rIndex + 1] - deltaFr;
-
-            if (sTop < minSize) {
-                sTop = minSize;
-                sBottom = startRowSizes[rIndex] + startRowSizes[rIndex + 1] - minSize;
-            }
-            if (sBottom < minSize) {
-                sBottom = minSize;
-                sTop = startRowSizes[rIndex] + startRowSizes[rIndex + 1] - minSize;
+                newSizes[index] = sLeft;
+                newSizes[index + 1] = sRight;
+                setColSizes(newSizes);
             }
 
-            newSizes[rIndex] = sTop;
-            newSizes[rIndex + 1] = sBottom;
-            setRowSizes(newSizes);
-        }
+            // Handle Row Resizing
+            if ((type === 'row' || type === 'both') && startRowSizes) {
+                const rIndex = type === 'row' ? index : rowIndex!;
+
+                const deltaPx = clientY - startPos.y;
+                const totalFr = startRowSizes.reduce((sum, val) => sum + val, 0);
+                const deltaFr = (deltaPx * totalFr) / gridSize.height;
+
+                const newSizes = [...startRowSizes];
+                let sTop = startRowSizes[rIndex] + deltaFr;
+                let sBottom = startRowSizes[rIndex + 1] - deltaFr;
+
+                if (sTop < minSize) {
+                    sTop = minSize;
+                    sBottom = startRowSizes[rIndex] + startRowSizes[rIndex + 1] - minSize;
+                }
+                if (sBottom < minSize) {
+                    sBottom = minSize;
+                    sTop = startRowSizes[rIndex] + startRowSizes[rIndex + 1] - minSize;
+                }
+
+                newSizes[rIndex] = sTop;
+                newSizes[rIndex + 1] = sBottom;
+                setRowSizes(newSizes);
+            }
+        });
     }, []);
 
     const handleResizeEnd = () => {
         resizingState.current = null;
+        if (resizeRafId.current !== null) {
+            cancelAnimationFrame(resizeRafId.current);
+            resizeRafId.current = null;
+        }
         document.removeEventListener('mousemove', handleResizeMove);
         document.removeEventListener('mouseup', handleResizeEnd);
         document.body.style.cursor = '';
     };
 
-    // Construct grid template strings
-    const gridTemplateColumns = colSizes.map(s => `minmax(0, ${s}fr)`).join(' 4px ');
-    const gridTemplateRows = rowSizes.map(s => `minmax(0, ${s}fr)`).join(' 4px ');
+    // Construct grid template strings (memoized)
+    const gridTemplateColumns = useMemo(() => colSizes.map(s => `minmax(0, ${s}fr)`).join(' 4px '), [colSizes]);
+    const gridTemplateRows = useMemo(() => rowSizes.map(s => `minmax(0, ${s}fr)`).join(' 4px '), [rowSizes]);
 
 
     // Drag & Drop logic for Sessions
-    const handleDragOver = (e: React.DragEvent) => {
+    const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
-    };
+    }, []);
 
-    const handleDrop = (e: React.DragEvent, paneId: string) => {
+    const handleDrop = useCallback((e: React.DragEvent, paneId: string) => {
         e.preventDefault();
         const sessionId = e.dataTransfer.getData('text/plain');
         if (sessionId) {
             onDropSession(sessionId, paneId);
         }
-    };
+    }, [onDropSession]);
 
     const renderPanes = () => {
         const elements: React.ReactNode[] = [];

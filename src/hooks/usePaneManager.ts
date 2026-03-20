@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePaneStore } from '../stores/paneStore';
 import type { LayoutMode } from '../components/LayoutSelector/LayoutSelector';
 
@@ -132,7 +132,7 @@ export function usePaneManager(options?: PaneManagerOptions) {
 
     /** List of session IDs currently displayed in valid panes for the current layout */
     const totalPanes = currentDims.rows * currentDims.cols;
-    const visibleSessionIds = Object.entries(paneAllocations)
+    const visibleSessionIds = useMemo(() => Object.entries(paneAllocations)
         .filter(([paneId, sessionId]) => sessionId !== null && (
             (paneId === 'sidebar-left' && options?.showLeftSidebar) ||
             (paneId === 'sidebar' && options?.showRightSidebar) ||
@@ -140,7 +140,8 @@ export function usePaneManager(options?: PaneManagerOptions) {
             (paneId === 'bottom-bar' && options?.showBottomBar) ||
             parseInt(paneId) < totalPanes
         ))
-        .map(([, sessionId]) => sessionId as string);
+        .map(([, sessionId]) => sessionId as string),
+    [paneAllocations, totalPanes, options?.showLeftSidebar, options?.showRightSidebar, options?.showTopBar, options?.showBottomBar]);
 
 
     /** Session ID of the active pane */

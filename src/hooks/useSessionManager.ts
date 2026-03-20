@@ -90,6 +90,8 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     const [tabOrder, setTabOrder] = useState<string[]>([]);
     const terminalRegistry = useRef<{ [sessionId: string]: Terminal }>({});
     const watchBuffers = useRef<{ [sessionId: string]: string }>({});
+    const watchingSessionIds = useRef<Set<string>>(new Set());
+    const hasWatchDataFlags = useRef<Set<string>>(new Set());
 
     const activeAiProvider = useSettingsStore(s => s.activeAiProvider);
     // Sync AI tab title when provider changes
@@ -187,32 +189,28 @@ export function useSessionManager(options: UseSessionManagerOptions) {
                 term.write(data);
             }
 
-            // Append to watch buffer if this session is being watched
-            setSessions(currentSessions => {
-                const session = currentSessions.find(s => s.id === id);
-                if (session && session.isWatching) {
-                    const cleanData = stripAnsiCodes(data);
+            // Append to watch buffer if this session is being watched (ref-based check avoids setSessions)
+            if (watchingSessionIds.current.has(id)) {
+                const cleanData = stripAnsiCodes(data);
 
-                    if (watchBuffers.current[id] === undefined) {
-                        watchBuffers.current[id] = '';
-                    }
-
-                    let newBuffer = watchBuffers.current[id] + cleanData;
-
-                    // Enforce limit (FIFO)
-                    if (newBuffer.length > watchBufferLimit) {
-                        newBuffer = newBuffer.substring(newBuffer.length - watchBufferLimit);
-                    }
-
-                    watchBuffers.current[id] = newBuffer;
-
-                    // Update session state to reflect that we have data (only if not already set)
-                    if (!session.hasWatchData) {
-                        return currentSessions.map(s => s.id === id ? { ...s, hasWatchData: true } : s);
-                    }
+                if (watchBuffers.current[id] === undefined) {
+                    watchBuffers.current[id] = '';
                 }
-                return currentSessions;
-            });
+
+                let newBuffer = watchBuffers.current[id] + cleanData;
+
+                if (newBuffer.length > watchBufferLimit) {
+                    newBuffer = newBuffer.substring(newBuffer.length - watchBufferLimit);
+                }
+
+                watchBuffers.current[id] = newBuffer;
+
+                // Only trigger a state update when hasWatchData needs to flip false→true
+                if (!hasWatchDataFlags.current.has(id)) {
+                    hasWatchDataFlags.current.add(id);
+                    setSessions(prev => prev.map(s => s.id === id ? { ...s, hasWatchData: true } : s));
+                }
+            }
         });
         return () => removeDataListener();
     }, [watchBufferLimit]); // Need watchBufferLimit to be bound
@@ -243,8 +241,10 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             }
         }
 
-        // Cleanup watch buffer
+        // Cleanup watch buffer and refs
         delete watchBuffers.current[sessionId];
+        watchingSessionIds.current.delete(sessionId);
+        hasWatchDataFlags.current.delete(sessionId);
 
         setSessions(prev => prev.filter(s => s.id !== sessionId));
         setTabOrder(prev => prev.filter(id => id !== sessionId));
@@ -471,17 +471,22 @@ export function useSessionManager(options: UseSessionManagerOptions) {
                     if (!isTurningOn) {
                         // Turning OFF
                         delete watchBuffers.current[sessionId];
+                        watchingSessionIds.current.delete(sessionId);
+                        hasWatchDataFlags.current.delete(sessionId);
                         return { ...s, isWatching: false, hasWatchData: false };
                     } else {
                         // Turning ON
                         if (!watchBuffers.current[sessionId]) {
                             watchBuffers.current[sessionId] = '';
                         }
+                        watchingSessionIds.current.add(sessionId);
                         return { ...s, isWatching: true };
                     }
                 } else if (isTurningOn && s.isWatching) {
                     // Turn OFF others if we are turning ON a new one
                     delete watchBuffers.current[s.id];
+                    watchingSessionIds.current.delete(s.id);
+                    hasWatchDataFlags.current.delete(s.id);
                     return { ...s, isWatching: false, hasWatchData: false };
                 } else if (isTurningOn && aiSessionId && s.id === aiSessionId && s.aiChatState) {
                     // Update lastTargetSessionId in the same render to avoid flicker
@@ -505,6 +510,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
 
     const clearWatchBuffer = useCallback((sessionId: string) => {
         delete watchBuffers.current[sessionId];
+        hasWatchDataFlags.current.delete(sessionId);
         setSessions(currentSessions => {
             return currentSessions.map(s => s.id === sessionId ? { ...s, hasWatchData: false } : s);
         });

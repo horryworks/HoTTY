@@ -58,7 +58,7 @@ const highlightLine = (line: string, regex: RegExp): React.ReactNode => {
     return parts.length > 0 ? <>{parts}</> : line;
 };
 
-export const LogViewerPane: React.FC<LogViewerPaneProps> = ({ loggingPath, askAiCommands = [] }) => {
+export const LogViewerPane: React.FC<LogViewerPaneProps> = React.memo(({ loggingPath, askAiCommands = [] }) => {
     // File list state
     const [files, setFiles] = useState<LogFile[]>([]);
     const [listError, setListError] = useState<string | null>(null);
@@ -439,4 +439,4 @@ export const LogViewerPane: React.FC<LogViewerPaneProps> = ({ loggingPath, askAi
             </div>
         </div>
     );
-};
+});

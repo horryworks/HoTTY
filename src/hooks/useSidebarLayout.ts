@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useSidebarLayoutStore } from '../stores/sidebarLayoutStore';
 
 export function useSidebarLayout() {
@@ -22,29 +22,46 @@ export function useSidebarLayout() {
         containerSize: number;
     } | null>(null);
 
-    const handleSidebarResizeMove = (e: MouseEvent) => {
-        if (!sidebarResizingState.current) return;
-        const { side, startPos, startPercent, containerSize } = sidebarResizingState.current;
-        // Use getState() to avoid stale closure in native DOM listeners
-        const store = useSidebarLayoutStore.getState();
+    const sidebarRafId = useRef<number | null>(null);
 
-        if (side === 'left' || side === 'right') {
-            const deltaPx = side === 'left' ? e.clientX - startPos : startPos - e.clientX;
-            const deltaPercent = (deltaPx / containerSize) * 100;
-            const newPercent = Math.max(5, Math.min(80, startPercent + deltaPercent));
-            if (side === 'left') store.setLeftSidebarPercent(newPercent);
-            else store.setRightSidebarPercent(newPercent);
-        } else {
-            const deltaPx = side === 'top' ? e.clientY - startPos : startPos - e.clientY;
-            const deltaPercent = (deltaPx / containerSize) * 100;
-            const newPercent = Math.max(5, Math.min(80, startPercent + deltaPercent));
-            if (side === 'top') store.setTopBarPercent(newPercent);
-            else store.setBottomBarPercent(newPercent);
-        }
-    };
+    const handleSidebarResizeMove = useCallback((e: MouseEvent) => {
+        if (!sidebarResizingState.current) return;
+
+        // Throttle with rAF
+        if (sidebarRafId.current !== null) return;
+
+        const clientX = e.clientX;
+        const clientY = e.clientY;
+
+        sidebarRafId.current = requestAnimationFrame(() => {
+            sidebarRafId.current = null;
+            if (!sidebarResizingState.current) return;
+
+            const { side, startPos, startPercent, containerSize } = sidebarResizingState.current;
+            const store = useSidebarLayoutStore.getState();
+
+            if (side === 'left' || side === 'right') {
+                const deltaPx = side === 'left' ? clientX - startPos : startPos - clientX;
+                const deltaPercent = (deltaPx / containerSize) * 100;
+                const newPercent = Math.max(5, Math.min(80, startPercent + deltaPercent));
+                if (side === 'left') store.setLeftSidebarPercent(newPercent);
+                else store.setRightSidebarPercent(newPercent);
+            } else {
+                const deltaPx = side === 'top' ? clientY - startPos : startPos - clientY;
+                const deltaPercent = (deltaPx / containerSize) * 100;
+                const newPercent = Math.max(5, Math.min(80, startPercent + deltaPercent));
+                if (side === 'top') store.setTopBarPercent(newPercent);
+                else store.setBottomBarPercent(newPercent);
+            }
+        });
+    }, []);
 
     const handleSidebarResizeEnd = () => {
         sidebarResizingState.current = null;
+        if (sidebarRafId.current !== null) {
+            cancelAnimationFrame(sidebarRafId.current);
+            sidebarRafId.current = null;
+        }
         setResizingSide(null);
         document.removeEventListener('mousemove', handleSidebarResizeMove);
         document.removeEventListener('mouseup', handleSidebarResizeEnd);

@@ -156,7 +156,7 @@ const MessageContent: React.FC<{
     );
 };
 
-export const AIChatPane: React.FC<AIChatPaneProps> = ({
+export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     sessionId,
     initialState,
     onStateChange,
@@ -1149,6 +1149,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = ({
             )}
         </div >
     );
-};
+});
 
 export default AIChatPane;
