@@ -64,7 +64,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
         e.dataTransfer.setData('text/plain', sessionId);
         e.dataTransfer.setData('application/json', JSON.stringify({ index }));
         e.dataTransfer.effectAllowed = 'move';
-        e.currentTarget.style.opacity = '0.5';
+        e.currentTarget.style.opacity = '0.4';
     };
 
     const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {

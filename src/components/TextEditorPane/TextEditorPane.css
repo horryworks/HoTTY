@@ -15,27 +15,25 @@
 /* ── Sub-tab Bar ── */
 .text-editor-subtab-bar {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     background: var(--bg-primary);
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
-    min-height: 30px;
-    overflow: hidden;
+    min-height: 35px;
     box-sizing: border-box;
 }
 
 .text-editor-subtab-list {
     display: flex;
-    align-items: stretch;
+    align-items: flex-start;
     flex: 1;
     min-width: 0;
     overflow-x: auto;
     overflow-y: hidden;
-    scrollbar-width: thin;
 }
 
 .text-editor-subtab-list::-webkit-scrollbar {
-    height: 4px;
+    height: 6px;
 }
 
 .text-editor-subtab-list::-webkit-scrollbar-track {
@@ -43,19 +41,21 @@
 }
 
 .text-editor-subtab-list::-webkit-scrollbar-thumb {
-    background: var(--text-secondary);
-    border-radius: 2px;
+    background-color: var(--border-color);
+    border-radius: 3px;
 }
 
 .text-editor-subtab-list::-webkit-scrollbar-thumb:hover {
-    background: var(--text-primary);
+    background-color: var(--text-secondary);
 }
 
 .text-editor-subtab {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 8px 4px 12px;
+    padding: 0 8px 0 12px;
+    height: 35px;
+    box-sizing: border-box;
     cursor: pointer;
     font-size: calc(var(--font-size-base) - 2px);
     color: var(--text-secondary);
@@ -66,6 +66,8 @@
     position: relative;
     background: transparent;
     flex-shrink: 0;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
 }
 
 .text-editor-subtab:hover {
@@ -115,21 +117,27 @@
     opacity: 0.4;
 }
 
-.text-editor-subtab.drop-target {
-    border-left: 2px solid var(--focus-border, #4E86F8);
+.text-editor-subtab.drop-target::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 2px;
+    background-color: var(--focus-border, #4E86F8);
+    z-index: 20;
 }
 
 .text-editor-subtab-new {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 35px;
+    height: 35px;
     cursor: pointer;
     color: var(--text-secondary);
-    border-radius: 3px;
     flex-shrink: 0;
-    margin: 0 2px;
+    border-left: 1px solid transparent;
 }
 
 .text-editor-subtab-new:hover {
