@@ -82,7 +82,7 @@
 
 .ping-monitor-btn-stop {
     background: var(--color-danger);
-    color: #fff;
+    color: var(--text-on-accent);
     border-color: var(--color-danger);
 }
 .ping-monitor-btn-stop:hover:not(:disabled) { opacity: 0.85; }
@@ -241,17 +241,17 @@
 
 /* Status indicators */
 .ping-status-ok {
-    color: #4caf50;
+    color: var(--success-color);
     font-weight: bold;
 }
 
 .ping-status-fail {
-    color: #f44336;
+    color: var(--error-color);
     font-weight: bold;
 }
 
 .ping-status-dns {
-    color: #ff9800;
+    color: var(--color-warning);
     font-weight: bold;
 }
 
@@ -286,7 +286,7 @@
     display: inline-block;
 }
 .ping-monitor-status-dot.running {
-    background: #4caf50;
+    background: var(--success-color);
 }
 .ping-monitor-status-dot.stopped {
     background: var(--text-secondary);

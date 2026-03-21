@@ -3,7 +3,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: var(--panel-bg, #1a1a1a);
+    background: var(--bg-secondary);
     border-right: 1px solid var(--border-color, #333);
     position: relative;
     user-select: none;

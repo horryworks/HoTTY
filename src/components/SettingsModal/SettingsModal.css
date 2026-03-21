@@ -120,7 +120,6 @@
 .settings-tab.active {
     color: var(--accent-color);
     border-bottom-color: var(--accent-color);
-    font-weight: 500;
 }
 
 /* ... styles ... */
@@ -142,7 +141,6 @@
 }
 
 .form-group label {
-    font-weight: 500;
     font-size: calc(var(--font-size-base) - 1px);
     color: var(--text-secondary);
 }

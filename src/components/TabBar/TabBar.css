@@ -6,7 +6,7 @@
     padding-left: 0px;
     user-select: none;
     overflow: visible;
-    --gemini-rainbow: linear-gradient(90deg, #4E86F8, #46B5D1, #8E54E9, #D64669);
+    --gemini-rainbow: linear-gradient(90deg, var(--accent-light, #4E86F8), var(--accent-color, #46B5D1), var(--accent-secondary, #8E54E9));
 }
 
 .tab-list {
@@ -14,7 +14,7 @@
     align-items: flex-start;
     overflow-x: auto;
     overflow-y: hidden;
-    flex: 1;
+    min-width: 0;
 }
 
 .tab-list::-webkit-scrollbar {
@@ -201,7 +201,7 @@
     padding: 4px;
     min-width: 140px;
     z-index: 1000;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 12px var(--modal-shadow, rgba(0, 0, 0, 0.3));
 }
 
 .features-item {
@@ -247,15 +247,15 @@
 @keyframes ai-glow-pulse {
     0% {
         transform: scale(1);
-        box-shadow: 0 0 2px rgba(0, 255, 128, 0.4);
+        box-shadow: 0 0 2px color-mix(in srgb, var(--success-color) 40%, transparent);
     }
     50% {
         transform: scale(1.1);
-        box-shadow: 0 0 8px rgba(0, 255, 128, 0.8);
+        box-shadow: 0 0 8px color-mix(in srgb, var(--success-color) 80%, transparent);
     }
     100% {
         transform: scale(1);
-        box-shadow: 0 0 2px rgba(0, 255, 128, 0.4);
+        box-shadow: 0 0 2px color-mix(in srgb, var(--success-color) 40%, transparent);
     }
 }
 
@@ -290,7 +290,6 @@
     background-color: transparent !important;
     /* Force transparent background-color to stop bleed from .active-pane-tab */
     color: white !important;
-    font-weight: bold;
     border: none !important;
     /* Explicitly keep rounded corners */
     border-top-left-radius: 8px;
@@ -316,16 +315,16 @@
 }
 
 .tab.is-ai-tab .tab-close {
-    background-color: rgba(255, 255, 255, 0.3);
+    background-color: color-mix(in srgb, var(--text-primary) 30%, transparent);
 }
 
 .tab.is-ai-tab .tab-close:hover {
-    background-color: rgba(255, 255, 255, 0.5);
+    background-color: color-mix(in srgb, var(--text-primary) 50%, transparent);
 }
 
 /* ── Hidden AI Tab: reddish gradient ── */
 .tab.is-ai-tab.hidden-tab {
-    background: linear-gradient(90deg, #7a0000, #c0392b, #e74c3c, #c0392b, #7a0000) !important;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--color-danger) 40%, black), var(--color-danger), color-mix(in srgb, var(--color-danger) 40%, black)) !important;
 }
 
 .tab.is-ai-tab.hidden-tab:hover {
