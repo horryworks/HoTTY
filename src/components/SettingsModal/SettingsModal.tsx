@@ -395,7 +395,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div className="about-content" style={{ textAlign: 'center', padding: '20px 0' }}>
                             <img src="./HoTTY_logo.png" alt="HoTTY Logo" width="64" height="64" style={{ marginBottom: '16px', borderRadius: '12px', backgroundColor: '#fff', padding: '4px' }} />
                             <h2 style={{ margin: '0 0 8px 0' }}>HoTTY</h2>
-                            <p style={{ color: '#aaa', margin: '0 0 8px 0' }}>v{version}</p>
+                            <p style={{ color: 'var(--text-secondary)', margin: '0 0 8px 0' }}>v{version}</p>
 
                             {updateInfo && (
                                 <div style={{ margin: '0 0 16px 0' }}>
@@ -419,18 +419,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                         e.preventDefault();
                                         electronService.openExternal('https://github.com/horryworks/HoTTY');
                                     }}
-                                    style={{ color: '#64b5f6', textDecoration: 'none' }}
+                                    style={{ color: 'var(--link-color)', textDecoration: 'none' }}
                                 >
                                     https://github.com/horryworks/HoTTY
                                 </a>
                             </p>
 
-                            <p style={{ color: '#ccc', margin: '0 0 24px 0' }}>
+                            <p style={{ color: 'var(--text-secondary)', margin: '0 0 24px 0' }}>
                                 SSH/Telnet/Serial Terminal Emulator<br />
                                 Built with Electron, React, & TypeScript
                             </p>
 
-                            <p style={{ color: '#888', margin: '0 0 8px 0', lineHeight: '1.4' }}>
+                            <p style={{ color: 'var(--text-tertiary)', margin: '0 0 8px 0', lineHeight: '1.4' }}>
                                 This program is free software released under the<br />
                                 GNU General Public License v3.0 or later.
                             </p>
@@ -442,7 +442,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                         e.preventDefault();
                                         electronService.openExternal('https://www.gnu.org/licenses/gpl-3.0.html');
                                     }}
-                                    style={{ color: '#64b5f6', textDecoration: 'none' }}
+                                    style={{ color: 'var(--link-color)', textDecoration: 'none' }}
                                 >
                                     View GNU General Public License v3.0
                                 </a>

@@ -14,7 +14,7 @@
 .message-modal {
     background-color: var(--bg-secondary);
     border-radius: 6px;
-    box-shadow: var(--modal-shadow);
+    box-shadow: 0 4px 16px var(--modal-shadow);
     width: 450px;
     max-width: 90vw;
     display: flex;
@@ -63,13 +63,13 @@
 /* Header colors per type */
 .message-modal.error h3 {
     background-color: var(--modal-header-error-bg);
-    border-bottom: 1px solid var(--modal-header-error-border);
+    border-bottom: 1px solid var(--modal-border-error);
     color: var(--modal-header-error-text);
 }
 
 .message-modal.success h3 {
     background-color: var(--modal-header-success-bg);
-    border-bottom: 1px solid var(--modal-header-success-border);
+    border-bottom: 1px solid var(--modal-border-success);
     color: var(--modal-header-success-text);
 }
 
@@ -102,7 +102,7 @@
 .message-btn {
     padding: 6px 20px;
     border: none;
-    border-radius: 2px;
+    border-radius: 4px;
     font-size: calc(var(--font-size-base) - 1px);
     cursor: pointer;
     background-color: var(--btn-secondary-bg);

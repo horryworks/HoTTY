@@ -13,11 +13,19 @@ vi.mock('../../services/electronService', () => ({
 }));
 
 // Mock useSettings
-vi.mock('../../hooks/useSettings', () => ({
-    useSettings: () => ({
-        settings: { lineWrapEnabled: false },
-    }),
+const mockUseSettings = vi.fn(() => ({
+    settings: { lineWrapEnabled: false },
 }));
+vi.mock('../../hooks/useSettings', () => ({
+    useSettings: () => mockUseSettings(),
+}));
+
+// Mock ResizeObserver (not available in jsdom)
+vi.stubGlobal('ResizeObserver', class {
+    observe() {}
+    disconnect() {}
+    unobserve() {}
+});
 
 // Mock crypto.randomUUID
 let uuidCounter = 0;
@@ -27,6 +35,7 @@ describe('TextEditorPane', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         uuidCounter = 0;
+        mockUseSettings.mockReturnValue({ settings: { lineWrapEnabled: false } });
     });
 
     it('renders with default empty state', () => {
@@ -428,5 +437,28 @@ describe('TextEditorPane', () => {
         );
         const tabEl = screen.getByTitle('C:\\test.txt');
         expect(tabEl.getAttribute('draggable')).toBe('true');
+    });
+
+    it('shows line numbers even when line wrap is enabled', () => {
+        mockUseSettings.mockReturnValue({ settings: { lineWrapEnabled: true } });
+        render(
+            <TextEditorPane
+                sessionId="test-1"
+                initialState={{
+                    tabs: [{
+                        id: 'tab-1',
+                        filePath: null,
+                        content: 'line1\nline2\nline3',
+                        savedContent: '',
+                        encoding: 'utf-8',
+                        lineEnding: 'CRLF',
+                    }],
+                    activeTabId: 'tab-1',
+                }}
+            />
+        );
+        expect(screen.getByText('1')).toBeTruthy();
+        expect(screen.getByText('2')).toBeTruthy();
+        expect(screen.getByText('3')).toBeTruthy();
     });
 });

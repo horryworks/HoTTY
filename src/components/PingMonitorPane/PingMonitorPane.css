@@ -246,7 +246,7 @@
 }
 
 .ping-status-fail {
-    color: var(--error-color);
+    color: var(--color-danger);
     font-weight: bold;
 }
 

@@ -135,6 +135,13 @@ function App() {
     };
   }, []);
 
+  const applyTerminalColors = (terminal: { foreground?: string; background?: string; backgroundInactive?: string; paneBackground?: string }) => {
+    updateTerminalForeground(terminal.foreground ?? '');
+    updateTerminalBackground(terminal.background ?? '');
+    updateTerminalBackgroundInactive(terminal.backgroundInactive ?? '');
+    updatePaneBackground(terminal.paneBackground ?? '');
+  };
+
   const applyTheme = (themeName: string) => {
     if (!themesData) return;
     const themeDef = themesData[themeName];
@@ -145,11 +152,7 @@ function App() {
         });
       }
       if (themeDef.terminal) {
-        const { foreground, background, backgroundInactive, paneBackground: pBg } = themeDef.terminal;
-        updateTerminalForeground(foreground ?? '');
-        updateTerminalBackground(background ?? '');
-        updateTerminalBackgroundInactive(backgroundInactive ?? '');
-        updatePaneBackground(pBg ?? '');
+        applyTerminalColors(themeDef.terminal);
       }
     }
   };
@@ -391,11 +394,7 @@ function App() {
     if (themesData) {
       const themeDef = themesData[newTheme];
       if (themeDef && themeDef.terminal) {
-        const { foreground, background, backgroundInactive, paneBackground: pBg } = themeDef.terminal;
-        updateTerminalForeground(foreground ?? '');
-        updateTerminalBackground(background ?? '');
-        updateTerminalBackgroundInactive(backgroundInactive ?? '');
-        updatePaneBackground(pBg ?? '');
+        applyTerminalColors(themeDef.terminal);
         if (settings.paneBackgroundMode !== 'image') updatePaneBackgroundMode('color');
       }
     }
@@ -487,7 +486,7 @@ function App() {
     border: '1px solid var(--border-color)',
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: bg || '#000000',
+    backgroundColor: bg || 'var(--bg-primary)',
     backgroundImage: bgMode === 'image' ? `url("${bgImage || ''}")` : 'none',
     backgroundSize: bgMode === 'image' ? 'auto' : 'auto',
     backgroundRepeat: 'repeat',

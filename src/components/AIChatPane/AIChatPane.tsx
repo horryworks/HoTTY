@@ -847,7 +847,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     };
 
 
-    const effectiveBg = getTransparentColor(terminalBackground || '#1e1e1e');
+    const effectiveBg = getTransparentColor(terminalBackground || 'var(--bg-primary)');
 
     return (
         <div className="ai-chat-pane" style={{ fontSize: `${fontSize}px`, backgroundColor: effectiveBg }}>

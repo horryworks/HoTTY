@@ -9,6 +9,8 @@ interface Tab {
     aiChatState?: Session['aiChatState'];
 }
 
+const NON_TERMINAL_TYPES = new Set<Tab['type']>(['ai', 'log-viewer', 'ping-monitor', 'text-editor']);
+
 interface TabBarProps {
     tabs: Tab[];
     activeTabId: string | null;
@@ -138,9 +140,9 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                 // AI tab always shows rainbow bar. Terminal tab shows it if watching OR explicitly linked from AI session.
                 const isGeminiLinked = tab.type === 'ai' || isWatching || tab.id === lastTargetSessionId;
 
-                // Determine if this is a terminal capable of being watched
-                const isTerminal = tab.type ? (tab.type !== 'ai' && tab.type !== 'log-viewer' && tab.type !== 'ping-monitor' && tab.type !== 'text-editor') :
-                    (tab.id.startsWith('ssh') || tab.id.startsWith('telnet') || tab.id.startsWith('wsl') || tab.id.startsWith('serial') || tab.id.startsWith('local'));
+                const isTerminal = tab.type
+                    ? !NON_TERMINAL_TYPES.has(tab.type)
+                    : (tab.id.startsWith('ssh') || tab.id.startsWith('telnet') || tab.id.startsWith('wsl') || tab.id.startsWith('serial') || tab.id.startsWith('local'));
 
                 return (
                     <div
@@ -169,7 +171,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                                         cursor: 'pointer',
                                         width: '14px',
                                         height: '14px',
-                                        color: isWatching ? 'var(--tab-watching-text, #4E86F8)' : 'var(--text-color)',
+                                        color: isWatching ? 'var(--tab-watching-text, #4E86F8)' : 'var(--tab-text)',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',

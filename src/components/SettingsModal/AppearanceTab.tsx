@@ -178,7 +178,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
             <div className="form-group">
                 <label>Empty Pane Background</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div style={{ display: 'flex', gap: '10px', color: '#ccc' }}>
+                    <div style={{ display: 'flex', gap: '8px', color: 'var(--text-secondary)' }}>
                         <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
                             <input
                                 type="radio"
@@ -298,7 +298,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
 
             <div className="form-group" style={{ paddingTop: '15px', borderTop: '1px solid var(--border-color)' }}>
                 <label>Prompt Highlight</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal', whiteSpace: 'nowrap' }}>
                         <input
                             type="checkbox"
@@ -312,7 +312,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                 {enablePromptHighlight && (
                     <>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' }}>
-                            <span style={{ color: '#ccc' }}>Highlight Color</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>Highlight Color</span>
                             <input
                                 type="color"
                                 value={promptHighlightColor}
@@ -372,7 +372,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                                                     onPromptPatternsChange(newPatterns);
                                                 }
                                             }}
-                                            style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
+                                            style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: 'var(--btn-danger-bg)', color: 'var(--text-primary)', border: 'none', borderRadius: '3px' }}
                                         >
                                             ✕
                                         </button>

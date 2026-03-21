@@ -70,6 +70,14 @@ export interface ElectronAPI {
     onPingMonitorData: (callback: (data: { sessionId: string; results: { target: string; status: string; rtt: number | null; ttl: number | null; timestamp: string }[] }) => void) => () => void;
     onPingMonitorLogFile: (callback: (data: { sessionId: string; fileName: string }) => void) => () => void;
 
+    // Text Editor
+    textEditorOpenFile: () => Promise<string | null>;
+    textEditorSaveFile: (defaultPath?: string) => Promise<string | null>;
+    textEditorReadFile: (filePath: string, encoding: string) => Promise<{ content: string; lineEnding: string }>;
+    textEditorWriteFile: (filePath: string, content: string, encoding: string) => Promise<void>;
+    getFilePath: (file: File) => string;
+    onOpenFileInEditor: (callback: (filePath: string) => void) => () => void;
+
     // Update notification
     onUpdateAvailable: (callback: (data: { version: string; releaseUrl: string }) => void) => () => void;
 }

@@ -60,6 +60,10 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
     const subtabListRef = useRef<HTMLDivElement>(null);
     const findInputRef = useRef<HTMLInputElement>(null);
     const gotoInputRef = useRef<HTMLInputElement>(null);
+    const measurerRef = useRef<HTMLDivElement | null>(null);
+
+    // Visual line numbers: number for the first visual row of each logical line, '' for wrapped rows
+    const [visualLineNumbers, setVisualLineNumbers] = useState<(number | '')[]>([1]);
 
     // Get the active tab
     const activeTab = tabs.find(t => t.id === activeTabId) ?? tabs[0];
@@ -111,6 +115,65 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
             lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
         }
     }, []);
+
+    // Compute visual line numbers, accounting for line wrap
+    const computeVisualLineNumbers = useCallback(() => {
+        const lines = activeTab.content.split('\n');
+        if (!lineWrapEnabled) {
+            setVisualLineNumbers(lines.map((_, i) => i + 1));
+            return;
+        }
+        const ta = textareaRef.current;
+        if (!ta) return;
+        const style = window.getComputedStyle(ta);
+        const lineHeightPx = parseFloat(style.lineHeight);
+        const paddingLeft = parseFloat(style.paddingLeft);
+        const paddingRight = parseFloat(style.paddingRight);
+        const innerWidth = ta.clientWidth - paddingLeft - paddingRight;
+        if (innerWidth <= 0 || !isFinite(lineHeightPx) || lineHeightPx <= 0) {
+            setVisualLineNumbers(lines.map((_, i) => i + 1));
+            return;
+        }
+        if (!measurerRef.current) {
+            measurerRef.current = document.createElement('div');
+            document.body.appendChild(measurerRef.current);
+        }
+        const measurer = measurerRef.current;
+        measurer.style.cssText = [
+            'position:fixed',
+            'top:-9999px',
+            'left:-9999px',
+            'visibility:hidden',
+            'pointer-events:none',
+            `width:${innerWidth}px`,
+            `font-family:${style.fontFamily}`,
+            `font-size:${style.fontSize}`,
+            `line-height:${style.lineHeight}`,
+            'white-space:pre-wrap',
+            'word-wrap:break-word',
+            'tab-size:4',
+            'padding:0',
+            'margin:0',
+            'border:none',
+            'overflow:hidden',
+        ].join(';');
+        // Batch write all lines then read heights in one pass — avoids O(n) reflows.
+        const spans = lines.map(line => {
+            const el = document.createElement('div');
+            el.textContent = line || '\u200b';
+            return el;
+        });
+        measurer.replaceChildren(...spans);
+        const heights = spans.map(el => el.offsetHeight);
+        measurer.replaceChildren();
+        const result: (number | '')[] = [];
+        heights.forEach((height, i) => {
+            const visualCount = Math.max(1, Math.round(height / lineHeightPx));
+            result.push(i + 1);
+            for (let j = 1; j < visualCount; j++) result.push('');
+        });
+        setVisualLineNumbers(result);
+    }, [activeTab.content, lineWrapEnabled]);
 
     // Update cursor position
     const updateCursorPosition = useCallback(() => {
@@ -429,13 +492,13 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
         if (!initialState?.tabs) return;
         initialState.tabs.forEach(tab => {
             if (tab.filePath && !tab.content) {
-                electronService.textEditorReadFile(tab.filePath, tab.encoding || 'utf-8').then((result: any) => {
+                electronService.textEditorReadFile(tab.filePath, tab.encoding || 'utf-8').then((result: { content: string; lineEnding: string }) => {
                     updateTab(tab.id, {
                         content: result.content,
                         savedContent: result.content,
                         lineEnding: result.lineEnding as 'LF' | 'CRLF',
                     });
-                }).catch((err: any) => {
+                }).catch((err: unknown) => {
                     console.error('Failed to load file:', err);
                 });
             }
@@ -443,9 +506,30 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Line numbers
-    const lineCount = activeTab.content.split('\n').length;
-    const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
+    // Cleanup measurer div on unmount
+    useEffect(() => {
+        return () => {
+            if (measurerRef.current) {
+                document.body.removeChild(measurerRef.current);
+                measurerRef.current = null;
+            }
+        };
+    }, []);
+
+    // Recompute visual line numbers whenever content or wrap setting changes
+    useEffect(() => {
+        computeVisualLineNumbers();
+    }, [computeVisualLineNumbers]);
+
+    // Recompute on textarea resize (relevant when line wrap is on)
+    useEffect(() => {
+        if (!lineWrapEnabled) return;
+        const ta = textareaRef.current;
+        if (!ta) return;
+        const observer = new ResizeObserver(() => computeVisualLineNumbers());
+        observer.observe(ta);
+        return () => observer.disconnect();
+    }, [lineWrapEnabled, computeVisualLineNumbers]);
 
     // Encoding change handler
     const handleEncodingChange = useCallback(async (newEncoding: string) => {
@@ -483,6 +567,7 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
     // Sub-tab drag reorder
     const [dragTabId, setDragTabId] = useState<string | null>(null);
     const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+    const [dropAtEnd, setDropAtEnd] = useState(false);
 
     const handleTabDragStart = useCallback((e: React.DragEvent, tabId: string) => {
         setDragTabId(tabId);
@@ -498,6 +583,7 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         setDropTargetId(tabId);
+        setDropAtEnd(false);
     }, [dragTabId]);
 
     const handleTabDrop = useCallback((e: React.DragEvent, targetTabId: string) => {
@@ -506,6 +592,7 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
         if (!dragTabId || dragTabId === targetTabId) {
             setDragTabId(null);
             setDropTargetId(null);
+            setDropAtEnd(false);
             return;
         }
         setTabs(prev => {
@@ -520,12 +607,41 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
         });
         setDragTabId(null);
         setDropTargetId(null);
+        setDropAtEnd(false);
     }, [dragTabId, syncState]);
 
     const handleTabDragEnd = useCallback(() => {
         setDragTabId(null);
         setDropTargetId(null);
+        setDropAtEnd(false);
     }, []);
+
+    const handleSubtabListDragOver = useCallback((e: React.DragEvent) => {
+        if (e.target !== e.currentTarget) return;
+        if (!dragTabId) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setDropTargetId(null);
+        setDropAtEnd(true);
+    }, [dragTabId]);
+
+    const handleSubtabListDrop = useCallback((e: React.DragEvent) => {
+        if (e.target !== e.currentTarget) return;
+        if (!dragTabId) return;
+        e.preventDefault();
+        setDropAtEnd(false);
+        setTabs(prev => {
+            const fromIdx = prev.findIndex(t => t.id === dragTabId);
+            if (fromIdx === -1 || fromIdx === prev.length - 1) return prev;
+            const next = [...prev];
+            const [moved] = next.splice(fromIdx, 1);
+            next.push(moved);
+            syncState(next);
+            return next;
+        });
+        setDragTabId(null);
+        setDropTargetId(null);
+    }, [dragTabId, syncState]);
 
     // Drag & drop file support
     const [isDragOver, setIsDragOver] = useState(false);
@@ -621,14 +737,15 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
         >
             {/* Sub-tab bar */}
             <div className="text-editor-subtab-bar">
-                <div className="text-editor-subtab-list" ref={subtabListRef}>
-                    {tabs.map(tab => {
+                <div className="text-editor-subtab-list" ref={subtabListRef} onDragOver={handleSubtabListDragOver} onDrop={handleSubtabListDrop}>
+                    {tabs.map((tab, tabIndex) => {
                         const fileName = tab.filePath ? tab.filePath.replace(/^.*[\\/]/, '') : 'Untitled';
                         const isDirty = tab.content !== tab.savedContent;
+                        const isLastTab = tabIndex === tabs.length - 1;
                         return (
                             <div
                                 key={tab.id}
-                                className={`text-editor-subtab ${tab.id === activeTabId ? 'active' : ''}${dragTabId === tab.id ? ' dragging' : ''}${dropTargetId === tab.id ? ' drop-target' : ''}`}
+                                className={`text-editor-subtab ${tab.id === activeTabId ? 'active' : ''}${dragTabId === tab.id ? ' dragging' : ''}${dropTargetId === tab.id ? ' drop-target' : ''}${dropAtEnd && isLastTab ? ' drop-target-right' : ''}`}
                                 onClick={() => switchTab(tab.id)}
                                 onMouseDown={(e) => handleSubTabMouseDown(e, tab.id)}
                                 title={tab.filePath || 'Untitled'}
@@ -823,13 +940,11 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
 
             {/* Editor area */}
             <div className="text-editor-container">
-                {!lineWrapEnabled && (
-                    <div className="text-editor-line-numbers" ref={lineNumbersRef}>
-                        {lineNumbers.map(n => (
-                            <div key={n} className="text-editor-line-number">{n}</div>
-                        ))}
-                    </div>
-                )}
+                <div className="text-editor-line-numbers" ref={lineNumbersRef}>
+                    {visualLineNumbers.map((n, i) => (
+                        <div key={i} className="text-editor-line-number">{n}</div>
+                    ))}
+                </div>
                 <textarea
                     ref={textareaRef}
                     className="text-editor-textarea"
@@ -858,12 +973,12 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
             {showGoto && (
                 <div className="text-editor-goto-overlay" onClick={() => setShowGoto(false)}>
                     <div className="text-editor-goto-dialog" onClick={e => e.stopPropagation()}>
-                        <label>Go to Line (1-{lineCount}):</label>
+                        <label>Go to Line (1-{activeTab.content.split('\n').length}):</label>
                         <input
                             ref={gotoInputRef}
                             type="number"
                             min={1}
-                            max={lineCount}
+                            max={activeTab.content.split('\n').length}
                             value={gotoValue}
                             onChange={e => setGotoValue(e.target.value)}
                             onKeyDown={e => {

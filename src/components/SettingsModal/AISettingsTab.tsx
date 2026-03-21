@@ -141,7 +141,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                             width: '10px',
                             height: '10px',
                             borderRadius: '50%',
-                            backgroundColor: isAiAuthenticated ? '#4caf50' : '#f44336'
+                            backgroundColor: isAiAuthenticated ? 'var(--status-success)' : 'var(--status-error)'
                         }}></div>
                         <span>{isAiAuthenticated ? 'Authenticated' : 'Not Authenticated'}</span>
                     </div>
@@ -262,7 +262,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                                     }}
                                 >
                                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                        <span style={{ cursor: 'grab', color: '#888', userSelect: 'none' }}>☰</span>
+                                        <span style={{ cursor: 'grab', color: 'var(--text-tertiary)', userSelect: 'none' }}>☰</span>
                                         <input
                                             type="text"
                                             value={cmd.label}
@@ -280,7 +280,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                                                 const newCommands = activePersona.askAiCommands.filter((_, i) => i !== index);
                                                 updatePersonaCommands(activeTabId, newCommands);
                                             }}
-                                            style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
+                                            style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: 'var(--btn-danger-bg)', color: 'var(--text-primary)', border: 'none', borderRadius: '3px' }}
                                         >
                                             ✕
                                         </button>
@@ -303,14 +303,14 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                                             boxSizing: 'border-box'
                                         }}
                                     />
-                                    <div style={{ color: '#888' }}>
+                                    <div style={{ color: 'var(--text-tertiary)' }}>
                                         Use <code>{'{selection}'}</code> placeholder for the selected text.
                                     </div>
                                 </div>
                             ))}
                         </div>
 
-                        <div style={{ display: 'flex', gap: '10px' }}>
+                        <div style={{ display: 'flex', gap: '8px' }}>
                             <button
                                 onClick={() => {
                                     const id = crypto.randomUUID();
@@ -351,8 +351,8 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                             style={{
                                 padding: '6px 12px',
                                 cursor: 'pointer',
-                                backgroundColor: '#d32f2f',
-                                color: 'white',
+                                backgroundColor: 'var(--btn-danger-bg)',
+                                color: 'var(--text-primary)',
                                 border: 'none',
                                 borderRadius: '3px',
                             }}
@@ -372,7 +372,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                             onActivePersonaIdChange(DEFAULT_PERSONAS[0].id);
                         }
                     }}
-                    style={{ padding: '6px 12px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
+                    style={{ padding: '6px 12px', cursor: 'pointer', backgroundColor: 'var(--btn-danger-bg)', color: 'var(--text-primary)', border: 'none', borderRadius: '3px' }}
                 >
                     Reset All Personas
                 </button>
@@ -392,7 +392,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         className="settings-input"
                         style={{ width: '120px', padding: '6px' }}
                     />
-                    <span style={{ fontSize: '0.9em', color: 'var(--text-muted)' }}>
+                    <span style={{ fontSize: '0.9em', color: 'var(--text-secondary)' }}>
                         Default: 500,000. Higher limits consume more memory.
                     </span>
                 </div>
@@ -411,7 +411,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         className="settings-input"
                         style={{ width: '120px', padding: '6px' }}
                     />
-                    <span style={{ fontSize: '0.9em', color: 'var(--text-muted)' }}>
+                    <span style={{ fontSize: '0.9em', color: 'var(--text-secondary)' }}>
                         Default: 10,000 (10s). Wait time after prompt detection before sending to AI.
                     </span>
                 </div>

@@ -12,9 +12,9 @@
 .connection-dialog {
     background-color: var(--bg-secondary);
     padding: 20px;
-    border-radius: 5px;
+    border-radius: 6px;
     width: 300px;
-    box-shadow: 0 4px 6px var(--modal-shadow, rgba(0, 0, 0, 0.3));
+    box-shadow: 0 4px 16px var(--modal-shadow);
     color: var(--text-primary);
     max-height: 90vh;
     overflow-y: auto;
@@ -37,7 +37,7 @@
     flex: 1;
     min-height: 0;
     /* allow flex shrink */
-    border: 1px solid var(--border-color, #333);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     overflow: hidden;
 }
@@ -54,12 +54,12 @@
     width: 5px;
     flex-shrink: 0;
     cursor: col-resize;
-    background: var(--border-color, #333);
+    background: var(--border-color);
     transition: background 0.15s;
 }
 
 .panel-divider:hover {
-    background: var(--accent-color, #4a7fb0);
+    background: var(--accent-color);
 }
 
 /* Right form panel */
@@ -77,7 +77,7 @@
     width: 18px;
     height: 18px;
     cursor: nwse-resize;
-    background: linear-gradient(135deg, transparent 40%, var(--border-color, #555) 40%, var(--border-color, #555) 50%, transparent 50%, transparent 65%, var(--border-color, #555) 65%, var(--border-color, #555) 75%, transparent 75%);
+    background: linear-gradient(135deg, transparent 40%, var(--border-color) 40%, var(--border-color) 50%, transparent 50%, transparent 65%, var(--border-color) 65%, var(--border-color) 75%, transparent 75%);
     opacity: 0.6;
     border-radius: 0 0 4px 0;
 }
@@ -95,22 +95,22 @@
 }
 
 .form-group {
-    margin-bottom: 8px;
+    margin-bottom: 10px;
 }
 
 .form-group label {
     display: block;
     margin-bottom: 3px;
-    font-size: calc(var(--font-size-base) - 2px);
+    font-size: calc(var(--font-size-base) - 1px);
 }
 
 .form-group input {
     width: 100%;
-    padding: 5px 6px;
+    padding: 5px 8px;
     background-color: var(--input-bg);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
-    border-radius: 3px;
+    border-radius: 4px;
     box-sizing: border-box;
     transition: border-color 0.2s;
 }
@@ -131,7 +131,7 @@
     color: var(--text-on-accent);
     border: none;
     padding: 6px 12px;
-    border-radius: 3px;
+    border-radius: 4px;
     cursor: pointer;
     font-size: calc(var(--font-size-base) - 1px);
 }
@@ -152,11 +152,11 @@
 
 .form-group select {
     width: 100%;
-    padding: 5px 6px;
+    padding: 5px 8px;
     background-color: var(--input-bg);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
-    border-radius: 3px;
+    border-radius: 4px;
     box-sizing: border-box;
     /* Ensure options inherit correct colors */
     appearance: none;
@@ -177,23 +177,22 @@
 /* The input needs to have the indicator always visible if possible, but standard behavior usually hides it until hover/focus */
 /* However, user wants it unified. Ensuring it displays similarly to select arrow */
 .form-group input::-webkit-calendar-picker-indicator {
-    /* appearance: none is crucial to remove default arrow rendering */
     appearance: none;
     -webkit-appearance: none;
     display: block;
-    background-image: var(--select-arrow);
+    background-image:
+        linear-gradient(45deg, var(--text-secondary) 33.3%, transparent 33.3%),
+        linear-gradient(315deg, var(--text-secondary) 33.3%, transparent 33.3%);
     background-repeat: no-repeat;
-    background-position: center;
-    background-size: 16px;
+    background-position: calc(50% - 3px) calc(50% + 2px), calc(50% + 3px) calc(50% + 2px);
+    background-size: 6px 6px, 6px 6px;
     width: 16px;
     height: 100%;
     cursor: pointer;
     opacity: 1 !important;
-    /* Force opacity */
     margin-right: 2px;
     color: transparent;
     transition: none;
-    /* remove default transition if any */
 }
 
 /* Hover state for the indicator */
@@ -202,5 +201,5 @@
 }
 
 .decrypting-placeholder {
-    color: var(--error-color, red) !important;
+    color: var(--color-danger) !important;
 }

@@ -23,12 +23,12 @@ interface LineData {
 }
 
 const COLORS = [
-    '#007acc', // blue
-    '#4ec9b0', // teal
-    '#ce9178', // orange
-    '#c586c0', // purple
-    '#dcdcaa', // yellow
-    '#9cdcfe', // light blue
+    'var(--pane-color-1)',
+    'var(--pane-color-2)',
+    'var(--pane-color-3)',
+    'var(--pane-color-4)',
+    'var(--pane-color-5)',
+    'var(--pane-color-6)',
 ];
 
 export const PaneLines: React.FC<PaneLinesProps> = ({
@@ -57,9 +57,7 @@ export const PaneLines: React.FC<PaneLinesProps> = ({
                 const pId = parseInt(paneId);
                 if ((isNaN(pId) || pId >= totalPanes) && !validNonNumericIds.includes(paneId)) return;
 
-                // Find the tab element
                 const tabEl = document.querySelector(`[data-session-id="${sessionId}"]`);
-                // Find the pane element
                 const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`);
 
                 if (tabEl && paneEl) {

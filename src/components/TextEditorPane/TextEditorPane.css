@@ -25,6 +25,7 @@
 
 .text-editor-subtab-list {
     display: flex;
+    flex: 1;
     align-items: flex-start;
     min-width: 0;
     overflow-x: auto;
@@ -60,7 +61,7 @@
 .text-editor-subtab.active {
     background: var(--ai-header-bg);
     color: var(--text-primary);
-    border-bottom: 2px solid var(--focus-border, #4E86F8);
+    border-bottom: 2px solid var(--accent-color);
 }
 
 .text-editor-subtab-title {
@@ -70,7 +71,7 @@
 }
 
 .text-editor-subtab-dirty {
-    color: var(--focus-border, #4E86F8);
+    color: var(--accent-color);
 }
 
 .text-editor-subtab-close {
@@ -106,7 +107,18 @@
     bottom: 0;
     left: 0;
     width: 2px;
-    background-color: var(--focus-border, #4E86F8);
+    background-color: var(--accent-color);
+    z-index: 20;
+}
+
+.text-editor-subtab.drop-target-right::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 2px;
+    background-color: var(--accent-color);
     z-index: 20;
 }
 
@@ -168,7 +180,7 @@
     position: absolute;
     top: 100%;
     left: 0;
-    background: var(--dropdown-bg, var(--bg-primary));
+    background: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     min-width: 180px;
@@ -249,7 +261,7 @@
 }
 
 .text-editor-find-input:focus {
-    border-color: var(--focus-border, #4E86F8);
+    border-color: var(--accent-color);
 }
 
 .text-editor-find-btn {
@@ -337,7 +349,7 @@
 }
 
 .text-editor-textarea::selection {
-    background: var(--selection-bg, rgba(78, 134, 248, 0.3));
+    background: var(--selection-bg, color-mix(in srgb, var(--accent-color) 30%, transparent));
 }
 
 /* ── Encoding / Line Ending Dropdown ── */
@@ -345,7 +357,7 @@
     position: absolute;
     bottom: 100%;
     right: 0;
-    background: var(--dropdown-bg, var(--bg-primary));
+    background: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     min-width: 120px;
@@ -367,7 +379,7 @@
 }
 
 .text-editor-select-item.selected {
-    color: var(--focus-border, #4E86F8);
+    color: var(--accent-color);
 }
 
 /* ── Go To Line Dialog ── */
@@ -386,7 +398,7 @@
 }
 
 .text-editor-goto-dialog {
-    background: var(--dropdown-bg, var(--bg-primary));
+    background: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     padding: 12px 16px;
@@ -414,7 +426,7 @@
 }
 
 .text-editor-goto-dialog input:focus {
-    border-color: var(--focus-border, #4E86F8);
+    border-color: var(--accent-color);
 }
 
 /* ── Drop Overlay ── */
@@ -429,7 +441,7 @@
     justify-content: center;
     z-index: 300;
     background: var(--modal-overlay-bg, rgba(0, 0, 0, 0.5));
-    border: 2px dashed var(--focus-border, #4E86F8);
+    border: 2px dashed var(--accent-color);
     pointer-events: none;
 }
 
@@ -440,5 +452,5 @@
     padding: 12px 24px;
     background: var(--bg-primary);
     border-radius: 8px;
-    border: 1px solid var(--focus-border, #4E86F8);
+    border: 1px solid var(--accent-color);
 }

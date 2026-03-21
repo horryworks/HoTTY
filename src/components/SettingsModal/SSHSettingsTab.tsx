@@ -66,7 +66,7 @@ export const SSHSettingsTab: React.FC<SSHSettingsTabProps> = ({
                     </div>
                     {sshKeepAliveEnabled && (
                         <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ color: '#ccc' }}>Interval (seconds):</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>Interval (seconds):</span>
                             <input
                                 type="number"
                                 value={sshKeepAliveInterval}
@@ -87,7 +87,7 @@ export const SSHSettingsTab: React.FC<SSHSettingsTabProps> = ({
                         <div className="ssh-algorithms-container" style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '10px' }}>
                             {Object.keys(sshAlgorithms).map(category => (
                                 <div key={category} style={{ marginBottom: '15px' }}>
-                                    <h4 style={{ margin: '0 0 8px 0', color: '#aaa', textTransform: 'capitalize' }}>
+                                    <h4 style={{ margin: '0 0 8px 0', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
                                         {category === 'serverHostKey' ? 'Server Host Key' : category}
                                     </h4>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px' }}>
@@ -133,7 +133,7 @@ export const SSHSettingsTab: React.FC<SSHSettingsTabProps> = ({
                     </div>
                     {telnetKeepAliveEnabled && (
                         <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ color: '#ccc' }}>Interval (seconds):</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>Interval (seconds):</span>
                             <input
                                 type="number"
                                 value={telnetKeepAliveInterval}
@@ -168,7 +168,7 @@ export const SSHSettingsTab: React.FC<SSHSettingsTabProps> = ({
             </div>
             {loggingEnabled && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <label style={{ color: '#ccc' }}>Log Folder Path</label>
+                    <label style={{ color: 'var(--text-secondary)' }}>Log Folder Path</label>
                     <div style={{ display: 'flex', gap: '8px' }}>
                         <input
                             type="text"
@@ -206,7 +206,7 @@ export const SSHSettingsTab: React.FC<SSHSettingsTabProps> = ({
                         max={100000}
                         style={{ width: '100px' }}
                     />
-                    <span style={{ color: '#ccc' }}>lines</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>lines</span>
                 </div>
                 <p className="settings-help">Max lines to keep in memory per terminal (Default: 10000).</p>
             </div>

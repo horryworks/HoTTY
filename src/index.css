@@ -85,10 +85,11 @@ select {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  background-image: var(--select-arrow);
+  background-image:
+    linear-gradient(45deg, var(--text-secondary) 33.3%, transparent 33.3%),
+    linear-gradient(315deg, var(--text-secondary) 33.3%, transparent 33.3%);
   background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 16px;
+  background-position: calc(100% - 18px) calc(50% + 2px), calc(100% - 12px) calc(50% + 2px);
+  background-size: 6px 6px, 6px 6px;
   padding-right: 32px !important;
-  /* Ensure space for arrow */
 }

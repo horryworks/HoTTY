@@ -54,7 +54,7 @@
     bottom: 0;
     left: 0;
     width: 2px;
-    background-color: var(--focus-border, #4E86F8);
+    background-color: var(--accent-color);
     z-index: 20;
 }
 
@@ -69,7 +69,7 @@
     bottom: 0;
     right: 0;
     width: 2px;
-    background-color: var(--focus-border, #4E86F8);
+    background-color: var(--accent-color);
     z-index: 20;
 }
 
@@ -87,7 +87,7 @@
 }
 
 .tab.active {
-    background-color: var(--tab-active-bg);
+    background-color: var(--bg-primary);
     color: var(--tab-active-text);
 }
 

@@ -22,12 +22,12 @@ const THEME_SECTIONS: { title: string; description: string; keys: string[] }[] =
     {
         title: 'Backgrounds & Text',
         description: 'Main background and text colors',
-        keys: ['bg-primary', 'bg-secondary', 'bg-tertiary', 'panel-bg', 'text-primary', 'text-secondary', 'text-on-accent'],
+        keys: ['bg-primary', 'bg-secondary', 'bg-tertiary', 'text-primary', 'text-secondary', 'text-tertiary', 'text-on-accent'],
     },
     {
         title: 'Borders & Accents',
         description: 'Border colors and accent/highlight colors',
-        keys: ['border-color', 'accent-color', 'accent-hover', 'accent-light', 'accent-secondary', 'active-pane-color'],
+        keys: ['border-color', 'accent-color', 'accent-hover', 'accent-light', 'accent-secondary', 'link-color'],
     },
     {
         title: 'Inputs, Buttons & Hovers',
@@ -37,17 +37,17 @@ const THEME_SECTIONS: { title: string; description: string; keys: string[] }[] =
     {
         title: 'Status & Signals',
         description: 'Success, error, warning, and danger indicator colors',
-        keys: ['success-color', 'error-color', 'color-danger', 'color-danger-bg', 'color-danger-bg-hover', 'color-danger-border', 'color-warning'],
+        keys: ['success-color', 'status-success', 'status-error', 'color-danger', 'color-danger-bg', 'color-danger-bg-hover', 'color-danger-border', 'color-warning'],
     },
     {
         title: 'AI Chat (Gemini)',
         description: 'Colors for AI chat messages and code blocks',
-        keys: ['chat-msg-user-bg', 'chat-msg-model-bg', 'chat-msg-user-text', 'chat-msg-model-text', 'code-bg', 'code-text', 'ai-header-bg', 'ai-welcome-text', 'ai-welcome-subtext'],
+        keys: ['chat-msg-user-bg', 'chat-msg-user-text', 'chat-msg-model-text', 'code-bg', 'code-text', 'ai-header-bg', 'ai-welcome-text', 'ai-welcome-subtext'],
     },
     {
         title: 'UI Specific Components',
         description: 'Sidebar, tabs, context menus, icons, and other UI elements',
-        keys: ['sidebar-bg', 'sidebar-btn-color', 'sidebar-btn-hover-bg', 'sidebar-btn-hover-color', 'sidebar-btn-active-bg', 'tab-bg', 'tab-text', 'tab-active-bg', 'tab-active-text', 'tab-close-bg', 'tab-close-hover-bg', 'tab-drag-indicator', 'tab-watching-text', 'tab-watching-bg', 'tab-watching-icon', 'tab-watching-icon-glow', 'context-menu-bg', 'context-menu-border', 'context-menu-text', 'context-menu-hover-bg', 'hidden-item-bg', 'hidden-item-bg-hover', 'tree-meta-color', 'icon-folder', 'icon-host', 'terminal-prompt-default', 'terminal-prompt-active'],
+        keys: ['sidebar-bg', 'sidebar-btn-color', 'sidebar-btn-hover-bg', 'sidebar-btn-hover-color', 'sidebar-btn-active-bg', 'tab-bg', 'tab-text', 'tab-active-text', 'tab-close-bg', 'tab-close-hover-bg', 'tab-watching-text', 'tab-watching-bg', 'tab-watching-icon', 'tab-watching-icon-glow', 'context-menu-bg', 'context-menu-border', 'context-menu-text', 'context-menu-hover-bg', 'hidden-item-bg', 'hidden-item-bg-hover', 'tree-meta-color', 'icon-folder', 'icon-host', 'terminal-prompt-default', 'terminal-prompt-active', 'pane-color-1', 'pane-color-2', 'pane-color-3', 'pane-color-4', 'pane-color-5', 'pane-color-6', 'resize-grip-shadow'],
     },
     {
         title: 'Search & Highlight',
@@ -57,7 +57,7 @@ const THEME_SECTIONS: { title: string; description: string; keys: string[] }[] =
     {
         title: 'Overlays & Modals',
         description: 'Modal dialogs, overlays, and notification banners',
-        keys: ['modal-overlay-bg', 'modal-shadow', 'modal-border-warning', 'modal-header-warning-bg', 'modal-header-warning-border', 'modal-header-warning-text', 'modal-border-error', 'modal-header-error-bg', 'modal-header-error-border', 'modal-header-error-text', 'modal-border-success', 'modal-header-success-bg', 'modal-header-success-border', 'modal-header-success-text', 'modal-header-info-bg', 'modal-header-info-border', 'modal-header-info-text'],
+        keys: ['modal-overlay-bg', 'modal-shadow', 'modal-border-warning', 'modal-header-warning-bg', 'modal-header-warning-text', 'modal-border-error', 'modal-header-error-bg', 'modal-header-error-text', 'modal-border-success', 'modal-header-success-bg', 'modal-header-success-text', 'modal-header-info-bg', 'modal-header-info-border', 'modal-header-info-text'],
     },
 ];
 
@@ -73,9 +73,9 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'bg-primary': 'The main background color for the application and active panes.',
     'bg-secondary': 'Background color for sidebars, headers, and UI elements.',
     'bg-tertiary': 'Background color for inactive tabs and dropdowns.',
-    'panel-bg': 'Background color for panel areas.',
     'text-primary': 'The main text color.',
     'text-secondary': 'Color for less important text or hints.',
+    'text-tertiary': 'Color for the dimmest level of text (e.g., drag handles, muted hints).',
     'text-on-accent': 'Text color used on top of accent-colored elements (e.g., buttons).',
     // Borders & Accents
     'border-color': 'Color for pane borders and dividers.',
@@ -83,7 +83,7 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'accent-hover': 'Hover state color for accented elements.',
     'accent-light': 'A lighter variation of the accent color.',
     'accent-secondary': 'A secondary accent color for additional highlights.',
-    'active-pane-color': 'Color used to highlight the currently active terminal pane.',
+    'link-color': 'Color for hyperlinks and URL-style references.',
     // Inputs, Buttons & Hovers
     'input-bg': 'Background color for text input fields and setting rows.',
     'btn-bg': 'Background color for standard buttons.',
@@ -96,7 +96,8 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'placeholder-color': 'Color for placeholder text in input fields.',
     // Status & Signals
     'success-color': 'Color used for success indicators (connection established, etc.).',
-    'error-color': 'General color for error messages.',
+    'status-success': 'Color for authenticated/success status indicator dots.',
+    'status-error': 'Color for unauthenticated/error status indicator dots.',
     'color-danger': 'Color indicating destructive actions or errors.',
     'color-danger-bg': 'Background tint for danger elements.',
     'color-danger-bg-hover': 'Hover background tint for danger elements.',
@@ -104,7 +105,6 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'color-warning': 'Color for warning or attention-required text.',
     // AI Chat (Gemini)
     'chat-msg-user-bg': 'Background color for messages sent by the user.',
-    'chat-msg-model-bg': 'Background color for messages from the AI.',
     'chat-msg-user-text': 'Text color for user messages.',
     'chat-msg-model-text': 'Text color for AI responses.',
     'code-bg': 'Background color for code blocks within the chat.',
@@ -113,7 +113,6 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'ai-welcome-text': 'Color for the large welcome heading.',
     'ai-welcome-subtext': 'Color for the descriptive text in the empty chat state.',
     // UI Specific Components
-    'select-arrow': 'An SVG data URL for the dropdown arrow icon.',
     'sidebar-bg': 'Background color specifically for the left sidebar.',
     'sidebar-btn-color': 'Icon/Text color for sidebar buttons (default).',
     'sidebar-btn-hover-bg': 'Background color when hovering over sidebar buttons.',
@@ -121,11 +120,9 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'sidebar-btn-active-bg': 'Background color for the currently selected sidebar button.',
     'tab-bg': 'Background color for inactive tabs.',
     'tab-text': 'Text color for inactive tabs.',
-    'tab-active-bg': 'Background color for the currently selected tab.',
     'tab-active-text': 'Text color for the currently selected tab.',
     'tab-close-bg': 'Color of the tab\'s close button.',
     'tab-close-hover-bg': 'Hover color of the tab\'s close button.',
-    'tab-drag-indicator': 'Color of the line indicating tab insertion position.',
     'tab-watching-text': 'Text color for a tab that is currently being monitored by AI.',
     'tab-watching-bg': 'Background/fill color for the AI monitoring icon in a tab.',
     'tab-watching-icon': 'Primary glow color for the AI monitoring icon.',
@@ -141,6 +138,13 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'icon-host': 'Color for host/connection icons in the host tree.',
     'terminal-prompt-default': 'Default color for terminal prompt marker blocks.',
     'terminal-prompt-active': 'Active color for terminal prompt marker blocks when detected as command input.',
+    'pane-color-1': 'Color 1 of 6 used for tab-to-pane connection lines.',
+    'pane-color-2': 'Color 2 of 6 used for tab-to-pane connection lines.',
+    'pane-color-3': 'Color 3 of 6 used for tab-to-pane connection lines.',
+    'pane-color-4': 'Color 4 of 6 used for tab-to-pane connection lines.',
+    'pane-color-5': 'Color 5 of 6 used for tab-to-pane connection lines.',
+    'pane-color-6': 'Color 6 of 6 used for tab-to-pane connection lines.',
+    'resize-grip-shadow': 'Color for the stripe pattern on the resize grip handle.',
     // Search & Highlight
     'search-highlight-bg': 'Background tint for lines that contain a search match.',
     'search-highlight-current-bg': 'Background for the currently focused search match line.',
@@ -150,18 +154,15 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'search-highlight-mark-text': 'Text color for highlighted match spans.',
     // Overlays & Modals
     'modal-overlay-bg': 'Background dimming for modal dialogs.',
-    'modal-shadow': 'Shadow effects for modals.',
-    'modal-border-warning': 'Border color for warning modals.',
+    'modal-shadow': 'Shadow color for modals (rgba). The shadow geometry is fixed at 0 4px 16px.',
+    'modal-border-warning': 'Border color for warning modals (applied to both the modal container and the header separator).',
     'modal-header-warning-bg': 'Header background for warning modals.',
-    'modal-header-warning-border': 'Header border for warning modals.',
     'modal-header-warning-text': 'Header text for warning modals.',
-    'modal-border-error': 'Border color for error modals.',
+    'modal-border-error': 'Border color for error modals (applied to both the modal container and the header separator).',
     'modal-header-error-bg': 'Header background for error modals.',
-    'modal-header-error-border': 'Header border for error modals.',
     'modal-header-error-text': 'Header text for error modals.',
-    'modal-border-success': 'Border color for success modals.',
+    'modal-border-success': 'Border color for success modals (applied to both the modal container and the header separator).',
     'modal-header-success-bg': 'Header background for success modals.',
-    'modal-header-success-border': 'Header border for success modals.',
     'modal-header-success-text': 'Header text for success modals.',
     'modal-header-info-bg': 'Header background for info modals.',
     'modal-header-info-border': 'Header border for info modals.',
@@ -170,6 +171,9 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
 
 const isSimpleHexColor = (value: string): boolean =>
     /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(value.trim());
+
+const isPureCssColor = (value: string): boolean =>
+    /^(rgba?|hsla?)\s*\([^)]+\)$/i.test(value.trim());
 
 const nameToKey = (name: string): string =>
     name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/g, '');
@@ -379,26 +383,8 @@ interface VariableRowProps {
 }
 
 const VariableRow: React.FC<VariableRowProps> = ({ varKey, value, description, onChange }) => {
-    const isColor = isSimpleHexColor(value);
-    const isComplex = varKey === 'select-arrow' || varKey === 'modal-shadow';
-
-    if (isComplex) {
-        return (
-            <div className="ctc-row">
-                <div className="ctc-row-info">
-                    <span className="ctc-var-key" title={description}>{varKey}</span>
-                </div>
-                <div className="ctc-row-controls">
-                    <input
-                        type="text"
-                        className="ctc-text-input ctc-text-input--wide"
-                        value={value}
-                        onChange={e => onChange(varKey, e.target.value)}
-                    />
-                </div>
-            </div>
-        );
-    }
+    const isHex = isSimpleHexColor(value);
+    const isCssColor = isPureCssColor(value);
 
     return (
         <div className="ctc-row">
@@ -406,12 +392,19 @@ const VariableRow: React.FC<VariableRowProps> = ({ varKey, value, description, o
                 <span className="ctc-var-key" title={description}>{varKey}</span>
             </div>
             <div className="ctc-row-controls">
-                {isColor && (
+                {isHex && (
                     <input
                         type="color"
                         className="ctc-color-picker"
                         value={value.slice(0, 7)}
                         onChange={e => onChange(varKey, e.target.value)}
+                    />
+                )}
+                {isCssColor && (
+                    <span
+                        className="ctc-color-swatch"
+                        style={{ backgroundColor: value }}
+                        title={value}
                     />
                 )}
                 <input

@@ -21,9 +21,9 @@ These values are applied as CSS variables (e.g., `--bg-primary`).
 - `bg-primary`: The main background color for the application and active panes.
 - `bg-secondary`: Background color for sidebars, headers, and UI elements.
 - `bg-tertiary`: Background color for inactive tabs and dropdowns.
-- `panel-bg`: Background color for specific panels (e.g., host tree, side sections).
 - `text-primary`: The main text color.
 - `text-secondary`: Color for less important text or hints.
+- `text-tertiary`: Color for the dimmest level of text (e.g., drag handles, muted hints).
 - `text-on-accent`: Text color used on top of accent-colored elements (e.g., buttons).
 
 ### Borders & Accents
@@ -32,7 +32,7 @@ These values are applied as CSS variables (e.g., `--bg-primary`).
 - `accent-hover`: Hover state color for accented elements.
 - `accent-light`: A lighter variation of the accent color.
 - `accent-secondary`: A secondary accent color for additional highlights.
-- `active-pane-color`: Color used to highlight the currently active terminal pane.
+- `link-color`: Color for hyperlinks and URL-style references.
 
 ### Inputs, Buttons & Hovers
 - `input-bg`: Background color for text input fields and setting rows.
@@ -47,7 +47,8 @@ These values are applied as CSS variables (e.g., `--bg-primary`).
 
 ### Status & Signals
 - `success-color`: Color used for success indicators (connection established, etc.).
-- `error-color`: General color for error messages.
+- `status-success`: Color for authenticated/success status indicator dots.
+- `status-error`: Color for unauthenticated/error status indicator dots.
 - `color-danger`: Color indicating destructive actions or errors.
 - `color-danger-bg`: Background tint for danger elements.
 - `color-danger-bg-hover`: Hover background tint for danger elements.
@@ -56,7 +57,6 @@ These values are applied as CSS variables (e.g., `--bg-primary`).
 
 ### AI Chat (Gemini)
 - `chat-msg-user-bg`: Background color for messages sent by the user.
-- `chat-msg-model-bg`: Background color for messages from the AI.
 - `chat-msg-user-text`: Text color for user messages.
 - `chat-msg-model-text`: Text color for AI responses.
 - `code-bg`: Background color for code blocks within the chat.
@@ -66,7 +66,6 @@ These values are applied as CSS variables (e.g., `--bg-primary`).
 - `ai-welcome-subtext`: Color for the descriptive text in the empty chat state.
 
 ### UI Specific Components
-- `select-arrow`: An SVG data URL for the dropdown arrow icon.
 - `sidebar-bg`: Background color specifically for the left sidebar.
 - `sidebar-btn-color`: Icon/Text color for sidebar buttons (default).
 - `sidebar-btn-hover-bg`: Background color when hovering over sidebar buttons.
@@ -74,11 +73,9 @@ These values are applied as CSS variables (e.g., `--bg-primary`).
 - `sidebar-btn-active-bg`: Background color for the currently selected sidebar button.
 - `tab-bg`: Background color for inactive tabs.
 - `tab-text`: Text color for inactive tabs.
-- `tab-active-bg`: Background color for the currently selected tab.
 - `tab-active-text`: Text color for the currently selected tab.
 - `tab-close-bg`: Color of the tab's close button.
 - `tab-close-hover-bg`: Hover color of the tab's close button.
-- `tab-drag-indicator`: Color of the line indicating tab insertion position.
 - `tab-watching-text`: Text color for a tab that is currently being monitored by AI.
 - `tab-watching-bg`: Background/fill color for the AI monitoring icon in a tab.
 - `tab-watching-icon`: Primary glow color for the AI monitoring icon.
@@ -94,6 +91,8 @@ These values are applied as CSS variables (e.g., `--bg-primary`).
 - `icon-host`: Color for host/connection icons in the host tree.
 - `terminal-prompt-default`: Default color for terminal prompt marker blocks.
 - `terminal-prompt-active`: Active color for terminal prompt marker blocks when detected as command input.
+- `pane-color-1` through `pane-color-6`: The 6 colors used for tab-to-pane connection lines (shown when a session is assigned to a pane).
+- `resize-grip-shadow`: Color for the stripe pattern on the resize grip handle.
 
 ### Search & Highlight
 - `search-highlight-bg`: Background tint for lines that contain a search match.
@@ -105,9 +104,19 @@ These values are applied as CSS variables (e.g., `--bg-primary`).
 
 ### Overlays & Modals
 - `modal-overlay-bg`: Background dimming for modal dialogs.
-- `modal-shadow`: Shadow effects for modals.
+- `modal-shadow`: Shadow color for modals (e.g. `rgba(0, 0, 0, 0.5)`). The shadow geometry (`0 4px 16px`) is fixed in the stylesheet.
 - `modal-header-info-bg`: Header background for info modals.
-- (Additional specific variants like `modal-header-warning-*` also exist)
+- `modal-header-info-border`: Border color for info modal headers.
+- `modal-header-info-text`: Text color for info modal headers.
+- `modal-border-warning`: Border color for warning modals (applied to both the modal container and the header separator).
+- `modal-header-warning-bg`: Header background for warning modals.
+- `modal-header-warning-text`: Text color for warning modal headers.
+- `modal-border-error`: Border color for error modals (applied to both the modal container and the header separator).
+- `modal-header-error-bg`: Header background for error modals.
+- `modal-header-error-text`: Text color for error modal headers.
+- `modal-border-success`: Border color for success modals (applied to both the modal container and the header separator).
+- `modal-header-success-bg`: Header background for success modals.
+- `modal-header-success-text`: Text color for success modal headers.
 
 ---
 

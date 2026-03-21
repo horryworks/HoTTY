@@ -20,9 +20,9 @@
 - `bg-primary`: アプリケーションのメイン背景色およびアクティブなペインの背景色。
 - `bg-secondary`: サイドバー、ヘッダー、およびUI要素の背景色。
 - `bg-tertiary`: 非アクティブなタブやドロップダウンの背景色。
-- `panel-bg`: 特定のパネル（ホストツリーなど）の背景色。
 - `text-primary`: メインのテキストカラー。
 - `text-secondary`: 補助的なテキストやヒントのカラー。
+- `text-tertiary`: 最も目立たせないテキストの色（ドラッグハンドルや補足ヒントなど）。
 - `text-on-accent`: アクセント色（ボタン等）の上に表示されるテキストの色。
 
 ### ボーダーとアクセント
@@ -31,7 +31,7 @@
 - `accent-hover`: アクセント要素のホバー時の色。
 - `accent-light`: アクセント色のライトバリエーション。
 - `accent-secondary`: 2つ目のアクセントカラー（補助的な装飾用）。
-- `active-pane-color`: 現在アクティブなペインを強調するための色。
+- `link-color`: ハイパーリンクやURL参照の色。
 
 ### 入力、ボタン、ホバー
 - `input-bg`: テキスト入力フィールドや設定項目の背景色。
@@ -46,7 +46,8 @@
 
 ### 状態とシグナル
 - `success-color`: 成功ステータス（完了、接続など）の色。
-- `error-color`: 一般的なエラーメッセージの色。
+- `status-success`: 認証済み/成功ステータスのインジケータードットの色。
+- `status-error`: 未認証/エラーステータスのインジケータードットの色。
 - `color-danger`: 警告や削除などの危険を示す色。
 - `color-danger-bg`: 危険要素の背景（半透明など）。
 - `color-danger-bg-hover`: 危険要素のホバー時背景。
@@ -55,7 +56,6 @@
 
 ### AIチャット (Gemini)
 - `chat-msg-user-bg`: ユーザーからのメッセージの背景色。
-- `chat-msg-model-bg`: AIからのメッセージの背景色。
 - `chat-msg-user-text`: ユーザーメッセージのテキストカラー。
 - `chat-msg-model-text`: AI応答のテキストカラー。
 - `code-bg`: チャット内のコードブロックの背景色。
@@ -65,7 +65,6 @@
 - `ai-welcome-subtext`: 空状態での説明文の色。
 
 ### UIコンポーネント専用
-- `select-arrow`: ドロップダウンの矢印用SVGデータ（URL形式）。
 - `sidebar-bg`: 左側サイドバーの背景色。
 - `sidebar-btn-color`: サイドバーボタン（通常時）の色。
 - `sidebar-btn-hover-bg`: サイドバーボタンのホバー背景色。
@@ -73,11 +72,9 @@
 - `sidebar-btn-active-bg`: 選択されているサイドバーボタンの背景。
 - `tab-bg`: 非アクティブなタブの背景。
 - `tab-text`: 非アクティブなタブの文字色。
-- `tab-active-bg`: アクティブなタブの背景。
 - `tab-active-text`: アクティブなタブの文字色。
 - `tab-close-bg`: タブの閉じる「×」ボタンの色。
 - `tab-close-hover-bg`: タブの「×」ボタンのホバー色。
-- `tab-drag-indicator`: タブ並び替え時の挿入位置インジケーターの色。
 - `tab-watching-text`: AI監視中のタブの文字色。
 - `tab-watching-bg`: AI監視中のタブアイコンの背景・塗りつぶし色。
 - `tab-watching-icon`: AI監視中アイコンのプライマリグローカラー。
@@ -93,6 +90,8 @@
 - `icon-host`: ホストツリーの接続先アイコンの色。
 - `terminal-prompt-default`: ターミナルのプロンプトマーカーブロックのデフォルト色。
 - `terminal-prompt-active`: ターミナルのプロンプトマーカーブロックがコマンド入力として検出された際のアクティブ色。
+- `pane-color-1` ～ `pane-color-6`: セッションがペインに割り当てられた際に表示されるタブ-ペイン接続線の6色。
+- `resize-grip-shadow`: リサイズグリップハンドルのストライプパターンの色。
 
 ### 検索とハイライト
 - `search-highlight-bg`: 検索一致行の背景色（薄いハイライト）。
@@ -104,9 +103,19 @@
 
 ### オーバーレイとモーダル
 - `modal-overlay-bg`: ダイアログ表示時の背景遮蔽色。
-- `modal-shadow`: モーダルの影。
+- `modal-shadow`: モーダルの影色（例: `rgba(0, 0, 0, 0.5)`）。影のジオメトリ（`0 4px 16px`）はスタイルシートに固定されています。
 - `modal-header-info-bg`: 通知モーダルのヘッダー背景。
-- (他にも `modal-header-warning-*`, `modal-header-error-*` 等の状態別設定があります)
+- `modal-header-info-border`: 通知モーダルのヘッダー枠線色。
+- `modal-header-info-text`: 通知モーダルのヘッダーテキスト色。
+- `modal-border-warning`: 警告モーダルの枠線色（モーダルコンテナとヘッダー区切り線の両方に適用）。
+- `modal-header-warning-bg`: 警告モーダルのヘッダー背景。
+- `modal-header-warning-text`: 警告モーダルのヘッダーテキスト色。
+- `modal-border-error`: エラーモーダルの枠線色（モーダルコンテナとヘッダー区切り線の両方に適用）。
+- `modal-header-error-bg`: エラーモーダルのヘッダー背景。
+- `modal-header-error-text`: エラーモーダルのヘッダーテキスト色。
+- `modal-border-success`: 成功モーダルの枠線色（モーダルコンテナとヘッダー区切り線の両方に適用）。
+- `modal-header-success-bg`: 成功モーダルのヘッダー背景。
+- `modal-header-success-text`: 成功モーダルのヘッダーテキスト色。
 
 ---
 

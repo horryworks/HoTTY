@@ -1,5 +1,35 @@
 # Release Notes - HoTTY
 
+## [v1.0.0-beta9] - 2026-03-21
+
+> ⚠️ **Preview Release** — AI provider integrations (Vertex AI, Anthropic, OpenAI) are not fully tested. Gemini remains the recommended production option.
+
+### New Features
+- **Text Editor**: Added a built-in text editor as a new pane type (accessible via the **⊞** Features menu → **Text Editor**). Key capabilities:
+    - Multi-tab editing — open multiple files in independent sub-tabs within a single pane.
+    - File open and save with encoding support (UTF-8, ASCII, Latin-1) and line ending display (LF / CRLF).
+    - **Find & Replace** toolbar with case-sensitive search and occurrence count.
+    - **Go to Line** dialog for fast navigation in large files.
+    - Visual line numbers that correctly account for wrapped lines.
+    - Unsaved changes indicator (`•`) on sub-tab titles.
+    - **File association** — files passed as command-line arguments open directly in the Text Editor.
+
+### Improved
+- **Theme Completeness**: Eliminated all remaining hardcoded colors from the UI. New CSS variables added across all built-in themes:
+    - `text-tertiary` — for dimmed/muted text (drag handles, hints).
+    - `status-success` / `status-error` — for authentication status indicator dots.
+    - `link-color` — for hyperlinks in the About panel.
+    - `pane-color-1` through `pane-color-6` — for tab-to-pane connection line colors.
+    - `resize-grip-shadow` — for the resize grip handle stripe pattern.
+- **UI Consistency**: Aligned modal padding, font sizes, and spacing across all dialog components.
+- **Line Wrap Performance**: Rewrote visual line number computation to use a single DOM layout pass instead of per-line reflows, eliminating lag on large files when line wrap is enabled.
+- **Code Quality**: Extracted duplicate terminal color application logic; replaced stringly-typed tab type checks with a typed Set constant.
+
+### Security
+- **DPAPI Batch Validation**: Added array length guard (max 1,000 entries) to `dpapi-encrypt-batch` and `dpapi-decrypt-batch` IPC handlers to prevent memory exhaustion from unbounded input.
+
+---
+
 ## [v1.0.0-beta8] - 2026-03-21
 
 > ⚠️ **Preview Release** — AI provider integrations (Vertex AI, Anthropic, OpenAI) are not fully tested. Gemini remains the recommended production option.

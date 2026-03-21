@@ -1017,6 +1017,7 @@ ipcMain.handle('dpapi-decrypt', async (_, ciphertext: string) => {
 });
 
 ipcMain.handle('dpapi-encrypt-batch', async (_, plaintexts: (string | undefined)[]) => {
+  if (!Array.isArray(plaintexts) || plaintexts.length > 1000) return [];
   try {
     return await Promise.all(plaintexts.map(text => text ? encryptString(text) : Promise.resolve(text)));
   } catch (err) {
@@ -1026,6 +1027,7 @@ ipcMain.handle('dpapi-encrypt-batch', async (_, plaintexts: (string | undefined)
 });
 
 ipcMain.handle('dpapi-decrypt-batch', async (_, ciphertexts: (string | undefined)[]) => {
+  if (!Array.isArray(ciphertexts) || ciphertexts.length > 1000) return [];
   try {
     return await Promise.all(ciphertexts.map(text => text ? decryptString(text) : Promise.resolve(text)));
   } catch (err) {

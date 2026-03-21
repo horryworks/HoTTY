@@ -183,6 +183,27 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                         </div>
                     </details>
 
+                    {/* ── Text Editor ── */}
+                    <details className="help-section">
+                        <summary>📝 Text Editor</summary>
+                        <div className="help-section-body">
+                            <p className="help-text">
+                                Open a built-in text editor pane via <strong><FeaturesIcon /></strong> (Features) → <strong>"Text Editor"</strong>. You can open multiple editor panes and edit multiple files simultaneously using sub-tabs.
+                            </p>
+                            <ul className="shortcuts-list">
+                                <li><strong>File menu:</strong> New, Open, Save, Save As, and Close actions for individual sub-tabs.</li>
+                                <li><strong>Find & Replace:</strong> Press <code>Ctrl + F</code> to open the search bar. Use <code>Ctrl + H</code> for find-and-replace. Matches are highlighted and the total count is shown.</li>
+                                <li><strong>Go to Line:</strong> Press <code>Ctrl + G</code> to jump to a specific line number.</li>
+                                <li><strong>Encoding & Line Endings:</strong> Click the encoding or line ending indicator in the status bar to change them for the current file.</li>
+                                <li><strong>Line Wrap:</strong> Controlled by the global <strong>Settings → Appearance → Line Wrap</strong> toggle. Visual line numbers update automatically to reflect wrapped lines.</li>
+                                <li><strong>File Association:</strong> Files opened from Windows Explorer (double-click or "Open with") launch directly in the Text Editor.</li>
+                            </ul>
+                            <p className="help-text small">
+                                💡 <strong>Tip:</strong> An unsaved file shows a <code>•</code> dot on its sub-tab title. Save with <code>Ctrl + S</code>.
+                            </p>
+                        </div>
+                    </details>
+
                     {/* ── AI Quick Start Guide ── */}
                     <details className="help-section" open>
                         <summary>✨ AI Quick Start Guide</summary>

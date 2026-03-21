@@ -30,6 +30,18 @@ export const AskAiModal: React.FC<AskAiModalProps> = ({
         }
     }, [isOpen]);
 
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onClose]);
+
     if (!isOpen) return null;
 
     const handleSubmit = () => {
@@ -42,15 +54,12 @@ export const AskAiModal: React.FC<AskAiModalProps> = ({
         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
             handleSubmit();
-        } else if (e.key === 'Escape') {
-            e.preventDefault();
-            onClose();
         }
     };
 
     return (
-        <div className="ask-ai-modal-overlay" onClick={onClose}>
-            <div className="ask-ai-modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="ask-ai-modal-overlay">
+            <div className="ask-ai-modal-content">
                 <div className="ask-ai-modal-header">
                     <h2>Ask AI</h2>
                     <button className="ask-ai-modal-close-btn" onClick={onClose} title="Close">×</button>
