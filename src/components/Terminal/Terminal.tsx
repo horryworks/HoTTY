@@ -349,18 +349,33 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                         else break;
                     }
 
+                    // Position marker 2px to the left of the vertical scrollbar.
+                    // Calculate left offset relative to the decoration's offsetParent,
+                    // using the .xterm container's width as the reference for the pane edge.
+                    const SCROLLBAR_WIDTH = 10; // matches Terminal.css .xterm .scrollbar width
+                    const MARKER_GAP = 2;
+                    const MARKER_BORDER = 6;
+                    const MARKER_WIDTH = 8; // total rendered width (box-sizing: border-box)
+                    const xtermEl = element.closest('.xterm') as HTMLElement | null;
+                    const offsetParent = element.offsetParent as HTMLElement | null;
+                    if (xtermEl && offsetParent) {
+                        const xtermRect = xtermEl.getBoundingClientRect();
+                        const parentRect = offsetParent.getBoundingClientRect();
+                        const markerLeft = (xtermRect.right - SCROLLBAR_WIDTH - MARKER_GAP - MARKER_WIDTH) - parentRect.left;
+                        element.style.left = `${markerLeft}px`;
+                    }
                     element.style.position = 'absolute';
-                    element.style.right = '0px';
-                    element.style.left = 'auto';
+                    element.style.right = 'auto';
+                    element.style.boxSizing = 'border-box';
                     // Do not override height; xterm.js sets it exactly to the line height.
-                    element.style.width = '8px';
+                    element.style.width = `${MARKER_WIDTH}px`;
                     element.style.backgroundColor = 'transparent';
-                    element.style.borderRight = `6px solid ${targetColor}`;
+                    element.style.borderRight = `${MARKER_BORDER}px solid ${targetColor}`;
                     element.style.pointerEvents = 'all'; // Allow user to click the marker
                     element.style.cursor = 'pointer';
                     element.style.zIndex = '10';
                     element.style.transformOrigin = 'top';
-                    element.style.transform = `translateX(14px) scaleY(${count})`;
+                    element.style.transform = `scaleY(${count})`;
 
                     if (!element.dataset.clickEventBound) {
                         element.dataset.clickEventBound = "true";
@@ -539,7 +554,10 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             // e.start and e.end are viewport row indices (0 to term.rows - 1)
             const buffer = term.buffer.active;
 
-            // Re-evaluate the height of all active decorations on screen
+            // Re-evaluate the height and horizontal position of all active decorations on screen
+            const SCROLLBAR_WIDTH = 10;
+            const MARKER_GAP = 2;
+            const MARKER_WIDTH = 8;
             for (const item of activeLines) {
                 if (item.marker && !item.marker.isDisposed && item.element) {
                     let count = 1;
@@ -549,7 +567,17 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                         if (l && l.isWrapped) { count++; checkY++; }
                         else break;
                     }
-                    item.element.style.transform = `translateX(14px) scaleY(${count})`;
+                    item.element.style.transform = `scaleY(${count})`;
+
+                    // Recalculate horizontal position on resize
+                    const xtermEl = item.element.closest('.xterm') as HTMLElement | null;
+                    const offsetParent = item.element.offsetParent as HTMLElement | null;
+                    if (xtermEl && offsetParent) {
+                        const xtermRect = xtermEl.getBoundingClientRect();
+                        const parentRect = offsetParent.getBoundingClientRect();
+                        const markerLeft = (xtermRect.right - SCROLLBAR_WIDTH - MARKER_GAP - MARKER_WIDTH) - parentRect.left;
+                        item.element.style.left = `${markerLeft}px`;
+                    }
                 }
             }
 
