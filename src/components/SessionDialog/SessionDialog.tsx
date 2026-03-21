@@ -193,7 +193,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         password: string;
     } | null>(null);
 
-    // Host history (legacy, kept for datalist)
+    // Host history (used for deduplication when saving)
     const [history] = useState<string[]>(() => {
         const saved = localStorage.getItem(STORAGE_KEYS.HOST_HISTORY);
         return saved ? JSON.parse(saved) : [];
@@ -311,8 +311,8 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             protocol: e.protocol,
             host: e.host,
             port: e.port,
-            username: e.protocol === 'ssh' ? u : undefined,
-            password: e.protocol === 'ssh' ? finalPass : undefined,
+            username: (e.protocol === 'ssh' || e.protocol === 'telnet') ? u : undefined,
+            password: (e.protocol === 'ssh' || e.protocol === 'telnet') ? finalPass : undefined,
         });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [getCachedPassword, onConnect]);
@@ -371,8 +371,8 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             protocol: protocol as 'ssh' | 'telnet',
             host,
             port: parseInt(port),
-            username: protocol === 'ssh' ? finalU : undefined,
-            password: protocol === 'ssh' ? finalP : undefined,
+            username: (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
+            password: (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
         };
 
         hostManager.editNode(selectedHostId, { name: displayName, entry });
@@ -463,8 +463,8 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                         protocol: protocol as 'ssh' | 'telnet',
                         host,
                         port: parseInt(port),
-                        username: protocol === 'ssh' ? username : undefined,
-                        password: protocol === 'ssh' ? password : undefined,
+                        username: (protocol === 'ssh' || protocol === 'telnet') ? username : undefined,
+                        password: (protocol === 'ssh' || protocol === 'telnet') ? password : undefined,
                     };
                     hostManager.editNode(selectedHostId, { entry });
                 }
@@ -475,8 +475,8 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             protocol,
             host,
             port: parseInt(port),
-            username: protocol === 'ssh' ? finalU : undefined,
-            password: protocol === 'ssh' ? finalP : undefined,
+            username: (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
+            password: (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
         });
     };
 
@@ -582,13 +582,9 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                             value={host}
                                             onChange={e => setHost(e.target.value)}
                                             placeholder="example.com"
-                                            list="host-history"
                                             required
                                             autoFocus
                                         />
-                                        <datalist id="host-history">
-                                            {history.map((h, i) => <option key={i} value={h} />)}
-                                        </datalist>
                                     </div>
                                     <div className="form-group">
                                         <label>Port</label>
@@ -599,7 +595,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                             required
                                         />
                                     </div>
-                                    {protocol === 'ssh' && (
+                                    {(protocol === 'ssh' || protocol === 'telnet') && (
                                         <div className="form-group">
                                             <label>Username</label>
                                             <input
@@ -609,11 +605,11 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                                 className={isDecrypting ? 'decrypting-placeholder' : ''}
                                                 disabled={isDecrypting}
                                                 autoComplete="off"
-                                                required
+                                                required={protocol === 'ssh'}
                                             />
                                         </div>
                                     )}
-                                    {protocol === 'ssh' && (
+                                    {(protocol === 'ssh' || protocol === 'telnet') && (
                                         <div className="form-group">
                                             <label>Password</label>
                                             <input

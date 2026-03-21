@@ -778,7 +778,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                         />
                                     </div>
                                 </div>
-                                {formProtocol === 'ssh' && (
+                                {(formProtocol === 'ssh' || formProtocol === 'telnet') && (
                                     <>
                                         <div className="modal-form-group">
                                             <label>Username</label>

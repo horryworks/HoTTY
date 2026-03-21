@@ -44,7 +44,7 @@
 }
 
 .ping-monitor-select {
-    background: var(--input-bg);
+    background-color: var(--input-bg);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     padding: 3px 6px;
@@ -54,7 +54,10 @@
     font-family: inherit;
     cursor: pointer;
 }
-.ping-monitor-select:focus { border-color: var(--accent-color); }
+
+.ping-monitor-select:focus {
+    border-color: var(--accent-color);
+}
 
 .ping-monitor-btn {
     display: inline-flex;
@@ -70,22 +73,35 @@
     background: var(--bg-primary);
     color: var(--text-primary);
 }
-.ping-monitor-btn:hover:not(:disabled) { background: var(--bg-tertiary); }
-.ping-monitor-btn:disabled { opacity: 0.4; cursor: default; }
+
+.ping-monitor-btn:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+}
+
+.ping-monitor-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
 
 .ping-monitor-btn-start {
     background: var(--accent-color);
     color: var(--text-on-accent);
     border-color: var(--accent-color);
 }
-.ping-monitor-btn-start:hover:not(:disabled) { opacity: 0.85; }
+
+.ping-monitor-btn-start:hover:not(:disabled) {
+    opacity: 0.85;
+}
 
 .ping-monitor-btn-stop {
     background: var(--color-danger);
     color: var(--text-on-accent);
     border-color: var(--color-danger);
 }
-.ping-monitor-btn-stop:hover:not(:disabled) { opacity: 0.85; }
+
+.ping-monitor-btn-stop:hover:not(:disabled) {
+    opacity: 0.85;
+}
 
 /* ── Body (editor + results) ── */
 .ping-monitor-body {
@@ -132,6 +148,7 @@
     font-family: inherit;
     z-index: 1;
 }
+
 .ping-monitor-editor-toggle:hover {
     background: var(--bg-primary);
     color: var(--text-primary);
@@ -163,6 +180,7 @@
     outline: none;
     overflow-y: auto;
 }
+
 .ping-monitor-textarea::placeholder {
     color: var(--text-secondary);
     opacity: 0.6;
@@ -285,9 +303,11 @@
     border-radius: 50%;
     display: inline-block;
 }
+
 .ping-monitor-status-dot.running {
     background: var(--success-color);
 }
+
 .ping-monitor-status-dot.stopped {
     background: var(--text-secondary);
 }

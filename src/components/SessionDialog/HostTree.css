@@ -229,7 +229,7 @@
 
 .modal-form-group input,
 .modal-form-group select {
-    background: var(--input-bg);
+    background-color: var(--input-bg);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     color: var(--text-primary);

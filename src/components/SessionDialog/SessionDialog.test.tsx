@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { ConnectionDialog } from './SessionDialog';
 
 vi.mock('./SessionDialog.css', () => ({}));
@@ -71,5 +71,38 @@ describe('ConnectionDialog', () => {
     it('renders without error when error prop is null', () => {
         const { container } = render(<ConnectionDialog {...baseProps} error={null} />);
         expect(container).toBeTruthy();
+    });
+
+    it('shows username and password fields for SSH protocol', () => {
+        render(<ConnectionDialog {...baseProps} />);
+        // Default protocol is SSH — find labels by text
+        expect(screen.getByText('Username')).toBeInTheDocument();
+        expect(screen.getByText('Password')).toBeInTheDocument();
+    });
+
+    it('shows username and password fields for Telnet protocol', () => {
+        render(<ConnectionDialog {...baseProps} />);
+        const protocolSelect = screen.getByDisplayValue('SSH');
+        fireEvent.change(protocolSelect, { target: { value: 'telnet' } });
+        expect(screen.getByText('Username')).toBeInTheDocument();
+        expect(screen.getByText('Password')).toBeInTheDocument();
+    });
+
+    it('does not require username for Telnet protocol', () => {
+        render(<ConnectionDialog {...baseProps} />);
+        const protocolSelect = screen.getByDisplayValue('SSH');
+        fireEvent.change(protocolSelect, { target: { value: 'telnet' } });
+        const usernameLabel = screen.getByText('Username');
+        const usernameInput = usernameLabel.parentElement?.querySelector('input');
+        expect(usernameInput).not.toBeNull();
+        expect(usernameInput!.required).toBe(false);
+    });
+
+    it('requires username for SSH protocol', () => {
+        render(<ConnectionDialog {...baseProps} />);
+        const usernameLabel = screen.getByText('Username');
+        const usernameInput = usernameLabel.parentElement?.querySelector('input');
+        expect(usernameInput).not.toBeNull();
+        expect(usernameInput!.required).toBe(true);
     });
 });

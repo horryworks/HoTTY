@@ -111,7 +111,7 @@
 .ctc-select {
     flex: 1;
     padding: 5px 8px;
-    background: var(--input-bg);
+    background-color: var(--input-bg);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     color: var(--text-primary);
