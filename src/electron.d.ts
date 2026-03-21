@@ -62,6 +62,14 @@ export interface ElectronAPI {
     listLogFiles: (folderPath: string) => Promise<{ files?: { name: string; path: string; mtime: number; size: number }[]; error?: string }>;
     readLogFile: (filePath: string) => Promise<{ content?: string; error?: string }>;
 
+    // Ping Monitor
+    pingMonitorStart: (sessionId: string, targets: string[], intervalMs: number, loggingEnabled: boolean, loggingPath: string) => void;
+    pingMonitorStop: (sessionId: string) => void;
+    pingMonitorUpdateTargets: (sessionId: string, targets: string[]) => void;
+    pingMonitorUpdateInterval: (sessionId: string, intervalMs: number) => void;
+    onPingMonitorData: (callback: (data: { sessionId: string; results: { target: string; status: string; rtt: number | null; ttl: number | null; timestamp: string }[] }) => void) => () => void;
+    onPingMonitorLogFile: (callback: (data: { sessionId: string; fileName: string }) => void) => () => void;
+
     // Update notification
     onUpdateAvailable: (callback: (data: { version: string; releaseUrl: string }) => void) => () => void;
 }

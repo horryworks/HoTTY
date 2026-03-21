@@ -1,8 +1,8 @@
-# HoTTY v1.0.0-beta7 - AI Integrated Advanced Terminal
+# HoTTY v1.0.0-beta8 - AI Integrated Advanced Terminal
 
 [English] | [日本語 (Japanese)](README.ja.md)
 
-**Current Version: v1.0.0-beta7**
+**Current Version: v1.0.0-beta8**
 
 Terminal emulator built with Electron, React, and TypeScript. Designed to provide a seamless terminal experience with advanced window management, deep AI integration, and extensive customization options.
 
@@ -38,6 +38,7 @@ Terminal emulator built with Electron, React, and TypeScript. Designed to provid
     - **AI Monitor (Output Monitoring)**: Watch and record terminal output, requesting direct analysis from AI with tailored prompts (Explain, Research, Suggest Fixes).
     - **Smart Chat Scrolling**: AI responses automatically scroll to the beginning of the message for better readability of long outputs.
     - **Free Format Questions**: Ask custom questions directly from the terminal via the right-click context menu.
+    - **Persona-Specific Ask Commands**: Each AI persona has its own set of Ask AI commands, allowing tailored quick actions per persona.
     - **Context Aware**: Helper for coding, debugging, or general questions within the terminal environment.
     - **Dynamic Models**: Automatically discovers available models from your selected AI provider.
     - **Reliable Command Execution**: Refined AI response parsing ensures terminal commands are always correctly extracted and executed.
@@ -46,6 +47,7 @@ Terminal emulator built with Electron, React, and TypeScript. Designed to provid
     - **Sandboxed Execution**: Enhanced security with Electron's sandbox mode.
     - **XSS Protection**: AI chat output is sanitized using DOMPurify to prevent cross-site scripting attacks.
     - **Clean Uninstallation**: Option to fully remove user data during uninstallation.
+- **Ping Monitor**: Built-in ICMP ping monitoring pane for tracking multiple hosts simultaneously. Configurable intervals (1s–60s), real-time RTT and TTL display, visual status indicators, and optional CSV log export.
 - **Update Notification**: Automatically checks for new releases on GitHub at startup and shows a non-blocking banner when an update is available. Options to **Skip this version** or **Never Notify** let you control notification behavior. A download link is also shown in **Settings > About** when an update is pending.
 - **Modern Tech Stack**: Built on Electron, React, and Vite for performance and stability.
 

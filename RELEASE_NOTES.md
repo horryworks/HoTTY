@@ -1,5 +1,26 @@
 # Release Notes - HoTTY
 
+## [v1.0.0-beta8] - 2026-03-21
+
+> ⚠️ **Preview Release** — AI provider integrations (Vertex AI, Anthropic, OpenAI) are not fully tested. Gemini remains the recommended production option.
+
+### New Features
+- **Ping Monitor**: Added a built-in ICMP ping monitoring pane as a new session type. Monitor multiple hosts simultaneously with:
+    - Configurable ping intervals (1s, 3s, 5s, 10s, 30s, 60s).
+    - Real-time RTT (Round-Trip Time) and TTL display per target.
+    - Visual status indicators (OK, Fail, DNS error).
+    - Optional CSV log export to the configured logging folder.
+    - Input validation to prevent shell injection via target hostnames.
+
+### Improved
+- **Persona-Specific Ask AI Commands**: Each AI persona now has its own independent set of Ask AI commands. Switching personas automatically loads the corresponding command set, enabling tailored quick actions per role (e.g., Network Expert vs. Security Analyst). AI settings have been extracted into a standalone modal for easier access.
+- **Graphics Performance**: Improved rendering performance across the UI:
+    - Optimized grid layout recalculations and resize handling with `requestAnimationFrame`.
+    - Reduced unnecessary re-renders in terminal panes, AI chat, and log viewer components.
+    - Improved sidebar resize smoothness with throttled updates.
+
+---
+
 ## [v1.0.0-beta7] - 2026-03-20
 
 > ⚠️ **Preview Release** — AI provider integrations (Vertex AI, Anthropic, OpenAI) are not fully tested. Gemini remains the recommended production option.

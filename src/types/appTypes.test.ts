@@ -18,7 +18,7 @@ describe('appTypes', () => {
     });
 
     it('PersonaDefinition has the expected shape', () => {
-        const persona: PersonaDefinition = { id: '1', label: 'Helper', systemPrompt: 'You are helpful.' };
+        const persona: PersonaDefinition = { id: '1', label: 'Helper', systemPrompt: 'You are helpful.', askAiCommands: [] };
         expect(persona).toHaveProperty('id');
         expect(persona).toHaveProperty('label');
         expect(persona).toHaveProperty('systemPrompt');
