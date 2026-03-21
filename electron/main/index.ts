@@ -158,7 +158,14 @@ app.whenReady().then(async () => {
   registry.register(new OpenAIProvider());
   registry.register(new AnthropicProvider());
   aiService = new AIService(registry, 'gemini');
-  win.webContents.once('did-finish-load', () => { checkForUpdates(win); });
+  win.webContents.once('did-finish-load', () => {
+    checkForUpdates(win);
+    // If app was launched with a file path argument, open it in the text editor
+    const filePath = getFilePathFromArgs(process.argv);
+    if (filePath) {
+      win.webContents.send('open-file-in-editor', filePath);
+    }
+  });
 
   // Register 'media' protocol to serve local files
   protocol.handle('media', (request: Request) => {
@@ -202,8 +209,39 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('second-instance', () => {
-  createWindow();
+// Extract file path from command line arguments (for "Open with" file association)
+function getFilePathFromArgs(argv: string[]): string | null {
+  // Skip the executable path and any Electron flags
+  for (let i = 1; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg.startsWith('-') || arg.startsWith('--')) continue;
+    // Check if this looks like a file path (not a URL or protocol)
+    if (/^[a-zA-Z]:\\/.test(arg) || arg.startsWith('/') || arg.startsWith('.')) {
+      try {
+        const resolvedPath = resolve(arg);
+        if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile()) {
+          return resolvedPath;
+        }
+      } catch { /* ignore invalid paths */ }
+    }
+  }
+  return null;
+}
+
+app.on('second-instance', (_event, argv) => {
+  // Focus existing window
+  const existingWin = [...windows][0];
+  if (existingWin) {
+    if (existingWin.isMinimized()) existingWin.restore();
+    existingWin.focus();
+    // If launched with a file path, send it to the existing window
+    const filePath = getFilePathFromArgs(argv);
+    if (filePath) {
+      existingWin.webContents.send('open-file-in-editor', filePath);
+    }
+  } else {
+    createWindow();
+  }
 })
 
 app.on('activate', () => {
@@ -508,6 +546,60 @@ ipcMain.handle('select-folder', async (event) => {
     return null;
   }
   return filePaths[0];
+});
+
+// Text Editor: open file dialog
+ipcMain.handle('text-editor-open-file', async (event) => {
+  const eventWin = BrowserWindow.fromWebContents(event.sender);
+  const { canceled, filePaths } = await dialog.showOpenDialog(eventWin!, {
+    properties: ['openFile'],
+    filters: [
+      { name: 'Text Files', extensions: ['txt', 'log', 'md', 'json', 'xml', 'yaml', 'yml', 'csv', 'ini', 'conf', 'cfg', 'sh', 'bat', 'ps1', 'py', 'js', 'ts', 'html', 'css'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+  });
+  if (canceled || filePaths.length === 0) return null;
+  return filePaths[0];
+});
+
+// Text Editor: save file dialog
+ipcMain.handle('text-editor-save-file', async (event, defaultPath?: string) => {
+  const eventWin = BrowserWindow.fromWebContents(event.sender);
+  const { canceled, filePath } = await dialog.showSaveDialog(eventWin!, {
+    defaultPath: defaultPath || undefined,
+    filters: [
+      { name: 'Text Files', extensions: ['txt', 'log', 'md', 'json', 'xml', 'yaml', 'yml', 'csv'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+  });
+  if (canceled || !filePath) return null;
+  return filePath;
+});
+
+// Text Editor: read file
+ipcMain.handle('text-editor-read-file', async (_event, filePath: string, encoding: string) => {
+  try {
+    const resolvedPath = resolve(filePath);
+    const buffer = fs.readFileSync(resolvedPath);
+    const content = buffer.toString(encoding as BufferEncoding || 'utf-8');
+    const lineEnding = content.includes('\r\n') ? 'CRLF' : 'LF';
+    return { content, lineEnding };
+  } catch (err) {
+    logger.error('app', 'Failed to read file for text editor', { error: String(err) });
+    throw new Error(`Failed to read file: ${String(err)}`);
+  }
+});
+
+// Text Editor: write file
+ipcMain.handle('text-editor-write-file', async (_event, filePath: string, content: string, encoding: string) => {
+  try {
+    const resolvedPath = resolve(filePath);
+    fs.writeFileSync(resolvedPath, content, { encoding: encoding as BufferEncoding || 'utf-8' });
+    return true;
+  } catch (err) {
+    logger.error('app', 'Failed to write file for text editor', { error: String(err) });
+    throw new Error(`Failed to write file: ${String(err)}`);
+  }
 });
 
 ipcMain.handle('list-wsl-distributions', async () => {

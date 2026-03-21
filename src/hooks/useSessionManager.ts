@@ -14,10 +14,19 @@ const AI_PROVIDER_LABELS: Record<string, string> = {
     anthropic: 'Anthropic',
 };
 
+export interface TextEditorTab {
+    id: string;
+    filePath: string | null;
+    content: string;
+    savedContent: string;
+    encoding: string;
+    lineEnding: 'LF' | 'CRLF';
+}
+
 export interface Session {
     id: string;
     title: string;
-    type: 'ssh' | 'telnet' | 'serial' | 'ai' | 'wsl' | 'local' | 'log-viewer' | 'ping-monitor';
+    type: 'ssh' | 'telnet' | 'serial' | 'ai' | 'wsl' | 'local' | 'log-viewer' | 'ping-monitor' | 'text-editor';
     logViewerState?: {
         loggingPath: string;
     };
@@ -40,6 +49,10 @@ export interface Session {
         lastTargetSessionTitle?: string;
         isWaitingForTerminal?: boolean;
     };
+    textEditorState?: {
+        tabs: TextEditorTab[];
+        activeTabId: string;
+    };
     isWatching?: boolean;
     hasWatchData?: boolean;
 }
@@ -49,6 +62,7 @@ interface UseSessionManagerOptions {
     onPasteRequest: (sessionId: string, text: string) => void;
     onSessionConnected: () => void;
     onSessionError: (error: string) => void;
+    paneAllocations: { [paneId: string]: string | null };
     setPaneAllocations: React.Dispatch<React.SetStateAction<{ [paneId: string]: string | null }>>;
     setActivePaneId: React.Dispatch<React.SetStateAction<string>>;
     sshKeepAliveEnabled: boolean;
@@ -73,6 +87,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         onPasteRequest,
         onSessionConnected,
         onSessionError,
+        paneAllocations,
         setPaneAllocations,
         setActivePaneId,
         sshKeepAliveEnabled,
@@ -237,6 +252,8 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             }
         } else if (session?.type === 'log-viewer') {
             // Log viewer sessions don't have terminal or backend connection
+        } else if (session?.type === 'text-editor') {
+            // Text editor sessions don't have terminal or backend connection
         } else if (session?.type === 'ping-monitor') {
             // Save targets and interval before closing
             if (session.pingMonitorState) {
@@ -475,6 +492,134 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         return sessionId;
     };
 
+    const createTextEditorSession = (initialFilePath?: string) => {
+        // Only allow one text-editor session at a time — reuse existing if present
+        const existingSession = sessions.find(s => s.type === 'text-editor');
+        if (existingSession) {
+            // Show warning when user explicitly tries to open another text editor (no file path)
+            if (!initialFilePath) {
+                onSessionError('Only one Text Editor session can be open at a time.');
+            }
+            // If a file path is provided, add it as a new tab (or activate existing)
+            if (initialFilePath && existingSession.textEditorState) {
+                const existingTab = existingSession.textEditorState.tabs.find(t => t.filePath === initialFilePath);
+                if (existingTab) {
+                    updateTextEditorState(existingSession.id, { activeTabId: existingTab.id });
+                } else {
+                    const newTab: TextEditorTab = {
+                        id: self.crypto.randomUUID(),
+                        filePath: initialFilePath,
+                        content: '',
+                        savedContent: '',
+                        encoding: 'utf-8',
+                        lineEnding: 'CRLF',
+                    };
+                    updateTextEditorState(existingSession.id, {
+                        tabs: [...existingSession.textEditorState.tabs, newTab],
+                        activeTabId: newTab.id,
+                    });
+                }
+            }
+            // Activate the pane containing the existing text-editor session
+            const paneId = Object.entries(paneAllocations).find(([, sid]) => sid === existingSession.id)?.[0];
+            if (paneId) {
+                setActivePaneId(paneId);
+            }
+            return existingSession.id;
+        }
+
+        const sessionId = self.crypto.randomUUID();
+
+        // Restore previously opened files from localStorage
+        let tabs: TextEditorTab[] = [];
+        let activeTabId = '';
+        try {
+            const saved = localStorage.getItem(STORAGE_KEYS.TEXT_EDITOR_STATE);
+            if (saved) {
+                const parsed = JSON.parse(saved) as { filePaths: string[]; activeFilePath: string | null };
+                if (parsed.filePaths?.length > 0) {
+                    tabs = parsed.filePaths.map(fp => ({
+                        id: self.crypto.randomUUID(),
+                        filePath: fp,
+                        content: '',
+                        savedContent: '',
+                        encoding: 'utf-8',
+                        lineEnding: 'CRLF' as const,
+                    }));
+                    // Set active tab to the previously active file, or first tab
+                    const activeIdx = parsed.activeFilePath
+                        ? tabs.findIndex(t => t.filePath === parsed.activeFilePath)
+                        : 0;
+                    activeTabId = tabs[Math.max(activeIdx, 0)].id;
+                }
+            }
+        } catch { /* ignore parse errors */ }
+
+        // If an initial file path is provided, add it (or ensure it's in the list)
+        if (initialFilePath) {
+            const existing = tabs.find(t => t.filePath === initialFilePath);
+            if (existing) {
+                activeTabId = existing.id;
+            } else {
+                const newTab: TextEditorTab = {
+                    id: self.crypto.randomUUID(),
+                    filePath: initialFilePath,
+                    content: '',
+                    savedContent: '',
+                    encoding: 'utf-8',
+                    lineEnding: 'CRLF',
+                };
+                tabs.push(newTab);
+                activeTabId = newTab.id;
+            }
+        }
+
+        // Fallback: if no tabs at all, create an empty one
+        if (tabs.length === 0) {
+            const tabId = self.crypto.randomUUID();
+            tabs = [{
+                id: tabId,
+                filePath: null,
+                content: '',
+                savedContent: '',
+                encoding: 'utf-8',
+                lineEnding: 'CRLF',
+            }];
+            activeTabId = tabId;
+        }
+
+        const newSession: Session = {
+            id: sessionId,
+            title: 'Text Editor',
+            type: 'text-editor',
+            textEditorState: { tabs, activeTabId },
+        };
+        setSessions(prev => [...prev, newSession]);
+        setTabOrder(prev => [...prev, sessionId]);
+        allocateToPane(sessionId);
+        return sessionId;
+    };
+
+    const updateTextEditorState = (sessionId: string, newState: Partial<NonNullable<Session['textEditorState']>>) => {
+        setSessions(prev => prev.map(s => {
+            if (s.id === sessionId && s.textEditorState) {
+                const merged = { ...s.textEditorState, ...newState };
+                // Persist tab file paths to localStorage
+                try {
+                    const filePaths = merged.tabs
+                        .map(t => t.filePath)
+                        .filter((p): p is string => p !== null);
+                    localStorage.setItem(STORAGE_KEYS.TEXT_EDITOR_STATE, JSON.stringify({
+                        filePaths,
+                        activeFilePath: merged.tabs.find(t => t.id === merged.activeTabId)?.filePath ?? null,
+                    }));
+                } catch { /* ignore storage errors */ }
+                return { ...s, textEditorState: merged };
+            }
+            return s;
+        }));
+    };
+
     const updatePingMonitorState = (sessionId: string, newState: Partial<Session['pingMonitorState']>) => {
         setSessions(prev => prev.map(s => {
             if (s.id === sessionId && s.pingMonitorState) {
@@ -588,7 +733,9 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         createAISession,
         createLogViewerSession,
         createPingMonitorSession,
+        createTextEditorSession,
         updatePingMonitorState,
+        updateTextEditorState,
         updateSessionState,
         closeSession,
         closeAllAISessions,

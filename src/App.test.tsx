@@ -54,6 +54,7 @@ vi.mock('./services/electronService', () => ({
     readLogFile: vi.fn(() => Promise.resolve('')),
     openDebugLogFolder: vi.fn(),
     onUpdateAvailable: vi.fn(() => vi.fn()),
+    onOpenFileInEditor: vi.fn(() => vi.fn()),
 }));
 
 vi.mock('@xterm/xterm', () => ({

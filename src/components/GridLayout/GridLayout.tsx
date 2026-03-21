@@ -3,6 +3,7 @@ import { TerminalComponent } from '../Terminal/Terminal';
 import { AIChatPane } from '../AIChatPane/AIChatPane';
 import { LogViewerPane } from '../LogViewerPane/LogViewerPane';
 import { PingMonitorPane } from '../PingMonitorPane/PingMonitorPane';
+import { TextEditorPane } from '../TextEditorPane/TextEditorPane';
 import type { Session } from '../../hooks/useSessionManager';
 import type { InteractiveSessionTracking } from '../../hooks/useInteractiveFlow';
 import type { Terminal } from '@xterm/xterm';
@@ -17,6 +18,7 @@ interface GridLayoutProps {
     sessions: Session[];
     updateSessionState: (sessionId: string, newState: Partial<Session['aiChatState']>) => void;
     updatePingMonitorState?: (sessionId: string, newState: Partial<NonNullable<Session['pingMonitorState']>>) => void;
+    updateTextEditorState?: (sessionId: string, newState: Partial<NonNullable<Session['textEditorState']>>) => void;
     paneAllocations: { [paneId: string]: string | null };
     activePaneId: string | null;
     onPaneClick: (paneId: string) => void;
@@ -40,6 +42,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     sessions,
     updateSessionState,
     updatePingMonitorState,
+    updateTextEditorState,
     paneAllocations,
     activePaneId,
     onPaneClick,
@@ -267,18 +270,22 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     const gridTemplateRows = useMemo(() => rowSizes.map(s => `minmax(0, ${s}fr)`).join(' 4px '), [rowSizes]);
 
 
-    // Drag & Drop logic for Sessions
+    // Drag & Drop logic for Sessions (allow file drops to pass through to child components)
     const handleDragOver = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
+        const isSessionDrag = Array.prototype.indexOf.call(e.dataTransfer.types, 'application/json') !== -1;
+        if (isSessionDrag) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        }
     }, []);
 
     const handleDrop = useCallback((e: React.DragEvent, paneId: string) => {
-        e.preventDefault();
         const sessionId = e.dataTransfer.getData('text/plain');
         if (sessionId) {
+            e.preventDefault();
             onDropSession(sessionId, paneId);
         }
+        // If no session data, let the event propagate (e.g. file drops)
     }, [onDropSession]);
 
     const renderPanes = () => {
@@ -316,7 +323,13 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
 
                     >
                         {session ? (
-                            session.type === 'ping-monitor' ? (
+                            session.type === 'text-editor' ? (
+                                <TextEditorPane
+                                    sessionId={session.id}
+                                    initialState={session.textEditorState}
+                                    onStateChange={updateTextEditorState ? (newState) => updateTextEditorState(session.id, newState) : undefined}
+                                />
+                            ) : session.type === 'ping-monitor' ? (
                                 <PingMonitorPane
                                     sessionId={session.id}
                                     initialState={session.pingMonitorState}

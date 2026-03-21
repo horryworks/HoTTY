@@ -87,7 +87,7 @@ function createLoading() {
 
 // ----------------------------------------------------------------------
 
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 const { appendLoading, removeLoading } = createLoading()
 domReady().then(appendLoading)
@@ -190,6 +190,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     selectImportFile: () => ipcRenderer.invoke('select-import-file'),
     decryptImportFile: (password: string) => ipcRenderer.invoke('decrypt-import-file', { password }),
     openDebugLogFolder: () => ipcRenderer.invoke('open-debug-log-folder'),
+
+    // Text Editor
+    textEditorOpenFile: () => ipcRenderer.invoke('text-editor-open-file'),
+    textEditorSaveFile: (defaultPath?: string) => ipcRenderer.invoke('text-editor-save-file', defaultPath),
+    textEditorReadFile: (filePath: string, encoding: string) => ipcRenderer.invoke('text-editor-read-file', filePath, encoding),
+    textEditorWriteFile: (filePath: string, content: string, encoding: string) => ipcRenderer.invoke('text-editor-write-file', filePath, content, encoding),
+    getFilePath: (file: File) => webUtils.getPathForFile(file),
+    onOpenFileInEditor: (callback: (filePath: string) => void) => {
+        const subscription = (_event: unknown, filePath: string) => callback(filePath);
+        ipcRenderer.on('open-file-in-editor', subscription);
+        return () => { ipcRenderer.removeListener('open-file-in-editor', subscription); };
+    },
 
     // Ping Monitor
     pingMonitorStart: (sessionId: string, targets: string[], intervalMs: number, loggingEnabled: boolean, loggingPath: string) =>

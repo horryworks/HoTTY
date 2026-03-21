@@ -3,6 +3,7 @@ import { TerminalComponent } from '../Terminal/Terminal';
 import { AIChatPane } from '../AIChatPane/AIChatPane';
 import { LogViewerPane } from '../LogViewerPane/LogViewerPane';
 import { PingMonitorPane } from '../PingMonitorPane/PingMonitorPane';
+import { TextEditorPane } from '../TextEditorPane/TextEditorPane';
 import type { Session } from '../../hooks/useSessionManager';
 import type { InteractiveSessionTracking } from '../../hooks/useInteractiveFlow';
 import type { Terminal } from '@xterm/xterm';
@@ -31,6 +32,7 @@ interface PaneContentProps {
   onSendMessage?: (text: string) => void;
   onStateChange?: (newState: Partial<Session['aiChatState']>) => void;
   onPingMonitorStateChange?: (newState: Partial<NonNullable<Session['pingMonitorState']>>) => void;
+  onTextEditorStateChange?: (newState: Partial<NonNullable<Session['textEditorState']>>) => void;
 }
 
 // -- Component --
@@ -53,6 +55,7 @@ export const PaneContent: React.FC<PaneContentProps> = React.memo(({
   onSendMessage,
   onStateChange,
   onPingMonitorStateChange,
+  onTextEditorStateChange,
 }) => {
   const {
     fontSize,
@@ -88,6 +91,16 @@ export const PaneContent: React.FC<PaneContentProps> = React.memo(({
     const persona = aiPersonas.find(p => p.id === activePersonaId);
     return persona?.askAiCommands ?? aiPersonas[0]?.askAiCommands ?? [];
   }, [aiPersonas, activePersonaId]);
+
+  if (session.type === 'text-editor') {
+    return (
+      <TextEditorPane
+        sessionId={session.id}
+        initialState={session.textEditorState}
+        onStateChange={onTextEditorStateChange}
+      />
+    );
+  }
 
   if (session.type === 'ping-monitor') {
     return (

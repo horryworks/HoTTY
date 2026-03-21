@@ -124,6 +124,17 @@ function App() {
     electronService.getThemes().then(setThemesData);
   }, []);
 
+  // Prevent Electron from navigating to dropped files (default browser behaviour)
+  useEffect(() => {
+    const prevent = (e: Event) => { e.preventDefault(); };
+    document.addEventListener('dragover', prevent);
+    document.addEventListener('drop', prevent);
+    return () => {
+      document.removeEventListener('dragover', prevent);
+      document.removeEventListener('drop', prevent);
+    };
+  }, []);
+
   const applyTheme = (themeName: string) => {
     if (!themesData) return;
     const themeDef = themesData[themeName];
@@ -180,6 +191,15 @@ function App() {
       }
     });
     return cleanup;
+  }, []);
+
+  // Listen for open-file-in-editor from main process (file association / "Open with")
+  useEffect(() => {
+    const cleanup = electronService.onOpenFileInEditor((filePath) => {
+      session.createTextEditorSession(filePath);
+    });
+    return cleanup;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Global keyboard shortcut: Ctrl+N → open New Session dialog
@@ -264,6 +284,7 @@ function App() {
     onPasteRequest: handlePasteRequest,
     onSessionConnected: () => setShowDialog(false),
     onSessionError: (msg) => setGlobalMessage({ type: 'error', message: msg }),
+    paneAllocations: pane.paneAllocations,
     setPaneAllocations: pane.setPaneAllocations,
     setActivePaneId: pane.setActivePaneId,
     showLeftSidebar,
@@ -316,7 +337,7 @@ function App() {
     const activeSessionId = pane.paneAllocations[pane.activePaneId || ''];
     if (activeSessionId) {
       const activeSession = session.sessions.find(s => s.id === activeSessionId);
-      if (activeSession && activeSession.type !== 'ai' && activeSession.type !== 'log-viewer' && activeSession.type !== 'ping-monitor') {
+      if (activeSession && activeSession.type !== 'ai' && activeSession.type !== 'log-viewer' && activeSession.type !== 'ping-monitor' && activeSession.type !== 'text-editor') {
         setLastTerminalSessionId(activeSessionId);
         lastTerminalSessionIdRef.current = activeSessionId;
       }
@@ -456,6 +477,7 @@ function App() {
         onSendMessage={(text) => aiChat.sendMessage(sessionData.id, text)}
         onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
         onPingMonitorStateChange={(newState) => session.updatePingMonitorState(sessionData.id, newState)}
+        onTextEditorStateChange={(newState) => session.updateTextEditorState(sessionData.id, newState)}
       />
     );
   };
@@ -629,6 +651,7 @@ function App() {
               onNewAITab={() => session.createAISession()}
               onNewLogViewer={() => session.createLogViewerSession()}
               onNewPingMonitor={() => session.createPingMonitorSession()}
+              onNewTextEditor={() => session.createTextEditorSession()}
               onTabReorder={session.handleTabReorder}
               lastTargetSessionId={session.sessions.find(s => s.type === 'ai')?.aiChatState?.lastTargetSessionId}
             />
@@ -689,6 +712,7 @@ function App() {
                   sessions={session.sessions}
                   updateSessionState={session.updateSessionState}
                   updatePingMonitorState={session.updatePingMonitorState}
+                  updateTextEditorState={session.updateTextEditorState}
                   paneAllocations={pane.paneAllocations}
                   activePaneId={pane.activePaneId || ''}
                   onPaneClick={pane.setActivePaneId}

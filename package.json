@@ -43,6 +43,14 @@
       "node_modules/ssh2/**/*",
       "node_modules/node-pty/**/*"
     ],
+    "fileAssociations": [
+      {
+        "ext": ["txt", "log", "md", "json", "xml", "yaml", "yml", "csv", "ini", "conf", "cfg"],
+        "name": "Text File",
+        "description": "Text file",
+        "role": "Editor"
+      }
+    ],
     "win": {
       "icon": "public/icon.ico",
       "target": [

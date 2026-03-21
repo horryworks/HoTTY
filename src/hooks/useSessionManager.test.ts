@@ -45,6 +45,7 @@ const makeOptions = (overrides = {}) => ({
     onPasteRequest: vi.fn(),
     onSessionConnected: vi.fn(),
     onSessionError: vi.fn(),
+    paneAllocations: {},
     setPaneAllocations: vi.fn(),
     setActivePaneId: vi.fn(),
     sshKeepAliveEnabled: false,
@@ -280,5 +281,165 @@ describe('useSessionManager — getWatchBuffer / clearWatchBuffer', () => {
             const session = result.current.sessions.find(s => s.id === sessionId);
             expect(session?.hasWatchData).toBe(false);
         });
+    });
+});
+
+// ── createTextEditorSession ──────────────────────────────────────────────────
+
+describe('useSessionManager — createTextEditorSession', () => {
+    it('creates a text editor session with title "Text Editor"', () => {
+        const { result } = renderHook(() => useSessionManager(makeOptions()));
+        act(() => { result.current.createTextEditorSession(); });
+        expect(result.current.sessions.length).toBe(1);
+        expect(result.current.sessions[0].title).toBe('Text Editor');
+        expect(result.current.sessions[0].type).toBe('text-editor');
+    });
+
+    it('title stays "Text Editor" even with initialFilePath', () => {
+        const { result } = renderHook(() => useSessionManager(makeOptions()));
+        act(() => { result.current.createTextEditorSession('C:\\folder\\readme.txt'); });
+        expect(result.current.sessions[0].title).toBe('Text Editor');
+    });
+
+    it('restores tabs from localStorage', () => {
+        localStorage.setItem('hotty_text_editor_state', JSON.stringify({
+            filePaths: ['C:\\file1.txt', 'C:\\file2.txt'],
+            activeFilePath: 'C:\\file2.txt',
+        }));
+        const { result } = renderHook(() => useSessionManager(makeOptions()));
+        act(() => { result.current.createTextEditorSession(); });
+        const state = result.current.sessions[0].textEditorState!;
+        expect(state.tabs.length).toBe(2);
+        expect(state.tabs[0].filePath).toBe('C:\\file1.txt');
+        expect(state.tabs[1].filePath).toBe('C:\\file2.txt');
+        // Active tab should be file2
+        const activeTab = state.tabs.find(t => t.id === state.activeTabId);
+        expect(activeTab?.filePath).toBe('C:\\file2.txt');
+    });
+
+    it('adds initialFilePath to restored tabs if not already present', () => {
+        localStorage.setItem('hotty_text_editor_state', JSON.stringify({
+            filePaths: ['C:\\file1.txt'],
+            activeFilePath: 'C:\\file1.txt',
+        }));
+        const { result } = renderHook(() => useSessionManager(makeOptions()));
+        act(() => { result.current.createTextEditorSession('C:\\newfile.txt'); });
+        const state = result.current.sessions[0].textEditorState!;
+        expect(state.tabs.length).toBe(2);
+        const activeTab = state.tabs.find(t => t.id === state.activeTabId);
+        expect(activeTab?.filePath).toBe('C:\\newfile.txt');
+    });
+
+    it('activates existing tab when initialFilePath matches a restored tab', () => {
+        localStorage.setItem('hotty_text_editor_state', JSON.stringify({
+            filePaths: ['C:\\file1.txt', 'C:\\file2.txt'],
+            activeFilePath: 'C:\\file1.txt',
+        }));
+        const { result } = renderHook(() => useSessionManager(makeOptions()));
+        act(() => { result.current.createTextEditorSession('C:\\file2.txt'); });
+        const state = result.current.sessions[0].textEditorState!;
+        expect(state.tabs.length).toBe(2);
+        const activeTab = state.tabs.find(t => t.id === state.activeTabId);
+        expect(activeTab?.filePath).toBe('C:\\file2.txt');
+    });
+});
+
+// ── createTextEditorSession — singleton ──────────────────────────────────────
+
+describe('useSessionManager — createTextEditorSession singleton', () => {
+    it('does not create a second text editor session', () => {
+        const { result } = renderHook(() => useSessionManager(makeOptions()));
+        act(() => { result.current.createTextEditorSession(); });
+        act(() => { result.current.createTextEditorSession(); });
+        const textEditorSessions = result.current.sessions.filter(s => s.type === 'text-editor');
+        expect(textEditorSessions.length).toBe(1);
+    });
+
+    it('reuses existing session and adds file as new tab', () => {
+        const { result } = renderHook(() => useSessionManager(makeOptions()));
+        act(() => { result.current.createTextEditorSession(); });
+        const sessionId = result.current.sessions[0].id;
+        act(() => { result.current.createTextEditorSession('C:\\newfile.txt'); });
+        // Still only one text editor session
+        expect(result.current.sessions.filter(s => s.type === 'text-editor').length).toBe(1);
+        // Same session id
+        expect(result.current.sessions.find(s => s.type === 'text-editor')!.id).toBe(sessionId);
+        // New tab was added
+        const state = result.current.sessions.find(s => s.type === 'text-editor')!.textEditorState!;
+        expect(state.tabs.length).toBe(2);
+        const activeTab = state.tabs.find(t => t.id === state.activeTabId);
+        expect(activeTab?.filePath).toBe('C:\\newfile.txt');
+    });
+
+    it('reuses existing session and activates existing tab for duplicate file', () => {
+        const { result } = renderHook(() => useSessionManager(makeOptions()));
+        act(() => { result.current.createTextEditorSession('C:\\file1.txt'); });
+        act(() => { result.current.createTextEditorSession('C:\\file1.txt'); });
+        const state = result.current.sessions.find(s => s.type === 'text-editor')!.textEditorState!;
+        // Should not duplicate the tab
+        expect(state.tabs.filter(t => t.filePath === 'C:\\file1.txt').length).toBe(1);
+    });
+
+    it('returns existing session id when reusing', () => {
+        const { result } = renderHook(() => useSessionManager(makeOptions()));
+        let id1 = '';
+        let id2 = '';
+        act(() => { id1 = result.current.createTextEditorSession(); });
+        act(() => { id2 = result.current.createTextEditorSession(); });
+        expect(id1).toBe(id2);
+    });
+
+    it('calls onSessionError when opening duplicate text editor without file path', () => {
+        const onSessionError = vi.fn();
+        const { result } = renderHook(() => useSessionManager(makeOptions({ onSessionError })));
+        act(() => { result.current.createTextEditorSession(); });
+        act(() => { result.current.createTextEditorSession(); });
+        expect(onSessionError).toHaveBeenCalledWith('Only one Text Editor session can be open at a time.');
+    });
+
+    it('does not call onSessionError when opening duplicate text editor with file path', () => {
+        const onSessionError = vi.fn();
+        const { result } = renderHook(() => useSessionManager(makeOptions({ onSessionError })));
+        act(() => { result.current.createTextEditorSession(); });
+        act(() => { result.current.createTextEditorSession('C:\\newfile.txt'); });
+        expect(onSessionError).not.toHaveBeenCalled();
+    });
+});
+
+// ── updateTextEditorState ────────────────────────────────────────────────────
+
+describe('useSessionManager — updateTextEditorState', () => {
+    it('title remains "Text Editor" after state update', () => {
+        const { result } = renderHook(() => useSessionManager(makeOptions()));
+        act(() => { result.current.createTextEditorSession(); });
+        const sessionId = result.current.sessions[0].id;
+        const tabs = result.current.sessions[0].textEditorState!.tabs;
+        act(() => {
+            result.current.updateTextEditorState(sessionId, {
+                tabs: tabs.map(t => ({ ...t, content: 'modified' })),
+            });
+        });
+        expect(result.current.sessions[0].title).toBe('Text Editor');
+    });
+
+    it('persists file paths to localStorage on state update', () => {
+        const { result } = renderHook(() => useSessionManager(makeOptions()));
+        act(() => { result.current.createTextEditorSession(); });
+        const sessionId = result.current.sessions[0].id;
+        const tabId = result.current.sessions[0].textEditorState!.tabs[0].id;
+        act(() => {
+            result.current.updateTextEditorState(sessionId, {
+                tabs: [{
+                    id: tabId,
+                    filePath: 'C:\\saved.txt',
+                    content: 'hello',
+                    savedContent: 'hello',
+                    encoding: 'utf-8',
+                    lineEnding: 'CRLF',
+                }],
+            });
+        });
+        const stored = JSON.parse(localStorage.getItem('hotty_text_editor_state')!);
+        expect(stored.filePaths).toEqual(['C:\\saved.txt']);
     });
 });
