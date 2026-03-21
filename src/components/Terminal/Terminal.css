@@ -5,6 +5,32 @@
   overflow: hidden;
 }
 
+/* xterm v6 uses a Monaco-style custom DOM scrollbar (.xterm-scrollable-element > .scrollbar > .slider).
+   The native .xterm-viewport browser scrollbar is hidden by Monaco internally.
+   xterm also injects a <style> tag at runtime to set slider background color,
+   so !important is required to override it. */
+
+/* Scrollbar track */
+.xterm .xterm-scrollable-element>.scrollbar {
+  width: 10px !important;
+  background: var(--bg-secondary) !important;
+  opacity: 1 !important;
+}
+
+/* Scrollbar thumb - match global ::-webkit-scrollbar-thumb exactly */
+.xterm .xterm-scrollable-element>.scrollbar>.slider {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  background: var(--border-color) !important;
+  border-radius: 5px !important;
+  opacity: 1 !important;
+}
+
+.xterm .xterm-scrollable-element>.scrollbar>.slider:hover,
+.xterm .xterm-scrollable-element>.scrollbar>.slider.active {
+  background: var(--text-secondary) !important;
+}
+
 .terminal-container.ai-highlighted {
   border: 4px solid var(--accent-color);
   box-shadow: 0 0 15px var(--accent-color);

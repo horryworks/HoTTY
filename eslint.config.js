@@ -26,6 +26,7 @@ module.exports = tseslint.config(
         'warn',
         { allowConstantExport: true },
       ],
+      'no-console': 'warn',
     },
   },
   {

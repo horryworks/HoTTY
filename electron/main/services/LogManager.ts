@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { logger } from './Logger';
 
 interface SessionLogEntry {
     stream: fs.WriteStream;
@@ -27,7 +28,7 @@ export class LogManager {
 
         try {
             if (!fs.existsSync(config.loggingPath)) {
-                console.warn(`Log folder does not exist: ${config.loggingPath}`);
+                logger.warn('logmanager', `Log folder does not exist: ${config.loggingPath}`);
                 return;
             }
 
@@ -60,18 +61,18 @@ export class LogManager {
             const tsStream = fs.createWriteStream(tsPath, { flags: 'a', encoding: 'utf8' });
 
             stream.on('error', (err) => {
-                console.error(`Failed to write log for session ${sessionId}:`, err);
+                logger.error('logmanager', `Failed to write log for session ${sessionId}`, { error: String(err) });
                 this.stopLogging(sessionId);
             });
             tsStream.on('error', (err) => {
-                console.error(`Failed to write timestamp log for session ${sessionId}:`, err);
+                logger.error('logmanager', `Failed to write timestamp log for session ${sessionId}`, { error: String(err) });
             });
 
             this.logs.set(sessionId, { stream, tsStream, atLineStart: true });
-            console.log(`Started logging for session ${sessionId} to ${fullPath}`);
+            logger.info('logmanager', `Started logging for session ${sessionId} to ${fullPath}`);
 
         } catch (err) {
-            console.error('Failed to start logging:', err);
+            logger.error('logmanager', 'Failed to start logging', { error: String(err) });
         }
     }
 
@@ -134,7 +135,7 @@ export class LogManager {
             log.stream.end();
             log.tsStream.end();
             this.logs.delete(sessionId);
-            console.log(`Stopped logging for session ${sessionId}`);
+            logger.info('logmanager', `Stopped logging for session ${sessionId}`);
         }
     }
 }

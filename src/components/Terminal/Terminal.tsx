@@ -360,7 +360,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                     element.style.cursor = 'pointer';
                     element.style.zIndex = '10';
                     element.style.transformOrigin = 'top';
-                    element.style.transform = `translateX(10px) scaleY(${count})`;
+                    element.style.transform = `translateX(14px) scaleY(${count})`;
 
                     if (!element.dataset.clickEventBound) {
                         element.dataset.clickEventBound = "true";
@@ -549,7 +549,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
                         if (l && l.isWrapped) { count++; checkY++; }
                         else break;
                     }
-                    item.element.style.transform = `translateX(6px) scaleY(${count})`;
+                    item.element.style.transform = `translateX(14px) scaleY(${count})`;
                 }
             }
 
