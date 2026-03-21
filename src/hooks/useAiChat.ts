@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Session } from './useSessionManager';
-import type { AskAiCommand, PersonaDefinition } from '../App';
+import type { PersonaDefinition } from '../types/appTypes';
 import { STORAGE_KEYS } from '../constants/storage';
 import * as electronService from '../services/electronService';
 
@@ -8,7 +8,6 @@ import * as electronService from '../services/electronService';
 
 interface UseAiChatOptions {
   sessions: Session[];
-  askAiCommands: AskAiCommand[];
   aiPersonas: PersonaDefinition[];
   proactiveInstruction: string;
   getWatchBuffer: (sessionId: string) => string;
@@ -36,7 +35,6 @@ interface UseAiChatReturn {
 export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
   const {
     sessions,
-    askAiCommands,
     aiPersonas,
     getWatchBuffer,
     clearWatchBuffer,
@@ -53,7 +51,6 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
 
   // Refs for stable access in callbacks
   const sessionsRef = useRef(sessions);
-  const askAiCommandsRef = useRef(askAiCommands);
   const aiPersonasRef = useRef(aiPersonas);
   const lastTerminalSessionIdRef = useRef(lastTerminalSessionId);
   const paneAllocationsRef = useRef(paneAllocations);
@@ -61,7 +58,6 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
 
   useEffect(() => {
     sessionsRef.current = sessions;
-    askAiCommandsRef.current = askAiCommands;
     aiPersonasRef.current = aiPersonas;
     lastTerminalSessionIdRef.current = lastTerminalSessionId;
     paneAllocationsRef.current = paneAllocations;
@@ -84,6 +80,15 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     createAISessionRef.current = createAISession;
     setActivePaneIdRef.current = setActivePaneId;
   });
+
+  // -- Helper: resolve persona by label --
+  const resolvePersona = useCallback((expertiseLabel?: string): PersonaDefinition | undefined => {
+    const currentPersonas = aiPersonasRef.current;
+    if (expertiseLabel) {
+      return currentPersonas.find(p => p.label === expertiseLabel) ?? currentPersonas[0];
+    }
+    return currentPersonas[0];
+  }, []);
 
   // -- Helper: resolve persona prompt --
   const resolvePersonaPrompt = useCallback((expertiseLabel?: string): string => {
@@ -158,7 +163,6 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     electronService.logDebug(`[useAiChat] onAskAi triggered. Type: ${type}, Selection length: ${actualSelection?.length}`);
 
     const currentSessions = sessionsRef.current;
-    const currentCommands = askAiCommandsRef.current;
 
     // Resolve target terminal
     const { activeTermId, activeSession } = resolveTargetTerminal(targetSessionId);
@@ -214,7 +218,9 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
 
     const lang = localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE) || 'English';
     const expertiseLabel = existingAiSession?.aiChatState?.selectedExpertise;
+    const activePersona = resolvePersona(expertiseLabel);
     const defaultPersona = resolvePersonaPrompt(expertiseLabel);
+    const currentCommands = activePersona?.askAiCommands ?? [];
 
     let systemInstruction = '';
     let userPrompt = '';
@@ -244,22 +250,25 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       pendingMessage: userPrompt,
       systemInstruction: systemInstruction
     });
-  }, [resolveTargetTerminal, resolvePersonaPrompt]);
+  }, [resolveTargetTerminal, resolvePersonaPrompt, resolvePersona]);
 
   // -- showPromptMenu --
   const showPromptMenu = useCallback((aiSessionId: string) => {
     electronService.logDebug(`[useAiChat] showPromptMenu for session: ${aiSessionId}`);
     const currentSessions = sessionsRef.current;
-    const currentCommands = askAiCommandsRef.current;
     const aiSession = currentSessions.find(s => s.id === aiSessionId);
     if (!aiSession || aiSession.type !== 'ai') return;
+
+    const expertiseLabel = aiSession.aiChatState?.selectedExpertise;
+    const activePersona = resolvePersona(expertiseLabel);
+    const currentCommands = activePersona?.askAiCommands ?? [];
 
     const menuCommands = [
       { id: 'analyze-watch', label: 'Analyze Watched Output' },
       ...currentCommands.map(c => ({ id: c.id, label: c.label }))
     ];
     electronService.showContextMenu('__WATCH_BUFFER__', menuCommands);
-  }, []);
+  }, [resolvePersona]);
 
   // -- handleFreeFormatSubmit --
   const handleFreeFormatSubmit = useCallback((prompt: string, selection: string) => {

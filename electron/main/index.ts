@@ -17,7 +17,7 @@ import { AnthropicProvider } from './services/ai/providers/anthropic/AnthropicPr
 import { LogManager } from './services/LogManager';
 import { PingMonitorService, isValidPingTarget } from './services/PingMonitorService';
 import { logger } from './services/Logger';
-import { encryptString, decryptString } from './services/dpapi';
+import { encryptString, decryptString, encodePowerShellScript } from './services/dpapi';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { pathToFileURL } from 'url';
@@ -527,7 +527,7 @@ ipcMain.handle('list-system-fonts', async () => {
     const script = '[System.Reflection.Assembly]::LoadWithPartialName("System.Drawing") | Out-Null; ' +
       '(New-Object System.Drawing.Text.InstalledFontCollection).Families | ' +
       'Select-Object -ExpandProperty Name';
-    const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', script]);
+    const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodePowerShellScript(script)]);
     return stdout.split('\n')
       .map(s => s.trim())
       .filter(s => s.length > 0);

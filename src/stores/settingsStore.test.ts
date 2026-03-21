@@ -30,7 +30,8 @@ describe('settingsStore — default state', () => {
         expect(s.sidebarPosition).toBe('left');
         expect(s.promptPatterns.length).toBeGreaterThan(0);
         expect(s.aiPersonas.length).toBeGreaterThan(0);
-        expect(s.askAiCommands.length).toBeGreaterThan(0);
+        expect(s.aiPersonas[0].askAiCommands.length).toBeGreaterThan(0);
+        expect(s.activePersonaId).toBe('network-expert');
         expect(s.activeAiProvider).toBe('vertexai');
     });
 

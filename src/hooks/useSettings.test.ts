@@ -38,7 +38,7 @@ describe('useSettings — exposes all settings fields', () => {
             'loggingEnabled', 'loggingPath', 'lineWrapEnabled', 'scrollback',
             'watchBufferLimit', 'backspaceSendsDel', 'rightClickPaste',
             'showSystemPrompt', 'enablePromptHighlight', 'promptHighlightColor',
-            'promptPatterns', 'aiPersonas', 'askAiCommands',
+            'promptPatterns', 'aiPersonas', 'activePersonaId',
             'sidebarPosition', 'proactiveInstruction', 'interactiveStabilizationTimeout',
         ];
         expected.forEach(key => expect(keys).toContain(key));

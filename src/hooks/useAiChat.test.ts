@@ -44,7 +44,6 @@ const makeOptions = (
     overrides: Partial<Parameters<typeof useAiChat>[0]> = {}
 ): Parameters<typeof useAiChat>[0] => ({
     sessions,
-    askAiCommands: [] as AskAiCommand[],
     aiPersonas: [] as PersonaDefinition[],
     proactiveInstruction: '',
     getWatchBuffer: vi.fn(() => ''),
@@ -219,12 +218,22 @@ describe('useAiChat — showPromptMenu', () => {
     });
 
     it('includes askAiCommands labels in the context menu items', () => {
-        const aiSession = makeAISession('ai-1');
         const commands: AskAiCommand[] = [
             { id: 'explain', label: 'Explain this', promptTemplate: 'Explain: {selection}' },
         ];
+        const persona: PersonaDefinition = {
+            id: 'test-persona',
+            label: 'Test Expert',
+            systemPrompt: 'You are a test expert.',
+            askAiCommands: commands,
+        };
+        const aiSession = makeAISession('ai-1');
+        aiSession.aiChatState = {
+            ...aiSession.aiChatState!,
+            selectedExpertise: 'Test Expert',
+        };
         const { result } = renderHook(() =>
-            useAiChat(makeOptions([aiSession], { askAiCommands: commands }))
+            useAiChat(makeOptions([aiSession], { aiPersonas: [persona] }))
         );
 
         act(() => {

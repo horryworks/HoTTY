@@ -64,9 +64,9 @@ export const PaneContent: React.FC<PaneContentProps> = React.memo(({
     enablePromptHighlight,
     promptHighlightColor,
     promptPatterns,
-    askAiCommands,
     showSystemPrompt,
     aiPersonas,
+    activePersonaId,
     proactiveInstruction,
   } = useSettingsStore(useShallow(s => ({
     fontSize: s.fontSize,
@@ -78,11 +78,16 @@ export const PaneContent: React.FC<PaneContentProps> = React.memo(({
     enablePromptHighlight: s.enablePromptHighlight,
     promptHighlightColor: s.promptHighlightColor,
     promptPatterns: s.promptPatterns,
-    askAiCommands: s.askAiCommands,
     showSystemPrompt: s.showSystemPrompt,
     aiPersonas: s.aiPersonas,
+    activePersonaId: s.activePersonaId,
     proactiveInstruction: s.proactiveInstruction,
   })));
+
+  const askAiCommands = React.useMemo(() => {
+    const persona = aiPersonas.find(p => p.id === activePersonaId);
+    return persona?.askAiCommands ?? aiPersonas[0]?.askAiCommands ?? [];
+  }, [aiPersonas, activePersonaId]);
 
   if (session.type === 'ping-monitor') {
     return (

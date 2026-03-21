@@ -14,7 +14,7 @@ export function isDpapiEncrypted(value: string): boolean {
  * Encodes a PowerShell script as Base64 UTF-16 LE for use with -EncodedCommand.
  * This avoids passing the script via -Command, which is susceptible to shell injection.
  */
-function encodePowerShellScript(script: string): string {
+export function encodePowerShellScript(script: string): string {
     const utf16le = Buffer.allocUnsafe(script.length * 2);
     for (let i = 0; i < script.length; i++) {
         utf16le.writeUInt16LE(script.charCodeAt(i), i * 2);

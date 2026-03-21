@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import * as electronService from '../../services/electronService';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, DEFAULT_AI_COMMANDS, DEFAULT_PERSONAS } from '../../stores/settingsStore';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
+import type { PersonaDefinition, AskAiCommand } from '../../types/appTypes';
 
 interface AISettingsTabProps {
     isAiAuthenticated: boolean;
@@ -12,10 +13,10 @@ interface AISettingsTabProps {
     onWatchBufferLimitChange: (limit: number) => void;
     interactiveStabilizationTimeout: number;
     onInteractiveStabilizationTimeoutChange: (timeout: number) => void;
-    askAiCommands: { id: string; label: string; promptTemplate: string }[];
-    onAskAiCommandsChange: (commands: { id: string; label: string; promptTemplate: string }[]) => void;
-    aiPersonas: { id: string; label: string; systemPrompt: string }[];
-    onAiPersonasChange: (personas: { id: string; label: string; systemPrompt: string }[]) => void;
+    aiPersonas: PersonaDefinition[];
+    onAiPersonasChange: (personas: PersonaDefinition[]) => void;
+    activePersonaId: string;
+    onActivePersonaIdChange: (id: string) => void;
     proactiveInstruction: string;
     onProactiveInstructionChange: (instruction: string) => void;
     showSystemPrompt: boolean;
@@ -35,10 +36,10 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
     onWatchBufferLimitChange,
     interactiveStabilizationTimeout,
     onInteractiveStabilizationTimeoutChange,
-    askAiCommands,
-    onAskAiCommandsChange,
     aiPersonas,
     onAiPersonasChange,
+    activePersonaId,
+    onActivePersonaIdChange,
     proactiveInstruction,
     onProactiveInstructionChange,
     showSystemPrompt,
@@ -54,9 +55,49 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
     const [showGeminiWarning, setShowGeminiWarning] = useState(false);
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
+    // Ensure activePersonaId points to an existing persona
+    const activePersona = aiPersonas.find(p => p.id === activePersonaId) ?? aiPersonas[0];
+    const activeTabId = activePersona?.id ?? '';
+
+    const tabsRef = React.useRef<HTMLDivElement>(null);
+    const isDraggingTab = React.useRef(false);
+    const tabStartX = React.useRef(0);
+    const tabScrollLeft = React.useRef(0);
+
+    const handleTabMouseDown = (e: React.MouseEvent) => {
+        isDraggingTab.current = true;
+        if (tabsRef.current) {
+            tabStartX.current = e.pageX - tabsRef.current.offsetLeft;
+            tabScrollLeft.current = tabsRef.current.scrollLeft;
+        }
+    };
+
+    const handleTabMouseLeave = () => { isDraggingTab.current = false; };
+    const handleTabMouseUp = () => { isDraggingTab.current = false; };
+
+    const handleTabMouseMove = (e: React.MouseEvent) => {
+        if (!isDraggingTab.current || !tabsRef.current) return;
+        e.preventDefault();
+        const x = e.pageX - tabsRef.current.offsetLeft;
+        const walk = (x - tabStartX.current) * 2;
+        tabsRef.current.scrollLeft = tabScrollLeft.current - walk;
+    };
+
+    const updatePersona = (personaId: string, updates: Partial<PersonaDefinition>) => {
+        const newPersonas = aiPersonas.map(p =>
+            p.id === personaId ? { ...p, ...updates } : p
+        );
+        onAiPersonasChange(newPersonas);
+    };
+
+    const updatePersonaCommands = (personaId: string, commands: AskAiCommand[]) => {
+        updatePersona(personaId, { askAiCommands: commands });
+    };
+
     return (
         <>
         <div className="form-group">
+            {/* ── AI Provider ── */}
             <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
                 <label style={{ marginBottom: '10px', display: 'block' }}>AI Provider</label>
                 <select
@@ -91,6 +132,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                 </p>
             </div>
 
+            {/* ── Authentication ── */}
             <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
                 <label style={{ marginBottom: '10px', display: 'block' }}>AI Provider Authentication</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -121,6 +163,222 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                 </div>
             </div>
 
+            {/* ── Persona Tabs ── */}
+            <label style={{ marginBottom: '10px', display: 'block' }}>Personas</label>
+            <div
+                className="settings-tabs ai-persona-tabs"
+                ref={tabsRef}
+                onMouseDown={handleTabMouseDown}
+                onMouseLeave={handleTabMouseLeave}
+                onMouseUp={handleTabMouseUp}
+                onMouseMove={handleTabMouseMove}
+            >
+                {aiPersonas.map(persona => (
+                    <button
+                        key={persona.id}
+                        className={`settings-tab ${activeTabId === persona.id ? 'active' : ''}`}
+                        onClick={() => onActivePersonaIdChange(persona.id)}
+                    >
+                        {persona.label}
+                    </button>
+                ))}
+                <button
+                    className="settings-tab"
+                    onClick={() => {
+                        const id = crypto.randomUUID();
+                        const newPersona: PersonaDefinition = {
+                            id,
+                            label: 'New Persona',
+                            systemPrompt: 'You are a helpful assistant.',
+                            askAiCommands: [...DEFAULT_AI_COMMANDS],
+                        };
+                        onAiPersonasChange([...aiPersonas, newPersona]);
+                        onActivePersonaIdChange(id);
+                    }}
+                    title="Add Persona"
+                >
+                    +
+                </button>
+            </div>
+
+            {/* ── Active Persona Content ── */}
+            {activePersona && (
+                <div style={{ border: '1px solid var(--border-color)', borderTop: 'none', borderRadius: '0 0 4px 4px', padding: '15px', marginBottom: '20px' }}>
+                    {/* Persona Name */}
+                    <div style={{ marginBottom: '15px' }}>
+                        <label style={{ marginBottom: '6px', display: 'block', fontSize: 'calc(var(--font-size-base) - 1px)' }}>Persona Name</label>
+                        <input
+                            type="text"
+                            value={activePersona.label}
+                            onChange={(e) => updatePersona(activeTabId, { label: e.target.value })}
+                            placeholder="Display Name"
+                            className="settings-input"
+                            style={{ width: '100%', padding: '6px', boxSizing: 'border-box' }}
+                        />
+                    </div>
+
+                    {/* System Prompt */}
+                    <div style={{ marginBottom: '15px' }}>
+                        <label style={{ marginBottom: '6px', display: 'block', fontSize: 'calc(var(--font-size-base) - 1px)' }}>System Prompt</label>
+                        <textarea
+                            value={activePersona.systemPrompt}
+                            onChange={(e) => updatePersona(activeTabId, { systemPrompt: e.target.value })}
+                            placeholder="System Prompt"
+                            className="settings-input"
+                            style={{
+                                width: '100%',
+                                padding: '6px',
+                                height: '80px',
+                                resize: 'vertical',
+                                boxSizing: 'border-box'
+                            }}
+                        />
+                    </div>
+
+                    {/* Ask AI Commands */}
+                    <div style={{ marginBottom: '15px' }}>
+                        <label style={{ marginBottom: '6px', display: 'block', fontSize: 'calc(var(--font-size-base) - 1px)' }}>Ask AI Commands</label>
+                        <div className="command-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                            {activePersona.askAiCommands?.map((cmd, index) => (
+                                <div
+                                    key={cmd.id}
+                                    draggable
+                                    onDragStart={(e) => onDragStart(e, index)}
+                                    onDragOver={(e) => onDragOver(e)}
+                                    onDrop={(e) => onDrop(e, index)}
+                                    onDragEnd={onDragEnd}
+                                    style={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '4px',
+                                        padding: '10px',
+                                        backgroundColor: 'var(--bg-secondary)',
+                                        borderRadius: '4px',
+                                        border: '1px solid var(--border-color)',
+                                        opacity: draggedIndex === index ? 0.5 : 1,
+                                        cursor: 'grab',
+                                        transition: 'opacity 0.2s, transform 0.2s',
+                                        transform: draggedIndex === index ? 'scale(0.98)' : 'scale(1)'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <span style={{ cursor: 'grab', color: '#888', userSelect: 'none' }}>☰</span>
+                                        <input
+                                            type="text"
+                                            value={cmd.label}
+                                            onChange={(e) => {
+                                                const newCommands = [...activePersona.askAiCommands];
+                                                newCommands[index] = { ...cmd, label: e.target.value };
+                                                updatePersonaCommands(activeTabId, newCommands);
+                                            }}
+                                            placeholder="Label"
+                                            className="settings-input"
+                                            style={{ flex: 1, padding: '4px' }}
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const newCommands = activePersona.askAiCommands.filter((_, i) => i !== index);
+                                                updatePersonaCommands(activeTabId, newCommands);
+                                            }}
+                                            style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                    <textarea
+                                        value={cmd.promptTemplate}
+                                        onChange={(e) => {
+                                            const newCommands = [...activePersona.askAiCommands];
+                                            newCommands[index] = { ...cmd, promptTemplate: e.target.value };
+                                            updatePersonaCommands(activeTabId, newCommands);
+                                        }}
+                                        placeholder="Prompt Template ({selection} will be replaced)"
+                                        className="settings-input"
+                                        style={{
+                                            width: '100%',
+                                            padding: '6px',
+                                            height: '60px',
+                                            fontFamily: 'monospace',
+                                            resize: 'vertical',
+                                            boxSizing: 'border-box'
+                                        }}
+                                    />
+                                    <div style={{ color: '#888' }}>
+                                        Use <code>{'{selection}'}</code> placeholder for the selected text.
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button
+                                onClick={() => {
+                                    const id = crypto.randomUUID();
+                                    const newCommand: AskAiCommand = { id, label: 'New Command', promptTemplate: '{selection}' };
+                                    updatePersonaCommands(activeTabId, [...(activePersona.askAiCommands || []), newCommand]);
+                                }}
+                                style={{ padding: '6px 12px', cursor: 'pointer' }}
+                            >
+                                + Add Command
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (confirm('Reset commands to defaults for this persona?')) {
+                                        updatePersonaCommands(activeTabId, [...DEFAULT_AI_COMMANDS]);
+                                    }
+                                }}
+                                style={{ padding: '6px 12px', cursor: 'pointer' }}
+                            >
+                                Reset Commands
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Delete Persona */}
+                    <div style={{ textAlign: 'right' }}>
+                        <button
+                            onClick={() => {
+                                if (aiPersonas.length <= 1) {
+                                    alert('At least one persona is required.');
+                                    return;
+                                }
+                                if (confirm(`Delete "${activePersona.label}"?`)) {
+                                    const newPersonas = aiPersonas.filter(p => p.id !== activeTabId);
+                                    onAiPersonasChange(newPersonas);
+                                    onActivePersonaIdChange(newPersonas[0].id);
+                                }
+                            }}
+                            style={{
+                                padding: '6px 12px',
+                                cursor: 'pointer',
+                                backgroundColor: '#d32f2f',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '3px',
+                            }}
+                        >
+                            Delete Persona
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Reset All Personas ── */}
+            <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
+                <button
+                    onClick={() => {
+                        if (confirm('Reset all personas to defaults? This will remove all custom personas and commands.')) {
+                            onAiPersonasChange([...DEFAULT_PERSONAS]);
+                            onActivePersonaIdChange(DEFAULT_PERSONAS[0].id);
+                        }
+                    }}
+                    style={{ padding: '6px 12px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
+                >
+                    Reset All Personas
+                </button>
+            </div>
+
+            {/* ── Advanced Settings ── */}
             <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
                 <label style={{ marginBottom: '10px', display: 'block' }}>Watch Buffer Limit (Characters)</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -157,205 +415,6 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         Default: 10,000 (10s). Wait time after prompt detection before sending to AI.
                     </span>
                 </div>
-            </div>
-
-            <label style={{ marginBottom: '10px', display: 'block' }}>Ask AI Commands</label>
-
-            <div className="command-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
-                {askAiCommands?.map((cmd, index) => (
-                    <div
-                        key={cmd.id}
-                        draggable
-                        onDragStart={(e) => onDragStart(e, index)}
-                        onDragOver={(e) => onDragOver(e)}
-                        onDrop={(e) => onDrop(e, index)}
-                        onDragEnd={onDragEnd}
-                        style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '4px',
-                            padding: '10px',
-                            backgroundColor: 'var(--bg-secondary)',
-                            borderRadius: '4px',
-                            border: '1px solid var(--border-color)',
-                            opacity: draggedIndex === index ? 0.5 : 1,
-                            cursor: 'grab',
-                            transition: 'opacity 0.2s, transform 0.2s',
-                            transform: draggedIndex === index ? 'scale(0.98)' : 'scale(1)'
-                        }}
-                    >
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <span style={{ cursor: 'grab', color: '#888', userSelect: 'none' }}>☰</span>
-                            <input
-                                type="text"
-                                value={cmd.label}
-                                onChange={(e) => {
-                                    const newCommands = [...askAiCommands];
-                                    newCommands[index] = { ...cmd, label: e.target.value };
-                                    onAskAiCommandsChange(newCommands);
-                                }}
-                                placeholder="Label"
-                                className="settings-input"
-                                style={{ flex: 1, padding: '4px' }}
-                            />
-                            <button
-                                onClick={() => {
-                                    const newCommands = askAiCommands.filter((_, i) => i !== index);
-                                    onAskAiCommandsChange(newCommands);
-                                }}
-                                style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
-                            >
-                                ✕
-                            </button>
-                        </div>
-                        <textarea
-                            value={cmd.promptTemplate}
-                            onChange={(e) => {
-                                const newCommands = [...askAiCommands];
-                                newCommands[index] = { ...cmd, promptTemplate: e.target.value };
-                                onAskAiCommandsChange(newCommands);
-                            }}
-                            placeholder="Prompt Template ({selection} will be replaced)"
-                            className="settings-input"
-                            style={{
-                                width: '100%',
-                                padding: '6px',
-                                height: '60px',
-                                fontFamily: 'monospace',
-                                resize: 'vertical',
-                                boxSizing: 'border-box'
-                            }}
-                        />
-                        <div style={{ color: '#888' }}>
-                            Use <code>{'{selection}'}</code> placeholder for the selected text.
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
-                <button
-                    onClick={() => {
-                        const id = crypto.randomUUID();
-                        const newCommand = { id, label: 'New Command', promptTemplate: '{selection}' };
-                        onAskAiCommandsChange([...(askAiCommands || []), newCommand]);
-                    }}
-                    style={{ padding: '6px 12px', cursor: 'pointer' }}
-                >
-                    + Add Command
-                </button>
-                <button
-                    onClick={() => {
-                        if (confirm('Reset to default commands?')) {
-                            const DEFAULT_COMMANDS = [
-                                { id: 'what-is-this', label: 'What is this?', promptTemplate: 'Explain the following text or code snippet concisely:\n\n{selection}' },
-                                { id: 'what-does-it-mean', label: 'What does it mean?', promptTemplate: 'Interpret the meaning of this log entry or message and its implications:\n\n{selection}' },
-                                { id: 'root-cause', label: 'Research root cause', promptTemplate: 'Analyze the following error or issue, identify 3 potential root causes, and suggest verification steps for each:\n\n{selection}' },
-                                { id: 'fix-this', label: 'Fix this', promptTemplate: 'Suggest a fix or improvement for the selected code or configuration:\n\n{selection}' },
-                            ];
-                            onAskAiCommandsChange(DEFAULT_COMMANDS);
-                        }
-                    }}
-                    style={{ padding: '6px 12px', cursor: 'pointer' }}
-                >
-                    Reset Defaults
-                </button>
-            </div>
-
-            <div style={{ marginBottom: '20px' }}>
-                <label style={{ marginBottom: '10px', display: 'block' }}>Personas</label>
-
-                <div className="command-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
-                    {aiPersonas?.map((persona, index) => (
-                        <div
-                            key={persona.id}
-                            style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '4px',
-                                padding: '10px',
-                                backgroundColor: 'var(--bg-secondary)',
-                                borderRadius: '4px',
-                                border: '1px solid var(--border-color)',
-                            }}
-                        >
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                <input
-                                    type="text"
-                                    value={persona.label}
-                                    onChange={(e) => {
-                                        const newPersonas = [...aiPersonas];
-                                        newPersonas[index] = { ...persona, label: e.target.value };
-                                        onAiPersonasChange(newPersonas);
-                                    }}
-                                    placeholder="Display Name"
-                                    className="settings-input"
-                                    style={{ flex: 1, padding: '4px' }}
-                                />
-                                <button
-                                    onClick={() => {
-                                        if (confirm('Delete this persona?')) {
-                                            const newPersonas = aiPersonas.filter((_, i) => i !== index);
-                                            onAiPersonasChange(newPersonas);
-                                        }
-                                    }}
-                                    style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '3px' }}
-                                >
-                                    ✕
-                                </button>
-                            </div>
-                            <textarea
-                                value={persona.systemPrompt}
-                                onChange={(e) => {
-                                    const newPersonas = [...aiPersonas];
-                                    newPersonas[index] = { ...persona, systemPrompt: e.target.value };
-                                    onAiPersonasChange(newPersonas);
-                                }}
-                                placeholder="System Prompt"
-                                className="settings-input"
-                                style={{
-                                    width: '100%',
-                                    padding: '6px',
-                                    height: '60px',
-                                    resize: 'vertical',
-                                    boxSizing: 'border-box'
-                                }}
-                            />
-                        </div>
-                    ))}
-                </div>
-
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
-                    <button
-                        onClick={() => {
-                            const id = crypto.randomUUID();
-                            const newPersona = { id, label: 'New Persona', systemPrompt: 'You are a helpful assistant.' };
-                            onAiPersonasChange([...(aiPersonas || []), newPersona]);
-                        }}
-                        style={{ padding: '6px 12px', cursor: 'pointer' }}
-                    >
-                        + Add Persona
-                    </button>
-                    <button
-                        onClick={() => {
-                            if (confirm('Reset to default personas?')) {
-                                const DEFAULT_PERSONAS = [
-                                    { id: 'general-helper', label: 'General Helper', systemPrompt: 'You are a helpful technical assistant. Provide clear, concise, and accurate answers. When explaining concepts, use analogies where appropriate.' },
-                                    { id: 'network-expert', label: 'Network Expert', systemPrompt: 'You are a Senior Network Engineer. Analyze network issues with a focus on OSI layers, routing protocols (BGP, OSPF), and switching. Use industry-standard terminology (Cisco/Juniper syntax) and formatting.' },
-                                    { id: 'server-expert', label: 'Server Expert', systemPrompt: 'You are a Systems Administrator specializing in Linux and Windows servers. Focus on OS internals, kernel parameters, performance tuning, and security best practices. Provide specific commands for troubleshooting.' },
-                                    { id: 'cloud-expert', label: 'Cloud Expert', systemPrompt: 'You are a Cloud Architect (AWS/Azure/GCP). Advise on cloud-native patterns, microservices, and infrastructure-as-code (Terraform/K8s). Prioritize scalability, cost-efficiency, and security in your recommendations.' },
-                                    { id: 'coding-expert', label: 'Coding Expert', systemPrompt: 'You are a Senior Software Engineer. Provide idiomatic, clean, and performant code solutions. Explain time/space complexity (Big O) where relevant. Prefer modern syntax and safety.' },
-                                    { id: 'security-analyst', label: 'Security Analyst', systemPrompt: 'You are a Cybersecurity Analyst. Analyze logs and configurations for potential vulnerabilities, threats, and indicators of compromise (IoCs). Recommend mitigation strategies based on industry standards (NIST/CIS).' },
-                                ];
-                                onAiPersonasChange(DEFAULT_PERSONAS);
-                            }
-                        }}
-                        style={{ padding: '6px 12px', cursor: 'pointer' }}
-                    >
-                        Reset Defaults
-                    </button>
-                </div>
-                <p className="settings-help">The default system instruction sent to the AI when starting a new session.</p>
             </div>
 
             <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>

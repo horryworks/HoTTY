@@ -315,7 +315,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const selectedModelRef = useRef(selectedModel);
     selectedModelRef.current = selectedModel;
     const [selectedLanguage, setSelectedLanguage] = useState(initialState?.selectedLanguage || 'English');
-    const [selectedExpertise, setSelectedExpertise] = useState(initialState?.selectedExpertise || 'General Helper');
+    const defaultExpertise = aiPersonas?.[0]?.label || 'Network Expert';
+    const [selectedExpertise, setSelectedExpertise] = useState(initialState?.selectedExpertise || defaultExpertise);
     const [textareaHeight, setTextareaHeight] = useState(initialState?.textareaHeight || 0);
     const [localSystemInstruction, setLocalSystemInstruction] = useState(initialState?.systemInstruction || 'You are a helpful assistant.');
 
@@ -883,6 +884,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         if (persona) {
                                             const langInstr = selectedLanguage !== 'English' ? ` Answer in ${selectedLanguage}.` : '';
                                             setLocalSystemInstruction(`${persona.systemPrompt}${langInstr} [ABSOLUTE MANDATORY RULES - NO EXCEPTIONS] 1. Answer ONLY what the user asked. Do NOT suggest next steps, additional commands, or follow-up actions unless explicitly requested. 2. After answering, STOP. Do not continue the conversation on your own. 3. ANY shell/terminal command MUST be placed in EXACTLY ONE \`\`\`execute block per response. 4. It is STRICTLY FORBIDDEN to use more than one \`\`\`execute block in a single response. 5. It is STRICTLY FORBIDDEN to write commands as inline code, plain text, or in \`\`\`bash/\`\`\`sh/\`\`\`shell blocks. 6. If multiple steps are needed, combine them into a single \`\`\`execute block using && or semicolons. 7. Breaking these rules causes a critical application failure.`);
+                                            // Sync global active persona for context menus
+                                            useSettingsStore.getState().updateActivePersonaId(persona.id);
                                         }
                                     }}
                                     disabled={isStreaming}

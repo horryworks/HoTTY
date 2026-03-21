@@ -61,7 +61,7 @@ function App() {
     updatePromptHighlightColor,
     updatePromptPatterns,
     updateAiPersonas,
-    updateAskAiCommands,
+    updateActivePersonaId,
     updateSidebarPosition,
     updateProactiveInstruction,
     updateInteractiveStabilizationTimeout,
@@ -295,7 +295,6 @@ function App() {
 
   const aiChat = useAiChat({
     sessions: session.sessions,
-    askAiCommands: settings.askAiCommands,
     aiPersonas: settings.aiPersonas,
     proactiveInstruction: settings.proactiveInstruction,
     getWatchBuffer: session.getWatchBuffer,
@@ -490,11 +489,11 @@ function App() {
     e.preventDefault();
     const sid = e.dataTransfer.getData('text/plain');
     if (sid) pane.handleDropSession(sid, paneId);
-  }, [pane.handleDropSession]);
+  }, [pane]);
 
   const handlePaneActivate = useCallback((paneId: string) => () => {
     pane.setActivePaneId(paneId);
-  }, [pane.setActivePaneId]);
+  }, [pane]);
 
   // GridLayout callback handlers (memoized)
   const handleGridPasteRequest = useCallback((text: string) => {
@@ -504,15 +503,15 @@ function App() {
 
   const handleGridRunCommand = useCallback((targetId: string, command: string, aiSessionId: string) => {
     interactiveFlow.startTracking(targetId, aiSessionId, command);
-  }, [interactiveFlow.startTracking]);
+  }, [interactiveFlow]);
 
   const handleGridSendMessage = useCallback((aiSessionId: string, text: string) => {
     aiChat.sendMessage(aiSessionId, text);
-  }, [aiChat.sendMessage]);
+  }, [aiChat]);
 
   const handleGridShowPromptMenu = useCallback((aiSessionId: string) => {
     aiChat.showPromptMenu(aiSessionId);
-  }, [aiChat.showPromptMenu]);
+  }, [aiChat]);
 
   // ═══════════════════════════════════════════════
   // 15. Early Return
@@ -798,7 +797,6 @@ function App() {
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
-          onLogout={session.closeAllAISessions}
           encoding={settings.globalEncoding}
           onEncodingChange={handleGlobalEncodingChange}
           fontSize={settings.fontSize}
@@ -832,12 +830,6 @@ function App() {
           onDeleteTheme={handleDeleteTheme}
           sidebarPosition={settings.sidebarPosition}
           onSidebarPositionChange={updateSidebarPosition}
-          showSystemPrompt={settings.showSystemPrompt}
-          onShowSystemPromptChange={updateShowSystemPrompt}
-          askAiCommands={settings.askAiCommands}
-          onAskAiCommandsChange={updateAskAiCommands}
-          aiPersonas={settings.aiPersonas}
-          onAiPersonasChange={updateAiPersonas}
           backspaceSendsDel={settings.backspaceSendsDel}
           onBackspaceSendsDelChange={updateBackspaceSendsDel}
           rightClickPaste={settings.rightClickPaste}
@@ -848,13 +840,20 @@ function App() {
           onPromptHighlightColorChange={updatePromptHighlightColor}
           promptPatterns={settings.promptPatterns}
           onPromptPatternsChange={updatePromptPatterns}
+          updateInfo={updateInfo}
+          onAiLogout={session.closeAllAISessions}
+          showSystemPrompt={settings.showSystemPrompt}
+          onShowSystemPromptChange={updateShowSystemPrompt}
+          aiPersonas={settings.aiPersonas}
+          onAiPersonasChange={updateAiPersonas}
+          activePersonaId={settings.activePersonaId}
+          onActivePersonaIdChange={updateActivePersonaId}
           watchBufferLimit={settings.watchBufferLimit}
           onWatchBufferLimitChange={updateWatchBufferLimit}
           proactiveInstruction={settings.proactiveInstruction}
           onProactiveInstructionChange={updateProactiveInstruction}
           interactiveStabilizationTimeout={settings.interactiveStabilizationTimeout}
           onInteractiveStabilizationTimeoutChange={updateInteractiveStabilizationTimeout}
-          updateInfo={updateInfo}
         />
         <PaneLines
           paneAllocations={pane.paneAllocations}

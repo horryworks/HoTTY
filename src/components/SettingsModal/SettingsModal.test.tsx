@@ -16,6 +16,7 @@ vi.mock('../../services/electronService', () => ({
     getAppVersion: vi.fn(() => Promise.resolve('1.0.0')),
     aiAuthStatus: vi.fn(() => Promise.resolve(false)),
     aiAuthLogout: vi.fn(),
+    aiSetProvider: vi.fn(() => Promise.resolve()),
     openExternal: vi.fn(),
     listSystemFonts: vi.fn(() => Promise.resolve(['Consolas', 'Courier New', 'Lucida Console'])),
 }));
@@ -34,7 +35,6 @@ vi.mock('../../hooks/useFocusTrap', () => ({
 const baseProps = {
     isOpen: true,
     onClose: vi.fn(),
-    onLogout: vi.fn(),
     encoding: 'utf8',
     onEncodingChange: vi.fn(),
     fontSize: 14,
@@ -68,12 +68,6 @@ const baseProps = {
     onDeleteTheme: vi.fn(),
     sidebarPosition: 'right' as const,
     onSidebarPositionChange: vi.fn(),
-    showSystemPrompt: false,
-    onShowSystemPromptChange: vi.fn(),
-    askAiCommands: [],
-    onAskAiCommandsChange: vi.fn(),
-    aiPersonas: [],
-    onAiPersonasChange: vi.fn(),
     backspaceSendsDel: false,
     onBackspaceSendsDelChange: vi.fn(),
     rightClickPaste: false,
@@ -84,6 +78,26 @@ const baseProps = {
     onPromptHighlightColorChange: vi.fn(),
     promptPatterns: [],
     onPromptPatternsChange: vi.fn(),
+    onAiLogout: vi.fn(),
+    showSystemPrompt: false,
+    onShowSystemPromptChange: vi.fn(),
+    aiPersonas: [
+        {
+            id: 'network-expert',
+            label: 'Network Expert',
+            systemPrompt: 'You are a Senior Network Engineer.',
+            askAiCommands: [{ id: 'what-is-this', label: 'What is this?', promptTemplate: 'Explain:\n\n{selection}' }],
+        },
+        {
+            id: 'general-helper',
+            label: 'General Helper',
+            systemPrompt: 'You are a helpful assistant.',
+            askAiCommands: [],
+        },
+    ],
+    onAiPersonasChange: vi.fn(),
+    activePersonaId: 'network-expert',
+    onActivePersonaIdChange: vi.fn(),
     watchBufferLimit: 100000,
     onWatchBufferLimitChange: vi.fn(),
     proactiveInstruction: '',
@@ -152,7 +166,7 @@ describe('SettingsModal', () => {
     it('switches to AI tab when clicked', async () => {
         await renderAndSettle(<SettingsModal {...baseProps} />);
         fireEvent.click(screen.getByText('AI'));
-        expect(screen.getByText('AI Provider Authentication')).toBeInTheDocument();
+        expect(screen.getByText('AI Provider')).toBeInTheDocument();
     });
 
     it('switches to About tab when clicked', async () => {

@@ -67,9 +67,9 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
         enablePromptHighlight,
         promptHighlightColor,
         promptPatterns,
-        askAiCommands,
         showSystemPrompt,
         aiPersonas,
+        activePersonaId,
         proactiveInstruction,
     } = useSettingsStore(useShallow(s => ({
         fontSize: s.fontSize,
@@ -81,11 +81,16 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
         enablePromptHighlight: s.enablePromptHighlight,
         promptHighlightColor: s.promptHighlightColor,
         promptPatterns: s.promptPatterns,
-        askAiCommands: s.askAiCommands,
         showSystemPrompt: s.showSystemPrompt,
         aiPersonas: s.aiPersonas,
+        activePersonaId: s.activePersonaId,
         proactiveInstruction: s.proactiveInstruction,
     })));
+
+    const askAiCommands = React.useMemo(() => {
+        const persona = aiPersonas.find(p => p.id === activePersonaId);
+        return persona?.askAiCommands ?? aiPersonas[0]?.askAiCommands ?? [];
+    }, [aiPersonas, activePersonaId]);
 
     // State to store track sizes (ratios). Initialized to 1 for all tracks.
     // State to store track sizes (ratios). Initialized to 1 for all tracks.

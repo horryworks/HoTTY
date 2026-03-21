@@ -15,4 +15,5 @@ export interface PersonaDefinition {
     id: string;
     label: string;
     systemPrompt: string;
+    askAiCommands: AskAiCommand[];
 }

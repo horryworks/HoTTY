@@ -33,7 +33,7 @@ vi.mock('../../stores/settingsStore', () => ({
             promptHighlightColor: '#ff0',
             promptPatterns: [],
             aiPersonas: [],
-            askAiCommands: [],
+            activePersonaId: 'network-expert',
             sidebarPosition: 'right',
             proactiveInstruction: '',
             interactiveStabilizationTimeout: 400,

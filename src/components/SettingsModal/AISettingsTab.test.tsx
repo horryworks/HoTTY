@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AISettingsTab } from './AISettingsTab';
+import type { PersonaDefinition } from '../../types/appTypes';
 
 vi.mock('../../services/electronService', () => ({
     getThemes: vi.fn(() => Promise.resolve({})),
@@ -19,6 +20,23 @@ vi.mock('../../services/electronService', () => ({
     aiSetProvider: vi.fn(() => Promise.resolve()),
 }));
 
+const defaultPersonas: PersonaDefinition[] = [
+    {
+        id: 'network-expert',
+        label: 'Network Expert',
+        systemPrompt: 'You are a Senior Network Engineer.',
+        askAiCommands: [
+            { id: 'what-is-this', label: 'What is this?', promptTemplate: 'Explain:\n\n{selection}' },
+        ],
+    },
+    {
+        id: 'general-helper',
+        label: 'General Helper',
+        systemPrompt: 'You are a helpful assistant.',
+        askAiCommands: [],
+    },
+];
+
 const baseProps = {
     isAiAuthenticated: false,
     onAuthenticatedChange: vi.fn(),
@@ -27,10 +45,10 @@ const baseProps = {
     onWatchBufferLimitChange: vi.fn(),
     interactiveStabilizationTimeout: 400,
     onInteractiveStabilizationTimeoutChange: vi.fn(),
-    askAiCommands: [],
-    onAskAiCommandsChange: vi.fn(),
-    aiPersonas: [],
+    aiPersonas: defaultPersonas,
     onAiPersonasChange: vi.fn(),
+    activePersonaId: 'network-expert',
+    onActivePersonaIdChange: vi.fn(),
     proactiveInstruction: '',
     onProactiveInstructionChange: vi.fn(),
     showSystemPrompt: false,
@@ -127,56 +145,67 @@ describe('AISettingsTab', () => {
         expect(screen.getByText('Interactive Flow Stabilization Timeout (ms)')).toBeInTheDocument();
     });
 
-    it('renders Ask AI Commands section', () => {
+    it('renders Personas section with tabs', () => {
         render(<AISettingsTab {...baseProps} />);
-        expect(screen.getByText('Ask AI Commands')).toBeInTheDocument();
+        expect(screen.getByText('Personas')).toBeInTheDocument();
+        expect(screen.getByText('Network Expert')).toBeInTheDocument();
+        expect(screen.getByText('General Helper')).toBeInTheDocument();
     });
 
-    it('renders Add Command button', () => {
+    it('renders Ask AI Commands for active persona', () => {
+        render(<AISettingsTab {...baseProps} />);
+        expect(screen.getByText('Ask AI Commands')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('What is this?')).toBeInTheDocument();
+    });
+
+    it('renders + Add Command button', () => {
         render(<AISettingsTab {...baseProps} />);
         expect(screen.getByText('+ Add Command')).toBeInTheDocument();
     });
 
-    it('renders Reset Defaults button for commands', () => {
+    it('renders Reset Commands button', () => {
         render(<AISettingsTab {...baseProps} />);
-        const resetButtons = screen.getAllByText('Reset Defaults');
-        expect(resetButtons.length).toBeGreaterThan(0);
+        expect(screen.getByText('Reset Commands')).toBeInTheDocument();
     });
 
-    it('calls onAskAiCommandsChange when Add Command is clicked', () => {
-        const onAskAiCommandsChange = vi.fn();
-        render(<AISettingsTab {...baseProps} onAskAiCommandsChange={onAskAiCommandsChange} />);
-        fireEvent.click(screen.getByText('+ Add Command'));
-        expect(onAskAiCommandsChange).toHaveBeenCalledTimes(1);
-        const newCommands = onAskAiCommandsChange.mock.calls[0][0];
-        expect(newCommands).toHaveLength(1);
-        expect(newCommands[0].label).toBe('New Command');
-    });
-
-    it('renders existing ask gemini commands', () => {
-        const commands = [{ id: 'cmd1', label: 'Test Command', promptTemplate: 'Test {selection}' }];
-        render(<AISettingsTab {...baseProps} askAiCommands={commands} />);
-        expect(screen.getByDisplayValue('Test Command')).toBeInTheDocument();
-    });
-
-    it('renders Personas section', () => {
-        render(<AISettingsTab {...baseProps} />);
-        expect(screen.getByText('Personas')).toBeInTheDocument();
-    });
-
-    it('renders Add Persona button', () => {
-        render(<AISettingsTab {...baseProps} />);
-        expect(screen.getByText('+ Add Persona')).toBeInTheDocument();
-    });
-
-    it('calls onAiPersonasChange when Add Persona is clicked', () => {
+    it('calls onAiPersonasChange when Add Command is clicked', () => {
         const onAiPersonasChange = vi.fn();
         render(<AISettingsTab {...baseProps} onAiPersonasChange={onAiPersonasChange} />);
-        fireEvent.click(screen.getByText('+ Add Persona'));
+        fireEvent.click(screen.getByText('+ Add Command'));
         expect(onAiPersonasChange).toHaveBeenCalledTimes(1);
-        const newPersonas = onAiPersonasChange.mock.calls[0][0];
-        expect(newPersonas).toHaveLength(1);
-        expect(newPersonas[0].label).toBe('New Persona');
+        const updated = onAiPersonasChange.mock.calls[0][0] as PersonaDefinition[];
+        const activePersona = updated.find(p => p.id === 'network-expert')!;
+        expect(activePersona.askAiCommands).toHaveLength(2);
+        expect(activePersona.askAiCommands[1].label).toBe('New Command');
+    });
+
+    it('renders existing ask AI commands for active persona', () => {
+        render(<AISettingsTab {...baseProps} />);
+        expect(screen.getByDisplayValue('What is this?')).toBeInTheDocument();
+    });
+
+    it('renders + button to add persona', () => {
+        render(<AISettingsTab {...baseProps} />);
+        expect(screen.getByText('+')).toBeInTheDocument();
+    });
+
+    it('calls onAiPersonasChange and onActivePersonaIdChange when + persona is clicked', () => {
+        const onAiPersonasChange = vi.fn();
+        const onActivePersonaIdChange = vi.fn();
+        render(<AISettingsTab {...baseProps} onAiPersonasChange={onAiPersonasChange} onActivePersonaIdChange={onActivePersonaIdChange} />);
+        fireEvent.click(screen.getByText('+'));
+        expect(onAiPersonasChange).toHaveBeenCalledTimes(1);
+        const newPersonas = onAiPersonasChange.mock.calls[0][0] as PersonaDefinition[];
+        expect(newPersonas).toHaveLength(3);
+        expect(newPersonas[2].label).toBe('New Persona');
+        expect(onActivePersonaIdChange).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls onActivePersonaIdChange when persona tab is clicked', () => {
+        const onActivePersonaIdChange = vi.fn();
+        render(<AISettingsTab {...baseProps} onActivePersonaIdChange={onActivePersonaIdChange} />);
+        fireEvent.click(screen.getByText('General Helper'));
+        expect(onActivePersonaIdChange).toHaveBeenCalledWith('general-helper');
     });
 
     it('renders Show System Prompt checkbox', () => {
@@ -249,5 +278,15 @@ describe('AISettingsTab', () => {
             fireEvent.change(proactiveTextarea, { target: { value: 'New instruction' } });
             expect(onProactiveInstructionChange).toHaveBeenCalledWith('New instruction');
         }
+    });
+
+    it('renders Reset All Personas button', () => {
+        render(<AISettingsTab {...baseProps} />);
+        expect(screen.getByText('Reset All Personas')).toBeInTheDocument();
+    });
+
+    it('renders Delete Persona button', () => {
+        render(<AISettingsTab {...baseProps} />);
+        expect(screen.getByText('Delete Persona')).toBeInTheDocument();
     });
 });

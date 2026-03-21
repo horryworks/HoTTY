@@ -5,12 +5,12 @@ import { AppearanceTab } from './AppearanceTab';
 import { SSHSettingsTab } from './SSHSettingsTab';
 import { AISettingsTab } from './AISettingsTab';
 import * as electronService from '../../services/electronService';
+import type { PersonaDefinition } from '../../types/appTypes';
 import './SettingsModal.css';
 
 interface SettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onLogout: () => void;
     encoding: string;
     onEncodingChange: (encoding: string) => void;
     fontSize: number;
@@ -44,12 +44,6 @@ interface SettingsModalProps {
     onDeleteTheme: (theme: string) => void;
     sidebarPosition: 'left' | 'right';
     onSidebarPositionChange: (position: 'left' | 'right') => void;
-    showSystemPrompt: boolean;
-    onShowSystemPromptChange: (show: boolean) => void;
-    askAiCommands: { id: string; label: string; promptTemplate: string }[];
-    onAskAiCommandsChange: (commands: { id: string; label: string; promptTemplate: string }[]) => void;
-    aiPersonas: { id: string; label: string; systemPrompt: string }[];
-    onAiPersonasChange: (personas: { id: string; label: string; systemPrompt: string }[]) => void;
     backspaceSendsDel: boolean;
     onBackspaceSendsDelChange: (sendsDel: boolean) => void;
     rightClickPaste: boolean;
@@ -60,19 +54,26 @@ interface SettingsModalProps {
     onPromptHighlightColorChange: (color: string) => void;
     promptPatterns: { id: string; name: string; pattern: string; enabled: boolean }[];
     onPromptPatternsChange: (patterns: { id: string; name: string; pattern: string; enabled: boolean }[]) => void;
+    updateInfo?: { version: string; releaseUrl: string } | null;
+    // AI Settings props
+    onAiLogout: () => void;
+    showSystemPrompt: boolean;
+    onShowSystemPromptChange: (show: boolean) => void;
+    aiPersonas: PersonaDefinition[];
+    onAiPersonasChange: (personas: PersonaDefinition[]) => void;
+    activePersonaId: string;
+    onActivePersonaIdChange: (id: string) => void;
     watchBufferLimit: number;
     onWatchBufferLimitChange: (limit: number) => void;
     proactiveInstruction: string;
     onProactiveInstructionChange: (instruction: string) => void;
     interactiveStabilizationTimeout: number;
     onInteractiveStabilizationTimeoutChange: (timeout: number) => void;
-    updateInfo?: { version: string; releaseUrl: string } | null;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
     isOpen,
     onClose,
-    onLogout,
     encoding,
     onEncodingChange,
     fontSize,
@@ -106,12 +107,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onDeleteTheme,
     sidebarPosition,
     onSidebarPositionChange,
-    showSystemPrompt,
-    onShowSystemPromptChange,
-    askAiCommands,
-    onAskAiCommandsChange,
-    aiPersonas,
-    onAiPersonasChange,
     backspaceSendsDel,
     onBackspaceSendsDelChange,
     rightClickPaste,
@@ -122,19 +117,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onPromptHighlightColorChange,
     promptPatterns,
     onPromptPatternsChange,
+    updateInfo,
+    onAiLogout,
+    showSystemPrompt,
+    onShowSystemPromptChange,
+    aiPersonas,
+    onAiPersonasChange,
+    activePersonaId,
+    onActivePersonaIdChange,
     watchBufferLimit,
     onWatchBufferLimitChange,
     proactiveInstruction,
     onProactiveInstructionChange,
     interactiveStabilizationTimeout,
     onInteractiveStabilizationTimeoutChange,
-    updateInfo,
 }) => {
     const { position, onMouseDown: onHeaderMouseDown } = useDraggable();
     const [activeTab, setActiveTab] = React.useState<'appearance' | 'ssh' | 'telnet' | 'system' | 'ai' | 'about'>('system');
     const [version, setVersion] = React.useState<string>('');
-    const [isAiAuthenticated, setIsAiAuthenticated] = React.useState<boolean>(false);
     const [sshAlgorithms, setSshAlgorithms] = React.useState<Record<string, { name: string; enabled: boolean }[]> | null>(null);
+    const [isAiAuthenticated, setIsAiAuthenticated] = React.useState<boolean>(false);
     const modalRef = useRef<HTMLDivElement>(null);
     const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -155,6 +157,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             electronService.aiAuthStatus().then(setIsAiAuthenticated);
         }
     }, [isOpen]);
+
+    // ── Drag and Drop for AI Commands ──
+    const [draggedIndex, setDraggedIndex] = React.useState<number | null>(null);
+
+    const handleCommandDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+        setDraggedIndex(index);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const handleCommandDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    const handleCommandDrop = (e: React.DragEvent<HTMLDivElement>, dropIndex: number) => {
+        e.preventDefault();
+        const activePersona = aiPersonas.find(p => p.id === activePersonaId) ?? aiPersonas[0];
+        if (draggedIndex === null || draggedIndex === dropIndex || !activePersona) return;
+
+        const newCommands = [...activePersona.askAiCommands];
+        const [movedItem] = newCommands.splice(draggedIndex, 1);
+        newCommands.splice(dropIndex, 0, movedItem);
+
+        const newPersonas = aiPersonas.map(p =>
+            p.id === activePersona.id ? { ...p, askAiCommands: newCommands } : p
+        );
+        onAiPersonasChange(newPersonas);
+        setDraggedIndex(null);
+    };
+
+    const handleCommandDragEnd = () => {
+        setDraggedIndex(null);
+    };
 
     // Close on Escape key
     useEffect(() => {
@@ -216,36 +251,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         const x = e.pageX - tabsRef.current.offsetLeft;
         const walk = (x - startX.current) * 2; // Scroll-fast
         tabsRef.current.scrollLeft = scrollLeft.current - walk;
-    };
-
-    // ── Drag and Drop for Commands ──
-    const [draggedIndex, setDraggedIndex] = React.useState<number | null>(null);
-
-    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
-        setDraggedIndex(index);
-        e.dataTransfer.effectAllowed = 'move';
-        // Optional: Set drag image if needed, default is usually fine
-    };
-
-    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault(); // Necessary to allow dropping
-        e.dataTransfer.dropEffect = 'move';
-    };
-
-    const handleDrop = (e: React.DragEvent<HTMLDivElement>, dropIndex: number) => {
-        e.preventDefault();
-        if (draggedIndex === null || draggedIndex === dropIndex || !askAiCommands) return;
-
-        const newCommands = [...askAiCommands];
-        const [movedItem] = newCommands.splice(draggedIndex, 1);
-        newCommands.splice(dropIndex, 0, movedItem);
-
-        onAskAiCommandsChange(newCommands);
-        setDraggedIndex(null);
-    };
-
-    const handleDragEnd = () => {
-        setDraggedIndex(null);
     };
 
     if (!isOpen) return null;
@@ -365,24 +370,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <AISettingsTab
                             isAiAuthenticated={isAiAuthenticated}
                             onAuthenticatedChange={setIsAiAuthenticated}
-                            onLogout={onLogout}
+                            onLogout={onAiLogout}
                             watchBufferLimit={watchBufferLimit}
                             onWatchBufferLimitChange={onWatchBufferLimitChange}
                             interactiveStabilizationTimeout={interactiveStabilizationTimeout}
                             onInteractiveStabilizationTimeoutChange={onInteractiveStabilizationTimeoutChange}
-                            askAiCommands={askAiCommands}
-                            onAskAiCommandsChange={onAskAiCommandsChange}
                             aiPersonas={aiPersonas}
                             onAiPersonasChange={onAiPersonasChange}
+                            activePersonaId={activePersonaId}
+                            onActivePersonaIdChange={onActivePersonaIdChange}
                             proactiveInstruction={proactiveInstruction}
                             onProactiveInstructionChange={onProactiveInstructionChange}
                             showSystemPrompt={showSystemPrompt}
                             onShowSystemPromptChange={onShowSystemPromptChange}
                             draggedIndex={draggedIndex}
-                            onDragStart={handleDragStart}
-                            onDragOver={handleDragOver}
-                            onDrop={handleDrop}
-                            onDragEnd={handleDragEnd}
+                            onDragStart={handleCommandDragStart}
+                            onDragOver={handleCommandDragOver}
+                            onDrop={handleCommandDrop}
+                            onDragEnd={handleCommandDragEnd}
                         />
                     )}
 
