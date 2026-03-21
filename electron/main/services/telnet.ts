@@ -13,12 +13,6 @@ export class TelnetService implements ISessionService {
     private lastCols: number | null = null;
     private lastRows: number | null = null;
     private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
-    private pendingUsername: string | null = null;
-    private pendingPassword: string | null = null;
-    private loginPhase: 'username' | 'password' | 'done' = 'done';
-
-    private static readonly LOGIN_PROMPT = /login[:\s]*$/i;
-    private static readonly PASSWORD_PROMPT = /password[:\s]*$/i;
 
     constructor(window: BrowserWindow, sessionId: string) {
         this.window = window;
@@ -33,29 +27,29 @@ export class TelnetService implements ISessionService {
     async connect(config: Record<string, unknown>) {
         this.encoding = (config.encoding as string) || 'utf8';
 
+        const hasCredentials = !!config.username;
+
         const params: ConnectOptions = {
             host: config.host as string,
             port: (config.port as number) || 23,
             negotiationMandatory: false, // Revert to false to fix connection issues
             timeout: 3000,
             sendTimeout: 3000,
-            disableLogon: true, // Prevent telnet-client from trying to log in
             stripShellPrompt: false, // We want the prompt to be shown in the terminal
             terminalWidth: this.lastCols || 80,
             terminalHeight: this.lastRows || 24,
             irs: '\r\n', // Input Record Separator
             ors: '\r\n', // Output Record Separator
-            echoLines: 0 // Don't echo lines locally
+            echoLines: 0, // Don't echo lines locally
+            // Delegate login prompt detection to telnet-client
+            disableLogon: !hasCredentials,
+            ...(hasCredentials ? {
+                username: config.username as string,
+                password: (config.password as string) || '',
+                loginPrompt: /login[:\s]*$/i,
+                passwordPrompt: /password[:\s]*$/i,
+            } : {}),
         };
-
-        // Store credentials for auto-login via data event handler.
-        // telnet-client's built-in login (disableLogon: false) does not work
-        // with negotiationMandatory: false, so we handle it ourselves.
-        if (config.username) {
-            this.pendingUsername = config.username as string;
-            this.pendingPassword = (config.password as string) || '';
-            this.loginPhase = 'username';
-        }
 
         logger.info('telnet', 'Connect attempt', { sessionId: this.sessionId, host: config.host, port: config.port || 23 });
         try {
@@ -83,11 +77,6 @@ export class TelnetService implements ISessionService {
             this.conn.on('data', (data: Buffer) => {
                 const cleanData = this.stripTelnetIAC(data);
                 const text = iconv.decode(cleanData, this.encoding);
-
-                // Auto-login: detect login/password prompts and send credentials
-                if (this.loginPhase !== 'done') {
-                    this.handleAutoLogin(text);
-                }
 
                 if (!this.window.isDestroyed()) {
                     this.window.webContents.send('session-data', { sessionId: this.sessionId, data: text });
@@ -235,40 +224,6 @@ export class TelnetService implements ISessionService {
         }
     }
 
-    private handleAutoLogin(text: string) {
-        logger.info('telnet', 'Auto-login: checking data', {
-            sessionId: this.sessionId,
-            phase: this.loginPhase,
-            textLength: text.length,
-            textTail: JSON.stringify(text.slice(-40)),
-            loginMatch: TelnetService.LOGIN_PROMPT.test(text),
-            passwordMatch: TelnetService.PASSWORD_PROMPT.test(text),
-        });
-        if (this.loginPhase === 'username' && TelnetService.LOGIN_PROMPT.test(text)) {
-            const credential = this.pendingUsername + '\r\n';
-            const buffer = iconv.encode(credential, this.encoding);
-            if (this.conn.socket && typeof this.conn.socket.write === 'function') {
-                this.conn.socket.write(buffer);
-            }
-            this.loginPhase = 'password';
-            logger.info('telnet', 'Auto-login: username sent', { sessionId: this.sessionId });
-        } else if (this.loginPhase === 'password' && TelnetService.PASSWORD_PROMPT.test(text)) {
-            const credential = this.pendingPassword + '\r\n';
-            const buffer = iconv.encode(credential, this.encoding);
-            if (this.conn.socket && typeof this.conn.socket.write === 'function') {
-                this.conn.socket.write(buffer);
-            }
-            this.clearPendingCredentials();
-            logger.info('telnet', 'Auto-login: password sent', { sessionId: this.sessionId });
-        }
-    }
-
-    private clearPendingCredentials() {
-        this.pendingUsername = null;
-        this.pendingPassword = null;
-        this.loginPhase = 'done';
-    }
-
     private dataCallback: ((data: string) => void) | null = null;
 
     onData(callback: (data: string) => void) {
@@ -313,7 +268,6 @@ export class TelnetService implements ISessionService {
 
     disconnect() {
         this.stopKeepalive();
-        this.clearPendingCredentials();
         if (this.conn) {
             try {
                 this.conn.end();
