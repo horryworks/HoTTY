@@ -15,6 +15,7 @@ import { VertexAIProvider } from './services/ai/providers/vertexai/VertexAIProvi
 import { OpenAIProvider } from './services/ai/providers/openai/OpenAIProvider';
 import { AnthropicProvider } from './services/ai/providers/anthropic/AnthropicProvider';
 import { LogManager } from './services/LogManager';
+import { PingMonitorService, isValidPingTarget } from './services/PingMonitorService';
 import { logger } from './services/Logger';
 import { encryptString, decryptString } from './services/dpapi';
 import { execFile } from 'child_process';
@@ -37,6 +38,7 @@ if (!app.requestSingleInstanceLock()) {
 const windows = new Set<BrowserWindow>();
 let aiService: AIService | null = null;
 const logManager = new LogManager();
+const pingMonitors = new Map<string, PingMonitorService>();
 
 // Security: track directories the user has explicitly allowed for log access
 const allowedLogDirs = new Set<string>();
@@ -191,6 +193,8 @@ app.on('before-quit', () => {
     logManager.stopLogging(s.id);
   });
   sessions.clear();
+  pingMonitors.forEach(pm => pm.stop());
+  pingMonitors.clear();
   logger.close();
 });
 
@@ -534,6 +538,64 @@ ipcMain.handle('list-system-fonts', async () => {
 });
 
 
+
+// ── Ping Monitor ──
+
+ipcMain.on('ping-monitor-start', (event, { sessionId, targets, intervalMs, loggingEnabled, loggingPath }) => {
+  const eventWin = BrowserWindow.fromWebContents(event.sender);
+  if (!eventWin) return;
+
+  // Validate inputs
+  if (typeof sessionId !== 'string' || !Array.isArray(targets) || typeof intervalMs !== 'number') {
+    logger.warn('ping-monitor', 'Invalid start parameters');
+    return;
+  }
+
+  // Filter and validate targets
+  const validTargets = targets.filter((t: unknown) => typeof t === 'string' && isValidPingTarget(t as string)) as string[];
+  if (validTargets.length === 0) {
+    logger.warn('ping-monitor', 'No valid targets provided');
+    return;
+  }
+
+  // Stop existing monitor if any
+  const existing = pingMonitors.get(sessionId);
+  if (existing) {
+    existing.stop();
+  }
+
+  const monitor = new PingMonitorService(eventWin, sessionId);
+  pingMonitors.set(sessionId, monitor);
+
+  if (loggingEnabled && loggingPath) {
+    allowedLogDirs.add(resolve(loggingPath));
+  }
+
+  monitor.start(validTargets, intervalMs, !!loggingEnabled, loggingPath || '');
+});
+
+ipcMain.on('ping-monitor-stop', (_, sessionId: string) => {
+  const monitor = pingMonitors.get(sessionId);
+  if (monitor) {
+    monitor.stop();
+    pingMonitors.delete(sessionId);
+  }
+});
+
+ipcMain.on('ping-monitor-update-targets', (_, { sessionId, targets }) => {
+  const monitor = pingMonitors.get(sessionId);
+  if (monitor) {
+    const validTargets = (targets as string[]).filter(t => typeof t === 'string' && isValidPingTarget(t));
+    monitor.updateTargets(validTargets);
+  }
+});
+
+ipcMain.on('ping-monitor-update-interval', (_, { sessionId, intervalMs }) => {
+  const monitor = pingMonitors.get(sessionId);
+  if (monitor && typeof intervalMs === 'number') {
+    monitor.updateInterval(intervalMs);
+  }
+});
 
 // ── Context Menu ──
 ipcMain.on('show-context-menu', (event, selection: string, commands?: { id: string; label: string }[], includePaste: boolean = true) => {

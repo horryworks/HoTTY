@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { TerminalComponent } from '../Terminal/Terminal';
 import { AIChatPane } from '../AIChatPane/AIChatPane';
 import { LogViewerPane } from '../LogViewerPane/LogViewerPane';
+import { PingMonitorPane } from '../PingMonitorPane/PingMonitorPane';
 import type { Session } from '../../hooks/useSessionManager';
 import type { InteractiveSessionTracking } from '../../hooks/useInteractiveFlow';
 import type { Terminal } from '@xterm/xterm';
@@ -15,6 +16,7 @@ interface GridLayoutProps {
     cols: number;
     sessions: Session[];
     updateSessionState: (sessionId: string, newState: Partial<Session['aiChatState']>) => void;
+    updatePingMonitorState?: (sessionId: string, newState: Partial<NonNullable<Session['pingMonitorState']>>) => void;
     paneAllocations: { [paneId: string]: string | null };
     activePaneId: string | null;
     onPaneClick: (paneId: string) => void;
@@ -37,6 +39,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     cols,
     sessions,
     updateSessionState,
+    updatePingMonitorState,
     paneAllocations,
     activePaneId,
     onPaneClick,
@@ -308,7 +311,13 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
 
                     >
                         {session ? (
-                            session.type === 'log-viewer' ? (
+                            session.type === 'ping-monitor' ? (
+                                <PingMonitorPane
+                                    sessionId={session.id}
+                                    initialState={session.pingMonitorState}
+                                    onStateChange={updatePingMonitorState ? (newState) => updatePingMonitorState(session.id, newState) : undefined}
+                                />
+                            ) : session.type === 'log-viewer' ? (
                                 <LogViewerPane
                                     loggingPath={session.logViewerState?.loggingPath || ''}
                                 />

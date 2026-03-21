@@ -57,4 +57,15 @@ export const listWslDistributions = () => api().listWslDistributions();
 export const exportHTree = (data: unknown[], password: string) => api().exportHTree(data, password);
 export const selectImportFile = () => api().selectImportFile();
 export const decryptImportFile = (password: string) => api().decryptImportFile(password);
+// Ping Monitor
+export const pingMonitorStart = (sessionId: string, targets: string[], intervalMs: number, loggingEnabled: boolean, loggingPath: string) =>
+    api().pingMonitorStart(sessionId, targets, intervalMs, loggingEnabled, loggingPath);
+export const pingMonitorStop = (sessionId: string) => api().pingMonitorStop(sessionId);
+export const pingMonitorUpdateTargets = (sessionId: string, targets: string[]) => api().pingMonitorUpdateTargets(sessionId, targets);
+export const pingMonitorUpdateInterval = (sessionId: string, intervalMs: number) => api().pingMonitorUpdateInterval(sessionId, intervalMs);
+export const onPingMonitorData = (callback: (data: { sessionId: string; results: { target: string; status: string; rtt: number | null; ttl: number | null; timestamp: string }[] }) => void) =>
+    api().onPingMonitorData(callback);
+export const onPingMonitorLogFile = (callback: (data: { sessionId: string; fileName: string }) => void) =>
+    api().onPingMonitorLogFile(callback);
+
 export const onUpdateAvailable = (callback: (data: { version: string; releaseUrl: string }) => void) => api().onUpdateAvailable(callback);

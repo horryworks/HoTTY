@@ -77,6 +77,9 @@ export const STORAGE_KEYS = {
     PROACTIVE_INSTRUCTION:           'hotty_gemini_proactive_instruction',
     INTERACTIVE_STABILIZATION_TIMEOUT: 'hotty_interactive_stabilization_timeout',
 
+    // Ping Monitor
+    PING_MONITOR_STATE: 'hotty_ping_monitor_state',
+
     // AI auth
     AI_EXPLICIT_LOGOUT: 'hotty_ai_explicit_logout',
 

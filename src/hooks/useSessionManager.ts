@@ -17,9 +17,14 @@ const AI_PROVIDER_LABELS: Record<string, string> = {
 export interface Session {
     id: string;
     title: string;
-    type: 'ssh' | 'telnet' | 'serial' | 'ai' | 'wsl' | 'local' | 'log-viewer';
+    type: 'ssh' | 'telnet' | 'serial' | 'ai' | 'wsl' | 'local' | 'log-viewer' | 'ping-monitor';
     logViewerState?: {
         loggingPath: string;
+    };
+    pingMonitorState?: {
+        targets: string;
+        intervalSeconds: number;
+        isRunning: boolean;
     };
     aiChatState?: {
         messages: { role: "user" | "model"; content: string }[]; // ChatMessage shape, avoiding circular dependency
@@ -232,6 +237,17 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             }
         } else if (session?.type === 'log-viewer') {
             // Log viewer sessions don't have terminal or backend connection
+        } else if (session?.type === 'ping-monitor') {
+            // Save targets and interval before closing
+            if (session.pingMonitorState) {
+                try {
+                    localStorage.setItem(STORAGE_KEYS.PING_MONITOR_STATE, JSON.stringify({
+                        targets: session.pingMonitorState.targets,
+                        intervalSeconds: session.pingMonitorState.intervalSeconds,
+                    }));
+                } catch { /* ignore storage errors */ }
+            }
+            electronService.pingMonitorStop(sessionId);
         } else {
             electronService.disconnectSession(sessionId);
             const term = terminalRegistry.current[sessionId];
@@ -428,6 +444,54 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         return sessionId;
     };
 
+    const createPingMonitorSession = () => {
+        const sessionId = self.crypto.randomUUID();
+
+        // Restore saved targets and interval from previous session
+        let savedTargets = '';
+        let savedInterval = 5;
+        try {
+            const saved = localStorage.getItem(STORAGE_KEYS.PING_MONITOR_STATE);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (typeof parsed.targets === 'string') savedTargets = parsed.targets;
+                if (typeof parsed.intervalSeconds === 'number') savedInterval = parsed.intervalSeconds;
+            }
+        } catch { /* ignore parse errors */ }
+
+        const newSession: Session = {
+            id: sessionId,
+            title: 'Ping Monitor',
+            type: 'ping-monitor',
+            pingMonitorState: {
+                targets: savedTargets,
+                intervalSeconds: savedInterval,
+                isRunning: false,
+            }
+        };
+        setSessions(prev => [...prev, newSession]);
+        setTabOrder(prev => [...prev, sessionId]);
+        allocateToPane(sessionId);
+        return sessionId;
+    };
+
+    const updatePingMonitorState = (sessionId: string, newState: Partial<Session['pingMonitorState']>) => {
+        setSessions(prev => prev.map(s => {
+            if (s.id === sessionId && s.pingMonitorState) {
+                const merged = { ...s.pingMonitorState, ...newState };
+                // Persist targets and interval to localStorage on every state change
+                try {
+                    localStorage.setItem(STORAGE_KEYS.PING_MONITOR_STATE, JSON.stringify({
+                        targets: merged.targets,
+                        intervalSeconds: merged.intervalSeconds,
+                    }));
+                } catch { /* ignore storage errors */ }
+                return { ...s, pingMonitorState: merged };
+            }
+            return s;
+        }));
+    };
+
     const updateSessionState = (sessionId: string, newState: Partial<Session['aiChatState']>) => {
         setSessions(prev => prev.map(s => {
             if (s.id === sessionId && s.aiChatState) {
@@ -523,6 +587,8 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         createSession,
         createAISession,
         createLogViewerSession,
+        createPingMonitorSession,
+        updatePingMonitorState,
         updateSessionState,
         closeSession,
         closeAllAISessions,

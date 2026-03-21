@@ -1,0 +1,304 @@
+.ping-monitor-pane {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-family);
+    font-size: calc(var(--font-size-base) - 1px);
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+/* ── Control Bar ── */
+.ping-monitor-control-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    background: var(--ai-header-bg);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    min-height: 36px;
+    box-sizing: border-box;
+}
+
+.ping-monitor-control-bar-title {
+    font-weight: bold;
+    font-size: calc(var(--font-size-base) - 2px);
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.ping-monitor-control-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ping-monitor-label {
+    font-size: calc(var(--font-size-base) - 2px);
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.ping-monitor-select {
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 3px 6px;
+    font-size: calc(var(--font-size-base) - 2px);
+    border-radius: 3px;
+    outline: none;
+    font-family: inherit;
+    cursor: pointer;
+}
+.ping-monitor-select:focus { border-color: var(--accent-color); }
+
+.ping-monitor-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    font-size: calc(var(--font-size-base) - 2px);
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+.ping-monitor-btn:hover:not(:disabled) { background: var(--bg-tertiary); }
+.ping-monitor-btn:disabled { opacity: 0.4; cursor: default; }
+
+.ping-monitor-btn-start {
+    background: var(--accent-color);
+    color: var(--text-on-accent);
+    border-color: var(--accent-color);
+}
+.ping-monitor-btn-start:hover:not(:disabled) { opacity: 0.85; }
+
+.ping-monitor-btn-stop {
+    background: var(--color-danger);
+    color: #fff;
+    border-color: var(--color-danger);
+}
+.ping-monitor-btn-stop:hover:not(:disabled) { opacity: 0.85; }
+
+/* ── Body (editor + results) ── */
+.ping-monitor-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* ── Targets Editor ── */
+.ping-monitor-editor {
+    width: 220px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    overflow: hidden;
+    transition: width 0.15s ease;
+}
+
+.ping-monitor-editor.collapsed {
+    width: 0;
+    min-width: 0;
+    border-right: none;
+}
+
+.ping-monitor-editor-toggle {
+    flex-shrink: 0;
+    width: 12px;
+    height: 40px;
+    align-self: center;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-left: none;
+    border-radius: 0 4px 4px 0;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: calc(var(--font-size-base) - 4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-family: inherit;
+    z-index: 1;
+}
+.ping-monitor-editor-toggle:hover {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+.ping-monitor-editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: calc(var(--font-size-base) - 2px);
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.ping-monitor-textarea {
+    flex: 1;
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    border: none;
+    padding: 6px 8px;
+    font-size: calc(var(--font-size-base) - 1px);
+    font-family: var(--font-family);
+    line-height: 1.6;
+    resize: none;
+    outline: none;
+    overflow-y: auto;
+}
+.ping-monitor-textarea::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.6;
+}
+
+/* ── Results Table ── */
+.ping-monitor-results {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.ping-monitor-table-wrap {
+    flex: 1;
+    overflow: auto;
+}
+
+.ping-monitor-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: calc(var(--font-size-base) - 2px);
+}
+
+.ping-monitor-table th {
+    position: sticky;
+    top: 0;
+    background: var(--ai-header-bg);
+    border-bottom: 1px solid var(--border-color);
+    padding: 5px 10px;
+    text-align: left;
+    font-weight: bold;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    z-index: 1;
+}
+
+.ping-monitor-table td {
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+
+.ping-monitor-table tr:hover td {
+    background: var(--bg-secondary);
+}
+
+.ping-monitor-table .col-num {
+    width: 30px;
+    text-align: right;
+    color: var(--text-secondary);
+}
+
+.ping-monitor-table .col-target {
+    min-width: 120px;
+}
+
+.ping-monitor-table .col-status {
+    width: 60px;
+    text-align: center;
+}
+
+.ping-monitor-table .col-rtt,
+.ping-monitor-table .col-ttl {
+    width: 70px;
+    text-align: right;
+}
+
+.ping-monitor-table .col-time {
+    width: 100px;
+    color: var(--text-secondary);
+    font-size: calc(var(--font-size-base) - 3px);
+}
+
+/* Status indicators */
+.ping-status-ok {
+    color: #4caf50;
+    font-weight: bold;
+}
+
+.ping-status-fail {
+    color: #f44336;
+    font-weight: bold;
+}
+
+.ping-status-dns {
+    color: #ff9800;
+    font-weight: bold;
+}
+
+.ping-status-pending {
+    color: var(--text-secondary);
+}
+
+/* ── Status Bar ── */
+.ping-monitor-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 4px 10px;
+    background: var(--ai-header-bg);
+    border-top: 1px solid var(--border-color);
+    font-size: calc(var(--font-size-base) - 3px);
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.ping-monitor-status-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.ping-monitor-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.ping-monitor-status-dot.running {
+    background: #4caf50;
+}
+.ping-monitor-status-dot.stopped {
+    background: var(--text-secondary);
+}
+
+/* ── Empty state ── */
+.ping-monitor-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-secondary);
+    font-size: calc(var(--font-size-base) - 1px);
+    font-style: italic;
+}

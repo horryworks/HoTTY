@@ -2,6 +2,7 @@ import React from 'react';
 import { TerminalComponent } from '../Terminal/Terminal';
 import { AIChatPane } from '../AIChatPane/AIChatPane';
 import { LogViewerPane } from '../LogViewerPane/LogViewerPane';
+import { PingMonitorPane } from '../PingMonitorPane/PingMonitorPane';
 import type { Session } from '../../hooks/useSessionManager';
 import type { InteractiveSessionTracking } from '../../hooks/useInteractiveFlow';
 import type { Terminal } from '@xterm/xterm';
@@ -29,6 +30,7 @@ interface PaneContentProps {
   onShowPromptMenu?: () => void;
   onSendMessage?: (text: string) => void;
   onStateChange?: (newState: Partial<Session['aiChatState']>) => void;
+  onPingMonitorStateChange?: (newState: Partial<NonNullable<Session['pingMonitorState']>>) => void;
 }
 
 // -- Component --
@@ -50,6 +52,7 @@ export const PaneContent: React.FC<PaneContentProps> = React.memo(({
   onShowPromptMenu,
   onSendMessage,
   onStateChange,
+  onPingMonitorStateChange,
 }) => {
   const {
     fontSize,
@@ -80,6 +83,16 @@ export const PaneContent: React.FC<PaneContentProps> = React.memo(({
     aiPersonas: s.aiPersonas,
     proactiveInstruction: s.proactiveInstruction,
   })));
+
+  if (session.type === 'ping-monitor') {
+    return (
+      <PingMonitorPane
+        sessionId={session.id}
+        initialState={session.pingMonitorState}
+        onStateChange={onPingMonitorStateChange}
+      />
+    );
+  }
 
   if (session.type === 'log-viewer') {
     return (

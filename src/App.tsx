@@ -317,7 +317,7 @@ function App() {
     const activeSessionId = pane.paneAllocations[pane.activePaneId || ''];
     if (activeSessionId) {
       const activeSession = session.sessions.find(s => s.id === activeSessionId);
-      if (activeSession && activeSession.type !== 'ai' && activeSession.type !== 'log-viewer') {
+      if (activeSession && activeSession.type !== 'ai' && activeSession.type !== 'log-viewer' && activeSession.type !== 'ping-monitor') {
         setLastTerminalSessionId(activeSessionId);
         lastTerminalSessionIdRef.current = activeSessionId;
       }
@@ -456,6 +456,7 @@ function App() {
         onShowPromptMenu={() => aiChat.showPromptMenu(sessionData.id)}
         onSendMessage={(text) => aiChat.sendMessage(sessionData.id, text)}
         onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
+        onPingMonitorStateChange={(newState) => session.updatePingMonitorState(sessionData.id, newState)}
       />
     );
   };
@@ -628,6 +629,7 @@ function App() {
               onNewTab={() => setShowDialog(true)}
               onNewAITab={() => session.createAISession()}
               onNewLogViewer={() => session.createLogViewerSession()}
+              onNewPingMonitor={() => session.createPingMonitorSession()}
               onTabReorder={session.handleTabReorder}
               lastTargetSessionId={session.sessions.find(s => s.type === 'ai')?.aiChatState?.lastTargetSessionId}
             />
@@ -687,6 +689,7 @@ function App() {
                   cols={pane.currentDims.cols}
                   sessions={session.sessions}
                   updateSessionState={session.updateSessionState}
+                  updatePingMonitorState={session.updatePingMonitorState}
                   paneAllocations={pane.paneAllocations}
                   activePaneId={pane.activePaneId || ''}
                   onPaneClick={pane.setActivePaneId}

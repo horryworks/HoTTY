@@ -5,7 +5,7 @@ import './TabBar.css';
 interface Tab {
     id: string;
     title: string;
-    type?: 'ssh' | 'telnet' | 'serial' | 'ai' | 'wsl' | 'local' | 'log-viewer';
+    type?: 'ssh' | 'telnet' | 'serial' | 'ai' | 'wsl' | 'local' | 'log-viewer' | 'ping-monitor';
     aiChatState?: Session['aiChatState'];
 }
 
@@ -20,11 +20,12 @@ interface TabBarProps {
     onNewTab: () => void;
     onNewAITab: () => void;
     onNewLogViewer: () => void;
+    onNewPingMonitor: () => void;
     onTabReorder: (fromIndex: number, toIndex: number) => void;
     lastTargetSessionId?: string | null;
 }
 
-export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessionIds, watchedSessionIds = [], onTabClick, onTabClose, onToggleWatch, onNewTab, onNewAITab, onNewLogViewer, onTabReorder, lastTargetSessionId }) => {
+export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessionIds, watchedSessionIds = [], onTabClick, onTabClose, onToggleWatch, onNewTab, onNewAITab, onNewLogViewer, onNewPingMonitor, onTabReorder, lastTargetSessionId }) => {
     const [dragOverInfo, setDragOverInfo] = React.useState<{ id: string, position: 'left' | 'right' } | null>(null);
     const [dragSourceIndex, setDragSourceIndex] = React.useState<number | null>(null);
     const [showFeaturesMenu, setShowFeaturesMenu] = React.useState(false);
@@ -137,7 +138,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                 const isGeminiLinked = tab.type === 'ai' || isWatching || tab.id === lastTargetSessionId;
 
                 // Determine if this is a terminal capable of being watched
-                const isTerminal = tab.type ? (tab.type !== 'ai' && tab.type !== 'log-viewer') :
+                const isTerminal = tab.type ? (tab.type !== 'ai' && tab.type !== 'log-viewer' && tab.type !== 'ping-monitor') :
                     (tab.id.startsWith('ssh') || tab.id.startsWith('telnet') || tab.id.startsWith('wsl') || tab.id.startsWith('serial') || tab.id.startsWith('local'));
 
                 return (
@@ -258,6 +259,16 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                                 <line x1="8" y1="17" x2="14" y2="17"/>
                             </svg>
                             Log Viewer
+                        </div>
+                        <div
+                            className="features-item"
+                            onClick={() => { onNewPingMonitor(); setShowFeaturesMenu(false); }}
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                            Ping Monitor
                         </div>
                     </div>
                 )}

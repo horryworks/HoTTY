@@ -190,6 +190,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     selectImportFile: () => ipcRenderer.invoke('select-import-file'),
     decryptImportFile: (password: string) => ipcRenderer.invoke('decrypt-import-file', { password }),
     openDebugLogFolder: () => ipcRenderer.invoke('open-debug-log-folder'),
+
+    // Ping Monitor
+    pingMonitorStart: (sessionId: string, targets: string[], intervalMs: number, loggingEnabled: boolean, loggingPath: string) =>
+        ipcRenderer.send('ping-monitor-start', { sessionId, targets, intervalMs, loggingEnabled, loggingPath }),
+    pingMonitorStop: (sessionId: string) => ipcRenderer.send('ping-monitor-stop', sessionId),
+    pingMonitorUpdateTargets: (sessionId: string, targets: string[]) =>
+        ipcRenderer.send('ping-monitor-update-targets', { sessionId, targets }),
+    pingMonitorUpdateInterval: (sessionId: string, intervalMs: number) =>
+        ipcRenderer.send('ping-monitor-update-interval', { sessionId, intervalMs }),
+    onPingMonitorData: (callback: (data: { sessionId: string; results: { target: string; status: string; rtt: number | null; ttl: number | null; timestamp: string }[] }) => void) => {
+        const subscription = (_event: unknown, data: { sessionId: string; results: { target: string; status: string; rtt: number | null; ttl: number | null; timestamp: string }[] }) => callback(data);
+        ipcRenderer.on('ping-monitor-data', subscription);
+        return () => ipcRenderer.removeListener('ping-monitor-data', subscription);
+    },
+    onPingMonitorLogFile: (callback: (data: { sessionId: string; fileName: string }) => void) => {
+        const subscription = (_event: unknown, data: { sessionId: string; fileName: string }) => callback(data);
+        ipcRenderer.on('ping-monitor-log-file', subscription);
+        return () => ipcRenderer.removeListener('ping-monitor-log-file', subscription);
+    },
+
     onUpdateAvailable: (callback: (data: { version: string; releaseUrl: string }) => void) => {
         const subscription = (_event: unknown, data: { version: string; releaseUrl: string }) => callback(data);
         ipcRenderer.on('update-available', subscription);
