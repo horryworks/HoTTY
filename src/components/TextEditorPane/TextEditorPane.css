@@ -31,23 +31,6 @@
     overflow-y: hidden;
 }
 
-.text-editor-subtab-list::-webkit-scrollbar {
-    height: 6px;
-}
-
-.text-editor-subtab-list::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.text-editor-subtab-list::-webkit-scrollbar-thumb {
-    background-color: var(--border-color);
-    border-radius: 3px;
-}
-
-.text-editor-subtab-list::-webkit-scrollbar-thumb:hover {
-    background-color: var(--text-secondary);
-}
-
 .text-editor-subtab {
     display: flex;
     align-items: center;

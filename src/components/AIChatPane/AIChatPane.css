@@ -271,20 +271,6 @@
     gap: 8px;
 }
 
-
-.ai-chat-messages::-webkit-scrollbar {
-    width: 6px;
-}
-
-.ai-chat-messages::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.ai-chat-messages::-webkit-scrollbar-thumb {
-    background-color: var(--border-color);
-    border-radius: 3px;
-}
-
 /* ── Welcome ── */
 .ai-chat-welcome {
     flex: 1;

@@ -338,8 +338,8 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
 
                 decoration.onRender((element: HTMLElement) => {
                     trackObj.element = element;
-                    const defaultPromptColor = promptHighlightColor && promptHighlightColor !== 'rgba(255, 255, 255, 0.15)' ? promptHighlightColor : '#f44336';
-                    const targetColor = isPrompt ? defaultPromptColor : '#2196f3';
+                    const defaultPromptColor = promptHighlightColor && promptHighlightColor !== 'rgba(255, 255, 255, 0.15)' ? promptHighlightColor : 'var(--terminal-prompt-default, #f44336)';
+                    const targetColor = isPrompt ? defaultPromptColor : 'var(--terminal-prompt-active, #2196f3)';
 
                     let count = 1;
                     let checkY = marker.line + 1;

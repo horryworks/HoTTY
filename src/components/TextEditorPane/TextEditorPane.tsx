@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { TextEditorTab } from '../../hooks/useSessionManager';
+import { useSettings } from '../../hooks/useSettings';
 import * as electronService from '../../services/electronService';
 import './TextEditorPane.css';
 
@@ -22,6 +23,7 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
     initialState,
     onStateChange,
 }) => {
+    const { settings: { lineWrapEnabled } } = useSettings();
     const [tabs, setTabs] = useState<TextEditorTab[]>(initialState?.tabs ?? [{
         id: self.crypto.randomUUID(),
         filePath: null,
@@ -427,13 +429,13 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
         if (!initialState?.tabs) return;
         initialState.tabs.forEach(tab => {
             if (tab.filePath && !tab.content) {
-                electronService.textEditorReadFile(tab.filePath, tab.encoding || 'utf-8').then(result => {
+                electronService.textEditorReadFile(tab.filePath, tab.encoding || 'utf-8').then((result: any) => {
                     updateTab(tab.id, {
                         content: result.content,
                         savedContent: result.content,
                         lineEnding: result.lineEnding as 'LF' | 'CRLF',
                     });
-                }).catch(err => {
+                }).catch((err: any) => {
                     console.error('Failed to load file:', err);
                 });
             }
@@ -530,6 +532,7 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
     const dragCounterRef = useRef(0);
 
     const handleDragEnter = useCallback((e: React.DragEvent) => {
+        if (e.dataTransfer.types && Array.prototype.indexOf.call(e.dataTransfer.types, 'application/json') !== -1) return;
         e.preventDefault();
         e.stopPropagation();
         if (dragTabId) return; // Ignore file overlay during tab reorder
@@ -540,6 +543,7 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
     }, [dragTabId]);
 
     const handleDragLeave = useCallback((e: React.DragEvent) => {
+        if (e.dataTransfer.types && Array.prototype.indexOf.call(e.dataTransfer.types, 'application/json') !== -1) return;
         e.preventDefault();
         e.stopPropagation();
         dragCounterRef.current--;
@@ -549,11 +553,13 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
     }, []);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
+        if (e.dataTransfer.types && Array.prototype.indexOf.call(e.dataTransfer.types, 'application/json') !== -1) return;
         e.preventDefault();
         e.stopPropagation();
     }, []);
 
     const handleDrop = useCallback(async (e: React.DragEvent) => {
+        if (e.dataTransfer.types && Array.prototype.indexOf.call(e.dataTransfer.types, 'application/json') !== -1) return;
         e.preventDefault();
         e.stopPropagation();
         dragCounterRef.current = 0;
@@ -817,21 +823,27 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
 
             {/* Editor area */}
             <div className="text-editor-container">
-                <div className="text-editor-line-numbers" ref={lineNumbersRef}>
-                    {lineNumbers.map(n => (
-                        <div key={n} className="text-editor-line-number">{n}</div>
-                    ))}
-                </div>
+                {!lineWrapEnabled && (
+                    <div className="text-editor-line-numbers" ref={lineNumbersRef}>
+                        {lineNumbers.map(n => (
+                            <div key={n} className="text-editor-line-number">{n}</div>
+                        ))}
+                    </div>
+                )}
                 <textarea
                     ref={textareaRef}
                     className="text-editor-textarea"
+                    style={{
+                        whiteSpace: lineWrapEnabled ? 'pre-wrap' : 'pre',
+                        wordWrap: lineWrapEnabled ? 'break-word' : 'normal'
+                    }}
                     value={activeTab.content}
                     onChange={handleContentChange}
                     onScroll={handleTextareaScroll}
                     onClick={updateCursorPosition}
                     onKeyUp={updateCursorPosition}
                     spellCheck={false}
-                    wrap="off"
+                    wrap={lineWrapEnabled ? 'soft' : 'off'}
                 />
             </div>
 

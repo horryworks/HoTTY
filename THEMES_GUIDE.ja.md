@@ -20,6 +20,7 @@
 - `bg-primary`: アプリケーションのメイン背景色およびアクティブなペインの背景色。
 - `bg-secondary`: サイドバー、ヘッダー、およびUI要素の背景色。
 - `bg-tertiary`: 非アクティブなタブやドロップダウンの背景色。
+- `panel-bg`: 特定のパネル（ホストツリーなど）の背景色。
 - `text-primary`: メインのテキストカラー。
 - `text-secondary`: 補助的なテキストやヒントのカラー。
 - `text-on-accent`: アクセント色（ボタン等）の上に表示されるテキストの色。
@@ -48,6 +49,7 @@
 - `error-color`: 一般的なエラーメッセージの色。
 - `color-danger`: 警告や削除などの危険を示す色。
 - `color-danger-bg`: 危険要素の背景（半透明など）。
+- `color-danger-bg-hover`: 危険要素のホバー時背景。
 - `color-danger-border`: 危険要素の境界線。
 - `color-warning`: 警告・注意が必要なテキストの色。
 
@@ -76,14 +78,21 @@
 - `tab-close-bg`: タブの閉じる「×」ボタンの色。
 - `tab-close-hover-bg`: タブの「×」ボタンのホバー色。
 - `tab-drag-indicator`: タブ並び替え時の挿入位置インジケーターの色。
+- `tab-watching-text`: AI監視中のタブの文字色。
+- `tab-watching-bg`: AI監視中のタブアイコンの背景・塗りつぶし色。
+- `tab-watching-icon`: AI監視中アイコンのプライマリグローカラー。
+- `tab-watching-icon-glow`: AI監視中アイコングラデーションのセカンダリグローカラー。
 - `context-menu-bg`: 右クリックメニューの背景。
 - `context-menu-border`: 右クリックメニューの枠線。
 - `context-menu-text`: 右クリックメニューの文字色。
 - `context-menu-hover-bg`: 右クリックメニューの項目ホバー色。
 - `hidden-item-bg`: 非表示設定にされている項目の背景（デバッグ等）。
+- `hidden-item-bg-hover`: 非表示設定項目のホバー背景。
 - `tree-meta-color`: ツリー表示等でのメタ情報（サイズ等）の色。
 - `icon-folder`: ホストツリーのフォルダアイコンの色。
 - `icon-host`: ホストツリーの接続先アイコンの色。
+- `terminal-prompt-default`: ターミナルのプロンプトマーカーブロックのデフォルト色。
+- `terminal-prompt-active`: ターミナルのプロンプトマーカーブロックがコマンド入力として検出された際のアクティブ色。
 
 ### 検索とハイライト
 - `search-highlight-bg`: 検索一致行の背景色（薄いハイライト）。

@@ -169,7 +169,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                                         cursor: 'pointer',
                                         width: '14px',
                                         height: '14px',
-                                        color: isWatching ? '#4E86F8' : 'var(--text-color)',
+                                        color: isWatching ? 'var(--tab-watching-text, #4E86F8)' : 'var(--text-color)',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
@@ -178,11 +178,11 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                                 >
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={`ai-icon-svg ${isWatching ? 'pulse' : ''}`}>
                                         <circle cx="12" cy="12" r="10" fill={isWatching ? "url(#ai-glow-gradient)" : "currentColor"} opacity={isWatching ? "1" : "0.7"} />
-                                        <circle cx="12" cy="12" r="6" fill={isWatching ? "#E0FFE0" : "currentColor"} opacity={isWatching ? "0.9" : "0.4"} />
+                                        <circle cx="12" cy="12" r="6" fill={isWatching ? "var(--tab-watching-bg, #E0FFE0)" : "currentColor"} opacity={isWatching ? "0.9" : "0.4"} />
                                         <defs>
                                             <linearGradient id="ai-glow-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                                <stop offset="0%" stopColor="#00FF80" />
-                                                <stop offset="100%" stopColor="#00D1FF" />
+                                                <stop offset="0%" stopColor="var(--tab-watching-icon, #00FF80)" />
+                                                <stop offset="100%" stopColor="var(--tab-watching-icon-glow, #00D1FF)" />
                                             </linearGradient>
                                         </defs>
                                     </svg>
@@ -239,11 +239,11 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                         >
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <circle cx="12" cy="12" r="10" fill="url(#feat-ai-gradient)" />
-                                <circle cx="12" cy="12" r="6" fill="#E0FFE0" opacity="0.9" />
+                                <circle cx="12" cy="12" r="6" fill="var(--tab-watching-bg, #E0FFE0)" opacity="0.9" />
                                 <defs>
                                     <linearGradient id="feat-ai-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                        <stop offset="0%" stopColor="#00FF80" />
-                                        <stop offset="100%" stopColor="#00D1FF" />
+                                        <stop offset="0%" stopColor="var(--tab-watching-icon, #00FF80)" />
+                                        <stop offset="100%" stopColor="var(--tab-watching-icon-glow, #00D1FF)" />
                                     </linearGradient>
                                 </defs>
                             </svg>

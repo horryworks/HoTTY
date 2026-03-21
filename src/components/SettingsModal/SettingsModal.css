@@ -89,11 +89,6 @@
     /* Prevent text selection while dragging */
 }
 
-.settings-tabs::-webkit-scrollbar {
-    display: none;
-    /* Chrome, Safari, Edge */
-}
-
 .settings-tabs:active {
     cursor: grabbing;
 }

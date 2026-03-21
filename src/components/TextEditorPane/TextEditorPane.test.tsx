@@ -12,6 +12,13 @@ vi.mock('../../services/electronService', () => ({
     getFilePath: vi.fn((file: File) => (file as File & { _testPath?: string })._testPath || ''),
 }));
 
+// Mock useSettings
+vi.mock('../../hooks/useSettings', () => ({
+    useSettings: () => ({
+        settings: { lineWrapEnabled: false },
+    }),
+}));
+
 // Mock crypto.randomUUID
 let uuidCounter = 0;
 vi.stubGlobal('crypto', { randomUUID: () => `test-uuid-${++uuidCounter}` });

@@ -47,7 +47,7 @@ const THEME_SECTIONS: { title: string; description: string; keys: string[] }[] =
     {
         title: 'UI Specific Components',
         description: 'Sidebar, tabs, context menus, icons, and other UI elements',
-        keys: ['sidebar-bg', 'sidebar-btn-color', 'sidebar-btn-hover-bg', 'sidebar-btn-hover-color', 'sidebar-btn-active-bg', 'tab-bg', 'tab-text', 'tab-active-bg', 'tab-active-text', 'tab-close-bg', 'tab-close-hover-bg', 'tab-drag-indicator', 'context-menu-bg', 'context-menu-border', 'context-menu-text', 'context-menu-hover-bg', 'hidden-item-bg', 'hidden-item-bg-hover', 'tree-meta-color', 'icon-folder', 'icon-host'],
+        keys: ['sidebar-bg', 'sidebar-btn-color', 'sidebar-btn-hover-bg', 'sidebar-btn-hover-color', 'sidebar-btn-active-bg', 'tab-bg', 'tab-text', 'tab-active-bg', 'tab-active-text', 'tab-close-bg', 'tab-close-hover-bg', 'tab-drag-indicator', 'tab-watching-text', 'tab-watching-bg', 'tab-watching-icon', 'tab-watching-icon-glow', 'context-menu-bg', 'context-menu-border', 'context-menu-text', 'context-menu-hover-bg', 'hidden-item-bg', 'hidden-item-bg-hover', 'tree-meta-color', 'icon-folder', 'icon-host', 'terminal-prompt-default', 'terminal-prompt-active'],
     },
     {
         title: 'Search & Highlight',
@@ -126,6 +126,10 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'tab-close-bg': 'Color of the tab\'s close button.',
     'tab-close-hover-bg': 'Hover color of the tab\'s close button.',
     'tab-drag-indicator': 'Color of the line indicating tab insertion position.',
+    'tab-watching-text': 'Text color for a tab that is currently being monitored by AI.',
+    'tab-watching-bg': 'Background/fill color for the AI monitoring icon in a tab.',
+    'tab-watching-icon': 'Primary glow color for the AI monitoring icon.',
+    'tab-watching-icon-glow': 'Secondary glow color for the AI monitoring icon gradient.',
     'context-menu-bg': 'Background for right-click menus.',
     'context-menu-border': 'Border for right-click menus.',
     'context-menu-text': 'Text color for right-click menus.',
@@ -135,6 +139,8 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'tree-meta-color': 'Color for metadata in list views (e.g., file sizes).',
     'icon-folder': 'Color for folder icons in the host tree.',
     'icon-host': 'Color for host/connection icons in the host tree.',
+    'terminal-prompt-default': 'Default color for terminal prompt marker blocks.',
+    'terminal-prompt-active': 'Active color for terminal prompt marker blocks when detected as command input.',
     // Search & Highlight
     'search-highlight-bg': 'Background tint for lines that contain a search match.',
     'search-highlight-current-bg': 'Background for the currently focused search match line.',
