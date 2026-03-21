@@ -13,6 +13,7 @@
     display: flex;
     align-items: center;
     overflow-x: auto;
+    overflow-y: hidden;
     height: 100%;
 }
 
@@ -44,79 +45,14 @@
 
 .tab.drag-over-left {
     z-index: 10;
-    /* Bring to front */
-}
-
-.tab.drag-over-left::before {
-    content: '';
-    position: absolute;
-    top: -4px;
-    left: -5px;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 6px solid var(--tab-drag-indicator);
-    z-index: 102;
-}
-
-.tab.drag-over-left::after {
-    content: '';
-    position: absolute;
-    bottom: -4px;
-    left: -5px;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-bottom: 6px solid var(--tab-drag-indicator);
-    z-index: 102;
-}
-
-/* Vertical Line connecting triangles */
-.tab.drag-over-left::after {
     border-left: 2px solid var(--tab-drag-indicator);
-    /* Use after element for the line? No, after is bottom triangle */
+    padding-left: 8px; /* Compensate for +2px border (normally 10px) */
 }
-
-/* Wait, we have before (top) and after (bottom). Where is the line?
-   We can use the element border-left.
-   Let's ensure the border spans full height.
- */
-.tab.drag-over-left {
-    border-left: 2px solid var(--tab-drag-indicator);
-    margin-left: -1px;
-}
-
-
-/* RIGHT SIDE */
 
 .tab.drag-over-right {
     z-index: 10;
-}
-
-.tab.drag-over-right::before {
-    content: '';
-    position: absolute;
-    top: -4px;
-    right: -5px;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 6px solid var(--tab-drag-indicator);
-    z-index: 102;
-}
-
-.tab.drag-over-right::after {
-    content: '';
-    position: absolute;
-    bottom: -4px;
-    right: -5px;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-bottom: 6px solid var(--tab-drag-indicator);
-    z-index: 102;
-}
-
-/* Vertical Line for right side */
-.tab.drag-over-right {
     border-right: 2px solid var(--tab-drag-indicator);
-    margin-right: -1px;
+    padding-right: 9px; /* Compensate for +1px border increase (normally 10px padding + 1px border) */
 }
 
 .tab[draggable="true"] {
