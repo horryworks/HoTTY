@@ -47,6 +47,7 @@ export const getThemes = () => api().getThemes();
 export const saveCustomTheme = (themeKey: string, themeData: Record<string, unknown>) => api().saveCustomTheme(themeKey, themeData);
 export const deleteCustomTheme = (themeKey: string) => api().deleteCustomTheme(themeKey);
 
+export const verifyUser = (password: string) => api().verifyUser(password);
 export const encryptSecret = (plaintext: string) => api().encryptSecret(plaintext);
 export const decryptSecret = (ciphertext: string) => api().decryptSecret(ciphertext);
 export const encryptSecrets = (plaintexts: (string | undefined)[]) => api().encryptSecrets(plaintexts);

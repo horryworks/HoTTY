@@ -398,3 +398,75 @@ describe('useHostManager — jumpbox fields', () => {
         expect(result.current.tree[0].entry?.jumpboxId).toBe('jb-id');
     });
 });
+
+// ── importData jumpbox remapping tests ──
+
+describe('useHostManager — importData jumpbox remapping', () => {
+    it('remaps jumpboxId references to new IDs after import', async () => {
+        const { result } = renderHook(() => useHostManager());
+        const importNodes: HostTreeNode[] = [
+            { id: 'old-jb', type: 'host', name: 'Jumpbox', entry: { protocol: 'ssh', host: '10.0.0.1', port: 22, isJumpbox: true } },
+            { id: 'old-h1', type: 'host', name: 'Host1', entry: { protocol: 'ssh', host: '10.0.0.2', port: 22, jumpboxId: 'old-jb' } },
+        ];
+
+        await act(async () => {
+            await result.current.importData(importNodes, 'TestImport');
+        });
+
+        const folder = result.current.tree[0];
+        expect(folder.type).toBe('folder');
+        const children = folder.children!;
+        expect(children.length).toBe(2);
+
+        const jumpbox = children.find(n => n.name === 'Jumpbox')!;
+        const host = children.find(n => n.name === 'Host1')!;
+
+        // IDs should be reassigned (not the old ones)
+        expect(jumpbox.id).not.toBe('old-jb');
+        expect(host.id).not.toBe('old-h1');
+
+        // jumpboxId should point to the new jumpbox ID
+        expect(host.entry?.jumpboxId).toBe(jumpbox.id);
+        expect(jumpbox.entry?.isJumpbox).toBe(true);
+    });
+
+    it('clears jumpboxId when referenced jumpbox is not in the import', async () => {
+        const { result } = renderHook(() => useHostManager());
+        const importNodes: HostTreeNode[] = [
+            { id: 'old-h1', type: 'host', name: 'Host1', entry: { protocol: 'ssh', host: '10.0.0.2', port: 22, jumpboxId: 'non-existent-jb' } },
+        ];
+
+        await act(async () => {
+            await result.current.importData(importNodes, 'TestImport');
+        });
+
+        const folder = result.current.tree[0];
+        const host = folder.children![0];
+
+        // jumpboxId should be cleared since the referenced jumpbox doesn't exist
+        expect(host.entry?.jumpboxId).toBeUndefined();
+    });
+
+    it('remaps jumpboxId in nested folder structures', async () => {
+        const { result } = renderHook(() => useHostManager());
+        const importNodes: HostTreeNode[] = [
+            { id: 'old-jb', type: 'host', name: 'Jumpbox', entry: { protocol: 'ssh', host: '10.0.0.1', port: 22, isJumpbox: true } },
+            {
+                id: 'old-folder', type: 'folder', name: 'SubFolder', children: [
+                    { id: 'old-h1', type: 'host', name: 'NestedHost', entry: { protocol: 'ssh', host: '10.0.0.2', port: 22, jumpboxId: 'old-jb' } },
+                ]
+            },
+        ];
+
+        await act(async () => {
+            await result.current.importData(importNodes, 'TestImport');
+        });
+
+        const folder = result.current.tree[0];
+        const jumpbox = folder.children!.find(n => n.name === 'Jumpbox')!;
+        const subFolder = folder.children!.find(n => n.name === 'SubFolder')!;
+        const nestedHost = subFolder.children![0];
+
+        expect(nestedHost.entry?.jumpboxId).toBe(jumpbox.id);
+    });
+});

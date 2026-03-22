@@ -179,6 +179,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getThemes: () => ipcRenderer.invoke('get-themes'),
     saveCustomTheme: (themeKey: string, themeData: Record<string, unknown>) => ipcRenderer.invoke('save-custom-theme', themeKey, themeData),
     deleteCustomTheme: (themeKey: string) => ipcRenderer.invoke('delete-custom-theme', themeKey),
+    verifyUser: (password: string) => ipcRenderer.invoke('dpapi-verify-user', password),
     encryptSecret: (plaintext: string) => ipcRenderer.invoke('dpapi-encrypt', plaintext),
     decryptSecret: (ciphertext: string) => ipcRenderer.invoke('dpapi-decrypt', ciphertext),
     encryptSecrets: (plaintexts: (string | undefined)[]) => ipcRenderer.invoke('dpapi-encrypt-batch', plaintexts),

@@ -5,7 +5,7 @@ vi.mock('./Logger', () => ({
     logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { isDpapiEncrypted, encryptString, decryptString } from './dpapi';
+import { isDpapiEncrypted, encryptString, decryptString, verifyWindowsUser } from './dpapi';
 
 describe('isDpapiEncrypted', () => {
     it('returns true for strings with [DPAPI] prefix', () => {
@@ -71,6 +71,22 @@ describe('decryptString', () => {
         Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
 
         await expect(decryptString('[DPAPI]encrypteddata')).rejects.toThrow('Windows');
+
+        Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+    });
+});
+
+describe('verifyWindowsUser', () => {
+    it('returns false for empty password', async () => {
+        const result = await verifyWindowsUser('');
+        expect(result).toBe(false);
+    });
+
+    it('throws on non-Windows platform', async () => {
+        const originalPlatform = process.platform;
+        Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+
+        await expect(verifyWindowsUser('password')).rejects.toThrow('Windows');
 
         Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
     });

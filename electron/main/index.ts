@@ -18,7 +18,7 @@ import { AnthropicProvider } from './services/ai/providers/anthropic/AnthropicPr
 import { LogManager } from './services/LogManager';
 import { PingMonitorService, isValidPingTarget } from './services/PingMonitorService';
 import { logger } from './services/Logger';
-import { encryptString, decryptString, encodePowerShellScript } from './services/dpapi';
+import { encryptString, decryptString, verifyWindowsUser, encodePowerShellScript } from './services/dpapi';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { pathToFileURL } from 'url';
@@ -1088,6 +1088,16 @@ ipcMain.handle('dpapi-decrypt-batch', async (_, ciphertexts: (string | undefined
   } catch (err) {
     logger.error('dpapi', 'Batch decrypt error', { error: String(err) });
     throw err;
+  }
+});
+
+ipcMain.handle('dpapi-verify-user', async (_, password: string) => {
+  if (typeof password !== 'string') return false;
+  try {
+    return await verifyWindowsUser(password);
+  } catch (err) {
+    logger.error('dpapi', 'User verification error', { error: String(err) });
+    return false;
   }
 });
 

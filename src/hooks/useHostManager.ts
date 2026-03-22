@@ -459,13 +459,32 @@ export function useHostManager() {
     }, []);
 
     const importData = useCallback(async (nodes: HostTreeNode[], folderName: string = 'Imported', parentId: string | null = null): Promise<string> => {
-        // Assign new IDs recursively to avoid collisions
+        // Build old-to-new ID mapping, then reassign IDs and remap jumpboxId references
+        const idMap = new Map<string, string>();
+        const buildIdMap = (nodeList: HostTreeNode[]): void => {
+            for (const n of nodeList) {
+                idMap.set(n.id, generateId());
+                if (n.children) buildIdMap(n.children);
+            }
+        };
+        buildIdMap(nodes);
+
         const reassignIds = (nodeList: HostTreeNode[]): HostTreeNode[] => {
-            return nodeList.map(n => ({
-                ...n,
-                id: generateId(),
-                children: n.children ? reassignIds(n.children) : undefined
-            }));
+            return nodeList.map(n => {
+                const newNode: HostTreeNode = {
+                    ...n,
+                    id: idMap.get(n.id) || generateId(),
+                    children: n.children ? reassignIds(n.children) : undefined
+                };
+                if (newNode.entry?.jumpboxId) {
+                    const newJumpboxId = idMap.get(newNode.entry.jumpboxId);
+                    newNode.entry = {
+                        ...newNode.entry,
+                        jumpboxId: newJumpboxId || undefined
+                    };
+                }
+                return newNode;
+            });
         };
 
         const importedNodes = reassignIds(nodes);

@@ -107,4 +107,39 @@ describe('ConnectionDialog', () => {
         expect(usernameInput).not.toBeNull();
         expect(usernameInput!.required).toBe(true);
     });
+
+    it('does not show password reveal button when password is empty', () => {
+        render(<ConnectionDialog {...baseProps} />);
+        expect(screen.queryByTitle('Show password')).not.toBeInTheDocument();
+    });
+
+    it('shows password reveal button when password is entered', () => {
+        render(<ConnectionDialog {...baseProps} />);
+        const passwordLabel = screen.getByText('Password');
+        const passwordInput = passwordLabel.parentElement?.querySelector('input[type="password"]');
+        expect(passwordInput).not.toBeNull();
+        fireEvent.change(passwordInput!, { target: { value: 'mysecret' } });
+        expect(screen.getByTitle('Show password')).toBeInTheDocument();
+    });
+
+    it('opens verify modal when password reveal button is clicked', () => {
+        render(<ConnectionDialog {...baseProps} />);
+        const passwordLabel = screen.getByText('Password');
+        const passwordInput = passwordLabel.parentElement?.querySelector('input[type="password"]');
+        fireEvent.change(passwordInput!, { target: { value: 'mysecret' } });
+        fireEvent.click(screen.getByTitle('Show password'));
+        expect(screen.getByText('Windows Authentication')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Windows password')).toBeInTheDocument();
+    });
+
+    it('closes verify modal on Cancel', () => {
+        render(<ConnectionDialog {...baseProps} />);
+        const passwordLabel = screen.getByText('Password');
+        const passwordInput = passwordLabel.parentElement?.querySelector('input[type="password"]');
+        fireEvent.change(passwordInput!, { target: { value: 'mysecret' } });
+        fireEvent.click(screen.getByTitle('Show password'));
+        expect(screen.getByText('Windows Authentication')).toBeInTheDocument();
+        fireEvent.click(screen.getByText('Cancel'));
+        expect(screen.queryByText('Windows Authentication')).not.toBeInTheDocument();
+    });
 });

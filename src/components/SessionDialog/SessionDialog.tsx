@@ -37,6 +37,15 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
     const [isDecrypting, setIsDecrypting] = useState(false);
 
+    // Password reveal state
+    const [passwordVisible, setPasswordVisible] = useState(false);
+    const [showVerifyModal, setShowVerifyModal] = useState(false);
+    const [verifyPassword, setVerifyPassword] = useState('');
+    const [verifyError, setVerifyError] = useState('');
+    const [isVerifying, setIsVerifying] = useState(false);
+    const passwordRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const verifyInputRef = useRef<HTMLInputElement>(null);
+
     // Ref to the connection form for programmatic submission
     const formRef = useRef<HTMLFormElement>(null);
     // Ref to the outer dialog container for scoped key handling
@@ -247,6 +256,68 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             setOriginalState(prev => prev ? { ...prev, name: node.name } : prev);
         }
     }, [hostManager.tree, selectedHostId]);
+
+    // --- Password reveal ---
+    const clearPasswordRevealTimer = useCallback(() => {
+        if (passwordRevealTimerRef.current) {
+            clearTimeout(passwordRevealTimerRef.current);
+            passwordRevealTimerRef.current = null;
+        }
+    }, []);
+
+    // Hide password when password value changes or host selection changes
+    useEffect(() => {
+        setPasswordVisible(false);
+        clearPasswordRevealTimer();
+    }, [selectedHostId, clearPasswordRevealTimer]);
+
+    // Cleanup timer on unmount
+    useEffect(() => {
+        return () => clearPasswordRevealTimer();
+    }, [clearPasswordRevealTimer]);
+
+    const handlePasswordRevealClick = useCallback(() => {
+        if (passwordVisible) {
+            setPasswordVisible(false);
+            clearPasswordRevealTimer();
+            return;
+        }
+        if (!password) return;
+        setVerifyPassword('');
+        setVerifyError('');
+        setShowVerifyModal(true);
+        setTimeout(() => verifyInputRef.current?.focus(), 50);
+    }, [passwordVisible, password, clearPasswordRevealTimer]);
+
+    const handleVerifySubmit = useCallback(async () => {
+        if (!verifyPassword || isVerifying) return;
+        setIsVerifying(true);
+        setVerifyError('');
+        try {
+            const ok = await electronService.verifyUser(verifyPassword);
+            if (ok) {
+                setShowVerifyModal(false);
+                setVerifyPassword('');
+                setPasswordVisible(true);
+                clearPasswordRevealTimer();
+                passwordRevealTimerRef.current = setTimeout(() => {
+                    setPasswordVisible(false);
+                }, 10000);
+            } else {
+                setVerifyError('Authentication failed');
+            }
+        } catch {
+            setVerifyError('Authentication failed');
+        } finally {
+            setIsVerifying(false);
+        }
+    }, [verifyPassword, isVerifying, clearPasswordRevealTimer]);
+
+    const handleVerifyCancel = useCallback(() => {
+        setShowVerifyModal(false);
+        setVerifyPassword('');
+        setVerifyError('');
+    }, []);
 
     // --- Select a host from the tree ---
     const handleSelectHost = async (node: HostTreeNode) => {
@@ -739,14 +810,38 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                     {(protocol === 'ssh' || protocol === 'telnet') && (
                                         <div className="form-group">
                                             <label>Password</label>
-                                            <input
-                                                type="password"
-                                                value={isDecrypting ? 'Decrypting...' : password}
-                                                onChange={e => setPassword(e.target.value)}
-                                                className={isDecrypting ? 'decrypting-placeholder' : ''}
-                                                disabled={isDecrypting}
-                                                autoComplete="new-password"
-                                            />
+                                            <div className="password-input-wrapper">
+                                                <input
+                                                    type={passwordVisible ? 'text' : 'password'}
+                                                    value={isDecrypting ? 'Decrypting...' : password}
+                                                    onChange={e => setPassword(e.target.value)}
+                                                    className={isDecrypting ? 'decrypting-placeholder' : ''}
+                                                    disabled={isDecrypting}
+                                                    autoComplete="new-password"
+                                                />
+                                                {password && !isDecrypting && (
+                                                    <button
+                                                        type="button"
+                                                        className="password-reveal-btn"
+                                                        onClick={handlePasswordRevealClick}
+                                                        title={passwordVisible ? 'Hide password' : 'Show password'}
+                                                        tabIndex={-1}
+                                                    >
+                                                        {passwordVisible ? (
+                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                                                                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                                                                <line x1="1" y1="1" x2="23" y2="23" />
+                                                            </svg>
+                                                        ) : (
+                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                                                <circle cx="12" cy="12" r="3" />
+                                                            </svg>
+                                                        )}
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
                                     {(protocol === 'ssh' || protocol === 'telnet') && jumpboxHosts.length > 0 && (
@@ -894,6 +989,38 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                 {/* Bottom-right dialog resize handle */}
                 <div className="dialog-resize-handle" onMouseDown={handleDialogResizeMouseDown} />
             </div>
+
+            {/* Windows authentication modal for password reveal */}
+            {showVerifyModal && (
+                <div className="password-verify-overlay" onMouseDown={handleVerifyCancel}>
+                    <div className="password-verify-modal" onMouseDown={e => e.stopPropagation()}>
+                        <div className="password-verify-header">Windows Authentication</div>
+                        <div className="password-verify-body">
+                            <p>Enter your Windows password to reveal the saved credential.</p>
+                            <input
+                                ref={verifyInputRef}
+                                type="password"
+                                value={verifyPassword}
+                                onChange={e => { setVerifyPassword(e.target.value); setVerifyError(''); }}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') { e.preventDefault(); handleVerifySubmit(); }
+                                    if (e.key === 'Escape') { e.preventDefault(); handleVerifyCancel(); }
+                                }}
+                                placeholder="Windows password"
+                                autoComplete="off"
+                                disabled={isVerifying}
+                            />
+                            {verifyError && <div className="password-verify-error">{verifyError}</div>}
+                        </div>
+                        <div className="password-verify-actions">
+                            <button type="button" className="btn-secondary" onClick={handleVerifyCancel} disabled={isVerifying}>Cancel</button>
+                            <button type="button" className="btn-primary" onClick={handleVerifySubmit} disabled={!verifyPassword || isVerifying}>
+                                {isVerifying ? 'Verifying...' : 'OK'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -54,6 +54,7 @@ export interface ElectronAPI {
     openDebugLogFolder: () => Promise<void>;
 
     // Credential encryption (Windows DPAPI)
+    verifyUser: (password: string) => Promise<boolean>;
     encryptSecret: (plaintext: string) => Promise<string>;
     decryptSecret: (ciphertext: string) => Promise<string>;
     encryptSecrets: (plaintexts: (string | undefined)[]) => Promise<(string | undefined)[]>;

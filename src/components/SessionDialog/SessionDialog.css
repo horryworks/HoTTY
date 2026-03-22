@@ -191,3 +191,133 @@
 .decrypting-placeholder {
     color: var(--color-danger) !important;
 }
+
+/* Password reveal button */
+.password-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-input-wrapper input {
+    padding-right: 32px;
+}
+
+.password-reveal-btn {
+    position: absolute;
+    right: 4px;
+    background: none;
+    border: none;
+    padding: 2px 4px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    transition: color 0.15s;
+}
+
+.password-reveal-btn:hover {
+    color: var(--text-primary);
+}
+
+/* Windows authentication modal for password reveal */
+.password-verify-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--modal-overlay-bg);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.password-verify-modal {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px var(--modal-shadow);
+    width: 340px;
+    color: var(--text-primary);
+}
+
+.password-verify-header {
+    padding: 12px 16px;
+    font-weight: bold;
+    font-size: var(--font-size-base);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.password-verify-body {
+    padding: 12px 16px;
+}
+
+.password-verify-body p {
+    margin: 0 0 10px 0;
+    font-size: calc(var(--font-size-base) - 1px);
+    color: var(--text-secondary);
+}
+
+.password-verify-body input {
+    width: 100%;
+    padding: 5px 8px;
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+.password-verify-body input:focus {
+    border-color: var(--accent-color);
+    outline: none;
+}
+
+.password-verify-error {
+    margin-top: 6px;
+    font-size: calc(var(--font-size-base) - 2px);
+    color: var(--color-danger);
+}
+
+.password-verify-actions {
+    padding: 10px 16px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    border-top: 1px solid var(--border-color);
+}
+
+.password-verify-actions button {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    font-size: calc(var(--font-size-base) - 1px);
+    cursor: pointer;
+}
+
+.password-verify-actions .btn-secondary {
+    background-color: var(--btn-secondary-bg);
+    color: var(--text-primary);
+}
+
+.password-verify-actions .btn-secondary:hover:not(:disabled) {
+    background-color: var(--btn-secondary-hover-bg);
+}
+
+.password-verify-actions .btn-primary {
+    background-color: var(--accent-color);
+    color: var(--text-on-accent);
+}
+
+.password-verify-actions .btn-primary:hover:not(:disabled) {
+    background-color: var(--accent-hover);
+}
+
+.password-verify-actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

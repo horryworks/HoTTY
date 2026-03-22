@@ -98,6 +98,49 @@ export async function encryptString(plaintext: string): Promise<string> {
  * @param ciphertext - The prefixed, base64-encoded ciphertext string.
  * @returns The original plaintext string.
  */
+/**
+ * Verifies Windows user credentials using the Win32 LogonUser API.
+ * @param password - The Windows password to verify for the current user.
+ * @returns true if the credentials are valid, false otherwise.
+ */
+export async function verifyWindowsUser(password: string): Promise<boolean> {
+    if (process.platform !== 'win32') {
+        throw new Error('Windows user verification requires Windows. HoTTY is a Windows-only application.');
+    }
+
+    if (!password) return false;
+
+    try {
+        const script = `
+            Add-Type -TypeDefinition @"
+            using System;
+            using System.Runtime.InteropServices;
+            public class WinAuth {
+                [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+                public static extern bool LogonUser(
+                    string lpszUsername, string lpszDomain, string lpszPassword,
+                    int dwLogonType, int dwLogonProvider, out IntPtr phToken);
+                [DllImport("kernel32.dll")]
+                public static extern bool CloseHandle(IntPtr hObject);
+            }
+"@
+            $pw = [Console]::In.ReadToEnd()
+            $token = [IntPtr]::Zero
+            $user = [Environment]::UserName
+            $domain = [Environment]::UserDomainName
+            $result = [WinAuth]::LogonUser($user, $domain, $pw, 3, 0, [ref]$token)
+            if ($token -ne [IntPtr]::Zero) { [WinAuth]::CloseHandle($token) | Out-Null }
+            [Console]::Write($result.ToString())
+        `;
+
+        const result = await runPowerShell(script, password);
+        return result.trim() === 'True';
+    } catch (err) {
+        logger.error('dpapi', 'Windows user verification failed', { error: String(err) });
+        return false;
+    }
+}
+
 export async function decryptString(ciphertext: string): Promise<string> {
     if (!ciphertext) return ciphertext;
 
