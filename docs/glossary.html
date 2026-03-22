@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HoTTY — Glossary</title>
+  <meta name="description" content="Glossary of terms used in HoTTY terminal emulator — SSH, Telnet, Serial, WSL, AI integration, and more." />
+  <link rel="icon" href="assets/images/HoTTY_logo.png" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/glossary.css" />
+</head>
+<body>
+
+<!-- Navigation -->
+<nav>
+  <div class="nav-inner">
+    <a class="nav-brand" href="index.html">
+      <img class="nav-logo" src="assets/images/HoTTY_logo.png" alt="HoTTY logo" />
+      HoTTY
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html#features">Features</a></li>
+      <li><a href="index.html#ai">AI Integration</a></li>
+      <li><a href="index.html#themes">Themes</a></li>
+      <li><a href="glossary.html" class="nav-active">Glossary</a></li>
+      <li><a href="https://github.com/horryworks/HoTTY" target="_blank">GitHub</a></li>
+    </ul>
+    <div class="nav-lang">
+      <button class="lang-btn active" data-lang="en">EN</button>
+      <button class="lang-btn" data-lang="ja" onclick="location.href='ja/glossary.html'">JA</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Glossary -->
+<section class="section glossary-section">
+  <div class="section-inner">
+    <div class="section-header">
+      <div class="section-label">// glossary</div>
+      <h2 class="section-title">Glossary of Terms</h2>
+      <p class="section-desc">
+        Key terms and concepts used in HoTTY.
+      </p>
+    </div>
+
+    <!-- Category Filter -->
+    <div class="glossary-filter">
+      <button class="filter-btn active" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="connection">Connection</button>
+      <button class="filter-btn" data-filter="ai">AI</button>
+      <button class="filter-btn" data-filter="terminal">Terminal</button>
+      <button class="filter-btn" data-filter="security">Security</button>
+      <button class="filter-btn" data-filter="ui">UI</button>
+    </div>
+
+    <div class="glossary-list">
+
+      <!-- Connection -->
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">Connection</span>
+          SSH <span class="glossary-full">(Secure Shell)</span>
+        </div>
+        <div class="glossary-def">
+          A cryptographic network protocol for secure communication over an unsecured network. HoTTY supports SSH connections with public key and password authentication, host key verification via <code>known_hosts</code>, and KeepAlive to prevent idle disconnects.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">Connection</span>
+          Telnet
+        </div>
+        <div class="glossary-def">
+          A legacy network protocol for bidirectional text-based communication. Unlike SSH, Telnet does not encrypt traffic. HoTTY supports Telnet connections with optional username/password authentication and KeepAlive.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">Connection</span>
+          Serial Connection
+        </div>
+        <div class="glossary-def">
+          A communication method using a serial port (COM port) to connect to devices such as routers, switches, and embedded systems. Configuration includes baud rate, data bits, stop bits, parity, and flow control.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">Connection</span>
+          Baud Rate
+        </div>
+        <div class="glossary-def">
+          The speed of data transmission over a serial connection, measured in bits per second (bps). Common values include 9600, 19200, 38400, 57600, and 115200. Must match the setting on the target device.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">Connection</span>
+          WSL <span class="glossary-full">(Windows Subsystem for Linux)</span>
+        </div>
+        <div class="glossary-def">
+          A Windows feature that lets you run Linux distributions natively. HoTTY automatically discovers installed WSL distributions and allows you to open them as terminal sessions.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">Connection</span>
+          Local Shell
+        </div>
+        <div class="glossary-def">
+          A terminal session running a local command interpreter (e.g., PowerShell, Command Prompt, or Git Bash) directly on your Windows machine without any network connection.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">Connection</span>
+          KeepAlive
+        </div>
+        <div class="glossary-def">
+          A mechanism that sends periodic packets to prevent an idle connection from being dropped by firewalls or the remote server. HoTTY supports SSH and Telnet KeepAlive with configurable intervals.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">Connection</span>
+          Jumpbox <span class="glossary-full">(Jump Host / Bastion Host)</span>
+        </div>
+        <div class="glossary-def">
+          An intermediary server used to access devices in a private network. HoTTY supports jumpbox chaining, allowing you to connect through one or more jump hosts to reach a final destination.
+        </div>
+      </div>
+
+      <!-- AI -->
+      <div class="glossary-item" data-category="ai">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ai">AI</span>
+          AI Monitor
+        </div>
+        <div class="glossary-def">
+          A HoTTY feature that captures terminal output and sends it to the AI for real-time analysis. You can request explanations, root cause analysis, or fix suggestions using predefined prompts.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="ai">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ai">AI</span>
+          Interactive Investigation
+        </div>
+        <div class="glossary-def">
+          An AI workflow where the AI proactively proposes diagnostic commands, HoTTY executes them on the terminal, captures the output, and feeds it back to the AI for continued analysis — all automatically.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="ai">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ai">AI</span>
+          Execute Block
+        </div>
+        <div class="glossary-def">
+          A special code block (<code>```execute</code>) used by the AI to propose commands for execution on the terminal. When the user approves, HoTTY runs the command and captures the output for follow-up analysis.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="ai">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ai">AI</span>
+          Gemini
+        </div>
+        <div class="glossary-def">
+          Google's family of large language models. HoTTY integrates with Gemini via Google AI Studio or Vertex AI to provide intelligent terminal assistance. Available models are auto-discovered from your API key.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="ai">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ai">AI</span>
+          AI Provider
+        </div>
+        <div class="glossary-def">
+          The AI service backend used for chat and analysis. HoTTY supports multiple providers: Google AI Studio (Gemini), Vertex AI, Anthropic (Claude), and OpenAI. Each provider requires its own API key or authentication.
+        </div>
+      </div>
+
+      <!-- Terminal -->
+      <div class="glossary-item" data-category="terminal">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-terminal">Terminal</span>
+          Terminal Emulator
+        </div>
+        <div class="glossary-def">
+          Software that replicates the functionality of a traditional hardware terminal, providing a text-based interface for interacting with a local or remote system. HoTTY is a modern terminal emulator built with xterm.js.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="terminal">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-terminal">Terminal</span>
+          ANSI Escape Sequences
+        </div>
+        <div class="glossary-def">
+          Special character sequences used to control text formatting, colors, and cursor positioning in terminals. Examples include bold text, color changes, and screen clearing. HoTTY fully supports ANSI/VT100 escape codes.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="terminal">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-terminal">Terminal</span>
+          Encoding
+        </div>
+        <div class="glossary-def">
+          The character set used to interpret bytes as text. HoTTY supports multiple encodings (e.g., UTF-8, Shift_JIS, EUC-JP) per session, ensuring correct display of text from systems using different character sets.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="terminal">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-terminal">Terminal</span>
+          Session
+        </div>
+        <div class="glossary-def">
+          An active connection to a local or remote system, displayed as a tab in HoTTY. Each session maintains its own terminal state, encoding, font settings, and color scheme. Sessions can be organized across multiple panes.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="terminal">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-terminal">Terminal</span>
+          Session Log
+        </div>
+        <div class="glossary-def">
+          A recorded log of all terminal input and output during a session. HoTTY saves logs with millisecond-precision timestamps and provides a built-in Log Viewer for reviewing them.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="terminal">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-terminal">Terminal</span>
+          Terminal Marker
+        </div>
+        <div class="glossary-def">
+          Colored vertical lines displayed on the right edge of the terminal that visually distinguish command prompts from their output. Red/orange markers indicate where you typed a command; blue markers indicate the resulting output. Click a marker to select the entire block, or right-click to ask AI about that specific output.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="terminal">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-terminal">Terminal</span>
+          Host Tree
+        </div>
+        <div class="glossary-def">
+          A hierarchical tree structure for organizing saved connection profiles (hosts) into folders. Supports drag-and-drop reordering, import/export of configurations, and quick-connect by double-clicking a host entry.
+        </div>
+      </div>
+
+      <!-- Security -->
+      <div class="glossary-item" data-category="security">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-security">Security</span>
+          Known Hosts
+        </div>
+        <div class="glossary-def">
+          A file that stores the public keys of SSH servers you have connected to. HoTTY manages <code>known_hosts</code> automatically, warning you if a server's key has changed (which could indicate a man-in-the-middle attack).
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="security">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-security">Security</span>
+          DPAPI <span class="glossary-full">(Data Protection API)</span>
+        </div>
+        <div class="glossary-def">
+          A Windows API for encrypting and decrypting data using credentials tied to the current user account. HoTTY uses DPAPI to securely store sensitive credentials like passwords and API keys.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="security">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-security">Security</span>
+          Sandbox
+        </div>
+        <div class="glossary-def">
+          A security mechanism that isolates running processes to limit their access to the system. HoTTY runs within Electron's sandboxed environment with <code>contextIsolation</code> enabled to prevent untrusted code from accessing system resources.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="security">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-security">Security</span>
+          CSP <span class="glossary-full">(Content Security Policy)</span>
+        </div>
+        <div class="glossary-def">
+          A security standard that helps prevent cross-site scripting (XSS) and other code injection attacks by specifying which content sources are trusted. HoTTY enforces CSP to protect the renderer process.
+        </div>
+      </div>
+
+      <!-- UI -->
+      <div class="glossary-item" data-category="ui">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ui">UI</span>
+          Grid Layout
+        </div>
+        <div class="glossary-def">
+          HoTTY's multi-pane workspace system with Top Bar, Bottom Bar, Left Sidebar, and Right Sidebar. You can drag the intersection point where four panes meet to resize all panels simultaneously. Layout is auto-saved.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="ui">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ui">UI</span>
+          Theme
+        </div>
+        <div class="glossary-def">
+          A set of colors, fonts, and visual styles applied to the entire HoTTY interface. Three built-in themes (Dark, Medium, Light) are provided, plus a Custom mode for full control over every UI color using the Visual Theme Creator.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="ui">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ui">UI</span>
+          Pane
+        </div>
+        <div class="glossary-def">
+          A subdivided area of the HoTTY window that holds one or more tabbed sessions. Panes can be positioned as a main area, sidebar, or bar, allowing you to view multiple sessions side by side.
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="ui">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ui">UI</span>
+          Log Viewer
+        </div>
+        <div class="glossary-def">
+          A built-in HoTTY feature that opens saved session logs as dedicated read-only tabs. Provides timestamp display, text search, and ANSI color rendering for reviewing past sessions.
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-links">
+      <a href="https://github.com/horryworks/HoTTY" target="_blank">GitHub</a>
+      <a href="https://github.com/horryworks/HoTTY/releases" target="_blank">Releases</a>
+      <a href="https://github.com/horryworks/HoTTY/issues" target="_blank">Issues</a>
+      <a href="https://github.com/horryworks/HoTTY/blob/main/LICENSE" target="_blank">License</a>
+      <a href="ja/">日本語</a>
+    </div>
+    <p>Copyright &copy; 2026 HoTTY Contributors. Licensed under GPL-3.0-or-later.</p>
+    <p style="margin-top:6px; font-size:0.78rem; opacity:0.6;">Built with Electron &middot; React &middot; TypeScript &middot; Google Gemini</p>
+  </div>
+</footer>
+
+<script src="js/main.js"></script>
+<script src="js/glossary.js"></script>
+</body>
+</html>

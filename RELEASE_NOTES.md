@@ -1,5 +1,22 @@
 # Release Notes - HoTTY
 
+## [v1.0.0] - 2026-03-22
+
+### First Stable Release
+
+HoTTY v1.0.0 marks the first stable release — a fully-featured AI-integrated terminal emulator for Windows supporting SSH, Telnet, Serial, WSL, and Local shell connections.
+
+> ⚠️ **Note:** The OpenAI provider integration has not been fully tested. Google AI Studio (Gemini), Vertex AI, and Anthropic are the recommended options.
+
+### New Features (since v1.0.0-beta10)
+- **Show Password**: Added a password visibility toggle to the host tree, allowing you to reveal saved passwords when needed.
+
+### Bug Fixes (since v1.0.0-beta10)
+- **Host Tree Import/Export**: Fixed a bug in the host tree import/export functionality.
+- **Tab Tooltip**: Fixed an issue where the tab tooltip did not disappear when closing the tab while the tooltip was displayed.
+
+---
+
 ## [v1.0.0-beta10] - 2026-03-22
 
 > ⚠️ **Preview Release** — AI provider integrations (Vertex AI, Anthropic, OpenAI) are not fully tested. Gemini remains the recommended production option.

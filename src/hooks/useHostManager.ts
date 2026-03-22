@@ -328,7 +328,7 @@ export function useHostManager() {
             const next = patchNode(prev, id, patch);
 
             // Need to track this id in cache if username/password changed to unencrypted string
-            const patchedNode = next.flatMap(n => n.type === 'host' ? [n] : n.children ?? []).find(n => n.id === id);
+            const patchedNode = flattenHosts(next).find(n => n.id === id);
             if (patchedNode?.type === 'host' && patchedNode.entry) {
                 if (patch.entry?.username && !patch.entry.username.startsWith('[DPAPI]')) {
                     setCachedCredential(id, { username: patch.entry.username });

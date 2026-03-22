@@ -112,6 +112,9 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                             <p className="help-text">
                                 <strong>Management:</strong> Use the action icons next to items to add folders, add new hosts, edit settings, or delete entries.
                             </p>
+                            <p className="help-text">
+                                🔑 <strong>Show Password:</strong> Use the password visibility toggle to reveal saved passwords in the host tree when needed.
+                            </p>
                         </div>
                     </details>
 

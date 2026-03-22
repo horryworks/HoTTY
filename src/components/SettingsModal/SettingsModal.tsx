@@ -393,7 +393,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                     {activeTab === 'about' && (
                         <div className="about-content" style={{ textAlign: 'center', padding: '20px 0' }}>
-                            <img src="./HoTTY_logo.png" alt="HoTTY Logo" width="64" height="64" style={{ marginBottom: '16px', borderRadius: '12px', backgroundColor: '#fff', padding: '4px' }} />
+                            <img src="./HoTTY_logo.png" alt="HoTTY Logo" width="64" height="64" style={{ marginBottom: '16px', borderRadius: '12px', backgroundColor: 'var(--bg-secondary)', padding: '4px' }} />
                             <h2 style={{ margin: '0 0 8px 0' }}>HoTTY</h2>
                             <p style={{ color: 'var(--text-secondary)', margin: '0 0 8px 0' }}>v{version}</p>
 

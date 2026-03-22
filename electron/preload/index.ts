@@ -168,8 +168,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('ai-auth-result', subscription);
         return () => ipcRenderer.removeListener('ai-auth-result', subscription);
     },
-    onAiChatResponse: (callback: (data: { sessionId: string, type: string, content: string }) => void) => {
-        const subscription = (_event: unknown, data: { sessionId: string, type: string, content: string }) => callback(data);
+    onAiChatResponse: (callback: (data: { sessionId: string, type: string, content: string, usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } }) => void) => {
+        const subscription = (_event: unknown, data: { sessionId: string, type: string, content: string, usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } }) => callback(data);
         ipcRenderer.on('ai-chat-response', subscription);
         return () => ipcRenderer.removeListener('ai-chat-response', subscription);
     },

@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HoTTY — 用語集</title>
+  <meta name="description" content="HoTTYターミナルエミュレーターで使用される用語集 — SSH、Telnet、Serial、WSL、AI統合など。" />
+  <link rel="icon" href="../assets/images/HoTTY_logo.png" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/glossary.css" />
+</head>
+<body>
+
+<!-- Navigation -->
+<nav>
+  <div class="nav-inner">
+    <a class="nav-brand" href="index.html">
+      <img class="nav-logo" src="../assets/images/HoTTY_logo.png" alt="HoTTY logo" />
+      HoTTY
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html#features">機能</a></li>
+      <li><a href="index.html#ai">AI統合</a></li>
+      <li><a href="index.html#themes">テーマ</a></li>
+      <li><a href="glossary.html" class="nav-active">用語集</a></li>
+      <li><a href="https://github.com/horryworks/HoTTY" target="_blank">GitHub</a></li>
+    </ul>
+    <div class="nav-lang">
+      <button class="lang-btn" data-lang="en" onclick="location.href='../glossary.html'">EN</button>
+      <button class="lang-btn active" data-lang="ja">JA</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Glossary -->
+<section class="section glossary-section">
+  <div class="section-inner">
+    <div class="section-header">
+      <div class="section-label">// 用語集</div>
+      <h2 class="section-title">用語集</h2>
+      <p class="section-desc">
+        HoTTYで使用される主要な用語と概念の一覧です。
+      </p>
+    </div>
+
+    <!-- Category Filter -->
+    <div class="glossary-filter">
+      <button class="filter-btn active" data-filter="all">すべて</button>
+      <button class="filter-btn" data-filter="connection">接続</button>
+      <button class="filter-btn" data-filter="ai">AI</button>
+      <button class="filter-btn" data-filter="terminal">ターミナル</button>
+      <button class="filter-btn" data-filter="security">セキュリティ</button>
+      <button class="filter-btn" data-filter="ui">UI</button>
+    </div>
+
+    <div class="glossary-list">
+
+      <!-- Connection -->
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">接続</span>
+          SSH <span class="glossary-full">(Secure Shell)</span>
+        </div>
+        <div class="glossary-def">
+          安全でないネットワーク上で暗号化された通信を行うためのプロトコル。HoTTYは公開鍵認証・パスワード認証、<code>known_hosts</code>によるホスト鍵検証、アイドル切断を防ぐKeepAliveに対応しています。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">接続</span>
+          Telnet
+        </div>
+        <div class="glossary-def">
+          双方向テキスト通信のためのレガシーネットワークプロトコル。SSHとは異なり通信は暗号化されません。HoTTYはユーザー名/パスワード認証とKeepAliveに対応したTelnet接続をサポートしています。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">接続</span>
+          シリアル接続
+        </div>
+        <div class="glossary-def">
+          シリアルポート（COMポート）を使用してルーター、スイッチ、組み込みシステムなどのデバイスに接続する通信方式。ボーレート、データビット、ストップビット、パリティ、フロー制御の設定が可能です。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">接続</span>
+          ボーレート
+        </div>
+        <div class="glossary-def">
+          シリアル接続におけるデータ転送速度で、ビット毎秒（bps）で測定されます。一般的な値は9600、19200、38400、57600、115200です。接続先デバイスの設定と一致させる必要があります。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">接続</span>
+          WSL <span class="glossary-full">(Windows Subsystem for Linux)</span>
+        </div>
+        <div class="glossary-def">
+          WindowsでLinuxディストリビューションをネイティブに実行できる機能。HoTTYはインストール済みのWSLディストリビューションを自動検出し、ターミナルセッションとして開くことができます。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">接続</span>
+          ローカルシェル
+        </div>
+        <div class="glossary-def">
+          ネットワーク接続なしに、Windowsマシン上でローカルのコマンドインタープリター（PowerShell、コマンドプロンプト、Git Bashなど）を直接実行するターミナルセッション。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">接続</span>
+          KeepAlive
+        </div>
+        <div class="glossary-def">
+          ファイアウォールやリモートサーバーによるアイドル接続の切断を防ぐために、定期的にパケットを送信する仕組み。HoTTYはSSHとTelnetのKeepAliveに対応し、送信間隔を設定できます。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="connection">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-connection">接続</span>
+          Jumpbox <span class="glossary-full">（踏み台サーバー / Bastion Host）</span>
+        </div>
+        <div class="glossary-def">
+          プライベートネットワーク内のデバイスにアクセスするための中継サーバー。HoTTYはジャンプボックスチェーンに対応しており、1台以上の踏み台を経由して最終的な接続先に到達できます。
+        </div>
+      </div>
+
+      <!-- AI -->
+      <div class="glossary-item" data-category="ai">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ai">AI</span>
+          AIモニター
+        </div>
+        <div class="glossary-def">
+          ターミナル出力をキャプチャしてAIに送信し、リアルタイムで分析するHoTTYの機能。「説明」「原因調査」「修正提案」などの定義済みプロンプトで即座に解析を依頼できます。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="ai">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ai">AI</span>
+          インタラクティブ調査
+        </div>
+        <div class="glossary-def">
+          AIが調査コマンドを自発的に提案し、HoTTYがそれをターミナルで実行、出力をキャプチャしてAIにフィードバックし、分析を継続するワークフロー。すべて自動で行われます。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="ai">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ai">AI</span>
+          Executeブロック
+        </div>
+        <div class="glossary-def">
+          AIがターミナルでの実行を提案するための特殊なコードブロック（<code>```execute</code>）。ユーザーが承認するとHoTTYがコマンドを実行し、出力をキャプチャして後続の分析に使用します。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="ai">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ai">AI</span>
+          Gemini
+        </div>
+        <div class="glossary-def">
+          Googleの大規模言語モデルファミリー。HoTTYはGoogle AI StudioまたはVertex AIを経由してGeminiと連携し、インテリジェントなターミナルアシスタンスを提供します。利用可能なモデルはAPIキーから自動検出されます。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="ai">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ai">AI</span>
+          AIプロバイダー
+        </div>
+        <div class="glossary-def">
+          チャットと分析に使用されるAIサービスのバックエンド。HoTTYは複数のプロバイダーに対応しています：Google AI Studio（Gemini）、Vertex AI、Anthropic（Claude）、OpenAI。各プロバイダーには固有のAPIキーまたは認証が必要です。
+        </div>
+      </div>
+
+      <!-- Terminal -->
+      <div class="glossary-item" data-category="terminal">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-terminal">ターミナル</span>
+          ターミナルエミュレーター
+        </div>
+        <div class="glossary-def">
+          従来のハードウェアターミナルの機能を再現し、ローカルまたはリモートシステムとのテキストベースのインターフェースを提供するソフトウェア。HoTTYはxterm.jsで構築されたモダンなターミナルエミュレーターです。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="terminal">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-terminal">ターミナル</span>
+          ANSIエスケープシーケンス
+        </div>
+        <div class="glossary-def">
+          ターミナルでのテキストの書式設定、色の変更、カーソル位置の制御に使用される特殊な文字列。太字、色の変更、画面クリアなどが含まれます。HoTTYはANSI/VT100エスケープコードを完全にサポートしています。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="terminal">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-terminal">ターミナル</span>
+          エンコーディング
+        </div>
+        <div class="glossary-def">
+          バイト列をテキストとして解釈するための文字セット。HoTTYはセッションごとに複数のエンコーディング（UTF-8、Shift_JIS、EUC-JPなど）に対応しており、異なる文字セットを使用するシステムからのテキストを正しく表示できます。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="terminal">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-terminal">ターミナル</span>
+          セッション
+        </div>
+        <div class="glossary-def">
+          ローカルまたはリモートシステムへのアクティブな接続で、HoTTYではタブとして表示されます。各セッションは独自のターミナル状態、エンコーディング、フォント設定、配色を保持し、複数のペインにわたって整理できます。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="terminal">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-terminal">ターミナル</span>
+          セッションログ
+        </div>
+        <div class="glossary-def">
+          セッション中のすべてのターミナル入出力を記録したログ。HoTTYはミリ秒精度のタイムスタンプでログを保存し、内蔵のログビューアーで確認できます。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="terminal">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-terminal">ターミナル</span>
+          ターミナルマーカー
+        </div>
+        <div class="glossary-def">
+          ターミナルの右端に表示される色付きの縦線で、コマンドプロンプトとその出力を視覚的に区別します。赤/オレンジのマーカーはコマンドを入力した位置を、青のマーカーは実行結果の出力を示します。マーカーをクリックするとブロック全体を選択でき、右クリックでその出力についてAIに質問できます。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="terminal">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-terminal">ターミナル</span>
+          ホストツリー
+        </div>
+        <div class="glossary-def">
+          保存された接続プロファイル（ホスト）をフォルダーで階層的に整理するツリー構造。ドラッグ＆ドロップによる並べ替え、設定のインポート/エクスポート、ダブルクリックによるクイック接続に対応しています。
+        </div>
+      </div>
+
+      <!-- Security -->
+      <div class="glossary-item" data-category="security">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-security">セキュリティ</span>
+          Known Hosts
+        </div>
+        <div class="glossary-def">
+          接続したSSHサーバーの公開鍵を保存するファイル。HoTTYは<code>known_hosts</code>を自動管理し、サーバーの鍵が変更された場合（中間者攻撃の可能性）に警告を表示します。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="security">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-security">セキュリティ</span>
+          DPAPI <span class="glossary-full">(Data Protection API)</span>
+        </div>
+        <div class="glossary-def">
+          現在のユーザーアカウントに紐づけられた資格情報を使用してデータを暗号化・復号化するWindows API。HoTTYはパスワードやAPIキーなどの機密情報を安全に保存するためにDPAPIを使用しています。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="security">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-security">セキュリティ</span>
+          サンドボックス
+        </div>
+        <div class="glossary-def">
+          実行中のプロセスを分離してシステムへのアクセスを制限するセキュリティ機構。HoTTYはElectronのサンドボックス環境内で<code>contextIsolation</code>を有効にして実行され、信頼されないコードによるシステムリソースへのアクセスを防止します。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="security">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-security">セキュリティ</span>
+          CSP <span class="glossary-full">(Content Security Policy)</span>
+        </div>
+        <div class="glossary-def">
+          クロスサイトスクリプティング（XSS）やその他のコードインジェクション攻撃を防ぐために、信頼されるコンテンツソースを指定するセキュリティ標準。HoTTYはレンダラープロセスを保護するためにCSPを適用しています。
+        </div>
+      </div>
+
+      <!-- UI -->
+      <div class="glossary-item" data-category="ui">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ui">UI</span>
+          グリッドレイアウト
+        </div>
+        <div class="glossary-def">
+          トップバー、ボトムバー、左サイドバー、右サイドバーを備えたHoTTYのマルチペインワークスペース。4つのペインが交差するポイントをドラッグして、すべてのパネルを同時にリサイズできます。レイアウトは自動保存されます。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="ui">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ui">UI</span>
+          テーマ
+        </div>
+        <div class="glossary-def">
+          HoTTYインターフェース全体に適用される色、フォント、ビジュアルスタイルのセット。3つのビルトインテーマ（ダーク、ミディアム、ライト）に加え、ビジュアルテーマクリエイターですべてのUI色を自由にカスタマイズできるCustomモードがあります。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="ui">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ui">UI</span>
+          ペイン
+        </div>
+        <div class="glossary-def">
+          1つ以上のタブ付きセッションを保持するHoTTYウィンドウの分割エリア。メインエリア、サイドバー、バーとして配置でき、複数のセッションを並べて表示できます。
+        </div>
+      </div>
+
+      <div class="glossary-item" data-category="ui">
+        <div class="glossary-term">
+          <span class="glossary-badge badge-ui">UI</span>
+          ログビューアー
+        </div>
+        <div class="glossary-def">
+          保存済みのセッションログを専用の読み取り専用タブとして開くHoTTYの組み込み機能。タイムスタンプ表示、テキスト検索、ANSIカラーレンダリングにより過去のセッションを確認できます。
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-links">
+      <a href="https://github.com/horryworks/HoTTY" target="_blank">GitHub</a>
+      <a href="https://github.com/horryworks/HoTTY/releases" target="_blank">リリース</a>
+      <a href="https://github.com/horryworks/HoTTY/issues" target="_blank">Issues</a>
+      <a href="https://github.com/horryworks/HoTTY/blob/main/LICENSE" target="_blank">ライセンス</a>
+      <a href="../">English</a>
+    </div>
+    <p>Copyright &copy; 2026 HoTTY Contributors. GPL-3.0-or-later ライセンスの下で公開。</p>
+    <p style="margin-top:6px; font-size:0.78rem; opacity:0.6;">Electron &middot; React &middot; TypeScript &middot; Google Gemini で構築</p>
+  </div>
+</footer>
+
+<script src="../js/main.js"></script>
+<script src="../js/glossary.js"></script>
+</body>
+</html>
