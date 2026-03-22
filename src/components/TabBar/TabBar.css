@@ -100,6 +100,22 @@
     text-align: center;
 }
 
+/* ── Tab Tooltip (fixed position, shown when title overflows) ── */
+.tab-tooltip {
+    position: fixed;
+    transform: translateX(-50%);
+    padding: 4px 10px;
+    background-color: var(--sidebar-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: calc(var(--font-size-base) - 1px);
+    white-space: nowrap;
+    z-index: 1000;
+    pointer-events: none;
+    box-shadow: 0 2px 8px var(--modal-shadow, rgba(0, 0, 0, 0.3));
+}
+
 .tab-close {
     width: 16px;
     height: 16px;
@@ -108,14 +124,14 @@
     justify-content: center;
     border-radius: 50%;
     background-color: var(--tab-close-bg);
-    color: white;
+    color: var(--text-on-accent);
     margin-left: 5px;
     /* Add some spacing from title */
 }
 
 .tab-close:hover {
     background-color: var(--tab-close-hover-bg);
-    color: white;
+    color: var(--text-on-accent);
 }
 
 .new-tab-btn {
@@ -272,7 +288,7 @@
     background: var(--gemini-rainbow) !important;
     background-color: transparent !important;
     /* Force transparent background-color to stop bleed from .active-pane-tab */
-    color: white !important;
+    color: var(--text-on-accent) !important;
     border: none !important;
     /* Explicitly keep rounded corners */
     border-top-left-radius: 8px;

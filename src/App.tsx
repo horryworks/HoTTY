@@ -538,7 +538,7 @@ function App() {
   // 15. Early Return
   // ═══════════════════════════════════════════════
 
-  if (!window.electronAPI) {
+  if (!electronService.isAvailable()) {
     return <div style={{ color: 'white', padding: '20px' }}>Loading Electron API...</div>;
   }
 

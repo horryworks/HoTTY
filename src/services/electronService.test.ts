@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import {
+    isAvailable,
     connectSession,
     disconnectSession,
     sendInput,
@@ -219,6 +220,17 @@ describe('electronService', () => {
             decryptImportFile('mypassword');
             expect(mockAPI.decryptImportFile).toHaveBeenCalledOnce();
             expect(mockAPI.decryptImportFile).toHaveBeenCalledWith('mypassword');
+        });
+    });
+
+    describe('isAvailable', () => {
+        it('returns true when electronAPI is defined', () => {
+            expect(isAvailable()).toBe(true);
+        });
+
+        it('returns false when electronAPI is undefined', () => {
+            Object.defineProperty(window, 'electronAPI', { value: undefined, configurable: true, writable: true });
+            expect(isAvailable()).toBe(false);
         });
     });
 

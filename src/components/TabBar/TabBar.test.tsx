@@ -120,4 +120,47 @@ describe('TabBar', () => {
         fireEvent.click(watchBtn);
         expect(onToggleWatch).toHaveBeenCalledWith('tab1');
     });
+
+    it('does not show tooltip when tab title is not overflowing', () => {
+        const { container } = render(<TabBar {...baseProps} />);
+        const tab = container.querySelector('.tab')!;
+        fireEvent.mouseEnter(tab);
+        // scrollWidth === clientWidth (both 0 in JSDOM), so no tooltip
+        expect(container.querySelector('.tab-tooltip')).toBeNull();
+    });
+
+    it('shows tooltip on hover when tab title overflows', () => {
+        const longTab = { id: 'tab3', title: 'Very Long Tab Title That Overflows', type: 'ssh' as const };
+        const { container } = render(
+            <TabBar {...baseProps} tabs={[longTab]} visibleSessionIds={['tab3']} />
+        );
+        // Simulate overflow by mocking scrollWidth > clientWidth on the title element
+        const titleEl = container.querySelector('.tab-title')!;
+        Object.defineProperty(titleEl, 'scrollWidth', { value: 300, configurable: true });
+        Object.defineProperty(titleEl, 'clientWidth', { value: 150, configurable: true });
+
+        const tab = container.querySelector('.tab')!;
+        fireEvent.mouseEnter(tab);
+
+        const tooltip = container.querySelector('.tab-tooltip');
+        expect(tooltip).toBeInTheDocument();
+        expect(tooltip!.textContent).toBe('Very Long Tab Title That Overflows');
+    });
+
+    it('hides tooltip on mouse leave', () => {
+        const longTab = { id: 'tab3', title: 'Very Long Tab Title That Overflows', type: 'ssh' as const };
+        const { container } = render(
+            <TabBar {...baseProps} tabs={[longTab]} visibleSessionIds={['tab3']} />
+        );
+        const titleEl = container.querySelector('.tab-title')!;
+        Object.defineProperty(titleEl, 'scrollWidth', { value: 300, configurable: true });
+        Object.defineProperty(titleEl, 'clientWidth', { value: 150, configurable: true });
+
+        const tab = container.querySelector('.tab')!;
+        fireEvent.mouseEnter(tab);
+        expect(container.querySelector('.tab-tooltip')).toBeInTheDocument();
+
+        fireEvent.mouseLeave(tab);
+        expect(container.querySelector('.tab-tooltip')).toBeNull();
+    });
 });

@@ -6,7 +6,10 @@ import {
     setCachedCredential,
     clearDecryptedCache,
     decryptBatch,
+    flattenHosts,
+    getJumpboxReferences,
 } from './useHostManager';
+import type { HostTreeNode } from './useHostManager';
 import { STORAGE_KEYS } from '../constants/storage';
 
 vi.mock('../services/electronService', () => ({
@@ -289,5 +292,109 @@ describe('useHostManager — sortFolder', () => {
         expect(names[1]).toBe('B Folder');
         expect(names[2]).toBe('A Host');
         expect(names[3]).toBe('Z Host');
+    });
+});
+
+// ── flattenHosts tests ──
+
+describe('flattenHosts', () => {
+    it('returns empty array for empty tree', () => {
+        expect(flattenHosts([])).toEqual([]);
+    });
+
+    it('returns only host nodes from a flat tree', () => {
+        const tree: HostTreeNode[] = [
+            { id: 'f1', type: 'folder', name: 'Folder', children: [] },
+            { id: 'h1', type: 'host', name: 'Host1', entry: { protocol: 'ssh', host: '10.0.0.1', port: 22 } },
+        ];
+        const hosts = flattenHosts(tree);
+        expect(hosts.length).toBe(1);
+        expect(hosts[0].id).toBe('h1');
+    });
+
+    it('flattens nested hosts', () => {
+        const tree: HostTreeNode[] = [
+            {
+                id: 'f1', type: 'folder', name: 'Folder', children: [
+                    { id: 'h1', type: 'host', name: 'Host1', entry: { protocol: 'ssh', host: '10.0.0.1', port: 22 } },
+                    {
+                        id: 'f2', type: 'folder', name: 'SubFolder', children: [
+                            { id: 'h2', type: 'host', name: 'Host2', entry: { protocol: 'telnet', host: '10.0.0.2', port: 23 } },
+                        ]
+                    },
+                ]
+            },
+            { id: 'h3', type: 'host', name: 'Host3', entry: { protocol: 'ssh', host: '10.0.0.3', port: 22 } },
+        ];
+        const hosts = flattenHosts(tree);
+        expect(hosts.length).toBe(3);
+        expect(hosts.map(h => h.id).sort()).toEqual(['h1', 'h2', 'h3']);
+    });
+});
+
+// ── getJumpboxReferences tests ──
+
+describe('getJumpboxReferences', () => {
+    it('returns empty array when no hosts reference the jumpbox', () => {
+        const tree: HostTreeNode[] = [
+            { id: 'jb1', type: 'host', name: 'Jumpbox', entry: { protocol: 'ssh', host: '10.0.0.1', port: 22, isJumpbox: true } },
+            { id: 'h1', type: 'host', name: 'Host1', entry: { protocol: 'ssh', host: '10.0.0.2', port: 22 } },
+        ];
+        expect(getJumpboxReferences(tree, 'jb1')).toEqual([]);
+    });
+
+    it('returns hosts that reference the jumpbox', () => {
+        const tree: HostTreeNode[] = [
+            { id: 'jb1', type: 'host', name: 'Jumpbox', entry: { protocol: 'ssh', host: '10.0.0.1', port: 22, isJumpbox: true } },
+            { id: 'h1', type: 'host', name: 'Host1', entry: { protocol: 'ssh', host: '10.0.0.2', port: 22, jumpboxId: 'jb1' } },
+            { id: 'h2', type: 'host', name: 'Host2', entry: { protocol: 'telnet', host: '10.0.0.3', port: 23, jumpboxId: 'jb1' } },
+            { id: 'h3', type: 'host', name: 'Host3', entry: { protocol: 'ssh', host: '10.0.0.4', port: 22 } },
+        ];
+        const refs = getJumpboxReferences(tree, 'jb1');
+        expect(refs.length).toBe(2);
+        expect(refs.map(r => r.id).sort()).toEqual(['h1', 'h2']);
+    });
+
+    it('finds references in nested tree', () => {
+        const tree: HostTreeNode[] = [
+            {
+                id: 'f1', type: 'folder', name: 'Folder', children: [
+                    { id: 'h1', type: 'host', name: 'Host1', entry: { protocol: 'ssh', host: '10.0.0.2', port: 22, jumpboxId: 'jb1' } },
+                ]
+            },
+        ];
+        const refs = getJumpboxReferences(tree, 'jb1');
+        expect(refs.length).toBe(1);
+        expect(refs[0].id).toBe('h1');
+    });
+});
+
+// ── isJumpbox in addHost/editNode tests ──
+
+describe('useHostManager — jumpbox fields', () => {
+    it('addHost preserves isJumpbox field', () => {
+        const { result } = renderHook(() => useHostManager());
+        act(() => {
+            result.current.addHost(null, 'Jumpbox', {
+                protocol: 'ssh', host: '10.0.0.1', port: 22, isJumpbox: true,
+            });
+        });
+        expect(result.current.tree[0].entry?.isJumpbox).toBe(true);
+    });
+
+    it('editNode can set jumpboxId', () => {
+        const { result } = renderHook(() => useHostManager());
+        let hostId!: string;
+        act(() => {
+            hostId = result.current.addHost(null, 'Host', {
+                protocol: 'ssh', host: '10.0.0.2', port: 22,
+            });
+        });
+        act(() => {
+            result.current.editNode(hostId, {
+                entry: { protocol: 'ssh', host: '10.0.0.2', port: 22, jumpboxId: 'jb-id' }
+            });
+        });
+        expect(result.current.tree[0].entry?.jumpboxId).toBe('jb-id');
     });
 });

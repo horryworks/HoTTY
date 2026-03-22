@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useHostManager, decryptBatch, getCachedCredential, clearDecryptedCache } from '../../hooks/useHostManager';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useHostManager, decryptBatch, getCachedCredential, clearDecryptedCache, flattenHosts } from '../../hooks/useHostManager';
 import type { HostTreeNode, HostEntry } from '../../hooks/useHostManager';
 import { HostTree } from './HostTree';
 import { useResize } from '../../hooks/useResize';
@@ -169,6 +169,14 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [protocol, setProtocol] = useState('ssh');
+    const [isJumpbox, setIsJumpbox] = useState(false);
+    const [jumpboxId, setJumpboxId] = useState('');
+
+    // Available jumpbox hosts (SSH hosts marked as jumpbox)
+    const jumpboxHosts = useMemo(() =>
+        flattenHosts(hostManager.tree).filter(n => n.entry?.isJumpbox && n.entry.protocol === 'ssh'),
+        [hostManager.tree]
+    );
 
     // Serial-specific state
     const [serialPorts, setSerialPorts] = useState<SerialPortInfo[]>([]);
@@ -191,6 +199,8 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         port: string;
         username: string;
         password: string;
+        isJumpbox: boolean;
+        jumpboxId: string;
     } | null>(null);
 
     // Host history (used for deduplication when saving)
@@ -217,6 +227,26 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             });
         }
     }, [protocol]);
+
+    // Sync displayName when the selected host is renamed in the tree
+    useEffect(() => {
+        if (!selectedHostId) return;
+        const find = (nodes: HostTreeNode[]): HostTreeNode | undefined => {
+            for (const n of nodes) {
+                if (n.id === selectedHostId) return n;
+                if (n.children) {
+                    const f = find(n.children);
+                    if (f) return f;
+                }
+            }
+            return undefined;
+        };
+        const node = find(hostManager.tree);
+        if (node && node.type === 'host') {
+            setDisplayName(node.name);
+            setOriginalState(prev => prev ? { ...prev, name: node.name } : prev);
+        }
+    }, [hostManager.tree, selectedHostId]);
 
     // --- Select a host from the tree ---
     const handleSelectHost = async (node: HostTreeNode) => {
@@ -262,6 +292,8 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         const cachedPass = getCachedPassword(e.host ?? '', u);
         const finalPass = cachedPass !== '' ? cachedPass : p;
         setPassword(finalPass);
+        setIsJumpbox(!!e.isJumpbox);
+        setJumpboxId(e.jumpboxId ?? '');
 
         setDisplayName(node.name);
         setOriginalState({
@@ -270,7 +302,9 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             host: e.host ?? '',
             port: String(e.port ?? (e.protocol === 'ssh' ? 22 : 23)),
             username: u,
-            password: finalPass
+            password: finalPass,
+            isJumpbox: !!e.isJumpbox,
+            jumpboxId: e.jumpboxId ?? ''
         });
     };
 
@@ -307,15 +341,50 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         const cachedPass = getCachedPassword(e.host ?? '', u);
         const finalPass = cachedPass !== '' ? cachedPass : p;
 
+        // Resolve jumpbox credentials if the host has a jumpbox configured
+        let jumpboxConfig: { host: string; port: number; username: string; password: string } | undefined;
+        if (e.jumpboxId) {
+            const jbNode = flattenHosts(hostManager.tree).find(n => n.id === e.jumpboxId);
+            if (jbNode?.entry) {
+                let jbUser = jbNode.entry.username ?? '';
+                let jbPass = jbNode.entry.password ?? '';
+
+                const jbCached = getCachedCredential(e.jumpboxId);
+                const jbNeedsDecrypt: (string | undefined)[] = [undefined, undefined];
+                if (jbUser.startsWith('[DPAPI]')) {
+                    if (jbCached?.username !== undefined) jbUser = jbCached.username;
+                    else jbNeedsDecrypt[0] = jbUser;
+                }
+                if (jbPass.startsWith('[DPAPI]')) {
+                    if (jbCached?.password !== undefined) jbPass = jbCached.password;
+                    else jbNeedsDecrypt[1] = jbPass;
+                }
+                if (jbNeedsDecrypt.some(v => v !== undefined)) {
+                    const [decU, decP] = await decryptBatch(jbNeedsDecrypt);
+                    if (decU !== undefined) jbUser = decU;
+                    if (decP !== undefined) jbPass = decP;
+                }
+
+                jumpboxConfig = {
+                    host: jbNode.entry.host,
+                    port: jbNode.entry.port,
+                    username: jbUser,
+                    password: jbPass,
+                };
+            }
+        }
+
         onConnect({
             protocol: e.protocol,
             host: e.host,
             port: e.port,
             username: (e.protocol === 'ssh' || e.protocol === 'telnet') ? u : undefined,
             password: (e.protocol === 'ssh' || e.protocol === 'telnet') ? finalPass : undefined,
+            jumpboxId: e.jumpboxId || undefined,
+            jumpbox: jumpboxConfig,
         });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [getCachedPassword, onConnect]);
+    }, [getCachedPassword, onConnect, hostManager.tree]);
 
     // Check if current form is dirty compared to original state
     const isDirty = originalState !== null && (
@@ -324,7 +393,9 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         originalState.host !== host ||
         originalState.port !== String(port) ||
         originalState.username !== username ||
-        originalState.password !== password
+        originalState.password !== password ||
+        originalState.isJumpbox !== isJumpbox ||
+        originalState.jumpboxId !== jumpboxId
     );
 
     const handleSave = async (e: React.MouseEvent) => {
@@ -364,7 +435,9 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             host,
             port: String(port),
             username: finalU,
-            password: finalP
+            password: finalP,
+            isJumpbox,
+            jumpboxId
         });
 
         const entry: HostEntry = {
@@ -373,6 +446,8 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             port: parseInt(port),
             username: (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
             password: (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
+            isJumpbox: protocol === 'ssh' ? (isJumpbox || undefined) : undefined,
+            jumpboxId: jumpboxId || undefined,
         };
 
         hostManager.editNode(selectedHostId, { name: displayName, entry });
@@ -448,26 +523,58 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
             // Persist credential changes back to the selected tree node
             if (selectedHostId && (protocol === 'ssh' || protocol === 'telnet')) {
-                const findNode = (nodes: HostTreeNode[], id: string): HostTreeNode | undefined => {
-                    for (const n of nodes) {
-                        if (n.id === id) return n;
-                        if (n.children) {
-                            const f = findNode(n.children, id);
-                            if (f) return f;
-                        }
-                    }
+                const entry: HostEntry = {
+                    protocol: protocol as 'ssh' | 'telnet',
+                    host,
+                    port: parseInt(port),
+                    username: (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
+                    password: (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
+                    isJumpbox: protocol === 'ssh' ? (isJumpbox || undefined) : undefined,
+                    jumpboxId: jumpboxId || undefined,
                 };
-                const selNode = findNode(hostManager.tree, selectedHostId);
-                if (selNode && selNode.type === 'host') {
-                    const entry: HostEntry = {
-                        protocol: protocol as 'ssh' | 'telnet',
-                        host,
-                        port: parseInt(port),
-                        username: (protocol === 'ssh' || protocol === 'telnet') ? username : undefined,
-                        password: (protocol === 'ssh' || protocol === 'telnet') ? password : undefined,
-                    };
-                    hostManager.editNode(selectedHostId, { entry });
+                // Save directly via saveTree (awaited) to ensure localStorage is updated
+                // before onConnect closes the dialog. editNode's save inside setTree updater
+                // may be discarded by React if the component unmounts before the batch flushes.
+                const patchTree = (nodes: HostTreeNode[], id: string): HostTreeNode[] =>
+                    nodes.map(n => {
+                        if (n.id === id) return { ...n, entry };
+                        if (n.children) return { ...n, children: patchTree(n.children, id) };
+                        return n;
+                    });
+                await hostManager.saveTree(patchTree(hostManager.tree, selectedHostId));
+            }
+        }
+
+        // Resolve jumpbox credentials if a jumpbox is selected
+        let jumpboxConfig: { host: string; port: number; username: string; password: string } | undefined;
+        if (jumpboxId) {
+            const jbNode = flattenHosts(hostManager.tree).find(n => n.id === jumpboxId);
+            if (jbNode?.entry) {
+                let jbUser = jbNode.entry.username ?? '';
+                let jbPass = jbNode.entry.password ?? '';
+
+                const jbCached = getCachedCredential(jumpboxId);
+                const jbNeedsDecrypt: (string | undefined)[] = [undefined, undefined];
+                if (jbUser.startsWith('[DPAPI]')) {
+                    if (jbCached?.username !== undefined) jbUser = jbCached.username;
+                    else jbNeedsDecrypt[0] = jbUser;
                 }
+                if (jbPass.startsWith('[DPAPI]')) {
+                    if (jbCached?.password !== undefined) jbPass = jbCached.password;
+                    else jbNeedsDecrypt[1] = jbPass;
+                }
+                if (jbNeedsDecrypt.some(v => v !== undefined)) {
+                    const [decU, decP] = await decryptBatch(jbNeedsDecrypt);
+                    if (decU !== undefined) jbUser = decU;
+                    if (decP !== undefined) jbPass = decP;
+                }
+
+                jumpboxConfig = {
+                    host: jbNode.entry.host,
+                    port: jbNode.entry.port,
+                    username: jbUser,
+                    password: jbPass,
+                };
             }
         }
 
@@ -477,6 +584,8 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             port: parseInt(port),
             username: (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
             password: (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
+            jumpboxId: jumpboxId || undefined,
+            jumpbox: jumpboxConfig,
         });
     };
 
@@ -560,6 +669,8 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                         setProtocol(p);
                                         if (p === 'ssh') setPort('22');
                                         else if (p === 'telnet') setPort('23');
+                                        if (p !== 'ssh') setIsJumpbox(false);
+                                        if (p !== 'ssh' && p !== 'telnet') setJumpboxId('');
                                     }}
                                 >
                                     <option value="ssh">SSH</option>
@@ -572,28 +683,44 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                 </select>
                             </div>
 
+                            {(protocol === 'ssh' || protocol === 'telnet') && (
+                                <div className="form-group form-group-checkbox">
+                                    <label>
+                                        <input
+                                            type="checkbox"
+                                            checked={isJumpbox}
+                                            onChange={e => setIsJumpbox(e.target.checked)}
+                                            disabled={protocol !== 'ssh'}
+                                        />
+                                        Use as Jumpbox
+                                    </label>
+                                </div>
+                            )}
+
                             {/* SSH/Telnet fields */}
                             {(protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell' && protocol !== 'log-viewer') && (
                                 <>
-                                    <div className="form-group">
-                                        <label>Host</label>
-                                        <input
-                                            type="text"
-                                            value={host}
-                                            onChange={e => setHost(e.target.value)}
-                                            placeholder="example.com"
-                                            required
-                                            autoFocus
-                                        />
-                                    </div>
-                                    <div className="form-group">
-                                        <label>Port</label>
-                                        <input
-                                            type="number"
-                                            value={port}
-                                            onChange={e => setPort(e.target.value)}
-                                            required
-                                        />
+                                    <div className="form-row">
+                                        <div className="form-group" style={{ flex: 3 }}>
+                                            <label>Host/IP</label>
+                                            <input
+                                                type="text"
+                                                value={host}
+                                                onChange={e => setHost(e.target.value)}
+                                                placeholder="example.com"
+                                                required
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <div className="form-group" style={{ flex: 1 }}>
+                                            <label>Port</label>
+                                            <input
+                                                type="number"
+                                                value={port}
+                                                onChange={e => setPort(e.target.value)}
+                                                required
+                                            />
+                                        </div>
                                     </div>
                                     {(protocol === 'ssh' || protocol === 'telnet') && (
                                         <div className="form-group">
@@ -620,6 +747,25 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                                 disabled={isDecrypting}
                                                 autoComplete="new-password"
                                             />
+                                        </div>
+                                    )}
+                                    {(protocol === 'ssh' || protocol === 'telnet') && jumpboxHosts.length > 0 && (
+                                        <div className="form-group">
+                                            <label>Jumpbox</label>
+                                            <select
+                                                value={jumpboxId}
+                                                onChange={e => setJumpboxId(e.target.value)}
+                                            >
+                                                <option value="">Direct Connection</option>
+                                                {jumpboxHosts
+                                                    .filter(jb => jb.id !== selectedHostId)
+                                                    .map(jb => (
+                                                        <option key={jb.id} value={jb.id}>
+                                                            {jb.name}
+                                                        </option>
+                                                    ))
+                                                }
+                                            </select>
                                         </div>
                                     )}
                                 </>

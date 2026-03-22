@@ -254,8 +254,8 @@
     color: var(--text-primary);
     font-family: var(--font-family);
     font-size: calc(var(--font-size-base) - 2px);
-    padding: 3px 8px;
-    border-radius: 3px;
+    padding: 5px 8px;
+    border-radius: 4px;
     outline: none;
     min-width: 160px;
 }

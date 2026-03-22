@@ -17,6 +17,8 @@ vi.mock('../../hooks/useHostManager', () => ({
     decryptBatch: vi.fn(() => Promise.resolve([])),
     getCachedCredential: vi.fn(),
     clearDecryptedCache: vi.fn(),
+    flattenHosts: vi.fn(() => []),
+    getJumpboxReferences: vi.fn(() => []),
 }));
 vi.mock('../../hooks/useResize', () => ({
     useResize: vi.fn(() => ({ startResize: vi.fn() })),

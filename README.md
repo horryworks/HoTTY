@@ -1,14 +1,15 @@
-# HoTTY v1.0.0-beta9 - AI Integrated Advanced Terminal
+# HoTTY v1.0.0-beta10 - AI Integrated Advanced Terminal
 
 [English] | [日本語 (Japanese)](README.ja.md)
 
-**Current Version: v1.0.0-beta9**
+**Current Version: v1.0.0-beta10**
 
 Terminal emulator built with Electron, React, and TypeScript. Designed to provide a seamless terminal experience with advanced window management, deep AI integration, and extensive customization options.
 
 ## Features
 
 - **Multi-protocol Support**: Seamlessly connect via **SSH**, **Telnet**, **Serial** port, **WSL** (Windows Subsystem for Linux), and **Windows Local Shell (CMD/PowerShell)**.
+    - **Jumpbox (Bastion Host)**: Route SSH and Telnet connections through an intermediate SSH jumpbox. Mark any SSH host as a jumpbox in the host tree, then assign it to target hosts for tunneled connections.
     - **WSL Integration**: Connect directly to installed Linux distributions (Ubuntu, Debian, etc.) with automatic distribution discovery.
     - **Wide SSH Compatibility**: Supports a comprehensive range of algorithms, including DH Group 1/14, 3DES, CBC ciphers, and all major Key Exchange methods.
 - **Advanced Grid Layout**:

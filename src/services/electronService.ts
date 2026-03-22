@@ -1,5 +1,7 @@
 const api = () => window.electronAPI;
 
+export const isAvailable = () => !!window.electronAPI;
+
 export const connectSession = (sessionId: string, config: Record<string, unknown>) => api().connectSession(sessionId, config);
 export const disconnectSession = (sessionId: string) => api().disconnectSession(sessionId);
 export const sendInput = (sessionId: string, data: string) => api().sendInput(sessionId, data);

@@ -61,7 +61,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
             const container = terminalRef.current;
             const fitAddon = (term as Terminal & { _fitAddon?: FitAddon })._fitAddon;
 
-            console.log('[Terminal] Attaching xterm instance to div');
+            console.warn('[Terminal] Attaching xterm instance to div');
 
             // Set overflow based on line wrapping
             container.style.overflowX = lineWrapEnabled ? 'hidden' : 'auto';
@@ -167,7 +167,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
         setTimeout(handleResize, 50);
 
         return () => {
-            console.log('[Terminal] Unmounting Component', sessionId);
+            console.warn('[Terminal] Unmounting Component', sessionId);
             resizeObserver.disconnect();
             if (term.element && term.element.parentElement) {
                 term.element.parentElement.removeChild(term.element);

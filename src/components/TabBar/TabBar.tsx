@@ -34,6 +34,41 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
     const [showFeaturesMenu, setShowFeaturesMenu] = React.useState(false);
     const [dropdownStyle, setDropdownStyle] = React.useState<React.CSSProperties>({});
     const featuresRef = React.useRef<HTMLDivElement>(null);
+    const [tooltip, setTooltip] = React.useState<{ text: string; left: number; top: number } | null>(null);
+    const tooltipRef = React.useRef<HTMLDivElement>(null);
+
+    // Clamp tooltip position so it doesn't overflow the viewport
+    React.useEffect(() => {
+        if (!tooltip || !tooltipRef.current) return;
+        const el = tooltipRef.current;
+        const tipRect = el.getBoundingClientRect();
+        const margin = 4;
+        let adjustedLeft = tooltip.left;
+        if (tipRect.left < margin) {
+            adjustedLeft = tipRect.width / 2 + margin;
+        } else if (tipRect.right > window.innerWidth - margin) {
+            adjustedLeft = window.innerWidth - margin - tipRect.width / 2;
+        }
+        if (adjustedLeft !== tooltip.left) {
+            setTooltip(prev => prev ? { ...prev, left: adjustedLeft } : null);
+        }
+    }, [tooltip]);
+
+    const handleTabMouseEnter = (e: React.MouseEvent<HTMLDivElement>, title: string) => {
+        const titleEl = e.currentTarget.querySelector('.tab-title') as HTMLElement | null;
+        if (titleEl && titleEl.scrollWidth > titleEl.clientWidth) {
+            const rect = e.currentTarget.getBoundingClientRect();
+            setTooltip({
+                text: title,
+                left: rect.left + rect.width / 2,
+                top: rect.bottom + 4,
+            });
+        }
+    };
+
+    const handleTabMouseLeave = () => {
+        setTooltip(null);
+    };
 
     React.useEffect(() => {
         if (!showFeaturesMenu) return;
@@ -156,6 +191,8 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                         onDragEnd={handleDragEnd}
                         onDragOver={(e) => handleDragOver(e, tab.id)}
                         onDrop={(e) => handleDrop(e, index)}
+                        onMouseEnter={(e) => handleTabMouseEnter(e, tab.title)}
+                        onMouseLeave={handleTabMouseLeave}
                     >
                         <span className="tab-title">{tab.title}</span>
                         <div className="tab-actions" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -287,6 +324,15 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                 )}
             </div>
             </div>{/* end .tab-bar-actions */}
+            {tooltip && (
+                <div
+                    ref={tooltipRef}
+                    className="tab-tooltip"
+                    style={{ left: tooltip.left, top: tooltip.top }}
+                >
+                    {tooltip.text}
+                </div>
+            )}
         </div>
     );
 };

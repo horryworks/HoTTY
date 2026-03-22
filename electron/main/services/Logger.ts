@@ -77,11 +77,8 @@ class Logger {
             line += ' | ' + Object.entries(fields).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(' ');
         }
 
-        // eslint-disable-next-line no-console
         if (level === 'ERROR') console.error(line);
-        // eslint-disable-next-line no-console
         else if (level === 'WARN') console.warn(line);
-        // eslint-disable-next-line no-console
         else console.log(line);
 
         if (!this.initialized) return;

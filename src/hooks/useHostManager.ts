@@ -10,6 +10,28 @@ export interface HostEntry {
     port: number;
     username?: string;
     password?: string;
+    isJumpbox?: boolean;
+    jumpboxId?: string;
+}
+
+// ── Jumpbox helpers ──
+
+/** Flatten the tree into an array of host nodes. */
+export function flattenHosts(nodes: HostTreeNode[]): HostTreeNode[] {
+    const result: HostTreeNode[] = [];
+    function traverse(list: HostTreeNode[]) {
+        for (const n of list) {
+            if (n.type === 'host') result.push(n);
+            if (n.children) traverse(n.children);
+        }
+    }
+    traverse(nodes);
+    return result;
+}
+
+/** Return all hosts whose jumpboxId references the given id. */
+export function getJumpboxReferences(nodes: HostTreeNode[], jumpboxId: string): HostTreeNode[] {
+    return flattenHosts(nodes).filter(n => n.entry?.jumpboxId === jumpboxId);
 }
 
 export interface HostTreeNode {
@@ -330,7 +352,7 @@ export function useHostManager() {
     }, []);
 
     const saveTree = useCallback((newTree: HostTreeNode[]) => {
-        persistAndSet(newTree);
+        return persistAndSet(newTree);
     }, [persistAndSet]);
 
     const moveNode = useCallback((nodeId: string, targetId: string, position: 'before' | 'after' | 'inside') => {

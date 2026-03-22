@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import type { HostTreeNode, HostEntry } from '../../hooks/useHostManager';
+import { flattenHosts, getJumpboxReferences } from '../../hooks/useHostManager';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useModalState } from '../../hooks/useModalState';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
@@ -63,6 +64,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [formPort, setFormPort] = useState('22');
     const [formUsername, setFormUsername] = useState('');
     const [formPassword, setFormPassword] = useState('');
+    const [formIsJumpbox, setFormIsJumpbox] = useState(false);
     const [importFilePath, setImportFilePath] = useState<string | null>(null);
     const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
     const [dropTarget, setDropTarget] = useState<{ nodeId: string; position: 'before' | 'after' | 'inside' } | null>(null);
@@ -170,9 +172,11 @@ export const HostTree: React.FC<HostTreeProps> = ({
         setFormPort('22');
         setFormUsername('');
         setFormPassword('');
+        setFormIsJumpbox(false);
         openEditModal({ mode: 'host', parentId });
         setContextMenu(null);
     }, [openEditModal]);
+
 
     const handleExport = (node: HostTreeNode | null = null) => {
         setExportNode(node);
@@ -279,6 +283,8 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     port: parseInt(formPort),
                     username: formUsername || undefined,
                     password: formPassword || undefined,
+                    isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,
+                    jumpboxId: existingNode.entry?.jumpboxId,
                 };
                 onEditNode(existingNode.id, { name: formName, entry });
             }
@@ -292,6 +298,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     port: parseInt(formPort),
                     username: formUsername || undefined,
                     password: formPassword || undefined,
+                    isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,
                 };
                 onAddHost(parentId, formName, entry);
             }
@@ -448,7 +455,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                     <polyline points="9 18 15 12 9 6"></polyline>
                                 </svg>
                             </span>
-                            <span className="tree-icon">🖥</span>
+                            <span className="tree-icon">{node.entry?.isJumpbox ? '🔗' : '🖥'}</span>
                         </>
                     )}
                     <span className="tree-label">
@@ -483,7 +490,13 @@ export const HostTree: React.FC<HostTreeProps> = ({
                             <>
                                 {node.name}
                                 {node.type === 'host' && node.entry && (
-                                    <span className="tree-meta"> {node.entry.host}</span>
+                                    <span className="tree-meta">
+                                        {' '}{node.entry.host}
+                                        {node.entry.jumpboxId && (() => {
+                                            const jb = flattenHosts(tree).find(n => n.id === node.entry!.jumpboxId);
+                                            return jb ? <span className="tree-meta-via"> via {jb.name}</span> : null;
+                                        })()}
+                                    </span>
                                 )}
                             </>
                         )}
@@ -701,7 +714,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     >
                         <h3>
                             {editModal.mode === 'folder' ? (editModal.existingNode ? 'Rename Folder' : 'Add Folder') :
-                                editModal.mode === 'host' ? (editModal.existingNode ? 'Rename Host' : 'Add Host') :
+                                editModal.mode === 'host' ? (editModal.existingNode ? 'Edit Host' : 'Add Host') :
                                     editModal.mode === 'export' ? 'Export Host Tree' : 'Import Host Tree'}
                         </h3>
 
@@ -751,15 +764,27 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                             const p = e.target.value as 'ssh' | 'telnet';
                                             setFormProtocol(p);
                                             setFormPort(p === 'ssh' ? '22' : '23');
+                                            if (p !== 'ssh') setFormIsJumpbox(false);
                                         }}
                                     >
                                         <option value="ssh">SSH</option>
                                         <option value="telnet">Telnet</option>
                                     </select>
                                 </div>
+                                <div className="modal-form-group modal-form-group-checkbox">
+                                    <label>
+                                        <input
+                                            type="checkbox"
+                                            checked={formIsJumpbox}
+                                            onChange={e => setFormIsJumpbox(e.target.checked)}
+                                            disabled={formProtocol !== 'ssh'}
+                                        />
+                                        Use as Jumpbox
+                                    </label>
+                                </div>
                                 <div className="modal-form-row">
                                     <div className="modal-form-group flex-3">
-                                        <label>Host / IP</label>
+                                        <label>Host/IP</label>
                                         <input
                                             type="text"
                                             value={formHost}
@@ -816,11 +841,22 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 </div>
             )}
 
-            {nodeToDeleteOpen && nodeToDelete && (
+            {nodeToDeleteOpen && nodeToDelete && (() => {
+                const jumpboxRefs = nodeToDelete.type === 'host' && nodeToDelete.entry?.isJumpbox
+                    ? getJumpboxReferences(tree, nodeToDelete.id)
+                    : [];
+                const refWarning = jumpboxRefs.length > 0
+                    ? `\n\nThis host is used as a jumpbox by ${jumpboxRefs.length} host(s): ${jumpboxRefs.map(r => r.name).join(', ')}. Their jumpbox setting will be cleared.`
+                    : '';
+                return (
                 <ConfirmModal
                     title={`Delete ${nodeToDelete.type === 'folder' ? 'Folder' : 'Host'}`}
-                    message={`Are you sure you want to delete "${nodeToDelete.name}"?\nThis action cannot be undone.`}
+                    message={`Are you sure you want to delete "${nodeToDelete.name}"?\nThis action cannot be undone.${refWarning}`}
                     onConfirm={() => {
+                        // Clear jumpboxId from hosts referencing this jumpbox
+                        for (const ref of jumpboxRefs) {
+                            onEditNode(ref.id, { entry: { ...ref.entry!, jumpboxId: undefined } });
+                        }
                         onDeleteNode(nodeToDelete.id);
                         closeNodeToDelete();
                         // Ensure window focus is restored after dialog closes (just in case)
@@ -839,7 +875,8 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         }, 50);
                     }}
                 />
-            )}
+                );
+            })()}
         </div>
     );
 };

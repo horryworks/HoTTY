@@ -6,6 +6,7 @@ import { TelnetService } from './services/telnet';
 import { SerialService } from './services/serial';
 import { WslService } from './services/wsl';
 import { LocalService } from './services/local';
+import { createJumpboxTunnel } from './services/jumpbox';
 import { SerialPort } from 'serialport';
 import type { ISessionService } from './services/ISessionService';
 import { AIProviderRegistry } from './services/ai/AIProviderRegistry';
@@ -391,6 +392,57 @@ ipcMain.on('connect-session', async (event, { sessionId, config }) => {
   // Strategy: I will modify SshService and TelnetService to accept `sessionId` in constructor 
   // and send `{ sessionId, data }` in their IPC events.
 
+  // Handle jumpbox tunnel if configured
+  if (config.jumpbox && (protocol === 'ssh' || protocol === 'telnet')) {
+    const jb = config.jumpbox;
+    // Validate jumpbox config
+    if (typeof jb.host !== 'string' || !jb.host) {
+      eventWin.webContents.send('session-error', { sessionId, error: 'Invalid jumpbox host' });
+      sessions.delete(sessionId);
+      return;
+    }
+    const jbPort = Number(jb.port);
+    if (!Number.isInteger(jbPort) || jbPort < 1 || jbPort > 65535) {
+      eventWin.webContents.send('session-error', { sessionId, error: 'Invalid jumpbox port' });
+      sessions.delete(sessionId);
+      return;
+    }
+
+    try {
+      logger.info('session', 'Establishing jumpbox tunnel', {
+        sessionId, jumpbox: `${jb.host}:${jbPort}`, target: `${config.host}:${config.port}`
+      });
+
+      const algorithms = service instanceof SshService
+        ? service.getAlgorithms() as Record<string, string[]>
+        : undefined;
+
+      const { stream: tunnelStream, jumpboxClient } = await createJumpboxTunnel(
+        { host: jb.host, port: jbPort, username: jb.username, password: jb.password },
+        config.host as string,
+        config.port as number,
+        algorithms,
+        eventWin,
+      );
+
+      if (service instanceof SshService) {
+        service.setJumpboxTunnel(tunnelStream, jumpboxClient);
+      } else if (service instanceof TelnetService) {
+        // Start logging if enabled
+        logManager.startLogging(sessionId, config);
+        service.onData((data) => { logManager.write(sessionId, data); });
+        await service.connectViaJumpbox(config, tunnelStream, jumpboxClient);
+        return; // connectViaJumpbox already calls connect internally
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error('session', 'Jumpbox tunnel failed', { sessionId, error: msg });
+      eventWin.webContents.send('session-error', { sessionId, error: `Jumpbox connection failed: ${msg}` });
+      sessions.delete(sessionId);
+      return;
+    }
+  }
+
   // Start logging if enabled
   logManager.startLogging(sessionId, config);
 
@@ -440,6 +492,7 @@ ipcMain.on('focus-window', (event) => {
 });
 
 const ALLOWED_ENCODINGS = new Set(['utf8', 'shift_jis', 'euc-jp']);
+const ALLOWED_BUFFER_ENCODINGS = new Set<BufferEncoding>(['utf-8', 'utf8', 'ascii', 'utf16le', 'ucs2', 'ucs-2', 'base64', 'base64url', 'latin1', 'binary', 'hex']);
 
 ipcMain.on('update-session-encoding', (event, { sessionId, encoding }) => {
   if (!ALLOWED_ENCODINGS.has(encoding)) {
@@ -579,9 +632,10 @@ ipcMain.handle('text-editor-save-file', async (event, defaultPath?: string) => {
 // Text Editor: read file
 ipcMain.handle('text-editor-read-file', async (_event, filePath: string, encoding: string) => {
   try {
+    const validEncoding: BufferEncoding = ALLOWED_BUFFER_ENCODINGS.has(encoding as BufferEncoding) ? encoding as BufferEncoding : 'utf-8';
     const resolvedPath = resolve(filePath);
     const buffer = fs.readFileSync(resolvedPath);
-    const content = buffer.toString(encoding as BufferEncoding || 'utf-8');
+    const content = buffer.toString(validEncoding);
     const lineEnding = content.includes('\r\n') ? 'CRLF' : 'LF';
     return { content, lineEnding };
   } catch (err) {
@@ -593,8 +647,9 @@ ipcMain.handle('text-editor-read-file', async (_event, filePath: string, encodin
 // Text Editor: write file
 ipcMain.handle('text-editor-write-file', async (_event, filePath: string, content: string, encoding: string) => {
   try {
+    const validEncoding: BufferEncoding = ALLOWED_BUFFER_ENCODINGS.has(encoding as BufferEncoding) ? encoding as BufferEncoding : 'utf-8';
     const resolvedPath = resolve(filePath);
-    fs.writeFileSync(resolvedPath, content, { encoding: encoding as BufferEncoding || 'utf-8' });
+    fs.writeFileSync(resolvedPath, content, { encoding: validEncoding });
     return true;
   } catch (err) {
     logger.error('app', 'Failed to write file for text editor', { error: String(err) });

@@ -175,10 +175,10 @@
 
 .ai-chat-input {
     width: 100%;
-    padding: 10px 12px;
+    padding: 5px 8px;
     background-color: var(--input-bg);
     border: 1px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: 4px;
     color: var(--text-primary);
     font-size: calc(var(--font-size-base) - 1px);
     outline: none;
@@ -243,16 +243,6 @@
     font-size: calc(var(--font-size-base) + 4px);
 }
 
-@keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
-}
-
 /* ── Chat Body ── */
 .ai-chat-body {
     flex: 1;
@@ -308,10 +298,10 @@
     display: flex;
     align-items: flex-start;
     gap: 10px;
-    animation: fadeIn 0.3s ease-in;
+    animation: fadeInMessage 0.3s ease-in;
 }
 
-@keyframes fadeIn {
+@keyframes fadeInMessage {
     from {
         opacity: 0;
         transform: translateY(4px);
@@ -327,16 +317,6 @@
     display: inline-block;
     animation: spin 1s linear infinite;
     font-size: calc(var(--font-size-base) + 2px);
-}
-
-@keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
 }
 
 .ai-chat-message-avatar {
@@ -374,7 +354,7 @@
     white-space: pre-wrap;
     word-wrap: break-word;
     font-family: var(--font-family, 'Consolas', 'Courier New', monospace);
-    font-size: 1.1em;
+    font-size: var(--ai-chat-content-font-size, 1.1em);
     line-height: 1.3;
     color: var(--chat-msg-model-text);
 }
@@ -450,7 +430,7 @@
     gap: 6px;
     padding: 3px 12px;
     background-color: var(--sidebar-bg);
-    font-size: 0.78em;
+    font-size: var(--ai-token-font-size, 0.78em);
     color: var(--text-secondary);
     opacity: 0.7;
     flex-shrink: 0;
@@ -527,7 +507,7 @@
     border-radius: 8px;
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: 1.1em;
+    font-size: var(--ai-chat-content-font-size, 1.1em);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -549,7 +529,7 @@
     border-radius: 8px;
     background: linear-gradient(135deg, var(--accent-color), var(--accent-hover));
     color: var(--text-on-accent);
-    font-size: 1.1em;
+    font-size: var(--ai-chat-content-font-size, 1.1em);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -564,7 +544,7 @@
 }
 
 .ai-chat-send-btn:disabled {
-    opacity: 0.4;
+    opacity: 0.5;
     cursor: not-allowed;
 }
 
@@ -587,15 +567,15 @@
 
 
 .ai-chat-markdown h1 {
-    font-size: 1.3em;
+    font-size: var(--ai-markdown-h1-font-size, 1.3em);
 }
 
 .ai-chat-markdown h2 {
-    font-size: 1.15em;
+    font-size: var(--ai-markdown-h2-font-size, 1.15em);
 }
 
 .ai-chat-markdown h3 {
-    font-size: 1.05em;
+    font-size: var(--ai-markdown-h3-font-size, 1.05em);
 }
 
 .ai-chat-markdown p {
@@ -743,7 +723,7 @@
     border-collapse: collapse;
     margin: 4px 0;
     width: 100%;
-    font-size: 0.9em;
+    font-size: var(--ai-markdown-table-font-size, 0.9em);
 }
 
 

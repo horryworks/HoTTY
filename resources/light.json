@@ -90,7 +90,13 @@
         "pane-color-4": "#7b2f9e",
         "pane-color-5": "#8b7700",
         "pane-color-6": "#1d6fb8",
-        "resize-grip-shadow": "rgba(0, 0, 0, 0.3)"
+        "resize-grip-shadow": "rgba(0, 0, 0, 0.3)",
+        "ai-chat-content-font-size": "1.1em",
+        "ai-token-font-size": "0.78em",
+        "ai-markdown-h1-font-size": "1.3em",
+        "ai-markdown-h2-font-size": "1.15em",
+        "ai-markdown-h3-font-size": "1.05em",
+        "ai-markdown-table-font-size": "0.9em"
     },
     "terminal": {
         "foreground": "#000000",

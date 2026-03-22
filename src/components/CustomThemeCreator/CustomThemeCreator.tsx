@@ -42,7 +42,7 @@ const THEME_SECTIONS: { title: string; description: string; keys: string[] }[] =
     {
         title: 'AI Chat (Gemini)',
         description: 'Colors for AI chat messages and code blocks',
-        keys: ['chat-msg-user-bg', 'chat-msg-user-text', 'chat-msg-model-text', 'code-bg', 'code-text', 'ai-header-bg', 'ai-welcome-text', 'ai-welcome-subtext'],
+        keys: ['chat-msg-user-bg', 'chat-msg-user-text', 'chat-msg-model-text', 'code-bg', 'code-text', 'ai-header-bg', 'ai-welcome-text', 'ai-welcome-subtext', 'ai-chat-content-font-size', 'ai-token-font-size', 'ai-markdown-h1-font-size', 'ai-markdown-h2-font-size', 'ai-markdown-h3-font-size', 'ai-markdown-table-font-size'],
     },
     {
         title: 'UI Specific Components',
@@ -112,6 +112,12 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'ai-header-bg': 'Background tint for the AI chat header.',
     'ai-welcome-text': 'Color for the large welcome heading.',
     'ai-welcome-subtext': 'Color for the descriptive text in the empty chat state.',
+    'ai-chat-content-font-size': 'Font size for AI chat message content (e.g., 1.1em).',
+    'ai-token-font-size': 'Font size for the token usage status bar (e.g., 0.78em).',
+    'ai-markdown-h1-font-size': 'Font size for h1 headings in AI markdown (e.g., 1.3em).',
+    'ai-markdown-h2-font-size': 'Font size for h2 headings in AI markdown (e.g., 1.15em).',
+    'ai-markdown-h3-font-size': 'Font size for h3 headings in AI markdown (e.g., 1.05em).',
+    'ai-markdown-table-font-size': 'Font size for tables in AI markdown (e.g., 0.9em).',
     // UI Specific Components
     'sidebar-bg': 'Background color specifically for the left sidebar.',
     'sidebar-btn-color': 'Icon/Text color for sidebar buttons (default).',

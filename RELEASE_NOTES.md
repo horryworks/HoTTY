@@ -1,5 +1,27 @@
 # Release Notes - HoTTY
 
+## [v1.0.0-beta10] - 2026-03-22
+
+> ⚠️ **Preview Release** — AI provider integrations (Vertex AI, Anthropic, OpenAI) are not fully tested. Gemini remains the recommended production option.
+
+### New Features
+- **Jumpbox (Bastion Host) Tunneling**: SSH and Telnet connections can now be routed through an intermediate SSH jumpbox host. Key capabilities:
+    - Mark any SSH host in the host tree as a **jumpbox** (displayed with a 🔗 link icon).
+    - Assign a jumpbox to target hosts — the connection form shows "via [jumpbox-name]" metadata.
+    - Tunneled connections use ssh2 `forwardOut()` to create a secure TCP tunnel through the jumpbox.
+    - Full host key verification on jumpbox connections via the existing known_hosts infrastructure.
+    - Session tab titles automatically append "via [jumpbox-host]" for tunneled sessions.
+- **Tab Tooltip**: Tab titles now show a tooltip when the text overflows, making it easy to see the full connection name on narrow tabs.
+
+### Improved
+- **Telnet Authentication**: Telnet connections now support automatic username/password authentication, with parsing delegated to the telnet-client library.
+- **Terminal Markers**: Adjusted marker positioning to sit 2px left of the vertical scrollbar, preventing overlap.
+- **Terminal Scrollbar**: Improved vertical scrollbar appearance and styling consistency.
+- **UI Consistency**: Consolidated duplicate `@keyframes` animations into a shared `animations.css` file. Unified modal shadows, border-radius, and input styling across all dialog components.
+- **Theme Cleanup**: Removed obsolete theme variables (`error-color`, `chat-msg-model-bg`, `panel-bg`, `active-pane-color`, `select-arrow`) and added new variables for tab watching states and terminal prompt indicators.
+
+---
+
 ## [v1.0.0-beta9] - 2026-03-21
 
 > ⚠️ **Preview Release** — AI provider integrations (Vertex AI, Anthropic, OpenAI) are not fully tested. Gemini remains the recommended production option.

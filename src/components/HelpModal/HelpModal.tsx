@@ -77,6 +77,9 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                 <li><strong>WSL</strong> — Windows Subsystem for Linux distributions</li>
                                 <li><strong>Local</strong> — Local shell (CMD or PowerShell)</li>
                             </ul>
+                            <p className="help-text">
+                                🔗 <strong>Jumpbox (Bastion Host):</strong> SSH and Telnet connections can be routed through a jumpbox. Mark any SSH host as a jumpbox in the host tree, then select it as the "via" host when editing a target host.
+                            </p>
                         </div>
                     </details>
 

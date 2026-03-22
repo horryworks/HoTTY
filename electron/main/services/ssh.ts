@@ -17,17 +17,26 @@ export class SshService implements ISessionService {
     private lastCols: number | null = null;
     private lastRows: number | null = null;
 
+    private tunnelStream: ClientChannel | null = null;
+    private jumpboxClient: Client | null = null;
+
     constructor(window: BrowserWindow, sessionId: string) {
         this.window = window;
         this.sessionId = sessionId;
         this.conn = new Client();
     }
 
+    /** Set a pre-established tunnel stream from a jumpbox connection. */
+    setJumpboxTunnel(stream: ClientChannel, jumpboxClient: Client) {
+        this.tunnelStream = stream;
+        this.jumpboxClient = jumpboxClient;
+    }
+
     setEncoding(encoding: string) {
         this.encoding = encoding;
     }
 
-    private getAlgorithms() {
+    getAlgorithms() {
         // Default algorithms (fallback)
         const defaultAlgorithms = {
             kex: [
@@ -136,13 +145,15 @@ export class SshService implements ISessionService {
             }
         }).on('keyboard-interactive', (name, instructions, instructionsLang, prompts, finish) => {
             finish([config.password as string]);
-        }).connect({
+        });
+
+        // Build connect config — use tunnel stream as socket if jumpbox is configured
+        const connectConfig: ConnectConfig & Record<string, unknown> = {
             ...config,
             tryKeyboard: true,
             algorithms: this.getAlgorithms() as ConnectConfig['algorithms'],
             hostVerifier: (hostKey: Buffer, verify: (result: boolean) => void) => {
                 try {
-                    // Extract key type from the key buffer (first 4 bytes = length, then key type string)
                     const keyTypeLen = hostKey.readUInt32BE(0);
                     const keyType = hostKey.slice(4, 4 + keyTypeLen).toString('utf8');
                     verifyHostKey(
@@ -167,7 +178,13 @@ export class SshService implements ISessionService {
                     verify(false);
                 }
             },
-        });
+        };
+
+        if (this.tunnelStream) {
+            connectConfig.sock = this.tunnelStream;
+        }
+
+        this.conn.connect(connectConfig);
     }
 
     write(data: string) {
@@ -193,6 +210,11 @@ export class SshService implements ISessionService {
 
     disconnect() {
         this.conn.end();
+        if (this.jumpboxClient) {
+            this.jumpboxClient.end();
+            this.jumpboxClient = null;
+        }
+        this.tunnelStream = null;
         this.dataCallback = null;
     }
 }

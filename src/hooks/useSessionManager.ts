@@ -294,7 +294,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     // Session status & error listeners
     useEffect(() => {
         const removeStatusListener = electronService.onSessionStatus((sessionId, status) => {
-            console.log(`Session ${sessionId} Status:`, status);
+            console.warn(`Session ${sessionId} Status:`, status);
             if (status === 'connected') {
                 onSessionConnected();
             } else if (status === 'disconnected') {
@@ -383,6 +383,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             type = 'serial';
         } else if (config.protocol === 'telnet') {
             title = `Telnet ${config.host}`;
+            if (config.jumpbox) title += ` via ${(config.jumpbox as Record<string, unknown>).host}`;
             type = 'telnet';
         } else if (config.protocol === 'wsl') {
             title = `WSL ${config.distro || 'Default'}`;
@@ -395,6 +396,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             type = 'local';
         } else {
             title = `SSH ${config.host}`;
+            if (config.jumpbox) title += ` via ${(config.jumpbox as Record<string, unknown>).host}`;
             type = 'ssh';
         }
         const newSession: Session = { id: sessionId, title, type };

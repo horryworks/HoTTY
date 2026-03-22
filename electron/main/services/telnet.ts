@@ -1,6 +1,8 @@
 import { BrowserWindow } from 'electron';
 import { Telnet, ConnectOptions } from 'telnet-client';
+import * as net from 'net';
 import * as iconv from 'iconv-lite';
+import { Client, ClientChannel } from 'ssh2';
 import { ISessionService } from './ISessionService';
 import { logger } from './Logger';
 
@@ -13,11 +15,56 @@ export class TelnetService implements ISessionService {
     private lastCols: number | null = null;
     private lastRows: number | null = null;
     private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+    private localProxy: net.Server | null = null;
+    private jumpboxClient: Client | null = null;
 
     constructor(window: BrowserWindow, sessionId: string) {
         this.window = window;
         this.sessionId = sessionId;
         this.conn = new Telnet();
+    }
+
+    /**
+     * Connect via a jumpbox tunnel. Creates a local TCP proxy that bridges
+     * the tunnel stream to the Telnet client.
+     */
+    async connectViaJumpbox(config: Record<string, unknown>, tunnelStream: ClientChannel, jumpboxClient: Client) {
+        this.jumpboxClient = jumpboxClient;
+
+        return new Promise<void>((resolve, reject) => {
+            const proxyServer = net.createServer((socket) => {
+                socket.pipe(tunnelStream);
+                tunnelStream.pipe(socket);
+
+                socket.on('close', () => { try { tunnelStream.end(); } catch { /* ignore */ } });
+                tunnelStream.on('close', () => { try { socket.end(); } catch { /* ignore */ } });
+            });
+
+            proxyServer.listen(0, '127.0.0.1', async () => {
+                const addr = proxyServer.address() as net.AddressInfo;
+                this.localProxy = proxyServer;
+                logger.info('telnet', 'Local proxy for jumpbox tunnel', { port: addr.port });
+
+                // Override host/port to connect via local proxy
+                const proxyConfig = {
+                    ...config,
+                    host: '127.0.0.1',
+                    port: addr.port,
+                };
+
+                try {
+                    await this.connect(proxyConfig);
+                    resolve();
+                } catch (err) {
+                    reject(err);
+                }
+            });
+
+            proxyServer.on('error', (err) => {
+                logger.error('telnet', 'Local proxy error', { error: err.message });
+                reject(err);
+            });
+        });
     }
 
     setEncoding(encoding: string) {
@@ -274,6 +321,14 @@ export class TelnetService implements ISessionService {
             } catch {
                 // ignore
             }
+        }
+        if (this.localProxy) {
+            this.localProxy.close();
+            this.localProxy = null;
+        }
+        if (this.jumpboxClient) {
+            this.jumpboxClient.end();
+            this.jumpboxClient = null;
         }
         this.dataCallback = null;
     }

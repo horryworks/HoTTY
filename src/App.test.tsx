@@ -5,6 +5,7 @@ import App from './App';
 // ── Mock external dependencies ────────────────────────────────────────────────
 
 vi.mock('./services/electronService', () => ({
+    isAvailable: vi.fn(() => !!(window as any).electronAPI),
     connectSession: vi.fn(),
     disconnectSession: vi.fn(),
     sendInput: vi.fn(),

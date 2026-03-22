@@ -25,7 +25,7 @@
 }
 
 .ping-monitor-control-bar-title {
-    font-weight: bold;
+    font-weight: 600;
     font-size: calc(var(--font-size-base) - 2px);
     color: var(--text-primary);
     white-space: nowrap;
@@ -79,7 +79,7 @@
 }
 
 .ping-monitor-btn:disabled {
-    opacity: 0.4;
+    opacity: 0.5;
     cursor: default;
 }
 
@@ -213,7 +213,7 @@
     border-bottom: 1px solid var(--border-color);
     padding: 5px 10px;
     text-align: left;
-    font-weight: bold;
+    font-weight: 600;
     color: var(--text-secondary);
     white-space: nowrap;
     z-index: 1;

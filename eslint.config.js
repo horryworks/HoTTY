@@ -26,7 +26,14 @@ module.exports = tseslint.config(
         'warn',
         { allowConstantExport: true },
       ],
-      'no-console': 'warn',
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
+    },
+  },
+  {
+    // Electron main process: Logger wraps console output by design
+    files: ['electron/**/*.ts'],
+    rules: {
+      'no-console': 'off',
     },
   },
   {
