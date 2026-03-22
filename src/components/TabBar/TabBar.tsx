@@ -54,6 +54,11 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
         }
     }, [tooltip]);
 
+    // Clear tooltip when tabs change (e.g., tab closed externally)
+    React.useEffect(() => {
+        setTooltip(null);
+    }, [tabs.length]);
+
     const handleTabMouseEnter = (e: React.MouseEvent<HTMLDivElement>, title: string) => {
         const titleEl = e.currentTarget.querySelector('.tab-title') as HTMLElement | null;
         if (titleEl && titleEl.scrollWidth > titleEl.clientWidth) {
@@ -231,6 +236,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                                 className="tab-close"
                                 onClick={(e) => {
                                     e.stopPropagation();
+                                    setTooltip(null);
                                     onTabClose(tab.id);
                                 }}
                             >
