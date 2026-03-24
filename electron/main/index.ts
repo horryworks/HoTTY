@@ -18,6 +18,7 @@ import { AnthropicProvider } from './services/ai/providers/anthropic/AnthropicPr
 import { LogManager } from './services/LogManager';
 import { PingMonitorService, isValidPingTarget } from './services/PingMonitorService';
 import { logger } from './services/Logger';
+import { friendlyErrorMessage } from './services/errorMessages';
 import { encryptString, decryptString, verifyWindowsUser, encodePowerShellScript } from './services/dpapi';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -164,6 +165,7 @@ app.whenReady().then(async () => {
     // If app was launched with a file path argument, open it in the text editor
     const filePath = getFilePathFromArgs(process.argv);
     if (filePath) {
+      approvedEditorPaths.add(resolve(filePath));
       win.webContents.send('open-file-in-editor', filePath);
     }
   });
@@ -238,6 +240,7 @@ app.on('second-instance', (_event, argv) => {
     // If launched with a file path, send it to the existing window
     const filePath = getFilePathFromArgs(argv);
     if (filePath) {
+      approvedEditorPaths.add(resolve(filePath));
       existingWin.webContents.send('open-file-in-editor', filePath);
     }
   } else {
@@ -437,7 +440,7 @@ ipcMain.on('connect-session', async (event, { sessionId, config }) => {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.error('session', 'Jumpbox tunnel failed', { sessionId, error: msg });
-      eventWin.webContents.send('session-error', { sessionId, error: `Jumpbox connection failed: ${msg}` });
+      eventWin.webContents.send('session-error', { sessionId, error: `Jumpbox connection failed: ${friendlyErrorMessage(msg)}` });
       sessions.delete(sessionId);
       return;
     }
@@ -493,6 +496,10 @@ ipcMain.on('focus-window', (event) => {
 
 const ALLOWED_ENCODINGS = new Set(['utf8', 'shift_jis', 'euc-jp']);
 const ALLOWED_BUFFER_ENCODINGS = new Set<BufferEncoding>(['utf-8', 'utf8', 'ascii', 'utf16le', 'ucs2', 'ucs-2', 'base64', 'base64url', 'latin1', 'binary', 'hex']);
+
+// Tracks file paths approved via native file dialogs (open/save).
+// Only these paths are allowed for text-editor read/write operations.
+const approvedEditorPaths = new Set<string>();
 
 ipcMain.on('update-session-encoding', (event, { sessionId, encoding }) => {
   if (!ALLOWED_ENCODINGS.has(encoding)) {
@@ -612,7 +619,9 @@ ipcMain.handle('text-editor-open-file', async (event) => {
     ],
   });
   if (canceled || filePaths.length === 0) return null;
-  return filePaths[0];
+  const selected = filePaths[0];
+  approvedEditorPaths.add(resolve(selected));
+  return selected;
 });
 
 // Text Editor: save file dialog
@@ -626,6 +635,7 @@ ipcMain.handle('text-editor-save-file', async (event, defaultPath?: string) => {
     ],
   });
   if (canceled || !filePath) return null;
+  approvedEditorPaths.add(resolve(filePath));
   return filePath;
 });
 
@@ -634,6 +644,9 @@ ipcMain.handle('text-editor-read-file', async (_event, filePath: string, encodin
   try {
     const validEncoding: BufferEncoding = ALLOWED_BUFFER_ENCODINGS.has(encoding as BufferEncoding) ? encoding as BufferEncoding : 'utf-8';
     const resolvedPath = resolve(filePath);
+    if (!approvedEditorPaths.has(resolvedPath)) {
+      throw new Error('File path not approved via dialog');
+    }
     const buffer = fs.readFileSync(resolvedPath);
     const content = buffer.toString(validEncoding);
     const lineEnding = content.includes('\r\n') ? 'CRLF' : 'LF';
@@ -649,11 +662,30 @@ ipcMain.handle('text-editor-write-file', async (_event, filePath: string, conten
   try {
     const validEncoding: BufferEncoding = ALLOWED_BUFFER_ENCODINGS.has(encoding as BufferEncoding) ? encoding as BufferEncoding : 'utf-8';
     const resolvedPath = resolve(filePath);
+    if (!approvedEditorPaths.has(resolvedPath)) {
+      throw new Error('File path not approved via dialog');
+    }
     fs.writeFileSync(resolvedPath, content, { encoding: validEncoding });
     return true;
   } catch (err) {
     logger.error('app', 'Failed to write file for text editor', { error: String(err) });
     throw new Error(`Failed to write file: ${String(err)}`);
+  }
+});
+
+// Text Editor: approve a dropped file path (validates it exists and is a regular file)
+ipcMain.handle('text-editor-approve-dropped-file', async (_event, filePath: string) => {
+  try {
+    const resolvedPath = resolve(filePath);
+    const stat = fs.statSync(resolvedPath);
+    if (!stat.isFile()) {
+      throw new Error('Path is not a regular file');
+    }
+    approvedEditorPaths.add(resolvedPath);
+    return true;
+  } catch (err) {
+    logger.error('app', 'Failed to approve dropped file', { error: String(err) });
+    throw new Error(`Failed to approve dropped file: ${String(err)}`);
   }
 });
 

@@ -76,6 +76,7 @@ export interface ElectronAPI {
     textEditorSaveFile: (defaultPath?: string) => Promise<string | null>;
     textEditorReadFile: (filePath: string, encoding: string) => Promise<{ content: string; lineEnding: string }>;
     textEditorWriteFile: (filePath: string, content: string, encoding: string) => Promise<void>;
+    textEditorApproveDroppedFile: (filePath: string) => Promise<boolean>;
     getFilePath: (file: File) => string;
     onOpenFileInEditor: (callback: (filePath: string) => void) => () => void;
 

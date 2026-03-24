@@ -1,5 +1,20 @@
 # Release Notes - HoTTY
 
+## [v1.0.1] - 2026-03-25
+
+### Improved
+- **Text Editor: Return Code Display**: Return codes (newline characters) are now rendered as visible symbols in the editor. A new **View** menu lets you toggle this display on or off.
+- **Text Editor: Line Selection**: Double-clicking a line now selects the entire line content without including the return code character.
+- **UI Consistency**: Standardized modal z-index layering, header padding, pane toolbar button padding, disabled button cursors, and font-weight patterns across all components for a more uniform look and feel.
+
+### Security
+- **Text Editor File Access Restriction**: The text editor's IPC file read/write handlers now only accept file paths that were previously approved through a native file dialog or drag-and-drop. This prevents potential unauthorized file access if the renderer process were compromised.
+
+### Bug Fixes
+- **About Tab Icon**: Fixed the icon background color in the About settings tab.
+
+---
+
 ## [v1.0.0] - 2026-03-22
 
 ### First Stable Release

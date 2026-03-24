@@ -11,6 +11,8 @@ interface ConnectionDialogProps {
     onConnect: (config: Record<string, unknown>) => void;
     onClose: () => void;
     error?: string | null;
+    isConnecting?: boolean;
+    connectionError?: string | null;
     getCachedPassword: (host: string, user: string) => string;
     saveCachedPassword: (host: string, user: string, pass: string) => void;
     onShowMessage?: (type: 'error' | 'success' | 'info', title: string | undefined, message: string) => void;
@@ -27,6 +29,8 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     onConnect,
     onClose,
     error,
+    isConnecting = false,
+    connectionError = null,
     getCachedPassword,
     saveCachedPassword,
     onShowMessage,
@@ -36,6 +40,10 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
     const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
     const [isDecrypting, setIsDecrypting] = useState(false);
+    const isSubmittingRef = useRef(false);
+    useEffect(() => {
+        if (!isConnecting) isSubmittingRef.current = false;
+    }, [isConnecting]);
 
     // Password reveal state
     const [passwordVisible, setPasswordVisible] = useState(false);
@@ -526,6 +534,8 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
 
         // Ensure we don't connect with raw DPAPI values if they somehow bypassed handleSelectHost
         let finalU = username;
@@ -718,6 +728,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                     {/* Right panel: Connection form */}
                     <div className="form-panel">
                         <form ref={formRef} onSubmit={handleSubmit}>
+                          <fieldset disabled={isConnecting} style={{ border: 'none', padding: 0, margin: 0 }}>
                             {/* Disabled unless a host is selected where display name makes sense, but show it if selectedHostId is present */}
                             {originalState !== null && (
                                 <div className="form-group">
@@ -967,20 +978,27 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                 </>
                             )}
 
-                            <div className="form-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                          </fieldset>
+                            <div className="form-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', alignItems: 'center' }}>
+                                {connectionError && (
+                                    <span className="connection-error">{connectionError}</span>
+                                )}
+                                {isConnecting && !connectionError && (
+                                    <span className="connection-status">Connecting...</span>
+                                )}
                                 {originalState !== null && protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell' && protocol !== 'log-viewer' && (
                                     <button
                                         type="button"
                                         className="btn-secondary"
                                         onClick={handleSave}
-                                        disabled={!isDirty || isDecrypting}
+                                        disabled={!isDirty || isDecrypting || isConnecting}
                                         title={isDirty ? "Save changes to this host" : "No changes to save"}
                                     >
                                         Save
                                     </button>
                                 )}
-                                <button type="submit" className="btn-primary" disabled={isDecrypting}>
-                                    Connect
+                                <button type="submit" className="btn-primary" disabled={isDecrypting || isConnecting}>
+                                    {isConnecting ? 'Connecting...' : 'Connect'}
                                 </button>
                             </div>
                         </form>

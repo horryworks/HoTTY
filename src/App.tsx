@@ -80,6 +80,11 @@ function App() {
 
   const [themesData, setThemesData] = useState<Record<string, ThemeDefinition> | null>(null);
   const [showDialog, setShowDialog] = useState(true);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const isConnectingRef = useRef(false);
+  const startConnecting = () => { setIsConnecting(true); isConnectingRef.current = true; };
+  const stopConnecting = () => { setIsConnecting(false); isConnectingRef.current = false; };
   const [globalMessage, setGlobalMessage] = useState<{ type: 'error' | 'success' | 'info', title?: string, message: string } | null>(null);
   const [focusTrigger, setFocusTrigger] = useState(0);
   const [lastTerminalSessionId, setLastTerminalSessionId] = useState<string | null>(null);
@@ -285,8 +290,19 @@ function App() {
     scrollback: settings.scrollback,
     backspaceSendsDel: settings.backspaceSendsDel,
     onPasteRequest: handlePasteRequest,
-    onSessionConnected: () => setShowDialog(false),
-    onSessionError: (msg) => setGlobalMessage({ type: 'error', message: msg }),
+    onSessionConnected: () => {
+      stopConnecting();
+      setConnectionError(null);
+      setShowDialog(false);
+    },
+    onSessionError: (msg) => {
+      if (isConnectingRef.current) {
+        stopConnecting();
+        setConnectionError(msg);
+      } else {
+        setGlobalMessage({ type: 'error', message: msg });
+      }
+    },
     paneAllocations: pane.paneAllocations,
     setPaneAllocations: pane.setPaneAllocations,
     setActivePaneId: pane.setActivePaneId,
@@ -782,8 +798,20 @@ function App() {
         {/* Modals and Overlays */}
         {showDialog && (
           <ConnectionDialog
-            onConnect={(config) => { session.createSession(config); setShowDialog(false); }}
-            onClose={() => setShowDialog(false)}
+            onConnect={(config) => {
+              if (isConnectingRef.current) return;
+              if (config.protocol === 'log-viewer') {
+                session.createSession(config);
+                setShowDialog(false);
+                return;
+              }
+              setConnectionError(null);
+              startConnecting();
+              session.createSession(config);
+            }}
+            onClose={() => { stopConnecting(); setConnectionError(null); setShowDialog(false); }}
+            isConnecting={isConnecting}
+            connectionError={connectionError}
             getCachedPassword={getCachedPassword}
             saveCachedPassword={saveCachedPassword}
             onShowMessage={(type, title, message) => setGlobalMessage({ type, title, message })}

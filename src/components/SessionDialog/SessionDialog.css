@@ -140,6 +140,21 @@
     margin-top: 12px;
 }
 
+.connection-error {
+    color: var(--color-danger);
+    font-size: calc(var(--font-size-base) - 2px);
+    margin-right: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.connection-status {
+    color: var(--text-secondary);
+    font-size: calc(var(--font-size-base) - 2px);
+    margin-right: auto;
+}
+
 .btn-primary {
     background-color: var(--accent-color);
     color: var(--text-on-accent);

@@ -65,6 +65,7 @@ export const textEditorOpenFile = () => api().textEditorOpenFile();
 export const textEditorSaveFile = (defaultPath?: string) => api().textEditorSaveFile(defaultPath);
 export const textEditorReadFile = (filePath: string, encoding: string) => api().textEditorReadFile(filePath, encoding);
 export const textEditorWriteFile = (filePath: string, content: string, encoding: string) => api().textEditorWriteFile(filePath, content, encoding);
+export const textEditorApproveDroppedFile = (filePath: string) => api().textEditorApproveDroppedFile(filePath);
 export const getFilePath = (file: File): string => api().getFilePath(file);
 export const onOpenFileInEditor = (callback: (filePath: string) => void) => api().onOpenFileInEditor(callback);
 

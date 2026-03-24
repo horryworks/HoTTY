@@ -198,6 +198,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                             </p>
                             <ul className="shortcuts-list">
                                 <li><strong>File menu:</strong> New, Open, Save, Save As, and Close actions for individual sub-tabs.</li>
+                                <li><strong>View menu:</strong> Toggle <strong>Show Return Codes</strong> to display newline characters as visible symbols in the editor.</li>
                                 <li><strong>Find & Replace:</strong> Press <code>Ctrl + F</code> to open the search bar. Use <code>Ctrl + H</code> for find-and-replace. Matches are highlighted and the total count is shown.</li>
                                 <li><strong>Go to Line:</strong> Press <code>Ctrl + G</code> to jump to a specific line number.</li>
                                 <li><strong>Encoding & Line Endings:</strong> Click the encoding or line ending indicator in the status bar to change them for the current file.</li>

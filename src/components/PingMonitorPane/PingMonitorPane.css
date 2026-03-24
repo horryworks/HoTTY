@@ -63,7 +63,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 3px 12px;
+    padding: 3px 10px;
     border: 1px solid var(--border-color);
     border-radius: 3px;
     font-size: calc(var(--font-size-base) - 2px);
@@ -260,17 +260,17 @@
 /* Status indicators */
 .ping-status-ok {
     color: var(--success-color);
-    font-weight: bold;
+    font-weight: 600;
 }
 
 .ping-status-fail {
     color: var(--color-danger);
-    font-weight: bold;
+    font-weight: 600;
 }
 
 .ping-status-dns {
     color: var(--color-warning);
-    font-weight: bold;
+    font-weight: 600;
 }
 
 .ping-status-pending {

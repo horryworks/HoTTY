@@ -718,6 +718,7 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
             }
 
             try {
+                await electronService.textEditorApproveDroppedFile(filePath);
                 const result = await electronService.textEditorReadFile(filePath, 'utf-8');
                 // Check if there's an existing empty untitled tab to reuse
                 const emptyTab = tabs.find(t => t.id === activeTabId && !t.filePath && !t.content);

@@ -142,4 +142,34 @@ describe('ConnectionDialog', () => {
         fireEvent.click(screen.getByText('Cancel'));
         expect(screen.queryByText('Windows Authentication')).not.toBeInTheDocument();
     });
+
+    it('disables Connect button when isConnecting is true', () => {
+        render(<ConnectionDialog {...baseProps} isConnecting={true} />);
+        const connectButton = screen.getByRole('button', { name: 'Connecting...' });
+        expect(connectButton).toBeDisabled();
+    });
+
+    it('shows "Connecting..." button text when isConnecting is true', () => {
+        render(<ConnectionDialog {...baseProps} isConnecting={true} />);
+        expect(screen.getByRole('button', { name: 'Connecting...' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument();
+    });
+
+    it('shows connection status text when isConnecting is true', () => {
+        render(<ConnectionDialog {...baseProps} isConnecting={true} />);
+        const statusElements = screen.getAllByText('Connecting...');
+        // One for the status text, one for the button
+        expect(statusElements.length).toBe(2);
+    });
+
+    it('displays connection error message', () => {
+        render(<ConnectionDialog {...baseProps} connectionError="Connection refused" />);
+        expect(screen.getByText('Connection refused')).toBeInTheDocument();
+    });
+
+    it('does not show connecting status when connectionError is present', () => {
+        render(<ConnectionDialog {...baseProps} isConnecting={false} connectionError="Connection refused" />);
+        expect(screen.getByText('Connection refused')).toBeInTheDocument();
+        expect(screen.getByText('Connect')).toBeInTheDocument();
+    });
 });

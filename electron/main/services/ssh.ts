@@ -6,6 +6,7 @@ import { join } from 'path';
 import { ISessionService } from './ISessionService';
 import { verifyHostKey } from './knownHosts';
 import { logger } from './Logger';
+import { friendlyErrorMessage } from './errorMessages';
 
 export class SshService implements ISessionService {
     private conn: Client;
@@ -130,11 +131,8 @@ export class SshService implements ISessionService {
                 });
             });
         }).on('error', (err) => {
-            let message = err.message;
-            if (message === 'All configured authentication methods failed') {
-                message = 'Username or password may be incorrect';
-            }
-            logger.error('ssh', 'Connection error', { sessionId: this.sessionId, error: message });
+            const message = friendlyErrorMessage(err.message);
+            logger.error('ssh', 'Connection error', { sessionId: this.sessionId, error: err.message });
             if (!this.window.isDestroyed()) {
                 this.window.webContents.send('session-error', { sessionId: this.sessionId, error: message });
             }

@@ -1,8 +1,8 @@
-# HoTTY v1.0.0 - AI Integrated Advanced Terminal
+# HoTTY v1.0.1 - AI Integrated Advanced Terminal
 
 [English] | [日本語 (Japanese)](README.ja.md)
 
-**Current Version: v1.0.0**
+**Current Version: v1.0.1**
 
 Terminal emulator built with Electron, React, and TypeScript. Designed to provide a seamless terminal experience with advanced window management, deep AI integration, and extensive customization options.
 
@@ -48,7 +48,7 @@ Terminal emulator built with Electron, React, and TypeScript. Designed to provid
     - **Sandboxed Execution**: Enhanced security with Electron's sandbox mode.
     - **XSS Protection**: AI chat output is sanitized using DOMPurify to prevent cross-site scripting attacks.
     - **Clean Uninstallation**: Option to fully remove user data during uninstallation.
-- **Text Editor**: Built-in text editor pane (open via **⊞** Features menu → **Text Editor**). Supports multi-tab editing, file open/save with encoding selection (UTF-8, ASCII, Latin-1) and line ending display (LF/CRLF), Find & Replace, Go to Line, visual line numbers (including wrapped lines), and file association for opening files from the command line.
+- **Text Editor**: Built-in text editor pane (open via **⊞** Features menu → **Text Editor**). Supports multi-tab editing, file open/save with encoding selection (UTF-8, ASCII, Latin-1) and line ending display (LF/CRLF), Find & Replace, Go to Line, visual line numbers (including wrapped lines), visible return code characters (toggleable via the View menu), and file association for opening files from the command line.
 - **Ping Monitor**: Built-in ICMP ping monitoring pane for tracking multiple hosts simultaneously. Configurable intervals (1s–60s), real-time RTT and TTL display, visual status indicators, and optional CSV log export.
 - **Update Notification**: Automatically checks for new releases on GitHub at startup and shows a non-blocking banner when an update is available. Options to **Skip this version** or **Never Notify** let you control notification behavior. A download link is also shown in **Settings > About** when an update is pending.
 - **Modern Tech Stack**: Built on Electron, React, and Vite for performance and stability.

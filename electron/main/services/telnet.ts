@@ -5,6 +5,7 @@ import * as iconv from 'iconv-lite';
 import { Client, ClientChannel } from 'ssh2';
 import { ISessionService } from './ISessionService';
 import { logger } from './Logger';
+import { friendlyErrorMessage } from './errorMessages';
 
 export class TelnetService implements ISessionService {
     private conn: Telnet & { opts?: { terminalWidth?: number; terminalHeight?: number } };
@@ -141,15 +142,18 @@ export class TelnetService implements ISessionService {
             });
 
             this.conn.on('error', (err: Error) => {
+                const message = friendlyErrorMessage(err.message);
                 logger.error('telnet', 'Connection error', { sessionId: this.sessionId, error: err.message });
                 if (!this.window.isDestroyed()) {
-                    this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Connection error.' });
+                    this.window.webContents.send('session-error', { sessionId: this.sessionId, error: message });
                 }
             });
 
         } catch (err: unknown) {
-            logger.error('telnet', 'Connect failed', { sessionId: this.sessionId, error: err instanceof Error ? err.message : String(err) });
-            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: 'Connection failed.' });
+            const raw = err instanceof Error ? err.message : String(err);
+            const message = friendlyErrorMessage(raw);
+            logger.error('telnet', 'Connect failed', { sessionId: this.sessionId, error: raw });
+            this.window.webContents.send('session-error', { sessionId: this.sessionId, error: message });
         }
     }
 

@@ -197,6 +197,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     textEditorSaveFile: (defaultPath?: string) => ipcRenderer.invoke('text-editor-save-file', defaultPath),
     textEditorReadFile: (filePath: string, encoding: string) => ipcRenderer.invoke('text-editor-read-file', filePath, encoding),
     textEditorWriteFile: (filePath: string, content: string, encoding: string) => ipcRenderer.invoke('text-editor-write-file', filePath, content, encoding),
+    textEditorApproveDroppedFile: (filePath: string) => ipcRenderer.invoke('text-editor-approve-dropped-file', filePath),
     getFilePath: (file: File) => webUtils.getPathForFile(file),
     onOpenFileInEditor: (callback: (filePath: string) => void) => {
         const subscription = (_event: unknown, filePath: string) => callback(filePath);

@@ -9,6 +9,7 @@ vi.mock('../../services/electronService', () => ({
     textEditorSaveFile: vi.fn(),
     textEditorReadFile: vi.fn(),
     textEditorWriteFile: vi.fn(),
+    textEditorApproveDroppedFile: vi.fn().mockResolvedValue(true),
     getFilePath: vi.fn((file: File) => (file as File & { _testPath?: string })._testPath || ''),
 }));
 

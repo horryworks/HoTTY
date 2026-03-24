@@ -5,7 +5,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 3000;
+    z-index: 10001;
 }
 
 .ctc-modal {
@@ -29,7 +29,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 20px 10px;
+    padding: 12px 20px;
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
 }
@@ -266,7 +266,7 @@
 
 .ctc-btn-cancel:disabled {
     opacity: 0.5;
-    cursor: not-allowed;
+    cursor: default;
 }
 
 .ctc-btn-save {
@@ -286,5 +286,5 @@
 
 .ctc-btn-save:disabled {
     opacity: 0.5;
-    cursor: not-allowed;
+    cursor: default;
 }
