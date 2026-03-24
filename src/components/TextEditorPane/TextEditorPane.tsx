@@ -38,7 +38,7 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
     const [cursorCol, setCursorCol] = useState(1);
 
     // Menu state
-    const [openMenu, setOpenMenu] = useState<'file' | 'edit' | null>(null);
+    const [openMenu, setOpenMenu] = useState<'file' | 'edit' | 'view' | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
     // Find/Replace state
@@ -51,6 +51,9 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
     const [showGoto, setShowGoto] = useState(false);
     const [gotoValue, setGotoValue] = useState('');
 
+    // Return code display
+    const [showReturnCodes, setShowReturnCodes] = useState(true);
+
     // Encoding/Line ending dropdowns
     const [showEncodingPicker, setShowEncodingPicker] = useState(false);
     const [showLineEndingPicker, setShowLineEndingPicker] = useState(false);
@@ -60,6 +63,7 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
     const subtabListRef = useRef<HTMLDivElement>(null);
     const findInputRef = useRef<HTMLInputElement>(null);
     const gotoInputRef = useRef<HTMLInputElement>(null);
+    const overlayRef = useRef<HTMLDivElement>(null);
     const measurerRef = useRef<HTMLDivElement | null>(null);
 
     // Visual line numbers: number for the first visual row of each logical line, '' for wrapped rows
@@ -109,10 +113,16 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
         });
     }, [syncState]);
 
-    // Sync scroll between line numbers and textarea
+    // Sync scroll between line numbers, overlay, and textarea
     const handleTextareaScroll = useCallback(() => {
-        if (lineNumbersRef.current && textareaRef.current) {
-            lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
+        if (textareaRef.current) {
+            if (lineNumbersRef.current) {
+                lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
+            }
+            if (overlayRef.current) {
+                overlayRef.current.scrollTop = textareaRef.current.scrollTop;
+                overlayRef.current.scrollLeft = textareaRef.current.scrollLeft;
+            }
         }
     }, []);
 
@@ -185,6 +195,20 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
         setCursorLine(lines.length);
         setCursorCol(lines[lines.length - 1].length + 1);
     }, []);
+
+    // Double-click: select the entire line without the newline character
+    const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
+        e.preventDefault();
+        const ta = textareaRef.current;
+        if (!ta) return;
+        const pos = ta.selectionStart;
+        const content = ta.value;
+        const lineStart = content.lastIndexOf('\n', pos - 1) + 1;
+        let lineEnd = content.indexOf('\n', pos);
+        if (lineEnd === -1) lineEnd = content.length;
+        ta.setSelectionRange(lineStart, lineEnd);
+        updateCursorPosition();
+    }, [updateCursorPosition]);
 
     // Content change
     const handleContentChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -853,6 +877,22 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
                             </div>
                         )}
                     </div>
+                    {/* View Menu */}
+                    <div style={{ position: 'relative' }}>
+                        <button
+                            className={`text-editor-menu-btn ${openMenu === 'view' ? 'active' : ''}`}
+                            onClick={() => setOpenMenu(openMenu === 'view' ? null : 'view')}
+                        >
+                            View
+                        </button>
+                        {openMenu === 'view' && (
+                            <div className="text-editor-menu-dropdown">
+                                <div className="text-editor-menu-item" onClick={() => { setShowReturnCodes(!showReturnCodes); setOpenMenu(null); }}>
+                                    <span>{showReturnCodes ? '\u2713 ' : '\u2003 '}Show Return Codes</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div className="text-editor-status">
@@ -945,21 +985,43 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
                         <div key={i} className="text-editor-line-number">{n}</div>
                     ))}
                 </div>
-                <textarea
-                    ref={textareaRef}
-                    className="text-editor-textarea"
-                    style={{
-                        whiteSpace: lineWrapEnabled ? 'pre-wrap' : 'pre',
-                        wordWrap: lineWrapEnabled ? 'break-word' : 'normal'
-                    }}
-                    value={activeTab.content}
-                    onChange={handleContentChange}
-                    onScroll={handleTextareaScroll}
-                    onClick={updateCursorPosition}
-                    onKeyUp={updateCursorPosition}
-                    spellCheck={false}
-                    wrap={lineWrapEnabled ? 'soft' : 'off'}
-                />
+                <div className="text-editor-editor-wrapper">
+                    <textarea
+                        ref={textareaRef}
+                        className="text-editor-textarea"
+                        style={{
+                            whiteSpace: lineWrapEnabled ? 'pre-wrap' : 'pre',
+                            wordWrap: lineWrapEnabled ? 'break-word' : 'normal',
+                        }}
+                        value={activeTab.content}
+                        onChange={handleContentChange}
+                        onScroll={handleTextareaScroll}
+                        onClick={updateCursorPosition}
+                        onDoubleClick={handleDoubleClick}
+                        onKeyUp={updateCursorPosition}
+                        spellCheck={false}
+                        wrap={lineWrapEnabled ? 'soft' : 'off'}
+                    />
+                    {showReturnCodes && (
+                        <div
+                            ref={overlayRef}
+                            className="text-editor-return-overlay"
+                            style={{
+                                whiteSpace: lineWrapEnabled ? 'pre-wrap' : 'pre',
+                                wordWrap: lineWrapEnabled ? 'break-word' : 'normal',
+                                overflowWrap: lineWrapEnabled ? 'break-word' : 'normal',
+                            }}
+                        >
+                            {activeTab.content.split('\n').map((line, i, arr) => (
+                                <React.Fragment key={i}>
+                                    <span className="text-editor-return-text">{line || '\u200b'}</span>
+                                    {i < arr.length - 1 && <span className="text-editor-newline-symbol">{'\u21B5'}</span>}
+                                    {i < arr.length - 1 && '\n'}
+                                </React.Fragment>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Drop overlay */}

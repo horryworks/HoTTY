@@ -42,6 +42,7 @@ describe('TextEditorPane', () => {
         render(<TextEditorPane sessionId="test-1" />);
         expect(screen.getByText('File')).toBeTruthy();
         expect(screen.getByText('Edit')).toBeTruthy();
+        expect(screen.getByText('View')).toBeTruthy();
         expect(screen.getByText('Ln 1, Col 1')).toBeTruthy();
         expect(screen.getByText('CRLF')).toBeTruthy();
         expect(screen.getByText('UTF-8')).toBeTruthy();
@@ -437,6 +438,110 @@ describe('TextEditorPane', () => {
         );
         const tabEl = screen.getByTitle('C:\\test.txt');
         expect(tabEl.getAttribute('draggable')).toBe('true');
+    });
+
+    it('opens View menu on click', () => {
+        render(<TextEditorPane sessionId="test-1" />);
+        fireEvent.click(screen.getByText('View'));
+        expect(screen.getByText(/Show Return Codes/)).toBeTruthy();
+    });
+
+    it('toggles return code overlay via View menu', () => {
+        const { container } = render(
+            <TextEditorPane
+                sessionId="test-1"
+                initialState={{
+                    tabs: [{
+                        id: 'tab-1',
+                        filePath: null,
+                        content: 'line1\nline2\nline3',
+                        savedContent: '',
+                        encoding: 'utf-8',
+                        lineEnding: 'CRLF',
+                    }],
+                    activeTabId: 'tab-1',
+                }}
+            />
+        );
+        // Initially overlay is visible (default ON)
+        expect(container.querySelector('.text-editor-return-overlay')).toBeTruthy();
+        const symbols = container.querySelectorAll('.text-editor-newline-symbol');
+        expect(symbols.length).toBe(2); // 2 newlines between 3 lines
+
+        // Toggle off via View menu
+        fireEvent.click(screen.getByText('View'));
+        fireEvent.click(screen.getByText(/Show Return Codes/));
+        expect(container.querySelector('.text-editor-return-overlay')).toBeFalsy();
+
+        // Toggle back on via View menu
+        fireEvent.click(screen.getByText('View'));
+        fireEvent.click(screen.getByText(/Show Return Codes/));
+        expect(container.querySelector('.text-editor-return-overlay')).toBeTruthy();
+    });
+
+    it('double-click selects entire line without newline', () => {
+        render(
+            <TextEditorPane
+                sessionId="test-1"
+                initialState={{
+                    tabs: [{
+                        id: 'tab-1',
+                        filePath: null,
+                        content: 'first line\nsecond line\nthird line',
+                        savedContent: '',
+                        encoding: 'utf-8',
+                        lineEnding: 'LF',
+                    }],
+                    activeTabId: 'tab-1',
+                }}
+            />
+        );
+        const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+        // Position cursor in the middle of the second line
+        // 'first line\n' = 11 chars, then 's' at index 11
+        Object.defineProperty(textarea, 'selectionStart', { value: 14, writable: true });
+        Object.defineProperty(textarea, 'selectionEnd', { value: 14, writable: true });
+
+        const setSelectionRange = vi.fn();
+        textarea.setSelectionRange = setSelectionRange;
+
+        fireEvent.doubleClick(textarea);
+
+        // Should select 'second line' (index 11 to 22), not including '\n'
+        expect(setSelectionRange).toHaveBeenCalledWith(11, 22);
+    });
+
+    it('double-click selects last line (no trailing newline)', () => {
+        render(
+            <TextEditorPane
+                sessionId="test-1"
+                initialState={{
+                    tabs: [{
+                        id: 'tab-1',
+                        filePath: null,
+                        content: 'aaa\nbbb',
+                        savedContent: '',
+                        encoding: 'utf-8',
+                        lineEnding: 'LF',
+                    }],
+                    activeTabId: 'tab-1',
+                }}
+            />
+        );
+        const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+        // Position cursor in 'bbb' (index 5)
+        Object.defineProperty(textarea, 'selectionStart', { value: 5, writable: true });
+        Object.defineProperty(textarea, 'selectionEnd', { value: 5, writable: true });
+
+        const setSelectionRange = vi.fn();
+        textarea.setSelectionRange = setSelectionRange;
+
+        fireEvent.doubleClick(textarea);
+
+        // Should select 'bbb' (index 4 to 7)
+        expect(setSelectionRange).toHaveBeenCalledWith(4, 7);
     });
 
     it('shows line numbers even when line wrap is enabled', () => {

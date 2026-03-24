@@ -6,6 +6,7 @@ import { IAIProvider, AuthStatus, ModelInfo, ChatResponseData, TokenUsage } from
 import { encryptString, decryptString } from '../../../dpapi';
 import { logger } from '../../../Logger';
 
+const CREDENTIAL_FILE_MAX_SIZE = 10 * 1024; // 10 KB
 const VALID_MODEL_PATTERN = /^[a-zA-Z0-9/._-]+$/;
 // GCP project IDs: 6-30 chars, lowercase letters/digits/hyphens, starts with letter
 const VALID_PROJECT_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
@@ -198,6 +199,11 @@ export class VertexAIProvider implements IAIProvider {
           onResult({ success: false });
           return false;
         }
+        if (fs.statSync(adcPath).size > CREDENTIAL_FILE_MAX_SIZE) {
+          logger.warn('vertexai', 'ADC file exceeds size limit');
+          onResult({ success: false });
+          return false;
+        }
         const adcContent = JSON.parse(fs.readFileSync(adcPath, 'utf8'));
         if (adcContent.type === 'authorized_user') {
           if (!adcContent.client_id || !adcContent.client_secret || !adcContent.refresh_token) {
@@ -233,6 +239,11 @@ export class VertexAIProvider implements IAIProvider {
         const resolvedPath = path.resolve(creds.keyFilePath);
         if (!fs.existsSync(resolvedPath)) {
           logger.warn('vertexai', 'Service account key file not found');
+          onResult({ success: false });
+          return false;
+        }
+        if (fs.statSync(resolvedPath).size > CREDENTIAL_FILE_MAX_SIZE) {
+          logger.warn('vertexai', 'Service account key file exceeds size limit');
           onResult({ success: false });
           return false;
         }
@@ -280,6 +291,10 @@ export class VertexAIProvider implements IAIProvider {
     try {
       const configPath = this.getConfigFilePath();
       if (!fs.existsSync(configPath)) return false;
+      if (fs.statSync(configPath).size > CREDENTIAL_FILE_MAX_SIZE) {
+        logger.warn('vertexai', 'Config file exceeds size limit');
+        return false;
+      }
       const encrypted = fs.readFileSync(configPath, 'utf8');
       const decrypted = await decryptString(encrypted);
       if (!decrypted) return false;

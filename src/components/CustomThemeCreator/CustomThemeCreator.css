@@ -243,7 +243,7 @@
 .ctc-footer {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
+    gap: 12px;
     padding: 12px 20px;
     border-top: 1px solid var(--border-color);
     flex-shrink: 0;

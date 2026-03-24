@@ -529,6 +529,31 @@ describe('VertexAIProvider — authenticate ADC file not found', () => {
         expect(onResult).toHaveBeenCalledWith({ success: false });
     });
 
+    it('returns false when ADC file exceeds size limit', async () => {
+        const provider = new VertexAIProvider();
+        const onResult = vi.fn();
+        const origAppData = process.env.APPDATA;
+        process.env.APPDATA = tempDir;
+
+        const adcDir = path.join(tempDir, 'gcloud');
+        fs.mkdirSync(adcDir, { recursive: true });
+        // Write a file larger than 10 KB
+        fs.writeFileSync(
+            path.join(adcDir, 'application_default_credentials.json'),
+            'x'.repeat(11 * 1024),
+        );
+
+        const result = await provider.authenticate(null as any, {
+            projectId: 'my-project-123',
+            location: 'us-central1',
+            authType: 'adc',
+        }, onResult);
+
+        process.env.APPDATA = origAppData;
+        expect(result).toBe(false);
+        expect(onResult).toHaveBeenCalledWith({ success: false });
+    });
+
     it('returns false when ADC type is unsupported', async () => {
         const provider = new VertexAIProvider();
         const onResult = vi.fn();
@@ -673,6 +698,22 @@ describe('VertexAIProvider — authenticate service_account key file', () => {
             location: 'us-central1',
             authType: 'service_account',
             keyFilePath: path.join(tempDir, 'nonexistent.json'),
+        }, onResult);
+        expect(result).toBe(false);
+        expect(onResult).toHaveBeenCalledWith({ success: false });
+    });
+
+    it('returns false when key file exceeds size limit', async () => {
+        const provider = new VertexAIProvider();
+        const onResult = vi.fn();
+        const keyPath = path.join(tempDir, 'sa_key_large.json');
+        fs.writeFileSync(keyPath, 'x'.repeat(11 * 1024));
+
+        const result = await provider.authenticate(null as any, {
+            projectId: 'my-project-123',
+            location: 'us-central1',
+            authType: 'service_account',
+            keyFilePath: keyPath,
         }, onResult);
         expect(result).toBe(false);
         expect(onResult).toHaveBeenCalledWith({ success: false });
@@ -942,6 +983,15 @@ describe('VertexAIProvider — autoAuth', () => {
             refreshData: { type: 'authorized_user', client_id: 'id', client_secret: 'secret', refresh_token: 'token' },
         });
         fs.writeFileSync(configPath, `[DPAPI]${savedData}`, 'utf8');
+
+        const result = await provider.autoAuth({ projectId: 'my-project-123', location: 'us-central1' });
+        expect(result).toBe(false);
+    });
+
+    it('returns false when config file exceeds size limit', async () => {
+        const provider = new VertexAIProvider();
+        const configPath = path.join(tempDir, 'vertexai_config.json');
+        fs.writeFileSync(configPath, 'x'.repeat(11 * 1024), 'utf8');
 
         const result = await provider.autoAuth({ projectId: 'my-project-123', location: 'us-central1' });
         expect(result).toBe(false);
