@@ -29,6 +29,8 @@
     padding: 12px 16px;
     background-color: var(--bg-tertiary);
     border-bottom: 1px solid var(--border-color);
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
     font-size: var(--font-size-base);
     font-weight: 600;
 }
@@ -89,7 +91,7 @@
     border-radius: 4px;
     font-size: calc(var(--font-size-base) - 1px);
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: background-color 0.1s;
 }
 
 .paste-btn.cancel {

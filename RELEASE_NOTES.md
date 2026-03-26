@@ -1,5 +1,18 @@
 # Release Notes - HoTTY
 
+## [v1.0.2] - 2026-03-26
+
+### Improved
+- **Session Dialog Auto-Center**: The New Session dialog now automatically re-centers itself when the application window is resized, keeping it accessible at all times.
+- **Session Dialog Form Locking**: The connection form (including the Save and Connect buttons) is now fully disabled immediately upon submission, preventing accidental double-clicks.
+- **Theming Compliance**: Replaced 19 hardcoded inline colors, font families, and font sizes across 10 components with CSS theme variables (`--bg-primary`, `--font-family`, `--font-size-base`), ensuring all UI elements respect the active theme.
+- **UI Consistency**: Unified modal header/footer padding, button transition speed, background color, and header border-radius across all modal components (SettingsModal, CustomThemeCreator, PasteConfirmationModal, AskAiModal).
+
+### Security
+- **Dependency Vulnerability Fixes**: Resolved a high-severity ReDoS vulnerability in `picomatch` and a moderate stack-overflow vulnerability in `yaml` via `npm audit fix`.
+
+---
+
 ## [v1.0.1] - 2026-03-25
 
 ### Improved

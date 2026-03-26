@@ -1022,7 +1022,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             ) : (
                 <div className="ai-chat-body">
                     {showSystemPrompt && localSystemInstruction && (
-                        <div className="ai-chat-message-system" style={{ padding: '10px', backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)', fontSize: '0.85rem', color: 'var(--text-secondary)', maxHeight: '100px', overflowY: 'auto' }}>
+                        <div className="ai-chat-message-system" style={{ padding: '10px', backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)', fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--text-secondary)', maxHeight: '100px', overflowY: 'auto' }}>
                             <div style={{ whiteSpace: 'pre-wrap' }}>{localSystemInstruction}</div>
                         </div>
                     )}
@@ -1077,21 +1077,21 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                             <button
                                                 className="run-command-btn"
                                                 onClick={handleStopWaiting}
-                                                style={{ padding: '2px 8px', fontSize: '11px', opacity: 0.8 }}
+                                                style={{ padding: '2px 8px', fontSize: 'calc(var(--font-size-base) - 3px)', opacity: 0.8 }}
                                             >
                                                 Cancel
                                             </button>
                                         </div>
                                         {interactiveSessionTracking && (
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
-                                                <div style={{ fontSize: '10px', opacity: 0.6, display: 'flex', gap: '12px' }}>
+                                                <div style={{ fontSize: 'calc(var(--font-size-base) - 4px)', opacity: 0.6, display: 'flex', gap: '12px' }}>
                                                     <span>Elapsed: {Math.floor((Date.now() - interactiveSessionTracking.startTime) / 1000)}s</span>
                                                     <span>Data: {new Intl.NumberFormat().format(interactiveSessionTracking.buffer.length)} bytes</span>
                                                 </div>
                                                 <button
                                                     className="run-command-btn"
                                                     onClick={handleSendBufferNow}
-                                                    style={{ padding: '0px 6px', fontSize: '10px', height: '20px' }}
+                                                    style={{ padding: '0px 6px', fontSize: 'calc(var(--font-size-base) - 4px)', height: '20px' }}
                                                     title="Send current output to AI immediately"
                                                 >
                                                     Send Now

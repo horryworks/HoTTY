@@ -311,7 +311,7 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                         style={{
                             gridColumn: c * 2 + 1,
                             gridRow: r * 2 + 1,
-                            backgroundColor: paneBackground || '#000000',
+                            backgroundColor: paneBackground || 'var(--bg-primary)',
                             backgroundImage: paneBackgroundMode === 'image' ? `url("${paneBackgroundImage || ''}")` : 'none',
                             backgroundSize: paneBackgroundMode === 'image' ? 'auto' : 'auto',
                             backgroundRepeat: 'repeat',

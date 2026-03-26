@@ -287,7 +287,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                             <p className="help-text">
                                 HoTTY supports four AI providers. Choose the one that best fits your needs:
                             </p>
-                            <table className="help-auth-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.92em', marginBottom: '8px' }}>
+                            <table className="help-auth-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'calc(var(--font-size-base) - 1px)', marginBottom: '8px' }}>
                                 <thead>
                                     <tr>
                                         <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)', paddingRight: '8px' }}>Provider</th>
@@ -313,13 +313,13 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                         <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}><strong>Anthropic<br />(Claude)</strong></td>
                                         <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>Claude models via API key</td>
                                         <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>API Key</td>
-                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>⚠️ Experimental<br /><span style={{ fontSize: '0.85em', opacity: 0.8 }}>(untested — may not work as expected)</span></td>
+                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>⚠️ Experimental<br /><span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', opacity: 0.8 }}>(untested — may not work as expected)</span></td>
                                     </tr>
                                     <tr>
                                         <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}><strong>OpenAI</strong></td>
                                         <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>GPT models via API key</td>
                                         <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>API Key</td>
-                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>⚠️ Experimental<br /><span style={{ fontSize: '0.85em', opacity: 0.8 }}>(untested — may not work as expected)</span></td>
+                                        <td style={{ padding: '6px 0', verticalAlign: 'top' }}>⚠️ Experimental<br /><span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', opacity: 0.8 }}>(untested — may not work as expected)</span></td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -352,7 +352,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                 <li>Enter your <strong>Google Cloud Project ID</strong> and select a <strong>Region</strong> in the AI Chat tab.</li>
                             </ol>
 
-                            <p className="help-text" style={{ marginBottom: '2px' }}><strong>Anthropic (Claude) — API Key</strong> <span style={{ fontSize: '0.85em', opacity: 0.7 }}>(⚠️ Experimental)</span></p>
+                            <p className="help-text" style={{ marginBottom: '2px' }}><strong>Anthropic (Claude) — API Key</strong> <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', opacity: 0.7 }}>(⚠️ Experimental)</span></p>
                             <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 4px 0' }}>
                                 <li>Obtain an API key from <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer">console.anthropic.com</a> → API Keys.</li>
                                 <li>In HoTTY, select <strong>Anthropic</strong> as your provider, open an AI Chat tab, and enter your API key.</li>
@@ -361,7 +361,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                 ⚠️ This provider is experimental and has not been fully tested. Some features (Watch Mode, Interactive Mode, etc.) may not work as expected. Please report any issues you encounter.
                             </p>
 
-                            <p className="help-text" style={{ marginBottom: '2px' }}><strong>OpenAI — API Key</strong> <span style={{ fontSize: '0.85em', opacity: 0.7 }}>(⚠️ Experimental)</span></p>
+                            <p className="help-text" style={{ marginBottom: '2px' }}><strong>OpenAI — API Key</strong> <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', opacity: 0.7 }}>(⚠️ Experimental)</span></p>
                             <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 4px 0' }}>
                                 <li>Obtain an API key from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">platform.openai.com</a> → API Keys.</li>
                                 <li>In HoTTY, select <strong>OpenAI</strong> as your provider, open an AI Chat tab, and enter your API key.</li>

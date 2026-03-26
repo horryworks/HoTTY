@@ -750,7 +750,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                     onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
                                     autoComplete="new-password"
                                 />
-                                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                <p style={{ fontSize: 'calc(var(--font-size-base) - 4px)', color: 'var(--text-secondary)', marginTop: '4px' }}>
                                     {editModal.mode === 'export'
                                         ? 'This password will be required to import the file later.'
                                         : 'Enter the password that was used to export this file.'}

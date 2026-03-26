@@ -298,7 +298,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                                             width: '100%',
                                             padding: '6px',
                                             height: '60px',
-                                            fontFamily: 'monospace',
+                                            fontFamily: 'var(--font-family)',
                                             resize: 'vertical',
                                             boxSizing: 'border-box'
                                         }}
@@ -392,7 +392,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         className="settings-input"
                         style={{ width: '120px', padding: '6px' }}
                     />
-                    <span style={{ fontSize: '0.9em', color: 'var(--text-secondary)' }}>
+                    <span style={{ fontSize: 'calc(var(--font-size-base) - 1px)', color: 'var(--text-secondary)' }}>
                         Default: 500,000. Higher limits consume more memory.
                     </span>
                 </div>
@@ -411,7 +411,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         className="settings-input"
                         style={{ width: '120px', padding: '6px' }}
                     />
-                    <span style={{ fontSize: '0.9em', color: 'var(--text-secondary)' }}>
+                    <span style={{ fontSize: 'calc(var(--font-size-base) - 1px)', color: 'var(--text-secondary)' }}>
                         Default: 10,000 (10s). Wait time after prompt detection before sending to AI.
                     </span>
                 </div>
@@ -428,7 +428,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         width: '100%',
                         padding: '10px',
                         height: '100px',
-                        fontFamily: 'monospace',
+                        fontFamily: 'var(--font-family)',
                         resize: 'vertical',
                         boxSizing: 'border-box'
                     }}

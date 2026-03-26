@@ -41,8 +41,9 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
     const [isDecrypting, setIsDecrypting] = useState(false);
     const isSubmittingRef = useRef(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     useEffect(() => {
-        if (!isConnecting) isSubmittingRef.current = false;
+        if (!isConnecting) { isSubmittingRef.current = false; setIsSubmitting(false); }
     }, [isConnecting]);
 
     // Password reveal state
@@ -118,19 +119,22 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     const [dialogSize, setDialogSize] = useState({ width: 960, height: 540 });
     const [dialogPos, setDialogPos] = useState<{ top: number; left: number } | null>(null);
 
-    // Initialize dialog position to viewport center when first rendered
-    const dialogPosInitialized = useRef(false);
+    // Keep dialog centered in viewport (on mount and whenever the window is resized)
     useEffect(() => {
-        if (!dialogPosInitialized.current) {
-            const w = 960;
-            const h = 540;
-            setDialogPos({
-                top: Math.max(0, (window.innerHeight - h) / 2),
-                left: Math.max(0, (window.innerWidth - w) / 2),
+        const center = () => {
+            setDialogPos(prev => {
+                const w = prev ? dialogSize.width : 960;
+                const h = prev ? dialogSize.height : 540;
+                return {
+                    top: Math.max(0, (window.innerHeight - h) / 2),
+                    left: Math.max(0, (window.innerWidth - w) / 2),
+                };
             });
-            dialogPosInitialized.current = true;
-        }
-    }, []);
+        };
+        center();
+        window.addEventListener('resize', center);
+        return () => window.removeEventListener('resize', center);
+    }, [dialogSize]);
 
     // Drag the dialog by its header (replaces useDraggable transform)
     const dragState = useRef<{ startX: number; startY: number; startTop: number; startLeft: number } | null>(null);
@@ -536,6 +540,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         e.preventDefault();
         if (isSubmittingRef.current) return;
         isSubmittingRef.current = true;
+        setIsSubmitting(true);
 
         // Ensure we don't connect with raw DPAPI values if they somehow bypassed handleSelectHost
         let finalU = username;
@@ -691,13 +696,13 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                 />
                 <button
                     onClick={onClose}
-                    style={{ position: 'absolute', top: '10px', right: '10px', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1, zIndex: 1 }}
+                    style={{ position: 'absolute', top: '10px', right: '10px', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 'calc(var(--font-size-base) + 5px)', lineHeight: 1, zIndex: 1 }}
                 >✕</button>
 
                 <h2 style={{ marginTop: 0, paddingRight: '20px', marginBottom: '10px' }}>New Session</h2>
 
                 {error && (
-                    <div style={{ color: 'var(--color-danger)', marginBottom: '8px', padding: '8px 10px', backgroundColor: 'var(--color-danger-bg)', borderRadius: '4px', fontSize: '0.9rem' }}>
+                    <div style={{ color: 'var(--color-danger)', marginBottom: '8px', padding: '8px 10px', backgroundColor: 'var(--color-danger-bg)', borderRadius: '4px', fontSize: 'calc(var(--font-size-base) - 1px)' }}>
                         {error}
                     </div>
                 )}
@@ -728,7 +733,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                     {/* Right panel: Connection form */}
                     <div className="form-panel">
                         <form ref={formRef} onSubmit={handleSubmit}>
-                          <fieldset disabled={isConnecting} style={{ border: 'none', padding: 0, margin: 0 }}>
+                          <fieldset disabled={isSubmitting || isConnecting} style={{ border: 'none', padding: 0, margin: 0 }}>
                             {/* Disabled unless a host is selected where display name makes sense, but show it if selectedHostId is present */}
                             {originalState !== null && (
                                 <div className="form-group">
@@ -886,7 +891,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                             {wslDistros.map(d => <option key={d} value={d}>{d}</option>)}
                                         </select>
                                     ) : (
-                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontStyle: 'italic' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) - 1px)', fontStyle: 'italic' }}>
                                             No WSL distributions found.
                                         </div>
                                     )}
@@ -896,13 +901,13 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             {/* Log Viewer info */}
                             {protocol === 'log-viewer' && (
                                 <div className="form-group">
-                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                                    <div style={{ color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) - 1px)', lineHeight: '1.5' }}>
                                         Opens a viewer for session log files.
                                     </div>
-                                    <div style={{ marginTop: '8px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                    <div style={{ marginTop: '8px', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) - 2px)' }}>
                                         <strong>Log Folder:</strong>{' '}
                                         {loggingPath
-                                            ? <span style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>{loggingPath}</span>
+                                            ? <span style={{ fontFamily: 'var(--font-family)', wordBreak: 'break-all' }}>{loggingPath}</span>
                                             : <span style={{ color: 'var(--color-warning)', fontStyle: 'italic' }}>Not configured (set in Settings → Logging)</span>
                                         }
                                     </div>
@@ -991,14 +996,14 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                         type="button"
                                         className="btn-secondary"
                                         onClick={handleSave}
-                                        disabled={!isDirty || isDecrypting || isConnecting}
+                                        disabled={!isDirty || isDecrypting || isSubmitting || isConnecting}
                                         title={isDirty ? "Save changes to this host" : "No changes to save"}
                                     >
                                         Save
                                     </button>
                                 )}
-                                <button type="submit" className="btn-primary" disabled={isDecrypting || isConnecting}>
-                                    {isConnecting ? 'Connecting...' : 'Connect'}
+                                <button type="submit" className="btn-primary" disabled={isDecrypting || isSubmitting || isConnecting}>
+                                    Connect
                                 </button>
                             </div>
                         </form>

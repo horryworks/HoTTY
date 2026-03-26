@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ConnectionDialog } from './SessionDialog';
 
 vi.mock('./SessionDialog.css', () => ({}));
@@ -143,23 +143,25 @@ describe('ConnectionDialog', () => {
         expect(screen.queryByText('Windows Authentication')).not.toBeInTheDocument();
     });
 
-    it('disables Connect button when isConnecting is true', () => {
-        render(<ConnectionDialog {...baseProps} isConnecting={true} />);
-        const connectButton = screen.getByRole('button', { name: 'Connecting...' });
-        expect(connectButton).toBeDisabled();
+    it('disables Connect button immediately on form submit', async () => {
+        render(<ConnectionDialog {...baseProps} />);
+        const connectButton = screen.getByRole('button', { name: 'Connect' });
+        expect(connectButton).not.toBeDisabled();
+        fireEvent.submit(connectButton.closest('form')!);
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'Connect' })).toBeDisabled();
+        });
     });
 
-    it('shows "Connecting..." button text when isConnecting is true', () => {
+    it('disables Connect button when isConnecting is true', () => {
         render(<ConnectionDialog {...baseProps} isConnecting={true} />);
-        expect(screen.getByRole('button', { name: 'Connecting...' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument();
+        const connectButton = screen.getByRole('button', { name: 'Connect' });
+        expect(connectButton).toBeDisabled();
     });
 
     it('shows connection status text when isConnecting is true', () => {
         render(<ConnectionDialog {...baseProps} isConnecting={true} />);
-        const statusElements = screen.getAllByText('Connecting...');
-        // One for the status text, one for the button
-        expect(statusElements.length).toBe(2);
+        expect(screen.getByText('Connecting...')).toBeInTheDocument();
     });
 
     it('displays connection error message', () => {
@@ -171,5 +173,30 @@ describe('ConnectionDialog', () => {
         render(<ConnectionDialog {...baseProps} isConnecting={false} connectionError="Connection refused" />);
         expect(screen.getByText('Connection refused')).toBeInTheDocument();
         expect(screen.getByText('Connect')).toBeInTheDocument();
+    });
+
+    it('re-centers dialog when window is resized', () => {
+        // Start with a known viewport size
+        Object.defineProperty(window, 'innerWidth', { value: 1200, writable: true });
+        Object.defineProperty(window, 'innerHeight', { value: 800, writable: true });
+
+        const { container } = render(<ConnectionDialog {...baseProps} />);
+        const dialog = container.querySelector('.connection-dialog') as HTMLElement;
+        expect(dialog).toBeTruthy();
+
+        // Read initial position
+        const initialTop = dialog.style.top;
+        const initialLeft = dialog.style.left;
+
+        // Simulate window resize to a larger size
+        (window as { innerWidth: number }).innerWidth = 1600;
+        (window as { innerHeight: number }).innerHeight = 1000;
+        fireEvent(window, new Event('resize'));
+
+        // Position should have changed to re-center
+        const newTop = dialog.style.top;
+        const newLeft = dialog.style.left;
+        expect(newTop).not.toBe(initialTop);
+        expect(newLeft).not.toBe(initialLeft);
     });
 });

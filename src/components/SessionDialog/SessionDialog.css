@@ -165,8 +165,13 @@
     font-size: calc(var(--font-size-base) - 1px);
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
     background-color: var(--accent-hover);
+}
+
+.btn-primary:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
 }
 
 /* Two-column layout for serial settings */

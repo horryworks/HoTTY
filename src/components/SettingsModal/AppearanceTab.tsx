@@ -387,7 +387,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                                         }}
                                         placeholder="Regex Pattern (e.g. ^[-_\w]+@[-_\w]+[>#]\s*)"
                                         className="settings-input"
-                                        style={{ width: '100%', padding: '6px', boxSizing: 'border-box', fontFamily: 'monospace' }}
+                                        style={{ width: '100%', padding: '6px', boxSizing: 'border-box', fontFamily: 'var(--font-family)' }}
                                     />
                                 </div>
                             ))}
