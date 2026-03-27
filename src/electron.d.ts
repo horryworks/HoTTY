@@ -42,6 +42,13 @@ export interface ElectronAPI {
     showContextMenu: (selection: string, commands?: { id: string; label: string }[], includePaste?: boolean) => void;
     onAskGemini: (callback: (selection: string, type: string) => void) => () => void;
     onTerminalContextPaste: (callback: () => void) => () => void;
+    // GCE IAP Tunnel
+    gceIapCheckGcloud: () => Promise<{ available: boolean; version?: string }>;
+    gceIapCheckAuth: () => Promise<{ authenticated: boolean; account?: string }>;
+    gceIapListProjects: () => Promise<{ id: string; name: string }[]>;
+    gceIapListZones: (project: string) => Promise<string[]>;
+    gceIapListInstances: (project: string, zone: string) => Promise<{ name: string; status: string }[]>;
+
     getSshAlgorithms: () => Promise<Record<string, { name: string; enabled: boolean }[]>>;
     saveSshAlgorithms: (algorithms: Record<string, { name: string; enabled: boolean }[]>) => Promise<boolean>;
     getThemes: () => Promise<Record<string, { name?: string; variables?: Record<string, string>; terminal?: Record<string, string> }>>;

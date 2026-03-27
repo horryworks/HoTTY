@@ -4,6 +4,12 @@ import * as electronService from '../services/electronService';
 
 const STORAGE_KEY = STORAGE_KEYS.HOST_TREE;
 
+export interface IapTunnelEntry {
+    project: string;
+    zone: string;
+    instance: string;
+}
+
 export interface HostEntry {
     protocol: 'ssh' | 'telnet';
     host: string;
@@ -12,6 +18,7 @@ export interface HostEntry {
     password?: string;
     isJumpbox?: boolean;
     jumpboxId?: string;
+    iapTunnel?: IapTunnelEntry;
 }
 
 // ── Jumpbox helpers ──

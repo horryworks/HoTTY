@@ -175,6 +175,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return () => ipcRenderer.removeListener('ai-chat-response', subscription);
     },
 
+    // GCE IAP Tunnel
+    gceIapCheckGcloud: () => ipcRenderer.invoke('gce-iap-check-gcloud'),
+    gceIapCheckAuth: () => ipcRenderer.invoke('gce-iap-check-auth'),
+    gceIapListProjects: () => ipcRenderer.invoke('gce-iap-list-projects'),
+    gceIapListZones: (project: string) => ipcRenderer.invoke('gce-iap-list-zones', project),
+    gceIapListInstances: (project: string, zone: string) => ipcRenderer.invoke('gce-iap-list-instances', project, zone),
+
     getSshAlgorithms: () => ipcRenderer.invoke('get-ssh-algorithms'),
     saveSshAlgorithms: (algorithms: Record<string, { name: string; enabled: boolean }[]>) => ipcRenderer.invoke('save-ssh-algorithms', algorithms),
     getThemes: () => ipcRenderer.invoke('get-themes'),

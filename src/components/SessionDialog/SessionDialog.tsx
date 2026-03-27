@@ -193,6 +193,24 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     const [isJumpbox, setIsJumpbox] = useState(false);
     const [jumpboxId, setJumpboxId] = useState('');
 
+    // IAP tunnel state
+    const [iapEnabled, setIapEnabled] = useState(false);
+    const [iapProject, setIapProject] = useState('');
+    const [iapZone, setIapZone] = useState('');
+    const [iapInstance, setIapInstance] = useState('');
+    const [iapGcloudStatus, setIapGcloudStatus] = useState<{ available: boolean; version?: string } | null>(null);
+    const [iapAuthStatus, setIapAuthStatus] = useState<{ authenticated: boolean; account?: string } | null>(null);
+    const [iapCheckingGcloud, setIapCheckingGcloud] = useState(false);
+    const [iapCheckingAuth, setIapCheckingAuth] = useState(false);
+    // IAP autocomplete state
+    const [iapProjects, setIapProjects] = useState<{ id: string; name: string }[]>([]);
+    const [iapZones, setIapZones] = useState<string[]>([]);
+    const [iapInstances, setIapInstances] = useState<{ name: string; status: string }[]>([]);
+    const [iapLoadingProjects, setIapLoadingProjects] = useState(false);
+    const [iapLoadingZones, setIapLoadingZones] = useState(false);
+    const [iapLoadingInstances, setIapLoadingInstances] = useState(false);
+    const iapLoadingFromHostRef = useRef(false);
+
     // Available jumpbox hosts (SSH hosts marked as jumpbox)
     const jumpboxHosts = useMemo(() =>
         flattenHosts(hostManager.tree).filter(n => n.entry?.isJumpbox && n.entry.protocol === 'ssh'),
@@ -225,6 +243,10 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         password: string;
         isJumpbox: boolean;
         jumpboxId: string;
+        iapEnabled: boolean;
+        iapProject: string;
+        iapZone: string;
+        iapInstance: string;
     } | null>(null);
 
     // Host history (used for deduplication when saving)
@@ -255,6 +277,88 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             });
         }
     }, [protocol]);
+
+    // Check gcloud availability and auth when IAP is enabled
+    useEffect(() => {
+        if (!iapEnabled) {
+            setIapGcloudStatus(null);
+            setIapAuthStatus(null);
+            setIapProjects([]);
+            setIapZones([]);
+            setIapInstances([]);
+            return;
+        }
+        let cancelled = false;
+        setIapCheckingGcloud(true);
+        setIapCheckingAuth(false);
+        (async () => {
+            const gcloud = await electronService.gceIapCheckGcloud();
+            if (cancelled) return;
+            setIapGcloudStatus(gcloud);
+            setIapCheckingGcloud(false);
+            if (gcloud.available) {
+                setIapCheckingAuth(true);
+                const auth = await electronService.gceIapCheckAuth();
+                if (cancelled) return;
+                setIapAuthStatus(auth);
+                setIapCheckingAuth(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [iapEnabled]);
+
+    // Load IAP projects when authenticated
+    const handleLoadProjects = useCallback(async () => {
+        if (iapLoadingProjects || iapProjects.length > 0) return;
+        setIapLoadingProjects(true);
+        const projects = await electronService.gceIapListProjects();
+        setIapProjects(projects);
+        setIapLoadingProjects(false);
+    }, [iapLoadingProjects, iapProjects.length]);
+
+    // Load IAP zones when project is set
+    const handleLoadZones = useCallback(async () => {
+        if (!iapProject || iapLoadingZones) return;
+        setIapLoadingZones(true);
+        const zones = await electronService.gceIapListZones(iapProject);
+        setIapZones(zones);
+        setIapLoadingZones(false);
+    }, [iapProject, iapLoadingZones]);
+
+    // Load IAP instances when project and zone are set
+    const handleLoadInstances = useCallback(async () => {
+        if (!iapProject || !iapZone || iapLoadingInstances) return;
+        setIapLoadingInstances(true);
+        const instances = await electronService.gceIapListInstances(iapProject, iapZone);
+        setIapInstances(instances);
+        setIapLoadingInstances(false);
+    }, [iapProject, iapZone, iapLoadingInstances]);
+
+    // Auto-load projects when auth succeeds
+    useEffect(() => {
+        if (iapAuthStatus?.authenticated && iapProjects.length === 0 && !iapLoadingProjects) {
+            handleLoadProjects();
+        }
+    }, [iapAuthStatus?.authenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Reset dependent fields and auto-load zones when project changes
+    useEffect(() => {
+        if (iapLoadingFromHostRef.current) return;
+        setIapZones([]);
+        setIapInstances([]);
+        if (iapProject) {
+            handleLoadZones();
+        }
+    }, [iapProject]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Reset instances and auto-load when zone changes
+    useEffect(() => {
+        if (iapLoadingFromHostRef.current) return;
+        setIapInstances([]);
+        if (iapZone) {
+            handleLoadInstances();
+        }
+    }, [iapZone]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Sync displayName when the selected host is renamed in the tree
     useEffect(() => {
@@ -385,6 +489,22 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         setIsJumpbox(!!e.isJumpbox);
         setJumpboxId(e.jumpboxId ?? '');
 
+        // IAP tunnel state — flag to skip cascading resets in useEffects
+        iapLoadingFromHostRef.current = true;
+        if (e.iapTunnel) {
+            setIapEnabled(true);
+            setIapProject(e.iapTunnel.project);
+            setIapZone(e.iapTunnel.zone);
+            setIapInstance(e.iapTunnel.instance);
+        } else {
+            setIapEnabled(false);
+            setIapProject('');
+            setIapZone('');
+            setIapInstance('');
+        }
+        // Clear flag after React processes the batch
+        requestAnimationFrame(() => { iapLoadingFromHostRef.current = false; });
+
         setDisplayName(node.name);
         setOriginalState({
             name: node.name,
@@ -394,7 +514,11 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             username: u,
             password: finalPass,
             isJumpbox: !!e.isJumpbox,
-            jumpboxId: e.jumpboxId ?? ''
+            jumpboxId: e.jumpboxId ?? '',
+            iapEnabled: !!e.iapTunnel,
+            iapProject: e.iapTunnel?.project ?? '',
+            iapZone: e.iapTunnel?.zone ?? '',
+            iapInstance: e.iapTunnel?.instance ?? '',
         });
     };
 
@@ -466,12 +590,13 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
         onConnect({
             protocol: e.protocol,
-            host: e.host,
+            host: e.iapTunnel ? e.iapTunnel.instance : e.host,
             port: e.port,
             username: (e.protocol === 'ssh' || e.protocol === 'telnet') ? u : undefined,
             password: (e.protocol === 'ssh' || e.protocol === 'telnet') ? finalPass : undefined,
-            jumpboxId: e.jumpboxId || undefined,
-            jumpbox: jumpboxConfig,
+            jumpboxId: e.iapTunnel ? undefined : (e.jumpboxId || undefined),
+            jumpbox: e.iapTunnel ? undefined : jumpboxConfig,
+            iapTunnel: e.iapTunnel || undefined,
         });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [getCachedPassword, onConnect, hostManager.tree]);
@@ -485,7 +610,11 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         originalState.username !== username ||
         originalState.password !== password ||
         originalState.isJumpbox !== isJumpbox ||
-        originalState.jumpboxId !== jumpboxId
+        originalState.jumpboxId !== jumpboxId ||
+        originalState.iapEnabled !== iapEnabled ||
+        originalState.iapProject !== iapProject ||
+        originalState.iapZone !== iapZone ||
+        originalState.iapInstance !== iapInstance
     );
 
     const handleSave = async (e: React.MouseEvent) => {
@@ -527,17 +656,22 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             username: finalU,
             password: finalP,
             isJumpbox,
-            jumpboxId
+            jumpboxId,
+            iapEnabled,
+            iapProject,
+            iapZone,
+            iapInstance,
         });
 
         const entry: HostEntry = {
             protocol: protocol as 'ssh' | 'telnet',
-            host,
+            host: iapEnabled ? iapInstance : host,
             port: parseInt(port),
             username: (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
             password: (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
             isJumpbox: protocol === 'ssh' ? (isJumpbox || undefined) : undefined,
-            jumpboxId: jumpboxId || undefined,
+            jumpboxId: iapEnabled ? undefined : (jumpboxId || undefined),
+            iapTunnel: iapEnabled ? { project: iapProject, zone: iapZone, instance: iapInstance } : undefined,
         };
 
         hostManager.editNode(selectedHostId, { name: displayName, entry });
@@ -622,12 +756,13 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             if (selectedHostId && (protocol === 'ssh' || protocol === 'telnet')) {
                 const entry: HostEntry = {
                     protocol: protocol as 'ssh' | 'telnet',
-                    host,
+                    host: iapEnabled ? iapInstance : host,
                     port: parseInt(port),
                     username: (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
                     password: (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
                     isJumpbox: protocol === 'ssh' ? (isJumpbox || undefined) : undefined,
-                    jumpboxId: jumpboxId || undefined,
+                    jumpboxId: iapEnabled ? undefined : (jumpboxId || undefined),
+                    iapTunnel: iapEnabled ? { project: iapProject, zone: iapZone, instance: iapInstance } : undefined,
                 };
                 // Save directly via saveTree (awaited) to ensure localStorage is updated
                 // before onConnect closes the dialog. editNode's save inside setTree updater
@@ -677,12 +812,13 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
         onConnect({
             protocol,
-            host,
+            host: iapEnabled ? iapInstance : host,
             port: parseInt(port),
             username: (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
             password: (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
-            jumpboxId: jumpboxId || undefined,
-            jumpbox: jumpboxConfig,
+            jumpboxId: iapEnabled ? undefined : (jumpboxId || undefined),
+            jumpbox: iapEnabled ? undefined : jumpboxConfig,
+            iapTunnel: iapEnabled ? { project: iapProject, zone: iapZone, instance: iapInstance } : undefined,
         });
     };
 
@@ -789,38 +925,153 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                             type="checkbox"
                                             checked={isJumpbox}
                                             onChange={e => setIsJumpbox(e.target.checked)}
-                                            disabled={protocol !== 'ssh'}
+                                            disabled={protocol !== 'ssh' || iapEnabled}
                                         />
                                         Use as Jumpbox
                                     </label>
                                 </div>
                             )}
 
+                            {protocol === 'ssh' && (
+                                <div className="form-group form-group-checkbox">
+                                    <label>
+                                        <input
+                                            type="checkbox"
+                                            checked={iapEnabled}
+                                            onChange={e => {
+                                                setIapEnabled(e.target.checked);
+                                                if (e.target.checked) {
+                                                    setIsJumpbox(false);
+                                                    setJumpboxId('');
+                                                }
+                                            }}
+                                        />
+                                        Connect via Google Cloud IAP
+                                    </label>
+                                </div>
+                            )}
+
+                            {/* IAP tunnel fields */}
+                            {protocol === 'ssh' && iapEnabled && (
+                                <>
+                                    {/* Auth status */}
+                                    <div className="form-group">
+                                        {iapCheckingGcloud ? (
+                                            <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--text-secondary)' }}>
+                                                Checking gcloud SDK...
+                                            </span>
+                                        ) : iapCheckingAuth ? (
+                                            <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--text-secondary)' }}>
+                                                Checking authentication...
+                                            </span>
+                                        ) : iapGcloudStatus && !iapGcloudStatus.available ? (
+                                            <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--color-danger)' }}>
+                                                gcloud SDK not found.{' '}
+                                                <a
+                                                    href="#"
+                                                    onClick={(e) => { e.preventDefault(); electronService.openExternal('https://cloud.google.com/sdk/docs/install'); }}
+                                                    style={{ color: 'var(--accent-color)' }}
+                                                >
+                                                    Install
+                                                </a>
+                                            </span>
+                                        ) : iapAuthStatus && !iapAuthStatus.authenticated ? (
+                                            <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--color-warning)' }}>
+                                                Not authenticated. Run <code>gcloud auth login</code> first.
+                                            </span>
+                                        ) : iapAuthStatus?.authenticated ? (
+                                            <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--success-color)' }}>
+                                                Authenticated as {iapAuthStatus.account}
+                                            </span>
+                                        ) : null}
+                                    </div>
+                                    <div className="form-group">
+                                        <label>GCP Project{iapLoadingProjects && <span style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}> (loading...)</span>}</label>
+                                        {iapProjects.length > 0 ? (
+                                            <select value={iapProject} onChange={e => setIapProject(e.target.value)} required>
+                                                <option value="">Select a project</option>
+                                                {iapProjects.map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name !== p.id ? `${p.name} (${p.id})` : p.id}</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <input
+                                                type="text"
+                                                value={iapProject}
+                                                onChange={e => setIapProject(e.target.value)}
+                                                placeholder="my-project-id"
+                                                required
+                                            />
+                                        )}
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Zone{iapLoadingZones && <span style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}> (loading...)</span>}</label>
+                                        {iapZones.length > 0 ? (
+                                            <select value={iapZone} onChange={e => setIapZone(e.target.value)} required>
+                                                <option value="">Select a zone</option>
+                                                {iapZones.map(z => (
+                                                    <option key={z} value={z}>{z}</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <input
+                                                type="text"
+                                                value={iapZone}
+                                                onChange={e => setIapZone(e.target.value)}
+                                                placeholder="us-central1-a"
+                                                required
+                                            />
+                                        )}
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Instance{iapLoadingInstances && <span style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}> (loading...)</span>}</label>
+                                        {iapInstances.length > 0 ? (
+                                            <select value={iapInstance} onChange={e => setIapInstance(e.target.value)} required>
+                                                <option value="">Select an instance</option>
+                                                {iapInstances.map(i => (
+                                                    <option key={i.name} value={i.name}>{`${i.name} (${i.status})`}</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <input
+                                                type="text"
+                                                value={iapInstance}
+                                                onChange={e => setIapInstance(e.target.value)}
+                                                placeholder="my-instance"
+                                                required
+                                            />
+                                        )}
+                                    </div>
+                                </>
+                            )}
+
                             {/* SSH/Telnet fields */}
                             {(protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell' && protocol !== 'git-bash' && protocol !== 'log-viewer') && (
                                 <>
-                                    <div className="form-row">
-                                        <div className="form-group" style={{ flex: 3 }}>
-                                            <label>Host/IP</label>
-                                            <input
-                                                type="text"
-                                                value={host}
-                                                onChange={e => setHost(e.target.value)}
-                                                placeholder="example.com"
-                                                required
-                                                autoFocus
-                                            />
+                                    {!iapEnabled && (
+                                        <div className="form-row">
+                                            <div className="form-group" style={{ flex: 3 }}>
+                                                <label>Host/IP</label>
+                                                <input
+                                                    type="text"
+                                                    value={host}
+                                                    onChange={e => setHost(e.target.value)}
+                                                    placeholder="example.com"
+                                                    required
+                                                    autoFocus
+                                                />
+                                            </div>
+                                            <div className="form-group" style={{ flex: 1 }}>
+                                                <label>Port</label>
+                                                <input
+                                                    type="number"
+                                                    value={port}
+                                                    onChange={e => setPort(e.target.value)}
+                                                    required
+                                                />
+                                            </div>
                                         </div>
-                                        <div className="form-group" style={{ flex: 1 }}>
-                                            <label>Port</label>
-                                            <input
-                                                type="number"
-                                                value={port}
-                                                onChange={e => setPort(e.target.value)}
-                                                required
-                                            />
-                                        </div>
-                                    </div>
+                                    )}
                                     {(protocol === 'ssh' || protocol === 'telnet') && (
                                         <div className="form-group">
                                             <label>Username</label>
@@ -872,7 +1123,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                             </div>
                                         </div>
                                     )}
-                                    {(protocol === 'ssh' || protocol === 'telnet') && jumpboxHosts.length > 0 && (
+                                    {(protocol === 'ssh' || protocol === 'telnet') && !iapEnabled && jumpboxHosts.length > 0 && (
                                         <div className="form-group">
                                             <label>Jumpbox</label>
                                             <select

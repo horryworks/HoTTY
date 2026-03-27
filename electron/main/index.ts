@@ -20,7 +20,11 @@ import { PingMonitorService, isValidPingTarget } from './services/PingMonitorSer
 import { logger } from './services/Logger';
 import { friendlyErrorMessage } from './services/errorMessages';
 import { encryptString, decryptString, verifyWindowsUser, encodePowerShellScript } from './services/dpapi';
-import { execFile } from 'child_process';
+import { execFile, ChildProcess } from 'child_process';
+import {
+  checkGcloudAvailable, checkGcloudAuth, listProjects, listZones, listInstances,
+  startIapTunnel, stopIapTunnel, validateIapConfig,
+} from './services/iapTunnel';
 import { promisify } from 'util';
 import { pathToFileURL } from 'url';
 const execFileAsync = promisify(execFile);
@@ -302,6 +306,7 @@ interface Session {
   service: ISessionService;
   host?: string;
   protocol?: string;
+  iapProcess?: ChildProcess;
 }
 
 const sessions = new Map<string, Session>();
@@ -394,6 +399,57 @@ ipcMain.on('connect-session', async (event, { sessionId, config }) => {
   // WAIT: I can't easily modify SshService constructor calls without modifying SshService first.
   // Strategy: I will modify SshService and TelnetService to accept `sessionId` in constructor 
   // and send `{ sessionId, data }` in their IPC events.
+
+  // Handle IAP tunnel if configured
+  if (config.iapTunnel && protocol === 'ssh') {
+    const iap = config.iapTunnel;
+    try {
+      validateIapConfig(iap);
+      logger.info('session', 'Starting IAP tunnel', {
+        sessionId, project: iap.project, zone: iap.zone, instance: iap.instance,
+      });
+
+      const tunnelResult = await startIapTunnel({
+        project: iap.project,
+        zone: iap.zone,
+        instance: iap.instance,
+        port: iap.port ?? 22,
+      });
+
+      // Track the gcloud process for cleanup
+      const session = sessions.get(sessionId);
+      if (session) {
+        session.iapProcess = tunnelResult.process;
+      }
+
+      // If gcloud process dies unexpectedly, notify the renderer
+      tunnelResult.process.on('exit', (code) => {
+        const s = sessions.get(sessionId);
+        if (s && !eventWin.isDestroyed()) {
+          logger.warn('iap', 'IAP tunnel process exited unexpectedly', { sessionId, code });
+          eventWin.webContents.send('session-status', { sessionId, status: 'disconnected' });
+          s.service.disconnect();
+          logManager.stopLogging(sessionId);
+          sessions.delete(sessionId);
+        }
+      });
+
+      // Override connection target to the local tunnel endpoint
+      config.host = '127.0.0.1';
+      config.port = tunnelResult.localPort;
+      config.skipHostVerify = true;
+
+      logger.info('session', 'IAP tunnel ready, connecting SSH via localhost', {
+        sessionId, localPort: tunnelResult.localPort,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error('session', 'IAP tunnel failed', { sessionId, error: msg });
+      eventWin.webContents.send('session-error', { sessionId, error: `IAP tunnel failed: ${msg}` });
+      sessions.delete(sessionId);
+      return;
+    }
+  }
 
   // Handle jumpbox tunnel if configured
   if (config.jumpbox && (protocol === 'ssh' || protocol === 'telnet')) {
@@ -516,6 +572,10 @@ ipcMain.on('disconnect-session', (event, sessionId) => {
   const session = sessions.get(sessionId);
   if (session) {
     logger.info('session', 'Disconnect', { sessionId, protocol: session.protocol });
+    if (session.iapProcess) {
+      stopIapTunnel(session.iapProcess);
+      session.iapProcess = undefined;
+    }
     session.service.disconnect();
     logManager.stopLogging(sessionId);
     sessions.delete(sessionId);
@@ -527,6 +587,9 @@ ipcMain.on('disconnect-session', (event, sessionId) => {
 ipcMain.on('app-quit', () => {
   logger.info('app', 'App quit requested');
   sessions.forEach(s => {
+    if (s.iapProcess) {
+      stopIapTunnel(s.iapProcess);
+    }
     s.service.disconnect();
     logManager.stopLogging(s.id);
   });
@@ -676,10 +739,25 @@ ipcMain.handle('text-editor-write-file', async (_event, filePath: string, conten
 // Text Editor: approve a dropped file path (validates it exists and is a regular file)
 ipcMain.handle('text-editor-approve-dropped-file', async (_event, filePath: string) => {
   try {
+    if (typeof filePath !== 'string' || filePath.trim() === '') {
+      throw new Error('Invalid file path');
+    }
     const resolvedPath = resolve(filePath);
     const stat = fs.statSync(resolvedPath);
     if (!stat.isFile()) {
       throw new Error('Path is not a regular file');
+    }
+    // Block files larger than 50MB to prevent resource exhaustion
+    if (stat.size > 50 * 1024 * 1024) {
+      throw new Error('File is too large (max 50MB)');
+    }
+    // Block system-sensitive directories on Windows
+    if (process.platform === 'win32') {
+      const lower = resolvedPath.toLowerCase();
+      const blocked = ['\\windows\\system32', '\\windows\\syswow64', '\\programdata\\ssh'];
+      if (blocked.some(dir => lower.includes(dir))) {
+        throw new Error('Access to system directories is not allowed');
+      }
     }
     approvedEditorPaths.add(resolvedPath);
     return true;
@@ -696,6 +774,11 @@ ipcMain.handle('file-explorer-list-directory', async (_event, dirPath: string) =
       return { error: 'Invalid directory path' };
     }
     const resolvedPath = resolve(dirPath);
+    // Validate the resolved path is a directory (not a file) before listing
+    const dirStat = await fs.promises.stat(resolvedPath);
+    if (!dirStat.isDirectory()) {
+      return { error: 'Path is not a directory' };
+    }
     const entries = await fs.promises.readdir(resolvedPath, { withFileTypes: true });
     const result: { name: string; isDirectory: boolean; size: number; mtime: number; isHidden: boolean }[] = [];
     for (const entry of entries) {
@@ -1038,6 +1121,30 @@ ipcMain.handle('get-ssh-algorithms', async () => {
 
 ipcMain.handle('save-ssh-algorithms', async (_, algorithms) => {
   try {
+    // Validate schema: must be an object with only known category keys
+    const VALID_CATEGORIES = ['kex', 'cipher', 'serverHostKey', 'hmac'];
+    if (typeof algorithms !== 'object' || algorithms === null || Array.isArray(algorithms)) {
+      throw new Error('Invalid algorithms format: expected an object');
+    }
+    const keys = Object.keys(algorithms);
+    for (const key of keys) {
+      if (!VALID_CATEGORIES.includes(key)) {
+        throw new Error(`Invalid algorithm category: ${key}`);
+      }
+      const entries = algorithms[key];
+      if (!Array.isArray(entries) || entries.length > 100) {
+        throw new Error(`Invalid entries for category "${key}": expected an array with at most 100 items`);
+      }
+      for (const entry of entries) {
+        if (typeof entry !== 'object' || entry === null ||
+            typeof entry.name !== 'string' || typeof entry.enabled !== 'boolean') {
+          throw new Error(`Invalid entry in category "${key}": expected { name: string, enabled: boolean }`);
+        }
+        if (entry.name.length > 100) {
+          throw new Error(`Algorithm name too long in category "${key}"`);
+        }
+      }
+    }
     const algorithmsPath = getSshAlgorithmsPath();
     fs.writeFileSync(algorithmsPath, JSON.stringify(algorithms, null, 2), 'utf8');
     return true;
@@ -1045,6 +1152,28 @@ ipcMain.handle('save-ssh-algorithms', async (_, algorithms) => {
     logger.error('app', 'Failed to save SSH algorithms', { error: String(err) });
     return false;
   }
+});
+
+// ── GCE IAP Tunnel IPC handlers ──
+
+ipcMain.handle('gce-iap-check-gcloud', async () => {
+  return await checkGcloudAvailable();
+});
+
+ipcMain.handle('gce-iap-check-auth', async () => {
+  return await checkGcloudAuth();
+});
+
+ipcMain.handle('gce-iap-list-projects', async () => {
+  return await listProjects();
+});
+
+ipcMain.handle('gce-iap-list-zones', async (_, project: string) => {
+  return await listZones(project);
+});
+
+ipcMain.handle('gce-iap-list-instances', async (_, project: string, zone: string) => {
+  return await listInstances(project, zone);
 });
 
 const THEME_FILE_MAX_SIZE = 100 * 1024; // 100 KB

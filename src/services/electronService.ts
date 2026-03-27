@@ -41,6 +41,13 @@ export const onAiChatResponse = (callback: (data: { sessionId: string; type: str
 export const showContextMenu = (selection: string, commands?: { id: string; label: string }[], includePaste?: boolean) => api().showContextMenu(selection, commands, includePaste);
 export const onAskGemini = (callback: (selection: string, type: string) => void) => api().onAskGemini(callback);
 export const onTerminalContextPaste = (callback: () => void) => api().onTerminalContextPaste(callback);
+// GCE IAP Tunnel
+export const gceIapCheckGcloud = () => api().gceIapCheckGcloud();
+export const gceIapCheckAuth = () => api().gceIapCheckAuth();
+export const gceIapListProjects = () => api().gceIapListProjects();
+export const gceIapListZones = (project: string) => api().gceIapListZones(project);
+export const gceIapListInstances = (project: string, zone: string) => api().gceIapListInstances(project, zone);
+
 export const getSshAlgorithms = () => api().getSshAlgorithms();
 export const saveSshAlgorithms = (algorithms: Record<string, { name: string; enabled: boolean }[]>) => api().saveSshAlgorithms(algorithms);
 export const getThemes = () => api().getThemes();

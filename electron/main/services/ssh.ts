@@ -151,6 +151,11 @@ export class SshService implements ISessionService {
             tryKeyboard: true,
             algorithms: this.getAlgorithms() as ConnectConfig['algorithms'],
             hostVerifier: (hostKey: Buffer, verify: (result: boolean) => void) => {
+                // Skip host key verification for IAP tunnel connections (localhost with dynamic port)
+                if (config.skipHostVerify) {
+                    verify(true);
+                    return;
+                }
                 try {
                     const keyTypeLen = hostKey.readUInt32BE(0);
                     const keyType = hostKey.slice(4, 4 + keyTypeLen).toString('utf8');

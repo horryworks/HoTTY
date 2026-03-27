@@ -65,6 +65,22 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [formUsername, setFormUsername] = useState('');
     const [formPassword, setFormPassword] = useState('');
     const [formIsJumpbox, setFormIsJumpbox] = useState(false);
+    const [formIapEnabled, setFormIapEnabled] = useState(false);
+    const [formIapProject, setFormIapProject] = useState('');
+    const [formIapZone, setFormIapZone] = useState('');
+    const [formIapInstance, setFormIapInstance] = useState('');
+    // IAP autocomplete state
+    const [iapGcloudStatus, setIapGcloudStatus] = useState<{ available: boolean; version?: string } | null>(null);
+    const [iapAuthStatus, setIapAuthStatus] = useState<{ authenticated: boolean; account?: string } | null>(null);
+    const [iapCheckingGcloud, setIapCheckingGcloud] = useState(false);
+    const [iapCheckingAuth, setIapCheckingAuth] = useState(false);
+    const [iapProjects, setIapProjects] = useState<{ id: string; name: string }[]>([]);
+    const [iapZones, setIapZones] = useState<string[]>([]);
+    const [iapInstances, setIapInstances] = useState<{ name: string; status: string }[]>([]);
+    const [iapLoadingProjects, setIapLoadingProjects] = useState(false);
+    const [iapLoadingZones, setIapLoadingZones] = useState(false);
+    const [iapLoadingInstances, setIapLoadingInstances] = useState(false);
+    const iapLoadingFromEditRef = useRef(false);
     const [importFilePath, setImportFilePath] = useState<string | null>(null);
     const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
     const [dropTarget, setDropTarget] = useState<{ nodeId: string; position: 'before' | 'after' | 'inside' } | null>(null);
@@ -104,6 +120,75 @@ export const HostTree: React.FC<HostTreeProps> = ({
             focusModal();
         }
     }, [editModalOpen, focusModal]);
+
+    // IAP: check gcloud and auth when IAP is enabled in the modal
+    /* eslint-disable react-hooks/set-state-in-effect */
+    useEffect(() => {
+        if (!formIapEnabled) {
+            setIapGcloudStatus(null);
+            setIapAuthStatus(null);
+            setIapProjects([]);
+            setIapZones([]);
+            setIapInstances([]);
+            return;
+        }
+        let cancelled = false;
+        setIapCheckingGcloud(true);
+        setIapCheckingAuth(false);
+        (async () => {
+            const gcloud = await electronService.gceIapCheckGcloud();
+            if (cancelled) return;
+            setIapGcloudStatus(gcloud);
+            setIapCheckingGcloud(false);
+            if (gcloud.available) {
+                setIapCheckingAuth(true);
+                const auth = await electronService.gceIapCheckAuth();
+                if (cancelled) return;
+                setIapAuthStatus(auth);
+                setIapCheckingAuth(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [formIapEnabled]);
+
+    // IAP: auto-load projects when auth succeeds
+    useEffect(() => {
+        if (iapAuthStatus?.authenticated && iapProjects.length === 0 && !iapLoadingProjects) {
+            setIapLoadingProjects(true);
+            electronService.gceIapListProjects().then(projects => {
+                setIapProjects(projects);
+                setIapLoadingProjects(false);
+            });
+        }
+    }, [iapAuthStatus?.authenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // IAP: reset dependent fields and auto-load zones when project changes
+    useEffect(() => {
+        if (iapLoadingFromEditRef.current) return;
+        setIapZones([]);
+        setIapInstances([]);
+        if (formIapProject) {
+            setIapLoadingZones(true);
+            electronService.gceIapListZones(formIapProject).then(zones => {
+                setIapZones(zones);
+                setIapLoadingZones(false);
+            });
+        }
+    }, [formIapProject]);
+
+    // IAP: reset instances and auto-load when zone changes
+    useEffect(() => {
+        if (iapLoadingFromEditRef.current) return;
+        setIapInstances([]);
+        if (formIapZone && formIapProject) {
+            setIapLoadingInstances(true);
+            electronService.gceIapListInstances(formIapProject, formIapZone).then(instances => {
+                setIapInstances(instances);
+                setIapLoadingInstances(false);
+            });
+        }
+    }, [formIapZone]); // eslint-disable-line react-hooks/exhaustive-deps
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     const toggle = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -173,6 +258,10 @@ export const HostTree: React.FC<HostTreeProps> = ({
         setFormUsername('');
         setFormPassword('');
         setFormIsJumpbox(false);
+        setFormIapEnabled(false);
+        setFormIapProject('');
+        setFormIapZone('');
+        setFormIapInstance('');
         openEditModal({ mode: 'host', parentId });
         setContextMenu(null);
     }, [openEditModal]);
@@ -279,12 +368,13 @@ export const HostTree: React.FC<HostTreeProps> = ({
             } else {
                 const entry: HostEntry = {
                     protocol: formProtocol,
-                    host: formHost,
+                    host: formIapEnabled ? formIapInstance : formHost,
                     port: parseInt(formPort),
                     username: formUsername || undefined,
                     password: formPassword || undefined,
                     isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,
-                    jumpboxId: existingNode.entry?.jumpboxId,
+                    jumpboxId: formIapEnabled ? undefined : existingNode.entry?.jumpboxId,
+                    iapTunnel: formIapEnabled ? { project: formIapProject, zone: formIapZone, instance: formIapInstance } : undefined,
                 };
                 onEditNode(existingNode.id, { name: formName, entry });
             }
@@ -294,11 +384,12 @@ export const HostTree: React.FC<HostTreeProps> = ({
             } else {
                 const entry: HostEntry = {
                     protocol: formProtocol,
-                    host: formHost,
+                    host: formIapEnabled ? formIapInstance : formHost,
                     port: parseInt(formPort),
                     username: formUsername || undefined,
                     password: formPassword || undefined,
                     isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,
+                    iapTunnel: formIapEnabled ? { project: formIapProject, zone: formIapZone, instance: formIapInstance } : undefined,
                 };
                 onAddHost(parentId, formName, entry);
             }
@@ -491,11 +582,17 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                 {node.name}
                                 {node.type === 'host' && node.entry && (
                                     <span className="tree-meta">
-                                        {' '}{node.entry.host}
-                                        {node.entry.jumpboxId && (() => {
-                                            const jb = flattenHosts(tree).find(n => n.id === node.entry!.jumpboxId);
-                                            return jb ? <span className="tree-meta-via"> via {jb.name}</span> : null;
-                                        })()}
+                                        {node.entry.iapTunnel ? (
+                                            <>{' '}{node.entry.iapTunnel.project}:{node.entry.iapTunnel.instance} <span className="tree-meta-via">(IAP)</span></>
+                                        ) : (
+                                            <>
+                                                {' '}{node.entry.host}
+                                                {node.entry.jumpboxId && (() => {
+                                                    const jb = flattenHosts(tree).find(n => n.id === node.entry!.jumpboxId);
+                                                    return jb ? <span className="tree-meta-via"> via {jb.name}</span> : null;
+                                                })()}
+                                            </>
+                                        )}
                                     </span>
                                 )}
                             </>
@@ -781,32 +878,141 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                             type="checkbox"
                                             checked={formIsJumpbox}
                                             onChange={e => setFormIsJumpbox(e.target.checked)}
-                                            disabled={formProtocol !== 'ssh'}
+                                            disabled={formProtocol !== 'ssh' || formIapEnabled}
                                         />
                                         Use as Jumpbox
                                     </label>
                                 </div>
-                                <div className="modal-form-row">
-                                    <div className="modal-form-group flex-3">
-                                        <label>Host/IP</label>
-                                        <input
-                                            type="text"
-                                            value={formHost}
-                                            onChange={e => setFormHost(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
-                                            placeholder="192.168.1.1"
-                                        />
+                                {formProtocol === 'ssh' && (
+                                    <div className="modal-form-group modal-form-group-checkbox">
+                                        <label>
+                                            <input
+                                                type="checkbox"
+                                                checked={formIapEnabled}
+                                                onChange={e => {
+                                                    setFormIapEnabled(e.target.checked);
+                                                    if (e.target.checked) setFormIsJumpbox(false);
+                                                }}
+                                            />
+                                            Connect via Google Cloud IAP
+                                        </label>
                                     </div>
-                                    <div className="modal-form-group flex-1">
-                                        <label>Port</label>
-                                        <input
-                                            type="number"
-                                            value={formPort}
-                                            onChange={e => setFormPort(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
-                                        />
+                                )}
+                                {formProtocol === 'ssh' && formIapEnabled && (
+                                    <>
+                                        {/* Auth status */}
+                                        <div className="modal-form-group">
+                                            {iapCheckingGcloud ? (
+                                                <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--text-secondary)' }}>
+                                                    Checking gcloud SDK...
+                                                </span>
+                                            ) : iapCheckingAuth ? (
+                                                <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--text-secondary)' }}>
+                                                    Checking authentication...
+                                                </span>
+                                            ) : iapGcloudStatus && !iapGcloudStatus.available ? (
+                                                <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--color-danger)' }}>
+                                                    gcloud SDK not found.{' '}
+                                                    <a
+                                                        href="#"
+                                                        onClick={(e) => { e.preventDefault(); electronService.openExternal('https://cloud.google.com/sdk/docs/install'); }}
+                                                        style={{ color: 'var(--accent-color)' }}
+                                                    >
+                                                        Install
+                                                    </a>
+                                                </span>
+                                            ) : iapAuthStatus && !iapAuthStatus.authenticated ? (
+                                                <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--color-warning)' }}>
+                                                    Not authenticated. Run <code>gcloud auth login</code> first.
+                                                </span>
+                                            ) : iapAuthStatus?.authenticated ? (
+                                                <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--success-color)' }}>
+                                                    Authenticated as {iapAuthStatus.account}
+                                                </span>
+                                            ) : null}
+                                        </div>
+                                        <div className="modal-form-group">
+                                            <label>GCP Project{iapLoadingProjects && <span style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}> (loading...)</span>}</label>
+                                            {iapProjects.length > 0 ? (
+                                                <select value={formIapProject} onChange={e => setFormIapProject(e.target.value)}>
+                                                    <option value="">Select a project</option>
+                                                    {iapProjects.map(p => (
+                                                        <option key={p.id} value={p.id}>{p.name !== p.id ? `${p.name} (${p.id})` : p.id}</option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <input
+                                                    type="text"
+                                                    value={formIapProject}
+                                                    onChange={e => setFormIapProject(e.target.value)}
+                                                    onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
+                                                    placeholder="my-project-id"
+                                                />
+                                            )}
+                                        </div>
+                                        <div className="modal-form-group">
+                                            <label>Zone{iapLoadingZones && <span style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}> (loading...)</span>}</label>
+                                            {iapZones.length > 0 ? (
+                                                <select value={formIapZone} onChange={e => setFormIapZone(e.target.value)}>
+                                                    <option value="">Select a zone</option>
+                                                    {iapZones.map(z => (
+                                                        <option key={z} value={z}>{z}</option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <input
+                                                    type="text"
+                                                    value={formIapZone}
+                                                    onChange={e => setFormIapZone(e.target.value)}
+                                                    onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
+                                                    placeholder="us-central1-a"
+                                                />
+                                            )}
+                                        </div>
+                                        <div className="modal-form-group">
+                                            <label>Instance{iapLoadingInstances && <span style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}> (loading...)</span>}</label>
+                                            {iapInstances.length > 0 ? (
+                                                <select value={formIapInstance} onChange={e => setFormIapInstance(e.target.value)}>
+                                                    <option value="">Select an instance</option>
+                                                    {iapInstances.map(i => (
+                                                        <option key={i.name} value={i.name}>{`${i.name} (${i.status})`}</option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <input
+                                                    type="text"
+                                                    value={formIapInstance}
+                                                    onChange={e => setFormIapInstance(e.target.value)}
+                                                    onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
+                                                    placeholder="my-instance"
+                                                />
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+                                {!formIapEnabled && (
+                                    <div className="modal-form-row">
+                                        <div className="modal-form-group flex-3">
+                                            <label>Host/IP</label>
+                                            <input
+                                                type="text"
+                                                value={formHost}
+                                                onChange={e => setFormHost(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
+                                                placeholder="192.168.1.1"
+                                            />
+                                        </div>
+                                        <div className="modal-form-group flex-1">
+                                            <label>Port</label>
+                                            <input
+                                                type="number"
+                                                value={formPort}
+                                                onChange={e => setFormPort(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
+                                            />
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                                 {(formProtocol === 'ssh' || formProtocol === 'telnet') && (
                                     <>
                                         <div className="modal-form-group">
