@@ -29,6 +29,7 @@ vi.mock('./HostTree', () => ({
 vi.mock('../../services/electronService', () => ({
     listSerialPorts: vi.fn(() => Promise.resolve([])),
     listWslDistributions: vi.fn(() => Promise.resolve([])),
+    detectGitBash: vi.fn(() => Promise.resolve({ available: true, path: 'C:\\Program Files\\Git\\bin\\bash.exe' })),
     getSshAlgorithms: vi.fn(() => Promise.resolve({})),
     logDebug: vi.fn(),
     focusWindow: vi.fn(),
@@ -173,6 +174,32 @@ describe('ConnectionDialog', () => {
         render(<ConnectionDialog {...baseProps} isConnecting={false} connectionError="Connection refused" />);
         expect(screen.getByText('Connection refused')).toBeInTheDocument();
         expect(screen.getByText('Connect')).toBeInTheDocument();
+    });
+
+    it('shows Git Bash option in protocol dropdown', () => {
+        render(<ConnectionDialog {...baseProps} />);
+        const protocolSelect = screen.getByDisplayValue('SSH');
+        fireEvent.change(protocolSelect, { target: { value: 'git-bash' } });
+        expect(protocolSelect).toHaveValue('git-bash');
+    });
+
+    it('hides SSH fields when Git Bash is selected', () => {
+        render(<ConnectionDialog {...baseProps} />);
+        const protocolSelect = screen.getByDisplayValue('SSH');
+        fireEvent.change(protocolSelect, { target: { value: 'git-bash' } });
+        expect(screen.queryByText('Username')).not.toBeInTheDocument();
+        expect(screen.queryByText('Password')).not.toBeInTheDocument();
+    });
+
+    it('calls onConnect with git-bash protocol when submitted', async () => {
+        const onConnect = vi.fn();
+        render(<ConnectionDialog {...baseProps} onConnect={onConnect} />);
+        const protocolSelect = screen.getByDisplayValue('SSH');
+        fireEvent.change(protocolSelect, { target: { value: 'git-bash' } });
+        fireEvent.submit(screen.getByRole('button', { name: 'Connect' }).closest('form')!);
+        await waitFor(() => {
+            expect(onConnect).toHaveBeenCalledWith({ protocol: 'git-bash', shellType: 'git-bash' });
+        });
     });
 
     it('re-centers dialog when window is resized', () => {

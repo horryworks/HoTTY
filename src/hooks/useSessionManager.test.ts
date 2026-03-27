@@ -112,6 +112,13 @@ describe('useSessionManager — createSession', () => {
         expect(result.current.sessions[0].type).toBe('wsl');
     });
 
+    it('creates a Git Bash session with title "Git Bash" and type "local"', () => {
+        const { result } = renderHook(() => useSessionManager(makeOptions()));
+        act(() => { result.current.createSession({ protocol: 'git-bash' }); });
+        expect(result.current.sessions[0].title).toBe('Git Bash');
+        expect(result.current.sessions[0].type).toBe('local');
+    });
+
     it('adds the new session to sessions and tabOrder', () => {
         const { result } = renderHook(() => useSessionManager(makeOptions()));
         act(() => { result.current.createSession({ protocol: 'ssh', host: 'box', port: 22 }); });

@@ -394,6 +394,9 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         } else if (config.protocol === 'powershell') {
             title = 'PowerShell';
             type = 'local';
+        } else if (config.protocol === 'git-bash') {
+            title = 'Git Bash';
+            type = 'local';
         } else {
             title = `SSH ${config.host}`;
             if (config.jumpbox) title += ` via ${(config.jumpbox as Record<string, unknown>).host}`;

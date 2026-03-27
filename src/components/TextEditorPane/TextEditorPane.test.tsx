@@ -480,7 +480,7 @@ describe('TextEditorPane', () => {
         expect(container.querySelector('.text-editor-return-overlay')).toBeTruthy();
     });
 
-    it('double-click selects entire line without newline', () => {
+    it('triple-click selects entire line without newline', () => {
         render(
             <TextEditorPane
                 sessionId="test-1"
@@ -507,13 +507,13 @@ describe('TextEditorPane', () => {
         const setSelectionRange = vi.fn();
         textarea.setSelectionRange = setSelectionRange;
 
-        fireEvent.doubleClick(textarea);
+        fireEvent.click(textarea, { detail: 3 });
 
         // Should select 'second line' (index 11 to 22), not including '\n'
         expect(setSelectionRange).toHaveBeenCalledWith(11, 22);
     });
 
-    it('double-click selects last line (no trailing newline)', () => {
+    it('triple-click selects last line (no trailing newline)', () => {
         render(
             <TextEditorPane
                 sessionId="test-1"
@@ -539,7 +539,7 @@ describe('TextEditorPane', () => {
         const setSelectionRange = vi.fn();
         textarea.setSelectionRange = setSelectionRange;
 
-        fireEvent.doubleClick(textarea);
+        fireEvent.click(textarea, { detail: 3 });
 
         // Should select 'bbb' (index 4 to 7)
         expect(setSelectionRange).toHaveBeenCalledWith(4, 7);

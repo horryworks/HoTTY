@@ -196,17 +196,19 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
         setCursorCol(lines[lines.length - 1].length + 1);
     }, []);
 
-    // Double-click: select the entire line without the newline character
-    const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
-        e.preventDefault();
-        const ta = textareaRef.current;
-        if (!ta) return;
-        const pos = ta.selectionStart;
-        const content = ta.value;
-        const lineStart = content.lastIndexOf('\n', pos - 1) + 1;
-        let lineEnd = content.indexOf('\n', pos);
-        if (lineEnd === -1) lineEnd = content.length;
-        ta.setSelectionRange(lineStart, lineEnd);
+    // Click handler: triple-click selects the entire line without the newline character
+    const handleClick = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
+        if (e.detail === 3) {
+            e.preventDefault();
+            const ta = textareaRef.current;
+            if (!ta) return;
+            const pos = ta.selectionStart;
+            const content = ta.value;
+            const lineStart = content.lastIndexOf('\n', pos - 1) + 1;
+            let lineEnd = content.indexOf('\n', pos);
+            if (lineEnd === -1) lineEnd = content.length;
+            ta.setSelectionRange(lineStart, lineEnd);
+        }
         updateCursorPosition();
     }, [updateCursorPosition]);
 
@@ -511,24 +513,46 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
         }
     }, [showGoto]);
 
-    // Load file content when initialState has a filePath but empty content (opened from file association)
+    // Load file content for a tab that has a filePath but empty content
+    const loadTabContent = useCallback((tab: TextEditorTab) => {
+        if (tab.filePath && !tab.content) {
+            electronService.textEditorReadFile(tab.filePath, tab.encoding || 'utf-8').then((result: { content: string; lineEnding: string }) => {
+                updateTab(tab.id, {
+                    content: result.content,
+                    savedContent: result.content,
+                    lineEnding: result.lineEnding as 'LF' | 'CRLF',
+                });
+            }).catch((err: unknown) => {
+                console.error('Failed to load file:', err);
+            });
+        }
+    }, [updateTab]);
+
+    // Load file content on mount (opened from file association)
     useEffect(() => {
         if (!initialState?.tabs) return;
-        initialState.tabs.forEach(tab => {
-            if (tab.filePath && !tab.content) {
-                electronService.textEditorReadFile(tab.filePath, tab.encoding || 'utf-8').then((result: { content: string; lineEnding: string }) => {
-                    updateTab(tab.id, {
-                        content: result.content,
-                        savedContent: result.content,
-                        lineEnding: result.lineEnding as 'LF' | 'CRLF',
-                    });
-                }).catch((err: unknown) => {
-                    console.error('Failed to load file:', err);
-                });
-            }
-        });
+        initialState.tabs.forEach(loadTabContent);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Sync externally-added tabs (e.g., file opened via "Send to" while editor is already open)
+    useEffect(() => {
+        if (!initialState?.tabs) return;
+        const tabsToLoad: TextEditorTab[] = [];
+        setTabs(prevTabs => {
+            const localTabIds = new Set(prevTabs.map(t => t.id));
+            const newTabs = initialState.tabs.filter(t => !localTabIds.has(t.id));
+            if (newTabs.length === 0) return prevTabs;
+            tabsToLoad.push(...newTabs);
+            return [...prevTabs, ...newTabs];
+        });
+        if (tabsToLoad.length > 0) {
+            tabsToLoad.forEach(loadTabContent);
+            if (initialState.activeTabId && tabsToLoad.some(t => t.id === initialState.activeTabId)) {
+                setActiveTabId(initialState.activeTabId);
+            }
+        }
+    }, [initialState, loadTabContent]);
 
     // Cleanup measurer div on unmount
     useEffect(() => {
@@ -997,8 +1021,7 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
                         value={activeTab.content}
                         onChange={handleContentChange}
                         onScroll={handleTextareaScroll}
-                        onClick={updateCursorPosition}
-                        onDoubleClick={handleDoubleClick}
+                        onClick={handleClick}
                         onKeyUp={updateCursorPosition}
                         spellCheck={false}
                         wrap={lineWrapEnabled ? 'soft' : 'off'}

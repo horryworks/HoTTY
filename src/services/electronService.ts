@@ -57,6 +57,7 @@ export const listLogFiles = (folderPath: string) => api().listLogFiles(folderPat
 export const readLogFile = (filePath: string) => api().readLogFile(filePath);
 export const openDebugLogFolder = () => api().openDebugLogFolder();
 export const listWslDistributions = () => api().listWslDistributions();
+export const detectGitBash = () => api().detectGitBash();
 export const exportHTree = (data: unknown[], password: string) => api().exportHTree(data, password);
 export const selectImportFile = () => api().selectImportFile();
 export const decryptImportFile = (password: string) => api().decryptImportFile(password);

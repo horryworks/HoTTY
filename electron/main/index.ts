@@ -5,7 +5,7 @@ import { SshService } from './services/ssh';
 import { TelnetService } from './services/telnet';
 import { SerialService } from './services/serial';
 import { WslService } from './services/wsl';
-import { LocalService } from './services/local';
+import { LocalService, detectGitBash } from './services/local';
 import { createJumpboxTunnel } from './services/jumpbox';
 import { SerialPort } from 'serialport';
 import type { ISessionService } from './services/ISessionService';
@@ -306,7 +306,7 @@ interface Session {
 
 const sessions = new Map<string, Session>();
 
-const VALID_PROTOCOLS = new Set(['ssh', 'telnet', 'serial', 'wsl', 'cmd', 'powershell', 'local']);
+const VALID_PROTOCOLS = new Set(['ssh', 'telnet', 'serial', 'wsl', 'cmd', 'powershell', 'git-bash', 'local']);
 
 ipcMain.on('connect-session', async (event, { sessionId, config }) => {
   const eventWin = BrowserWindow.fromWebContents(event.sender);
@@ -363,7 +363,7 @@ ipcMain.on('connect-session', async (event, { sessionId, config }) => {
     service = new TelnetService(eventWin, sessionId);
   } else if (protocol === 'wsl') {
     service = new WslService(eventWin, sessionId);
-  } else if (protocol === 'cmd' || protocol === 'powershell') {
+  } else if (protocol === 'cmd' || protocol === 'powershell' || protocol === 'git-bash') {
     service = new LocalService(eventWin, sessionId);
   } else {
     service = new SerialService(eventWin, sessionId);
@@ -699,6 +699,10 @@ ipcMain.handle('list-wsl-distributions', async () => {
     logger.error('app', 'Failed to list WSL distributions', { error: String(err) });
     return [];
   }
+});
+
+ipcMain.handle('detect-git-bash', () => {
+  return detectGitBash();
 });
 
 ipcMain.handle('list-system-fonts', async () => {

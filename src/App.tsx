@@ -201,14 +201,6 @@ function App() {
     return cleanup;
   }, []);
 
-  // Listen for open-file-in-editor from main process (file association / "Open with")
-  useEffect(() => {
-    const cleanup = electronService.onOpenFileInEditor((filePath) => {
-      session.createTextEditorSession(filePath);
-    });
-    return cleanup;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Global keyboard shortcut: Ctrl+N → open New Session dialog
   useEffect(() => {
@@ -312,6 +304,20 @@ function App() {
     showBottomBar,
     watchBufferLimit: settings.watchBufferLimit,
   });
+
+  // Listen for open-file-in-editor from main process (file association / "Open with")
+  // Use a ref to avoid stale closure — the IPC listener is registered once on mount,
+  // but createTextEditorSession must always see the latest sessions state.
+  const createTextEditorSessionRef = useRef(session.createTextEditorSession);
+  useEffect(() => {
+    createTextEditorSessionRef.current = session.createTextEditorSession;
+  });
+  useEffect(() => {
+    const cleanup = electronService.onOpenFileInEditor((filePath) => {
+      createTextEditorSessionRef.current(filePath);
+    });
+    return cleanup;
+  }, []);
 
   // ═══════════════════════════════════════════════
   // 9. Interactive Flow (useInteractiveFlow hook)

@@ -212,6 +212,9 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     const [wslDistros, setWslDistros] = useState<string[]>([]);
     const [selectedDistro, setSelectedDistro] = useState('');
 
+    // Git Bash detection state
+    const [gitBashAvailable, setGitBashAvailable] = useState<boolean | null>(null);
+
     // State to track original values to determine if the form is dirty
     const [originalState, setOriginalState] = useState<{
         name: string;
@@ -245,6 +248,10 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                 if (distros.length > 0) {
                     setSelectedDistro(prev => prev || distros[0]);
                 }
+            });
+        } else if (protocol === 'git-bash') {
+            electronService.detectGitBash().then((result: { available: boolean; path?: string }) => {
+                setGitBashAvailable(result.available);
             });
         }
     }, [protocol]);
@@ -579,6 +586,10 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             onConnect({ protocol, shellType: protocol });
             return;
         }
+        if (protocol === 'git-bash') {
+            onConnect({ protocol: 'git-bash', shellType: 'git-bash' });
+            return;
+        }
         if (protocol === 'log-viewer') {
             onConnect({ protocol: 'log-viewer' });
             return;
@@ -766,6 +777,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                     <option value="wsl">WSL</option>
                                     <option value="cmd">Command Prompt</option>
                                     <option value="powershell">PowerShell</option>
+                                    <option value="git-bash">Git Bash</option>
 
                                 </select>
                             </div>
@@ -785,7 +797,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             )}
 
                             {/* SSH/Telnet fields */}
-                            {(protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell' && protocol !== 'log-viewer') && (
+                            {(protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell' && protocol !== 'git-bash' && protocol !== 'log-viewer') && (
                                 <>
                                     <div className="form-row">
                                         <div className="form-group" style={{ flex: 3 }}>
@@ -898,6 +910,15 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                 </div>
                             )}
 
+                            {/* Git Bash status */}
+                            {protocol === 'git-bash' && gitBashAvailable === false && (
+                                <div className="form-group">
+                                    <div style={{ color: 'var(--color-warning)', fontSize: 'calc(var(--font-size-base) - 1px)', fontStyle: 'italic' }}>
+                                        Git Bash is not installed.
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Log Viewer info */}
                             {protocol === 'log-viewer' && (
                                 <div className="form-group">
@@ -991,7 +1012,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                 {isConnecting && !connectionError && (
                                     <span className="connection-status">Connecting...</span>
                                 )}
-                                {originalState !== null && protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell' && protocol !== 'log-viewer' && (
+                                {originalState !== null && protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell' && protocol !== 'git-bash' && protocol !== 'log-viewer' && (
                                     <button
                                         type="button"
                                         className="btn-secondary"
@@ -1002,7 +1023,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                         Save
                                     </button>
                                 )}
-                                <button type="submit" className="btn-primary" disabled={isDecrypting || isSubmitting || isConnecting}>
+                                <button type="submit" className="btn-primary" disabled={isDecrypting || isSubmitting || isConnecting || (protocol === 'git-bash' && gitBashAvailable === false)}>
                                     Connect
                                 </button>
                             </div>
