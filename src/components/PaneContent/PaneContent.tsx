@@ -4,6 +4,8 @@ import { AIChatPane } from '../AIChatPane/AIChatPane';
 import { LogViewerPane } from '../LogViewerPane/LogViewerPane';
 import { PingMonitorPane } from '../PingMonitorPane/PingMonitorPane';
 import { TextEditorPane } from '../TextEditorPane/TextEditorPane';
+import type { TextEditorPaneHandle } from '../TextEditorPane/TextEditorPane';
+import { FileExplorerPane } from '../FileExplorerPane/FileExplorerPane';
 import type { Session } from '../../hooks/useSessionManager';
 import type { InteractiveSessionTracking } from '../../hooks/useInteractiveFlow';
 import type { Terminal } from '@xterm/xterm';
@@ -33,6 +35,9 @@ interface PaneContentProps {
   onStateChange?: (newState: Partial<Session['aiChatState']>) => void;
   onPingMonitorStateChange?: (newState: Partial<NonNullable<Session['pingMonitorState']>>) => void;
   onTextEditorStateChange?: (newState: Partial<NonNullable<Session['textEditorState']>>) => void;
+  onFileExplorerStateChange?: (newState: Partial<NonNullable<Session['fileExplorerState']>>) => void;
+  onFileExplorerOpenFile?: (filePath: string) => void;
+  textEditorRegistry?: React.MutableRefObject<{ [sessionId: string]: TextEditorPaneHandle }>;
 }
 
 // -- Component --
@@ -56,6 +61,9 @@ export const PaneContent: React.FC<PaneContentProps> = React.memo(({
   onStateChange,
   onPingMonitorStateChange,
   onTextEditorStateChange,
+  onFileExplorerStateChange,
+  onFileExplorerOpenFile,
+  textEditorRegistry,
 }) => {
   const {
     fontSize,
@@ -92,12 +100,24 @@ export const PaneContent: React.FC<PaneContentProps> = React.memo(({
     return persona?.askAiCommands ?? aiPersonas[0]?.askAiCommands ?? [];
   }, [aiPersonas, activePersonaId]);
 
+  if (session.type === 'file-explorer') {
+    return (
+      <FileExplorerPane
+        sessionId={session.id}
+        initialState={session.fileExplorerState}
+        onStateChange={onFileExplorerStateChange}
+        onOpenFile={onFileExplorerOpenFile}
+      />
+    );
+  }
+
   if (session.type === 'text-editor') {
     return (
       <TextEditorPane
         sessionId={session.id}
         initialState={session.textEditorState}
         onStateChange={onTextEditorStateChange}
+        registry={textEditorRegistry}
       />
     );
   }

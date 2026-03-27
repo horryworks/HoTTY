@@ -193,6 +193,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     decryptImportFile: (password: string) => ipcRenderer.invoke('decrypt-import-file', { password }),
     openDebugLogFolder: () => ipcRenderer.invoke('open-debug-log-folder'),
 
+    // File Explorer
+    fileExplorerListDirectory: (dirPath: string) => ipcRenderer.invoke('file-explorer-list-directory', dirPath),
+    fileExplorerGetDrives: () => ipcRenderer.invoke('file-explorer-get-drives'),
+
     // Text Editor
     textEditorOpenFile: () => ipcRenderer.invoke('text-editor-open-file'),
     textEditorSaveFile: (defaultPath?: string) => ipcRenderer.invoke('text-editor-save-file', defaultPath),

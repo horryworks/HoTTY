@@ -80,6 +80,9 @@ export const STORAGE_KEYS = {
     // Ping Monitor
     PING_MONITOR_STATE: 'hotty_ping_monitor_state',
 
+    // File Explorer
+    FILE_EXPLORER_STATE: 'hotty_file_explorer_state',
+
     // Text Editor
     TEXT_EDITOR_STATE: 'hotty_text_editor_state',
 

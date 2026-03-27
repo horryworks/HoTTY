@@ -61,6 +61,10 @@ export const detectGitBash = () => api().detectGitBash();
 export const exportHTree = (data: unknown[], password: string) => api().exportHTree(data, password);
 export const selectImportFile = () => api().selectImportFile();
 export const decryptImportFile = (password: string) => api().decryptImportFile(password);
+// File Explorer
+export const fileExplorerListDirectory = (dirPath: string) => api().fileExplorerListDirectory(dirPath);
+export const fileExplorerGetDrives = () => api().fileExplorerGetDrives();
+
 // Text Editor
 export const textEditorOpenFile = () => api().textEditorOpenFile();
 export const textEditorSaveFile = (defaultPath?: string) => api().textEditorSaveFile(defaultPath);

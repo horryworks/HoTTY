@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { TextEditorTab } from '../../hooks/useSessionManager';
 import { useSettings } from '../../hooks/useSettings';
 import * as electronService from '../../services/electronService';
+import { SaveConfirmModal } from '../SaveConfirmModal/SaveConfirmModal';
 import './TextEditorPane.css';
 
 interface TextEditorState {
@@ -13,6 +14,11 @@ interface TextEditorPaneProps {
     sessionId: string;
     initialState?: TextEditorState;
     onStateChange?: (newState: Partial<TextEditorState>) => void;
+    registry?: React.MutableRefObject<{ [sessionId: string]: TextEditorPaneHandle }>;
+}
+
+export interface TextEditorPaneHandle {
+    requestClose: () => Promise<boolean>;
 }
 
 const ENCODINGS = ['utf-8', 'ascii', 'latin1'] as const;
@@ -22,6 +28,7 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
     sessionId,
     initialState,
     onStateChange,
+    registry,
 }) => {
     const { settings: { lineWrapEnabled } } = useSettings();
     const [tabs, setTabs] = useState<TextEditorTab[]>(initialState?.tabs ?? [{
@@ -71,6 +78,17 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
 
     // Get the active tab
     const activeTab = tabs.find(t => t.id === activeTabId) ?? tabs[0];
+
+    // Unsaved changes confirmation state
+    const [unsavedCloseTabId, setUnsavedCloseTabId] = useState<string | null>(null);
+    const pendingCloseResolve = useRef<((result: boolean) => void) | null>(null);
+    const tabsRef = useRef(tabs);
+    tabsRef.current = tabs;
+
+    const isTabDirty = useCallback((tab: TextEditorTab) => {
+        if (!tab.filePath && tab.content === '') return false; // Empty Untitled
+        return tab.content !== tab.savedContent;
+    }, []);
 
     // Auto-scroll the active sub-tab into view
     useEffect(() => {
@@ -237,7 +255,7 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
         setActiveTabId(newTab.id);
     }, [syncState]);
 
-    const closeTab = useCallback((tabId: string) => {
+    const forceCloseTab = useCallback((tabId: string) => {
         setTabs(prev => {
             if (prev.length <= 1) {
                 // Last tab: reset to empty instead of closing
@@ -268,6 +286,15 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
             return next;
         });
     }, [activeTabId, syncState]);
+
+    const closeTab = useCallback((tabId: string) => {
+        const tab = tabsRef.current.find(t => t.id === tabId);
+        if (tab && isTabDirty(tab)) {
+            setUnsavedCloseTabId(tabId);
+            return;
+        }
+        forceCloseTab(tabId);
+    }, [isTabDirty, forceCloseTab]);
 
     const switchTab = useCallback((tabId: string) => {
         setActiveTabId(tabId);
@@ -364,6 +391,96 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
         setOpenMenu(null);
         closeTab(activeTabId);
     }, [activeTabId, closeTab]);
+
+    // Save a specific tab (used by unsaved confirm dialog)
+    const saveTabById = useCallback(async (tabId: string): Promise<boolean> => {
+        const tab = tabsRef.current.find(t => t.id === tabId);
+        if (!tab) return false;
+        let savePath = tab.filePath;
+        if (!savePath) {
+            savePath = await electronService.textEditorSaveFile();
+            if (!savePath) return false; // User cancelled Save As
+            updateTab(tabId, { filePath: savePath });
+        }
+        try {
+            let saveContent = tab.content;
+            if (tab.lineEnding === 'CRLF') {
+                saveContent = tab.content.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+            } else {
+                saveContent = tab.content.replace(/\r\n/g, '\n');
+            }
+            await electronService.textEditorWriteFile(savePath, saveContent, tab.encoding);
+            updateTab(tabId, { savedContent: tab.content, filePath: savePath });
+            return true;
+        } catch (err) {
+            console.error('Failed to save file:', err);
+            return false;
+        }
+    }, [updateTab]);
+
+    // Unsaved changes modal handlers
+    const handleUnsavedSave = useCallback(async () => {
+        if (!unsavedCloseTabId) return;
+        const tabId = unsavedCloseTabId;
+        const saved = await saveTabById(tabId);
+        if (saved) {
+            setUnsavedCloseTabId(null);
+            forceCloseTab(tabId);
+            if (pendingCloseResolve.current) {
+                pendingCloseResolve.current(true);
+                pendingCloseResolve.current = null;
+            }
+        }
+        // If save failed (e.g., user cancelled Save As), keep the modal open
+    }, [unsavedCloseTabId, saveTabById, forceCloseTab]);
+
+    const handleUnsavedDiscard = useCallback(() => {
+        if (!unsavedCloseTabId) return;
+        const tabId = unsavedCloseTabId;
+        setUnsavedCloseTabId(null);
+        forceCloseTab(tabId);
+        if (pendingCloseResolve.current) {
+            pendingCloseResolve.current(true);
+            pendingCloseResolve.current = null;
+        }
+    }, [unsavedCloseTabId, forceCloseTab]);
+
+    const handleUnsavedCancel = useCallback(() => {
+        setUnsavedCloseTabId(null);
+        if (pendingCloseResolve.current) {
+            pendingCloseResolve.current(false);
+            pendingCloseResolve.current = null;
+        }
+    }, []);
+
+    // Register requestClose handle for pane-level close
+    useEffect(() => {
+        if (!registry) return;
+        registry.current[sessionId] = {
+            requestClose: async () => {
+                const dirtyTabs = tabsRef.current.filter(isTabDirty);
+                if (dirtyTabs.length === 0) return true;
+
+                for (const tab of dirtyTabs) {
+                    // Switch to the dirty tab so user can see it
+                    setActiveTabId(tab.id);
+                    onStateChange?.({ activeTabId: tab.id });
+
+                    // Show modal and wait for response
+                    const shouldContinue = await new Promise<boolean>(resolve => {
+                        pendingCloseResolve.current = resolve;
+                        setUnsavedCloseTabId(tab.id);
+                    });
+
+                    if (!shouldContinue) return false;
+                }
+                return true;
+            },
+        };
+        return () => {
+            delete registry.current[sessionId];
+        };
+    }, [registry, sessionId, isTabDirty, onStateChange]);
 
     // Find operations
     const handleFindNext = useCallback(() => {
@@ -1075,6 +1192,21 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
                     </div>
                 </div>
             )}
+
+            {/* Unsaved changes confirmation */}
+            {unsavedCloseTabId && (() => {
+                const unsavedTab = tabs.find(t => t.id === unsavedCloseTabId);
+                if (!unsavedTab) return null;
+                const fileName = unsavedTab.filePath ? unsavedTab.filePath.replace(/^.*[\\/]/, '') : 'Untitled';
+                return (
+                    <SaveConfirmModal
+                        fileName={fileName}
+                        onSave={handleUnsavedSave}
+                        onDiscard={handleUnsavedDiscard}
+                        onCancel={handleUnsavedCancel}
+                    />
+                );
+            })()}
         </div>
     );
 });

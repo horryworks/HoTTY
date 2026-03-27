@@ -26,7 +26,7 @@ export interface TextEditorTab {
 export interface Session {
     id: string;
     title: string;
-    type: 'ssh' | 'telnet' | 'serial' | 'ai' | 'wsl' | 'local' | 'log-viewer' | 'ping-monitor' | 'text-editor';
+    type: 'ssh' | 'telnet' | 'serial' | 'ai' | 'wsl' | 'local' | 'log-viewer' | 'ping-monitor' | 'text-editor' | 'file-explorer';
     logViewerState?: {
         loggingPath: string;
     };
@@ -52,6 +52,10 @@ export interface Session {
     textEditorState?: {
         tabs: TextEditorTab[];
         activeTabId: string;
+    };
+    fileExplorerState?: {
+        currentPath: string;
+        expandedPaths: string[];
     };
     isWatching?: boolean;
     hasWatchData?: boolean;
@@ -109,6 +113,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     const [sessions, setSessions] = useState<Session[]>([]);
     const [tabOrder, setTabOrder] = useState<string[]>([]);
     const terminalRegistry = useRef<{ [sessionId: string]: Terminal }>({});
+    const textEditorRegistry = useRef<{ [sessionId: string]: { requestClose: () => Promise<boolean> } }>({});
     const watchBuffers = useRef<{ [sessionId: string]: string }>({});
     const watchingSessionIds = useRef<Set<string>>(new Set());
     const hasWatchDataFlags = useRef<Set<string>>(new Set());
@@ -235,7 +240,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         return () => removeDataListener();
     }, [watchBufferLimit]); // Need watchBufferLimit to be bound
 
-    const closeSession = (sessionId: string) => {
+    const performCloseSession = (sessionId: string) => {
         const session = sessions.find(s => s.id === sessionId);
 
         if (session?.type === 'ai') {
@@ -254,6 +259,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
             // Log viewer sessions don't have terminal or backend connection
         } else if (session?.type === 'text-editor') {
             // Text editor sessions don't have terminal or backend connection
+            delete textEditorRegistry.current[sessionId];
         } else if (session?.type === 'ping-monitor') {
             // Save targets and interval before closing
             if (session.pingMonitorState) {
@@ -291,6 +297,18 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         });
     };
 
+    const closeSession = async (sessionId: string) => {
+        const session = sessions.find(s => s.id === sessionId);
+        if (session?.type === 'text-editor') {
+            const handle = textEditorRegistry.current[sessionId];
+            if (handle) {
+                const canClose = await handle.requestClose();
+                if (!canClose) return;
+            }
+        }
+        performCloseSession(sessionId);
+    };
+
     // Session status & error listeners
     useEffect(() => {
         const removeStatusListener = electronService.onSessionStatus((sessionId, status) => {
@@ -325,15 +343,33 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const allocateToPane = (sessionId: string) => {
+    const allocateToPane = (sessionId: string, options?: { preferSidebar?: boolean }) => {
         setPaneAllocations(prev => {
             const next = { ...prev };
 
+            let firstEmpty: string | undefined;
+
+            // When preferSidebar is set, try Left Sidebar → Right Sidebar first
+            if (options?.preferSidebar) {
+                const sidebarOrder = [
+                    { id: 'sidebar-left', visible: showLeftSidebar },
+                    { id: 'sidebar', visible: showRightSidebar },
+                ];
+                for (const bar of sidebarOrder) {
+                    if (bar.visible && !next[bar.id]) {
+                        firstEmpty = bar.id;
+                        break;
+                    }
+                }
+            }
+
             // 1. Find the first empty grid pane (numerical ID)
-            const validGridPanes = Object.keys(next)
-                .filter(p => !isNaN(parseInt(p)))
-                .sort((a, b) => parseInt(a) - parseInt(b));
-            let firstEmpty = validGridPanes.find(p => next[p] === null);
+            if (!firstEmpty) {
+                const validGridPanes = Object.keys(next)
+                    .filter(p => !isNaN(parseInt(p)))
+                    .sort((a, b) => parseInt(a) - parseInt(b));
+                firstEmpty = validGridPanes.find(p => next[p] === null);
+            }
 
             // 2. Fallback to outer bars in priority order if grid is full
             if (!firstEmpty) {
@@ -605,6 +641,60 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         return sessionId;
     };
 
+    const createFileExplorerSession = () => {
+        // Only allow one file explorer session at a time
+        const existingSession = sessions.find(s => s.type === 'file-explorer');
+        if (existingSession) {
+            onSessionError('Only one File Explorer session can be open at a time.');
+            const paneId = Object.entries(paneAllocations).find(([, sid]) => sid === existingSession.id)?.[0];
+            if (paneId) {
+                setActivePaneId(paneId);
+            }
+            return existingSession.id;
+        }
+
+        const sessionId = self.crypto.randomUUID();
+
+        // Restore previous state from localStorage
+        let currentPath = '';
+        let expandedPaths: string[] = [];
+        try {
+            const saved = localStorage.getItem(STORAGE_KEYS.FILE_EXPLORER_STATE);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (typeof parsed.currentPath === 'string') currentPath = parsed.currentPath;
+                if (Array.isArray(parsed.expandedPaths)) expandedPaths = parsed.expandedPaths;
+            }
+        } catch { /* ignore parse errors */ }
+
+        const newSession: Session = {
+            id: sessionId,
+            title: 'File Explorer',
+            type: 'file-explorer',
+            fileExplorerState: { currentPath, expandedPaths },
+        };
+        setSessions(prev => [...prev, newSession]);
+        setTabOrder(prev => [...prev, sessionId]);
+        allocateToPane(sessionId, { preferSidebar: true });
+        return sessionId;
+    };
+
+    const updateFileExplorerState = (sessionId: string, newState: Partial<NonNullable<Session['fileExplorerState']>>) => {
+        setSessions(prev => prev.map(s => {
+            if (s.id === sessionId && s.fileExplorerState) {
+                const merged = { ...s.fileExplorerState, ...newState };
+                try {
+                    localStorage.setItem(STORAGE_KEYS.FILE_EXPLORER_STATE, JSON.stringify({
+                        currentPath: merged.currentPath,
+                        expandedPaths: merged.expandedPaths,
+                    }));
+                } catch { /* ignore storage errors */ }
+                return { ...s, fileExplorerState: merged };
+            }
+            return s;
+        }));
+    };
+
     const updateTextEditorState = (sessionId: string, newState: Partial<NonNullable<Session['textEditorState']>>) => {
         setSessions(prev => prev.map(s => {
             if (s.id === sessionId && s.textEditorState) {
@@ -734,13 +824,16 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         sessions,
         tabOrder,
         terminalRegistry,
+        textEditorRegistry,
         createSession,
         createAISession,
         createLogViewerSession,
         createPingMonitorSession,
         createTextEditorSession,
+        createFileExplorerSession,
         updatePingMonitorState,
         updateTextEditorState,
+        updateFileExplorerState,
         updateSessionState,
         closeSession,
         closeAllAISessions,

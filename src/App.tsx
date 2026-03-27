@@ -499,6 +499,13 @@ function App() {
         onStateChange={(newState) => session.updateSessionState(sessionData.id, newState)}
         onPingMonitorStateChange={(newState) => session.updatePingMonitorState(sessionData.id, newState)}
         onTextEditorStateChange={(newState) => session.updateTextEditorState(sessionData.id, newState)}
+        onFileExplorerStateChange={(newState) => session.updateFileExplorerState(sessionData.id, newState)}
+        onFileExplorerOpenFile={(filePath) => {
+          electronService.textEditorApproveDroppedFile(filePath).then(() => {
+            session.createTextEditorSession(filePath);
+          }).catch(() => { /* file approval failed */ });
+        }}
+        textEditorRegistry={sessionData.type === 'text-editor' ? session.textEditorRegistry : undefined}
       />
     );
   };
@@ -673,6 +680,7 @@ function App() {
               onNewLogViewer={() => session.createLogViewerSession()}
               onNewPingMonitor={() => session.createPingMonitorSession()}
               onNewTextEditor={() => session.createTextEditorSession()}
+              onNewFileExplorer={() => session.createFileExplorerSession()}
               onTabReorder={session.handleTabReorder}
               lastTargetSessionId={session.sessions.find(s => s.type === 'ai')?.aiChatState?.lastTargetSessionId}
             />
@@ -734,6 +742,12 @@ function App() {
                   updateSessionState={session.updateSessionState}
                   updatePingMonitorState={session.updatePingMonitorState}
                   updateTextEditorState={session.updateTextEditorState}
+                  updateFileExplorerState={session.updateFileExplorerState}
+                  onFileExplorerOpenFile={(filePath) => {
+                    electronService.textEditorApproveDroppedFile(filePath).then(() => {
+                      session.createTextEditorSession(filePath);
+                    }).catch(() => { /* file approval failed */ });
+                  }}
                   paneAllocations={pane.paneAllocations}
                   activePaneId={pane.activePaneId || ''}
                   onPaneClick={pane.setActivePaneId}
@@ -750,6 +764,7 @@ function App() {
                   onRunCommand={handleGridRunCommand}
                   onSendMessage={handleGridSendMessage}
                   onShowPromptMenu={handleGridShowPromptMenu}
+                  textEditorRegistry={session.textEditorRegistry}
                 />
                 </ErrorBoundary>
               </div>
@@ -795,7 +810,7 @@ function App() {
                 onDrop={handleSidebarDrop('sidebar')}
                 onClick={handlePaneActivate('sidebar')}
               >
-                <ErrorBoundary fallbackLabel="Sidebar">{renderPaneContent('sidebar', 'Sidebar')}</ErrorBoundary>
+                <ErrorBoundary fallbackLabel="Right Sidebar">{renderPaneContent('sidebar', 'Right Sidebar')}</ErrorBoundary>
               </div>
             )}
           </div>

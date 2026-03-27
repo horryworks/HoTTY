@@ -413,6 +413,94 @@ describe('useSessionManager — createTextEditorSession singleton', () => {
     });
 });
 
+// ── createFileExplorerSession ─────────────────────────────────────────────────
+
+describe('useSessionManager — createFileExplorerSession', () => {
+    it('creates a file explorer session with type "file-explorer"', () => {
+        const { result } = renderHook(() => useSessionManager(makeOptions()));
+        act(() => { result.current.createFileExplorerSession(); });
+        expect(result.current.sessions.length).toBe(1);
+        expect(result.current.sessions[0].type).toBe('file-explorer');
+        expect(result.current.sessions[0].title).toBe('File Explorer');
+    });
+
+    it('does not create a second file explorer session', () => {
+        const onSessionError = vi.fn();
+        const { result } = renderHook(() => useSessionManager(makeOptions({ onSessionError })));
+        act(() => { result.current.createFileExplorerSession(); });
+        act(() => { result.current.createFileExplorerSession(); });
+        expect(result.current.sessions.filter(s => s.type === 'file-explorer').length).toBe(1);
+        expect(onSessionError).toHaveBeenCalledWith(expect.stringContaining('Only one'));
+    });
+
+    it('allocates to left sidebar when visible and empty', () => {
+        const setPaneAllocations = vi.fn();
+        const setActivePaneId = vi.fn();
+        const { result } = renderHook(() => useSessionManager(makeOptions({
+            showLeftSidebar: true,
+            showRightSidebar: true,
+            paneAllocations: { '0': null, 'sidebar-left': null, 'sidebar': null },
+            setPaneAllocations,
+            setActivePaneId,
+        })));
+        act(() => { result.current.createFileExplorerSession(); });
+        // setPaneAllocations is called with a function; invoke it to check the result
+        const updater = setPaneAllocations.mock.calls[0][0];
+        const nextState = updater({ '0': null, 'sidebar-left': null, 'sidebar': null });
+        expect(nextState['sidebar-left']).not.toBeNull();
+        expect(nextState['0']).toBeNull();
+    });
+
+    it('allocates to right sidebar when left sidebar is occupied', () => {
+        const setPaneAllocations = vi.fn();
+        const setActivePaneId = vi.fn();
+        const { result } = renderHook(() => useSessionManager(makeOptions({
+            showLeftSidebar: true,
+            showRightSidebar: true,
+            paneAllocations: { '0': null, 'sidebar-left': 'other-session', 'sidebar': null },
+            setPaneAllocations,
+            setActivePaneId,
+        })));
+        act(() => { result.current.createFileExplorerSession(); });
+        const updater = setPaneAllocations.mock.calls[0][0];
+        const nextState = updater({ '0': null, 'sidebar-left': 'other-session', 'sidebar': null });
+        expect(nextState['sidebar']).not.toBeNull();
+        expect(nextState['0']).toBeNull();
+    });
+
+    it('allocates to grid pane when both sidebars are inactive', () => {
+        const setPaneAllocations = vi.fn();
+        const setActivePaneId = vi.fn();
+        const { result } = renderHook(() => useSessionManager(makeOptions({
+            showLeftSidebar: false,
+            showRightSidebar: false,
+            paneAllocations: { '0': null, '1': null },
+            setPaneAllocations,
+            setActivePaneId,
+        })));
+        act(() => { result.current.createFileExplorerSession(); });
+        const updater = setPaneAllocations.mock.calls[0][0];
+        const nextState = updater({ '0': null, '1': null });
+        expect(nextState['0']).not.toBeNull();
+    });
+
+    it('allocates to grid pane when both sidebars are occupied', () => {
+        const setPaneAllocations = vi.fn();
+        const setActivePaneId = vi.fn();
+        const { result } = renderHook(() => useSessionManager(makeOptions({
+            showLeftSidebar: true,
+            showRightSidebar: true,
+            paneAllocations: { '0': null, 'sidebar-left': 'sess-a', 'sidebar': 'sess-b' },
+            setPaneAllocations,
+            setActivePaneId,
+        })));
+        act(() => { result.current.createFileExplorerSession(); });
+        const updater = setPaneAllocations.mock.calls[0][0];
+        const nextState = updater({ '0': null, 'sidebar-left': 'sess-a', 'sidebar': 'sess-b' });
+        expect(nextState['0']).not.toBeNull();
+    });
+});
+
 // ── updateTextEditorState ────────────────────────────────────────────────────
 
 describe('useSessionManager — updateTextEditorState', () => {

@@ -72,6 +72,13 @@ export interface ElectronAPI {
     onPingMonitorData: (callback: (data: { sessionId: string; results: { target: string; status: string; rtt: number | null; ttl: number | null; timestamp: string }[] }) => void) => () => void;
     onPingMonitorLogFile: (callback: (data: { sessionId: string; fileName: string }) => void) => () => void;
 
+    // File Explorer
+    fileExplorerListDirectory: (dirPath: string) => Promise<{
+        entries?: { name: string; isDirectory: boolean; size: number; mtime: number; isHidden: boolean }[];
+        error?: string;
+    }>;
+    fileExplorerGetDrives: () => Promise<{ drives: string[]; homedir: string }>;
+
     // Text Editor
     textEditorOpenFile: () => Promise<string | null>;
     textEditorSaveFile: (defaultPath?: string) => Promise<string | null>;

@@ -689,6 +689,67 @@ ipcMain.handle('text-editor-approve-dropped-file', async (_event, filePath: stri
   }
 });
 
+// File Explorer: list directory contents
+ipcMain.handle('file-explorer-list-directory', async (_event, dirPath: string) => {
+  try {
+    if (typeof dirPath !== 'string' || dirPath.trim() === '') {
+      return { error: 'Invalid directory path' };
+    }
+    const resolvedPath = resolve(dirPath);
+    const entries = await fs.promises.readdir(resolvedPath, { withFileTypes: true });
+    const result: { name: string; isDirectory: boolean; size: number; mtime: number; isHidden: boolean }[] = [];
+    for (const entry of entries) {
+      let size = 0;
+      let mtime = 0;
+      const isDir = entry.isDirectory();
+      if (!isDir) {
+        try {
+          const stat = await fs.promises.stat(join(resolvedPath, entry.name));
+          size = stat.size;
+          mtime = stat.mtimeMs;
+        } catch { /* skip stat errors */ }
+      } else {
+        try {
+          const stat = await fs.promises.stat(join(resolvedPath, entry.name));
+          mtime = stat.mtimeMs;
+        } catch { /* skip stat errors */ }
+      }
+      const isHidden = entry.name.startsWith('.');
+      result.push({ name: entry.name, isDirectory: isDir, size, mtime, isHidden });
+    }
+    // Sort: directories first, then files, both alphabetically (case-insensitive)
+    result.sort((a, b) => {
+      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+    return { entries: result };
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'EPERM' || code === 'EACCES') {
+      return { error: 'Permission denied' };
+    }
+    logger.error('app', 'Failed to list directory', { error: String(err) });
+    return { error: String(err) };
+  }
+});
+
+// File Explorer: get available drives and home directory
+ipcMain.handle('file-explorer-get-drives', async () => {
+  const homedir = require('os').homedir();
+  if (process.platform === 'win32') {
+    const drives: string[] = [];
+    for (let i = 65; i <= 90; i++) {
+      const drive = `${String.fromCharCode(i)}:\\`;
+      try {
+        await fs.promises.access(drive);
+        drives.push(drive);
+      } catch { /* drive not available */ }
+    }
+    return { drives, homedir };
+  }
+  return { drives: ['/'], homedir };
+});
+
 ipcMain.handle('list-wsl-distributions', async () => {
   try {
     const { stdout } = await execFileAsync('wsl.exe', ['--list', '--quiet']);
@@ -1205,10 +1266,8 @@ ipcMain.handle('list-log-files', async (_, folderPath: string) => {
   if (!folderPath) return { error: 'No log folder configured' };
   const resolvedFolder = resolve(folderPath);
   if (!fs.existsSync(resolvedFolder)) return { error: 'Log folder does not exist' };
-  // Only allow reading from directories already registered via update-logging
-  if (![...allowedLogDirs].some(dir => resolvedFolder === dir)) {
-    return { error: 'Log folder is not in the allowed list' };
-  }
+  // Register the folder so read-log-file can also access files within it
+  allowedLogDirs.add(resolvedFolder);
   try {
     const entries = fs.readdirSync(resolvedFolder);
     const files = entries

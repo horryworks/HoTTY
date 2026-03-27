@@ -3,7 +3,8 @@ import { TerminalComponent } from '../Terminal/Terminal';
 import { AIChatPane } from '../AIChatPane/AIChatPane';
 import { LogViewerPane } from '../LogViewerPane/LogViewerPane';
 import { PingMonitorPane } from '../PingMonitorPane/PingMonitorPane';
-import { TextEditorPane } from '../TextEditorPane/TextEditorPane';
+import { TextEditorPane, type TextEditorPaneHandle } from '../TextEditorPane/TextEditorPane';
+import { FileExplorerPane } from '../FileExplorerPane/FileExplorerPane';
 import type { Session } from '../../hooks/useSessionManager';
 import type { InteractiveSessionTracking } from '../../hooks/useInteractiveFlow';
 import type { Terminal } from '@xterm/xterm';
@@ -19,6 +20,8 @@ interface GridLayoutProps {
     updateSessionState: (sessionId: string, newState: Partial<Session['aiChatState']>) => void;
     updatePingMonitorState?: (sessionId: string, newState: Partial<NonNullable<Session['pingMonitorState']>>) => void;
     updateTextEditorState?: (sessionId: string, newState: Partial<NonNullable<Session['textEditorState']>>) => void;
+    updateFileExplorerState?: (sessionId: string, newState: Partial<NonNullable<Session['fileExplorerState']>>) => void;
+    onFileExplorerOpenFile?: (filePath: string) => void;
     paneAllocations: { [paneId: string]: string | null };
     activePaneId: string | null;
     onPaneClick: (paneId: string) => void;
@@ -34,6 +37,7 @@ interface GridLayoutProps {
     onSendMessage?: (aiSessionId: string, text: string) => void;
     interactiveSessions?: { [sessionId: string]: InteractiveSessionTracking };
     onShowPromptMenu?: (aiSessionId: string) => void;
+    textEditorRegistry?: React.MutableRefObject<{ [sessionId: string]: TextEditorPaneHandle }>;
 }
 
 export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: string]: Terminal } }> = ({
@@ -43,6 +47,8 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     updateSessionState,
     updatePingMonitorState,
     updateTextEditorState,
+    updateFileExplorerState,
+    onFileExplorerOpenFile,
     paneAllocations,
     activePaneId,
     onPaneClick,
@@ -58,7 +64,8 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
     onRunCommand,
     onSendMessage,
     interactiveSessions,
-    onShowPromptMenu
+    onShowPromptMenu,
+    textEditorRegistry,
 }) => {
     const {
         fontSize,
@@ -323,11 +330,19 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
 
                     >
                         {session ? (
-                            session.type === 'text-editor' ? (
+                            session.type === 'file-explorer' ? (
+                                <FileExplorerPane
+                                    sessionId={session.id}
+                                    initialState={session.fileExplorerState}
+                                    onStateChange={updateFileExplorerState ? (newState) => updateFileExplorerState(session.id, newState) : undefined}
+                                    onOpenFile={onFileExplorerOpenFile}
+                                />
+                            ) : session.type === 'text-editor' ? (
                                 <TextEditorPane
                                     sessionId={session.id}
                                     initialState={session.textEditorState}
                                     onStateChange={updateTextEditorState ? (newState) => updateTextEditorState(session.id, newState) : undefined}
+                                    registry={textEditorRegistry}
                                 />
                             ) : session.type === 'ping-monitor' ? (
                                 <PingMonitorPane
