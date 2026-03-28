@@ -45,10 +45,6 @@ describe('AIService', () => {
         service = new AIService(registry, 'mock');
     });
 
-    it('getActiveProviderId returns the default provider id', () => {
-        expect(service.getActiveProviderId()).toBe('mock');
-    });
-
     it('listProviders returns registered providers', () => {
         const list = service.listProviders();
         expect(list).toHaveLength(1);
@@ -62,12 +58,16 @@ describe('AIService', () => {
 
         service.setActiveProvider('other');
 
-        expect(service.getActiveProviderId()).toBe('other');
+        // Verify 'other' provider is now active by checking delegation
+        service.logout();
+        expect(other.logout).toHaveBeenCalled();
     });
 
     it('setActiveProvider ignores unknown provider id', () => {
         service.setActiveProvider('nonexistent');
-        expect(service.getActiveProviderId()).toBe('mock');
+        // Still delegates to original 'mock' provider
+        service.logout();
+        expect(provider.logout).toHaveBeenCalled();
     });
 
     it('getAuthStatus delegates to active provider', () => {

@@ -80,10 +80,6 @@ export class PingMonitorService {
         }
     }
 
-    isRunning(): boolean {
-        return this.running;
-    }
-
     private startLogging(loggingPath: string) {
         try {
             const resolvedPath = path.resolve(loggingPath);

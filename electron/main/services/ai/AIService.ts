@@ -26,10 +26,6 @@ export class AIService {
     this.activeProviderId = id;
   }
 
-  getActiveProviderId(): string {
-    return this.activeProviderId;
-  }
-
   listProviders(): { id: string; displayName: string; authType: string }[] {
     return this.registry.list().map(p => ({
       id: p.id,

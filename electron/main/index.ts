@@ -267,30 +267,6 @@ ipcMain.on('log-debug', (_, message) => {
 });
 
 // IPC Handlers
-ipcMain.handle('open-win', (_, arg) => {
-  // Input validation for 'arg' (hash)
-  if (typeof arg !== 'string' || !/^[a-zA-Z0-9_-]*$/.test(arg)) {
-    logger.warn('app', 'Invalid window hash argument');
-    return;
-  }
-
-  const childWindow = new BrowserWindow({
-    webPreferences: {
-      preload,
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      webSecurity: true,
-    },
-  })
-
-  if (process.env.VITE_DEV_SERVER_URL) {
-    childWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}#${arg}`)
-  } else {
-    childWindow.loadFile(indexHtml, { hash: arg })
-  }
-})
-
 ipcMain.on('open-external', (_, url) => {
   if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
     shell.openExternal(url);
@@ -582,20 +558,6 @@ ipcMain.on('disconnect-session', (event, sessionId) => {
     const eventWin = BrowserWindow.fromWebContents(event.sender);
     eventWin?.webContents.send('session-status', { sessionId, status: 'disconnected' });
   }
-});
-
-ipcMain.on('app-quit', () => {
-  logger.info('app', 'App quit requested');
-  sessions.forEach(s => {
-    if (s.iapProcess) {
-      stopIapTunnel(s.iapProcess);
-    }
-    s.service.disconnect();
-    logManager.stopLogging(s.id);
-  });
-  sessions.clear();
-  logger.close();
-  app.quit();
 });
 
 ipcMain.handle('open-debug-log-folder', () => {
