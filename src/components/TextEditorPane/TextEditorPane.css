@@ -65,6 +65,7 @@
 }
 
 .text-editor-subtab-title {
+    font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -166,7 +167,7 @@
     color: var(--text-primary);
     font-family: var(--font-family);
     font-size: calc(var(--font-size-base) - 2px);
-    padding: 3px 10px;
+    padding: 3px 8px;
     cursor: pointer;
     border-radius: 3px;
 }

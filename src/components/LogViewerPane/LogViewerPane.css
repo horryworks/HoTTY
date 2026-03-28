@@ -308,7 +308,7 @@
     color: var(--text-primary);
     border-radius: 3px;
     font-size: var(--font-size-base);
-    padding: 2px 6px;
+    padding: 3px 8px;
     cursor: pointer;
     line-height: 1.4;
     font-family: inherit;
@@ -323,7 +323,7 @@
     color: var(--text-on-accent);
     border-radius: 3px;
     font-size: calc(var(--font-size-base) - 2px);
-    padding: 3px 10px;
+    padding: 3px 8px;
     cursor: pointer;
     font-family: inherit;
     flex-shrink: 0;

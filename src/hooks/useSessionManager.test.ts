@@ -391,8 +391,8 @@ describe('useSessionManager — createTextEditorSession singleton', () => {
         const { result } = renderHook(() => useSessionManager(makeOptions()));
         let id1 = '';
         let id2 = '';
-        act(() => { id1 = result.current.createTextEditorSession(); });
-        act(() => { id2 = result.current.createTextEditorSession(); });
+        act(() => { id1 = result.current.createTextEditorSession() ?? ''; });
+        act(() => { id2 = result.current.createTextEditorSession() ?? ''; });
         expect(id1).toBe(id2);
     });
 

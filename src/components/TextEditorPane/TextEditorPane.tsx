@@ -477,8 +477,9 @@ export const TextEditorPane: React.FC<TextEditorPaneProps> = React.memo(({
                 return true;
             },
         };
+        const reg = registry.current;
         return () => {
-            delete registry.current[sessionId];
+            delete reg[sessionId];
         };
     }, [registry, sessionId, isTabDirty, onStateChange]);
 

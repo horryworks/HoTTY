@@ -72,6 +72,8 @@ function App() {
     updatePaneBackgroundMode,
     updatePaneBackgroundImage,
     toggleLineWrap,
+    updateEnabledProtocol,
+    updateEnabledFeature,
   } = useSettings();
 
   // ═══════════════════════════════════════════════
@@ -926,6 +928,10 @@ function App() {
           onProactiveInstructionChange={updateProactiveInstruction}
           interactiveStabilizationTimeout={settings.interactiveStabilizationTimeout}
           onInteractiveStabilizationTimeoutChange={updateInteractiveStabilizationTimeout}
+          enabledProtocols={settings.enabledProtocols}
+          onEnabledProtocolChange={updateEnabledProtocol}
+          enabledFeatures={settings.enabledFeatures}
+          onEnabledFeatureChange={updateEnabledFeature}
         />
         <PaneLines
           paneAllocations={pane.paneAllocations}

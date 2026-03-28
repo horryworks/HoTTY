@@ -42,6 +42,8 @@ export function useSettings() {
         proactiveInstruction: store.proactiveInstruction,
         interactiveStabilizationTimeout: store.interactiveStabilizationTimeout,
         activeAiProvider: store.activeAiProvider,
+        enabledProtocols: store.enabledProtocols,
+        enabledFeatures: store.enabledFeatures,
     };
 
     return {
@@ -78,5 +80,7 @@ export function useSettings() {
         updateProactiveInstruction: store.updateProactiveInstruction,
         updateInteractiveStabilizationTimeout: store.updateInteractiveStabilizationTimeout,
         updateActiveAiProvider: store.updateActiveAiProvider,
+        updateEnabledProtocol: store.updateEnabledProtocol,
+        updateEnabledFeature: store.updateEnabledFeature,
     };
 }

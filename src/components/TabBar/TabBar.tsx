@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Session } from '../../hooks/useSessionManager';
+import { useSettingsStore } from '../../stores/settingsStore';
 import './TabBar.css';
 
 interface Tab {
@@ -30,6 +31,7 @@ interface TabBarProps {
 }
 
 export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessionIds, watchedSessionIds = [], onTabClick, onTabClose, onToggleWatch, onNewTab, onNewAITab, onNewLogViewer, onNewPingMonitor, onNewTextEditor, onNewFileExplorer, onTabReorder, lastTargetSessionId }) => {
+    const enabledFeatures = useSettingsStore(s => s.enabledFeatures);
     const [dragOverInfo, setDragOverInfo] = React.useState<{ id: string, position: 'left' | 'right' } | null>(null);
     const [dragSourceIndex, setDragSourceIndex] = React.useState<number | null>(null);
     const [showFeaturesMenu, setShowFeaturesMenu] = React.useState(false);
@@ -265,6 +267,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
             </div>
 
             {/* Features button — 2×2 grid icon */}
+            {Object.values(enabledFeatures).some(Boolean) && (
             <div className="features-btn" ref={featuresRef} title="Features">
                 <div
                     className={`features-btn-icon ${showFeaturesMenu ? 'active' : ''}`}
@@ -279,6 +282,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                 </div>
                 {showFeaturesMenu && (
                     <div className="features-dropdown" style={dropdownStyle}>
+                        {enabledFeatures['ai-chat'] && (
                         <div
                             className="features-item"
                             onClick={() => { onNewAITab(); setShowFeaturesMenu(false); }}
@@ -295,6 +299,8 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                             </svg>
                             AI Chat
                         </div>
+                        )}
+                        {enabledFeatures['log-viewer'] && (
                         <div
                             className="features-item"
                             onClick={() => { onNewLogViewer(); setShowFeaturesMenu(false); }}
@@ -307,6 +313,8 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                             </svg>
                             Log Viewer
                         </div>
+                        )}
+                        {enabledFeatures['ping-monitor'] && (
                         <div
                             className="features-item"
                             onClick={() => { onNewPingMonitor(); setShowFeaturesMenu(false); }}
@@ -317,6 +325,8 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                             </svg>
                             Ping Monitor
                         </div>
+                        )}
+                        {enabledFeatures['text-editor'] && (
                         <div
                             className="features-item"
                             onClick={() => { onNewTextEditor(); setShowFeaturesMenu(false); }}
@@ -327,6 +337,8 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                             </svg>
                             Text Editor
                         </div>
+                        )}
+                        {enabledFeatures['file-explorer'] && (
                         <div
                             className="features-item"
                             onClick={() => { onNewFileExplorer(); setShowFeaturesMenu(false); }}
@@ -337,9 +349,11 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, visibleSessio
                             </svg>
                             File Explorer
                         </div>
+                        )}
                     </div>
                 )}
             </div>
+            )}
             </div>{/* end .tab-bar-actions */}
             {tooltip && (
                 <div

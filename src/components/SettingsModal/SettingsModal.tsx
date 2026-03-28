@@ -2,10 +2,12 @@ import React, { useEffect, useRef } from 'react';
 import { useDraggable } from '../../hooks/useDraggable';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { AppearanceTab } from './AppearanceTab';
-import { SSHSettingsTab } from './SSHSettingsTab';
+import { GeneralTab } from './GeneralTab';
+import { ProtocolsTab } from './ProtocolsTab';
+import { FeaturesTab } from './FeaturesTab';
 import { AISettingsTab } from './AISettingsTab';
 import * as electronService from '../../services/electronService';
-import type { PersonaDefinition } from '../../types/appTypes';
+import type { ProtocolId, FeatureId, PersonaDefinition } from '../../types/appTypes';
 import './SettingsModal.css';
 
 interface SettingsModalProps {
@@ -69,6 +71,11 @@ interface SettingsModalProps {
     onProactiveInstructionChange: (instruction: string) => void;
     interactiveStabilizationTimeout: number;
     onInteractiveStabilizationTimeoutChange: (timeout: number) => void;
+    // Protocol & Feature toggles
+    enabledProtocols: Record<ProtocolId, boolean>;
+    onEnabledProtocolChange: (protocol: ProtocolId, enabled: boolean) => void;
+    enabledFeatures: Record<FeatureId, boolean>;
+    onEnabledFeatureChange: (feature: FeatureId, enabled: boolean) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -131,9 +138,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onProactiveInstructionChange,
     interactiveStabilizationTimeout,
     onInteractiveStabilizationTimeoutChange,
+    enabledProtocols,
+    onEnabledProtocolChange,
+    enabledFeatures,
+    onEnabledFeatureChange,
 }) => {
     const { position, onMouseDown: onHeaderMouseDown } = useDraggable();
-    const [activeTab, setActiveTab] = React.useState<'appearance' | 'ssh' | 'telnet' | 'system' | 'ai' | 'about'>('system');
+    const [activeTab, setActiveTab] = React.useState<'general' | 'appearance' | 'protocols' | 'features' | 'ai' | 'about'>('general');
     const [version, setVersion] = React.useState<string>('');
     const [sshAlgorithms, setSshAlgorithms] = React.useState<Record<string, { name: string; enabled: boolean }[]> | null>(null);
     const [isAiAuthenticated, setIsAiAuthenticated] = React.useState<boolean>(false);
@@ -208,7 +219,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const handleClose = () => {
         if (loggingEnabled && !loggingPath) {
             alert('Logging is enabled but no folder path is selected.\nPlease select a folder or disable logging.');
-            setActiveTab('system'); // Switch to system tab so user can see the error
+            setActiveTab('general');
             return;
         }
         onClose();
@@ -227,13 +238,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const tabsRef = React.useRef<HTMLDivElement>(null);
     const isDragging = React.useRef(false);
     const startX = React.useRef(0);
-    const scrollLeft = React.useRef(0);
+    const scrollLeftRef = React.useRef(0);
 
     const handleMouseDown = (e: React.MouseEvent) => {
         isDragging.current = true;
         if (tabsRef.current) {
             startX.current = e.pageX - tabsRef.current.offsetLeft;
-            scrollLeft.current = tabsRef.current.scrollLeft;
+            scrollLeftRef.current = tabsRef.current.scrollLeft;
         }
     };
 
@@ -250,7 +261,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         e.preventDefault();
         const x = e.pageX - tabsRef.current.offsetLeft;
         const walk = (x - startX.current) * 2; // Scroll-fast
-        tabsRef.current.scrollLeft = scrollLeft.current - walk;
+        tabsRef.current.scrollLeft = scrollLeftRef.current - walk;
     };
 
     if (!isOpen) return null;
@@ -272,10 +283,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onMouseMove={handleMouseMove}
                 >
                     <button
-                        className={`settings-tab ${activeTab === 'system' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('system')}
+                        className={`settings-tab ${activeTab === 'general' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('general')}
                     >
-                        System
+                        General
                     </button>
                     <button
                         className={`settings-tab ${activeTab === 'appearance' ? 'active' : ''}`}
@@ -284,16 +295,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         Appearance
                     </button>
                     <button
-                        className={`settings-tab ${activeTab === 'ssh' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('ssh')}
+                        className={`settings-tab ${activeTab === 'protocols' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('protocols')}
                     >
-                        SSH
+                        Protocols
                     </button>
                     <button
-                        className={`settings-tab ${activeTab === 'telnet' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('telnet')}
+                        className={`settings-tab ${activeTab === 'features' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('features')}
                     >
-                        Telnet
+                        Features
                     </button>
                     <button
                         className={`settings-tab ${activeTab === 'ai' ? 'active' : ''}`}
@@ -310,6 +321,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div className="settings-content">
+                    {activeTab === 'general' && (
+                        <GeneralTab
+                            loggingEnabled={loggingEnabled}
+                            onLoggingEnabledChange={onLoggingEnabledChange}
+                            loggingPath={loggingPath}
+                            onLoggingPathChange={onLoggingPathChange}
+                            scrollback={scrollback}
+                            onScrollbackChange={onScrollbackChange}
+                            backspaceSendsDel={backspaceSendsDel}
+                            onBackspaceSendsDelChange={onBackspaceSendsDelChange}
+                            rightClickPaste={rightClickPaste}
+                            onRightClickPasteChange={onRightClickPasteChange}
+                        />
+                    )}
+
                     {activeTab === 'appearance' && (
                         <AppearanceTab
                             theme={theme}
@@ -340,9 +366,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         />
                     )}
 
-                    {(activeTab === 'ssh' || activeTab === 'telnet' || activeTab === 'system') && (
-                        <SSHSettingsTab
-                            activeTab={activeTab}
+                    {activeTab === 'protocols' && (
+                        <ProtocolsTab
+                            enabledProtocols={enabledProtocols}
+                            onProtocolToggle={onEnabledProtocolChange}
                             sshKeepAliveEnabled={sshKeepAliveEnabled}
                             onSshKeepAliveEnabledChange={onSshKeepAliveEnabledChange}
                             sshKeepAliveInterval={sshKeepAliveInterval}
@@ -351,18 +378,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             onTelnetKeepAliveEnabledChange={onTelnetKeepAliveEnabledChange}
                             telnetKeepAliveInterval={telnetKeepAliveInterval}
                             onTelnetKeepAliveIntervalChange={onTelnetKeepAliveIntervalChange}
-                            loggingEnabled={loggingEnabled}
-                            onLoggingEnabledChange={onLoggingEnabledChange}
-                            loggingPath={loggingPath}
-                            onLoggingPathChange={onLoggingPathChange}
-                            scrollback={scrollback}
-                            onScrollbackChange={onScrollbackChange}
-                            backspaceSendsDel={backspaceSendsDel}
-                            onBackspaceSendsDelChange={onBackspaceSendsDelChange}
-                            rightClickPaste={rightClickPaste}
-                            onRightClickPasteChange={onRightClickPasteChange}
                             sshAlgorithms={sshAlgorithms ?? {}}
                             onAlgorithmToggle={handleAlgorithmToggle}
+                        />
+                    )}
+
+                    {activeTab === 'features' && (
+                        <FeaturesTab
+                            enabledFeatures={enabledFeatures}
+                            onFeatureToggle={onEnabledFeatureChange}
                         />
                     )}
 

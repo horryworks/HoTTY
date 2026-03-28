@@ -5,6 +5,8 @@ import { HostTree } from './HostTree';
 import { useResize } from '../../hooks/useResize';
 import { STORAGE_KEYS } from '../../constants/storage';
 import * as electronService from '../../services/electronService';
+import { useSettingsStore } from '../../stores/settingsStore';
+import type { ProtocolId } from '../../types/appTypes';
 import './SessionDialog.css';
 
 interface ConnectionDialogProps {
@@ -34,9 +36,20 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     getCachedPassword,
     saveCachedPassword,
     onShowMessage,
-    loggingPath
 }) => {
     const hostManager = useHostManager();
+    const enabledProtocols = useSettingsStore(s => s.enabledProtocols);
+
+    const PROTOCOLS: { value: ProtocolId; label: string }[] = [
+        { value: 'ssh', label: 'SSH' },
+        { value: 'telnet', label: 'Telnet' },
+        { value: 'serial', label: 'Serial' },
+        { value: 'wsl', label: 'WSL' },
+        { value: 'cmd', label: 'Command Prompt' },
+        { value: 'powershell', label: 'PowerShell' },
+        { value: 'git-bash', label: 'Git Bash' },
+    ];
+    const availableProtocols = PROTOCOLS.filter(p => enabledProtocols[p.value]);
 
     const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
     const [isDecrypting, setIsDecrypting] = useState(false);
@@ -189,7 +202,11 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
     const [port, setPort] = useState('22');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [protocol, setProtocol] = useState('ssh');
+    const [protocol, setProtocol] = useState<ProtocolId>(() => {
+        if (enabledProtocols.ssh) return 'ssh';
+        const first = availableProtocols[0];
+        return first ? first.value : 'ssh';
+    });
     const [isJumpbox, setIsJumpbox] = useState(false);
     const [jumpboxId, setJumpboxId] = useState('');
 
@@ -724,10 +741,6 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
             onConnect({ protocol: 'git-bash', shellType: 'git-bash' });
             return;
         }
-        if (protocol === 'log-viewer') {
-            onConnect({ protocol: 'log-viewer' });
-            return;
-        }
 
         // Save host history
         if (host) {
@@ -899,7 +912,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                 <select
                                     value={protocol}
                                     onChange={(e) => {
-                                        const p = e.target.value;
+                                        const p = e.target.value as ProtocolId;
                                         setProtocol(p);
                                         if (p === 'ssh') setPort('22');
                                         else if (p === 'telnet') setPort('23');
@@ -907,14 +920,9 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                         if (p !== 'ssh' && p !== 'telnet') setJumpboxId('');
                                     }}
                                 >
-                                    <option value="ssh">SSH</option>
-                                    <option value="telnet">Telnet</option>
-                                    <option value="serial">Serial</option>
-                                    <option value="wsl">WSL</option>
-                                    <option value="cmd">Command Prompt</option>
-                                    <option value="powershell">PowerShell</option>
-                                    <option value="git-bash">Git Bash</option>
-
+                                    {availableProtocols.map(p => (
+                                        <option key={p.value} value={p.value}>{p.label}</option>
+                                    ))}
                                 </select>
                             </div>
 
@@ -1046,7 +1054,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             )}
 
                             {/* SSH/Telnet fields */}
-                            {(protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell' && protocol !== 'git-bash' && protocol !== 'log-viewer') && (
+                            {(protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell' && protocol !== 'git-bash') && (
                                 <>
                                     {!iapEnabled && (
                                         <div className="form-row">
@@ -1170,22 +1178,6 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                 </div>
                             )}
 
-                            {/* Log Viewer info */}
-                            {protocol === 'log-viewer' && (
-                                <div className="form-group">
-                                    <div style={{ color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) - 1px)', lineHeight: '1.5' }}>
-                                        Opens a viewer for session log files.
-                                    </div>
-                                    <div style={{ marginTop: '8px', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) - 2px)' }}>
-                                        <strong>Log Folder:</strong>{' '}
-                                        {loggingPath
-                                            ? <span style={{ fontFamily: 'var(--font-family)', wordBreak: 'break-all' }}>{loggingPath}</span>
-                                            : <span style={{ color: 'var(--color-warning)', fontStyle: 'italic' }}>Not configured (set in Settings → Logging)</span>
-                                        }
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Serial fields */}
                             {protocol === 'serial' && (
                                 <>
@@ -1263,7 +1255,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                 {isConnecting && !connectionError && (
                                     <span className="connection-status">Connecting...</span>
                                 )}
-                                {originalState !== null && protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell' && protocol !== 'git-bash' && protocol !== 'log-viewer' && (
+                                {originalState !== null && protocol !== 'serial' && protocol !== 'wsl' && protocol !== 'cmd' && protocol !== 'powershell' && protocol !== 'git-bash' && (
                                     <button
                                         type="button"
                                         className="btn-secondary"

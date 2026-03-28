@@ -1,5 +1,5 @@
 import { app, BrowserWindow, shell, ipcMain, dialog, Menu, clipboard, protocol, net } from 'electron';
-import { release } from 'node:os';
+import { release, homedir as osHomedir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { SshService } from './services/ssh';
 import { TelnetService } from './services/telnet';
@@ -818,7 +818,7 @@ ipcMain.handle('file-explorer-list-directory', async (_event, dirPath: string) =
 
 // File Explorer: get available drives and home directory
 ipcMain.handle('file-explorer-get-drives', async () => {
-  const homedir = require('os').homedir();
+  const homedir = osHomedir();
   if (process.platform === 'win32') {
     const drives: string[] = [];
     for (let i = 65; i <= 90; i++) {

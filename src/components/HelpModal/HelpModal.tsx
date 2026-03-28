@@ -76,9 +76,13 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                 <li><strong>Serial</strong> — Direct COM port connection (routers, embedded devices, etc.)</li>
                                 <li><strong>WSL</strong> — Windows Subsystem for Linux distributions</li>
                                 <li><strong>Local</strong> — Local shell (CMD or PowerShell)</li>
+                                <li><strong>Git Bash</strong> — Git Bash interactive login shell (auto-detected)</li>
                             </ul>
                             <p className="help-text">
                                 🔗 <strong>Jumpbox (Bastion Host):</strong> SSH and Telnet connections can be routed through a jumpbox. Mark any SSH host as a jumpbox in the host tree, then select it as the "via" host when editing a target host.
+                            </p>
+                            <p className="help-text">
+                                ☁️ <strong>GCE IAP Tunnel:</strong> Connect to Google Compute Engine VMs via Identity-Aware Proxy without exposing VMs to the public internet. Check "Connect via Google Cloud IAP" in the SSH form, then select your GCP project, zone, and instance (autocomplete provided via gcloud CLI).
                             </p>
                         </div>
                     </details>
@@ -208,6 +212,22 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                             <p className="help-text small">
                                 💡 <strong>Tip:</strong> An unsaved file shows a <code>•</code> dot on its sub-tab title. Save with <code>Ctrl + S</code>.
                             </p>
+                        </div>
+                    </details>
+
+                    {/* ── File Explorer ── */}
+                    <details className="help-section">
+                        <summary>📂 File Explorer</summary>
+                        <div className="help-section-body">
+                            <p className="help-text">
+                                Open a built-in file browser pane via <strong><FeaturesIcon /></strong> (Features) → <strong>"File Explorer"</strong>. Browse your drives and directories in a collapsible tree structure.
+                            </p>
+                            <ul className="shortcuts-list">
+                                <li><strong>Navigate:</strong> Click folders to expand/collapse. Use the breadcrumb path at the top for quick navigation.</li>
+                                <li><strong>Open files:</strong> Double-click a file to open it in the Text Editor.</li>
+                                <li><strong>Hidden files:</strong> Toggle hidden file visibility with the eye icon in the toolbar.</li>
+                                <li><strong>Refresh:</strong> Click the refresh button to reload the current directory.</li>
+                            </ul>
                         </div>
                     </details>
 

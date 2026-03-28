@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { PromptPattern, PersonaDefinition, AskAiCommand } from '../types/appTypes';
+import type { ProtocolId, FeatureId, PromptPattern, PersonaDefinition, AskAiCommand } from '../types/appTypes';
 import * as electronService from '../services/electronService';
 
 // ── State shape ──────────────────────────────────────────────────────────────
@@ -82,6 +82,10 @@ export interface SettingsState {
 
     // Active Persona (used to resolve Ask AI commands for context menus)
     activePersonaId: string;
+
+    // Protocol & Feature Toggles
+    enabledProtocols: Record<ProtocolId, boolean>;
+    enabledFeatures: Record<FeatureId, boolean>;
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
@@ -119,6 +123,8 @@ export interface SettingsActions {
     updateActiveAiProvider: (v: 'gemini' | 'vertexai' | 'openai' | 'anthropic') => void;
     updateActivePersonaId: (v: string) => void;
     getActiveAskAiCommands: () => AskAiCommand[];
+    updateEnabledProtocol: (protocol: ProtocolId, enabled: boolean) => void;
+    updateEnabledFeature: (feature: FeatureId, enabled: boolean) => void;
 }
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
@@ -242,6 +248,14 @@ const INITIAL_STATE: SettingsState = {
     interactiveStabilizationTimeout: 10000,
     activeAiProvider: 'vertexai',
     activePersonaId: 'network-expert',
+    enabledProtocols: {
+        ssh: true, telnet: true, serial: true,
+        wsl: true, cmd: true, powershell: true, 'git-bash': true,
+    },
+    enabledFeatures: {
+        'ai-chat': true, 'log-viewer': true, 'ping-monitor': true,
+        'text-editor': true, 'file-explorer': true,
+    },
 };
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -302,10 +316,16 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
                 const persona = aiPersonas.find(p => p.id === activePersonaId);
                 return persona?.askAiCommands ?? aiPersonas[0]?.askAiCommands ?? [];
             },
+            updateEnabledProtocol: (protocol, enabled) => set((prev) => ({
+                enabledProtocols: { ...prev.enabledProtocols, [protocol]: enabled },
+            })),
+            updateEnabledFeature: (feature, enabled) => set((prev) => ({
+                enabledFeatures: { ...prev.enabledFeatures, [feature]: enabled },
+            })),
         }),
         {
             name: 'hotty-settings',
-            version: 1,
+            version: 2,
             // Persist only state fields, not action functions
             partialize: (state) =>
                 Object.fromEntries(
@@ -313,6 +333,14 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
                 ) as SettingsState,
             // Migrate from v0 (global askAiCommands) to v1 (per-persona askAiCommands)
             migrate: (persisted, version) => {
+                if (version === 1) {
+                    const old = persisted as Record<string, unknown>;
+                    return {
+                        ...old,
+                        enabledProtocols: INITIAL_STATE.enabledProtocols,
+                        enabledFeatures: INITIAL_STATE.enabledFeatures,
+                    };
+                }
                 if (version === 0) {
                     const old = persisted as Record<string, unknown>;
                     const globalCommands = (old.askAiCommands as AskAiCommand[] | undefined) ?? DEFAULT_AI_COMMANDS;

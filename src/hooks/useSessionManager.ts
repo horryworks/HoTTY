@@ -458,6 +458,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     };
 
     const createAISession = () => {
+        if (!useSettingsStore.getState().enabledFeatures['ai-chat']) return;
         // Only one AI session allowed
         const existingAI = sessions.find(s => s.type === 'ai');
         const aiTitle = AI_PROVIDER_LABELS[activeAiProvider] ?? 'AI';
@@ -489,6 +490,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     };
 
     const createLogViewerSession = () => {
+        if (!useSettingsStore.getState().enabledFeatures['log-viewer']) return;
         const sessionId = self.crypto.randomUUID();
         const newSession: Session = {
             id: sessionId,
@@ -503,6 +505,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     };
 
     const createPingMonitorSession = () => {
+        if (!useSettingsStore.getState().enabledFeatures['ping-monitor']) return;
         const sessionId = self.crypto.randomUUID();
 
         // Restore saved targets and interval from previous session
@@ -534,6 +537,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     };
 
     const createTextEditorSession = (initialFilePath?: string) => {
+        if (!useSettingsStore.getState().enabledFeatures['text-editor']) return;
         // Only allow one text-editor session at a time — reuse existing if present
         const existingSession = sessions.find(s => s.type === 'text-editor');
         if (existingSession) {
@@ -642,6 +646,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     };
 
     const createFileExplorerSession = () => {
+        if (!useSettingsStore.getState().enabledFeatures['file-explorer']) return;
         // Only allow one file explorer session at a time
         const existingSession = sessions.find(s => s.type === 'file-explorer');
         if (existingSession) {

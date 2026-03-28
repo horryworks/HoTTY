@@ -21,6 +21,7 @@ describe('TabBar', () => {
         onNewLogViewer: vi.fn(),
         onNewTextEditor: vi.fn(),
         onNewPingMonitor: vi.fn(),
+        onNewFileExplorer: vi.fn(),
         onTabReorder: vi.fn(),
         lastTargetSessionId: null,
     };

@@ -104,6 +104,16 @@ const baseProps = {
     onProactiveInstructionChange: vi.fn(),
     interactiveStabilizationTimeout: 400,
     onInteractiveStabilizationTimeoutChange: vi.fn(),
+    enabledProtocols: {
+        ssh: true, telnet: true, serial: true,
+        wsl: true, cmd: true, powershell: true, 'git-bash': true,
+    },
+    onEnabledProtocolChange: vi.fn(),
+    enabledFeatures: {
+        'ai-chat': true, 'log-viewer': true, 'ping-monitor': true,
+        'text-editor': true, 'file-explorer': true,
+    },
+    onEnabledFeatureChange: vi.fn(),
 };
 
 // Helper to render and let async effects settle
@@ -132,15 +142,15 @@ describe('SettingsModal', () => {
 
     it('renders all tab buttons', async () => {
         await renderAndSettle(<SettingsModal {...baseProps} />);
-        expect(screen.getByText('System')).toBeInTheDocument();
+        expect(screen.getByText('General')).toBeInTheDocument();
         expect(screen.getByText('Appearance')).toBeInTheDocument();
-        expect(screen.getByText('SSH')).toBeInTheDocument();
-        expect(screen.getByText('Telnet')).toBeInTheDocument();
+        expect(screen.getByText('Protocols')).toBeInTheDocument();
+        expect(screen.getByText('Features')).toBeInTheDocument();
         expect(screen.getByText('AI')).toBeInTheDocument();
         expect(screen.getByText('About')).toBeInTheDocument();
     });
 
-    it('shows System tab content by default', async () => {
+    it('shows General tab content by default', async () => {
         await renderAndSettle(<SettingsModal {...baseProps} />);
         expect(screen.getByText('Logging')).toBeInTheDocument();
     });
@@ -151,16 +161,18 @@ describe('SettingsModal', () => {
         expect(screen.getByText('Theme')).toBeInTheDocument();
     });
 
-    it('switches to SSH tab when clicked', async () => {
+    it('switches to Protocols tab when clicked', async () => {
         await renderAndSettle(<SettingsModal {...baseProps} />);
-        fireEvent.click(screen.getByText('SSH'));
+        fireEvent.click(screen.getByText('Protocols'));
         expect(screen.getByText('SSH KeepAlive')).toBeInTheDocument();
+        expect(screen.getByText('Telnet KeepAlive')).toBeInTheDocument();
     });
 
-    it('switches to Telnet tab when clicked', async () => {
+    it('switches to Features tab when clicked', async () => {
         await renderAndSettle(<SettingsModal {...baseProps} />);
-        fireEvent.click(screen.getByText('Telnet'));
-        expect(screen.getByText('Telnet KeepAlive')).toBeInTheDocument();
+        fireEvent.click(screen.getByText('Features'));
+        expect(screen.getByText('AI Chat')).toBeInTheDocument();
+        expect(screen.getByText('Log Viewer')).toBeInTheDocument();
     });
 
     it('switches to AI tab when clicked', async () => {

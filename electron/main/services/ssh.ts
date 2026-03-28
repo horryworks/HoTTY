@@ -92,7 +92,7 @@ export class SshService implements ISessionService {
         return defaultAlgorithms;
     }
 
-    connect(config: ConnectConfig & { encoding?: string }) {
+    connect(config: ConnectConfig & { encoding?: string; skipHostVerify?: boolean }) {
         this.encoding = config.encoding || 'utf8';
         logger.info('ssh', 'Connect attempt', { sessionId: this.sessionId, host: config.host, port: config.port ?? 22, user: config.username });
 

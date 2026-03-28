@@ -1,5 +1,20 @@
 # Release Notes - HoTTY
 
+## [v1.0.3] - 2026-03-28
+
+### New Features
+- **GCE IAP Tunnel**: SSH connections can now be established to Google Compute Engine VMs via Identity-Aware Proxy (IAP), eliminating the need to expose VMs to the public internet. The session dialog integrates with the gcloud CLI to provide autocomplete for GCP projects, zones, and instances. Enable via the "Connect via Google Cloud IAP" checkbox in the SSH connection form.
+- **File Explorer**: Added a built-in file browser pane (accessible via **⊞** Features menu → **File Explorer**). Browse drives and directories in a tree structure with lazy-loading expansion, toggle hidden files, and double-click files to open them directly in the Text Editor. Virtual scrolling ensures smooth performance with large directories.
+- **Git Bash Connection**: Added Git Bash as a new connection type. HoTTY auto-detects Git Bash installations and provides an interactive login shell session. Selectable from the protocol dropdown in the session dialog.
+
+### Improved
+- **Settings Restructured**: The Settings modal has been reorganized into specialized tabs — **General** (logging, keyboard, buffer), **Protocols** (protocol toggles, SSH/Telnet KeepAlive, SSH algorithms), **Features** (enable/disable AI Chat, Log Viewer, Ping Monitor, Text Editor, File Explorer), **Appearance**, and **AI** — for easier navigation and configuration.
+
+### Bug Fixes
+- **Text Editor Tab Sync**: Fixed an issue where text editor sub-tab state could become stale due to a closure bug, causing tabs to display outdated content.
+
+---
+
 ## [v1.0.2] - 2026-03-26
 
 ### Improved
