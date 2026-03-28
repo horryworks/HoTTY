@@ -926,7 +926,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                 </select>
                             </div>
 
-                            {(protocol === 'ssh' || protocol === 'telnet') && (
+                            {selectedHostId && (protocol === 'ssh' || protocol === 'telnet') && (
                                 <div className="form-group form-group-checkbox">
                                     <label>
                                         <input
