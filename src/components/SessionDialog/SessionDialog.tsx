@@ -459,12 +459,39 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         setVerifyError('');
     }, []);
 
+    // --- Reset form to default state ---
+    const resetForm = useCallback(() => {
+        setSelectedHostId(null);
+        setOriginalState(null);
+        setDisplayName('');
+        setHost('');
+        setPort('22');
+        setUsername('');
+        setPassword('');
+        setIsJumpbox(false);
+        setJumpboxId('');
+        setIapEnabled(false);
+        setIapProject('');
+        setIapZone('');
+        setIapInstance('');
+    }, []);
+
     // --- Select a host from the tree ---
     const handleSelectHost = async (node: HostTreeNode) => {
         setSelectedHostId(node.id);
         if (node.type !== 'host' || !node.entry) {
             setOriginalState(null);
             setDisplayName('');
+            setHost('');
+            setPort('22');
+            setUsername('');
+            setPassword('');
+            setIsJumpbox(false);
+            setJumpboxId('');
+            setIapEnabled(false);
+            setIapProject('');
+            setIapZone('');
+            setIapInstance('');
             return;
         }
 
@@ -848,6 +875,12 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                     width: dialogSize.width,
                     height: dialogSize.height,
                 }}
+                onClick={(e) => {
+                    const target = e.target as HTMLElement;
+                    // Skip if clicking on interactive elements
+                    if (target.closest('.form-panel, .host-tree-row, .host-tree-toolbar, .context-menu, .host-edit-modal-overlay')) return;
+                    resetForm();
+                }}
             >
                 {/* Drag handle — full header area */}
                 <div
@@ -926,7 +959,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                 </select>
                             </div>
 
-                            {selectedHostId && (protocol === 'ssh' || protocol === 'telnet') && (
+                            {selectedHostId && protocol === 'ssh' && (
                                 <div className="form-group form-group-checkbox">
                                     <label>
                                         <input

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { ConnectionDialog } from './SessionDialog';
 
 vi.mock('./SessionDialog.css', () => ({}));
@@ -23,8 +23,12 @@ vi.mock('../../hooks/useHostManager', () => ({
 vi.mock('../../hooks/useResize', () => ({
     useResize: vi.fn(() => ({ startResize: vi.fn() })),
 }));
+let capturedOnSelect: ((node: import('../../hooks/useHostManager').HostTreeNode) => void) | null = null;
 vi.mock('./HostTree', () => ({
-    HostTree: () => <div data-testid="host-tree" />,
+    HostTree: (props: { onSelect: (node: import('../../hooks/useHostManager').HostTreeNode) => void }) => {
+        capturedOnSelect = props.onSelect;
+        return <div data-testid="host-tree" />;
+    },
 }));
 vi.mock('../../services/electronService', () => ({
     listSerialPorts: vi.fn(() => Promise.resolve([])),
@@ -200,6 +204,38 @@ describe('ConnectionDialog', () => {
         await waitFor(() => {
             expect(onConnect).toHaveBeenCalledWith({ protocol: 'git-bash', shellType: 'git-bash' });
         });
+    });
+
+    it('clears form fields when a folder is selected after a host was filled in', async () => {
+        render(<ConnectionDialog {...baseProps} />);
+        expect(capturedOnSelect).not.toBeNull();
+
+        // Simulate selecting a host node — fill in form fields
+        const hostNode: import('../../hooks/useHostManager').HostTreeNode = {
+            id: 'host-1',
+            type: 'host',
+            name: 'TestHost',
+            entry: { protocol: 'ssh', host: '192.168.0.2', port: 22, username: 'admin', password: 'secret' },
+        };
+        await act(async () => { await capturedOnSelect!(hostNode); });
+
+        // Verify form was populated
+        const hostInput = screen.getByPlaceholderText('example.com') as HTMLInputElement;
+        expect(hostInput.value).toBe('192.168.0.2');
+
+        // Simulate selecting a folder node
+        const folderNode: import('../../hooks/useHostManager').HostTreeNode = {
+            id: 'folder-1',
+            type: 'folder',
+            name: 'Local2',
+            children: [],
+        };
+        await act(async () => { await capturedOnSelect!(folderNode); });
+
+        // Form fields should be cleared
+        expect(hostInput.value).toBe('');
+        const usernameInput = screen.getByText('Username').parentElement?.querySelector('input') as HTMLInputElement;
+        expect(usernameInput.value).toBe('');
     });
 
     it('re-centers dialog when window is resized', () => {

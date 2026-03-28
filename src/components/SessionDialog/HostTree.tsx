@@ -32,6 +32,7 @@ interface HostTreeProps {
     onSortFolder?: (folderId: string | null) => void;
     onImportData?: (nodes: HostTreeNode[], folderName: string, parentId: string | null) => Promise<string | undefined> | void;
     onShowMessage?: (type: 'error' | 'success' | 'info', title: string | undefined, message: string) => void;
+    onDeselect?: () => void;
 }
 
 export const HostTree: React.FC<HostTreeProps> = ({
@@ -46,7 +47,8 @@ export const HostTree: React.FC<HostTreeProps> = ({
     onMoveNode,
     onSortFolder,
     onImportData,
-    onShowMessage
+    onShowMessage,
+    onDeselect,
 }) => {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
