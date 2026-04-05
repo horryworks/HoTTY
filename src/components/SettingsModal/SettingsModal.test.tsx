@@ -104,6 +104,12 @@ const baseProps = {
     onProactiveInstructionChange: vi.fn(),
     interactiveStabilizationTimeout: 400,
     onInteractiveStabilizationTimeoutChange: vi.fn(),
+    commandExecutionMode: 'ask-before-execute' as const,
+    onCommandExecutionModeChange: vi.fn(),
+    maxConsecutiveAutoExecutions: 10,
+    onMaxConsecutiveAutoExecutionsChange: vi.fn(),
+    customSafeCommands: [] as string[],
+    onCustomSafeCommandsChange: vi.fn(),
     enabledProtocols: {
         ssh: true, telnet: true, serial: true,
         wsl: true, cmd: true, powershell: true, 'git-bash': true,

@@ -315,7 +315,7 @@
     flex-shrink: 0;
 }
 .log-viewer-nav-btn:hover:not(:disabled) { background: var(--bg-tertiary); }
-.log-viewer-nav-btn:disabled { opacity: 0.5; cursor: default; }
+.log-viewer-nav-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .log-viewer-search-btn {
     background: var(--accent-color);
@@ -333,7 +333,7 @@
     gap: 4px;
 }
 .log-viewer-search-btn:hover:not(:disabled) { opacity: 0.85; }
-.log-viewer-search-btn:disabled { opacity: 0.5; cursor: default; }
+.log-viewer-search-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .log-viewer-match-count {
     font-size: calc(var(--font-size-base) - 3px);

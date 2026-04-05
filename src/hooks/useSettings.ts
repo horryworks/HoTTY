@@ -42,6 +42,9 @@ export function useSettings() {
         proactiveInstruction: store.proactiveInstruction,
         interactiveStabilizationTimeout: store.interactiveStabilizationTimeout,
         activeAiProvider: store.activeAiProvider,
+        commandExecutionMode: store.commandExecutionMode,
+        maxConsecutiveAutoExecutions: store.maxConsecutiveAutoExecutions,
+        customSafeCommands: store.customSafeCommands,
         enabledProtocols: store.enabledProtocols,
         enabledFeatures: store.enabledFeatures,
     };
@@ -80,6 +83,9 @@ export function useSettings() {
         updateProactiveInstruction: store.updateProactiveInstruction,
         updateInteractiveStabilizationTimeout: store.updateInteractiveStabilizationTimeout,
         updateActiveAiProvider: store.updateActiveAiProvider,
+        updateCommandExecutionMode: store.updateCommandExecutionMode,
+        updateMaxConsecutiveAutoExecutions: store.updateMaxConsecutiveAutoExecutions,
+        updateCustomSafeCommands: store.updateCustomSafeCommands,
         updateEnabledProtocol: store.updateEnabledProtocol,
         updateEnabledFeature: store.updateEnabledFeature,
     };

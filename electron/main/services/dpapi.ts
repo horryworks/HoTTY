@@ -6,7 +6,7 @@ const DPAPI_PREFIX = '[DPAPI]';
 /**
  * Checks if a value was encrypted by DPAPI.
  */
-export function isDpapiEncrypted(value: string): boolean {
+function isDpapiEncrypted(value: string): boolean {
     return value.startsWith(DPAPI_PREFIX);
 }
 

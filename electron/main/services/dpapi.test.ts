@@ -5,23 +5,19 @@ vi.mock('./Logger', () => ({
     logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { isDpapiEncrypted, encryptString, decryptString, verifyWindowsUser } from './dpapi';
+import { encryptString, decryptString, verifyWindowsUser } from './dpapi';
 
-describe('isDpapiEncrypted', () => {
-    it('returns true for strings with [DPAPI] prefix', () => {
-        expect(isDpapiEncrypted('[DPAPI]abc123')).toBe(true);
+describe('DPAPI prefix detection (via decryptString)', () => {
+    it('treats non-prefixed string as legacy plaintext and returns as-is', async () => {
+        expect(await decryptString('plaintext')).toBe('plaintext');
     });
 
-    it('returns false for plain strings', () => {
-        expect(isDpapiEncrypted('plaintext')).toBe(false);
+    it('returns empty string unchanged', async () => {
+        expect(await decryptString('')).toBe('');
     });
 
-    it('returns false for empty string', () => {
-        expect(isDpapiEncrypted('')).toBe(false);
-    });
-
-    it('returns false for partial prefix', () => {
-        expect(isDpapiEncrypted('[DPAP]abc')).toBe(false);
+    it('treats partial prefix as legacy plaintext', async () => {
+        expect(await decryptString('[DPAP]abc')).toBe('[DPAP]abc');
     });
 });
 

@@ -87,9 +87,9 @@ function runGcloud(args: string[], timeoutMs: number = GCLOUD_CMD_TIMEOUT_MS): P
         const gcloudPath = findGcloudPath();
         // On Windows, .cmd files require shell: true. When using shell mode,
         // paths with spaces must be quoted to prevent the shell from splitting them.
-        const rawCommand = gcloudPath || 'gcloud';
-        const command = (process.platform === 'win32' && gcloudPath && gcloudPath.includes(' '))
-            ? `"${gcloudPath}"` : rawCommand;
+        const command = gcloudPath || 'gcloud';
+        // On Windows, .cmd files need shell: true for execution.
+        // Avoid manual quoting — let the OS handle path resolution.
         const useShell = process.platform === 'win32' || !gcloudPath;
 
         logger.debug('iap', 'Running gcloud command', { command, args });
@@ -195,7 +195,7 @@ export async function listInstances(project: string, zone: string): Promise<{ na
             'compute', 'instances', 'list',
             '--format=json',
             `--project=${project}`,
-            `--filter=zone:${zone}`,
+            `--filter=zone:(${zone})`,
             '--sort-by=name',
         ]);
         const instances = JSON.parse(stdout);
@@ -247,10 +247,8 @@ export function startIapTunnel(config: IapTunnelConfig): Promise<IapTunnelResult
 
     return new Promise((resolve, reject) => {
         const gcloudPath = findGcloudPath();
-        const rawCommand = gcloudPath || 'gcloud';
+        const command = gcloudPath || 'gcloud';
         const useShell = process.platform === 'win32' || !gcloudPath;
-        const command = (process.platform === 'win32' && gcloudPath && gcloudPath.includes(' '))
-            ? `"${gcloudPath}"` : rawCommand;
 
         const args = [
             'compute', 'start-iap-tunnel',

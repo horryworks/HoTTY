@@ -129,12 +129,13 @@ export function useSessionManager(options: UseSessionManagerOptions) {
 
     // Terminal instance factory
     const createTerminalInstance = (sessionId: string, type?: Session['type']) => {
+        const settings = useSettingsStore.getState();
         const term = new Terminal({
             cursorBlink: true,
-            fontSize: 14,
-            fontFamily: 'Consolas, "Courier New", monospace',
+            fontSize: settings.fontSize,
+            fontFamily: settings.fontFamily,
             disableStdin: false,
-            theme: { background: '#1e1e1e', foreground: '#ffffff' },
+            theme: { background: settings.terminalBackground, foreground: settings.terminalForeground },
             allowProposedApi: true,
             scrollback: scrollback
         });

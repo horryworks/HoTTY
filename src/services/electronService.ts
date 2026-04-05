@@ -31,7 +31,6 @@ export const aiListModels = () => api().aiListModels();
 export const aiListLocations = () => api().aiListLocations();
 export const aiChatCancel = (sessionId: string) => api().aiChatCancel(sessionId);
 export const aiChatClear = (sessionId: string) => api().aiChatClear(sessionId);
-export const aiListProviders = () => api().aiListProviders();
 export const aiSetLocation = (location: string) => api().aiSetLocation(location);
 export const aiSetProvider = (providerId: string) => api().aiSetProvider(providerId);
 export const selectServiceAccountKeyFile = () => api().selectServiceAccountKeyFile();

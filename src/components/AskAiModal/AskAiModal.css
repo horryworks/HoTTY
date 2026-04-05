@@ -2,8 +2,8 @@
     position: fixed;
     top: 0;
     left: 0;
-    width: 100vw;
-    height: 100vh;
+    right: 0;
+    bottom: 0;
     background-color: var(--modal-overlay-bg);
     display: flex;
     justify-content: center;
@@ -105,4 +105,23 @@
     gap: 12px;
     padding: 12px 16px;
     border-top: 1px solid var(--border-color);
+}
+
+.ask-ai-modal-footer .btn-secondary {
+    background: var(--btn-secondary-bg);
+    color: var(--text-primary);
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: calc(var(--font-size-base) - 1px);
+}
+
+.ask-ai-modal-footer .btn-secondary:hover:not(:disabled) {
+    background: var(--btn-secondary-hover-bg);
+}
+
+.ask-ai-modal-footer .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }

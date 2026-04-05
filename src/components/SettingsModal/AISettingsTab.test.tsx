@@ -51,6 +51,12 @@ const baseProps = {
     onActivePersonaIdChange: vi.fn(),
     proactiveInstruction: '',
     onProactiveInstructionChange: vi.fn(),
+    commandExecutionMode: 'ask-before-execute' as const,
+    onCommandExecutionModeChange: vi.fn(),
+    maxConsecutiveAutoExecutions: 10,
+    onMaxConsecutiveAutoExecutionsChange: vi.fn(),
+    customSafeCommands: [] as string[],
+    onCustomSafeCommandsChange: vi.fn(),
     showSystemPrompt: false,
     onShowSystemPromptChange: vi.fn(),
     draggedIndex: null,
@@ -227,7 +233,7 @@ describe('AISettingsTab', () => {
         (aiAuthStatus as ReturnType<typeof vi.fn>).mockResolvedValue(true);
         const onAuthenticatedChange = vi.fn();
         render(<AISettingsTab {...baseProps} onAuthenticatedChange={onAuthenticatedChange} />);
-        const select = screen.getByRole('combobox');
+        const select = screen.getAllByRole('combobox')[0];
         fireEvent.change(select, { target: { value: 'vertexai' } });
         await waitFor(() => {
             expect(aiAuthStatus).toHaveBeenCalled();
@@ -237,7 +243,7 @@ describe('AISettingsTab', () => {
 
     it('shows privacy warning when Google AI Studio (Gemini) is selected', async () => {
         render(<AISettingsTab {...baseProps} />);
-        const select = screen.getByRole('combobox');
+        const select = screen.getAllByRole('combobox')[0];
         fireEvent.change(select, { target: { value: 'gemini' } });
         await waitFor(() => {
             expect(screen.getByText(/Privacy Notice/)).toBeInTheDocument();
@@ -246,7 +252,7 @@ describe('AISettingsTab', () => {
 
     it('does not show privacy warning when non-Gemini provider is selected', async () => {
         render(<AISettingsTab {...baseProps} />);
-        const select = screen.getByRole('combobox');
+        const select = screen.getAllByRole('combobox')[0];
         fireEvent.change(select, { target: { value: 'vertexai' } });
         await waitFor(() => {
             expect(screen.queryByText(/Privacy Notice/)).not.toBeInTheDocument();
@@ -255,7 +261,7 @@ describe('AISettingsTab', () => {
 
     it('dismisses privacy warning when OK is clicked', async () => {
         render(<AISettingsTab {...baseProps} />);
-        const select = screen.getByRole('combobox');
+        const select = screen.getAllByRole('combobox')[0];
         fireEvent.change(select, { target: { value: 'gemini' } });
         await waitFor(() => {
             expect(screen.getByText(/Privacy Notice/)).toBeInTheDocument();

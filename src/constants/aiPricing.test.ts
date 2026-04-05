@@ -1,41 +1,40 @@
 import { describe, it, expect } from 'vitest';
-import { calcAICost, GEMINI_PRICING, OPENAI_PRICING, ANTHROPIC_PRICING } from './aiPricing';
+import { calcAICost } from './aiPricing';
 
-describe('GEMINI_PRICING', () => {
-    it('contains expected model keys', () => {
-        expect('gemini-3.1-pro' in GEMINI_PRICING).toBe(true);
-        expect('gemini-3.1-flash-lite' in GEMINI_PRICING).toBe(true);
-        expect('gemini-3-pro' in GEMINI_PRICING).toBe(true);
-        expect('gemini-3-flash' in GEMINI_PRICING).toBe(true);
-        expect('gemini-2.5-pro' in GEMINI_PRICING).toBe(true);
-        expect('gemini-2.5-flash' in GEMINI_PRICING).toBe(true);
-        expect('gemini-2.5-flash-lite' in GEMINI_PRICING).toBe(true);
-        expect('gemini-2.0-flash' in GEMINI_PRICING).toBe(true);
-        expect('gemini-1.5-flash' in GEMINI_PRICING).toBe(true);
+describe('calcAICost', () => {
+    // ── Model coverage (verifies pricing table entries exist) ────────────────
+    it('recognises all expected Gemini models', () => {
+        const models = [
+            'gemini-3.1-pro', 'gemini-3.1-flash-lite',
+            'gemini-3-pro', 'gemini-3-flash',
+            'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite',
+            'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-exp',
+            'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.5-flash-8b',
+        ];
+        for (const m of models) {
+            expect(calcAICost(1_000_000, 0, m), `${m} should be recognised`).not.toBeNull();
+        }
+    });
+
+    it('recognises all expected OpenAI models', () => {
+        const models = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'o3-mini', 'o4-mini'];
+        for (const m of models) {
+            expect(calcAICost(1_000_000, 0, m), `${m} should be recognised`).not.toBeNull();
+        }
+    });
+
+    it('recognises all expected Anthropic models', () => {
+        const models = ['claude-opus-4', 'claude-sonnet-4', 'claude-haiku-4', 'claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku'];
+        for (const m of models) {
+            expect(calcAICost(1_000_000, 0, m), `${m} should be recognised`).not.toBeNull();
+        }
     });
 
     it('gemini-2.0-flash-exp is free tier', () => {
-        expect(GEMINI_PRICING['gemini-2.0-flash-exp'].input).toBe(0);
-        expect(GEMINI_PRICING['gemini-2.0-flash-exp'].output).toBe(0);
+        expect(calcAICost(1_000_000, 1_000_000, 'gemini-2.0-flash-exp')).toBe(0);
     });
-});
 
-describe('OPENAI_PRICING', () => {
-    it('contains expected model keys', () => {
-        expect('gpt-4o' in OPENAI_PRICING).toBe(true);
-        expect('gpt-4o-mini' in OPENAI_PRICING).toBe(true);
-    });
-});
-
-describe('ANTHROPIC_PRICING', () => {
-    it('contains expected model keys', () => {
-        expect('claude-opus-4' in ANTHROPIC_PRICING).toBe(true);
-        expect('claude-sonnet-4' in ANTHROPIC_PRICING).toBe(true);
-    });
-});
-
-describe('calcAICost', () => {
-    // ── Gemini ────────────────────────────────────────────────────────────────
+    // ── Basic cost calculations ──────────────────────────────────────────────
     it('returns 0 for zero tokens', () => {
         expect(calcAICost(0, 0, 'gemini-1.5-flash')).toBe(0);
     });
@@ -60,12 +59,12 @@ describe('calcAICost', () => {
 
     it('matches gemini-2.0-flash for exact prefix', () => {
         const cost = calcAICost(1_000_000, 0, 'gemini-2.0-flash');
-        expect(cost).toBeCloseTo(GEMINI_PRICING['gemini-2.0-flash'].input);
+        expect(cost).toBeCloseTo(0.10);
     });
 
     it('matches gemini-1.5-flash-8b over gemini-1.5-flash', () => {
         const cost = calcAICost(1_000_000, 0, 'gemini-1.5-flash-8b');
-        expect(cost).toBeCloseTo(GEMINI_PRICING['gemini-1.5-flash-8b'].input);
+        expect(cost).toBeCloseTo(0.0375);
     });
 
     it('calculates cost for gemini-3.1-pro', () => {
@@ -105,7 +104,7 @@ describe('calcAICost', () => {
 
     it('matches model with version suffix via prefix', () => {
         const cost = calcAICost(1_000_000, 0, 'gemini-1.5-pro-002');
-        expect(cost).toBeCloseTo(GEMINI_PRICING['gemini-1.5-pro'].input);
+        expect(cost).toBeCloseTo(1.25);
     });
 
     it('scales correctly for partial token counts', () => {
@@ -113,7 +112,7 @@ describe('calcAICost', () => {
         expect(cost).toBeCloseTo(0.05);
     });
 
-    // ── OpenAI ────────────────────────────────────────────────────────────────
+    // ── OpenAI ──��───────────────────────────────���─────────────────────────────
     it('calculates cost for gpt-4o', () => {
         const cost = calcAICost(1_000_000, 1_000_000, 'gpt-4o');
         expect(cost).toBeCloseTo(2.50 + 10.00);
@@ -134,7 +133,7 @@ describe('calcAICost', () => {
         expect(cost).toBeCloseTo(2.50);
     });
 
-    // ── Anthropic ─────────────────────────────────────────────────────────────
+    // ── Anthropic ────────────────────────��────────────────────────────────────
     it('calculates cost for claude-sonnet-4', () => {
         const cost = calcAICost(1_000_000, 1_000_000, 'claude-sonnet-4-6');
         expect(cost).toBeCloseTo(3.00 + 15.00);
@@ -150,7 +149,7 @@ describe('calcAICost', () => {
         expect(cost).toBeCloseTo(0.25 + 1.25);
     });
 
-    // ── Unknown models ────────────────────────────────────────────────────────
+    // ── Unknown models ──────────────���───────────────────────────────────���─────
     it('returns null for unknown model', () => {
         expect(calcAICost(1_000_000, 0, 'unknown-model-xyz')).toBeNull();
     });
@@ -163,7 +162,7 @@ describe('calcAICost', () => {
         expect(calcAICost(1_000_000, 0, 'publishers/google/models/custom')).toBeNull();
     });
 
-    // ── Vertex AI path format ────────────────────────────────────────────────
+    // ── Vertex AI path format ───────��────────────────────────────────────────
     it('calculates cost for Vertex AI Google model path', () => {
         const cost = calcAICost(1_000_000, 1_000_000, 'publishers/google/models/gemini-3.1-pro-preview');
         expect(cost).toBeCloseTo(2.00 + 12.00);

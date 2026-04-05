@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { ProtocolId, FeatureId, PromptPattern, PersonaDefinition, AskAiCommand } from '../types/appTypes';
+import type { ProtocolId, FeatureId, PromptPattern, PersonaDefinition, AskAiCommand, CommandExecutionMode } from '../types/appTypes';
 import * as electronService from '../services/electronService';
 
 // ── State shape ──────────────────────────────────────────────────────────────
@@ -83,6 +83,11 @@ export interface SettingsState {
     // Active Persona (used to resolve Ask AI commands for context menus)
     activePersonaId: string;
 
+    // Command Execution Mode
+    commandExecutionMode: CommandExecutionMode;
+    maxConsecutiveAutoExecutions: number;   // 0 = unlimited
+    customSafeCommands: string[];
+
     // Protocol & Feature Toggles
     enabledProtocols: Record<ProtocolId, boolean>;
     enabledFeatures: Record<FeatureId, boolean>;
@@ -123,6 +128,9 @@ export interface SettingsActions {
     updateActiveAiProvider: (v: 'gemini' | 'vertexai' | 'openai' | 'anthropic') => void;
     updateActivePersonaId: (v: string) => void;
     getActiveAskAiCommands: () => AskAiCommand[];
+    updateCommandExecutionMode: (v: CommandExecutionMode) => void;
+    updateMaxConsecutiveAutoExecutions: (v: number) => void;
+    updateCustomSafeCommands: (v: string[]) => void;
     updateEnabledProtocol: (protocol: ProtocolId, enabled: boolean) => void;
     updateEnabledFeature: (feature: FeatureId, enabled: boolean) => void;
 }
@@ -248,6 +256,9 @@ const INITIAL_STATE: SettingsState = {
     interactiveStabilizationTimeout: 10000,
     activeAiProvider: 'vertexai',
     activePersonaId: 'network-expert',
+    commandExecutionMode: 'ask-before-execute',
+    maxConsecutiveAutoExecutions: 10,
+    customSafeCommands: [],
     enabledProtocols: {
         ssh: true, telnet: true, serial: true,
         wsl: true, cmd: true, powershell: true, 'git-bash': true,
@@ -316,6 +327,9 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
                 const persona = aiPersonas.find(p => p.id === activePersonaId);
                 return persona?.askAiCommands ?? aiPersonas[0]?.askAiCommands ?? [];
             },
+            updateCommandExecutionMode: (v) => set({ commandExecutionMode: v }),
+            updateMaxConsecutiveAutoExecutions: (v) => set({ maxConsecutiveAutoExecutions: v }),
+            updateCustomSafeCommands: (v) => set({ customSafeCommands: v }),
             updateEnabledProtocol: (protocol, enabled) => set((prev) => ({
                 enabledProtocols: { ...prev.enabledProtocols, [protocol]: enabled },
             })),
@@ -325,7 +339,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
         }),
         {
             name: 'hotty-settings',
-            version: 2,
+            version: 3,
             // Persist only state fields, not action functions
             partialize: (state) =>
                 Object.fromEntries(
@@ -333,6 +347,15 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
                 ) as SettingsState,
             // Migrate from v0 (global askAiCommands) to v1 (per-persona askAiCommands)
             migrate: (persisted, version) => {
+                if (version === 2) {
+                    const old = persisted as Record<string, unknown>;
+                    return {
+                        ...old,
+                        commandExecutionMode: INITIAL_STATE.commandExecutionMode,
+                        maxConsecutiveAutoExecutions: INITIAL_STATE.maxConsecutiveAutoExecutions,
+                        customSafeCommands: INITIAL_STATE.customSafeCommands,
+                    };
+                }
                 if (version === 1) {
                     const old = persisted as Record<string, unknown>;
                     return {

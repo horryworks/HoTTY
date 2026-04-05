@@ -109,7 +109,7 @@
 }
 
 .file-explorer-row.selected {
-    background: var(--accent-light);
+    background: var(--sidebar-btn-active-bg);
 }
 
 .file-explorer-row-indent {
@@ -211,5 +211,5 @@
 }
 
 .file-explorer-drive-row.selected {
-    background: var(--accent-light);
+    background: var(--sidebar-btn-active-bg);
 }

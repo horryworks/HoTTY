@@ -10,6 +10,7 @@ import { AnthropicAuthPanel } from './AnthropicAuthPanel';
 import { MessageModal } from '../MessageModal/MessageModal';
 import { useSettingsStore } from '../../stores/settingsStore';
 import * as electronService from '../../services/electronService';
+import { classifyCommand } from '../../utils/commandClassifier';
 import './AIChatPane.css';
 
 interface ChatMessage {
@@ -90,6 +91,28 @@ const GeminiIcon: React.FC<{ size?: number; className?: string }> = ({ size = 24
 
 import { sanitizeHtml } from '../../utils/htmlUtils';
 
+// ── Extract execute commands from message content ──
+function extractExecuteCommands(content: string): string[] {
+    const parts = content.split(/(^```+[\s\S]*?^```+)/gm);
+    const commands: string[] = [];
+    for (const part of parts) {
+        const match = part.match(/^```+(\w*)\s*\n?([\s\S]*?)\n?```+$/);
+        if (match) {
+            const lang = match[1].toLowerCase();
+            let command = match[2].trim();
+            const startsWithExecute = command.startsWith('execute\n') || command.startsWith('execute ');
+            const isExecute = lang === 'execute' || (lang === '' && startsWithExecute) || ((lang === 'bash' || lang === 'sh' || lang === 'shell') && startsWithExecute);
+            if (isExecute) {
+                if (startsWithExecute) {
+                    command = command.replace(/^execute\s+/, '').trim();
+                }
+                commands.push(command);
+            }
+        }
+    }
+    return commands;
+}
+
 // ── Custom Message Component with Execution Support ──
 const MessageContent: React.FC<{
     content: string;
@@ -97,7 +120,10 @@ const MessageContent: React.FC<{
     onHoverTarget?: (hovered: boolean) => void;
     targetTitle?: string;
     targetId?: string;
-}> = ({ content, onRun, onHoverTarget, targetTitle, targetId }) => {
+    autoExecutedCommands?: Set<string>;
+    classificationReason?: string;
+    limitReached?: boolean;
+}> = ({ content, onRun, onHoverTarget, targetTitle, targetId, autoExecutedCommands, classificationReason, limitReached }) => {
     // We split the content by any code blocks (3 or more backticks).
     const parts = content.split(/(^```+[\s\S]*?^```+)/gm);
 
@@ -118,27 +144,43 @@ const MessageContent: React.FC<{
                         if (startsWithExecute) {
                             command = command.replace(/^execute\s+/, '').trim();
                         }
+                        const wasAutoExecuted = autoExecutedCommands?.has(command);
                         return (
-                            <div key={i} className="ai-execute-block">
+                            <div key={i} className={`ai-execute-block${wasAutoExecuted ? ' ai-execute-auto' : ''}`}>
                                 <pre><code>{command}</code></pre>
                                 <div className="ai-execute-actions">
-                                    <button
-                                        className="ai-run-btn"
-                                        onClick={() => onRun?.(command)}
-                                        onMouseEnter={() => onHoverTarget?.(true)}
-                                        onMouseLeave={() => onHoverTarget?.(false)}
-                                    >
-                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                                            <path d="M8 5v14l11-7z" />
-                                        </svg>
-                                        Run in Terminal
-                                    </button>
+                                    {wasAutoExecuted ? (
+                                        <span className="ai-execute-auto-badge">
+                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                                                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                                            </svg>
+                                            Auto-executed
+                                        </span>
+                                    ) : (
+                                        <button
+                                            className="ai-run-btn"
+                                            onClick={() => onRun?.(command)}
+                                            onMouseEnter={() => onHoverTarget?.(true)}
+                                            onMouseLeave={() => onHoverTarget?.(false)}
+                                        >
+                                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                                <path d="M8 5v14l11-7z" />
+                                            </svg>
+                                            Run in Terminal
+                                        </button>
+                                    )}
                                     {targetId ? (
                                         <span className="ai-run-target">Target: {targetTitle || 'Unnamed Terminal'}</span>
                                     ) : (
                                         <span className="ai-run-target no-target">No Terminal Targeted</span>
                                     )}
                                 </div>
+                                {!wasAutoExecuted && classificationReason && (
+                                    <div className="ai-execute-unsafe-note">Manual: {classificationReason}</div>
+                                )}
+                                {!wasAutoExecuted && limitReached && (
+                                    <div className="ai-execute-paused-banner">Auto-execution paused (limit reached). Click Run to continue.</div>
+                                )}
                             </div>
                         );
                     }
@@ -198,6 +240,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const [isLoadingModels, setIsLoadingModels] = useState(false);
 
     const activeAiProvider = useSettingsStore(s => s.activeAiProvider);
+    const commandExecutionMode = useSettingsStore(s => s.commandExecutionMode);
+    const customSafeCommands = useSettingsStore(s => s.customSafeCommands);
+    const maxConsecutiveAutoExecutions = useSettingsStore(s => s.maxConsecutiveAutoExecutions);
+
+    // Auto-execute state
+    const [consecutiveAutoExecCount, setConsecutiveAutoExecCount] = useState(0);
+    const [autoExecutedCommands] = useState(() => new Set<string>());
+    const autoExecProcessedRef = useRef(new Set<string>());
 
     // OpenAI auth state
     const [openaiApiKey, setOpenaiApiKey] = useState<string>('');
@@ -504,6 +554,41 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         return () => removeListener();
     }, [sessionId]);
 
+    // ── Auto-execute safe commands ──
+    const handleRunCommandRef = useRef<(cmd: string) => void>(() => {});
+    const prevIsStreamingRef = useRef(isStreaming);
+    useEffect(() => {
+        const wasStreaming = prevIsStreamingRef.current;
+        prevIsStreamingRef.current = isStreaming;
+
+        // Only trigger when streaming just finished
+        if (wasStreaming && !isStreaming && commandExecutionMode === 'auto-execute-safe') {
+            const lastMsg = messages[messages.length - 1];
+            if (!lastMsg || lastMsg.role !== 'model') return;
+            if (!lastTargetSessionId) return;
+
+            // Check consecutive limit (0 = unlimited)
+            if (maxConsecutiveAutoExecutions > 0 && consecutiveAutoExecCount >= maxConsecutiveAutoExecutions) return;
+
+            const commands = extractExecuteCommands(lastMsg.content);
+            if (commands.length === 0) return;
+
+            // Auto-execute the last command in the message
+            const command = commands[commands.length - 1];
+            const blockKey = `${messages.length - 1}:${command}`;
+            if (autoExecProcessedRef.current.has(blockKey)) return;
+
+            const classification = classifyCommand(command, customSafeCommands);
+            if (!classification.safe) return;
+
+            autoExecProcessedRef.current.add(blockKey);
+            autoExecutedCommands.add(command);
+            setConsecutiveAutoExecCount(prev => prev + 1);
+            handleRunCommandRef.current(command);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isStreaming, messages, commandExecutionMode, lastTargetSessionId, customSafeCommands, maxConsecutiveAutoExecutions, consecutiveAutoExecCount]);
+
     const [authError, setAuthError] = useState<string | null>(null);
     const [availableModels, setAvailableModels] = useState<{ name: string; displayName: string }[]>([]);
     const [modelLoadError, setModelLoadError] = useState(false);
@@ -751,6 +836,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         electronService.focusWindow();
         window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: lastTargetSessionId } }));
     };
+    handleRunCommandRef.current = handleRunCommand;
 
     const handleStopWaiting = () => {
         setIsWaitingForTerminal(false);
@@ -798,6 +884,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const handleSend = () => {
         const text = inputText.trim();
         if (!text || isStreaming || selectedModel === 'Unspecified') return;
+
+        // Reset auto-exec counter on manual user interaction
+        setConsecutiveAutoExecCount(0);
 
         setMessages(prev => [...prev, { role: 'user', content: text }]);
         lastSentTextRef.current = text;
@@ -960,6 +1049,18 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     ))}
                                 </select>
                             </div>
+                            <button
+                                className={`ai-chat-header-btn ai-chat-autoexec-toggle${commandExecutionMode === 'auto-execute-safe' ? ' active' : ''}`}
+                                onClick={() => {
+                                    const next = commandExecutionMode === 'ask-before-execute' ? 'auto-execute-safe' : 'ask-before-execute';
+                                    useSettingsStore.getState().updateCommandExecutionMode(next);
+                                }}
+                                title={commandExecutionMode === 'auto-execute-safe' ? 'Auto-execute: ON — Safe commands run automatically' : 'Auto-execute: OFF — All commands require confirmation'}
+                            >
+                                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                                    <path d="M7 2v11h3v9l7-12h-4l4-8z"/>
+                                </svg>
+                            </button>
                             <button className="ai-chat-header-btn ai-chat-header-btn--danger" onClick={handleClearChat} title="Clear chat context">
                                 <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
                                     <path d="M9 3v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5V3H9zm0 5h2v9H9V8zm4 0h2v9h-2V8z"/>
@@ -1036,10 +1137,18 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     {msg.role === 'model' ? (
                                         <MessageContent
                                             content={msg.content}
-                                            onRun={handleRunCommand}
+                                            onRun={(cmd) => { setConsecutiveAutoExecCount(0); handleRunCommand(cmd); }}
                                             onHoverTarget={handleHoverTarget}
                                             targetTitle={lastTargetSessionTitle}
                                             targetId={lastTargetSessionId}
+                                            autoExecutedCommands={autoExecutedCommands}
+                                            classificationReason={commandExecutionMode === 'auto-execute-safe' ? (() => {
+                                                const cmds = extractExecuteCommands(msg.content);
+                                                if (cmds.length === 0) return undefined;
+                                                const c = classifyCommand(cmds[cmds.length - 1], customSafeCommands);
+                                                return c.safe ? undefined : c.reason;
+                                            })() : undefined}
+                                            limitReached={commandExecutionMode === 'auto-execute-safe' && maxConsecutiveAutoExecutions > 0 && consecutiveAutoExecCount >= maxConsecutiveAutoExecutions}
                                         />
                                     ) : (
                                         <pre>{msg.content}</pre>

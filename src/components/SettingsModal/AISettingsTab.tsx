@@ -3,7 +3,7 @@ import * as electronService from '../../services/electronService';
 import { useSettingsStore, DEFAULT_AI_COMMANDS, DEFAULT_PERSONAS } from '../../stores/settingsStore';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
-import type { PersonaDefinition, AskAiCommand } from '../../types/appTypes';
+import type { PersonaDefinition, AskAiCommand, CommandExecutionMode } from '../../types/appTypes';
 
 interface AISettingsTabProps {
     isAiAuthenticated: boolean;
@@ -19,6 +19,12 @@ interface AISettingsTabProps {
     onActivePersonaIdChange: (id: string) => void;
     proactiveInstruction: string;
     onProactiveInstructionChange: (instruction: string) => void;
+    commandExecutionMode: CommandExecutionMode;
+    onCommandExecutionModeChange: (mode: CommandExecutionMode) => void;
+    maxConsecutiveAutoExecutions: number;
+    onMaxConsecutiveAutoExecutionsChange: (v: number) => void;
+    customSafeCommands: string[];
+    onCustomSafeCommandsChange: (v: string[]) => void;
     showSystemPrompt: boolean;
     onShowSystemPromptChange: (show: boolean) => void;
     draggedIndex: number | null;
@@ -42,6 +48,12 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
     onActivePersonaIdChange,
     proactiveInstruction,
     onProactiveInstructionChange,
+    commandExecutionMode,
+    onCommandExecutionModeChange,
+    maxConsecutiveAutoExecutions,
+    onMaxConsecutiveAutoExecutionsChange,
+    customSafeCommands,
+    onCustomSafeCommandsChange,
     showSystemPrompt,
     onShowSystemPromptChange,
     draggedIndex,
@@ -55,6 +67,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
     const [showGeminiWarning, setShowGeminiWarning] = useState(false);
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+    const [newSafeCommand, setNewSafeCommand] = useState('');
 
     // Ensure activePersonaId points to an existing persona
     const activePersona = aiPersonas.find(p => p.id === activePersonaId) ?? aiPersonas[0];
@@ -417,6 +430,133 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         Default: 10,000 (10s). How long to wait for command output to finish before sending it to AI. Increase if commands produce slow, streaming output.
                     </span>
                 </div>
+            </div>
+
+            {/* ── Command Execution Mode ── */}
+            <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
+                <label style={{ marginBottom: '10px', display: 'block' }}>Command Execution Mode</label>
+                <select
+                    value={commandExecutionMode}
+                    onChange={(e) => onCommandExecutionModeChange(e.target.value as CommandExecutionMode)}
+                    style={{
+                        padding: '6px 10px',
+                        cursor: 'pointer',
+                        backgroundColor: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-color)',
+                        color: 'var(--text-primary)',
+                        borderRadius: '3px',
+                        width: '280px',
+                    }}
+                >
+                    <option value="ask-before-execute">Ask before execute</option>
+                    <option value="auto-execute-safe">Auto-execute safe commands</option>
+                </select>
+                <p className="settings-help" style={{ marginTop: '8px' }}>
+                    {commandExecutionMode === 'auto-execute-safe'
+                        ? 'Read-only commands (ls, cat, show, display, ping, etc.) are executed automatically. Destructive or unknown commands still require manual confirmation.'
+                        : 'All AI-suggested commands require clicking "Run in Terminal" before execution.'}
+                </p>
+
+                {commandExecutionMode === 'auto-execute-safe' && (
+                    <>
+                        {/* Max consecutive auto-executions */}
+                        <div style={{ marginTop: '15px' }}>
+                            <label style={{ marginBottom: '6px', display: 'block', fontSize: 'calc(var(--font-size-base) - 1px)' }}>Max Consecutive Auto-Executions</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <input
+                                    type="number"
+                                    value={maxConsecutiveAutoExecutions}
+                                    onChange={(e) => onMaxConsecutiveAutoExecutionsChange(parseInt(e.target.value, 10))}
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    className="settings-input"
+                                    style={{ width: '80px', padding: '6px' }}
+                                />
+                                <span style={{ fontSize: 'calc(var(--font-size-base) - 1px)', color: 'var(--text-secondary)' }}>
+                                    0 = unlimited. After this limit, commands require manual confirmation until you click Run.
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Custom Safe Commands */}
+                        <div style={{ marginTop: '15px' }}>
+                            <label style={{ marginBottom: '6px', display: 'block', fontSize: 'calc(var(--font-size-base) - 1px)' }}>Custom Safe Commands</label>
+                            <p className="settings-help" style={{ marginTop: '0', marginBottom: '8px' }}>
+                                Add custom command names to the auto-execute whitelist. Built-in safe commands (ls, cat, show, display, ping, grep, etc.) are always included.
+                            </p>
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                                <input
+                                    type="text"
+                                    value={newSafeCommand}
+                                    onChange={(e) => setNewSafeCommand(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && newSafeCommand.trim()) {
+                                            const cmd = newSafeCommand.trim().toLowerCase();
+                                            if (!customSafeCommands.includes(cmd)) {
+                                                onCustomSafeCommandsChange([...customSafeCommands, cmd]);
+                                            }
+                                            setNewSafeCommand('');
+                                        }
+                                    }}
+                                    placeholder="Command name (e.g., mycheck)"
+                                    className="settings-input"
+                                    style={{ flex: 1, padding: '6px' }}
+                                />
+                                <button
+                                    onClick={() => {
+                                        const cmd = newSafeCommand.trim().toLowerCase();
+                                        if (cmd && !customSafeCommands.includes(cmd)) {
+                                            onCustomSafeCommandsChange([...customSafeCommands, cmd]);
+                                        }
+                                        setNewSafeCommand('');
+                                    }}
+                                    disabled={!newSafeCommand.trim()}
+                                    style={{ padding: '6px 12px', cursor: 'pointer' }}
+                                >
+                                    Add
+                                </button>
+                            </div>
+                            {customSafeCommands.length > 0 && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                    {customSafeCommands.map((cmd) => (
+                                        <span
+                                            key={cmd}
+                                            style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                padding: '3px 8px',
+                                                backgroundColor: 'var(--bg-tertiary)',
+                                                borderRadius: '4px',
+                                                fontSize: 'calc(var(--font-size-base) - 2px)',
+                                                color: 'var(--text-primary)',
+                                                fontFamily: 'var(--font-family)',
+                                            }}
+                                        >
+                                            {cmd}
+                                            <button
+                                                onClick={() => onCustomSafeCommandsChange(customSafeCommands.filter(c => c !== cmd))}
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    color: 'var(--text-tertiary)',
+                                                    cursor: 'pointer',
+                                                    padding: '0 2px',
+                                                    fontSize: 'calc(var(--font-size-base) - 2px)',
+                                                    lineHeight: 1,
+                                                }}
+                                                title={`Remove ${cmd}`}
+                                            >
+                                                ✕
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
             </div>
 
             <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>

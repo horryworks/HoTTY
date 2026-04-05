@@ -1,5 +1,27 @@
 # Release Notes - HoTTY
 
+## [v1.0.5-beta2] - 2026-04-05
+
+### New Features
+- **AI Command Auto-Execution**: AI-suggested read-only commands (ls, cat, show, ping, etc.) can now be executed automatically when auto-execute mode is enabled. A command safety classifier using a whitelist + danger-pattern approach ensures only safe commands run without confirmation. Toggle with the lightning bolt button in the AI Chat header, or configure in Settings → AI → Command Execution Mode.
+- **Custom Safe Command Whitelist**: Add your own commands to the auto-execute whitelist in Settings → AI. Built-in safe commands include common Unix utilities, network diagnostics, and network device CLI commands (Cisco show, Huawei display, etc.).
+- **Consecutive Execution Limit**: Set a maximum number of consecutive auto-executions (default: 10, 0 = unlimited). After the limit is reached, commands require manual confirmation until you click Run.
+
+### Improved
+- **Dead Code Cleanup**: Removed 43 unused localStorage keys left over from the pre-Zustand migration, removed unused `hexToRgba` utility and `aiListProviders` wrapper, and un-exported internal-only symbols across multiple modules.
+- **Terminal Constructor Settings**: New terminal instances now read font family, font size, and theme colors from the settings store instead of relying on hardcoded defaults.
+- **Icon Format**: Updated favicon and Electron window icon from PNG to ICO format for better Windows compatibility.
+- **UI Consistency**: Standardized disabled button cursor to `not-allowed` across all pane toolbars (LogViewer, PingMonitor, TextEditor), normalized modal overlay positioning and footer button styles (AskAiModal, CustomThemeCreator, PasteConfirmationModal), and replaced hardcoded colors with theme variables in the loading fallback and FileExplorerPane.
+
+### Bug Fixes
+- **IAP Tunnel Zone Filter**: Fixed the gcloud zone filter syntax from `--filter=zone:${zone}` to `--filter=zone:(${zone})`, which could cause instance lookup failures.
+- **IAP Tunnel Path Quoting**: Simplified gcloud path handling by removing fragile manual quoting that could break paths with special characters.
+
+### Security
+- **IPC Input Validation**: Added type checking and size limits to IPC handlers: `term-input` (string validation), `term-resize` (integer range clamping 1–1000 cols, 1–500 rows), `write-clipboard` (10 MB limit), `ai-chat-send` (string validation + 1 MB message limit), and `export-htree` (password length + data array size validation).
+
+---
+
 ## [v1.0.5-beta1] - 2026-04-05
 
 ### Improved

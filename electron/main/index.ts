@@ -89,7 +89,7 @@ async function createWindow() {
   const newWin = new BrowserWindow({
     title: 'HoTTY',
     // If dev env, assume public/favicon.ico. If prod, assume dist/favicon.ico
-    icon: join(process.env.PUBLIC || 'public', 'icon.png'),
+    icon: join(process.env.PUBLIC || 'public', 'icon.ico'),
     width: 1200,
     height: 800,
     webPreferences: {
@@ -490,6 +490,7 @@ ipcMain.on('connect-session', async (event, { sessionId, config }) => {
 });
 
 ipcMain.on('term-input', (event, { sessionId, data }) => {
+  if (typeof sessionId !== 'string' || typeof data !== 'string') return;
   const session = sessions.get(sessionId);
   if (session) {
     session.service.write(data);
@@ -497,9 +498,12 @@ ipcMain.on('term-input', (event, { sessionId, data }) => {
 });
 
 ipcMain.on('term-resize', (event, { sessionId, cols, rows }) => {
+  if (typeof sessionId !== 'string') return;
+  const validCols = Number.isInteger(cols) && cols >= 1 && cols <= 1000 ? cols : 80;
+  const validRows = Number.isInteger(rows) && rows >= 1 && rows <= 500 ? rows : 24;
   const session = sessions.get(sessionId);
   if (session) {
-    session.service.resize(cols, rows);
+    session.service.resize(validCols, validRows);
   }
 });
 
@@ -513,7 +517,7 @@ ipcMain.on('set-window-size', (event, { width, height }) => {
 });
 
 ipcMain.on('write-clipboard', (event, text) => {
-  if (text) {
+  if (typeof text === 'string' && text.length <= 10 * 1024 * 1024) {
     clipboard.writeText(text);
   }
 });
@@ -982,6 +986,9 @@ ipcMain.on('ai-auth-logout', () => {
 
 ipcMain.on('ai-chat-send', async (event, { sessionId, message, model, systemInstruction }) => {
   if (!aiService) return;
+  if (typeof sessionId !== 'string' || typeof message !== 'string' || typeof model !== 'string') return;
+  if (message.length > 1_000_000) return;
+  if (systemInstruction !== undefined && typeof systemInstruction !== 'string') return;
   const eventWin = BrowserWindow.fromWebContents(event.sender);
   if (!eventWin) return;
   await aiService.sendMessage(eventWin, sessionId, message, model, systemInstruction);
@@ -1293,6 +1300,12 @@ ipcMain.handle('dpapi-verify-user', async (_, password: string) => {
 const MAGIC_NUMBER = 'HOTTY';
 
 ipcMain.handle('export-htree', async (event, { data, password }) => {
+  if (typeof password !== 'string' || password.length === 0 || password.length > 10_000) {
+    throw new Error('Invalid password');
+  }
+  if (!Array.isArray(data) || data.length > 50_000) {
+    throw new Error('Invalid data');
+  }
   logger.debug('app', 'export-htree called');
   const eventWin = BrowserWindow.fromWebContents(event.sender);
   logger.debug('app', 'export-htree window', { found: !!eventWin });

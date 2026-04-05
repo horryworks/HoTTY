@@ -274,6 +274,11 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                 When the AI suggests a command, it can send it directly to your terminal session for execution. You'll see the command before it runs, so you stay in control.
                             </p>
 
+                            <p className="help-text" style={{ marginBottom: '4px' }}><strong>Auto-Execute Safe Commands</strong></p>
+                            <p className="help-text">
+                                Toggle auto-execution with the <strong>lightning bolt</strong> button in the AI Chat header. When enabled, read-only commands (ls, cat, show, ping, etc.) are executed automatically after the AI responds. Destructive or unknown commands still require manual confirmation. Configure the safe command whitelist and consecutive execution limit in <strong>Settings → AI → Command Execution Mode</strong>.
+                            </p>
+
                             <p className="help-text" style={{ marginBottom: '4px' }}><strong>Personas</strong></p>
                             <p className="help-text">
                                 Switch between AI roles (General Helper, Network Expert, Security Analyst, etc.) using the persona selector at the top of the chat. Each persona has a system prompt tailored for that domain.

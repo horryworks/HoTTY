@@ -253,7 +253,7 @@
 .ctc-btn-cancel {
     padding: 6px 20px;
     background: var(--btn-secondary-bg);
-    border: 1px solid var(--border-color);
+    border: none;
     border-radius: 4px;
     color: var(--text-primary);
     font-size: calc(var(--font-size-base) - 1px);
@@ -266,7 +266,7 @@
 
 .ctc-btn-cancel:disabled {
     opacity: 0.5;
-    cursor: default;
+    cursor: not-allowed;
 }
 
 .ctc-btn-save {

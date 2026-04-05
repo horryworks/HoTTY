@@ -19,3 +19,5 @@ export interface PersonaDefinition {
     systemPrompt: string;
     askAiCommands: AskAiCommand[];
 }
+
+export type CommandExecutionMode = 'ask-before-execute' | 'auto-execute-safe';

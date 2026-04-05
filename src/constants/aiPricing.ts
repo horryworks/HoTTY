@@ -10,12 +10,12 @@
  *
  * Update these tables when providers change pricing.
  */
-export interface ModelPricing {
+interface ModelPricing {
     input: number;
     output: number;
 }
 
-export const GEMINI_PRICING: Record<string, ModelPricing> = {
+const GEMINI_PRICING: Record<string, ModelPricing> = {
     // 3.1
     'gemini-3.1-pro':            { input: 2.00,   output: 12.00 },
     'gemini-3.1-flash-lite':     { input: 0.25,   output: 1.50  },
@@ -36,7 +36,7 @@ export const GEMINI_PRICING: Record<string, ModelPricing> = {
     'gemini-1.5-flash':          { input: 0.075,  output: 0.30  },
 };
 
-export const OPENAI_PRICING: Record<string, ModelPricing> = {
+const OPENAI_PRICING: Record<string, ModelPricing> = {
     'gpt-4.1':              { input: 2.00,   output: 8.00  },
     'gpt-4.1-mini':         { input: 0.40,   output: 1.60  },
     'gpt-4.1-nano':         { input: 0.10,   output: 0.40  },
@@ -51,7 +51,7 @@ export const OPENAI_PRICING: Record<string, ModelPricing> = {
     'o1':                   { input: 15.00,  output: 60.00 },
 };
 
-export const ANTHROPIC_PRICING: Record<string, ModelPricing> = {
+const ANTHROPIC_PRICING: Record<string, ModelPricing> = {
     'claude-opus-4':        { input: 15.00,  output: 75.00 },
     'claude-sonnet-4':      { input: 3.00,   output: 15.00 },
     'claude-haiku-4':       { input: 0.80,   output: 4.00  },

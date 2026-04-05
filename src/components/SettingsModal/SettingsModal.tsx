@@ -7,7 +7,7 @@ import { ProtocolsTab } from './ProtocolsTab';
 import { FeaturesTab } from './FeaturesTab';
 import { AISettingsTab } from './AISettingsTab';
 import * as electronService from '../../services/electronService';
-import type { ProtocolId, FeatureId, PersonaDefinition } from '../../types/appTypes';
+import type { ProtocolId, FeatureId, PersonaDefinition, CommandExecutionMode } from '../../types/appTypes';
 import './SettingsModal.css';
 
 interface SettingsModalProps {
@@ -71,6 +71,12 @@ interface SettingsModalProps {
     onProactiveInstructionChange: (instruction: string) => void;
     interactiveStabilizationTimeout: number;
     onInteractiveStabilizationTimeoutChange: (timeout: number) => void;
+    commandExecutionMode: CommandExecutionMode;
+    onCommandExecutionModeChange: (mode: CommandExecutionMode) => void;
+    maxConsecutiveAutoExecutions: number;
+    onMaxConsecutiveAutoExecutionsChange: (v: number) => void;
+    customSafeCommands: string[];
+    onCustomSafeCommandsChange: (v: string[]) => void;
     // Protocol & Feature toggles
     enabledProtocols: Record<ProtocolId, boolean>;
     onEnabledProtocolChange: (protocol: ProtocolId, enabled: boolean) => void;
@@ -138,6 +144,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onProactiveInstructionChange,
     interactiveStabilizationTimeout,
     onInteractiveStabilizationTimeoutChange,
+    commandExecutionMode,
+    onCommandExecutionModeChange,
+    maxConsecutiveAutoExecutions,
+    onMaxConsecutiveAutoExecutionsChange,
+    customSafeCommands,
+    onCustomSafeCommandsChange,
     enabledProtocols,
     onEnabledProtocolChange,
     enabledFeatures,
@@ -405,6 +417,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             onActivePersonaIdChange={onActivePersonaIdChange}
                             proactiveInstruction={proactiveInstruction}
                             onProactiveInstructionChange={onProactiveInstructionChange}
+                            commandExecutionMode={commandExecutionMode}
+                            onCommandExecutionModeChange={onCommandExecutionModeChange}
+                            maxConsecutiveAutoExecutions={maxConsecutiveAutoExecutions}
+                            onMaxConsecutiveAutoExecutionsChange={onMaxConsecutiveAutoExecutionsChange}
+                            customSafeCommands={customSafeCommands}
+                            onCustomSafeCommandsChange={onCustomSafeCommandsChange}
                             showSystemPrompt={showSystemPrompt}
                             onShowSystemPromptChange={onShowSystemPromptChange}
                             draggedIndex={draggedIndex}

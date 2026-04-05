@@ -1,8 +1,8 @@
-# HoTTY v1.0.5-beta1 - AI Integrated Advanced Terminal
+# HoTTY v1.0.5-beta2 - AI Integrated Advanced Terminal
 
 [English] | [日本語 (Japanese)](README.ja.md)
 
-**Current Version: v1.0.5-beta1**
+**Current Version: v1.0.5-beta2**
 
 Terminal emulator built with Electron, React, and TypeScript. Designed to provide a seamless terminal experience with advanced window management, deep AI integration, and extensive customization options.
 
@@ -45,6 +45,7 @@ Terminal emulator built with Electron, React, and TypeScript. Designed to provid
     - **Context Aware**: Helper for coding, debugging, or general questions within the terminal environment.
     - **Dynamic Models**: Automatically discovers available models from your selected AI provider.
     - **Reliable Command Execution**: Refined AI response parsing ensures terminal commands are always correctly extracted and executed.
+    - **Auto-Execute Safe Commands**: Optionally auto-execute read-only commands (ls, cat, show, ping, etc.) suggested by AI. A built-in command safety classifier with customizable whitelist ensures only safe commands run automatically.
 - **Security & Reliability**:
     - **Path Traversal Protection**: Secure `media://` protocol with path validation.
     - **Sandboxed Execution**: Enhanced security with Electron's sandbox mode.

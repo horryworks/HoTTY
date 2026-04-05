@@ -80,7 +80,7 @@
 
 .ping-monitor-btn:disabled {
     opacity: 0.5;
-    cursor: default;
+    cursor: not-allowed;
 }
 
 .ping-monitor-btn-start {

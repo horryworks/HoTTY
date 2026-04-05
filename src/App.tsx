@@ -72,6 +72,9 @@ function App() {
     updatePaneBackgroundMode,
     updatePaneBackgroundImage,
     toggleLineWrap,
+    updateCommandExecutionMode,
+    updateMaxConsecutiveAutoExecutions,
+    updateCustomSafeCommands,
     updateEnabledProtocol,
     updateEnabledFeature,
   } = useSettings();
@@ -570,7 +573,7 @@ function App() {
   // ═══════════════════════════════════════════════
 
   if (!electronService.isAvailable()) {
-    return <div style={{ color: 'white', padding: '20px' }}>Loading Electron API...</div>;
+    return <div style={{ color: 'var(--text-primary)', padding: '20px' }}>Loading Electron API...</div>;
   }
 
   // ═══════════════════════════════════════════════
@@ -928,6 +931,12 @@ function App() {
           onProactiveInstructionChange={updateProactiveInstruction}
           interactiveStabilizationTimeout={settings.interactiveStabilizationTimeout}
           onInteractiveStabilizationTimeoutChange={updateInteractiveStabilizationTimeout}
+          commandExecutionMode={settings.commandExecutionMode}
+          onCommandExecutionModeChange={updateCommandExecutionMode}
+          maxConsecutiveAutoExecutions={settings.maxConsecutiveAutoExecutions}
+          onMaxConsecutiveAutoExecutionsChange={updateMaxConsecutiveAutoExecutions}
+          customSafeCommands={settings.customSafeCommands}
+          onCustomSafeCommandsChange={updateCustomSafeCommands}
           enabledProtocols={settings.enabledProtocols}
           onEnabledProtocolChange={updateEnabledProtocol}
           enabledFeatures={settings.enabledFeatures}
