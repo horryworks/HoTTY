@@ -117,6 +117,14 @@ These values are applied as CSS variables (e.g., `--bg-primary`).
 - `modal-border-success`: Border color for success modals (applied to both the modal container and the header separator).
 - `modal-header-success-bg`: Header background for success modals.
 - `modal-header-success-text`: Text color for success modal headers.
+- `update-notification-bg`: Background color for the update notification banner.
+- `update-notification-border`: Bottom border color for the update notification banner.
+- `update-notification-text`: Text color for the update notification banner.
+- `update-notification-accent`: Accent color for the version highlight and icon in the update notification.
+- `update-notification-btn-bg`: Background color for the Download button in the update notification.
+- `update-notification-btn-text`: Text color for the Download button in the update notification.
+- `update-notification-btn-border`: Border color for the Download button in the update notification.
+- `update-notification-btn-hover`: Hover background for the Download button in the update notification.
 
 ---
 

@@ -989,6 +989,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                         />
                                         Connect via Google Cloud IAP
                                     </label>
+                                    <p className="settings-help">Tunnels SSH through Google Cloud Identity-Aware Proxy. Requires gcloud SDK.</p>
                                 </div>
                             )}
 
@@ -1166,7 +1167,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                     )}
                                     {(protocol === 'ssh' || protocol === 'telnet') && !iapEnabled && jumpboxHosts.length > 0 && (
                                         <div className="form-group">
-                                            <label>Jumpbox</label>
+                                            <label>Jumpbox (Bastion)</label>
                                             <select
                                                 value={jumpboxId}
                                                 onChange={e => setJumpboxId(e.target.value)}
@@ -1181,6 +1182,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                                     ))
                                                 }
                                             </select>
+                                            <p className="settings-help">Route through an intermediate server to reach the destination.</p>
                                         </div>
                                     )}
                                 </>
@@ -1276,7 +1278,9 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                             <option value="xon/xoff">XON/XOFF</option>
                                             <option value="rts/cts">RTS/CTS</option>
                                         </select>
+                                        <p className="settings-help">XON/XOFF: software flow control. RTS/CTS: hardware flow control.</p>
                                     </div>
+                                    <p className="settings-help">Default: 9600 / 8 / None / 1. Match the settings of the device you are connecting to.</p>
                                 </>
                             )}
 

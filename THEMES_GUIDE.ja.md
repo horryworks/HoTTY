@@ -116,6 +116,14 @@
 - `modal-border-success`: 成功モーダルの枠線色（モーダルコンテナとヘッダー区切り線の両方に適用）。
 - `modal-header-success-bg`: 成功モーダルのヘッダー背景。
 - `modal-header-success-text`: 成功モーダルのヘッダーテキスト色。
+- `update-notification-bg`: アップデート通知バナーの背景色。
+- `update-notification-border`: アップデート通知バナーの下枠線色。
+- `update-notification-text`: アップデート通知バナーのテキスト色。
+- `update-notification-accent`: アップデート通知のバージョン強調・アイコン色。
+- `update-notification-btn-bg`: アップデート通知のダウンロードボタン背景色。
+- `update-notification-btn-text`: アップデート通知のダウンロードボタンテキスト色。
+- `update-notification-btn-border`: アップデート通知のダウンロードボタン枠線色。
+- `update-notification-btn-hover`: アップデート通知のダウンロードボタンホバー背景色。
 
 ---
 

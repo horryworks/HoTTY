@@ -1,5 +1,20 @@
 # リリースノート - HoTTY
 
+## [v1.0.5-beta1] - 2026-04-05
+
+### 改善
+- **設定画面の UX 改善**: General タブを Storage、Input、Diagnostics の3セクションに再編成し、見出しを追加。設定項目名をわかりやすく変更: "Watch Buffer Limit" → "AI Monitor Buffer Limit"、"Interactive Flow Stabilization Timeout" → "Command Output Wait Time"、"Local Log Buffer" → "Terminal Scrollback Buffer"、"Empty Pane Background" → "Unused Pane Background"。AI 設定の説明文も全体的に改善。
+- **セッションダイアログのヘルプテキスト**: Google Cloud IAP、ジャンプボックス（踏み台）、シリアルポート設定にインラインヘルプの説明を追加。"Jumpbox" ラベルを "Jumpbox (Bastion)" に変更し、より明確に。
+- **SSH アルゴリズムの折りたたみ表示**: Protocols タブの SSH アルゴリズムセクションが折りたたみ可能になり、不要時の視覚的なノイズを軽減。
+- **ドラッグ＆ドロップの視覚フィードバック**: Ask AI コマンドリストのドラッグ時に、ドロップ先にアクセントカラーのボーダーハイライトを表示。
+- **アップデート通知のテーマ変数**: アップデート通知バナーの外観を完全にカスタマイズできる 8 つの新しい `update-notification-*` テーマ変数を追加。
+
+### バグ修正
+- **ドラッグ＆ドロップのちらつき修正**: Ask AI コマンドのドラッグ＆ドロップ時に、子要素の境界で `onDragLeave` が発火することによるハイライトのちらつきを修正。
+- **CSS フォールバックカラーの不一致修正**: TabBar のグラデーションフォールバックカラーと LayoutSelector のボーダーフォールバックカラーを、実際のダークテーマの値に一致するよう修正。
+
+---
+
 ## [v1.0.4] - 2026-04-05
 
 ### 改善

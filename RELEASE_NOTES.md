@@ -1,5 +1,20 @@
 # Release Notes - HoTTY
 
+## [v1.0.5-beta1] - 2026-04-05
+
+### Improved
+- **Settings UX Overhaul**: Reorganized the General tab into clear sections (Storage, Input, Diagnostics) with descriptive headers. Renamed settings for clarity: "Watch Buffer Limit" → "AI Monitor Buffer Limit", "Interactive Flow Stabilization Timeout" → "Command Output Wait Time", "Local Log Buffer" → "Terminal Scrollback Buffer", "Empty Pane Background" → "Unused Pane Background". Improved AI settings descriptions throughout.
+- **Session Dialog Help Text**: Added inline help descriptions for Google Cloud IAP, Jumpbox (Bastion), and Serial port settings. Renamed "Jumpbox" label to "Jumpbox (Bastion)" for clarity.
+- **SSH Algorithms Collapsible**: The SSH Algorithms section in the Protocols tab is now collapsible, reducing visual clutter when not needed.
+- **Drag-and-Drop Visual Feedback**: The Ask AI command list now shows an accent-colored border highlight on the drop target while dragging.
+- **Update Notification Theme Variables**: Added 8 new `update-notification-*` theme variables for full customization of the update notification banner appearance.
+
+### Bug Fixes
+- **Drag-and-Drop Flickering**: Fixed the Ask AI command drag-and-drop highlight flickering when dragging over child elements, caused by `onDragLeave` firing on child element boundaries.
+- **CSS Fallback Color Mismatch**: Fixed gradient fallback colors in TabBar and border fallback color in LayoutSelector to match the actual dark theme values.
+
+---
+
 ## [v1.0.4] - 2026-04-05
 
 ### Improved

@@ -6,7 +6,7 @@
     padding-left: 0px;
     user-select: none;
     overflow: visible;
-    --gemini-rainbow: linear-gradient(90deg, var(--accent-light, #4E86F8), var(--accent-color, #46B5D1), var(--accent-secondary, #8E54E9));
+    --gemini-rainbow: linear-gradient(90deg, var(--accent-light, #42a5f5), var(--accent-color, #007acc), var(--accent-secondary, #ab47bc));
 }
 
 .tab-list {

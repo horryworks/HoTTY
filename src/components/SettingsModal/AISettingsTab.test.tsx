@@ -120,9 +120,9 @@ describe('AISettingsTab', () => {
         expect(screen.queryByText('Logout')).not.toBeInTheDocument();
     });
 
-    it('renders Watch Buffer Limit section', () => {
+    it('renders AI Monitor Buffer Limit section', () => {
         render(<AISettingsTab {...baseProps} />);
-        expect(screen.getByText('Watch Buffer Limit (Characters)')).toBeInTheDocument();
+        expect(screen.getByText('AI Monitor Buffer Limit (Characters)')).toBeInTheDocument();
     });
 
     it('renders watch buffer limit input with correct value', () => {
@@ -140,9 +140,9 @@ describe('AISettingsTab', () => {
         expect(onWatchBufferLimitChange).toHaveBeenCalledWith(200000);
     });
 
-    it('renders Interactive Flow Stabilization Timeout section', () => {
+    it('renders Command Output Wait Time section', () => {
         render(<AISettingsTab {...baseProps} />);
-        expect(screen.getByText('Interactive Flow Stabilization Timeout (ms)')).toBeInTheDocument();
+        expect(screen.getByText('Command Output Wait Time (ms)')).toBeInTheDocument();
     });
 
     it('renders Personas section with tabs', () => {

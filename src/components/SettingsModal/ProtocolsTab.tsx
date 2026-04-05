@@ -91,8 +91,8 @@ export const ProtocolsTab: React.FC<ProtocolsTabProps> = ({
                     <p className="settings-help">Sends dummy packets to prevent timeouts.</p>
 
                     {sshAlgorithms && (
-                        <div style={{ marginTop: '20px', borderTop: '1px solid var(--border-color)', paddingTop: '15px' }}>
-                            <label style={{ marginBottom: '10px', display: 'block' }}>SSH Algorithms</label>
+                        <details style={{ marginTop: '20px', borderTop: '1px solid var(--border-color)', paddingTop: '15px' }}>
+                            <summary style={{ cursor: 'pointer', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '10px' }}>SSH Algorithms</summary>
                             <div className="ssh-algorithms-container" style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '10px' }}>
                                 {Object.keys(sshAlgorithms).map(category => (
                                     <div key={category} style={{ marginBottom: '15px' }}>
@@ -118,7 +118,7 @@ export const ProtocolsTab: React.FC<ProtocolsTabProps> = ({
                                 ))}
                             </div>
                             <p className="settings-help">Choose which algorithms to enable for SSH connections. Changes apply to new sessions.</p>
-                        </div>
+                        </details>
                     )}
                 </div>
             )}

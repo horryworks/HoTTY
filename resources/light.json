@@ -96,7 +96,15 @@
         "ai-markdown-h1-font-size": "1.3em",
         "ai-markdown-h2-font-size": "1.15em",
         "ai-markdown-h3-font-size": "1.05em",
-        "ai-markdown-table-font-size": "0.9em"
+        "ai-markdown-table-font-size": "0.9em",
+        "update-notification-bg": "#dbeafe",
+        "update-notification-border": "#93c5fd",
+        "update-notification-text": "#1e3a5f",
+        "update-notification-accent": "#2563eb",
+        "update-notification-btn-bg": "#2563eb",
+        "update-notification-btn-text": "#ffffff",
+        "update-notification-btn-border": "#1d4ed8",
+        "update-notification-btn-hover": "#1d4ed8"
     },
     "terminal": {
         "foreground": "#000000",

@@ -34,7 +34,7 @@
 .layout-separator {
     width: 24px;
     height: 1px;
-    background-color: var(--border-color, #444);
+    background-color: var(--border-color, #333333);
     margin: 4px 0;
     opacity: 0.5;
 }

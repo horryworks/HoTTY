@@ -28,6 +28,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
 }) => {
     return (
         <div className="form-group">
+            <h3 style={{ margin: '0 0 12px 0', fontSize: 'calc(var(--font-size-base) + 2px)', color: 'var(--text-primary)' }}>Storage</h3>
             <label>Logging</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal', whiteSpace: 'nowrap' }}>
@@ -69,7 +70,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
             )}
 
             <div className="form-group" style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid var(--border-color)' }}>
-                <label>Local Log Buffer</label>
+                <label>Terminal Scrollback Buffer</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <input
                         type="number"
@@ -85,7 +86,8 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                 <p className="settings-help">Max lines to keep in memory per terminal (Default: 10000).</p>
             </div>
 
-            <div className="form-group" style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid var(--border-color)' }}>
+            <h3 style={{ margin: '15px 0 12px 0', paddingTop: '15px', borderTop: '1px solid var(--border-color)', fontSize: 'calc(var(--font-size-base) + 2px)', color: 'var(--text-primary)' }}>Input</h3>
+            <div className="form-group">
                 <label>Keyboard</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal', whiteSpace: 'nowrap' }}>
@@ -95,13 +97,13 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                             onChange={(e) => onBackspaceSendsDelChange(e.target.checked)}
                             style={{ marginRight: '8px' }}
                         />
-                        Backspace sends 0x7F (DEL)
+                        Backspace sends DEL (0x7F)
                     </label>
                 </div>
                 <p className="settings-help">If disabled (default), Backspace sends 0x08 (BS/^H). Enable this if your server expects 0x7F (DEL) for Backspace.</p>
             </div>
 
-            <div className="form-group" style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid var(--border-color)' }}>
+            <div className="form-group" style={{ marginTop: '10px' }}>
                 <label>Mouse</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal', whiteSpace: 'nowrap' }}>
@@ -117,7 +119,8 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                 <p className="settings-help">If enabled, right-clicking the terminal will read the clipboard and show the paste confirmation dialog instead of the context menu.</p>
             </div>
 
-            <div className="form-group form-group--section">
+            <h3 style={{ margin: '15px 0 12px 0', paddingTop: '15px', borderTop: '1px solid var(--border-color)', fontSize: 'calc(var(--font-size-base) + 2px)', color: 'var(--text-primary)' }}>Diagnostics</h3>
+            <div className="form-group">
                 <label>Debug Log</label>
                 <div>
                     <button

@@ -57,7 +57,7 @@ const THEME_SECTIONS: { title: string; description: string; keys: string[] }[] =
     {
         title: 'Overlays & Modals',
         description: 'Modal dialogs, overlays, and notification banners',
-        keys: ['modal-overlay-bg', 'modal-shadow', 'modal-border-warning', 'modal-header-warning-bg', 'modal-header-warning-text', 'modal-border-error', 'modal-header-error-bg', 'modal-header-error-text', 'modal-border-success', 'modal-header-success-bg', 'modal-header-success-text', 'modal-header-info-bg', 'modal-header-info-border', 'modal-header-info-text'],
+        keys: ['modal-overlay-bg', 'modal-shadow', 'modal-border-warning', 'modal-header-warning-bg', 'modal-header-warning-text', 'modal-border-error', 'modal-header-error-bg', 'modal-header-error-text', 'modal-border-success', 'modal-header-success-bg', 'modal-header-success-text', 'modal-header-info-bg', 'modal-header-info-border', 'modal-header-info-text', 'update-notification-bg', 'update-notification-border', 'update-notification-text', 'update-notification-accent', 'update-notification-btn-bg', 'update-notification-btn-text', 'update-notification-btn-border', 'update-notification-btn-hover'],
     },
 ];
 
@@ -173,6 +173,15 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'modal-header-info-bg': 'Header background for info modals.',
     'modal-header-info-border': 'Header border for info modals.',
     'modal-header-info-text': 'Header text for info modals.',
+    // Update Notification
+    'update-notification-bg': 'Background color for the update notification banner.',
+    'update-notification-border': 'Bottom border color for the update notification banner.',
+    'update-notification-text': 'Text color for the update notification banner.',
+    'update-notification-accent': 'Accent color for the version highlight and icon in the update notification.',
+    'update-notification-btn-bg': 'Background color for the Download button in the update notification.',
+    'update-notification-btn-text': 'Text color for the Download button in the update notification.',
+    'update-notification-btn-border': 'Border color for the Download button in the update notification.',
+    'update-notification-btn-hover': 'Hover background for the Download button in the update notification.',
 };
 
 const isSimpleHexColor = (value: string): boolean =>

@@ -295,7 +295,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                             </ol>
                             <p className="help-text small">
                                 💡 <strong>Tip:</strong> Let it collect output and ask AI to summarize or find errors when you're ready.
-                                The buffer size limit can be adjusted in <strong>Settings → AI → Watch Buffer Limit</strong>.
+                                The buffer size limit can be adjusted in <strong>Settings → AI → AI Monitor Buffer Limit</strong>.
                             </p>
                         </div>
                     </details>

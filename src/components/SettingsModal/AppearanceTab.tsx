@@ -177,7 +177,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
             </div>
 
             <div className="form-group">
-                <label>Empty Pane Background</label>
+                <label>Unused Pane Background</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ display: 'flex', gap: '8px', color: 'var(--text-secondary)' }}>
                         <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>

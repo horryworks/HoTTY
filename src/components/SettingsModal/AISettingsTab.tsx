@@ -54,6 +54,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
     const updateActiveAiProvider = useSettingsStore(s => s.updateActiveAiProvider);
     const [showGeminiWarning, setShowGeminiWarning] = useState(false);
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+    const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
     // Ensure activePersonaId points to an existing persona
     const activePersona = aiPersonas.find(p => p.id === activePersonaId) ?? aiPersonas[0];
@@ -128,7 +129,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                     <option value="openai">OpenAI</option>
                 </select>
                 <p className="settings-help" style={{ marginTop: '8px' }}>
-                    Select the AI provider to use for the chat panel.
+                    Vertex AI and Gemini use Google OAuth. Anthropic and OpenAI require API keys set in environment variables.
                 </p>
             </div>
 
@@ -244,9 +245,10 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                                     key={cmd.id}
                                     draggable
                                     onDragStart={(e) => onDragStart(e, index)}
-                                    onDragOver={(e) => onDragOver(e)}
-                                    onDrop={(e) => onDrop(e, index)}
-                                    onDragEnd={onDragEnd}
+                                    onDragOver={(e) => { onDragOver(e); setDragOverIndex(index); }}
+                                    onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverIndex(null); }}
+                                    onDrop={(e) => { onDrop(e, index); setDragOverIndex(null); }}
+                                    onDragEnd={() => { onDragEnd(); setDragOverIndex(null); }}
                                     style={{
                                         display: 'flex',
                                         flexDirection: 'column',
@@ -254,7 +256,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                                         padding: '10px',
                                         backgroundColor: 'var(--bg-secondary)',
                                         borderRadius: '4px',
-                                        border: '1px solid var(--border-color)',
+                                        border: dragOverIndex === index && draggedIndex !== null && draggedIndex !== index ? '1px solid var(--accent-color)' : '1px solid var(--border-color)',
                                         opacity: draggedIndex === index ? 0.5 : 1,
                                         cursor: 'grab',
                                         transition: 'opacity 0.2s, transform 0.2s',
@@ -262,7 +264,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                                     }}
                                 >
                                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                        <span style={{ cursor: 'grab', color: 'var(--text-tertiary)', userSelect: 'none' }}>☰</span>
+                                        <span style={{ cursor: 'grab', color: 'var(--text-tertiary)', userSelect: 'none' }} title="Drag to reorder">☰</span>
                                         <input
                                             type="text"
                                             value={cmd.label}
@@ -380,7 +382,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
 
             {/* ── Advanced Settings ── */}
             <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
-                <label style={{ marginBottom: '10px', display: 'block' }}>Watch Buffer Limit (Characters)</label>
+                <label style={{ marginBottom: '10px', display: 'block' }}>AI Monitor Buffer Limit (Characters)</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <input
                         type="number"
@@ -393,13 +395,13 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         style={{ width: '120px', padding: '6px' }}
                     />
                     <span style={{ fontSize: 'calc(var(--font-size-base) - 1px)', color: 'var(--text-secondary)' }}>
-                        Default: 500,000. Higher limits consume more memory.
+                        Maximum terminal output that AI Monitor keeps in memory for analysis. Default: 500,000. Higher limits consume more memory.
                     </span>
                 </div>
             </div>
 
             <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
-                <label style={{ marginBottom: '10px', display: 'block' }}>Interactive Flow Stabilization Timeout (ms)</label>
+                <label style={{ marginBottom: '10px', display: 'block' }}>Command Output Wait Time (ms)</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <input
                         type="number"
@@ -412,7 +414,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         style={{ width: '120px', padding: '6px' }}
                     />
                     <span style={{ fontSize: 'calc(var(--font-size-base) - 1px)', color: 'var(--text-secondary)' }}>
-                        Default: 10,000 (10s). Wait time after prompt detection before sending to AI.
+                        Default: 10,000 (10s). How long to wait for command output to finish before sending it to AI. Increase if commands produce slow, streaming output.
                     </span>
                 </div>
             </div>
@@ -434,7 +436,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                     }}
                 />
                 <p className="settings-help" style={{ marginTop: '8px' }}>
-                    This instruction is appended to the system prompt and terminal output responses to encourage the AI to proactively search for information.
+                    Appended to AI Monitor responses. Use this to tell AI to run follow-up commands (e.g., &quot;check logs if errors are found&quot;).
                 </p>
             </div>
 
