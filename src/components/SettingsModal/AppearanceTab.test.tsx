@@ -176,6 +176,33 @@ describe('AppearanceTab', () => {
         expect(screen.queryByText(/Delete/)).not.toBeInTheDocument();
     });
 
+    it('shows Reset to Default button when prompt highlight is enabled', () => {
+        render(<AppearanceTab {...baseProps} enablePromptHighlight={true} />);
+        expect(screen.getByText('Reset to Default')).toBeInTheDocument();
+    });
+
+    it('does not show Reset to Default button when prompt highlight is disabled', () => {
+        render(<AppearanceTab {...baseProps} enablePromptHighlight={false} />);
+        expect(screen.queryByText('Reset to Default')).not.toBeInTheDocument();
+    });
+
+    it('calls onPromptPatternsChange with defaults when Reset to Default is confirmed', async () => {
+        const onPromptPatternsChange = vi.fn();
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        render(<AppearanceTab {...baseProps} enablePromptHighlight={true} onPromptPatternsChange={onPromptPatternsChange} />);
+        fireEvent.click(screen.getByText('Reset to Default'));
+        const { DEFAULT_PROMPT_PATTERNS } = await import('../../stores/settingsStore');
+        expect(onPromptPatternsChange).toHaveBeenCalledWith(DEFAULT_PROMPT_PATTERNS);
+    });
+
+    it('does not call onPromptPatternsChange when Reset to Default is cancelled', () => {
+        const onPromptPatternsChange = vi.fn();
+        vi.spyOn(window, 'confirm').mockReturnValue(false);
+        render(<AppearanceTab {...baseProps} enablePromptHighlight={true} onPromptPatternsChange={onPromptPatternsChange} />);
+        fireEvent.click(screen.getByText('Reset to Default'));
+        expect(onPromptPatternsChange).not.toHaveBeenCalled();
+    });
+
     it('shows Delete button for custom themes', () => {
         const propsWithCustomTheme = {
             ...baseProps,

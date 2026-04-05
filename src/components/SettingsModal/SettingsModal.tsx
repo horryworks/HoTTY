@@ -54,8 +54,8 @@ interface SettingsModalProps {
     onEnablePromptHighlightChange: (enabled: boolean) => void;
     promptHighlightColor: string;
     onPromptHighlightColorChange: (color: string) => void;
-    promptPatterns: { id: string; name: string; pattern: string; enabled: boolean }[];
-    onPromptPatternsChange: (patterns: { id: string; name: string; pattern: string; enabled: boolean }[]) => void;
+    promptPatterns: { id: string; name: string; pattern: string }[];
+    onPromptPatternsChange: (patterns: { id: string; name: string; pattern: string }[]) => void;
     updateInfo?: { version: string; releaseUrl: string } | null;
     // AI Settings props
     onAiLogout: () => void;

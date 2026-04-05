@@ -177,3 +177,46 @@ describe('settingsStore — persist to localStorage', () => {
         expect(hasFunctions).toBe(false);
     });
 });
+
+describe('settingsStore — Huawei prompt pattern matches HRP prefixes', () => {
+    function getHuaweiRegex(): RegExp {
+        const huawei = useSettingsStore.getState().promptPatterns.find(p => p.id === 'huawei');
+        return new RegExp(huawei!.pattern);
+    }
+
+    it('matches plain user view <hostname>', () => {
+        expect(getHuaweiRegex().test('<USG6000>')).toBe(true);
+    });
+
+    it('matches plain system view [hostname]', () => {
+        expect(getHuaweiRegex().test('[USG6000]')).toBe(true);
+    });
+
+    it('matches HRP_M user view', () => {
+        expect(getHuaweiRegex().test('HRP_M<FW_A>')).toBe(true);
+    });
+
+    it('matches HRP_S user view', () => {
+        expect(getHuaweiRegex().test('HRP_S<FW_B>')).toBe(true);
+    });
+
+    it('matches HRP_A user view', () => {
+        expect(getHuaweiRegex().test('HRP_A<USG_A>')).toBe(true);
+    });
+
+    it('matches HRP_B user view', () => {
+        expect(getHuaweiRegex().test('HRP_B<USG_B>')).toBe(true);
+    });
+
+    it('matches HRP_M system view', () => {
+        expect(getHuaweiRegex().test('HRP_M[FW_A]')).toBe(true);
+    });
+
+    it('matches HRP_S system view', () => {
+        expect(getHuaweiRegex().test('HRP_S[FW_B]')).toBe(true);
+    });
+
+    it('matches HRP with sub-view prompt', () => {
+        expect(getHuaweiRegex().test('HRP_M[FW_A-security-policy]')).toBe(true);
+    });
+});

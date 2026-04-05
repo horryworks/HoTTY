@@ -8,7 +8,7 @@ vi.mock('../services/electronService', () => ({
 }));
 
 const makePromptPatterns = (): PromptPattern[] => [
-    { id: 'p1', name: 'bash', pattern: '\\$\\s*$', enabled: true },
+    { id: 'p1', name: 'bash', pattern: '\\$\\s*$' },
 ];
 
 const makeOptions = (overrides?: Partial<Parameters<typeof useInteractiveFlow>[0]>) => ({

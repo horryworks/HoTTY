@@ -38,7 +38,7 @@ const ERROR_MAP: [RegExp, string][] = [
 export function friendlyErrorMessage(raw: string): string {
     for (const [pattern, friendly] of ERROR_MAP) {
         if (pattern.test(raw)) {
-            return friendly;
+            return `${friendly}\n${raw}`;
         }
     }
     return raw;

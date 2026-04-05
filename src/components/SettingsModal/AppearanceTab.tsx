@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import * as electronService from '../../services/electronService';
 import { STORAGE_KEYS } from '../../constants/storage';
+import { DEFAULT_PROMPT_PATTERNS } from '../../stores/settingsStore';
 
 interface AppearanceTabProps {
     theme: string;
@@ -26,8 +27,8 @@ interface AppearanceTabProps {
     onEnablePromptHighlightChange: (enabled: boolean) => void;
     promptHighlightColor: string;
     onPromptHighlightColorChange: (color: string) => void;
-    promptPatterns: { id: string; name: string; pattern: string; enabled: boolean }[];
-    onPromptPatternsChange: (patterns: { id: string; name: string; pattern: string; enabled: boolean }[]) => void;
+    promptPatterns: { id: string; name: string; pattern: string }[];
+    onPromptPatternsChange: (patterns: { id: string; name: string; pattern: string }[]) => void;
 }
 
 export const AppearanceTab: React.FC<AppearanceTabProps> = ({
@@ -334,49 +335,26 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                                     key={p.id}
                                     style={{
                                         display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '4px',
-                                        padding: '10px',
+                                        gap: '8px',
+                                        alignItems: 'center',
+                                        padding: '6px 10px',
                                         backgroundColor: 'var(--bg-secondary)',
                                         borderRadius: '4px',
                                         border: '1px solid var(--border-color)'
                                     }}
                                 >
-                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={p.enabled}
-                                            onChange={(e) => {
-                                                const newPatterns = [...promptPatterns];
-                                                newPatterns[index] = { ...p, enabled: e.target.checked };
-                                                onPromptPatternsChange(newPatterns);
-                                            }}
-                                            style={{ margin: 0, cursor: 'pointer' }}
-                                        />
-                                        <input
-                                            type="text"
-                                            value={p.name}
-                                            onChange={(e) => {
-                                                const newPatterns = [...promptPatterns];
-                                                newPatterns[index] = { ...p, name: e.target.value };
-                                                onPromptPatternsChange(newPatterns);
-                                            }}
-                                            placeholder="Pattern Name"
-                                            className="settings-input"
-                                            style={{ flex: 1, padding: '4px' }}
-                                        />
-                                        <button
-                                            onClick={() => {
-                                                if (confirm('Delete this pattern?')) {
-                                                    const newPatterns = promptPatterns.filter((_, i) => i !== index);
-                                                    onPromptPatternsChange(newPatterns);
-                                                }
-                                            }}
-                                            style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: 'var(--btn-danger-bg)', color: 'var(--text-primary)', border: 'none', borderRadius: '3px' }}
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
+                                    <input
+                                        type="text"
+                                        value={p.name}
+                                        onChange={(e) => {
+                                            const newPatterns = [...promptPatterns];
+                                            newPatterns[index] = { ...p, name: e.target.value };
+                                            onPromptPatternsChange(newPatterns);
+                                        }}
+                                        placeholder="Name"
+                                        className="settings-input"
+                                        style={{ width: '140px', padding: '4px', flexShrink: 0 }}
+                                    />
                                     <input
                                         type="text"
                                         value={p.pattern}
@@ -385,10 +363,21 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                                             newPatterns[index] = { ...p, pattern: e.target.value };
                                             onPromptPatternsChange(newPatterns);
                                         }}
-                                        placeholder="Regex Pattern (e.g. ^[-_\w]+@[-_\w]+[>#]\s*)"
+                                        placeholder="Regex"
                                         className="settings-input"
-                                        style={{ width: '100%', padding: '6px', boxSizing: 'border-box', fontFamily: 'var(--font-family)' }}
+                                        style={{ flex: 1, padding: '4px', fontFamily: 'var(--font-family)' }}
                                     />
+                                    <button
+                                        onClick={() => {
+                                            if (confirm('Delete this pattern?')) {
+                                                const newPatterns = promptPatterns.filter((_, i) => i !== index);
+                                                onPromptPatternsChange(newPatterns);
+                                            }
+                                        }}
+                                        style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: 'var(--btn-danger-bg)', color: 'var(--text-primary)', border: 'none', borderRadius: '3px', flexShrink: 0 }}
+                                    >
+                                        ✕
+                                    </button>
                                 </div>
                             ))}
                         </div>
@@ -396,12 +385,22 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                             <button
                                 onClick={() => {
                                     const id = crypto.randomUUID();
-                                    const newPattern = { id, name: 'New Pattern', pattern: '^pattern\\s*', enabled: true };
+                                    const newPattern = { id, name: 'New Pattern', pattern: '^pattern\\s*' };
                                     onPromptPatternsChange([...(promptPatterns || []), newPattern]);
                                 }}
                                 style={{ padding: '6px 12px', cursor: 'pointer' }}
                             >
                                 + Add Pattern
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (confirm('Reset all prompt patterns to default?')) {
+                                        onPromptPatternsChange(DEFAULT_PROMPT_PATTERNS);
+                                    }
+                                }}
+                                style={{ padding: '6px 12px', cursor: 'pointer' }}
+                            >
+                                Reset to Default
                             </button>
                         </div>
                     </>

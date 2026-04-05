@@ -1281,10 +1281,10 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             )}
 
                           </fieldset>
+                            {connectionError && (
+                                <div className="connection-error-box">{connectionError}</div>
+                            )}
                             <div className="form-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', alignItems: 'center' }}>
-                                {connectionError && (
-                                    <span className="connection-error">{connectionError}</span>
-                                )}
                                 {isConnecting && !connectionError && (
                                     <span className="connection-status">Connecting...</span>
                                 )}

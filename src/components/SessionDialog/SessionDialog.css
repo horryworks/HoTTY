@@ -140,13 +140,19 @@
     margin-top: 12px;
 }
 
-.connection-error {
+.connection-error-box {
     color: var(--color-danger);
     font-size: calc(var(--font-size-base) - 2px);
-    margin-right: auto;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--color-danger);
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 120px;
+    overflow-y: auto;
+    font-family: var(--font-family);
 }
 
 .connection-status {

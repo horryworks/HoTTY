@@ -299,7 +299,7 @@ export const TerminalComponentBase: React.FC<TerminalProps & { terminalInstance?
 
             let isPrompt = false;
             for (const patternObj of promptPatterns) {
-                if (!patternObj.enabled || !patternObj.pattern) continue;
+                if (!patternObj.pattern) continue;
                 try {
                     const regex = new RegExp(patternObj.pattern);
                     const match = regex.exec(startText);

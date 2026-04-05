@@ -11,7 +11,6 @@ export interface PromptPattern {
     id: string;
     name: string;
     pattern: string;
-    enabled: boolean;
 }
 
 export interface PersonaDefinition {

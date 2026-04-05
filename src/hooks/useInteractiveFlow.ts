@@ -8,7 +8,6 @@ export interface PromptPattern {
   id: string;
   name: string;
   pattern: string;
-  enabled: boolean;
 }
 
 export interface InteractiveSessionTracking {
@@ -117,7 +116,7 @@ export function useInteractiveFlow(options: UseInteractiveFlowOptions): UseInter
         let matched = false;
         let matchedPatternName = '';
         for (const patternObj of promptPatterns) {
-          if (!patternObj.enabled || !patternObj.pattern) continue;
+          if (!patternObj.pattern) continue;
           try {
             const regex = new RegExp(patternObj.pattern);
             const trimmedLine = lastLine.trimLeft();

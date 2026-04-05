@@ -10,11 +10,10 @@ describe('appTypes', () => {
     });
 
     it('PromptPattern has the expected shape', () => {
-        const pattern: PromptPattern = { id: '1', name: 'Test', pattern: '\\$', enabled: true };
+        const pattern: PromptPattern = { id: '1', name: 'Test', pattern: '\\$' };
         expect(pattern).toHaveProperty('id');
         expect(pattern).toHaveProperty('name');
         expect(pattern).toHaveProperty('pattern');
-        expect(pattern).toHaveProperty('enabled');
     });
 
     it('PersonaDefinition has the expected shape', () => {

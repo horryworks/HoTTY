@@ -1,5 +1,20 @@
 # Release Notes - HoTTY
 
+## [v1.0.4] - 2026-04-05
+
+### Improved
+- **Connection Error Details**: Connection errors in the session dialog are now displayed in a dedicated scrollable panel above the Connect button, showing both a friendly message and the raw error details. This makes it much easier to diagnose SSH handshake failures with legacy devices (e.g., Cisco ASA algorithm negotiation issues).
+- **Prompt Pattern Settings**: Simplified the prompt pattern configuration UI — removed the per-pattern enable/disable checkbox in favor of a cleaner single-row layout, and added a "Reset to Default" button to quickly restore built-in patterns.
+- **Huawei Prompt Detection**: Updated the Huawei/Yamaha prompt pattern to recognize HRP (High Reliability Platform) prefixes used in HA cluster configurations.
+
+### Bug Fixes
+- **Jumpbox Checkbox**: Fixed the "Use as Jumpbox" checkbox incorrectly appearing when manually entering session details without selecting a host from the tree.
+
+### Security
+- **Dependency Vulnerability Fixes**: Resolved high-severity XML injection in `@xmldom/xmldom`, high-severity code injection and prototype pollution in `lodash`, and moderate HTTP response header injection and use-after-free in `electron` via `npm audit fix`.
+
+---
+
 ## [v1.0.3] - 2026-03-28
 
 ### New Features
