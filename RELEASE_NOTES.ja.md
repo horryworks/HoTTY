@@ -1,6 +1,6 @@
 # リリースノート - HoTTY
 
-## [v1.0.5-beta2] - 2026-04-05
+## [v1.0.5] - 2026-04-07
 
 ### 新機能
 - **AI コマンド自動実行**: AI が提案する読み取り専用コマンド（ls、cat、show、ping など）を自動実行モード有効時に自動で実行できるようになりました。ホワイトリスト＋危険パターン検出方式のコマンド安全性分類器により、安全なコマンドのみ確認なしで実行されます。AI チャットヘッダーの雷アイコンで切り替え、または設定 → AI → Command Execution Mode で設定可能。
@@ -8,32 +8,27 @@
 - **連続実行制限**: 連続自動実行の最大回数を設定可能（デフォルト: 10、0 = 無制限）。制限に達すると、Run をクリックするまでコマンドは手動確認が必要になります。
 
 ### 改善
-- **不要コードの整理**: Zustand 移行前に残っていた未使用の localStorage キー 43 件を削除、未使用の `hexToRgba` ユーティリティと `aiListProviders` ラッパーを削除、複数モジュールの内部専用シンボルを非エクスポート化。
+- **インラインヘルプツールチップ**: すべての設定タブおよびセッションダイアログの段落形式のヘルプテキストを、コンパクトなホバーツールチップ（HelpTooltip コンポーネント）に置き換え。視覚的なノイズを軽減しつつ、説明文へのアクセスを維持。
+- **設定画面の UX 改善**: General タブを Storage、Input、Diagnostics の3セクションに再編成し、見出しを追加。設定項目名をわかりやすく変更: "Watch Buffer Limit" → "AI Monitor Buffer Limit"、"Interactive Flow Stabilization Timeout" → "Command Output Wait Time"、"Local Log Buffer" → "Terminal Scrollback Buffer"、"Empty Pane Background" → "Unused Pane Background"。AI 設定の説明文も全体的に改善。
+- **セッションダイアログのヘルプテキスト**: Google Cloud IAP、ジャンプボックス（踏み台）、シリアルポート、フロー制御設定にインラインヘルプの説明を追加。"Jumpbox" ラベルを "Jumpbox (Bastion)" に変更し、より明確に。
+- **SSH アルゴリズムの折りたたみ表示**: Protocols タブの SSH アルゴリズムセクションが折りたたみ可能になり、不要時の視覚的なノイズを軽減。
 - **ターミナルコンストラクタの設定読み込み**: 新規ターミナルインスタンスがハードコードされたデフォルト値ではなく、設定ストアからフォントファミリー、フォントサイズ、テーマカラーを読み込むように改善。
+- **ドラッグ＆ドロップの視覚フィードバック**: Ask AI コマンドリストのドラッグ時に、ドロップ先にアクセントカラーのボーダーハイライトを表示。
+- **アップデート通知のテーマ変数**: アップデート通知バナーの外観を完全にカスタマイズできる 8 つの新しい `update-notification-*` テーマ変数を追加。
 - **アイコン形式の変更**: ファビコンと Electron ウィンドウアイコンを PNG から ICO 形式に変更し、Windows との互換性を向上。
 - **UI 一貫性の向上**: すべてのペインツールバー（LogViewer、PingMonitor、TextEditor）の無効ボタンカーソルを `not-allowed` に統一、モーダルのオーバーレイ配置とフッターボタンスタイルを正規化（AskAiModal、CustomThemeCreator、PasteConfirmationModal）、ローディングフォールバックと FileExplorerPane のハードコードされた色をテーマ変数に置き換え。
+- **不要コードの整理**: 未使用の localStorage キー 43 件、未使用の `hexToRgba` ユーティリティ、`aiListProviders` IPC ハンドラーを削除、複数モジュールの内部専用シンボルを非エクスポート化。
 
 ### バグ修正
 - **IAP トンネルゾーンフィルター**: gcloud のゾーンフィルター構文を `--filter=zone:${zone}` から `--filter=zone:(${zone})` に修正。これによりインスタンス検索が失敗する可能性がありました。
 - **IAP トンネルパスの引用符処理**: 特殊文字を含むパスで問題を起こす可能性のある手動の引用符処理を削除し、gcloud パス処理を簡素化。
+- **ドラッグ＆ドロップのちらつき修正**: Ask AI コマンドのドラッグ＆ドロップ時に、子要素の境界で `onDragLeave` が発火することによるハイライトのちらつきを修正。
+- **CSS フォールバックカラーの不一致修正**: TabBar のグラデーションフォールバックカラーと LayoutSelector のボーダーフォールバックカラーを、実際のダークテーマの値に一致するよう修正。
 
 ### セキュリティ
 - **IPC 入力バリデーション**: IPC ハンドラーに型チェックとサイズ制限を追加: `term-input`（文字列検証）、`term-resize`（整数範囲クランプ 1〜1000列、1〜500行）、`write-clipboard`（10MB 制限）、`ai-chat-send`（文字列検証 + 1MB メッセージ制限）、`export-htree`（パスワード長 + データ配列サイズ検証）。
-
----
-
-## [v1.0.5-beta1] - 2026-04-05
-
-### 改善
-- **設定画面の UX 改善**: General タブを Storage、Input、Diagnostics の3セクションに再編成し、見出しを追加。設定項目名をわかりやすく変更: "Watch Buffer Limit" → "AI Monitor Buffer Limit"、"Interactive Flow Stabilization Timeout" → "Command Output Wait Time"、"Local Log Buffer" → "Terminal Scrollback Buffer"、"Empty Pane Background" → "Unused Pane Background"。AI 設定の説明文も全体的に改善。
-- **セッションダイアログのヘルプテキスト**: Google Cloud IAP、ジャンプボックス（踏み台）、シリアルポート設定にインラインヘルプの説明を追加。"Jumpbox" ラベルを "Jumpbox (Bastion)" に変更し、より明確に。
-- **SSH アルゴリズムの折りたたみ表示**: Protocols タブの SSH アルゴリズムセクションが折りたたみ可能になり、不要時の視覚的なノイズを軽減。
-- **ドラッグ＆ドロップの視覚フィードバック**: Ask AI コマンドリストのドラッグ時に、ドロップ先にアクセントカラーのボーダーハイライトを表示。
-- **アップデート通知のテーマ変数**: アップデート通知バナーの外観を完全にカスタマイズできる 8 つの新しい `update-notification-*` テーマ変数を追加。
-
-### バグ修正
-- **ドラッグ＆ドロップのちらつき修正**: Ask AI コマンドのドラッグ＆ドロップ時に、子要素の境界で `onDragLeave` が発火することによるハイライトのちらつきを修正。
-- **CSS フォールバックカラーの不一致修正**: TabBar のグラデーションフォールバックカラーと LayoutSelector のボーダーフォールバックカラーを、実際のダークテーマの値に一致するよう修正。
+- **ファイルエディターのパスブロック強化**: テキストエディターのブロックディレクトリリストを拡張し、ユーザー機密パス（`.ssh`、`.gnupg`、Windows 資格情報ストア）を Windows および非 Windows プラットフォームの両方で保護。
+- **ログフォルダアクセスの強化**: `list-log-files` ハンドラーは、ログ記録またはピングモニターにより事前登録されたディレクトリのみアクセスを許可するよう変更し、任意のディレクトリ一覧取得を防止。
 
 ---
 

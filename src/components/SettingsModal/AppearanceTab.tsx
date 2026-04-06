@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import * as electronService from '../../services/electronService';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { DEFAULT_PROMPT_PATTERNS } from '../../stores/settingsStore';
+import HelpTooltip from '../HelpTooltip/HelpTooltip';
 
 interface AppearanceTabProps {
     theme: string;
@@ -284,7 +285,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
             </div>
 
             <div className="form-group">
-                <label>Default Encoding</label>
+                <label>Default Encoding <HelpTooltip text="Applies to new connections." /></label>
                 <select
                     value={encoding}
                     onChange={(e) => onEncodingChange(e.target.value)}
@@ -294,7 +295,6 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                     <option value="shift_jis">Shift_JIS</option>
                     <option value="euc-jp">EUC-JP</option>
                 </select>
-                <p className="settings-help">Applies to new connections.</p>
             </div>
 
             <div className="form-group" style={{ paddingTop: '15px', borderTop: '1px solid var(--border-color)' }}>

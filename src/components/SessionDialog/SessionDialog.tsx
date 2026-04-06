@@ -7,6 +7,7 @@ import { STORAGE_KEYS } from '../../constants/storage';
 import * as electronService from '../../services/electronService';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { ProtocolId } from '../../types/appTypes';
+import HelpTooltip from '../HelpTooltip/HelpTooltip';
 import './SessionDialog.css';
 
 interface ConnectionDialogProps {
@@ -988,8 +989,8 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                             }}
                                         />
                                         Connect via Google Cloud IAP
+                                        <HelpTooltip text="Tunnels SSH through Google Cloud Identity-Aware Proxy. Requires gcloud SDK." />
                                     </label>
-                                    <p className="settings-help">Tunnels SSH through Google Cloud Identity-Aware Proxy. Requires gcloud SDK.</p>
                                 </div>
                             )}
 
@@ -1167,7 +1168,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                     )}
                                     {(protocol === 'ssh' || protocol === 'telnet') && !iapEnabled && jumpboxHosts.length > 0 && (
                                         <div className="form-group">
-                                            <label>Jumpbox (Bastion)</label>
+                                            <label>Jumpbox (Bastion) <HelpTooltip text="Route through an intermediate server to reach the destination." /></label>
                                             <select
                                                 value={jumpboxId}
                                                 onChange={e => setJumpboxId(e.target.value)}
@@ -1182,7 +1183,6 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                                     ))
                                                 }
                                             </select>
-                                            <p className="settings-help">Route through an intermediate server to reach the destination.</p>
                                         </div>
                                     )}
                                 </>
@@ -1217,7 +1217,7 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                             {protocol === 'serial' && (
                                 <>
                                     <div className="form-group">
-                                        <label>Serial Port</label>
+                                        <label>Serial Port <HelpTooltip text="Default: 9600 / 8 / None / 1. Match the settings of the device you are connecting to." /></label>
                                         {serialPorts.length > 0 ? (
                                             <select value={serialPath} onChange={e => setSerialPath(e.target.value)}>
                                                 {serialPorts.map(p => (
@@ -1272,15 +1272,13 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
                                         </div>
                                     </div>
                                     <div className="form-group">
-                                        <label>Flow Control</label>
+                                        <label>Flow Control <HelpTooltip text="XON/XOFF: software flow control. RTS/CTS: hardware flow control." /></label>
                                         <select value={flowControl} onChange={e => setFlowControl(e.target.value)}>
                                             <option value="none">None</option>
                                             <option value="xon/xoff">XON/XOFF</option>
                                             <option value="rts/cts">RTS/CTS</option>
                                         </select>
-                                        <p className="settings-help">XON/XOFF: software flow control. RTS/CTS: hardware flow control.</p>
                                     </div>
-                                    <p className="settings-help">Default: 9600 / 8 / None / 1. Match the settings of the device you are connecting to.</p>
                                 </>
                             )}
 

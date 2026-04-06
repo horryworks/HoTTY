@@ -182,7 +182,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                         <summary>📁 Session Logging & Log Viewer</summary>
                         <div className="help-section-body">
                             <p className="help-text">
-                                <strong>Session Logging:</strong> Enable automatic logging in <strong>Settings → System</strong>. All terminal output is saved as timestamped <code>.log</code> files to the folder you specify.
+                                <strong>Session Logging:</strong> Enable automatic logging in <strong>Settings → General</strong>. All terminal output is saved as timestamped <code>.log</code> files to the folder you specify.
                             </p>
                             <p className="help-text">
                                 <strong>Log Viewer:</strong> Click the <strong>Log Viewer</strong> button in the tab bar to open a dedicated log-browsing pane. It lists all saved log files and lets you open and search them without leaving HoTTY.

@@ -95,7 +95,7 @@ export interface SettingsState {
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 
-export interface SettingsActions {
+interface SettingsActions {
     updateGlobalEncoding: (v: string) => void;
     updateFontSize: (v: number) => void;
     updateFontFamily: (v: string) => void;

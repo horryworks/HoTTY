@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 
-export type ResizeOrientation = 'horizontal' | 'vertical' | 'both';
+type ResizeOrientation = 'horizontal' | 'vertical' | 'both';
 
 interface UseResizeOptions {
     onMove: (dx: number, dy: number) => void;

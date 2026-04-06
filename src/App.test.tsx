@@ -32,7 +32,6 @@ vi.mock('./services/electronService', () => ({
     aiListLocations: vi.fn(() => Promise.resolve([])),
     aiChatCancel: vi.fn(),
     aiChatClear: vi.fn(),
-    aiListProviders: vi.fn(() => Promise.resolve([])),
     aiSetLocation: vi.fn(),
     aiSetProvider: vi.fn(),
     selectServiceAccountKeyFile: vi.fn(),

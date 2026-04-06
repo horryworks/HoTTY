@@ -4,7 +4,7 @@ import * as iconv from 'iconv-lite';
 import { ISessionService } from './ISessionService';
 import { logger } from './Logger';
 
-export interface SerialConfig {
+interface SerialConfig {
     path: string;         // COM port (e.g., 'COM3')
     baudRate: number;     // default: 9600
     dataBits: 5 | 6 | 7 | 8;  // default: 8

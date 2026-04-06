@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ProtocolId } from '../../types/appTypes';
+import HelpTooltip from '../HelpTooltip/HelpTooltip';
 
 const PROTOCOL_LABELS: { id: ProtocolId; label: string; description: string }[] = [
     { id: 'ssh', label: 'SSH', description: 'Secure Shell connections' },
@@ -43,8 +44,7 @@ export const ProtocolsTab: React.FC<ProtocolsTabProps> = ({
     return (
         <>
             <div className="form-group">
-                <label>Protocols</label>
-                <p className="settings-help" style={{ marginTop: 0 }}>Enable or disable connection protocols shown in the session dialog.</p>
+                <label>Protocols <HelpTooltip text="Enable or disable connection protocols shown in the session dialog." /></label>
             </div>
             {PROTOCOL_LABELS.map(({ id, label, description }) => (
                 <div key={id} style={{ display: 'flex', alignItems: 'center', marginBottom: '6px' }}>
@@ -62,7 +62,7 @@ export const ProtocolsTab: React.FC<ProtocolsTabProps> = ({
 
             {enabledProtocols.ssh && (
                 <div className="form-group" style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid var(--border-color)' }}>
-                    <label>SSH KeepAlive</label>
+                    <label>SSH KeepAlive <HelpTooltip text="Sends dummy packets to prevent timeouts." /></label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
                             <input
@@ -88,11 +88,10 @@ export const ProtocolsTab: React.FC<ProtocolsTabProps> = ({
                             />
                         </div>
                     )}
-                    <p className="settings-help">Sends dummy packets to prevent timeouts.</p>
 
                     {sshAlgorithms && (
                         <details style={{ marginTop: '20px', borderTop: '1px solid var(--border-color)', paddingTop: '15px' }}>
-                            <summary style={{ cursor: 'pointer', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '10px' }}>SSH Algorithms</summary>
+                            <summary style={{ cursor: 'pointer', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '10px' }}>SSH Algorithms <HelpTooltip text="Choose which algorithms to enable for SSH connections. Changes apply to new sessions." /></summary>
                             <div className="ssh-algorithms-container" style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '10px' }}>
                                 {Object.keys(sshAlgorithms).map(category => (
                                     <div key={category} style={{ marginBottom: '15px' }}>
@@ -117,7 +116,6 @@ export const ProtocolsTab: React.FC<ProtocolsTabProps> = ({
                                     </div>
                                 ))}
                             </div>
-                            <p className="settings-help">Choose which algorithms to enable for SSH connections. Changes apply to new sessions.</p>
                         </details>
                     )}
                 </div>
@@ -125,7 +123,7 @@ export const ProtocolsTab: React.FC<ProtocolsTabProps> = ({
 
             {enabledProtocols.telnet && (
                 <div className="form-group" style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid var(--border-color)' }}>
-                    <label>Telnet KeepAlive</label>
+                    <label>Telnet KeepAlive <HelpTooltip text="Sends Telnet NOP commands to prevent idle timeouts." /></label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal' }}>
                             <input
@@ -151,7 +149,6 @@ export const ProtocolsTab: React.FC<ProtocolsTabProps> = ({
                             />
                         </div>
                     )}
-                    <p className="settings-help">Sends Telnet NOP commands to prevent idle timeouts.</p>
                 </div>
             )}
         </>

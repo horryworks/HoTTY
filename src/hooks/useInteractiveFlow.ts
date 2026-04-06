@@ -1,14 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { stripAnsiCodes } from '../utils/ansiUtils';
 import * as electronService from '../services/electronService';
+import type { PromptPattern } from '../types/appTypes';
 
 // -- Types --
-
-export interface PromptPattern {
-  id: string;
-  name: string;
-  pattern: string;
-}
 
 export interface InteractiveSessionTracking {
   aiSessionId: string;

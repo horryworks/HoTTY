@@ -1,5 +1,4 @@
 import { useSettingsStore } from '../stores/settingsStore';
-export type { SettingsState } from '../stores/settingsStore';
 
 /**
  * Compatibility wrapper around the Zustand settings store.

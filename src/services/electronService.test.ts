@@ -42,7 +42,6 @@ const mockAPI = {
     aiListLocations: vi.fn(),
     aiChatCancel: vi.fn(),
     aiChatClear: vi.fn(),
-    aiListProviders: vi.fn(),
     aiSetLocation: vi.fn(),
     aiSetProvider: vi.fn(),
     selectServiceAccountKeyFile: vi.fn(),

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useInteractiveFlow, type PromptPattern } from './useInteractiveFlow';
+import { useInteractiveFlow } from './useInteractiveFlow';
+import type { PromptPattern } from '../types/appTypes';
 
 vi.mock('../services/electronService', () => ({
     onSessionData: vi.fn(() => vi.fn()), // returns cleanup fn

@@ -12,14 +12,14 @@ const VALID_INSTANCE_PATTERN = /^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$/;
 const TUNNEL_READY_TIMEOUT_MS = 30_000;
 const GCLOUD_CMD_TIMEOUT_MS = 15_000;
 
-export interface IapTunnelConfig {
+interface IapTunnelConfig {
     project: string;
     zone: string;
     instance: string;
     port?: number; // default 22
 }
 
-export interface IapTunnelResult {
+interface IapTunnelResult {
     localPort: number;
     process: ChildProcess;
 }

@@ -15,7 +15,7 @@ function getGridDimensions(mode: LayoutMode) {
     }
 }
 
-export interface PaneManagerOptions {
+interface PaneManagerOptions {
     showLeftSidebar: boolean;
     showRightSidebar: boolean;
     showTopBar: boolean;

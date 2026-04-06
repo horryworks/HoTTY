@@ -3,6 +3,7 @@ import * as electronService from '../../services/electronService';
 import { useSettingsStore, DEFAULT_AI_COMMANDS, DEFAULT_PERSONAS } from '../../stores/settingsStore';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
+import HelpTooltip from '../HelpTooltip/HelpTooltip';
 import type { PersonaDefinition, AskAiCommand, CommandExecutionMode } from '../../types/appTypes';
 
 interface AISettingsTabProps {
@@ -113,7 +114,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
         <div className="form-group">
             {/* ── AI Provider ── */}
             <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
-                <label style={{ marginBottom: '10px', display: 'block' }}>AI Provider</label>
+                <label style={{ marginBottom: '10px', display: 'block' }}>AI Provider <HelpTooltip text="Vertex AI and Gemini use Google OAuth. Anthropic and OpenAI require API keys set in environment variables." /></label>
                 <select
                     value={activeAiProvider}
                     onChange={async (e) => {
@@ -141,9 +142,6 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                     <option value="anthropic">Anthropic (Claude)</option>
                     <option value="openai">OpenAI</option>
                 </select>
-                <p className="settings-help" style={{ marginTop: '8px' }}>
-                    Vertex AI and Gemini use Google OAuth. Anthropic and OpenAI require API keys set in environment variables.
-                </p>
             </div>
 
             {/* ── Authentication ── */}
@@ -434,7 +432,9 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
 
             {/* ── Command Execution Mode ── */}
             <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
-                <label style={{ marginBottom: '10px', display: 'block' }}>Command Execution Mode</label>
+                <label style={{ marginBottom: '10px', display: 'block' }}>Command Execution Mode <HelpTooltip text={commandExecutionMode === 'auto-execute-safe'
+                    ? 'Read-only commands (ls, cat, show, display, ping, etc.) are executed automatically. Destructive or unknown commands still require manual confirmation.'
+                    : 'All AI-suggested commands require clicking "Run in Terminal" before execution.'} /></label>
                 <select
                     value={commandExecutionMode}
                     onChange={(e) => onCommandExecutionModeChange(e.target.value as CommandExecutionMode)}
@@ -451,11 +451,6 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                     <option value="ask-before-execute">Ask before execute</option>
                     <option value="auto-execute-safe">Auto-execute safe commands</option>
                 </select>
-                <p className="settings-help" style={{ marginTop: '8px' }}>
-                    {commandExecutionMode === 'auto-execute-safe'
-                        ? 'Read-only commands (ls, cat, show, display, ping, etc.) are executed automatically. Destructive or unknown commands still require manual confirmation.'
-                        : 'All AI-suggested commands require clicking "Run in Terminal" before execution.'}
-                </p>
 
                 {commandExecutionMode === 'auto-execute-safe' && (
                     <>
@@ -481,10 +476,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
 
                         {/* Custom Safe Commands */}
                         <div style={{ marginTop: '15px' }}>
-                            <label style={{ marginBottom: '6px', display: 'block', fontSize: 'calc(var(--font-size-base) - 1px)' }}>Custom Safe Commands</label>
-                            <p className="settings-help" style={{ marginTop: '0', marginBottom: '8px' }}>
-                                Add custom command names to the auto-execute whitelist. Built-in safe commands (ls, cat, show, display, ping, grep, etc.) are always included.
-                            </p>
+                            <label style={{ marginBottom: '6px', display: 'block', fontSize: 'calc(var(--font-size-base) - 1px)' }}>Custom Safe Commands <HelpTooltip text="Add custom command names to the auto-execute whitelist. Built-in safe commands (ls, cat, show, display, ping, grep, etc.) are always included." /></label>
                             <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                                 <input
                                     type="text"
@@ -560,7 +552,7 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
             </div>
 
             <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
-                <label style={{ marginBottom: '10px', display: 'block' }}>Proactive Investigation Instruction</label>
+                <label style={{ marginBottom: '10px', display: 'block' }}>Proactive Investigation Instruction <HelpTooltip text={'Appended to AI Monitor responses. Use this to tell AI to run follow-up commands (e.g., "check logs if errors are found").'} /></label>
                 <textarea
                     value={proactiveInstruction}
                     onChange={(e) => onProactiveInstructionChange(e.target.value)}
@@ -575,9 +567,6 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         boxSizing: 'border-box'
                     }}
                 />
-                <p className="settings-help" style={{ marginTop: '8px' }}>
-                    Appended to AI Monitor responses. Use this to tell AI to run follow-up commands (e.g., &quot;check logs if errors are found&quot;).
-                </p>
             </div>
 
             <label>Debugging</label>
@@ -590,9 +579,9 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         style={{ marginRight: '8px' }}
                     />
                     Show System Prompt
+                    <HelpTooltip text="Display hidden system instructions in the chat view." />
                 </label>
             </div>
-            <p className="settings-help">Display hidden system instructions in the chat view.</p>
 
             {showGeminiWarning && (
                 <div className="confirm-modal-overlay">

@@ -3,14 +3,14 @@ import { BrowserWindow } from 'electron';
 import { verifyHostKey } from './knownHosts';
 import { logger } from './Logger';
 
-export interface JumpboxConfig {
+interface JumpboxConfig {
     host: string;
     port: number;
     username: string;
     password?: string;
 }
 
-export interface TunnelResult {
+interface TunnelResult {
     stream: ClientChannel;
     jumpboxClient: Client;
 }

@@ -717,12 +717,24 @@ ipcMain.handle('text-editor-approve-dropped-file', async (_event, filePath: stri
     if (stat.size > 50 * 1024 * 1024) {
       throw new Error('File is too large (max 50MB)');
     }
-    // Block system-sensitive directories on Windows
+    // Block system-sensitive and user-sensitive directories
+    const lower = resolvedPath.toLowerCase().replace(/\//g, sep);
     if (process.platform === 'win32') {
-      const lower = resolvedPath.toLowerCase();
-      const blocked = ['\\windows\\system32', '\\windows\\syswow64', '\\programdata\\ssh'];
-      if (blocked.some(dir => lower.includes(dir))) {
-        throw new Error('Access to system directories is not allowed');
+      const userHome = osHomedir().toLowerCase().replace(/\//g, sep);
+      const blocked = [
+        '\\windows\\system32', '\\windows\\syswow64', '\\programdata\\ssh',
+        join(userHome, '.ssh'), join(userHome, '.gnupg'),
+        join(userHome, 'appdata', 'roaming', 'microsoft', 'credentials'),
+        join(userHome, 'appdata', 'local', 'microsoft', 'credentials'),
+      ];
+      if (blocked.some(dir => lower.startsWith(dir.toLowerCase()))) {
+        throw new Error('Access to sensitive directories is not allowed');
+      }
+    } else {
+      const userHome = osHomedir().toLowerCase();
+      const blocked = [join(userHome, '.ssh'), join(userHome, '.gnupg')];
+      if (blocked.some(dir => lower.startsWith(dir))) {
+        throw new Error('Access to sensitive directories is not allowed');
       }
     }
     approvedEditorPaths.add(resolvedPath);
@@ -1008,10 +1020,6 @@ ipcMain.handle('ai-list-locations', async () => {
 
 ipcMain.on('ai-chat-clear', (_, sessionId: string) => {
   aiService?.clearHistory(sessionId);
-});
-
-ipcMain.handle('ai-list-providers', () => {
-  return aiService?.listProviders() ?? [];
 });
 
 ipcMain.handle('ai-set-location', (_, location: unknown) => {
@@ -1370,8 +1378,8 @@ ipcMain.handle('list-log-files', async (_, folderPath: string) => {
   if (!folderPath) return { error: 'No log folder configured' };
   const resolvedFolder = resolve(folderPath);
   if (!fs.existsSync(resolvedFolder)) return { error: 'Log folder does not exist' };
-  // Register the folder so read-log-file can also access files within it
-  allowedLogDirs.add(resolvedFolder);
+  // Only allow listing directories already registered by update-logging or ping-monitor-start
+  if (!allowedLogDirs.has(resolvedFolder)) return { error: 'Log folder is not registered' };
   try {
     const entries = fs.readdirSync(resolvedFolder);
     const files = entries

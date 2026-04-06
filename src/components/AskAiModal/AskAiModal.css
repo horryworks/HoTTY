@@ -111,7 +111,7 @@
     background: var(--btn-secondary-bg);
     color: var(--text-primary);
     border: none;
-    padding: 6px 16px;
+    padding: 6px 20px;
     border-radius: 4px;
     cursor: pointer;
     font-size: calc(var(--font-size-base) - 1px);

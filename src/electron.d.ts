@@ -31,7 +31,6 @@ export interface ElectronAPI {
     aiListLocations: () => Promise<string[]>;
     aiChatCancel: (sessionId: string) => void;
     aiChatClear: (sessionId: string) => void;
-    aiListProviders: () => Promise<{ id: string; displayName: string; authType: string }[]>;
     aiSetLocation: (location: string) => Promise<void>;
     aiSetProvider: (providerId: string) => Promise<void>;
     selectServiceAccountKeyFile: () => Promise<string | null>;

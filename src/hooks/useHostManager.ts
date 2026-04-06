@@ -4,7 +4,7 @@ import * as electronService from '../services/electronService';
 
 const STORAGE_KEY = STORAGE_KEYS.HOST_TREE;
 
-export interface IapTunnelEntry {
+interface IapTunnelEntry {
     project: string;
     zone: string;
     instance: string;

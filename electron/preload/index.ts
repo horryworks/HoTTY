@@ -160,7 +160,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     aiListLocations: () => ipcRenderer.invoke('ai-list-locations'),
     aiChatCancel: (sessionId: string) => ipcRenderer.send('ai-chat-cancel', sessionId),
     aiChatClear: (sessionId: string) => ipcRenderer.send('ai-chat-clear', sessionId),
-    aiListProviders: () => ipcRenderer.invoke('ai-list-providers'),
     aiSetLocation: (location: string) => ipcRenderer.invoke('ai-set-location', location),
     aiSetProvider: (providerId: string) => ipcRenderer.invoke('ai-set-provider', providerId),
     selectServiceAccountKeyFile: () => ipcRenderer.invoke('select-service-account-key-file'),

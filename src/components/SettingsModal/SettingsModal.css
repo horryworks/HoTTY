@@ -168,12 +168,6 @@
     border-color: var(--accent-color);
 }
 
-.settings-help {
-    margin: 0;
-    font-size: calc(var(--font-size-base) - 2px);
-    color: var(--text-secondary);
-    opacity: 0.8;
-}
 
 .about-download-btn {
     background-color: var(--accent-color);

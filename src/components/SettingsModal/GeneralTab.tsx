@@ -1,5 +1,6 @@
 import React from 'react';
 import * as electronService from '../../services/electronService';
+import HelpTooltip from '../HelpTooltip/HelpTooltip';
 
 interface GeneralTabProps {
     loggingEnabled: boolean;
@@ -43,7 +44,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
             </div>
             {loggingEnabled && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <label style={{ color: 'var(--text-secondary)' }}>Log Folder Path</label>
+                    <label style={{ color: 'var(--text-secondary)' }}>Log Folder Path <HelpTooltip text="Logs are saved as YYYYMMDDHHMMSS-(Protocol)-(IP).txt" /></label>
                     <div style={{ display: 'flex', gap: '8px' }}>
                         <input
                             type="text"
@@ -65,12 +66,11 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                             Browse...
                         </button>
                     </div>
-                    <p className="settings-help">Logs are saved as YYYYMMDDHHMMSS-(Protocol)-(IP).txt</p>
                 </div>
             )}
 
             <div className="form-group" style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid var(--border-color)' }}>
-                <label>Terminal Scrollback Buffer</label>
+                <label>Terminal Scrollback Buffer <HelpTooltip text="Max lines to keep in memory per terminal (Default: 10000)." /></label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <input
                         type="number"
@@ -83,7 +83,6 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                     />
                     <span style={{ color: 'var(--text-secondary)' }}>lines</span>
                 </div>
-                <p className="settings-help">Max lines to keep in memory per terminal (Default: 10000).</p>
             </div>
 
             <h3 style={{ margin: '15px 0 12px 0', paddingTop: '15px', borderTop: '1px solid var(--border-color)', fontSize: 'calc(var(--font-size-base) + 2px)', color: 'var(--text-primary)' }}>Input</h3>
@@ -98,9 +97,9 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                             style={{ marginRight: '8px' }}
                         />
                         Backspace sends DEL (0x7F)
+                        <HelpTooltip text="If disabled (default), Backspace sends 0x08 (BS/^H). Enable this if your server expects 0x7F (DEL) for Backspace." />
                     </label>
                 </div>
-                <p className="settings-help">If disabled (default), Backspace sends 0x08 (BS/^H). Enable this if your server expects 0x7F (DEL) for Backspace.</p>
             </div>
 
             <div className="form-group" style={{ marginTop: '10px' }}>
@@ -114,14 +113,14 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                             style={{ marginRight: '8px' }}
                         />
                         Right-click to paste
+                        <HelpTooltip text="If enabled, right-clicking the terminal will read the clipboard and show the paste confirmation dialog instead of the context menu." />
                     </label>
                 </div>
-                <p className="settings-help">If enabled, right-clicking the terminal will read the clipboard and show the paste confirmation dialog instead of the context menu.</p>
             </div>
 
             <h3 style={{ margin: '15px 0 12px 0', paddingTop: '15px', borderTop: '1px solid var(--border-color)', fontSize: 'calc(var(--font-size-base) + 2px)', color: 'var(--text-primary)' }}>Diagnostics</h3>
             <div className="form-group">
-                <label>Debug Log</label>
+                <label>Debug Log <HelpTooltip text="Application debug logs are saved here. Share the latest log file when reporting a bug." /></label>
                 <div>
                     <button
                         className="settings-button"
@@ -130,7 +129,6 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                         Open Debug Log Folder
                     </button>
                 </div>
-                <p className="settings-help">Application debug logs are saved here. Share the latest log file when reporting a bug.</p>
             </div>
         </div>
     );

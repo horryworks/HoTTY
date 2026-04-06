@@ -1,6 +1,6 @@
 # Release Notes - HoTTY
 
-## [v1.0.5-beta2] - 2026-04-05
+## [v1.0.5] - 2026-04-07
 
 ### New Features
 - **AI Command Auto-Execution**: AI-suggested read-only commands (ls, cat, show, ping, etc.) can now be executed automatically when auto-execute mode is enabled. A command safety classifier using a whitelist + danger-pattern approach ensures only safe commands run without confirmation. Toggle with the lightning bolt button in the AI Chat header, or configure in Settings → AI → Command Execution Mode.
@@ -8,32 +8,27 @@
 - **Consecutive Execution Limit**: Set a maximum number of consecutive auto-executions (default: 10, 0 = unlimited). After the limit is reached, commands require manual confirmation until you click Run.
 
 ### Improved
-- **Dead Code Cleanup**: Removed 43 unused localStorage keys left over from the pre-Zustand migration, removed unused `hexToRgba` utility and `aiListProviders` wrapper, and un-exported internal-only symbols across multiple modules.
+- **Inline Help Tooltips**: Replaced paragraph-style help text across all Settings tabs and the Session Dialog with compact hover tooltips (HelpTooltip component), reducing visual clutter while keeping descriptions accessible.
+- **Settings UX Overhaul**: Reorganized the General tab into clear sections (Storage, Input, Diagnostics) with descriptive headers. Renamed settings for clarity: "Watch Buffer Limit" → "AI Monitor Buffer Limit", "Interactive Flow Stabilization Timeout" → "Command Output Wait Time", "Local Log Buffer" → "Terminal Scrollback Buffer", "Empty Pane Background" → "Unused Pane Background". Improved AI settings descriptions throughout.
+- **Session Dialog Help Text**: Added inline help descriptions for Google Cloud IAP, Jumpbox (Bastion), Serial port, and Flow Control settings. Renamed "Jumpbox" label to "Jumpbox (Bastion)" for clarity.
+- **SSH Algorithms Collapsible**: The SSH Algorithms section in the Protocols tab is now collapsible, reducing visual clutter when not needed.
 - **Terminal Constructor Settings**: New terminal instances now read font family, font size, and theme colors from the settings store instead of relying on hardcoded defaults.
+- **Drag-and-Drop Visual Feedback**: The Ask AI command list now shows an accent-colored border highlight on the drop target while dragging.
+- **Update Notification Theme Variables**: Added 8 new `update-notification-*` theme variables for full customization of the update notification banner appearance.
 - **Icon Format**: Updated favicon and Electron window icon from PNG to ICO format for better Windows compatibility.
 - **UI Consistency**: Standardized disabled button cursor to `not-allowed` across all pane toolbars (LogViewer, PingMonitor, TextEditor), normalized modal overlay positioning and footer button styles (AskAiModal, CustomThemeCreator, PasteConfirmationModal), and replaced hardcoded colors with theme variables in the loading fallback and FileExplorerPane.
+- **Dead Code Cleanup**: Removed 43 unused localStorage keys, unused `hexToRgba` utility, `aiListProviders` IPC handler, and un-exported internal-only symbols across multiple modules.
 
 ### Bug Fixes
 - **IAP Tunnel Zone Filter**: Fixed the gcloud zone filter syntax from `--filter=zone:${zone}` to `--filter=zone:(${zone})`, which could cause instance lookup failures.
 - **IAP Tunnel Path Quoting**: Simplified gcloud path handling by removing fragile manual quoting that could break paths with special characters.
+- **Drag-and-Drop Flickering**: Fixed the Ask AI command drag-and-drop highlight flickering when dragging over child elements, caused by `onDragLeave` firing on child element boundaries.
+- **CSS Fallback Color Mismatch**: Fixed gradient fallback colors in TabBar and border fallback color in LayoutSelector to match the actual dark theme values.
 
 ### Security
 - **IPC Input Validation**: Added type checking and size limits to IPC handlers: `term-input` (string validation), `term-resize` (integer range clamping 1–1000 cols, 1–500 rows), `write-clipboard` (10 MB limit), `ai-chat-send` (string validation + 1 MB message limit), and `export-htree` (password length + data array size validation).
-
----
-
-## [v1.0.5-beta1] - 2026-04-05
-
-### Improved
-- **Settings UX Overhaul**: Reorganized the General tab into clear sections (Storage, Input, Diagnostics) with descriptive headers. Renamed settings for clarity: "Watch Buffer Limit" → "AI Monitor Buffer Limit", "Interactive Flow Stabilization Timeout" → "Command Output Wait Time", "Local Log Buffer" → "Terminal Scrollback Buffer", "Empty Pane Background" → "Unused Pane Background". Improved AI settings descriptions throughout.
-- **Session Dialog Help Text**: Added inline help descriptions for Google Cloud IAP, Jumpbox (Bastion), and Serial port settings. Renamed "Jumpbox" label to "Jumpbox (Bastion)" for clarity.
-- **SSH Algorithms Collapsible**: The SSH Algorithms section in the Protocols tab is now collapsible, reducing visual clutter when not needed.
-- **Drag-and-Drop Visual Feedback**: The Ask AI command list now shows an accent-colored border highlight on the drop target while dragging.
-- **Update Notification Theme Variables**: Added 8 new `update-notification-*` theme variables for full customization of the update notification banner appearance.
-
-### Bug Fixes
-- **Drag-and-Drop Flickering**: Fixed the Ask AI command drag-and-drop highlight flickering when dragging over child elements, caused by `onDragLeave` firing on child element boundaries.
-- **CSS Fallback Color Mismatch**: Fixed gradient fallback colors in TabBar and border fallback color in LayoutSelector to match the actual dark theme values.
+- **File Editor Path Blocking**: Extended the text editor's blocked directory list to include user-sensitive paths (`.ssh`, `.gnupg`, Windows credential stores) on both Windows and non-Windows platforms.
+- **Log Folder Access Hardening**: The `list-log-files` handler now only allows access to directories that were previously registered by logging or ping monitor, preventing arbitrary directory listing.
 
 ---
 

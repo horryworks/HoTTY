@@ -1,5 +1,6 @@
 import React from 'react';
 import type { FeatureId } from '../../types/appTypes';
+import HelpTooltip from '../HelpTooltip/HelpTooltip';
 
 const FEATURE_LABELS: { id: FeatureId; label: string; description: string }[] = [
     { id: 'ai-chat', label: 'AI Chat', description: 'AI-powered chat panel for terminal assistance' },
@@ -21,8 +22,7 @@ export const FeaturesTab: React.FC<FeaturesTabProps> = ({
     return (
         <div>
             <div className="form-group">
-                <label>Features</label>
-                <p className="settings-help" style={{ marginTop: 0 }}>Enable or disable feature panes. Existing open panes are not affected.</p>
+                <label>Features <HelpTooltip text="Enable or disable feature panes. Existing open panes are not affected." /></label>
             </div>
             {FEATURE_LABELS.map(({ id, label, description }) => (
                 <div key={id} style={{ display: 'flex', alignItems: 'center', marginBottom: '6px' }}>

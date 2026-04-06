@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from './Logger';
 
-export interface PingResult {
+interface PingResult {
     target: string;
     status: 'ok' | 'fail' | 'dns' | 'pending';
     rtt: number | null;
