@@ -210,4 +210,99 @@ describe('TelnetService — disconnect', () => {
         mockConn.end.mockImplementationOnce(() => { throw new Error('already closed'); });
         expect(() => service.disconnect()).not.toThrow();
     });
+
+    it('clears login state on disconnect', () => {
+        const win = makeMockWin();
+        const service = new TelnetService(win, 's1');
+        (service as any).loginState = 'waitingForUsername';
+        (service as any).loginCredentials = { username: 'u', password: 'p' };
+        (service as any).loginBuffer = 'some data';
+        service.disconnect();
+        expect((service as any).loginState).toBe('done');
+        expect((service as any).loginCredentials).toBeNull();
+        expect((service as any).loginBuffer).toBe('');
+    });
+});
+
+// ── auto-login ───────────────────────────────────────────────────────────────
+
+describe('TelnetService — auto-login', () => {
+    let service: TelnetService;
+
+    beforeEach(() => {
+        service = new TelnetService(makeMockWin(), 's1');
+    });
+
+    function initLogin(username = 'admin', password = 'secret') {
+        (service as any).loginState = 'waitingForUsername';
+        (service as any).loginBuffer = '';
+        (service as any).loginCredentials = { username, password };
+    }
+
+    function feedData(text: string) {
+        (service as any).handleLoginData(text);
+    }
+
+    it('sends username on "Username: " prompt (Cisco ASA style)', () => {
+        initLogin();
+        feedData('Username: ');
+        expect(mockSocket.write).toHaveBeenCalledWith(Buffer.from('admin\r\n'));
+        expect((service as any).loginState).toBe('waitingForPassword');
+    });
+
+    it('sends username on "login:" prompt (traditional style)', () => {
+        initLogin();
+        feedData('login: ');
+        expect(mockSocket.write).toHaveBeenCalledWith(Buffer.from('admin\r\n'));
+        expect((service as any).loginState).toBe('waitingForPassword');
+    });
+
+    it('sends password after username', () => {
+        initLogin();
+        feedData('Username: ');
+        mockSocket.write.mockClear();
+        feedData('Password: ');
+        expect(mockSocket.write).toHaveBeenCalledWith(Buffer.from('secret\r\n'));
+        expect((service as any).loginState).toBe('done');
+    });
+
+    it('does NOT auto-send on second password prompt (enable)', () => {
+        initLogin();
+        feedData('Username: ');
+        mockSocket.write.mockClear();
+        feedData('Password: ');
+        mockSocket.write.mockClear();
+        // Simulate enable password prompt
+        feedData('Password: ');
+        expect(mockSocket.write).not.toHaveBeenCalled();
+    });
+
+    it('does not auto-login when no credentials provided', () => {
+        // loginState defaults to 'done', loginCredentials defaults to null
+        feedData('Username: ');
+        feedData('Password: ');
+        expect(mockSocket.write).not.toHaveBeenCalled();
+    });
+
+    it('handles password-only device (no username prompt)', () => {
+        initLogin('admin', 'secret');
+        feedData('Password: ');
+        expect(mockSocket.write).toHaveBeenCalledWith(Buffer.from('secret\r\n'));
+        expect((service as any).loginState).toBe('done');
+    });
+
+    it('handles split chunks for prompt detection', () => {
+        initLogin();
+        feedData('User');
+        expect(mockSocket.write).not.toHaveBeenCalled();
+        feedData('name: ');
+        expect(mockSocket.write).toHaveBeenCalledWith(Buffer.from('admin\r\n'));
+    });
+
+    it('clears credentials from memory after login completes', () => {
+        initLogin();
+        feedData('Username: ');
+        feedData('Password: ');
+        expect((service as any).loginCredentials).toBeNull();
+    });
 });

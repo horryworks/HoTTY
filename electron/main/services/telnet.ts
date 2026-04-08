@@ -19,6 +19,11 @@ export class TelnetService implements ISessionService {
     private localProxy: net.Server | null = null;
     private jumpboxClient: Client | null = null;
 
+    // Custom login state machine (replaces telnet-client's built-in login)
+    private loginState: 'waitingForUsername' | 'waitingForPassword' | 'done' = 'done';
+    private loginBuffer: string = '';
+    private loginCredentials: { username: string; password: string } | null = null;
+
     constructor(window: BrowserWindow, sessionId: string) {
         this.window = window;
         this.sessionId = sessionId;
@@ -89,15 +94,22 @@ export class TelnetService implements ISessionService {
             irs: '\r\n', // Input Record Separator
             ors: '\r\n', // Output Record Separator
             echoLines: 0, // Don't echo lines locally
-            // Delegate login prompt detection to telnet-client
-            disableLogon: !hasCredentials,
-            ...(hasCredentials ? {
+            // Always disable telnet-client's built-in login; we handle it ourselves
+            disableLogon: true,
+        };
+
+        // Initialize custom login state machine
+        if (hasCredentials) {
+            this.loginState = 'waitingForUsername';
+            this.loginBuffer = '';
+            this.loginCredentials = {
                 username: config.username as string,
                 password: (config.password as string) || '',
-                loginPrompt: /login[:\s]*$/i,
-                passwordPrompt: /password[:\s]*$/i,
-            } : {}),
-        };
+            };
+        } else {
+            this.loginState = 'done';
+            this.loginCredentials = null;
+        }
 
         logger.info('telnet', 'Connect attempt', { sessionId: this.sessionId, host: config.host, port: config.port || 23 });
         try {
@@ -125,6 +137,8 @@ export class TelnetService implements ISessionService {
             this.conn.on('data', (data: Buffer) => {
                 const cleanData = this.stripTelnetIAC(data);
                 const text = iconv.decode(cleanData, this.encoding);
+
+                this.handleLoginData(text);
 
                 if (!this.window.isDestroyed()) {
                     this.window.webContents.send('session-data', { sessionId: this.sessionId, data: text });
@@ -213,6 +227,50 @@ export class TelnetService implements ISessionService {
             }
         }
         return Buffer.from(clean);
+    }
+
+    private writeRaw(data: string): void {
+        if (this.conn.socket && typeof this.conn.socket.write === 'function') {
+            this.conn.socket.write(Buffer.from(data));
+        }
+    }
+
+    private handleLoginData(text: string): void {
+        if (this.loginState === 'done' || !this.loginCredentials) return;
+
+        this.loginBuffer += text;
+
+        // Cap buffer to prevent unbounded growth
+        if (this.loginBuffer.length > 256) {
+            this.loginBuffer = this.loginBuffer.slice(-256);
+        }
+
+        const USERNAME_PROMPT = /(?:login|username)[:\s]*$/i;
+        const PASSWORD_PROMPT = /password[:\s]*$/i;
+
+        if (this.loginState === 'waitingForUsername') {
+            if (USERNAME_PROMPT.test(this.loginBuffer)) {
+                this.writeRaw(this.loginCredentials.username + '\r\n');
+                this.loginBuffer = '';
+                this.loginState = 'waitingForPassword';
+                logger.info('telnet', 'Auto-login: sent username', { sessionId: this.sessionId });
+            } else if (PASSWORD_PROMPT.test(this.loginBuffer)) {
+                // Some devices skip username and go straight to password
+                this.writeRaw(this.loginCredentials.password + '\r\n');
+                this.loginBuffer = '';
+                this.loginState = 'done';
+                this.loginCredentials = null;
+                logger.info('telnet', 'Auto-login: sent password (no username prompt)', { sessionId: this.sessionId });
+            }
+        } else if (this.loginState === 'waitingForPassword') {
+            if (PASSWORD_PROMPT.test(this.loginBuffer)) {
+                this.writeRaw(this.loginCredentials.password + '\r\n');
+                this.loginBuffer = '';
+                this.loginState = 'done';
+                this.loginCredentials = null;
+                logger.info('telnet', 'Auto-login: sent password', { sessionId: this.sessionId });
+            }
+        }
     }
 
     write(data: string) {
@@ -319,6 +377,9 @@ export class TelnetService implements ISessionService {
 
     disconnect() {
         this.stopKeepalive();
+        this.loginState = 'done';
+        this.loginBuffer = '';
+        this.loginCredentials = null;
         if (this.conn) {
             try {
                 this.conn.end();
