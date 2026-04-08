@@ -6,6 +6,9 @@
 - **SSH Algorithm Mismatch Diagnostics**: When an SSH connection fails due to a "no matching" algorithm error, the error message now includes the server-offered algorithms (e.g., "Their offer: diffie-hellman-group14-sha1, ..."), making it much easier to identify which algorithms to enable without needing external tools like Wireshark.
 - **Modal Body Padding Consistency**: Unified modal body padding across AskAiModal, ConfirmModal, MessageModal, and SaveConfirmModal to a consistent `15px 20px` layout.
 
+### Bug Fixes
+- **Telnet Auto-Login for Cisco ASA**: Fixed auto-login failing on devices that use "Username:" prompt instead of "login:". Also fixed the login password being incorrectly auto-typed at the `enable` password prompt. Replaced the telnet-client library's built-in login handler with a custom state machine that supports both prompt styles and stops auto-input after login completes.
+
 ---
 
 ## [v1.0.5] - 2026-04-07
