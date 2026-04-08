@@ -1,5 +1,13 @@
 # Release Notes - HoTTY
 
+## [v1.0.6] - 2026-04-08
+
+### Improved
+- **SSH Algorithm Mismatch Diagnostics**: When an SSH connection fails due to a "no matching" algorithm error, the error message now includes the server-offered algorithms (e.g., "Their offer: diffie-hellman-group14-sha1, ..."), making it much easier to identify which algorithms to enable without needing external tools like Wireshark.
+- **Modal Body Padding Consistency**: Unified modal body padding across AskAiModal, ConfirmModal, MessageModal, and SaveConfirmModal to a consistent `15px 20px` layout.
+
+---
+
 ## [v1.0.5] - 2026-04-07
 
 ### New Features

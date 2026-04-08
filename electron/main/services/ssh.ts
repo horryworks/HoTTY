@@ -96,6 +96,9 @@ export class SshService implements ISessionService {
         this.encoding = config.encoding || 'utf8';
         logger.info('ssh', 'Connect attempt', { sessionId: this.sessionId, host: config.host, port: config.port ?? 22, user: config.username });
 
+        // Capture server-offered algorithms from ssh2 debug output for enriched error messages
+        const remoteAlgorithms: Record<string, string> = {};
+
         this.conn.on('ready', () => {
             logger.info('ssh', 'Connected', { sessionId: this.sessionId });
             this.window.webContents.send('session-status', { sessionId: this.sessionId, status: 'connected' });
@@ -131,8 +134,26 @@ export class SshService implements ISessionService {
                 });
             });
         }).on('error', (err) => {
-            const message = friendlyErrorMessage(err.message);
-            logger.error('ssh', 'Connection error', { sessionId: this.sessionId, error: err.message });
+            let rawMessage = err.message;
+            // Enrich handshake failures with server-offered algorithms
+            if (rawMessage.includes('no matching')) {
+                const categoryMap: [string, string][] = [
+                    ['key exchange', 'KEX method'],
+                    ['host key', 'Host key format'],
+                    ['C->S cipher', 'C->S cipher'],
+                    ['S->C cipher', 'S->C cipher'],
+                    ['C->S MAC', 'C->S MAC'],
+                    ['S->C MAC', 'S->C MAC'],
+                ];
+                for (const [errorKey, debugKey] of categoryMap) {
+                    if (rawMessage.includes(errorKey) && remoteAlgorithms[debugKey]) {
+                        rawMessage += `\nTheir offer: ${remoteAlgorithms[debugKey]}`;
+                        break;
+                    }
+                }
+            }
+            const message = friendlyErrorMessage(rawMessage);
+            logger.error('ssh', 'Connection error', { sessionId: this.sessionId, error: rawMessage });
             if (!this.window.isDestroyed()) {
                 this.window.webContents.send('session-error', { sessionId: this.sessionId, error: message });
             }
@@ -150,6 +171,12 @@ export class SshService implements ISessionService {
             ...config,
             tryKeyboard: true,
             algorithms: this.getAlgorithms() as ConnectConfig['algorithms'],
+            debug: (message: string) => {
+                const match = message.match(/^Handshake: \(remote\) (.+?): (.+)$/);
+                if (match) {
+                    remoteAlgorithms[match[1]] = match[2];
+                }
+            },
             hostVerifier: (hostKey: Buffer, verify: (result: boolean) => void) => {
                 // Skip host key verification for IAP tunnel connections (localhost with dynamic port)
                 if (config.skipHostVerify) {

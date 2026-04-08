@@ -1,8 +1,8 @@
-# HoTTY v1.0.5 - AI Integrated Advanced Terminal
+# HoTTY v1.0.6 - AI Integrated Advanced Terminal
 
 [English] | [日本語 (Japanese)](README.ja.md)
 
-**Current Version: v1.0.5**
+**Current Version: v1.0.6**
 
 Terminal emulator built with Electron, React, and TypeScript. Designed to provide a seamless terminal experience with advanced window management, deep AI integration, and extensive customization options.
 
@@ -102,7 +102,7 @@ Alternatively, you can use the provided batch files on Windows:
 ## Troubleshooting
 
 - **Image Loading**: If a custom background image does not appear, ensure the file is an image (PNG, JPG, SVG, WebP) and that the path is correctly selected via the "Browse" button in Settings.
-- **SSH Connectivity**: If connections time out, check your "SSH KeepAlive" settings in the Settings modal.
+- **SSH Connectivity**: If connections time out, check your "SSH KeepAlive" settings in the Settings modal. If an SSH connection fails with an algorithm mismatch, the error message will show the server's offered algorithms so you can enable the correct ones in Settings → Protocols → SSH Algorithms.
 - **WSL Terminal**: If the WSL terminal doesn't show a prompt, ensure the distribution is correctly installed and initialized. HoTTY now uses `node-pty` for a native TTY experience.
 
 HoTTY is a personal project. We do not accept Pull Requests, but bug reports and feature requests are welcome via [Issues](https://github.com/horryworks/HoTTY/issues). Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.

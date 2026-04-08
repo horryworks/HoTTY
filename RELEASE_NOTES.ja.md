@@ -1,5 +1,13 @@
 # リリースノート - HoTTY
 
+## [v1.0.6] - 2026-04-08
+
+### 改善
+- **SSH アルゴリズム不一致の診断強化**: SSH 接続が「no matching」アルゴリズムエラーで失敗した際、サーバーが提示するアルゴリズム一覧（例: "Their offer: diffie-hellman-group14-sha1, ..."）がエラーメッセージに含まれるようになりました。Wireshark 等の外部ツールを使わずに、有効にすべきアルゴリズムを特定できます。
+- **モーダル本文パディングの統一**: AskAiModal、ConfirmModal、MessageModal、SaveConfirmModal のモーダル本文パディングを `15px 20px` に統一しました。
+
+---
+
 ## [v1.0.5] - 2026-04-07
 
 ### 新機能
