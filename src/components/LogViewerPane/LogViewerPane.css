@@ -50,7 +50,7 @@
     color: var(--text-primary);
     border: 1px solid var(--border-color);
     border-radius: 3px;
-    font-size: calc(var(--font-size-base) - 3px);
+    font-size: calc(var(--font-size-base) - 2px);
     cursor: pointer;
     white-space: nowrap;
     font-family: inherit;
@@ -307,7 +307,7 @@
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     border-radius: 3px;
-    font-size: var(--font-size-base);
+    font-size: calc(var(--font-size-base) - 2px);
     padding: 3px 8px;
     cursor: pointer;
     line-height: 1.4;

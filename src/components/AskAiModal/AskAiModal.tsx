@@ -61,7 +61,7 @@ export const AskAiModal: React.FC<AskAiModalProps> = ({
         <div className="ask-ai-modal-overlay">
             <div className="ask-ai-modal-content">
                 <div className="ask-ai-modal-header">
-                    <h2>Ask AI</h2>
+                    <h3>Ask AI</h3>
                     <button className="ask-ai-modal-close-btn" onClick={onClose} title="Close">×</button>
                 </div>
 

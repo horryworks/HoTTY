@@ -42,4 +42,29 @@ describe('stripAnsiCodes', () => {
     it('handles empty string', () => {
         expect(stripAnsiCodes('')).toBe('');
     });
+
+    it('strips CSI sequence ending in s (save cursor)', () => {
+        expect(stripAnsiCodes('prompt\x1b[s')).toBe('prompt');
+    });
+
+    it('strips CSI sequence ending in t (window manipulation)', () => {
+        expect(stripAnsiCodes('text\x1b[8;24;80t')).toBe('text');
+    });
+
+    it('strips CSI sequence ending in @ (insert characters)', () => {
+        expect(stripAnsiCodes('text\x1b[2@')).toBe('text');
+    });
+
+    it('strips CSI sequence ending in u (restore cursor)', () => {
+        expect(stripAnsiCodes('\x1b[utext')).toBe('text');
+    });
+
+    it('strips CSI sequence ending in d (VPA)', () => {
+        expect(stripAnsiCodes('\x1b[5dtext')).toBe('text');
+    });
+
+    it('strips bracketed paste mode enable/disable', () => {
+        expect(stripAnsiCodes('$ \x1b[?2004h')).toBe('$ ');
+        expect(stripAnsiCodes('$ \x1b[?2004l')).toBe('$ ');
+    });
 });

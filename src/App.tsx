@@ -390,6 +390,23 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pane.paneAllocations, pane.setActivePaneId]);
 
+  // Interactive Flow Event Listeners (cancel / manual send)
+  useEffect(() => {
+    const handleCancel = (e: CustomEvent<{ sessionId: string }>) => {
+      interactiveFlow.cancelTracking(e.detail.sessionId);
+    };
+    const handleManualSend = (e: CustomEvent<{ sessionId: string }>) => {
+      interactiveFlow.sendNow(e.detail.sessionId);
+    };
+    window.addEventListener('hotty-interactive-cancel', handleCancel as EventListener);
+    window.addEventListener('hotty-interactive-manual-send', handleManualSend as EventListener);
+    return () => {
+      window.removeEventListener('hotty-interactive-cancel', handleCancel as EventListener);
+      window.removeEventListener('hotty-interactive-manual-send', handleManualSend as EventListener);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interactiveFlow.cancelTracking, interactiveFlow.sendNow]);
+
   // ═══════════════════════════════════════════════
   // 12. Watch Toggle & Theme Change
   // ═══════════════════════════════════════════════

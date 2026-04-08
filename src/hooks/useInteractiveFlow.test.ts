@@ -3,8 +3,13 @@ import { renderHook, act } from '@testing-library/react';
 import { useInteractiveFlow } from './useInteractiveFlow';
 import type { PromptPattern } from '../types/appTypes';
 
+let sessionDataCallback: ((sessionId: string, data: string) => void) | null = null;
+
 vi.mock('../services/electronService', () => ({
-    onSessionData: vi.fn(() => vi.fn()), // returns cleanup fn
+    onSessionData: vi.fn((cb: (sessionId: string, data: string) => void) => {
+        sessionDataCallback = cb;
+        return vi.fn(); // cleanup fn
+    }),
     logDebug: vi.fn(),
 }));
 
@@ -193,5 +198,117 @@ describe('useInteractiveFlow — sendNow', () => {
 
         expect(onFeedbackReady).not.toHaveBeenCalled();
         expect(result.current.trackings).toEqual({});
+    });
+});
+
+// ── Prompt detection via onSessionData ──
+
+describe('useInteractiveFlow — prompt detection', () => {
+    const stablePatterns = makePromptPatterns();
+
+    it('detects prompt and calls onFeedbackReady after stabilization', () => {
+        vi.useFakeTimers();
+        const onFeedbackReady = vi.fn();
+        const opts = { promptPatterns: stablePatterns, onFeedbackReady };
+        const { result } = renderHook(() => useInteractiveFlow(opts));
+
+        act(() => {
+            result.current.startTracking('term-1', 'ai-1', 'ls');
+        });
+
+        // Simulate terminal output followed by prompt
+        act(() => {
+            sessionDataCallback?.('term-1', 'file1 file2\n$ ');
+        });
+
+        expect(onFeedbackReady).not.toHaveBeenCalled();
+
+        // Advance past stabilization timeout (400ms)
+        act(() => {
+            vi.advanceTimersByTime(500);
+        });
+
+        expect(onFeedbackReady).toHaveBeenCalledTimes(1);
+        expect(onFeedbackReady.mock.calls[0][0]).toBe('ai-1');
+        expect(onFeedbackReady.mock.calls[0][2]).toBe('term-1');
+
+        vi.useRealTimers();
+    });
+
+    it('handles split ANSI sequences across data chunks', () => {
+        vi.useFakeTimers();
+        const onFeedbackReady = vi.fn();
+        const opts = { promptPatterns: stablePatterns, onFeedbackReady };
+        const { result } = renderHook(() => useInteractiveFlow(opts));
+
+        act(() => {
+            result.current.startTracking('term-1', 'ai-1', 'ls');
+        });
+
+        // Chunk 1: prompt followed by incomplete ANSI escape
+        act(() => {
+            sessionDataCallback?.('term-1', 'output\r\n$ \x1b[');
+        });
+
+        // Chunk 2: completes the ANSI sequence
+        act(() => {
+            sessionDataCallback?.('term-1', '?2004h');
+        });
+
+        // After ANSI stripping on full buffer, lastLine should be "$ "
+        act(() => {
+            vi.advanceTimersByTime(500);
+        });
+
+        expect(onFeedbackReady).toHaveBeenCalledTimes(1);
+        expect(onFeedbackReady.mock.calls[0][0]).toBe('ai-1');
+
+        vi.useRealTimers();
+    });
+
+    it('ignores data for sessions not being tracked', () => {
+        const onFeedbackReady = vi.fn();
+        const opts = { promptPatterns: stablePatterns, onFeedbackReady };
+        renderHook(() => useInteractiveFlow(opts));
+
+        act(() => {
+            sessionDataCallback?.('unknown-session', '$ ');
+        });
+
+        expect(onFeedbackReady).not.toHaveBeenCalled();
+    });
+});
+
+// ── TTL Cleanup ──
+
+describe('useInteractiveFlow — TTL cleanup', () => {
+    const stablePatterns = makePromptPatterns();
+
+    it('calls onFeedbackReady with timeout message when tracking expires', () => {
+        vi.useFakeTimers();
+        const onFeedbackReady = vi.fn();
+        const opts = { promptPatterns: stablePatterns, onFeedbackReady };
+        const { result } = renderHook(() => useInteractiveFlow(opts));
+
+        act(() => {
+            result.current.startTracking('term-1', 'ai-1', 'long-running-cmd');
+        });
+
+        // Advance past TTL (15 minutes) + cleanup interval (1 minute)
+        act(() => {
+            vi.advanceTimersByTime(16 * 60 * 1000);
+        });
+
+        expect(onFeedbackReady).toHaveBeenCalledTimes(1);
+        const [aiSessionId, resultText, termSessionId] = onFeedbackReady.mock.calls[0];
+        expect(aiSessionId).toBe('ai-1');
+        expect(termSessionId).toBe('term-1');
+        expect(resultText).toContain('Timed Out');
+        expect(resultText).toContain('long-running-cmd');
+
+        // Tracking should be removed
+        expect(result.current.trackings['term-1']).toBeUndefined();
+
+        vi.useRealTimers();
     });
 });

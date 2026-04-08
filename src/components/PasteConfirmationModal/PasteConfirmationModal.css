@@ -27,12 +27,13 @@
 .paste-modal h3 {
     margin: 0;
     padding: 12px 16px;
-    background-color: var(--bg-tertiary);
-    border-bottom: 1px solid var(--border-color);
+    background-color: var(--modal-header-warning-bg);
+    border-bottom: 1px solid var(--modal-border-warning);
     border-top-left-radius: 6px;
     border-top-right-radius: 6px;
     font-size: var(--font-size-base);
     font-weight: 600;
+    color: var(--modal-header-warning-text);
 }
 
 .paste-content-preview {

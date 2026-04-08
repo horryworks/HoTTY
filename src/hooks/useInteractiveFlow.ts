@@ -8,6 +8,7 @@ import type { PromptPattern } from '../types/appTypes';
 export interface InteractiveSessionTracking {
   aiSessionId: string;
   buffer: string;
+  rawBuffer: string;
   originalCommand: string;
   startTime: number;
 }
@@ -58,6 +59,7 @@ export function useInteractiveFlow(options: UseInteractiveFlowOptions): UseInter
     const newTracking: InteractiveSessionTracking = {
       aiSessionId,
       buffer: '',
+      rawBuffer: '',
       originalCommand: command,
       startTime: Date.now()
     };
@@ -91,16 +93,17 @@ export function useInteractiveFlow(options: UseInteractiveFlowOptions): UseInter
       const currentTracking = trackingsRef.current[sessionId];
       if (!currentTracking) return;
 
-      const cleanData = stripAnsiCodes(data);
+      const newRawBuffer = currentTracking.rawBuffer + data;
+      currentTracking.rawBuffer = newRawBuffer;
 
-      if (!cleanData.replace(/\n/g, '')) return;
+      const newBuffer = stripAnsiCodes(newRawBuffer);
+      if (newBuffer === currentTracking.buffer) return;
 
-      const newBuffer = currentTracking.buffer + cleanData;
       currentTracking.buffer = newBuffer;
 
       setTrackings(prev => ({
         ...prev,
-        [sessionId]: { ...prev[sessionId], buffer: newBuffer }
+        [sessionId]: { ...prev[sessionId], buffer: newBuffer, rawBuffer: newRawBuffer }
       }));
 
       // Check for prompt at end of buffer
@@ -180,6 +183,11 @@ export function useInteractiveFlow(options: UseInteractiveFlowOptions): UseInter
         Object.keys(next).forEach(sid => {
           if (now - next[sid].startTime > MAX_TTL) {
             electronService.logDebug(`[Interactive Flow] Cleaning up stale session ${sid} (TTL exceeded)`);
+
+            const stale = next[sid];
+            const resultText = `Terminal Output (Timed Out - Command: ${stale.originalCommand}):\n\`\`\`\n${stale.buffer}\n\`\`\``;
+            onFeedbackReadyRef.current(stale.aiSessionId, resultText, sid);
+
             if (stabilizationTimersRef.current[sid]) {
               clearTimeout(stabilizationTimersRef.current[sid]);
               delete stabilizationTimersRef.current[sid];
