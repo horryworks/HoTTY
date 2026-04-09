@@ -1,5 +1,14 @@
 # Release Notes - HoTTY
 
+## [v1.0.7] - 2026-04-09
+
+### Improved
+- **Expanded SSH Algorithm Support**: Added ChaCha20-Poly1305 cipher, Diffie-Hellman Groups 14-sha256, 15–18-sha512, ETM (Encrypt-then-MAC) HMAC variants (hmac-sha2-256-etm, hmac-sha2-512-etm, hmac-sha1-etm), and legacy algorithms (Arcfour, Blowfish-CBC, CAST128-CBC, HMAC-MD5, HMAC-RIPEMD160, truncated HMAC variants). This significantly improves compatibility with both modern and legacy SSH servers.
+- **DPAPI Batch Credential Operations**: Credential encryption and decryption for batch operations (e.g., host tree export/import) now use a single PowerShell invocation instead of spawning one process per credential, significantly reducing processing time for large host trees.
+- **Modal Padding Consistency**: Standardized padding in PasteConfirmationModal's warning and preview sections to match the modal convention used across all other modals.
+
+---
+
 ## [v1.0.6] - 2026-04-08
 
 ### Improved

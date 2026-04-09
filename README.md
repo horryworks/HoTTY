@@ -1,8 +1,8 @@
-# HoTTY v1.0.6 - AI Integrated Advanced Terminal
+# HoTTY v1.0.7 - AI Integrated Advanced Terminal
 
 [English] | [日本語 (Japanese)](README.ja.md)
 
-**Current Version: v1.0.6**
+**Current Version: v1.0.7**
 
 Terminal emulator built with Electron, React, and TypeScript. Designed to provide a seamless terminal experience with advanced window management, deep AI integration, and extensive customization options.
 
@@ -13,7 +13,7 @@ Terminal emulator built with Electron, React, and TypeScript. Designed to provid
     - **GCE IAP Tunnel**: Connect to Google Compute Engine VMs via Identity-Aware Proxy (IAP) without exposing VMs to the public internet. Autocomplete for GCP projects, zones, and instances with gcloud CLI integration.
     - **WSL Integration**: Connect directly to installed Linux distributions (Ubuntu, Debian, etc.) with automatic distribution discovery.
     - **Git Bash**: Auto-detects Git Bash installation and provides an interactive login shell session.
-    - **Wide SSH Compatibility**: Supports a comprehensive range of algorithms, including DH Group 1/14, 3DES, CBC ciphers, and all major Key Exchange methods.
+    - **Wide SSH Compatibility**: Supports a comprehensive range of algorithms, including ChaCha20-Poly1305, AES-GCM, DH Groups 1/14–18, 3DES, CBC/CTR ciphers, Arcfour, Blowfish, ETM HMAC variants, and all major Key Exchange methods.
 - **Advanced Grid Layout**:
     - Flexible multi-pane interface with **Top/Bottom Bars** and **Left/Right Sidebars**.
     - **Layout Persistence**: Automatically saves and restores your workspace configuration (sizes, visibility, grid ratios).

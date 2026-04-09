@@ -175,3 +175,131 @@ export async function decryptString(ciphertext: string): Promise<string> {
         throw new Error('Failed to decrypt credential using DPAPI');
     }
 }
+
+/**
+ * Encrypts multiple plaintext strings in a single PowerShell invocation.
+ * Non-string / empty values are passed through unchanged.
+ */
+export async function encryptBatch(plaintexts: (string | undefined)[]): Promise<(string | undefined)[]> {
+    if (!plaintexts.length) return [];
+
+    if (process.platform !== 'win32') {
+        throw new Error('Credential encryption requires Windows (DPAPI). HoTTY is a Windows-only application.');
+    }
+
+    // Separate values that need encryption from pass-through values
+    const results: (string | undefined)[] = [...plaintexts];
+    const toEncrypt: { index: number; value: string }[] = [];
+
+    for (let i = 0; i < plaintexts.length; i++) {
+        const v = plaintexts[i];
+        if (v && !isDpapiEncrypted(v)) {
+            toEncrypt.push({ index: i, value: v });
+        }
+    }
+
+    if (toEncrypt.length === 0) return results;
+
+    // Single-item optimisation: reuse existing single-value path
+    if (toEncrypt.length === 1) {
+        results[toEncrypt[0].index] = await encryptString(toEncrypt[0].value);
+        return results;
+    }
+
+    try {
+        const script = `
+            Add-Type -AssemblyName System.Security
+            $json = [Console]::In.ReadToEnd()
+            $items = $json | ConvertFrom-Json
+            $results = @()
+            foreach ($pt in $items) {
+                $bytes = [System.Text.Encoding]::UTF8.GetBytes($pt)
+                $encrypted = [System.Security.Cryptography.ProtectedData]::Protect(
+                    $bytes,
+                    $null,
+                    [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+                )
+                $results += [Convert]::ToBase64String($encrypted)
+            }
+            [Console]::Write(($results | ConvertTo-Json -Compress))
+        `;
+
+        const input = JSON.stringify(toEncrypt.map(e => e.value));
+        const raw = await runPowerShell(script, input);
+        const encrypted: string[] = JSON.parse(raw.trim());
+
+        for (let i = 0; i < toEncrypt.length; i++) {
+            results[toEncrypt[i].index] = DPAPI_PREFIX + encrypted[i];
+        }
+
+        return results;
+    } catch (err) {
+        logger.error('dpapi', 'Batch encryption failed', { error: String(err) });
+        throw new Error('Failed to batch-encrypt credentials using DPAPI');
+    }
+}
+
+/**
+ * Decrypts multiple DPAPI-encrypted strings in a single PowerShell invocation.
+ * Non-encrypted / empty / undefined values are passed through unchanged.
+ */
+export async function decryptBatch(ciphertexts: (string | undefined)[]): Promise<(string | undefined)[]> {
+    if (!ciphertexts.length) return [];
+
+    if (process.platform !== 'win32') {
+        throw new Error('Credential decryption requires Windows (DPAPI). HoTTY is a Windows-only application.');
+    }
+
+    // Separate values that need decryption from pass-through values
+    const results: (string | undefined)[] = [...ciphertexts];
+    const toDecrypt: { index: number; base64: string }[] = [];
+
+    for (let i = 0; i < ciphertexts.length; i++) {
+        const v = ciphertexts[i];
+        if (!v) continue;
+        if (isDpapiEncrypted(v)) {
+            toDecrypt.push({ index: i, base64: v.slice(DPAPI_PREFIX.length) });
+        }
+        // Non-DPAPI values (legacy plaintext) stay as-is in results
+    }
+
+    if (toDecrypt.length === 0) return results;
+
+    // Single-item optimisation: reuse existing single-value path
+    if (toDecrypt.length === 1) {
+        results[toDecrypt[0].index] = await decryptString(ciphertexts[toDecrypt[0].index]!);
+        return results;
+    }
+
+    try {
+        const script = `
+            Add-Type -AssemblyName System.Security
+            $json = [Console]::In.ReadToEnd()
+            $items = $json | ConvertFrom-Json
+            $results = @()
+            foreach ($b64 in $items) {
+                $bytes = [Convert]::FromBase64String($b64)
+                $dec = [System.Security.Cryptography.ProtectedData]::Unprotect(
+                    $bytes,
+                    $null,
+                    [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+                )
+                $results += [System.Text.Encoding]::UTF8.GetString($dec)
+            }
+            [Console]::Write(($results | ConvertTo-Json -Compress))
+        `;
+
+        const input = JSON.stringify(toDecrypt.map(e => e.base64));
+        const raw = await runPowerShell(script, input);
+        const decrypted: string[] = JSON.parse(raw.trim());
+
+        for (let i = 0; i < toDecrypt.length; i++) {
+            results[toDecrypt[i].index] = decrypted[i];
+        }
+
+        return results;
+    } catch (err) {
+        logger.error('dpapi', 'Batch decryption failed', { error: String(err) });
+        throw new Error('Failed to batch-decrypt credentials using DPAPI');
+    }
+}

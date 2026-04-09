@@ -1,5 +1,14 @@
 # リリースノート - HoTTY
 
+## [v1.0.7] - 2026-04-09
+
+### 改善
+- **SSH アルゴリズムサポートの拡充**: ChaCha20-Poly1305 暗号、Diffie-Hellman Group 14-sha256 および 15〜18-sha512、ETM（Encrypt-then-MAC）HMAC バリアント（hmac-sha2-256-etm、hmac-sha2-512-etm、hmac-sha1-etm）、レガシーアルゴリズム（Arcfour、Blowfish-CBC、CAST128-CBC、HMAC-MD5、HMAC-RIPEMD160、truncated HMAC バリアント）を追加。最新サーバーからレガシー SSH サーバーまでの互換性が大幅に向上しました。
+- **DPAPI バッチ資格情報処理の最適化**: バッチ操作（ホストツリーのエクスポート/インポートなど）での資格情報の暗号化・復号化が、資格情報ごとに PowerShell プロセスを起動する代わりに単一の PowerShell 呼び出しで処理されるようになり、大規模なホストツリーの処理時間が大幅に短縮されました。
+- **モーダルパディングの統一**: PasteConfirmationModal の警告セクションとプレビューセクションのパディングを、他のすべてのモーダルで使用されている規約に合わせて統一しました。
+
+---
+
 ## [v1.0.6] - 2026-04-08
 
 ### 改善

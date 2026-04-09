@@ -19,7 +19,7 @@ import { LogManager } from './services/LogManager';
 import { PingMonitorService, isValidPingTarget } from './services/PingMonitorService';
 import { logger } from './services/Logger';
 import { friendlyErrorMessage } from './services/errorMessages';
-import { encryptString, decryptString, verifyWindowsUser, encodePowerShellScript } from './services/dpapi';
+import { encryptString, decryptString, encryptBatch, decryptBatch, verifyWindowsUser, encodePowerShellScript } from './services/dpapi';
 import { execFile, ChildProcess } from 'child_process';
 import {
   checkGcloudAvailable, checkGcloudAuth, listProjects, listZones, listInstances,
@@ -1277,7 +1277,7 @@ ipcMain.handle('dpapi-decrypt', async (_, ciphertext: string) => {
 ipcMain.handle('dpapi-encrypt-batch', async (_, plaintexts: (string | undefined)[]) => {
   if (!Array.isArray(plaintexts) || plaintexts.length > 1000) return [];
   try {
-    return await Promise.all(plaintexts.map(text => text ? encryptString(text) : Promise.resolve(text)));
+    return await encryptBatch(plaintexts);
   } catch (err) {
     logger.error('dpapi', 'Batch encrypt error', { error: String(err) });
     throw err;
@@ -1287,7 +1287,7 @@ ipcMain.handle('dpapi-encrypt-batch', async (_, plaintexts: (string | undefined)
 ipcMain.handle('dpapi-decrypt-batch', async (_, ciphertexts: (string | undefined)[]) => {
   if (!Array.isArray(ciphertexts) || ciphertexts.length > 1000) return [];
   try {
-    return await Promise.all(ciphertexts.map(text => text ? decryptString(text) : Promise.resolve(text)));
+    return await decryptBatch(ciphertexts);
   } catch (err) {
     logger.error('dpapi', 'Batch decrypt error', { error: String(err) });
     throw err;
