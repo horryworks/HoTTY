@@ -339,38 +339,38 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
                 Object.fromEntries(
                     Object.entries(state).filter(([, v]) => typeof v !== 'function')
                 ) as SettingsState,
-            // Migrate from v0 (global askAiCommands) to v1 (per-persona askAiCommands)
+            // Cumulative migrations — each step runs if the persisted version is older.
             migrate: (persisted, version) => {
-                if (version === 2) {
-                    const old = persisted as Record<string, unknown>;
-                    return {
-                        ...old,
+                let state = persisted as Record<string, unknown>;
+                // v0→v1: move global askAiCommands into per-persona askAiCommands
+                if (version < 1) {
+                    const globalCommands = (state.askAiCommands as AskAiCommand[] | undefined) ?? DEFAULT_AI_COMMANDS;
+                    const oldPersonas = (state.aiPersonas as Array<{ id: string; label: string; systemPrompt: string; askAiCommands?: AskAiCommand[] }>) ?? DEFAULT_PERSONAS;
+                    const migratedPersonas: PersonaDefinition[] = oldPersonas.map(p => ({
+                        ...p,
+                        askAiCommands: p.askAiCommands ?? globalCommands,
+                    }));
+                    delete state.askAiCommands;
+                    state = { ...state, aiPersonas: migratedPersonas };
+                }
+                // v1→v2: add protocol and feature toggles
+                if (version < 2) {
+                    state = {
+                        ...state,
+                        enabledProtocols: INITIAL_STATE.enabledProtocols,
+                        enabledFeatures: INITIAL_STATE.enabledFeatures,
+                    };
+                }
+                // v2→v3: add command auto-execution settings
+                if (version < 3) {
+                    state = {
+                        ...state,
                         commandExecutionMode: INITIAL_STATE.commandExecutionMode,
                         maxConsecutiveAutoExecutions: INITIAL_STATE.maxConsecutiveAutoExecutions,
                         customSafeCommands: INITIAL_STATE.customSafeCommands,
                     };
                 }
-                if (version === 1) {
-                    const old = persisted as Record<string, unknown>;
-                    return {
-                        ...old,
-                        enabledProtocols: INITIAL_STATE.enabledProtocols,
-                        enabledFeatures: INITIAL_STATE.enabledFeatures,
-                    };
-                }
-                if (version === 0) {
-                    const old = persisted as Record<string, unknown>;
-                    const globalCommands = (old.askAiCommands as AskAiCommand[] | undefined) ?? DEFAULT_AI_COMMANDS;
-                    const oldPersonas = (old.aiPersonas as Array<{ id: string; label: string; systemPrompt: string; askAiCommands?: AskAiCommand[] }>) ?? DEFAULT_PERSONAS;
-                    // Copy global commands into each persona that lacks its own
-                    const migratedPersonas: PersonaDefinition[] = oldPersonas.map(p => ({
-                        ...p,
-                        askAiCommands: p.askAiCommands ?? globalCommands,
-                    }));
-                    delete old.askAiCommands;
-                    return { ...old, aiPersonas: migratedPersonas };
-                }
-                return persisted;
+                return state as unknown as SettingsState;
             },
         }
     )

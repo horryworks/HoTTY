@@ -178,6 +178,55 @@ describe('settingsStore — persist to localStorage', () => {
     });
 });
 
+describe('settingsStore — cumulative migration from v0 to latest', () => {
+    it('applies all migration steps when upgrading from v0', () => {
+        // Simulate a v0 persisted state (global askAiCommands, no protocols/features/execution settings)
+        const v0State = {
+            fontSize: 16,
+            askAiCommands: [{ id: 'test', label: 'Test', command: '/test' }],
+            aiPersonas: [{ id: 'p1', label: 'Persona 1', systemPrompt: 'test' }],
+        };
+        localStorage.setItem('hotty-settings', JSON.stringify({ state: v0State, version: 0 }));
+
+        // Force Zustand to rehydrate by recreating the store
+        useSettingsStore.persist.rehydrate();
+        const s = useSettingsStore.getState();
+
+        // v0→v1: askAiCommands should be distributed to personas
+        expect(s.aiPersonas[0].askAiCommands).toBeDefined();
+        expect(s.aiPersonas[0].askAiCommands.length).toBeGreaterThan(0);
+
+        // v1→v2: protocol and feature toggles should exist
+        expect(s.enabledProtocols).toBeDefined();
+        expect(s.enabledFeatures).toBeDefined();
+
+        // v2→v3: command execution settings should exist
+        expect(s.commandExecutionMode).toBeDefined();
+        expect(s.maxConsecutiveAutoExecutions).toBeDefined();
+        expect(s.customSafeCommands).toBeDefined();
+    });
+
+    it('applies v1→v3 migration steps when upgrading from v1', () => {
+        const v1State = {
+            fontSize: 16,
+            aiPersonas: [{ id: 'p1', label: 'Persona 1', systemPrompt: 'test', askAiCommands: [] }],
+        };
+        localStorage.setItem('hotty-settings', JSON.stringify({ state: v1State, version: 1 }));
+
+        useSettingsStore.persist.rehydrate();
+        const s = useSettingsStore.getState();
+
+        // v1→v2: should have protocol/feature toggles
+        expect(s.enabledProtocols).toBeDefined();
+        expect(s.enabledFeatures).toBeDefined();
+
+        // v2→v3: should have command execution settings
+        expect(s.commandExecutionMode).toBeDefined();
+        expect(s.maxConsecutiveAutoExecutions).toBeDefined();
+        expect(s.customSafeCommands).toBeDefined();
+    });
+});
+
 describe('settingsStore — Huawei prompt pattern matches HRP prefixes', () => {
     function getHuaweiRegex(): RegExp {
         const huawei = useSettingsStore.getState().promptPatterns.find(p => p.id === 'huawei');

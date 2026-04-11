@@ -13,8 +13,15 @@ import type { HostTreeNode } from './useHostManager';
 import { STORAGE_KEYS } from '../constants/storage';
 
 vi.mock('../services/electronService', () => ({
-    encryptSecrets: vi.fn(async (values: (string | undefined)[]) => values),
-    decryptSecrets: vi.fn(async (values: (string | undefined)[]) => values),
+    encryptSecrets: vi.fn(async (values: (string | undefined)[]) =>
+        values.map(v => (v && !v.startsWith('[SAFE]') && !v.startsWith('[DPAPI]')) ? `[SAFE]${v}` : v)),
+    decryptSecrets: vi.fn(async (values: (string | undefined)[]) =>
+        values.map(v => {
+            if (v?.startsWith('[DPAPI]')) return v.slice('[DPAPI]'.length);
+            if (v?.startsWith('[SAFE]')) return v.slice('[SAFE]'.length);
+            return v;
+        })),
+    isEncrypted: (value: string) => value.startsWith('[DPAPI]') || value.startsWith('[SAFE]'),
 }));
 
 beforeEach(() => {
@@ -468,5 +475,76 @@ describe('useHostManager — importData jumpbox remapping', () => {
         const nestedHost = subFolder.children![0];
 
         expect(nestedHost.entry?.jumpboxId).toBe(jumpbox.id);
+    });
+});
+
+// ── DPAPI→SAFE migration tests ──
+
+describe('useHostManager — DPAPI to SAFE migration', () => {
+    it('migrates [DPAPI] credentials to [SAFE] format on mount', async () => {
+        const stored: HostTreeNode[] = [
+            {
+                id: 'h1', type: 'host', name: 'Legacy Host',
+                entry: { protocol: 'ssh', host: '10.0.0.1', port: 22, username: '[DPAPI]alice', password: '[DPAPI]secret' },
+            },
+        ];
+        localStorage.setItem(STORAGE_KEYS.HOST_TREE, JSON.stringify(stored));
+
+        renderHook(() => useHostManager());
+
+        // Wait for the background migration to complete and persist
+        await waitFor(() => {
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.HOST_TREE) ?? '[]');
+            const entry = saved[0]?.entry;
+            return entry?.username?.startsWith('[SAFE]') && entry?.password?.startsWith('[SAFE]');
+        });
+
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.HOST_TREE) ?? '[]');
+        expect(saved[0].entry.username).toBe('[SAFE]alice');
+        expect(saved[0].entry.password).toBe('[SAFE]secret');
+    });
+
+    it('does not re-encrypt already [SAFE] credentials', async () => {
+        const stored: HostTreeNode[] = [
+            {
+                id: 'h1', type: 'host', name: 'Safe Host',
+                entry: { protocol: 'ssh', host: '10.0.0.1', port: 22, username: '[SAFE]alice', password: '[SAFE]secret' },
+            },
+        ];
+        localStorage.setItem(STORAGE_KEYS.HOST_TREE, JSON.stringify(stored));
+
+        const { encryptSecrets } = await import('../services/electronService');
+        renderHook(() => useHostManager());
+
+        // Wait for eager decryption to finish
+        await waitFor(() => {
+            expect(getCachedCredential('h1')?.decrypted).toBe(true);
+        });
+
+        // encryptSecrets should not have been called for migration (no [DPAPI] values)
+        expect(encryptSecrets).not.toHaveBeenCalled();
+    });
+
+    it('migrates mixed [DPAPI] and [SAFE] credentials', async () => {
+        const stored: HostTreeNode[] = [
+            {
+                id: 'h1', type: 'host', name: 'Legacy Host',
+                entry: { protocol: 'ssh', host: '10.0.0.1', port: 22, username: '[DPAPI]alice', password: '[SAFE]alreadysafe' },
+            },
+        ];
+        localStorage.setItem(STORAGE_KEYS.HOST_TREE, JSON.stringify(stored));
+
+        renderHook(() => useHostManager());
+
+        await waitFor(() => {
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.HOST_TREE) ?? '[]');
+            return saved[0]?.entry?.username?.startsWith('[SAFE]');
+        });
+
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.HOST_TREE) ?? '[]');
+        // [DPAPI] username should be migrated to [SAFE]
+        expect(saved[0].entry.username).toBe('[SAFE]alice');
+        // [SAFE] password should remain unchanged
+        expect(saved[0].entry.password).toBe('[SAFE]alreadysafe');
     });
 });

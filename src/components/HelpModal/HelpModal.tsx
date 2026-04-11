@@ -396,7 +396,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                             </p>
 
                             <p className="help-text small">
-                                🔒 All credentials are encrypted with Windows DPAPI and stored locally — they are never transmitted outside your machine except to the respective AI provider.
+                                🔒 All credentials are encrypted with Electron safeStorage and stored locally — they are never transmitted outside your machine except to the respective AI provider.
                             </p>
                         </div>
                     </details>

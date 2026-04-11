@@ -272,9 +272,28 @@ export function useHostManager() {
                     }
                 }
 
-                // Migrate legacy [DPAPI] values to [SAFE] format by re-encrypting and persisting
+                // Migrate legacy [DPAPI] values to [SAFE] format by re-encrypting and persisting.
+                // We must replace encrypted values with plaintext first, because encryptTree
+                // skips values that are already encrypted (including [DPAPI]-prefixed ones).
                 if (hasLegacyDpapi) {
-                    encryptTree(nodes).then(saveRawTree).catch(err => {
+                    const replacePlaintext = (nodeList: HostTreeNode[]): HostTreeNode[] =>
+                        nodeList.map(n => {
+                            const children = n.children ? replacePlaintext(n.children) : undefined;
+                            if (n.type === 'host' && n.entry) {
+                                const cached = decryptedCache[n.id];
+                                const entry = { ...n.entry };
+                                if (cached?.username !== undefined && entry.username?.startsWith('[DPAPI]')) {
+                                    entry.username = cached.username;
+                                }
+                                if (cached?.password !== undefined && entry.password?.startsWith('[DPAPI]')) {
+                                    entry.password = cached.password;
+                                }
+                                return { ...n, entry, children };
+                            }
+                            return { ...n, children };
+                        });
+                    const plaintextNodes = replacePlaintext(nodes);
+                    encryptTree(plaintextNodes).then(saveRawTree).catch(err => {
                         console.error('[HostManager] Migration re-encryption failed:', err);
                     });
                 }
