@@ -8,6 +8,10 @@ import { verifyHostKey } from './knownHosts';
 import { logger } from './Logger';
 import { friendlyErrorMessage } from './errorMessages';
 
+// Runtime-supported algorithm lists from ssh2 (filtered by OpenSSL availability)
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ssh2Constants = require('ssh2/lib/protocol/constants.js');
+
 export class SshService implements ISessionService {
     private conn: Client;
     private stream: ClientChannel | null = null;
@@ -74,6 +78,16 @@ export class SshService implements ISessionService {
         // Allowlist of valid algorithm names per category
         const allowedAlgorithms: Record<string, string[]> = defaultAlgorithms;
 
+        // ssh2 runtime-supported algorithms (filtered by OpenSSL/BoringSSL availability)
+        const supportedLists: Record<string, string[]> = {
+            kex: ssh2Constants.SUPPORTED_KEX,
+            cipher: ssh2Constants.SUPPORTED_CIPHER,
+            serverHostKey: ssh2Constants.SUPPORTED_SERVER_HOST_KEY,
+            hmac: ssh2Constants.SUPPORTED_MAC,
+        };
+
+        let algorithms: Record<string, string[]> = defaultAlgorithms;
+
         try {
             const configPath = join(app.getPath('userData'), 'ssh_algorithms.json');
 
@@ -91,16 +105,29 @@ export class SshService implements ISessionService {
                     }
                 }
 
-                // Only return if we actually found enabled algorithms
+                // Only use config if we actually found enabled algorithms
                 if (Object.keys(result).length > 0) {
-                    return result;
+                    algorithms = result;
                 }
             }
         } catch (error) {
             logger.error('ssh', 'Failed to load SSH algorithms', { error: String(error) });
         }
 
-        return defaultAlgorithms;
+        // Filter out algorithms not supported by ssh2 at runtime
+        // (e.g. chacha20-poly1305 may be unavailable depending on the OpenSSL/BoringSSL build)
+        for (const key of Object.keys(algorithms)) {
+            if (supportedLists[key]) {
+                const before = algorithms[key];
+                algorithms[key] = before.filter(alg => supportedLists[key].includes(alg));
+                const removed = before.filter(alg => !supportedLists[key].includes(alg));
+                if (removed.length > 0) {
+                    logger.warn('ssh', `Filtered unsupported ${key} algorithms`, { removed });
+                }
+            }
+        }
+
+        return algorithms;
     }
 
     connect(config: ConnectConfig & { encoding?: string; skipHostVerify?: boolean }) {
@@ -225,7 +252,15 @@ export class SshService implements ISessionService {
             connectConfig.sock = this.tunnelStream;
         }
 
-        this.conn.connect(connectConfig);
+        try {
+            this.conn.connect(connectConfig);
+        } catch (err) {
+            const message = friendlyErrorMessage(err instanceof Error ? err.message : String(err));
+            logger.error('ssh', 'Connect failed', { sessionId: this.sessionId, error: String(err) });
+            if (!this.window.isDestroyed()) {
+                this.window.webContents.send('session-error', { sessionId: this.sessionId, error: message });
+            }
+        }
     }
 
     write(data: string) {
