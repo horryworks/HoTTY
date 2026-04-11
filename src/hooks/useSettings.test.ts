@@ -39,7 +39,7 @@ describe('useSettings — exposes all settings fields', () => {
             'watchBufferLimit', 'backspaceSendsDel', 'rightClickPaste',
             'showSystemPrompt', 'enablePromptHighlight', 'promptHighlightColor',
             'promptPatterns', 'aiPersonas', 'activePersonaId',
-            'sidebarPosition', 'proactiveInstruction', 'interactiveStabilizationTimeout',
+            'sidebarPosition', 'interactiveStabilizationTimeout',
         ];
         expected.forEach(key => expect(keys).toContain(key));
     });

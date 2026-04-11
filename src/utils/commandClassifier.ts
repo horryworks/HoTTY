@@ -150,6 +150,18 @@ export function classifyCommand(
         return { safe: false, reason: 'Empty command' };
     }
 
+    // Step 1.5: multi-line handling — classify each line independently
+    const lines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length > 1) {
+        for (const line of lines) {
+            const result = classifyCommand(line, customSafe);
+            if (!result.safe) {
+                return result;
+            }
+        }
+        return { safe: true, reason: 'All commands are in the safe list' };
+    }
+
     // Step 2: danger patterns (before pipe splitting)
     for (const { pattern, reason } of DANGER_PATTERNS) {
         if (pattern.test(trimmed)) {

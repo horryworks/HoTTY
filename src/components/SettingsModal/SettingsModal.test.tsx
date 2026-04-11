@@ -100,8 +100,6 @@ const baseProps = {
     onActivePersonaIdChange: vi.fn(),
     watchBufferLimit: 100000,
     onWatchBufferLimitChange: vi.fn(),
-    proactiveInstruction: '',
-    onProactiveInstructionChange: vi.fn(),
     interactiveStabilizationTimeout: 400,
     onInteractiveStabilizationTimeoutChange: vi.fn(),
     commandExecutionMode: 'ask-before-execute' as const,

@@ -35,7 +35,6 @@ vi.mock('../../stores/settingsStore', () => ({
             aiPersonas: [],
             activePersonaId: 'network-expert',
             sidebarPosition: 'right',
-            proactiveInstruction: '',
             interactiveStabilizationTimeout: 400,
         };
         return typeof selector === 'function' ? selector(state) : state;

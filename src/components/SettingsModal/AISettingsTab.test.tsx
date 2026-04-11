@@ -49,8 +49,6 @@ const baseProps = {
     onAiPersonasChange: vi.fn(),
     activePersonaId: 'network-expert',
     onActivePersonaIdChange: vi.fn(),
-    proactiveInstruction: '',
-    onProactiveInstructionChange: vi.fn(),
     commandExecutionMode: 'ask-before-execute' as const,
     onCommandExecutionModeChange: vi.fn(),
     maxConsecutiveAutoExecutions: 10,
@@ -268,22 +266,6 @@ describe('AISettingsTab', () => {
         });
         fireEvent.click(screen.getByText('OK'));
         expect(screen.queryByText(/Privacy Notice/)).not.toBeInTheDocument();
-    });
-
-    it('renders Proactive Investigation Instruction textarea', () => {
-        render(<AISettingsTab {...baseProps} />);
-        expect(screen.getByText('Proactive Investigation Instruction')).toBeInTheDocument();
-    });
-
-    it('calls onProactiveInstructionChange when textarea changes', () => {
-        const onProactiveInstructionChange = vi.fn();
-        render(<AISettingsTab {...baseProps} onProactiveInstructionChange={onProactiveInstructionChange} />);
-        const textareas = screen.getAllByRole('textbox');
-        const proactiveTextarea = textareas.find(t => t.getAttribute('placeholder')?.includes('proactive') || t.getAttribute('placeholder')?.includes('Instruction'));
-        if (proactiveTextarea) {
-            fireEvent.change(proactiveTextarea, { target: { value: 'New instruction' } });
-            expect(onProactiveInstructionChange).toHaveBeenCalledWith('New instruction');
-        }
     });
 
     it('renders Reset All Personas button', () => {

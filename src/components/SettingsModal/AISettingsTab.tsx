@@ -18,8 +18,6 @@ interface AISettingsTabProps {
     onAiPersonasChange: (personas: PersonaDefinition[]) => void;
     activePersonaId: string;
     onActivePersonaIdChange: (id: string) => void;
-    proactiveInstruction: string;
-    onProactiveInstructionChange: (instruction: string) => void;
     commandExecutionMode: CommandExecutionMode;
     onCommandExecutionModeChange: (mode: CommandExecutionMode) => void;
     maxConsecutiveAutoExecutions: number;
@@ -47,8 +45,6 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
     onAiPersonasChange,
     activePersonaId,
     onActivePersonaIdChange,
-    proactiveInstruction,
-    onProactiveInstructionChange,
     commandExecutionMode,
     onCommandExecutionModeChange,
     maxConsecutiveAutoExecutions,
@@ -549,24 +545,6 @@ export const AISettingsTab: React.FC<AISettingsTabProps> = ({
                         </div>
                     </>
                 )}
-            </div>
-
-            <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border-color)' }}>
-                <label style={{ marginBottom: '10px', display: 'block' }}>Proactive Investigation Instruction <HelpTooltip text={'Appended to AI Monitor responses. Use this to tell AI to run follow-up commands (e.g., "check logs if errors are found").'} /></label>
-                <textarea
-                    value={proactiveInstruction}
-                    onChange={(e) => onProactiveInstructionChange(e.target.value)}
-                    placeholder="Instruction to encourage the AI to gather more info..."
-                    className="settings-input"
-                    style={{
-                        width: '100%',
-                        padding: '10px',
-                        height: '100px',
-                        fontFamily: 'var(--font-family)',
-                        resize: 'vertical',
-                        boxSizing: 'border-box'
-                    }}
-                />
             </div>
 
             <label>Debugging</label>

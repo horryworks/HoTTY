@@ -3,6 +3,7 @@ import { marked } from 'marked';
 import { getTransparentColor } from '../../utils/colorUtils';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { calcAICost } from '../../constants/aiPricing';
+import { buildExecutionRules } from '../../constants/aiPrompts';
 import { AuthenticationPanel } from './AuthenticationPanel';
 import { VertexAIAuthPanel } from './VertexAIAuthPanel';
 import { OpenAIAuthPanel } from './OpenAIAuthPanel';
@@ -65,7 +66,6 @@ interface AIChatPaneProps {
         buffer: string;
         startTime: number;
     };
-    proactiveInstruction?: string;
 }
 
 // ── Gemini Icon Component ──
@@ -211,8 +211,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     onRunCommand,
     onShowPromptMenu,
     onSendMessage,
-    interactiveSessionTracking,
-    proactiveInstruction
+    interactiveSessionTracking
 }) => {
     // Auth state
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -436,10 +435,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         }
 
         // Add execution instruction and proactive instruction
-        const extraInstructions = ' [ABSOLUTE MANDATORY RULES - NO EXCEPTIONS] 1. Answer ONLY what the user asked. Do NOT suggest next steps, additional commands, or follow-up actions unless explicitly requested. 2. After answering, STOP. Do not continue the conversation on your own. 3. ANY shell/terminal command MUST be placed in EXACTLY ONE ```execute block per response. 4. It is STRICTLY FORBIDDEN to use more than one ```execute block in a single response. 5. It is STRICTLY FORBIDDEN to write commands as inline code, plain text, or in ```bash/```sh/```shell blocks. 6. If multiple steps are needed, combine them into a single ```execute block using && or semicolons. 7. Breaking these rules causes a critical application failure.' + (proactiveInstruction ? ` ${proactiveInstruction}` : '');
+        const extraInstructions = buildExecutionRules();
         setLocalSystemInstruction(`${basePrompt}${langInstruction}${extraInstructions}`);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedExpertise, selectedLanguage, aiPersonas]);
 
 
@@ -832,7 +830,15 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             isWaitingForTerminal: true
         });
 
-        electronService.sendInput(lastTargetSessionId, cleanCmd + '\r');
+        // Split multi-line commands and send each line individually
+        // (network devices only accept one command per line)
+        const lines = cleanCmd.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const targetId = lastTargetSessionId;
+        lines.forEach((line, index) => {
+            setTimeout(() => {
+                electronService.sendInput(targetId, line + '\r');
+            }, index * 150);
+        });
         electronService.focusWindow();
         window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: lastTargetSessionId } }));
     };
@@ -972,7 +978,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         const persona = aiPersonas?.find(p => p.label === e.target.value);
                                         if (persona) {
                                             const langInstr = selectedLanguage !== 'English' ? ` Answer in ${selectedLanguage}.` : '';
-                                            setLocalSystemInstruction(`${persona.systemPrompt}${langInstr} [ABSOLUTE MANDATORY RULES - NO EXCEPTIONS] 1. Answer ONLY what the user asked. Do NOT suggest next steps, additional commands, or follow-up actions unless explicitly requested. 2. After answering, STOP. Do not continue the conversation on your own. 3. ANY shell/terminal command MUST be placed in EXACTLY ONE \`\`\`execute block per response. 4. It is STRICTLY FORBIDDEN to use more than one \`\`\`execute block in a single response. 5. It is STRICTLY FORBIDDEN to write commands as inline code, plain text, or in \`\`\`bash/\`\`\`sh/\`\`\`shell blocks. 6. If multiple steps are needed, combine them into a single \`\`\`execute block using && or semicolons. 7. Breaking these rules causes a critical application failure.`);
+                                            setLocalSystemInstruction(`${persona.systemPrompt}${langInstr}${buildExecutionRules()}`);
                                             // Sync global active persona for context menus
                                             useSettingsStore.getState().updateActivePersonaId(persona.id);
                                         }

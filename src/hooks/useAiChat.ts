@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Session } from './useSessionManager';
 import type { PersonaDefinition } from '../types/appTypes';
 import { STORAGE_KEYS } from '../constants/storage';
+import { buildExecutionRules } from '../constants/aiPrompts';
 import * as electronService from '../services/electronService';
 
 // -- Types --
@@ -9,7 +10,6 @@ import * as electronService from '../services/electronService';
 interface UseAiChatOptions {
   sessions: Session[];
   aiPersonas: PersonaDefinition[];
-  proactiveInstruction: string;
   getWatchBuffer: (sessionId: string) => string;
   clearWatchBuffer: (sessionId: string) => void;
   updateSessionState: (sessionId: string, newState: Partial<Session['aiChatState']>) => void;
@@ -102,7 +102,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       targetPrompt = currentPersonas[0].systemPrompt;
     }
 
-    return targetPrompt + " [ABSOLUTE MANDATORY RULES - NO EXCEPTIONS]\n1. Answer ONLY what the user asked. Do NOT suggest next steps, additional commands, or follow-up actions unless explicitly requested.\n2. After answering, always end your response with a brief closing statement such as 'That concludes my response.' or 'That is all.' to clearly signal that you are done. Do not end silently.\n3. ANY shell/terminal command MUST be placed in EXACTLY ONE ```execute block per response.\n4. It is STRICTLY FORBIDDEN to use more than one ```execute block in a single response.\n5. It is STRICTLY FORBIDDEN to write commands as inline code (`command`), plain text, or in ```bash/```sh/```shell blocks.\n6. If multiple steps are needed, combine them into a single ```execute block using && or semicolons.\n7. Breaking these rules causes a critical application failure.";
+    return targetPrompt + buildExecutionRules();
   }, []);
 
   // -- Helper: find active terminal --

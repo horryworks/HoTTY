@@ -45,7 +45,6 @@ const makeOptions = (
 ): Parameters<typeof useAiChat>[0] => ({
     sessions,
     aiPersonas: [] as PersonaDefinition[],
-    proactiveInstruction: '',
     getWatchBuffer: vi.fn(() => ''),
     clearWatchBuffer: vi.fn(),
     updateSessionState: vi.fn(),

@@ -412,7 +412,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                 <strong>Custom Personas:</strong> In <strong>Settings → AI → Personas</strong>, create personas with custom system prompts. The chosen persona is applied as the initial system instruction for every new AI chat session.
                             </p>
                             <p className="help-text">
-                                <strong>Proactive Investigation:</strong> In <strong>Settings → AI</strong>, set a standing instruction that the AI applies proactively when analyzing terminal output in Watch Mode.
+                                <strong>Proactive Investigation:</strong> The AI automatically suggests terminal commands when it needs more information to fulfill your request, and can capture results for continued analysis in Watch Mode.
                             </p>
                         </div>
                     </details>

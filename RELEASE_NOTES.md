@@ -1,5 +1,13 @@
 # Release Notes - HoTTY
 
+## [v1.0.9-beta1] - 2026-04-11
+
+### Improved
+- **Simplified AI Settings**: Removed the "Proactive Investigation Instruction" textarea from Settings → AI. The proactive command suggestion behavior is now built-in and always active, reducing configuration complexity without changing functionality.
+- **Multi-Line Command Safety Classifier**: The auto-execution command classifier now evaluates multi-line execute blocks line-by-line. If any individual line is unsafe, the entire block requires manual confirmation. Previously, multi-line blocks were treated as a single command string.
+
+---
+
 ## [v1.0.8] - 2026-04-11
 
 ### Bug Fixes

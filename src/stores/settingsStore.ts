@@ -71,9 +71,6 @@ export interface SettingsState {
     // Sidebar Position
     sidebarPosition: 'left' | 'right';
 
-    // Proactive Instruction
-    proactiveInstruction: string;
-
     // Interactive Stabilization Timeout
     interactiveStabilizationTimeout: number;
 
@@ -123,7 +120,6 @@ interface SettingsActions {
     updatePromptPatterns: (v: PromptPattern[]) => void;
     updateAiPersonas: (v: PersonaDefinition[]) => void;
     updateSidebarPosition: (v: 'left' | 'right') => void;
-    updateProactiveInstruction: (v: string) => void;
     updateInteractiveStabilizationTimeout: (v: number) => void;
     updateActiveAiProvider: (v: 'gemini' | 'vertexai' | 'openai' | 'anthropic') => void;
     updateActivePersonaId: (v: string) => void;
@@ -252,7 +248,6 @@ const INITIAL_STATE: SettingsState = {
     promptPatterns: DEFAULT_PROMPT_PATTERNS,
     aiPersonas: DEFAULT_PERSONAS,
     sidebarPosition: 'left',
-    proactiveInstruction: 'If you need more information to fulfill the user\'s request, proactively suggest terminal commands using code blocks with the "execute" language tag, like this: ```execute\\n[command]\\n```. Do not just wait for user input if the information can be gathered via the terminal.',
     interactiveStabilizationTimeout: 10000,
     activeAiProvider: 'vertexai',
     activePersonaId: 'network-expert',
@@ -318,7 +313,6 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
             updatePromptPatterns: (v) => set({ promptPatterns: v }),
             updateAiPersonas: (v) => set({ aiPersonas: v }),
             updateSidebarPosition: (v) => set({ sidebarPosition: v }),
-            updateProactiveInstruction: (v) => set({ proactiveInstruction: v }),
             updateInteractiveStabilizationTimeout: (v) => set({ interactiveStabilizationTimeout: v }),
             updateActiveAiProvider: (v) => set({ activeAiProvider: v }),
             updateActivePersonaId: (v) => set({ activePersonaId: v }),

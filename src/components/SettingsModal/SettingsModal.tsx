@@ -67,8 +67,6 @@ interface SettingsModalProps {
     onActivePersonaIdChange: (id: string) => void;
     watchBufferLimit: number;
     onWatchBufferLimitChange: (limit: number) => void;
-    proactiveInstruction: string;
-    onProactiveInstructionChange: (instruction: string) => void;
     interactiveStabilizationTimeout: number;
     onInteractiveStabilizationTimeoutChange: (timeout: number) => void;
     commandExecutionMode: CommandExecutionMode;
@@ -140,8 +138,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onActivePersonaIdChange,
     watchBufferLimit,
     onWatchBufferLimitChange,
-    proactiveInstruction,
-    onProactiveInstructionChange,
     interactiveStabilizationTimeout,
     onInteractiveStabilizationTimeoutChange,
     commandExecutionMode,
@@ -415,8 +411,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             onAiPersonasChange={onAiPersonasChange}
                             activePersonaId={activePersonaId}
                             onActivePersonaIdChange={onActivePersonaIdChange}
-                            proactiveInstruction={proactiveInstruction}
-                            onProactiveInstructionChange={onProactiveInstructionChange}
                             commandExecutionMode={commandExecutionMode}
                             onCommandExecutionModeChange={onCommandExecutionModeChange}
                             maxConsecutiveAutoExecutions={maxConsecutiveAutoExecutions}

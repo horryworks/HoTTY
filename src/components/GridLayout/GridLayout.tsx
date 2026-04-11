@@ -80,7 +80,6 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
         showSystemPrompt,
         aiPersonas,
         activePersonaId,
-        proactiveInstruction,
     } = useSettingsStore(useShallow(s => ({
         fontSize: s.fontSize,
         fontFamily: s.fontFamily,
@@ -94,7 +93,6 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
         showSystemPrompt: s.showSystemPrompt,
         aiPersonas: s.aiPersonas,
         activePersonaId: s.activePersonaId,
-        proactiveInstruction: s.proactiveInstruction,
     })));
 
     const askAiCommands = React.useMemo(() => {
@@ -365,7 +363,6 @@ export const GridLayout: React.FC<GridLayoutProps & { terminalRegistry: { [id: s
                                     fontSize={fontSize}
                                     terminalBackground={terminalBackground}
                                     terminalBackgroundInactive={terminalBackgroundInactive || undefined}
-                                    proactiveInstruction={proactiveInstruction}
                                     interactiveSessionTracking={interactiveSessions ? Object.values(interactiveSessions).find((t) => t.aiSessionId === session.id) : undefined}
                                     onRunCommand={(targetId, command) => {
                                         if (onRunCommand) onRunCommand(targetId, command, session.id);

@@ -392,4 +392,20 @@ describe('commandClassifier', () => {
             expectSafe('terminal length 0');
         });
     });
+
+    // ── Multi-line command handling ──
+    describe('multi-line commands', () => {
+        it('allows multi-line with all safe commands', () => {
+            expectSafe('show version\nshow ip route\nshow interfaces');
+        });
+        it('rejects multi-line if any line is unsafe', () => {
+            expectUnsafe('show version\nconfigure terminal\nshow ip route');
+        });
+        it('handles blank lines between commands', () => {
+            expectSafe('show version\n\nshow ip route\n  \nshow clock');
+        });
+        it('rejects multi-line with danger pattern in one line', () => {
+            expectUnsafe('ls -la\necho data > file.txt');
+        });
+    });
 });

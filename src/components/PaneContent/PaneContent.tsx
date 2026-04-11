@@ -78,7 +78,6 @@ export const PaneContent: React.FC<PaneContentProps> = React.memo(({
     showSystemPrompt,
     aiPersonas,
     activePersonaId,
-    proactiveInstruction,
   } = useSettingsStore(useShallow(s => ({
     fontSize: s.fontSize,
     fontFamily: s.fontFamily,
@@ -92,7 +91,6 @@ export const PaneContent: React.FC<PaneContentProps> = React.memo(({
     showSystemPrompt: s.showSystemPrompt,
     aiPersonas: s.aiPersonas,
     activePersonaId: s.activePersonaId,
-    proactiveInstruction: s.proactiveInstruction,
   })));
 
   const askAiCommands = React.useMemo(() => {
@@ -157,7 +155,6 @@ export const PaneContent: React.FC<PaneContentProps> = React.memo(({
         lastTerminalSessionTitle={lastTerminalSessionTitle}
         onShowPromptMenu={onShowPromptMenu}
         onSendMessage={onSendMessage}
-        proactiveInstruction={proactiveInstruction}
         interactiveSessionTracking={interactiveSessionTracking}
         onRunCommand={onRunCommand}
       />

@@ -63,7 +63,6 @@ function App() {
     updateAiPersonas,
     updateActivePersonaId,
     updateSidebarPosition,
-    updateProactiveInstruction,
     updateInteractiveStabilizationTimeout,
     updateTerminalForeground,
     updateTerminalBackground,
@@ -347,7 +346,6 @@ function App() {
   const aiChat = useAiChat({
     sessions: session.sessions,
     aiPersonas: settings.aiPersonas,
-    proactiveInstruction: settings.proactiveInstruction,
     getWatchBuffer: session.getWatchBuffer,
     clearWatchBuffer: session.clearWatchBuffer,
     updateSessionState: session.updateSessionState,
@@ -944,8 +942,6 @@ function App() {
           onActivePersonaIdChange={updateActivePersonaId}
           watchBufferLimit={settings.watchBufferLimit}
           onWatchBufferLimitChange={updateWatchBufferLimit}
-          proactiveInstruction={settings.proactiveInstruction}
-          onProactiveInstructionChange={updateProactiveInstruction}
           interactiveStabilizationTimeout={settings.interactiveStabilizationTimeout}
           onInteractiveStabilizationTimeoutChange={updateInteractiveStabilizationTimeout}
           commandExecutionMode={settings.commandExecutionMode}
