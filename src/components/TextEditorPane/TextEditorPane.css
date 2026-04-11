@@ -145,11 +145,11 @@
     display: flex;
     align-items: center;
     gap: 0;
-    padding: 0 6px;
+    padding: 6px 10px;
     background: var(--ai-header-bg);
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
-    min-height: 32px;
+    min-height: 36px;
     box-sizing: border-box;
     justify-content: space-between;
 }

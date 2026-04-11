@@ -9,7 +9,7 @@ import { logger } from './Logger';
 import { friendlyErrorMessage } from './errorMessages';
 
 // Runtime-supported algorithm lists from ssh2 (filtered by OpenSSL availability)
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const ssh2Constants = require('ssh2/lib/protocol/constants.js');
 
 export class SshService implements ISessionService {

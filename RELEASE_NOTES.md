@@ -1,5 +1,15 @@
 # Release Notes - HoTTY
 
+## [v1.0.8] - 2026-04-11
+
+### Bug Fixes
+- **SSH Crash on Unsupported Algorithm**: Fixed a crash when connecting to SSH servers where the configured algorithm list included ChaCha20-Poly1305 or other ciphers not supported by the runtime's OpenSSL/BoringSSL build. Algorithm lists are now validated against the ssh2 library's runtime-supported algorithms before connecting, silently filtering out unavailable ones. Also added error handling around `conn.connect()` to prevent unhandled promise rejections.
+
+### Improved
+- **Pane Toolbar Consistency**: Aligned TextEditorPane toolbar dimensions (`min-height`, `padding`) with LogViewerPane and PingMonitorPane for a consistent look across all pane toolbars.
+
+---
+
 ## [v1.0.7] - 2026-04-09
 
 ### Improved
