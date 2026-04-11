@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "HoTTY",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.hotty.terminal",
   "build": {
     "frontendDist": "../dist",
@@ -16,7 +16,8 @@
         "width": 800,
         "height": 600,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "dragDropEnabled": false
       }
     ],
     "security": {
