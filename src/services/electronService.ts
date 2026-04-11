@@ -2,6 +2,10 @@ const api = () => window.electronAPI;
 
 export const isAvailable = () => !!window.electronAPI;
 
+/** Checks if a value is encrypted by any supported method ([DPAPI] or [SAFE]). */
+export const isEncrypted = (value: string): boolean =>
+    value.startsWith('[DPAPI]') || value.startsWith('[SAFE]');
+
 export const connectSession = (sessionId: string, config: Record<string, unknown>) => api().connectSession(sessionId, config);
 export const disconnectSession = (sessionId: string) => api().disconnectSession(sessionId);
 export const sendInput = (sessionId: string, data: string) => api().sendInput(sessionId, data);

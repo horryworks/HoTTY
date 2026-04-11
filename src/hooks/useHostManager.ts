@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { STORAGE_KEYS } from '../constants/storage';
 import * as electronService from '../services/electronService';
+import { isEncrypted } from '../services/electronService';
 
 const STORAGE_KEY = STORAGE_KEYS.HOST_TREE;
 
@@ -100,12 +101,12 @@ async function encryptTree(nodes: HostTreeNode[]): Promise<HostTreeNode[]> {
                 // clone the entry so we can mutate it after batch encryption
                 const entry = { ...n.entry };
 
-                if (entry.username && !entry.username.startsWith('[DPAPI]')) {
+                if (entry.username && !isEncrypted(entry.username)) {
                     secrets.push(entry.username);
                     setters.push((val) => entry.username = val);
                 }
 
-                if (entry.password && !entry.password.startsWith('[DPAPI]')) {
+                if (entry.password && !isEncrypted(entry.password)) {
                     secrets.push(entry.password);
                     setters.push((val) => entry.password = val);
                 }
@@ -236,15 +237,18 @@ export function useHostManager() {
         const eagerDecryptTree = async (nodes: HostTreeNode[]) => {
             const secrets: (string | undefined)[] = [];
             const targets: { id: string, type: 'username' | 'password' }[] = [];
+            let hasLegacyDpapi = false;
 
             function traverse(nodeList: HostTreeNode[]) {
                 for (const n of nodeList) {
                     if (n.type === 'host' && n.entry && !decryptedCache[n.id]?.decrypted) {
-                        if (n.entry.username?.startsWith('[DPAPI]')) {
+                        if (n.entry.username && isEncrypted(n.entry.username)) {
+                            if (n.entry.username.startsWith('[DPAPI]')) hasLegacyDpapi = true;
                             secrets.push(n.entry.username);
                             targets.push({ id: n.id, type: 'username' });
                         }
-                        if (n.entry.password?.startsWith('[DPAPI]')) {
+                        if (n.entry.password && isEncrypted(n.entry.password)) {
+                            if (n.entry.password.startsWith('[DPAPI]')) hasLegacyDpapi = true;
                             secrets.push(n.entry.password);
                             targets.push({ id: n.id, type: 'password' });
                         }
@@ -266,6 +270,13 @@ export function useHostManager() {
                     if (val !== undefined) {
                         setCachedCredential(t.id, { [t.type]: val });
                     }
+                }
+
+                // Migrate legacy [DPAPI] values to [SAFE] format by re-encrypting and persisting
+                if (hasLegacyDpapi) {
+                    encryptTree(nodes).then(saveRawTree).catch(err => {
+                        console.error('[HostManager] Migration re-encryption failed:', err);
+                    });
                 }
             }
 
@@ -337,10 +348,10 @@ export function useHostManager() {
             // Need to track this id in cache if username/password changed to unencrypted string
             const patchedNode = flattenHosts(next).find(n => n.id === id);
             if (patchedNode?.type === 'host' && patchedNode.entry) {
-                if (patch.entry?.username && !patch.entry.username.startsWith('[DPAPI]')) {
+                if (patch.entry?.username && !isEncrypted(patch.entry.username)) {
                     setCachedCredential(id, { username: patch.entry.username });
                 }
-                if (patch.entry?.password && !patch.entry.password.startsWith('[DPAPI]')) {
+                if (patch.entry?.password && !isEncrypted(patch.entry.password)) {
                     setCachedCredential(id, { password: patch.entry.password });
                 }
             }

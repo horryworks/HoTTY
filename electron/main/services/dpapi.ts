@@ -1,13 +1,29 @@
 import { spawn } from 'child_process';
+import { safeStorage } from 'electron';
 import { logger } from './Logger';
 
 const DPAPI_PREFIX = '[DPAPI]';
+const SAFE_PREFIX = '[SAFE]';
 
 /**
- * Checks if a value was encrypted by DPAPI.
+ * Checks if a value was encrypted by legacy PowerShell DPAPI.
  */
 function isDpapiEncrypted(value: string): boolean {
     return value.startsWith(DPAPI_PREFIX);
+}
+
+/**
+ * Checks if a value was encrypted by Electron safeStorage.
+ */
+function isSafeEncrypted(value: string): boolean {
+    return value.startsWith(SAFE_PREFIX);
+}
+
+/**
+ * Checks if a value is encrypted by any supported method.
+ */
+export function isAnyEncrypted(value: string): boolean {
+    return isDpapiEncrypted(value) || isSafeEncrypted(value);
 }
 
 /**
@@ -56,39 +72,23 @@ function runPowerShell(script: string, input: string): Promise<string> {
 }
 
 /**
- * Encrypts a plaintext string using Windows DPAPI (CurrentUser scope).
+ * Encrypts a plaintext string using Electron safeStorage (DPAPI on Windows).
  * @param plaintext - The string to encrypt.
  * @returns A prefixed, base64-encoded ciphertext string.
  */
 export async function encryptString(plaintext: string): Promise<string> {
     if (!plaintext) return plaintext;
 
-    if (process.platform !== 'win32') {
-        throw new Error('Credential encryption requires Windows (DPAPI). HoTTY is a Windows-only application.');
-    }
-
-    const MAX_INPUT_SIZE = 1 * 1024 * 1024; // 1 MB
-    if (Buffer.byteLength(plaintext, 'utf8') > MAX_INPUT_SIZE) {
-        throw new Error('Input exceeds maximum size for encryption (1 MB)');
+    if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('Credential encryption is not available on this system.');
     }
 
     try {
-        const script = `
-            Add-Type -AssemblyName System.Security
-            $bytes = [System.Text.Encoding]::UTF8.GetBytes([Console]::In.ReadToEnd())
-            $encrypted = [System.Security.Cryptography.ProtectedData]::Protect(
-                $bytes,
-                $null,
-                [System.Security.Cryptography.DataProtectionScope]::CurrentUser
-            )
-            [Console]::WriteLine([Convert]::ToBase64String($encrypted))
-        `;
-
-        const result = await runPowerShell(script, plaintext);
-        return DPAPI_PREFIX + result.trim();
+        const encrypted = safeStorage.encryptString(plaintext);
+        return SAFE_PREFIX + encrypted.toString('base64');
     } catch (err) {
         logger.error('dpapi', 'Encryption failed', { error: String(err) });
-        throw new Error('Failed to encrypt credential using DPAPI');
+        throw new Error('Failed to encrypt credential using safeStorage');
     }
 }
 
@@ -144,130 +144,119 @@ export async function verifyWindowsUser(password: string): Promise<boolean> {
 export async function decryptString(ciphertext: string): Promise<string> {
     if (!ciphertext) return ciphertext;
 
-    if (!isDpapiEncrypted(ciphertext)) {
-        // Not encrypted (legacy plaintext) — return as-is for backward compatibility
-        return ciphertext;
+    // Electron safeStorage format
+    if (isSafeEncrypted(ciphertext)) {
+        try {
+            const buf = Buffer.from(ciphertext.slice(SAFE_PREFIX.length), 'base64');
+            return safeStorage.decryptString(buf);
+        } catch (err) {
+            logger.error('dpapi', 'safeStorage decryption failed', { error: String(err) });
+            throw new Error('Failed to decrypt credential using safeStorage');
+        }
     }
 
-    if (process.platform !== 'win32') {
-        throw new Error('Credential decryption requires Windows (DPAPI). HoTTY is a Windows-only application.');
+    // Legacy PowerShell DPAPI format (migration path)
+    if (isDpapiEncrypted(ciphertext)) {
+        if (process.platform !== 'win32') {
+            throw new Error('Credential decryption requires Windows (DPAPI). HoTTY is a Windows-only application.');
+        }
+
+        const base64Data = ciphertext.slice(DPAPI_PREFIX.length);
+
+        try {
+            const script = `
+                Add-Type -AssemblyName System.Security
+                $base64 = [Console]::In.ReadToEnd().Trim()
+                $bytes = [Convert]::FromBase64String($base64)
+                $decrypted = [System.Security.Cryptography.ProtectedData]::Unprotect(
+                    $bytes,
+                    $null,
+                    [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+                )
+                [Console]::Write([System.Text.Encoding]::UTF8.GetString($decrypted))
+            `;
+
+            const result = await runPowerShell(script, base64Data);
+            return result;
+        } catch (err) {
+            logger.error('dpapi', 'Legacy DPAPI decryption failed', { error: String(err) });
+            throw new Error('Failed to decrypt credential using DPAPI');
+        }
     }
 
-    const base64Data = ciphertext.slice(DPAPI_PREFIX.length);
-
-    try {
-        const script = `
-            Add-Type -AssemblyName System.Security
-            $base64 = [Console]::In.ReadToEnd().Trim()
-            $bytes = [Convert]::FromBase64String($base64)
-            $decrypted = [System.Security.Cryptography.ProtectedData]::Unprotect(
-                $bytes,
-                $null,
-                [System.Security.Cryptography.DataProtectionScope]::CurrentUser
-            )
-            [Console]::Write([System.Text.Encoding]::UTF8.GetString($decrypted))
-        `;
-
-        const result = await runPowerShell(script, base64Data);
-        return result;
-    } catch (err) {
-        logger.error('dpapi', 'Decryption failed', { error: String(err) });
-        throw new Error('Failed to decrypt credential using DPAPI');
-    }
+    // Not encrypted (legacy plaintext) — return as-is for backward compatibility
+    return ciphertext;
 }
 
 /**
- * Encrypts multiple plaintext strings in a single PowerShell invocation.
+ * Encrypts multiple plaintext strings using Electron safeStorage.
  * Non-string / empty values are passed through unchanged.
  */
 export async function encryptBatch(plaintexts: (string | undefined)[]): Promise<(string | undefined)[]> {
     if (!plaintexts.length) return [];
 
-    if (process.platform !== 'win32') {
-        throw new Error('Credential encryption requires Windows (DPAPI). HoTTY is a Windows-only application.');
+    if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('Credential encryption is not available on this system.');
     }
 
-    // Separate values that need encryption from pass-through values
     const results: (string | undefined)[] = [...plaintexts];
-    const toEncrypt: { index: number; value: string }[] = [];
-
-    for (let i = 0; i < plaintexts.length; i++) {
-        const v = plaintexts[i];
-        if (v && !isDpapiEncrypted(v)) {
-            toEncrypt.push({ index: i, value: v });
-        }
-    }
-
-    if (toEncrypt.length === 0) return results;
-
-    // Single-item optimisation: reuse existing single-value path
-    if (toEncrypt.length === 1) {
-        results[toEncrypt[0].index] = await encryptString(toEncrypt[0].value);
-        return results;
-    }
 
     try {
-        const script = `
-            Add-Type -AssemblyName System.Security
-            $json = [Console]::In.ReadToEnd()
-            $items = $json | ConvertFrom-Json
-            $results = @()
-            foreach ($pt in $items) {
-                $bytes = [System.Text.Encoding]::UTF8.GetBytes($pt)
-                $encrypted = [System.Security.Cryptography.ProtectedData]::Protect(
-                    $bytes,
-                    $null,
-                    [System.Security.Cryptography.DataProtectionScope]::CurrentUser
-                )
-                $results += [Convert]::ToBase64String($encrypted)
+        for (let i = 0; i < plaintexts.length; i++) {
+            const v = plaintexts[i];
+            if (v && !isAnyEncrypted(v)) {
+                const encrypted = safeStorage.encryptString(v);
+                results[i] = SAFE_PREFIX + encrypted.toString('base64');
             }
-            [Console]::Write(($results | ConvertTo-Json -Compress))
-        `;
-
-        const input = JSON.stringify(toEncrypt.map(e => e.value));
-        const raw = await runPowerShell(script, input);
-        const encrypted: string[] = JSON.parse(raw.trim());
-
-        for (let i = 0; i < toEncrypt.length; i++) {
-            results[toEncrypt[i].index] = DPAPI_PREFIX + encrypted[i];
         }
-
         return results;
     } catch (err) {
         logger.error('dpapi', 'Batch encryption failed', { error: String(err) });
-        throw new Error('Failed to batch-encrypt credentials using DPAPI');
+        throw new Error('Failed to batch-encrypt credentials using safeStorage');
     }
 }
 
 /**
- * Decrypts multiple DPAPI-encrypted strings in a single PowerShell invocation.
+ * Decrypts multiple encrypted strings.
+ * [SAFE]-prefixed values are decrypted synchronously via safeStorage.
+ * [DPAPI]-prefixed values fall back to a single PowerShell invocation (legacy migration).
  * Non-encrypted / empty / undefined values are passed through unchanged.
  */
 export async function decryptBatch(ciphertexts: (string | undefined)[]): Promise<(string | undefined)[]> {
     if (!ciphertexts.length) return [];
 
+    const results: (string | undefined)[] = [...ciphertexts];
+    const legacyToDecrypt: { index: number; base64: string }[] = [];
+
+    // First pass: decrypt [SAFE] values synchronously, collect [DPAPI] values for batch
+    for (let i = 0; i < ciphertexts.length; i++) {
+        const v = ciphertexts[i];
+        if (!v) continue;
+
+        if (isSafeEncrypted(v)) {
+            try {
+                const buf = Buffer.from(v.slice(SAFE_PREFIX.length), 'base64');
+                results[i] = safeStorage.decryptString(buf);
+            } catch (err) {
+                logger.error('dpapi', 'safeStorage batch decryption failed for item', { index: i, error: String(err) });
+                throw new Error('Failed to decrypt credential using safeStorage');
+            }
+        } else if (isDpapiEncrypted(v)) {
+            legacyToDecrypt.push({ index: i, base64: v.slice(DPAPI_PREFIX.length) });
+        }
+        // Non-encrypted values (legacy plaintext) stay as-is in results
+    }
+
+    // No legacy values to decrypt — done
+    if (legacyToDecrypt.length === 0) return results;
+
+    // Legacy [DPAPI] decryption via PowerShell (migration path)
     if (process.platform !== 'win32') {
         throw new Error('Credential decryption requires Windows (DPAPI). HoTTY is a Windows-only application.');
     }
 
-    // Separate values that need decryption from pass-through values
-    const results: (string | undefined)[] = [...ciphertexts];
-    const toDecrypt: { index: number; base64: string }[] = [];
-
-    for (let i = 0; i < ciphertexts.length; i++) {
-        const v = ciphertexts[i];
-        if (!v) continue;
-        if (isDpapiEncrypted(v)) {
-            toDecrypt.push({ index: i, base64: v.slice(DPAPI_PREFIX.length) });
-        }
-        // Non-DPAPI values (legacy plaintext) stay as-is in results
-    }
-
-    if (toDecrypt.length === 0) return results;
-
-    // Single-item optimisation: reuse existing single-value path
-    if (toDecrypt.length === 1) {
-        results[toDecrypt[0].index] = await decryptString(ciphertexts[toDecrypt[0].index]!);
+    if (legacyToDecrypt.length === 1) {
+        results[legacyToDecrypt[0].index] = await decryptString(ciphertexts[legacyToDecrypt[0].index]!);
         return results;
     }
 
@@ -289,17 +278,17 @@ export async function decryptBatch(ciphertexts: (string | undefined)[]): Promise
             [Console]::Write(($results | ConvertTo-Json -Compress))
         `;
 
-        const input = JSON.stringify(toDecrypt.map(e => e.base64));
+        const input = JSON.stringify(legacyToDecrypt.map(e => e.base64));
         const raw = await runPowerShell(script, input);
         const decrypted: string[] = JSON.parse(raw.trim());
 
-        for (let i = 0; i < toDecrypt.length; i++) {
-            results[toDecrypt[i].index] = decrypted[i];
+        for (let i = 0; i < legacyToDecrypt.length; i++) {
+            results[legacyToDecrypt[i].index] = decrypted[i];
         }
 
         return results;
     } catch (err) {
-        logger.error('dpapi', 'Batch decryption failed', { error: String(err) });
+        logger.error('dpapi', 'Legacy DPAPI batch decryption failed', { error: String(err) });
         throw new Error('Failed to batch-decrypt credentials using DPAPI');
     }
 }

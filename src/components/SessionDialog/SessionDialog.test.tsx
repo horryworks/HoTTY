@@ -37,6 +37,7 @@ vi.mock('../../services/electronService', () => ({
     getSshAlgorithms: vi.fn(() => Promise.resolve({})),
     logDebug: vi.fn(),
     focusWindow: vi.fn(),
+    isEncrypted: vi.fn((value: string) => value.startsWith('[DPAPI]') || value.startsWith('[SAFE]')),
 }));
 vi.mock('../../constants/storage', () => ({
     STORAGE_KEYS: {

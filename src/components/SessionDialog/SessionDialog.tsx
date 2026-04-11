@@ -5,6 +5,7 @@ import { HostTree } from './HostTree';
 import { useResize } from '../../hooks/useResize';
 import { STORAGE_KEYS } from '../../constants/storage';
 import * as electronService from '../../services/electronService';
+import { isEncrypted } from '../../services/electronService';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { ProtocolId } from '../../types/appTypes';
 import HelpTooltip from '../HelpTooltip/HelpTooltip';
@@ -508,12 +509,12 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
         // On-demand decryption if they are still encrypted
         const needsDecryption: (string | undefined)[] = [undefined, undefined];
-        if (u.startsWith('[DPAPI]')) {
+        if (isEncrypted(u)) {
             if (cached?.username !== undefined) u = cached.username;
             else needsDecryption[0] = u;
         }
 
-        if (p.startsWith('[DPAPI]')) {
+        if (isEncrypted(p)) {
             if (cached?.password !== undefined) p = cached.password;
             else needsDecryption[1] = p;
         }
@@ -581,12 +582,12 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         const cached = getCachedCredential(node.id);
 
         const needsDecryption: (string | undefined)[] = [undefined, undefined];
-        if (u.startsWith('[DPAPI]')) {
+        if (isEncrypted(u)) {
             if (cached?.username !== undefined) u = cached.username;
             else needsDecryption[0] = u;
         }
 
-        if (p.startsWith('[DPAPI]')) {
+        if (isEncrypted(p)) {
             if (cached?.password !== undefined) p = cached.password;
             else needsDecryption[1] = p;
         }
@@ -610,11 +611,11 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
                 const jbCached = getCachedCredential(e.jumpboxId);
                 const jbNeedsDecrypt: (string | undefined)[] = [undefined, undefined];
-                if (jbUser.startsWith('[DPAPI]')) {
+                if (isEncrypted(jbUser)) {
                     if (jbCached?.username !== undefined) jbUser = jbCached.username;
                     else jbNeedsDecrypt[0] = jbUser;
                 }
-                if (jbPass.startsWith('[DPAPI]')) {
+                if (isEncrypted(jbPass)) {
                     if (jbCached?.password !== undefined) jbPass = jbCached.password;
                     else jbNeedsDecrypt[1] = jbPass;
                 }
@@ -671,14 +672,14 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         let finalU = username;
         let finalP = password;
 
-        if (finalU.startsWith('[DPAPI]') || finalP.startsWith('[DPAPI]')) {
+        if (isEncrypted(finalU) || isEncrypted(finalP)) {
             const cached = getCachedCredential(selectedHostId);
             const needsDecryption = [undefined, undefined] as (string | undefined)[];
-            if (finalU.startsWith('[DPAPI]')) {
+            if (isEncrypted(finalU)) {
                 if (cached?.username !== undefined) finalU = cached.username;
                 else needsDecryption[0] = finalU;
             }
-            if (finalP.startsWith('[DPAPI]')) {
+            if (isEncrypted(finalP)) {
                 if (cached?.password !== undefined) finalP = cached.password;
                 else needsDecryption[1] = finalP;
             }
@@ -731,15 +732,15 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
         // Ensure we don't connect with raw DPAPI values if they somehow bypassed handleSelectHost
         let finalU = username;
         let finalP = password;
-        if (finalU.startsWith('[DPAPI]') || finalP.startsWith('[DPAPI]')) {
+        if (isEncrypted(finalU) || isEncrypted(finalP)) {
             const cached = selectedHostId ? getCachedCredential(selectedHostId) : undefined;
 
             const needsDecryption = [undefined, undefined] as (string | undefined)[];
-            if (finalU.startsWith('[DPAPI]')) {
+            if (isEncrypted(finalU)) {
                 if (cached?.username !== undefined) finalU = cached.username;
                 else needsDecryption[0] = finalU;
             }
-            if (finalP.startsWith('[DPAPI]')) {
+            if (isEncrypted(finalP)) {
                 if (cached?.password !== undefined) finalP = cached.password;
                 else needsDecryption[1] = finalP;
             }
@@ -828,11 +829,11 @@ export const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
 
                 const jbCached = getCachedCredential(jumpboxId);
                 const jbNeedsDecrypt: (string | undefined)[] = [undefined, undefined];
-                if (jbUser.startsWith('[DPAPI]')) {
+                if (isEncrypted(jbUser)) {
                     if (jbCached?.username !== undefined) jbUser = jbCached.username;
                     else jbNeedsDecrypt[0] = jbUser;
                 }
-                if (jbPass.startsWith('[DPAPI]')) {
+                if (isEncrypted(jbPass)) {
                     if (jbCached?.password !== undefined) jbPass = jbCached.password;
                     else jbNeedsDecrypt[1] = jbPass;
                 }
