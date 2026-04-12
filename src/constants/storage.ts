@@ -1,0 +1,14 @@
+export const STORAGE_KEYS = {
+  HOST_TREE: 'hotty_host_tree',
+  GEMINI_CLIENT_ID: 'hotty_gemini_client_id',
+  GEMINI_CLIENT_SECRET: 'hotty_gemini_client_secret',
+  GEMINI_LANGUAGE: 'hotty_gemini_language',
+  VERTEXAI_PROJECT_ID: 'hotty_vertexai_project_id',
+  VERTEXAI_LOCATION: 'hotty_vertexai_location',
+  VERTEXAI_AUTH_TYPE: 'hotty_vertexai_auth_type',
+  VERTEXAI_KEY_FILE_PATH: 'hotty_vertexai_key_file_path',
+  VERTEXAI_SELECTED_REGION: 'hotty_vertexai_selected_region',
+  AI_SELECTED_MODEL: 'hotty_ai_selected_model',
+  AI_SELECTED_MODEL_PER_PROVIDER: (provider: string) => `hotty_ai_selected_model_${provider}`,
+  AI_EXPLICIT_LOGOUT: 'hotty_ai_explicit_logout',
+} as const;

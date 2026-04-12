@@ -1,0 +1,360 @@
+/* --- Host Tree Container --- */
+.host-tree-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    position: relative;
+    user-select: none;
+}
+
+/* --- Toolbar --- */
+.host-tree-toolbar {
+    display: flex;
+    gap: 4px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.tree-toolbar-btn {
+    background: var(--btn-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 4px;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.tree-toolbar-btn:hover {
+    background: var(--btn-hover-bg);
+    border-color: var(--accent-color);
+    transform: translateY(-1px);
+}
+
+.tree-toolbar-btn svg {
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.tree-toolbar-btn:hover svg {
+    opacity: 1;
+}
+
+/* --- Tree Body --- */
+.host-tree-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px 0;
+}
+
+.host-tree-empty {
+    color: var(--text-secondary);
+    font-size: calc(var(--font-size-base) - 3px);
+    text-align: center;
+    padding: 20px 12px;
+    line-height: 1.6;
+}
+
+/* --- Nodes --- */
+
+.host-tree-row {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 6px;
+    cursor: pointer;
+    border-radius: 4px;
+    margin: 0px 4px;
+    font-size: calc(var(--font-size-base) - 2px);
+    color: var(--text-primary);
+    transition: background 0.12s;
+    min-height: 22px;
+}
+
+.host-tree-row:hover {
+    background: var(--hover-bg);
+}
+
+.host-tree-row.selected {
+    background: var(--accent-color);
+    color: var(--text-primary);
+}
+
+.tree-icon {
+    flex-shrink: 0;
+    font-size: calc(var(--font-size-base) - 3px);
+    width: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tree-chevron {
+    color: var(--text-secondary);
+    transition: transform 0.15s ease-in-out, color 0.1s;
+}
+
+.tree-chevron:hover {
+    color: var(--text-primary);
+}
+
+.tree-chevron.expanded {
+    transform: rotate(90deg);
+}
+
+.tree-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tree-meta {
+    font-size: calc(var(--font-size-base) - 3px);
+    color: var(--tree-meta-color);
+    flex-shrink: 0;
+    font-family: var(--font-family);
+    opacity: 0.85;
+}
+
+.tree-meta-via {
+    opacity: 0.6;
+    font-style: italic;
+}
+
+/* --- Context Menu --- */
+.context-menu {
+    position: fixed;
+    z-index: 30000;
+    background: var(--context-menu-bg);
+    border: 1px solid var(--context-menu-border);
+    border-radius: 6px;
+    padding: 4px 0;
+    box-shadow: 0 4px 16px var(--modal-shadow);
+    min-width: 160px;
+}
+
+.context-menu button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    color: var(--context-menu-text);
+    padding: 6px 14px;
+    font-size: calc(var(--font-size-base) - 2px);
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.menu-icon-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    flex-shrink: 0;
+}
+
+.context-menu button svg {
+    flex-shrink: 0;
+}
+
+.context-menu button:hover {
+    background: var(--context-menu-hover-bg);
+    color: var(--text-primary);
+}
+
+.context-menu button.danger {
+    color: var(--color-danger);
+}
+
+.context-menu button.danger:hover {
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+}
+
+.context-menu-separator {
+    height: 1px;
+    background: var(--border-color);
+    margin: 3px 0;
+}
+
+/* --- Add/Edit Modal --- */
+.host-edit-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--modal-overlay-bg);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+}
+
+.host-edit-modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 20px 24px;
+    min-width: 320px;
+    max-width: 460px;
+    width: 90%;
+    box-shadow: 0 4px 16px var(--modal-shadow);
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    animation: fadeIn 0.1s ease-out;
+}
+
+.host-edit-modal h3 {
+    margin: 0 0 16px 0;
+    font-size: calc(var(--font-size-base) + 2px);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.modal-form-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+}
+
+.modal-form-group label {
+    font-size: calc(var(--font-size-base) - 1px);
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.modal-form-group input,
+.modal-form-group select {
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    padding: 5px 8px;
+    font-size: calc(var(--font-size-base) - 1px);
+    font-family: var(--font-family);
+    user-select: text !important;
+    -webkit-user-select: text !important;
+}
+
+.modal-form-group input:focus,
+.modal-form-group select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+}
+
+.modal-form-row {
+    display: flex;
+    gap: 10px;
+}
+
+.modal-form-group-checkbox {
+    flex-direction: row;
+    align-items: center;
+}
+
+.modal-form-group-checkbox label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 0;
+    cursor: pointer;
+}
+
+.modal-form-group-checkbox input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+    accent-color: var(--accent-color);
+    cursor: pointer;
+}
+
+.modal-form-group.flex-3 {
+    flex: 3;
+}
+
+.modal-form-group.flex-1 {
+    flex: 1;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.modal-actions .btn-secondary {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    background: var(--btn-secondary-bg);
+    color: var(--text-primary);
+    transition: background-color 0.1s;
+}
+
+.modal-actions .btn-secondary:hover:not(:disabled) {
+    background: var(--btn-secondary-hover-bg);
+}
+
+.modal-actions .btn-primary {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    background: var(--accent-color);
+    color: var(--text-on-accent);
+    transition: background-color 0.1s;
+}
+
+.modal-actions .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+/* --- Drag & Drop --- */
+.host-tree-row.dragging {
+    opacity: 0.4;
+}
+
+.host-tree-row.drag-over-before {
+    box-shadow: 0 -2px 0 0 var(--accent-color);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+.host-tree-row.drag-over-after {
+    box-shadow: 0 2px 0 0 var(--accent-color);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.host-tree-row.drag-over-inside {
+    background: var(--color-danger-bg);
+    box-shadow: 0 0 0 1px var(--accent-color) inset;
+}
+
+/* --- Inline Edit --- */
+.tree-label-edit-input {
+    background: var(--btn-bg);
+    border: 1px solid var(--accent-color);
+    border-radius: 3px;
+    color: var(--text-primary);
+    padding: 1px 4px;
+    margin: -2px -5px;
+    font-size: inherit;
+    font-family: inherit;
+    min-width: 80px;
+    max-width: 100%;
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-danger-bg);
+}

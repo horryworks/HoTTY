@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { GridLayout } from './components/GridLayout/GridLayout';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { sidebarPaneId } from './components/Sidebar/sidebarHelpers';
@@ -10,12 +10,15 @@ import { LogViewerPane } from './components/LogViewerPane/LogViewerPane';
 import { TextEditorPane } from './components/TextEditorPane/TextEditorPane';
 import { FileExplorerPane } from './components/FileExplorerPane/FileExplorerPane';
 import { PingMonitorPane } from './components/PingMonitorPane/PingMonitorPane';
-import { ConnectForm, type ConnectSubmitPayload } from './components/ConnectForm/ConnectForm';
+import { AIChatPane } from './components/AIChatPane/AIChatPane';
+import { AskAiModal } from './components/AskAiModal/AskAiModal';
+import { SessionDialog, type ConnectSubmitPayload } from './components/SessionDialog/SessionDialog';
 import { SettingsModal } from './components/SettingsModal/SettingsModal';
 import { SshHostKeyModal } from './components/SshHostKeyModal/SshHostKeyModal';
 import { PasteConfirmationModal } from './components/PasteConfirmationModal/PasteConfirmationModal';
 import { tauriService } from './services/tauriService';
 import { useSessionManager, type SessionRecord } from './hooks/useSessionManager';
+import { useAiChat } from './hooks/useAiChat';
 import { usePaneStore, gridPaneIds, SIDEBAR_PANE_IDS } from './stores/paneStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { applyTheme } from './utils/applyTheme';
@@ -63,6 +66,60 @@ function App() {
   const fontFamily = useSettingsStore((s) => s.fontFamily);
   const sidebarPosition = useSettingsStore((s) => s.sidebarPosition);
   const updateSetting = useSettingsStore((s) => s.update);
+
+  const aiPersonas = useSettingsStore((s) => s.aiPersonas);
+
+  // Track last known terminal session for AI targeting
+  const [lastTerminalSessionId, setLastTerminalSessionId] = useState<string | null>(null);
+  const activePaneAllocation = paneAllocations[activePaneId];
+  useEffect(() => {
+    if (activePaneAllocation && !isFeaturePane(activePaneAllocation)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLastTerminalSessionId(activePaneAllocation);
+    }
+  }, [activePaneAllocation]);
+
+  // Watch buffer stubs (will be expanded with useInteractiveFlow later)
+  const watchBuffers = useRef(new Map<string, string>());
+  const getWatchBuffer = useCallback((sid: string) => watchBuffers.current.get(sid) || '', []);
+  const clearWatchBuffer = useCallback((sid: string) => { watchBuffers.current.delete(sid); }, []);
+  const toggleWatch = useCallback((_sid?: string) => { void _sid; /* noop until interactive flow is implemented */ }, []);
+
+  const createAiChatPane = useCallback((): string | undefined => {
+    // Only allow one AI chat pane at a time
+    const existing = Array.from(featurePanes.values()).find(p => p.type === 'ai-chat');
+    if (existing) return existing.id;
+    const id = makeFeaturePaneId('ai-chat');
+    setFeaturePanes((prev) => {
+      const next = new Map(prev);
+      next.set(id, { id, type: 'ai-chat', displayName: 'AI Chat' });
+      return next;
+    });
+    addSessionToStore(id);
+    return id;
+  }, [featurePanes, addSessionToStore]);
+
+  const {
+    aiChatStates,
+    updateAiChatState,
+    sendMessage: aiSendMessage,
+    showPromptMenu: aiShowPromptMenu,
+    askAiFreeFormatData,
+    setAskAiFreeFormatData,
+    handleFreeFormatSubmit,
+  } = useAiChat({
+    sessions,
+    featurePanes,
+    aiPersonas,
+    getWatchBuffer,
+    clearWatchBuffer,
+    toggleWatch,
+    createAiChatPane,
+    lastTerminalSessionId,
+    paneAllocations,
+    activePaneId,
+    setActivePaneId,
+  });
 
   const [connectOpen, setConnectOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -234,6 +291,21 @@ function App() {
               paneId={featureInfo.id}
               active={paneId === activePaneId}
             />
+          ) : featureInfo?.type === 'ai-chat' ? (
+            <AIChatPane
+              key={featureInfo.id}
+              paneId={featureInfo.id}
+              active={paneId === activePaneId}
+              chatState={aiChatStates.get(featureInfo.id)}
+              onChatStateChange={(newState) => updateAiChatState(featureInfo.id, newState)}
+              onRunCommand={(targetId, cmd) => {
+                tauriService.sendInput(targetId, cmd + '\r').catch(() => {});
+              }}
+              onShowPromptMenu={() => aiShowPromptMenu(featureInfo.id)}
+              onSendMessage={(text) => aiSendMessage(featureInfo.id, text)}
+              aiPersonas={aiPersonas}
+              terminalBackground={useSettingsStore.getState().terminalBackground}
+            />
           ) : (
             <div className="pane-empty">No session</div>
           )}
@@ -259,6 +331,7 @@ function App() {
             onNewPingMonitor={() => handleNewFeaturePane('ping-monitor')}
             onNewTextEditor={() => handleNewFeaturePane('text-editor')}
             onNewFileExplorer={() => handleNewFeaturePane('file-explorer')}
+            onNewAiChat={() => handleNewFeaturePane('ai-chat')}
           />
           <div className="content-area">
             <Sidebar
@@ -292,10 +365,10 @@ function App() {
         </div>
       </div>
 
-      <ConnectForm
+      <SessionDialog
         open={connectOpen}
-        onCancel={() => setConnectOpen(false)}
-        onSubmit={handleConnectSubmit}
+        onClose={() => setConnectOpen(false)}
+        onConnect={handleConnectSubmit}
       />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <SshHostKeyModal />
@@ -307,6 +380,14 @@ function App() {
             setPasteReq(null);
           }}
           onCancel={() => setPasteReq(null)}
+        />
+      )}
+      {askAiFreeFormatData && (
+        <AskAiModal
+          isOpen={true}
+          selection={askAiFreeFormatData.selection}
+          onClose={() => setAskAiFreeFormatData(null)}
+          onSubmit={handleFreeFormatSubmit}
         />
       )}
     </div>

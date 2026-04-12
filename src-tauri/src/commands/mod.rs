@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod dpapi;
 pub mod file_explorer;
 pub mod host_tree;

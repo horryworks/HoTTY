@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AboutTab } from './AboutTab';
+import { AISettingsTab } from './AISettingsTab';
 import { AppearanceTab } from './AppearanceTab';
 import { GeneralTab } from './GeneralTab';
 import { ProtocolsTab } from './ProtocolsTab';
@@ -11,13 +12,14 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type Tab = 'general' | 'appearance' | 'protocols' | 'features' | 'about';
+type Tab = 'general' | 'appearance' | 'protocols' | 'features' | 'ai' | 'about';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'general', label: 'General' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'protocols', label: 'Protocols' },
   { id: 'features', label: 'Features' },
+  { id: 'ai', label: 'AI' },
   { id: 'about', label: 'About' },
 ];
 
@@ -49,6 +51,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
           {tab === 'appearance' && <AppearanceTab />}
           {tab === 'protocols' && <ProtocolsTab />}
           {tab === 'features' && <FeaturesTab />}
+          {tab === 'ai' && <AISettingsTab />}
           {tab === 'about' && <AboutTab />}
         </div>
       </div>

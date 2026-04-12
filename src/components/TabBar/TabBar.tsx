@@ -15,6 +15,7 @@ interface TabBarProps {
   onNewPingMonitor?: () => void;
   onNewTextEditor?: () => void;
   onNewFileExplorer?: () => void;
+  onNewAiChat?: () => void;
 }
 
 type DragOverSide = 'left' | 'right' | null;
@@ -59,6 +60,7 @@ export function TabBar({
   onNewPingMonitor,
   onNewTextEditor,
   onNewFileExplorer,
+  onNewAiChat,
 }: TabBarProps) {
   const [dragSourceIndex, setDragSourceIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -69,7 +71,7 @@ export function TabBar({
   const visibleSet = new Set(visibleTabIds);
 
   const hasAnyFeatureCallback =
-    onNewLogViewer || onNewPingMonitor || onNewTextEditor || onNewFileExplorer;
+    onNewLogViewer || onNewPingMonitor || onNewTextEditor || onNewFileExplorer || onNewAiChat;
 
   // Close features menu on click outside
   useEffect(() => {
@@ -267,6 +269,17 @@ export function TabBar({
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
                   </svg>
                   File Explorer
+                </div>
+              )}
+              {onNewAiChat && (
+                <div
+                  className="features-dropdown-item"
+                  onClick={() => { onNewAiChat(); setShowFeaturesMenu(false); }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2L14.8 9.2L22 12L14.8 14.8L12 22L9.2 14.8L2 12L9.2 9.2L12 2Z" />
+                  </svg>
+                  AI Chat
                 </div>
               )}
             </div>

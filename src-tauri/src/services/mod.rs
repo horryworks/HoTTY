@@ -1,3 +1,5 @@
+pub mod ai;
+pub mod dpapi;
 pub mod iap_tunnel;
 pub mod known_hosts;
 pub mod local;

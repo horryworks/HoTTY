@@ -77,6 +77,12 @@ async-trait = "0.1"
 # Futures utilities
 futures = "0.3"
 
+# Cancellation tokens for async tasks
+tokio-util = { version = "0.7", features = ["rt"] }
+
+# JWT creation for Vertex AI service account authentication
+jsonwebtoken = "9"
+
 # Lightweight regex (no proc-macro, used for validation)
 regex-lite = "0.1"
 

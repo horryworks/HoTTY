@@ -220,3 +220,86 @@ export interface GceInstance {
   name: string;
   status: string;
 }
+
+// ---------------------------------------------------------------------------
+// Host Tree
+// ---------------------------------------------------------------------------
+
+export interface IapTunnelEntry {
+  project: string;
+  zone: string;
+  instance: string;
+}
+
+export interface HostEntry {
+  protocol: 'ssh' | 'telnet';
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+  isJumpbox?: boolean;
+  jumpboxId?: string;
+  iapTunnel?: IapTunnelEntry;
+}
+
+export interface HostTreeNode {
+  id: string;
+  type: 'folder' | 'host';
+  name: string;
+  entry?: HostEntry;
+  children?: HostTreeNode[];
+}
+
+// ---------------------------------------------------------------------------
+// AI
+// ---------------------------------------------------------------------------
+
+export type AIAuthType = 'oauth2' | 'service_account' | 'api_key' | 'adc';
+
+export interface AIAuthStatus {
+  authenticated: boolean;
+  accountInfo?: string;
+}
+
+export interface AIModelInfo {
+  name: string;
+  displayName: string;
+}
+
+export interface AITokenUsage {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  totalTokenCount?: number;
+}
+
+export interface AIChatResponseData {
+  sessionId: string;
+  responseType: string;
+  content: string;
+  usageMetadata?: AITokenUsage;
+}
+
+export interface AIAuthResultPayload {
+  success: boolean;
+}
+
+export interface AIProviderInfo {
+  id: string;
+  displayName: string;
+  authType: AIAuthType;
+}
+
+export type CommandExecutionMode = 'ask-before-execute' | 'auto-execute-safe';
+
+export interface AskAiCommand {
+  id: string;
+  label: string;
+  promptTemplate: string;
+}
+
+export interface PersonaDefinition {
+  id: string;
+  label: string;
+  systemPrompt: string;
+  askAiCommands: AskAiCommand[];
+}

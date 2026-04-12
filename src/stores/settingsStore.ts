@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Encoding, PromptPattern, ThemeId } from '../types/appTypes';
+import type { Encoding, PromptPattern, ThemeId, CommandExecutionMode, PersonaDefinition } from '../types/appTypes';
 import { DEFAULT_THEMES } from '../themes/defaults';
 
 export const DEFAULT_PROMPT_PATTERNS: PromptPattern[] = [
@@ -52,6 +52,13 @@ export interface SettingsState {
   // Logging
   loggingEnabled: boolean;
   loggingPath: string;
+
+  // AI
+  activeAiProvider: string;
+  commandExecutionMode: CommandExecutionMode;
+  customSafeCommands: string[];
+  maxConsecutiveAutoExecutions: number;
+  aiPersonas: PersonaDefinition[];
 }
 
 export interface SettingsActions {
@@ -82,6 +89,21 @@ const DEFAULTS: SettingsState = {
   promptPatterns: DEFAULT_PROMPT_PATTERNS,
   loggingEnabled: false,
   loggingPath: '',
+  activeAiProvider: 'gemini',
+  commandExecutionMode: 'ask-before-execute',
+  customSafeCommands: [],
+  maxConsecutiveAutoExecutions: 5,
+  aiPersonas: [
+    {
+      id: 'default',
+      label: 'General Assistant',
+      systemPrompt: 'You are a helpful assistant.',
+      askAiCommands: [
+        { id: 'explain', label: 'Explain', promptTemplate: 'Please explain the following text:\n\n{selection}' },
+        { id: 'root-cause', label: 'Root Cause Analysis', promptTemplate: 'Please analyze the root cause of the following issue:\n\n{selection}' },
+      ],
+    },
+  ],
 };
 
 export const useSettingsStore = create<SettingsState & SettingsActions>()(
@@ -93,7 +115,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 4,
+      version: 5,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -107,6 +129,13 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
         if (version < 4) {
           state.loggingEnabled ??= false;
           state.loggingPath ??= '';
+        }
+        if (version < 5) {
+          state.activeAiProvider ??= DEFAULTS.activeAiProvider;
+          state.commandExecutionMode ??= DEFAULTS.commandExecutionMode;
+          state.customSafeCommands ??= DEFAULTS.customSafeCommands;
+          state.maxConsecutiveAutoExecutions ??= DEFAULTS.maxConsecutiveAutoExecutions;
+          state.aiPersonas ??= DEFAULTS.aiPersonas;
         }
         return state as SettingsState;
       },

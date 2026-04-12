@@ -1,6 +1,13 @@
 pub mod commands;
 pub mod services;
 
+use tauri::Manager;
+
+use commands::ai::{
+    ai_auth_auto, ai_auth_logout, ai_auth_start, ai_auth_status, ai_chat_cancel, ai_chat_clear,
+    ai_chat_send, ai_get_auth_type, ai_list_locations, ai_list_models, ai_list_providers,
+    ai_set_location, ai_set_provider, select_service_account_key_file, AIServiceState,
+};
 use commands::dpapi::{
     dpapi_decrypt, dpapi_decrypt_batch, dpapi_encrypt, dpapi_encrypt_batch, dpapi_verify_user,
 };
@@ -30,6 +37,11 @@ use commands::text_editor::{
 };
 use commands::themes::{delete_custom_theme, get_themes, save_custom_theme};
 use commands::utilities::{log_debug, select_folder, select_image, update_logging};
+use services::ai::providers::anthropic::AnthropicProvider;
+use services::ai::providers::gemini::GeminiProvider;
+use services::ai::providers::openai::OpenAIProvider;
+use services::ai::providers::vertexai::VertexAIProvider;
+use services::ai::{AIProviderRegistry, AIService};
 use services::log_manager::LogManager;
 use services::ping_monitor::PingMonitorState;
 
@@ -54,6 +66,24 @@ pub fn run() {
         .manage(ImportPathState::new())
         .manage(ApprovedEditorPaths::new())
         .manage(PingMonitorState::new())
+        .setup(|app| {
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
+                .expect("Failed to resolve app data directory");
+
+            let mut registry = AIProviderRegistry::new();
+            registry.register(Box::new(OpenAIProvider::new(app_data_dir.clone())));
+            registry.register(Box::new(AnthropicProvider::new(app_data_dir.clone())));
+            registry.register(Box::new(GeminiProvider::new(app_data_dir.clone())));
+            registry.register(Box::new(VertexAIProvider::new(app_data_dir)));
+
+            let service = AIService::new(registry, "openai");
+            app.manage(AIServiceState {
+                service: tokio::sync::Mutex::new(service),
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             // Session management
             connect_session,
@@ -117,6 +147,21 @@ pub fn run() {
             update_logging,
             select_image,
             select_folder,
+            // AI
+            ai_auth_start,
+            ai_auth_auto,
+            ai_auth_status,
+            ai_auth_logout,
+            ai_chat_send,
+            ai_chat_cancel,
+            ai_chat_clear,
+            ai_list_models,
+            ai_list_locations,
+            ai_set_provider,
+            ai_set_location,
+            ai_list_providers,
+            ai_get_auth_type,
+            select_service_account_key_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -105,18 +105,18 @@ vi.mock('./components/PingMonitorPane/PingMonitorPane', () => ({
   PingMonitorPane: () => <div data-testid="ping-monitor" />,
 }));
 
-vi.mock('./components/ConnectForm/ConnectForm', () => ({
-  ConnectForm: ({ open, onCancel, onSubmit }: {
+vi.mock('./components/SessionDialog/SessionDialog', () => ({
+  SessionDialog: ({ open, onClose, onConnect }: {
     open: boolean;
-    onCancel: () => void;
-    onSubmit: (payload: unknown) => void;
+    onClose: () => void;
+    onConnect: (payload: unknown) => void;
   }) =>
     open ? (
       <div data-testid="connect-form">
-        <button data-testid="cancel-connect" onClick={onCancel}>Cancel</button>
+        <button data-testid="cancel-connect" onClick={onClose}>Cancel</button>
         <button
           data-testid="submit-connect"
-          onClick={() => onSubmit({ protocol: 'ssh', config: {} })}
+          onClick={() => onConnect({ protocol: 'ssh', config: {} })}
         >
           Connect
         </button>

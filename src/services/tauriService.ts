@@ -36,6 +36,12 @@ import type {
   GcloudAuthStatus,
   GcpProject,
   GceInstance,
+  AIAuthStatus,
+  AIModelInfo,
+  AIProviderInfo,
+  AIAuthType,
+  AIChatResponseData,
+  AIAuthResultPayload,
 } from '../types/appTypes';
 
 type AnyConfig =
@@ -46,6 +52,13 @@ type AnyConfig =
   | LocalConnectionConfig;
 
 const CLIPBOARD_MAX_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Check if a credential string is encrypted (DPAPI or SAFE format).
+ */
+export function isEncrypted(value: string): boolean {
+  return value.startsWith('[DPAPI]') || value.startsWith('[SAFE]');
+}
 
 export const tauriService = {
   // -----------------------------------------------------------------------
@@ -381,5 +394,82 @@ export const tauriService = {
     return listen<SshHostKeyPromptPayload>('ssh-host-key-prompt', (e) =>
       cb(e.payload)
     );
+  },
+
+  // -----------------------------------------------------------------------
+  // AI
+  // -----------------------------------------------------------------------
+
+  async aiAuthStart(credentials: Record<string, unknown>): Promise<boolean> {
+    return invoke<boolean>('ai_auth_start', { credentials });
+  },
+
+  async aiAuthAuto(credentials: Record<string, unknown>): Promise<boolean> {
+    return invoke<boolean>('ai_auth_auto', { credentials });
+  },
+
+  async aiAuthStatus(): Promise<AIAuthStatus> {
+    return invoke<AIAuthStatus>('ai_auth_status');
+  },
+
+  async aiAuthLogout(): Promise<void> {
+    await invoke('ai_auth_logout');
+  },
+
+  async aiChatSend(
+    sessionId: string,
+    message: string,
+    model: string,
+    systemInstruction?: string,
+  ): Promise<void> {
+    await invoke('ai_chat_send', { sessionId, message, model, systemInstruction: systemInstruction ?? null });
+  },
+
+  async aiChatCancel(sessionId: string): Promise<void> {
+    await invoke('ai_chat_cancel', { sessionId });
+  },
+
+  async aiChatClear(sessionId: string): Promise<void> {
+    await invoke('ai_chat_clear', { sessionId });
+  },
+
+  async aiListModels(): Promise<AIModelInfo[]> {
+    return invoke<AIModelInfo[]>('ai_list_models');
+  },
+
+  async aiListLocations(): Promise<string[]> {
+    return invoke<string[]>('ai_list_locations');
+  },
+
+  async aiSetProvider(providerId: string): Promise<void> {
+    await invoke('ai_set_provider', { providerId });
+  },
+
+  async aiSetLocation(location: string): Promise<void> {
+    await invoke('ai_set_location', { location });
+  },
+
+  async aiListProviders(): Promise<AIProviderInfo[]> {
+    return invoke<AIProviderInfo[]>('ai_list_providers');
+  },
+
+  async aiGetAuthType(): Promise<AIAuthType> {
+    return invoke<AIAuthType>('ai_get_auth_type');
+  },
+
+  async selectServiceAccountKeyFile(): Promise<string | null> {
+    return invoke<string | null>('select_service_account_key_file');
+  },
+
+  // -----------------------------------------------------------------------
+  // AI Event listeners
+  // -----------------------------------------------------------------------
+
+  onAiChatResponse(cb: (p: AIChatResponseData) => void): Promise<UnlistenFn> {
+    return listen<AIChatResponseData>('ai-chat-response', (e) => cb(e.payload));
+  },
+
+  onAiAuthResult(cb: (p: AIAuthResultPayload) => void): Promise<UnlistenFn> {
+    return listen<AIAuthResultPayload>('ai-auth-result', (e) => cb(e.payload));
   },
 };

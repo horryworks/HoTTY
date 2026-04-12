@@ -17,7 +17,7 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
 }));
 vi.mock('@tauri-apps/plugin-shell', () => ({ open: vi.fn() }));
 
-import { tauriService } from './tauriService';
+import { tauriService, isEncrypted } from './tauriService';
 
 describe('tauriService clipboard wrappers', () => {
   beforeEach(() => {
@@ -495,6 +495,154 @@ describe('tauriService ping monitor commands', () => {
       sessionId: 's1',
       intervalMs: 10000,
     });
+  });
+});
+
+describe('isEncrypted', () => {
+  it('returns true for DPAPI-prefixed strings', () => {
+    expect(isEncrypted('[DPAPI]abc123')).toBe(true);
+  });
+
+  it('returns true for SAFE-prefixed strings', () => {
+    expect(isEncrypted('[SAFE]xyz789')).toBe(true);
+  });
+
+  it('returns false for plaintext strings', () => {
+    expect(isEncrypted('plaintext')).toBe(false);
+  });
+
+  it('returns false for empty string', () => {
+    expect(isEncrypted('')).toBe(false);
+  });
+
+  it('returns false for partial prefix', () => {
+    expect(isEncrypted('[DPAP')).toBe(false);
+    expect(isEncrypted('[SAF')).toBe(false);
+  });
+});
+
+describe('tauriService AI commands', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset();
+  });
+
+  it('aiAuthStart invokes with credentials', async () => {
+    mockInvoke.mockResolvedValue(true);
+    const result = await tauriService.aiAuthStart({ apiKey: 'sk-test' });
+    expect(mockInvoke).toHaveBeenCalledWith('ai_auth_start', { credentials: { apiKey: 'sk-test' } });
+    expect(result).toBe(true);
+  });
+
+  it('aiAuthAuto invokes with credentials', async () => {
+    mockInvoke.mockResolvedValue(false);
+    const result = await tauriService.aiAuthAuto({});
+    expect(mockInvoke).toHaveBeenCalledWith('ai_auth_auto', { credentials: {} });
+    expect(result).toBe(false);
+  });
+
+  it('aiAuthStatus invokes the correct command', async () => {
+    mockInvoke.mockResolvedValue({ authenticated: true });
+    const result = await tauriService.aiAuthStatus();
+    expect(mockInvoke).toHaveBeenCalledWith('ai_auth_status');
+    expect(result).toEqual({ authenticated: true });
+  });
+
+  it('aiAuthLogout invokes the correct command', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await tauriService.aiAuthLogout();
+    expect(mockInvoke).toHaveBeenCalledWith('ai_auth_logout');
+  });
+
+  it('aiChatSend invokes with all parameters', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await tauriService.aiChatSend('s1', 'hello', 'gpt-4o', 'Be helpful');
+    expect(mockInvoke).toHaveBeenCalledWith('ai_chat_send', {
+      sessionId: 's1',
+      message: 'hello',
+      model: 'gpt-4o',
+      systemInstruction: 'Be helpful',
+    });
+  });
+
+  it('aiChatSend sends null for missing systemInstruction', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await tauriService.aiChatSend('s1', 'hello', 'gpt-4o');
+    expect(mockInvoke).toHaveBeenCalledWith('ai_chat_send', {
+      sessionId: 's1',
+      message: 'hello',
+      model: 'gpt-4o',
+      systemInstruction: null,
+    });
+  });
+
+  it('aiChatCancel invokes with sessionId', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await tauriService.aiChatCancel('s1');
+    expect(mockInvoke).toHaveBeenCalledWith('ai_chat_cancel', { sessionId: 's1' });
+  });
+
+  it('aiChatClear invokes with sessionId', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await tauriService.aiChatClear('s1');
+    expect(mockInvoke).toHaveBeenCalledWith('ai_chat_clear', { sessionId: 's1' });
+  });
+
+  it('aiListModels invokes the correct command', async () => {
+    const models = [{ name: 'gpt-4o', displayName: 'GPT-4o' }];
+    mockInvoke.mockResolvedValue(models);
+    const result = await tauriService.aiListModels();
+    expect(mockInvoke).toHaveBeenCalledWith('ai_list_models');
+    expect(result).toEqual(models);
+  });
+
+  it('aiListLocations invokes the correct command', async () => {
+    mockInvoke.mockResolvedValue(['us-central1', 'europe-west1']);
+    const result = await tauriService.aiListLocations();
+    expect(mockInvoke).toHaveBeenCalledWith('ai_list_locations');
+    expect(result).toEqual(['us-central1', 'europe-west1']);
+  });
+
+  it('aiSetProvider invokes with providerId', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await tauriService.aiSetProvider('anthropic');
+    expect(mockInvoke).toHaveBeenCalledWith('ai_set_provider', { providerId: 'anthropic' });
+  });
+
+  it('aiSetLocation invokes with location', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await tauriService.aiSetLocation('us-east1');
+    expect(mockInvoke).toHaveBeenCalledWith('ai_set_location', { location: 'us-east1' });
+  });
+
+  it('aiListProviders invokes the correct command', async () => {
+    const providers = [
+      { id: 'openai', displayName: 'OpenAI', authType: 'api_key' },
+      { id: 'anthropic', displayName: 'Anthropic (Claude)', authType: 'api_key' },
+    ];
+    mockInvoke.mockResolvedValue(providers);
+    const result = await tauriService.aiListProviders();
+    expect(mockInvoke).toHaveBeenCalledWith('ai_list_providers');
+    expect(result).toEqual(providers);
+  });
+
+  it('aiGetAuthType invokes the correct command', async () => {
+    mockInvoke.mockResolvedValue('api_key');
+    const result = await tauriService.aiGetAuthType();
+    expect(mockInvoke).toHaveBeenCalledWith('ai_get_auth_type');
+    expect(result).toBe('api_key');
+  });
+
+  it('selectServiceAccountKeyFile invokes the correct command', async () => {
+    mockInvoke.mockResolvedValue('/path/to/key.json');
+    const result = await tauriService.selectServiceAccountKeyFile();
+    expect(mockInvoke).toHaveBeenCalledWith('select_service_account_key_file');
+    expect(result).toBe('/path/to/key.json');
+  });
+
+  it('selectServiceAccountKeyFile returns null when cancelled', async () => {
+    mockInvoke.mockResolvedValue(null);
+    const result = await tauriService.selectServiceAccountKeyFile();
+    expect(result).toBeNull();
   });
 });
 
