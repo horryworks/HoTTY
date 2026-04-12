@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Mutex};
@@ -330,6 +330,7 @@ impl SessionService for TelnetSession {
         let app_r = app.clone();
         let sid = session_id.clone();
         let writer_tx_for_login = tx.clone();
+        let log_mgr: super::log_manager::LogManager = app.state::<super::log_manager::LogManager>().inner().clone();
 
         let reader_join = tokio::spawn(async move {
             log::info!("telnet reader task started for {sid}");
@@ -424,8 +425,10 @@ impl SessionService for TelnetSession {
                 }
 
                 log::debug!("telnet {sid}: emitting {} chars", text.chars().count());
-                emit_session_data(&app_r, &sid, text);
+                emit_session_data(&app_r, &sid, text.clone());
+                log_mgr.write(&sid, &text).await;
             }
+            log_mgr.stop_logging(&sid).await;
             log::info!("telnet reader task ended for {sid}");
         });
         self.join.push(reader_join);
@@ -479,9 +482,22 @@ impl SessionService for TelnetSession {
             let _ = tx.send(WriterCmd::Close).await;
         }
         for h in self.join.drain(..) {
-            h.abort();
+            if tokio::time::timeout(std::time::Duration::from_millis(200), h).await.is_err() {
+                log::debug!("Telnet task did not finish in time, aborting");
+            }
         }
         Ok(())
+    }
+}
+
+impl Drop for TelnetSession {
+    fn drop(&mut self) {
+        if self.writer_tx.is_some() {
+            log::warn!("TelnetSession dropped without calling disconnect()");
+            for h in self.join.drain(..) {
+                h.abort();
+            }
+        }
     }
 }
 

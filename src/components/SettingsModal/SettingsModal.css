@@ -17,7 +17,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  width: 460px;
+  width: 520px;
   max-width: 90vw;
   max-height: 90vh;
   color: var(--text-primary);
@@ -116,5 +116,203 @@
   margin-bottom: 10px;
   cursor: pointer;
   font-size: calc(var(--font-size-base) - 1px);
+}
+
+.settings-logging-path-row {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-logging-path-row input[type='text'] {
+  flex: 1;
+  padding: 5px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.settings-logging-path-row input[type='text']:focus {
+  border-color: var(--accent-color);
+}
+
+.settings-logging-path-row button {
+  padding: 5px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  white-space: nowrap;
+}
+
+.settings-logging-path-row button:hover:not(:disabled) {
+  background: var(--btn-secondary-hover-bg);
+}
+
+.settings-separator {
+  border-top: 1px solid var(--border-color);
+  margin: 10px 0;
+}
+
+/* ── Section titles ── */
+
+.settings-section-title {
+  margin: 15px 0 12px 0;
+  padding-top: 15px;
+  border-top: 1px solid var(--border-color);
+  font-size: calc(var(--font-size-base) + 2px);
+  color: var(--text-primary);
+}
+
+.settings-help-text {
+  display: block;
+  font-size: calc(var(--font-size-base) - 2px);
+  color: var(--text-tertiary);
+  font-weight: normal;
+  margin-top: 2px;
+}
+
+.settings-button {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+}
+
+.settings-button:hover:not(:disabled) {
+  background: var(--btn-secondary-hover-bg);
+}
+
+/* ── Font family row ── */
+
+.settings-font-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-font-row select {
+  flex: 1;
+  padding: 5px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.settings-font-row select:focus {
+  border-color: var(--accent-color);
+}
+
+.settings-font-row select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-font-row button {
+  padding: 5px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  white-space: nowrap;
+}
+
+.settings-font-row button:hover:not(:disabled) {
+  background: var(--btn-secondary-hover-bg);
+}
+
+.settings-font-row button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── SSH Algorithms ── */
+
+.settings-algorithms-details {
+  margin-top: 10px;
+  padding-top: 15px;
+  border-top: 1px solid var(--border-color);
+}
+
+.settings-algorithms-summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  font-size: var(--font-size-base);
+}
+
+.settings-algorithms-container {
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 10px;
+}
+
+.settings-algorithms-category {
+  margin-bottom: 15px;
+}
+
+.settings-algorithms-category-title {
+  margin: 0 0 8px 0;
+  color: var(--text-secondary);
+  font-size: calc(var(--font-size-base) - 1px);
+  text-transform: capitalize;
+}
+
+.settings-algorithms-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 20px;
+}
+
+.settings-algorithms-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: center;
+  font-weight: normal;
+  cursor: pointer;
+  font-size: calc(var(--font-size-base) - 1px);
+}
+
+.settings-algorithms-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.about-content {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.about-link {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+.about-link:hover {
+  text-decoration: underline;
 }
 

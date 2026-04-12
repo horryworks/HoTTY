@@ -1,0 +1,117 @@
+import { useSettingsStore } from '../../stores/settingsStore';
+import { tauriService } from '../../services/tauriService';
+
+export function GeneralTab() {
+  const settings = useSettingsStore();
+  const update = settings.update;
+
+  return (
+    <>
+      {/* ── Storage ── */}
+      <h3 className="settings-section-title">Storage</h3>
+      <label className="settings-checkbox">
+        <input
+          type="checkbox"
+          checked={settings.loggingEnabled}
+          onChange={(e) => update('loggingEnabled', e.target.checked)}
+        />
+        Enable Logging
+      </label>
+      {settings.loggingEnabled && (
+        <div className="settings-group">
+          <label>
+            Log Folder Path
+            <span className="settings-help-text">
+              Logs are saved as YYYYMMDDHHMMSS-(Protocol)-(IP).txt
+            </span>
+          </label>
+          <div className="settings-logging-path-row">
+            <input
+              type="text"
+              value={settings.loggingPath}
+              onChange={(e) => update('loggingPath', e.target.value)}
+              placeholder="Select a folder or type path..."
+            />
+            <button
+              type="button"
+              onClick={async () => {
+                const path = await tauriService.selectFolder();
+                if (path) update('loggingPath', path);
+              }}
+            >
+              Browse...
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="settings-group">
+        <label>
+          Terminal Scrollback Buffer
+          <span className="settings-help-text">
+            Max lines to keep in memory per terminal (Default: 10000).
+          </span>
+        </label>
+        <input
+          type="number"
+          min={100}
+          max={100000}
+          value={settings.scrollback}
+          onChange={(e) => update('scrollback', parseInt(e.target.value, 10) || 10000)}
+        />
+      </div>
+      <label className="settings-checkbox">
+        <input
+          type="checkbox"
+          checked={settings.lineWrapEnabled}
+          onChange={(e) => update('lineWrapEnabled', e.target.checked)}
+        />
+        Enable line wrap
+      </label>
+
+      {/* ── Input ── */}
+      <h3 className="settings-section-title">Input</h3>
+      <label className="settings-checkbox">
+        <input
+          type="checkbox"
+          checked={settings.backspaceSendsDel}
+          onChange={(e) => update('backspaceSendsDel', e.target.checked)}
+        />
+        Backspace sends DEL (0x7F)
+        <span className="settings-help-text">
+          If disabled, Backspace sends 0x08 (BS). Enable if your server expects 0x7F.
+        </span>
+      </label>
+      <label className="settings-checkbox">
+        <input
+          type="checkbox"
+          checked={settings.rightClickPaste}
+          onChange={(e) => update('rightClickPaste', e.target.checked)}
+        />
+        Right-click to paste
+        <span className="settings-help-text">
+          Right-clicking the terminal shows the paste confirmation dialog.
+        </span>
+      </label>
+
+      {/* ── Diagnostics ── */}
+      <h3 className="settings-section-title">Diagnostics</h3>
+      <div className="settings-group">
+        <label>
+          Debug Log
+          <span className="settings-help-text">
+            Share the latest log file when reporting a bug.
+          </span>
+        </label>
+        <div>
+          <button
+            type="button"
+            className="settings-button"
+            onClick={() => tauriService.openDebugLogFolder()}
+          >
+            Open Debug Log Folder
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}

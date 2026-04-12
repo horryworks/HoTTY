@@ -3,6 +3,18 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { SettingsModal } from './SettingsModal';
 import { useSettingsStore } from '../../stores/settingsStore';
 
+vi.mock('../../services/tauriService', () => ({
+  tauriService: {
+    getAppVersion: vi.fn().mockResolvedValue('0.1.1'),
+    openExternal: vi.fn().mockResolvedValue(undefined),
+    selectFolder: vi.fn().mockResolvedValue(null),
+    openDebugLogFolder: vi.fn().mockResolvedValue(undefined),
+    listSystemFonts: vi.fn().mockResolvedValue([]),
+    getSshAlgorithms: vi.fn().mockResolvedValue({}),
+    saveSshAlgorithms: vi.fn().mockResolvedValue(true),
+  },
+}));
+
 describe('SettingsModal', () => {
   beforeEach(() => {
     useSettingsStore.getState().reset();
@@ -13,30 +25,37 @@ describe('SettingsModal', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('shows the Appearance tab by default', () => {
+  it('shows the General tab by default', () => {
     render(<SettingsModal open onClose={() => {}} />);
+    expect(screen.getByText('Storage')).toBeTruthy();
+    expect(screen.getByText('Input')).toBeTruthy();
+    expect(screen.getByText('Diagnostics')).toBeTruthy();
+  });
+
+  it('switches to the Appearance tab', () => {
+    render(<SettingsModal open onClose={() => {}} />);
+    fireEvent.click(screen.getByText('Appearance'));
     expect(screen.getByText('Font family')).toBeTruthy();
   });
 
-  it('switches to the Terminal tab and edits scrollback', () => {
+  it('switches to the Protocols tab', () => {
     render(<SettingsModal open onClose={() => {}} />);
-    fireEvent.click(screen.getByText('Terminal'));
-    const scrollbackInput = screen
-      .getByText('Scrollback (lines)')
-      .parentElement!.querySelector('input') as HTMLInputElement;
-    fireEvent.change(scrollbackInput, { target: { value: '5000' } });
-    expect(useSettingsStore.getState().scrollback).toBe(5000);
+    fireEvent.click(screen.getByText('Protocols'));
+    expect(screen.getByText('SSH KeepAlive')).toBeTruthy();
+    expect(screen.getByText('Telnet KeepAlive')).toBeTruthy();
   });
 
-  it('switches to the Connection tab and toggles keepalive', () => {
+  it('switches to the Features tab', () => {
     render(<SettingsModal open onClose={() => {}} />);
-    fireEvent.click(screen.getByText('Connection'));
-    const checkbox = screen
-      .getByText(/SSH keep-alive enabled/)
-      .parentElement!.querySelector('input[type="checkbox"]') as HTMLInputElement;
-    const before = useSettingsStore.getState().sshKeepAliveEnabled;
-    fireEvent.click(checkbox);
-    expect(useSettingsStore.getState().sshKeepAliveEnabled).toBe(!before);
+    fireEvent.click(screen.getByText('Features'));
+    expect(screen.getByText('AI Chat')).toBeTruthy();
+    expect(screen.getByText('Log Viewer')).toBeTruthy();
+  });
+
+  it('switches to the About tab and renders app name', () => {
+    render(<SettingsModal open onClose={() => {}} />);
+    fireEvent.click(screen.getByText('About'));
+    expect(screen.getByText('HoTTY')).toBeTruthy();
   });
 
   it('clicking the overlay triggers onClose; clicking the modal body does not', () => {
@@ -50,5 +69,14 @@ describe('SettingsModal', () => {
 
     fireEvent.click(overlay);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders all 5 tab buttons', () => {
+    render(<SettingsModal open onClose={() => {}} />);
+    expect(screen.getByText('General')).toBeTruthy();
+    expect(screen.getByText('Appearance')).toBeTruthy();
+    expect(screen.getByText('Protocols')).toBeTruthy();
+    expect(screen.getByText('Features')).toBeTruthy();
+    expect(screen.getByText('About')).toBeTruthy();
   });
 });

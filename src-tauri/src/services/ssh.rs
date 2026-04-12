@@ -298,6 +298,17 @@ impl SessionService for SshSession {
 
         try_authenticate(&mut handle, &self.config).await?;
 
+        // Zeroize credentials after successful authentication
+        use zeroize::Zeroize;
+        if let Some(ref mut pw) = self.config.password {
+            pw.zeroize();
+        }
+        self.config.password = None;
+        if let Some(ref mut pp) = self.config.private_key_passphrase {
+            pp.zeroize();
+        }
+        self.config.private_key_passphrase = None;
+
         let channel = handle
             .channel_open_session()
             .await
@@ -350,24 +361,31 @@ impl SessionService for SshSession {
         let app_r = app.clone();
         let sid_r = session_id.clone();
         let read_half_r = read_half.clone();
+        let log_mgr: super::log_manager::LogManager = app.state::<super::log_manager::LogManager>().inner().clone();
         let reader_join = tokio::spawn(async move {
             loop {
                 let mut rd = read_half_r.lock().await;
                 match rd.wait().await {
                     Some(ChannelMsg::Data { data }) => {
                         let (decoded, _, _) = encoding.decode(&data);
-                        emit_session_data(&app_r, &sid_r, decoded.into_owned());
+                        let text = decoded.into_owned();
+                        emit_session_data(&app_r, &sid_r, text.clone());
+                        log_mgr.write(&sid_r, &text).await;
                     }
                     Some(ChannelMsg::ExtendedData { data, .. }) => {
                         let (decoded, _, _) = encoding.decode(&data);
-                        emit_session_data(&app_r, &sid_r, decoded.into_owned());
+                        let text = decoded.into_owned();
+                        emit_session_data(&app_r, &sid_r, text.clone());
+                        log_mgr.write(&sid_r, &text).await;
                     }
                     Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) => {
+                        log_mgr.stop_logging(&sid_r).await;
                         emit_session_status(&app_r, &sid_r, "disconnected");
                         break;
                     }
                     Some(_) => {}
                     None => {
+                        log_mgr.stop_logging(&sid_r).await;
                         emit_session_status(&app_r, &sid_r, "disconnected");
                         break;
                     }
@@ -434,8 +452,22 @@ impl SessionService for SshSession {
                 .await;
         }
         for h in self.join.drain(..) {
-            h.abort();
+            // Give each task a brief window to finish before forcing abort
+            if tokio::time::timeout(std::time::Duration::from_millis(200), h).await.is_err() {
+                log::debug!("SSH task did not finish in time, aborting");
+            }
         }
         Ok(())
+    }
+}
+
+impl Drop for SshSession {
+    fn drop(&mut self) {
+        if self.writer_tx.is_some() {
+            log::warn!("SshSession dropped without calling disconnect()");
+            for h in self.join.drain(..) {
+                h.abort();
+            }
+        }
     }
 }

@@ -17,3 +17,11 @@
 .terminal-view .xterm-viewport {
   background-color: transparent !important;
 }
+
+.terminal-view .xterm-decoration-container {
+  pointer-events: none;
+}
+
+.terminal-view .xterm-decoration-container > div {
+  pointer-events: all;
+}

@@ -10,6 +10,8 @@ export function SshHostKeyModal() {
     let unlisten: (() => void) | undefined;
     tauriService.onSshHostKeyPrompt((p) => setPrompt(p)).then((fn) => {
       unlisten = fn;
+    }).catch((e) => {
+      console.error('Failed to listen for SSH host key prompts:', e);
     });
     return () => {
       unlisten?.();

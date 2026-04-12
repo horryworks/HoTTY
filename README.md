@@ -1,73 +1,87 @@
-# React + TypeScript + Vite
+# HoTTY
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**AI-Integrated Advanced Terminal Emulator** built with Rust (Tauri v2) + React + TypeScript.
 
-Currently, two official plugins are available:
+HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telnet, Serial, WSL, and local shell (cmd / PowerShell / Git Bash) connections. It features a multi-pane layout, integrated utility tools, theming, and session logging.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+> This is a ground-up rewrite of [HoTTY (Electron)](https://github.com/horryworks/HoTTY) using Tauri v2 for significantly improved memory efficiency and performance.
 
-## React Compiler
+## Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Multi-Protocol Connections
+- **SSH** with host key verification, private key authentication, and configurable algorithms
+- **Telnet** with encoding support (UTF-8, Shift_JIS, EUC-JP)
+- **Serial** with configurable baud rate, data bits, parity, stop bits, and flow control
+- **WSL** with distribution selection
+- **Local shells** — cmd, PowerShell, and Git Bash
 
-## Expanding the ESLint configuration
+### Multi-Pane Layout
+- Flexible grid layouts: 1x1, 1x2, 2x1, 2x2, 2x3, 3x2
+- Collapsible sidebars on all four edges (left, right, top, bottom)
+- Drag-and-drop tab reordering and pane assignment
+- Tab bar with session and feature pane management
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Integrated Utility Tools
+- **Log Viewer** — browse and read session log files
+- **Text Editor** — open, edit, and save files with line ending support
+- **File Explorer** — browse directories and drives, open files in the editor
+- **Ping Monitor** — monitor multiple targets with configurable intervals
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### Theming & Appearance
+- Built-in themes: Dark, Medium, Light
+- Custom theme support with full CSS variable control
+- Configurable font family and font size
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Security & Credentials
+- Windows DPAPI encryption for stored credentials
+- SSH host key verification with fingerprint display
+- Paste confirmation modal for clipboard content review
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Session Management
+- Per-session encoding selection
+- Session logging to file
+- Connection host tree export/import (encrypted .htree format)
+
+### Additional Features
+- GCE IAP tunnel support for Google Cloud instances
+- SSH algorithm configuration (KEX, cipher, MAC, host key)
+- System font detection
+- Context menu support
+- Debug log management
+
+## Installation
+
+Download the latest installer from the [Releases](https://github.com/horryworks/HoTTY-Rust-Tauri/releases) page.
+
+## Development
+
+### Prerequisites
+- [Node.js](https://nodejs.org/) (LTS)
+- [Rust](https://www.rust-lang.org/tools/install) (1.77.2+)
+- [Tauri CLI](https://v2.tauri.app/start/prerequisites/)
+
+### Commands
+
+```bash
+npm install              # Install frontend dependencies
+npm run tauri:dev        # Start dev server + Tauri window
+npm run tauri:build      # Production build with installer
+npm run test             # Run frontend tests (Vitest)
+npm run lint             # Run ESLint
+cd src-tauri && cargo test   # Run backend tests
+cd src-tauri && cargo clippy # Run Clippy lints
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Tech Stack
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React, TypeScript, Vite |
+| Backend | Rust, Tauri v2 |
+| Terminal | @xterm/xterm |
+| State | Zustand (with persist middleware) |
+| Testing | Vitest (frontend), cargo test (backend) |
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## License
+
+GPL-3.0-or-later

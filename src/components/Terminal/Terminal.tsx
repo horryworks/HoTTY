@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Terminal } from '@xterm/xterm';
 import type { SessionRecord } from '../../hooks/useSessionManager';
+import { usePromptHighlight } from '../../hooks/usePromptHighlight';
 import { tauriService } from '../../services/tauriService';
 import { useSettingsStore } from '../../stores/settingsStore';
 import '@xterm/xterm/css/xterm.css';
@@ -32,6 +33,11 @@ export function TerminalView({ session, active, onPasteRequest }: TerminalViewPr
   const terminalForeground = useSettingsStore((s) => s.terminalForeground);
   const terminalBackground = useSettingsStore((s) => s.terminalBackground);
   const terminalBackgroundInactive = useSettingsStore((s) => s.terminalBackgroundInactive);
+  const enablePromptHighlight = useSettingsStore((s) => s.enablePromptHighlight);
+  const promptHighlightColor = useSettingsStore((s) => s.promptHighlightColor);
+  const promptPatterns = useSettingsStore((s) => s.promptPatterns);
+
+  usePromptHighlight(session.term, enablePromptHighlight, promptHighlightColor, promptPatterns);
 
   useEffect(() => {
     const effectiveBg = active ? terminalBackground : terminalBackgroundInactive;

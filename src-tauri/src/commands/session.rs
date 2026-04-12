@@ -1,15 +1,53 @@
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 
 use serde_json::Value;
 use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 
+use crate::services::local::{LocalConfig, LocalSession};
+use crate::services::log_manager::LogManager;
+use crate::services::serial::{SerialConfig, SerialSession};
 use crate::services::session_service::{emit_session_error, SessionError, SessionService};
 use crate::services::ssh::{resolve_host_key_prompt, HostKeyDecision, SshConfig, SshSession};
 use crate::services::telnet::{TelnetConfig, TelnetSession};
+use crate::services::wsl::{WslConfig, WslSession};
 
-pub type SessionMap = Arc<Mutex<HashMap<String, Box<dyn SessionService>>>>;
+/// Protocol identifier for session metadata.
+#[derive(Clone, Copy, Debug)]
+pub enum ProtocolId {
+    Ssh,
+    Telnet,
+    Serial,
+    Wsl,
+    Cmd,
+    PowerShell,
+    GitBash,
+}
+
+impl ProtocolId {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ssh => "ssh",
+            Self::Telnet => "telnet",
+            Self::Serial => "serial",
+            Self::Wsl => "wsl",
+            Self::Cmd => "cmd",
+            Self::PowerShell => "powershell",
+            Self::GitBash => "git-bash",
+        }
+    }
+}
+
+/// Metadata stored alongside each session for logging and display purposes.
+#[derive(Clone)]
+pub struct SessionMeta {
+    pub protocol: ProtocolId,
+    pub host: String,
+}
+
+pub type SessionMap = Arc<Mutex<HashMap<String, (Box<dyn SessionService>, SessionMeta)>>>;
 
 pub struct SessionState {
     pub sessions: SessionMap,
@@ -30,12 +68,16 @@ impl Default for SessionState {
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn connect_session(
     app: AppHandle,
     state: State<'_, SessionState>,
+    log_manager: State<'_, LogManager>,
     session_id: String,
     protocol: String,
     config: Value,
+    logging_enabled: bool,
+    logging_path: String,
 ) -> Result<(), String> {
     log::info!(
         "connect_session called: session_id={session_id} protocol={protocol}"
@@ -49,14 +91,15 @@ pub async fn connect_session(
         }
     }
 
-    let mut service: Box<dyn SessionService> = match protocol.as_str() {
+    let (mut service, meta): (Box<dyn SessionService>, SessionMeta) = match protocol.as_str() {
         "telnet" => {
             let cfg: TelnetConfig = serde_json::from_value(config).map_err(|e| {
                 log::error!("invalid telnet config: {e}");
                 format!("invalid telnet config: {e}")
             })?;
             log::info!("building TelnetSession: host={} port={}", cfg.host, cfg.port);
-            Box::new(TelnetSession::new(cfg))
+            let meta = SessionMeta { protocol: ProtocolId::Telnet, host: cfg.host.clone() };
+            (Box::new(TelnetSession::new(cfg)), meta)
         }
         "ssh" => {
             let cfg: SshConfig = serde_json::from_value(config).map_err(|e| {
@@ -64,7 +107,57 @@ pub async fn connect_session(
                 format!("invalid ssh config: {e}")
             })?;
             log::info!("building SshSession: host={} port={}", cfg.host, cfg.port);
-            Box::new(SshSession::new(cfg))
+            let meta = SessionMeta { protocol: ProtocolId::Ssh, host: cfg.host.clone() };
+            (Box::new(SshSession::new(cfg)), meta)
+        }
+        "serial" => {
+            let cfg: SerialConfig = serde_json::from_value(config).map_err(|e| {
+                log::error!("invalid serial config: {e}");
+                format!("invalid serial config: {e}")
+            })?;
+            log::info!("building SerialSession: path={}", cfg.path);
+            let meta = SessionMeta { protocol: ProtocolId::Serial, host: cfg.path.clone() };
+            (Box::new(SerialSession::new(cfg)), meta)
+        }
+        "wsl" => {
+            let cfg: WslConfig = serde_json::from_value(config).map_err(|e| {
+                log::error!("invalid wsl config: {e}");
+                format!("invalid wsl config: {e}")
+            })?;
+            let dist = cfg.distribution.clone().unwrap_or_default();
+            log::info!(
+                "building WslSession: distribution={}",
+                if dist.is_empty() { "(default)" } else { &dist }
+            );
+            let meta = SessionMeta { protocol: ProtocolId::Wsl, host: if dist.is_empty() { "wsl".to_string() } else { dist } };
+            (Box::new(WslSession::new(cfg)), meta)
+        }
+        "cmd" => {
+            let cfg: LocalConfig = serde_json::from_value(config).map_err(|e| {
+                log::error!("invalid local config: {e}");
+                format!("invalid local config: {e}")
+            })?;
+            log::info!("building LocalSession: type={}", cfg.shell_type);
+            let meta = SessionMeta { protocol: ProtocolId::Cmd, host: cfg.shell_type.clone() };
+            (Box::new(LocalSession::new(cfg)), meta)
+        }
+        "powershell" => {
+            let cfg: LocalConfig = serde_json::from_value(config).map_err(|e| {
+                log::error!("invalid local config: {e}");
+                format!("invalid local config: {e}")
+            })?;
+            log::info!("building LocalSession: type={}", cfg.shell_type);
+            let meta = SessionMeta { protocol: ProtocolId::PowerShell, host: cfg.shell_type.clone() };
+            (Box::new(LocalSession::new(cfg)), meta)
+        }
+        "git-bash" => {
+            let cfg: LocalConfig = serde_json::from_value(config).map_err(|e| {
+                log::error!("invalid local config: {e}");
+                format!("invalid local config: {e}")
+            })?;
+            log::info!("building LocalSession: type={}", cfg.shell_type);
+            let meta = SessionMeta { protocol: ProtocolId::GitBash, host: cfg.shell_type.clone() };
+            (Box::new(LocalSession::new(cfg)), meta)
         }
         other => return Err(format!("unsupported protocol: {other}")),
     };
@@ -75,20 +168,32 @@ pub async fn connect_session(
         return Err(e.to_string());
     }
 
+    // Start session logging if enabled
+    if logging_enabled && !logging_path.is_empty() {
+        if let Err(e) = log_manager
+            .start_logging(&session_id, Path::new(&logging_path), meta.protocol.as_str(), &meta.host)
+            .await
+        {
+            log::warn!("failed to start logging for {session_id}: {e}");
+        }
+    }
+
     log::info!("connect ok for {session_id}, storing in session map");
     let mut map = state.sessions.lock().await;
-    map.insert(session_id, service);
+    map.insert(session_id, (service, meta));
     Ok(())
 }
 
 #[tauri::command]
 pub async fn disconnect_session(
     state: State<'_, SessionState>,
+    log_manager: State<'_, LogManager>,
     session_id: String,
 ) -> Result<(), String> {
+    log_manager.stop_logging(&session_id).await;
     let mut map = state.sessions.lock().await;
     match map.remove(&session_id) {
-        Some(mut s) => s.disconnect().await.map_err(|e| e.to_string()),
+        Some((mut s, _meta)) => s.disconnect().await.map_err(|e| e.to_string()),
         None => Err(SessionError::NotFound.to_string()),
     }
 }
@@ -100,7 +205,7 @@ pub async fn send_input(
     data: String,
 ) -> Result<(), String> {
     let mut map = state.sessions.lock().await;
-    let s = map
+    let (s, _meta) = map
         .get_mut(&session_id)
         .ok_or_else(|| SessionError::NotFound.to_string())?;
     s.write(data.as_bytes()).await.map_err(|e| e.to_string())
@@ -114,7 +219,7 @@ pub async fn term_resize(
     rows: u16,
 ) -> Result<(), String> {
     let mut map = state.sessions.lock().await;
-    let s = map
+    let (s, _meta) = map
         .get_mut(&session_id)
         .ok_or_else(|| SessionError::NotFound.to_string())?;
     s.resize(cols, rows).await.map_err(|e| e.to_string())
@@ -127,10 +232,33 @@ pub async fn update_session_encoding(
     encoding: String,
 ) -> Result<(), String> {
     let mut map = state.sessions.lock().await;
-    let s = map
+    let (s, _meta) = map
         .get_mut(&session_id)
         .ok_or_else(|| SessionError::NotFound.to_string())?;
     s.set_encoding(&encoding);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn update_session_logging(
+    state: State<'_, SessionState>,
+    log_manager: State<'_, LogManager>,
+    logging_enabled: bool,
+    logging_path: String,
+) -> Result<(), String> {
+    let map = state.sessions.lock().await;
+    for (session_id, (_service, meta)) in map.iter() {
+        if logging_enabled && !logging_path.is_empty() {
+            if let Err(e) = log_manager
+                .start_logging(session_id, Path::new(&logging_path), meta.protocol.as_str(), &meta.host)
+                .await
+            {
+                log::warn!("failed to start logging for {session_id}: {e}");
+            }
+        } else {
+            log_manager.stop_logging(session_id).await;
+        }
+    }
     Ok(())
 }
 

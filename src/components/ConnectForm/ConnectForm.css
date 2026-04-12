@@ -136,3 +136,26 @@
 .connect-form-btn-secondary:hover:not(:disabled) {
   background: var(--btn-secondary-hover-bg);
 }
+
+.connect-form-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.connect-form-two-col .connect-form-group {
+  margin-bottom: 10px;
+}
+
+.connect-form-warning {
+  color: var(--color-warning);
+  font-size: calc(var(--font-size-base) - 1px);
+  font-style: italic;
+  margin-bottom: 10px;
+}
+
+.connect-form-info {
+  color: var(--text-secondary);
+  font-size: calc(var(--font-size-base) - 1px);
+  font-style: italic;
+}

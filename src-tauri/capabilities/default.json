@@ -9,9 +9,14 @@
     "core:default",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
+    "core:window:allow-set-size",
+    "core:window:allow-set-focus",
+    "core:menu:default",
     "dialog:allow-open",
+    "dialog:allow-save",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
-    "fs:allow-read-text-file"
+    "shell:allow-open",
+    "log:default"
   ]
 }

@@ -2157,7 +2157,7 @@ dependencies = [
 
 [[package]]
 name = "hotty"
-version = "0.1.1"
+version = "2.0.0-beta1"
 dependencies = [
  "aes-gcm 0.10.3",
  "anyhow",
@@ -2169,6 +2169,7 @@ dependencies = [
  "pbkdf2 0.12.2",
  "portable-pty",
  "rand 0.8.5",
+ "regex-lite",
  "reqwest 0.12.28",
  "russh",
  "serde",
@@ -2181,11 +2182,11 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-log",
- "tauri-plugin-process",
  "tauri-plugin-shell",
  "thiserror 2.0.18",
  "tokio",
  "windows 0.58.0",
+ "zeroize",
 ]
 
 [[package]]
@@ -4390,6 +4391,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "regex-lite"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cab834c73d247e67f4fae452806d17d3c7501756d98c8808d7c9c7aa7d18f973"
+
+[[package]]
 name = "regex-syntax"
 version = "0.8.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5908,16 +5915,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tauri-plugin-process"
-version = "2.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d55511a7bf6cd70c8767b02c97bf8134fa434daf3926cfc1be0a0f94132d165a"
-dependencies = [
- "tauri",
- "tauri-plugin",
-]
-
-[[package]]
 name = "tauri-plugin-shell"
 version = "2.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6202,7 +6199,6 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
- "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2",

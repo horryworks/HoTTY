@@ -1,0 +1,154 @@
+.log-viewer-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+}
+
+.log-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 10px;
+  background: var(--ai-header-bg);
+  border-bottom: 1px solid var(--border-color);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.log-viewer-folder-input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  outline: none;
+}
+
+.log-viewer-folder-input:focus {
+  border-color: var(--accent-color);
+}
+
+.log-viewer-toolbar-btn {
+  padding: 3px 8px;
+  background: var(--btn-secondary-bg);
+  border: none;
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.log-viewer-toolbar-btn:hover:not(:disabled) {
+  background: var(--btn-secondary-hover-bg);
+}
+
+.log-viewer-toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.log-viewer-auto-refresh {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: calc(var(--font-size-base) - 2px);
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.log-viewer-error {
+  padding: 4px 10px;
+  background: var(--color-danger);
+  color: var(--text-on-accent);
+  font-size: calc(var(--font-size-base) - 2px);
+  flex-shrink: 0;
+}
+
+.log-viewer-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.log-viewer-file-list {
+  width: 250px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-color);
+  overflow-y: auto;
+  background: var(--bg-secondary);
+}
+
+.log-viewer-file-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.log-viewer-file-item:hover {
+  background: var(--hover-bg);
+}
+
+.log-viewer-file-item.selected {
+  background: var(--accent-light);
+}
+
+.log-viewer-file-name {
+  font-size: calc(var(--font-size-base) - 1px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-viewer-file-meta {
+  font-size: calc(var(--font-size-base) - 3px);
+  color: var(--text-tertiary);
+}
+
+.log-viewer-file-content {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+.log-viewer-pre {
+  margin: 0;
+  padding: 10px;
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.log-viewer-placeholder,
+.log-viewer-loading,
+.log-viewer-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-tertiary);
+  font-size: calc(var(--font-size-base) - 1px);
+}
+
+.log-viewer-empty {
+  padding: 20px 10px;
+  height: auto;
+}

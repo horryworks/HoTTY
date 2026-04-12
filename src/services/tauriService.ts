@@ -1,30 +1,65 @@
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import {
   readText as clipboardReadText,
   writeText as clipboardWriteText,
 } from '@tauri-apps/plugin-clipboard-manager';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { open as shellOpen } from '@tauri-apps/plugin-shell';
 import type {
   ProtocolId,
   SshConnectionConfig,
   TelnetConnectionConfig,
+  SerialConnectionConfig,
+  WslConnectionConfig,
+  LocalConnectionConfig,
   SessionDataPayload,
   SessionStatusPayload,
   SessionErrorPayload,
   SshHostKeyPromptPayload,
+  SerialPortInfo,
+  FontInfo,
+  ContextMenuItem,
+  Theme,
+  SshAlgorithms,
+  SaveThemeResult,
+  ListLogFilesResult,
+  ReadLogFileResult,
+  ExportHtreeResult,
+  ReadFileResult,
+  ListDirectoryResult,
+  GetDrivesResult,
+  PingDataPayload,
+  PingLogFilePayload,
+  GcloudStatus,
+  GcloudAuthStatus,
+  GcpProject,
+  GceInstance,
 } from '../types/appTypes';
 
-type AnyConfig = SshConnectionConfig | TelnetConnectionConfig;
+type AnyConfig =
+  | SshConnectionConfig
+  | TelnetConnectionConfig
+  | SerialConnectionConfig
+  | WslConnectionConfig
+  | LocalConnectionConfig;
 
 const CLIPBOARD_MAX_BYTES = 10 * 1024 * 1024;
 
 export const tauriService = {
+  // -----------------------------------------------------------------------
+  // Session management
+  // -----------------------------------------------------------------------
+
   async connectSession(
     sessionId: string,
     protocol: ProtocolId,
-    config: AnyConfig
+    config: AnyConfig,
+    loggingEnabled: boolean,
+    loggingPath: string,
   ): Promise<void> {
-    await invoke('connect_session', { sessionId, protocol, config });
+    await invoke('connect_session', { sessionId, protocol, config, loggingEnabled, loggingPath });
   },
 
   async disconnectSession(sessionId: string): Promise<void> {
@@ -43,6 +78,14 @@ export const tauriService = {
     await invoke('update_session_encoding', { sessionId, encoding });
   },
 
+  async updateSessionLogging(loggingEnabled: boolean, loggingPath: string): Promise<void> {
+    await invoke('update_session_logging', { loggingEnabled, loggingPath });
+  },
+
+  // -----------------------------------------------------------------------
+  // Clipboard
+  // -----------------------------------------------------------------------
+
   async writeClipboard(text: string): Promise<void> {
     if (typeof text !== 'string' || text.length === 0) return;
     if (text.length > CLIPBOARD_MAX_BYTES) return;
@@ -54,6 +97,10 @@ export const tauriService = {
     return v ?? '';
   },
 
+  // -----------------------------------------------------------------------
+  // SSH host key
+  // -----------------------------------------------------------------------
+
   async respondSshHostKey(
     sessionId: string,
     accept: boolean,
@@ -61,6 +108,260 @@ export const tauriService = {
   ): Promise<void> {
     await invoke('ssh_host_key_response', { sessionId, accept, remember });
   },
+
+  // -----------------------------------------------------------------------
+  // System / utilities
+  // -----------------------------------------------------------------------
+
+  async listSerialPorts(): Promise<SerialPortInfo[]> {
+    return invoke<SerialPortInfo[]>('list_serial_ports');
+  },
+
+  async listWslDistributions(): Promise<string[]> {
+    return invoke<string[]>('list_wsl_distributions');
+  },
+
+  async detectGitBash(): Promise<string | null> {
+    return invoke<string | null>('detect_git_bash');
+  },
+
+  async listSystemFonts(): Promise<FontInfo[]> {
+    return invoke<FontInfo[]>('list_system_fonts');
+  },
+
+  async setWindowSize(width: number, height: number): Promise<void> {
+    await invoke('set_window_size', { width, height });
+  },
+
+  async focusWindow(): Promise<void> {
+    await invoke('focus_window');
+  },
+
+  async showContextMenu(items: ContextMenuItem[]): Promise<string | null> {
+    return invoke<string | null>('show_context_menu', { items });
+  },
+
+  async openDebugLogFolder(): Promise<void> {
+    await invoke('open_debug_log_folder');
+  },
+
+  // -----------------------------------------------------------------------
+  // Themes
+  // -----------------------------------------------------------------------
+
+  async getThemes(): Promise<Record<string, Theme>> {
+    return invoke<Record<string, Theme>>('get_themes');
+  },
+
+  async saveCustomTheme(themeKey: string, themeData: Theme): Promise<SaveThemeResult> {
+    return invoke<SaveThemeResult>('save_custom_theme', { themeKey, themeData });
+  },
+
+  async deleteCustomTheme(themeKey: string): Promise<SaveThemeResult> {
+    return invoke<SaveThemeResult>('delete_custom_theme', { themeKey });
+  },
+
+  // -----------------------------------------------------------------------
+  // SSH algorithms
+  // -----------------------------------------------------------------------
+
+  async getSshAlgorithms(): Promise<SshAlgorithms> {
+    return invoke<SshAlgorithms>('get_ssh_algorithms');
+  },
+
+  async saveSshAlgorithms(algorithms: SshAlgorithms): Promise<boolean> {
+    return invoke<boolean>('save_ssh_algorithms', { algorithms });
+  },
+
+  // -----------------------------------------------------------------------
+  // Log viewer
+  // -----------------------------------------------------------------------
+
+  async listLogFiles(folderPath: string): Promise<ListLogFilesResult> {
+    return invoke<ListLogFilesResult>('list_log_files', { folderPath });
+  },
+
+  async readLogFile(filePath: string): Promise<ReadLogFileResult> {
+    return invoke<ReadLogFileResult>('read_log_file', { filePath });
+  },
+
+  // -----------------------------------------------------------------------
+  // Host tree import/export
+  // -----------------------------------------------------------------------
+
+  async exportHtree(data: string, password: string): Promise<ExportHtreeResult> {
+    return invoke<ExportHtreeResult>('export_htree', { data, password });
+  },
+
+  async selectImportFile(): Promise<string | null> {
+    return invoke<string | null>('select_import_file');
+  },
+
+  async decryptImportFile(password: string): Promise<string> {
+    return invoke<string>('decrypt_import_file', { password });
+  },
+
+  // -----------------------------------------------------------------------
+  // DPAPI encryption
+  // -----------------------------------------------------------------------
+
+  async dpapiEncrypt(plaintext: string): Promise<string> {
+    return invoke<string>('dpapi_encrypt', { plaintext });
+  },
+
+  async dpapiDecrypt(ciphertext: string): Promise<string> {
+    return invoke<string>('dpapi_decrypt', { ciphertext });
+  },
+
+  async dpapiEncryptBatch(values: string[]): Promise<string[]> {
+    return invoke<string[]>('dpapi_encrypt_batch', { values });
+  },
+
+  async dpapiDecryptBatch(values: string[]): Promise<string[]> {
+    return invoke<string[]>('dpapi_decrypt_batch', { values });
+  },
+
+  async dpapiVerifyUser(password: string): Promise<boolean> {
+    return invoke<boolean>('dpapi_verify_user', { password });
+  },
+
+  // -----------------------------------------------------------------------
+  // Logging
+  // -----------------------------------------------------------------------
+
+  async logDebug(level: string, category: string, message: string): Promise<void> {
+    await invoke('log_debug', { level, category, message });
+  },
+
+  async updateLogging(level: string): Promise<void> {
+    await invoke('update_logging', { level });
+  },
+
+  // -----------------------------------------------------------------------
+  // File dialogs
+  // -----------------------------------------------------------------------
+
+  async selectImage(): Promise<string | null> {
+    return invoke<string | null>('select_image');
+  },
+
+  async selectFolder(): Promise<string | null> {
+    return invoke<string | null>('select_folder');
+  },
+
+  // -----------------------------------------------------------------------
+  // Text editor
+  // -----------------------------------------------------------------------
+
+  async textEditorOpenFile(): Promise<string | null> {
+    return invoke<string | null>('text_editor_open_file');
+  },
+
+  async textEditorSaveFile(defaultPath?: string): Promise<string | null> {
+    return invoke<string | null>('text_editor_save_file', { defaultPath: defaultPath ?? null });
+  },
+
+  async textEditorReadFile(filePath: string, encoding: string): Promise<ReadFileResult> {
+    return invoke<ReadFileResult>('text_editor_read_file', { filePath, encoding });
+  },
+
+  async textEditorWriteFile(filePath: string, content: string, encoding: string): Promise<boolean> {
+    return invoke<boolean>('text_editor_write_file', { filePath, content, encoding });
+  },
+
+  async textEditorApproveDroppedFile(filePath: string): Promise<boolean> {
+    return invoke<boolean>('text_editor_approve_dropped_file', { filePath });
+  },
+
+  // -----------------------------------------------------------------------
+  // File explorer
+  // -----------------------------------------------------------------------
+
+  async fileExplorerListDirectory(dirPath: string): Promise<ListDirectoryResult> {
+    return invoke<ListDirectoryResult>('file_explorer_list_directory', { dirPath });
+  },
+
+  async fileExplorerGetDrives(): Promise<GetDrivesResult> {
+    return invoke<GetDrivesResult>('file_explorer_get_drives');
+  },
+
+  // -----------------------------------------------------------------------
+  // Ping monitor
+  // -----------------------------------------------------------------------
+
+  async pingMonitorStart(
+    sessionId: string,
+    targets: string[],
+    intervalMs: number,
+    loggingEnabled: boolean,
+    loggingPath: string
+  ): Promise<void> {
+    await invoke('ping_monitor_start', { sessionId, targets, intervalMs, loggingEnabled, loggingPath });
+  },
+
+  async pingMonitorStop(sessionId: string): Promise<void> {
+    await invoke('ping_monitor_stop', { sessionId });
+  },
+
+  async pingMonitorUpdateTargets(sessionId: string, targets: string[]): Promise<void> {
+    await invoke('ping_monitor_update_targets', { sessionId, targets });
+  },
+
+  async pingMonitorUpdateInterval(sessionId: string, intervalMs: number): Promise<void> {
+    await invoke('ping_monitor_update_interval', { sessionId, intervalMs });
+  },
+
+  onPingMonitorData(cb: (p: PingDataPayload) => void): Promise<UnlistenFn> {
+    return listen<PingDataPayload>('ping-monitor-data', (e) => cb(e.payload));
+  },
+
+  onPingMonitorLogFile(cb: (p: PingLogFilePayload) => void): Promise<UnlistenFn> {
+    return listen<PingLogFilePayload>('ping-monitor-log-file', (e) => cb(e.payload));
+  },
+
+  // -----------------------------------------------------------------------
+  // GCE IAP Tunnel
+  // -----------------------------------------------------------------------
+
+  async gceIapCheckGcloud(): Promise<GcloudStatus> {
+    return invoke<GcloudStatus>('gce_iap_check_gcloud');
+  },
+
+  async gceIapCheckAuth(): Promise<GcloudAuthStatus> {
+    return invoke<GcloudAuthStatus>('gce_iap_check_auth');
+  },
+
+  async gceIapListProjects(): Promise<GcpProject[]> {
+    return invoke<GcpProject[]>('gce_iap_list_projects');
+  },
+
+  async gceIapListZones(project: string): Promise<string[]> {
+    return invoke<string[]>('gce_iap_list_zones', { project });
+  },
+
+  async gceIapListInstances(project: string, zone: string): Promise<GceInstance[]> {
+    return invoke<GceInstance[]>('gce_iap_list_instances', { project, zone });
+  },
+
+  // -----------------------------------------------------------------------
+  // App info
+  // -----------------------------------------------------------------------
+
+  async getAppVersion(): Promise<string> {
+    return getVersion();
+  },
+
+  async setWindowTitle(title: string): Promise<void> {
+    await getCurrentWebviewWindow().setTitle(title);
+  },
+
+  async openExternal(url: string): Promise<void> {
+    await shellOpen(url);
+  },
+
+  // -----------------------------------------------------------------------
+  // Event listeners
+  // -----------------------------------------------------------------------
 
   onSessionData(cb: (p: SessionDataPayload) => void): Promise<UnlistenFn> {
     return listen<SessionDataPayload>('session-data', (e) => cb(e.payload));

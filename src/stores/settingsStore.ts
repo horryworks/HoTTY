@@ -1,7 +1,18 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Encoding, ThemeId } from '../types/appTypes';
+import type { Encoding, PromptPattern, ThemeId } from '../types/appTypes';
 import { DEFAULT_THEMES } from '../themes/defaults';
+
+export const DEFAULT_PROMPT_PATTERNS: PromptPattern[] = [
+  { id: 'cisco', name: 'Cisco / Allied Telesis', pattern: '^([a-zA-Z0-9_\\-\\./]+(?:\\([a-zA-Z0-9_\\-\\./]+\\))?[>#])\\s*' },
+  { id: 'fortigate', name: 'Fortigate', pattern: '^([a-zA-Z0-9_\\-\\.]+(?:\\s\\([a-zA-Z0-9_\\-\\.]+\\))?[#$])\\s*' },
+  { id: 'huawei', name: 'Huawei / Yamaha', pattern: '^((?:HRP_[AMSB])?[<\\[][a-zA-Z0-9_\\-\\./]+[>\\]])\\s*' },
+  { id: 'juniper', name: 'Juniper', pattern: '^([-_\\w]+@[-_\\w]+[>#])\\s*' },
+  { id: 'paloalto', name: 'Palo Alto / Arista', pattern: '^([-_\\w.]+@[-_\\w.]+[>#])\\s*' },
+  { id: 'linux', name: 'Linux', pattern: '^([-_\\w]+@[-_\\w]+:[^$# ]*[$#])\\s*' },
+  { id: 'cmd', name: 'Command Prompt', pattern: '^([A-Za-z]:.*>)\\s*' },
+  { id: 'powershell', name: 'PowerShell', pattern: '^(PS\\s+.*>)\\s*' },
+];
 
 export interface SettingsState {
   // Appearance
@@ -32,6 +43,15 @@ export interface SettingsState {
   lineWrapEnabled: boolean;
   backspaceSendsDel: boolean;
   rightClickPaste: boolean;
+
+  // Prompt highlighting
+  enablePromptHighlight: boolean;
+  promptHighlightColor: string;
+  promptPatterns: PromptPattern[];
+
+  // Logging
+  loggingEnabled: boolean;
+  loggingPath: string;
 }
 
 export interface SettingsActions {
@@ -57,6 +77,11 @@ const DEFAULTS: SettingsState = {
   lineWrapEnabled: true,
   backspaceSendsDel: false,
   rightClickPaste: true,
+  enablePromptHighlight: true,
+  promptHighlightColor: 'rgba(255, 255, 255, 0.15)',
+  promptPatterns: DEFAULT_PROMPT_PATTERNS,
+  loggingEnabled: false,
+  loggingPath: '',
 };
 
 export const useSettingsStore = create<SettingsState & SettingsActions>()(
@@ -68,11 +93,20 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 2,
+      version: 4,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
           state.theme = 'dark';
+        }
+        if (version < 3) {
+          state.enablePromptHighlight ??= true;
+          state.promptHighlightColor ??= 'rgba(255, 255, 255, 0.15)';
+          state.promptPatterns ??= DEFAULT_PROMPT_PATTERNS;
+        }
+        if (version < 4) {
+          state.loggingEnabled ??= false;
+          state.loggingPath ??= '';
         }
         return state as SettingsState;
       },

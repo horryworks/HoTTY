@@ -38,6 +38,10 @@ function makeSession(): { session: SessionRecord; term: ReturnType<typeof makeTe
   };
 }
 
+function makeDisposable() {
+  return { dispose: vi.fn() };
+}
+
 function makeTerm() {
   return {
     options: { theme: {} },
@@ -48,6 +52,20 @@ function makeTerm() {
       this.element = el;
     }),
     focus: vi.fn(),
+    buffer: {
+      active: {
+        baseY: 0,
+        cursorY: 0,
+        length: 0,
+        getLine: vi.fn().mockReturnValue(null),
+      },
+    },
+    registerMarker: vi.fn().mockReturnValue({ line: 0, isDisposed: false, dispose: vi.fn(), onDispose: vi.fn() }),
+    registerDecoration: vi.fn().mockReturnValue({ onRender: vi.fn(), onDispose: vi.fn(), dispose: vi.fn() }),
+    onCursorMove: vi.fn(() => makeDisposable()),
+    onLineFeed: vi.fn(() => makeDisposable()),
+    onRender: vi.fn(() => makeDisposable()),
+    selectLines: vi.fn(),
   };
 }
 

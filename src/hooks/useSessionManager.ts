@@ -8,6 +8,9 @@ import type {
   SessionStatus,
   SshConnectionConfig,
   TelnetConnectionConfig,
+  SerialConnectionConfig,
+  WslConnectionConfig,
+  LocalConnectionConfig,
 } from '../types/appTypes';
 
 export interface SessionRecord {
@@ -20,7 +23,12 @@ export interface SessionRecord {
   fitAddon: FitAddon;
 }
 
-type AnyConfig = SshConnectionConfig | TelnetConnectionConfig;
+type AnyConfig =
+  | SshConnectionConfig
+  | TelnetConnectionConfig
+  | SerialConnectionConfig
+  | WslConnectionConfig
+  | LocalConnectionConfig;
 
 export interface OpenRequest {
   displayName: string;
@@ -74,6 +82,20 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
+  // Sync logging settings changes to the backend for active sessions.
+  const loggingEnabled = settings.loggingEnabled;
+  const loggingPath = settings.loggingPath;
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
+    tauriService.updateSessionLogging(loggingEnabled, loggingPath).catch(() => {
+      /* non-fatal */
+    });
+  }, [loggingEnabled, loggingPath]);
+
   // Global event subscriptions — one set for the whole app.
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +108,8 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
         } else {
           unlisteners.push(fn);
         }
+      }).catch((e) => {
+        console.error('Failed to set up session event listener:', e);
       });
     };
 
@@ -141,6 +165,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
         scrollback: s.scrollback,
         cursorBlink: true,
         rightClickSelectsWord: false,
+        allowProposedApi: true,
         theme: {
           foreground: s.terminalForeground,
           background: s.terminalBackground,
@@ -186,7 +211,13 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       });
 
       try {
-        await tauriService.connectSession(id, req.protocol, req.config);
+        await tauriService.connectSession(
+          id,
+          req.protocol,
+          req.config,
+          s.loggingEnabled,
+          s.loggingPath,
+        );
       } catch (e) {
         setSessions((prev) => {
           const next = new Map(prev);

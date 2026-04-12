@@ -1,1 +1,12 @@
+pub mod dpapi;
+pub mod file_explorer;
+pub mod host_tree;
+pub mod iap_tunnel;
+pub mod log_viewer;
+pub mod ping_monitor;
 pub mod session;
+pub mod ssh_algorithms;
+pub mod system;
+pub mod text_editor;
+pub mod themes;
+pub mod utilities;
