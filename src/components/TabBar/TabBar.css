@@ -1,0 +1,136 @@
+.tab-bar {
+  display: flex;
+  align-items: center;
+  min-height: 35px;
+  height: 35px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  padding: 0 6px;
+  gap: 6px;
+  box-sizing: border-box;
+}
+
+.tab-list {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--tab-bg);
+  border-radius: 8px 8px 0 0;
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  color: var(--tab-text);
+  cursor: pointer;
+  flex-shrink: 0;
+  max-width: 220px;
+}
+
+.tab:hover:not(.active) {
+  background: var(--hover-bg);
+}
+
+.tab.active {
+  background: var(--bg-primary);
+  color: var(--tab-active-text);
+}
+
+.tab.error {
+  color: var(--color-danger);
+}
+
+.tab.hidden-tab {
+  opacity: 0.55;
+}
+
+.tab.hidden-tab:hover {
+  opacity: 0.8;
+}
+
+.tab.drag-over-left {
+  box-shadow: inset 2px 0 0 0 var(--accent-color);
+}
+
+.tab.drag-over-right {
+  box-shadow: inset -2px 0 0 0 var(--accent-color);
+}
+
+.tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.tab-status-connected {
+  background: var(--status-success);
+}
+
+.tab-status-connecting {
+  background: var(--color-warning);
+}
+
+.tab-status-disconnected {
+  background: var(--text-tertiary);
+}
+
+.tab-status-error {
+  background: var(--status-error);
+}
+
+.tab-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  width: 16px;
+  height: 16px;
+  font-size: calc(var(--font-size-base));
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 4px;
+}
+
+.tab-close:hover:not(:disabled) {
+  background: var(--tab-close-bg);
+  color: var(--text-on-accent);
+}
+
+.new-tab-btn {
+  width: 35px;
+  height: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.new-tab-btn:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.new-tab-btn svg {
+  transition: transform 0.2s;
+}
+
+.new-tab-btn:hover svg {
+  transform: scale(1.1);
+}

@@ -1,0 +1,75 @@
+.sidebar {
+  position: relative;
+  background: var(--sidebar-bg);
+  flex-shrink: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.sidebar-left,
+.sidebar-right {
+  height: 100%;
+  flex-direction: column;
+}
+
+.sidebar-top,
+.sidebar-bottom {
+  width: 100%;
+  flex-direction: row;
+}
+
+.sidebar-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.sidebar.drop-target {
+  outline: 2px dashed var(--accent-color);
+  outline-offset: -2px;
+}
+
+.sidebar-resize {
+  position: absolute;
+  background: transparent;
+  z-index: 10;
+}
+
+.sidebar-resize:hover {
+  background: var(--accent-color);
+  opacity: 0.5;
+}
+
+.sidebar-resize-left {
+  cursor: ew-resize;
+  width: 4px;
+  right: 0;
+  top: 0;
+  bottom: 0;
+}
+
+.sidebar-resize-right {
+  cursor: ew-resize;
+  width: 4px;
+  left: 0;
+  top: 0;
+  bottom: 0;
+}
+
+.sidebar-resize-top {
+  cursor: ns-resize;
+  height: 4px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.sidebar-resize-bottom {
+  cursor: ns-resize;
+  height: 4px;
+  left: 0;
+  right: 0;
+  top: 0;
+}

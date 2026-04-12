@@ -1,0 +1,65 @@
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+export type SidebarEdge = 'left' | 'right' | 'top' | 'bottom';
+
+interface SidebarLayoutState {
+  showLeftSidebar: boolean;
+  showRightSidebar: boolean;
+  showTopBar: boolean;
+  showBottomBar: boolean;
+  leftSidebarPercent: number;
+  rightSidebarPercent: number;
+  topBarPercent: number;
+  bottomBarPercent: number;
+  toggle: (edge: SidebarEdge) => void;
+  setPercent: (edge: SidebarEdge, percent: number) => void;
+}
+
+const clamp = (n: number) => Math.max(5, Math.min(60, n));
+
+export const useSidebarLayoutStore = create<SidebarLayoutState>()(
+  persist(
+    (set) => ({
+      showLeftSidebar: false,
+      showRightSidebar: false,
+      showTopBar: false,
+      showBottomBar: false,
+      leftSidebarPercent: 20,
+      rightSidebarPercent: 20,
+      topBarPercent: 20,
+      bottomBarPercent: 20,
+      toggle: (edge) =>
+        set((s) => {
+          switch (edge) {
+            case 'left':
+              return { showLeftSidebar: !s.showLeftSidebar };
+            case 'right':
+              return { showRightSidebar: !s.showRightSidebar };
+            case 'top':
+              return { showTopBar: !s.showTopBar };
+            case 'bottom':
+              return { showBottomBar: !s.showBottomBar };
+          }
+        }),
+      setPercent: (edge, percent) =>
+        set(() => {
+          const v = clamp(percent);
+          switch (edge) {
+            case 'left':
+              return { leftSidebarPercent: v };
+            case 'right':
+              return { rightSidebarPercent: v };
+            case 'top':
+              return { topBarPercent: v };
+            case 'bottom':
+              return { bottomBarPercent: v };
+          }
+        }),
+    }),
+    {
+      name: 'hotty-sidebar-layout',
+      version: 1,
+    }
+  )
+);
