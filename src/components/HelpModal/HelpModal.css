@@ -1,0 +1,148 @@
+.help-modal {
+  position: fixed;
+  max-width: 550px;
+  max-height: 80vh;
+  z-index: 10001;
+}
+
+.help-modal .settings-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.help-modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  outline: none;
+}
+
+.help-modal-close:hover {
+  color: var(--text-primary);
+}
+
+.help-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+  padding-bottom: 20px;
+  padding-right: 8px;
+}
+
+.help-section {
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 4px;
+}
+
+.help-section summary {
+  list-style: none;
+  cursor: pointer;
+  margin: 0;
+  font-size: calc(var(--font-size-base) + 1px);
+  color: var(--accent-light, #42a5f5);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-weight: 500;
+  transition: opacity 0.2s;
+}
+
+.help-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.help-section summary::before {
+  content: '\25B6';
+  font-size: calc(var(--font-size-base) - 4px);
+  transition: transform 0.2s;
+  opacity: 0.5;
+}
+
+.help-section[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.help-section summary:hover {
+  opacity: 0.8;
+}
+
+.help-section-body {
+  padding: 4px 0 12px 20px;
+}
+
+.help-text {
+  margin: 4px 0;
+  font-size: calc(var(--font-size-base) - 1px);
+  line-height: 1.5;
+  color: var(--text-primary);
+  opacity: 0.85;
+}
+
+.help-text code {
+  background: var(--bg-tertiary);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-family: var(--font-family);
+}
+
+.help-visual-guide {
+  background: var(--bg-tertiary);
+  padding: 12px;
+  border-radius: 8px;
+  margin: 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.marker-expl {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.marker-line {
+  width: 6px;
+  height: 24px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.marker-red {
+  background-color: var(--color-danger);
+}
+
+.marker-blue {
+  background-color: var(--accent-color);
+}
+
+.marker-desc {
+  font-size: calc(var(--font-size-base) - 2px);
+  line-height: 1.4;
+}
+
+.shortcuts-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shortcuts-list code {
+  min-width: 80px;
+  display: inline-block;
+  text-align: center;
+  margin-right: 8px;
+  background: var(--accent-color);
+  color: var(--text-on-accent);
+  font-weight: bold;
+}

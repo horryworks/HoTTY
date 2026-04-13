@@ -19,20 +19,20 @@ describe('AppSidebar', () => {
   });
 
   it('renders a layout button for each layout mode and marks the active one', () => {
-    render(<AppSidebar onOpenSettings={() => {}} />);
+    render(<AppSidebar onOpenSettings={() => {}} onOpenHelp={() => {}} />);
     const activeBtns = document.querySelectorAll('.app-sidebar-btn-active');
     expect(activeBtns.length).toBe(1);
     expect(activeBtns[0].getAttribute('title')).toContain('Single');
   });
 
   it('clicking a layout button updates paneStore.layoutMode', () => {
-    render(<AppSidebar onOpenSettings={() => {}} />);
+    render(<AppSidebar onOpenSettings={() => {}} onOpenHelp={() => {}} />);
     fireEvent.click(screen.getByTitle('Grid (2x2)'));
     expect(usePaneStore.getState().layoutMode).toBe('2x2');
   });
 
   it('clicking an edge button toggles that sidebar flag', () => {
-    render(<AppSidebar onOpenSettings={() => {}} />);
+    render(<AppSidebar onOpenSettings={() => {}} onOpenHelp={() => {}} />);
     fireEvent.click(screen.getByTitle('Toggle Left Sidebar'));
     expect(useSidebarLayoutStore.getState().showLeftSidebar).toBe(true);
     fireEvent.click(screen.getByTitle('Toggle Bottom Bar'));
@@ -41,20 +41,27 @@ describe('AppSidebar', () => {
 
   it('Settings button invokes the onOpenSettings callback', () => {
     const onOpenSettings = vi.fn();
-    render(<AppSidebar onOpenSettings={onOpenSettings} />);
+    render(<AppSidebar onOpenSettings={onOpenSettings} onOpenHelp={() => {}} />);
     fireEvent.click(screen.getByTitle('Settings'));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
+  it('Help button invokes the onOpenHelp callback', () => {
+    const onOpenHelp = vi.fn();
+    render(<AppSidebar onOpenSettings={() => {}} onOpenHelp={onOpenHelp} />);
+    fireEvent.click(screen.getByTitle('Help / Documentation'));
+    expect(onOpenHelp).toHaveBeenCalledTimes(1);
+  });
+
   it('applies the right-side class when sidebarPosition is "right"', () => {
     useSettingsStore.getState().update('sidebarPosition', 'right');
-    const { container } = render(<AppSidebar onOpenSettings={() => {}} />);
+    const { container } = render(<AppSidebar onOpenSettings={() => {}} onOpenHelp={() => {}} />);
     expect(container.querySelector('.app-sidebar-right')).not.toBeNull();
   });
 
   it('toggles lineWrapEnabled on line wrap button click', () => {
     useSettingsStore.getState().update('lineWrapEnabled', true);
-    render(<AppSidebar onOpenSettings={() => {}} />);
+    render(<AppSidebar onOpenSettings={() => {}} onOpenHelp={() => {}} />);
     fireEvent.click(screen.getByTitle('Disable Line Wrap'));
     expect(useSettingsStore.getState().lineWrapEnabled).toBe(false);
     fireEvent.click(screen.getByTitle('Enable Line Wrap'));
@@ -63,7 +70,7 @@ describe('AppSidebar', () => {
 
   it('shows active state on line wrap button when lineWrapEnabled is true', () => {
     useSettingsStore.getState().update('lineWrapEnabled', true);
-    render(<AppSidebar onOpenSettings={() => {}} />);
+    render(<AppSidebar onOpenSettings={() => {}} onOpenHelp={() => {}} />);
     const btn = screen.getByTitle('Disable Line Wrap');
     expect(btn.classList.contains('app-sidebar-btn-active')).toBe(true);
   });

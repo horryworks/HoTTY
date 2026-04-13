@@ -14,6 +14,7 @@ import { AIChatPane } from './components/AIChatPane/AIChatPane';
 import { AskAiModal } from './components/AskAiModal/AskAiModal';
 import { SessionDialog, type ConnectSubmitPayload } from './components/SessionDialog/SessionDialog';
 import { SettingsModal } from './components/SettingsModal/SettingsModal';
+import { HelpModal } from './components/HelpModal/HelpModal';
 import { SshHostKeyModal } from './components/SshHostKeyModal/SshHostKeyModal';
 import { PasteConfirmationModal } from './components/PasteConfirmationModal/PasteConfirmationModal';
 import { tauriService } from './services/tauriService';
@@ -188,6 +189,7 @@ function App() {
 
   const [connectOpen, setConnectOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     tauriService.getAppVersion().then((v) => {
@@ -446,7 +448,7 @@ function App() {
   return (
     <div className="app-root">
       <div className={`app-container app-container-${sidebarPosition}`}>
-        <AppSidebar onOpenSettings={() => setSettingsOpen(true)} />
+        <AppSidebar onOpenSettings={() => setSettingsOpen(true)} onOpenHelp={() => setHelpOpen(true)} />
         <div className="main-layout">
           <TabBar
             tabItems={tabItems}
@@ -501,6 +503,7 @@ function App() {
         onConnect={handleConnectSubmit}
       />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
       <SshHostKeyModal />
       {pasteReq && (
         <PasteConfirmationModal

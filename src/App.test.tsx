@@ -64,8 +64,11 @@ vi.mock('./components/Sidebar/sidebarHelpers', () => ({
 }));
 
 vi.mock('./components/AppSidebar/AppSidebar', () => ({
-  AppSidebar: ({ onOpenSettings }: { onOpenSettings: () => void }) => (
-    <button data-testid="open-settings" onClick={onOpenSettings}>Settings</button>
+  AppSidebar: ({ onOpenSettings, onOpenHelp }: { onOpenSettings: () => void; onOpenHelp: () => void }) => (
+    <div>
+      <button data-testid="open-settings" onClick={onOpenSettings}>Settings</button>
+      <button data-testid="open-help" onClick={onOpenHelp}>Help</button>
+    </div>
   ),
 }));
 
@@ -135,6 +138,15 @@ vi.mock('./components/SettingsModal/SettingsModal', () => ({
     ) : null,
 }));
 
+vi.mock('./components/HelpModal/HelpModal', () => ({
+  HelpModal: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
+    open ? (
+      <div data-testid="help-modal">
+        <button data-testid="close-help" onClick={onClose}>Close</button>
+      </div>
+    ) : null,
+}));
+
 vi.mock('./components/SshHostKeyModal/SshHostKeyModal', () => ({
   SshHostKeyModal: () => null,
 }));
@@ -187,6 +199,15 @@ describe('App', () => {
     expect(screen.getByTestId('settings-modal')).toBeTruthy();
     fireEvent.click(screen.getByTestId('close-settings'));
     expect(screen.queryByTestId('settings-modal')).toBeNull();
+  });
+
+  it('opens and closes HelpModal', () => {
+    render(<App />);
+    expect(screen.queryByTestId('help-modal')).toBeNull();
+    fireEvent.click(screen.getByTestId('open-help'));
+    expect(screen.getByTestId('help-modal')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('close-help'));
+    expect(screen.queryByTestId('help-modal')).toBeNull();
   });
 
   it('submitting ConnectForm calls openSession', async () => {
