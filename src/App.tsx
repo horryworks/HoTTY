@@ -67,6 +67,7 @@ function App() {
   const fontSize = useSettingsStore((s) => s.fontSize);
   const fontFamily = useSettingsStore((s) => s.fontFamily);
   const sidebarPosition = useSettingsStore((s) => s.sidebarPosition);
+  const enabledFeatures = useSettingsStore((s) => s.enabledFeatures);
   const updateSetting = useSettingsStore((s) => s.update);
 
   const aiPersonas = useSettingsStore((s) => s.aiPersonas);
@@ -76,7 +77,6 @@ function App() {
   const activePaneAllocation = paneAllocations[activePaneId];
   useEffect(() => {
     if (activePaneAllocation && !isFeaturePane(activePaneAllocation)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLastTerminalSessionId(activePaneAllocation);
     }
   }, [activePaneAllocation]);
@@ -90,8 +90,8 @@ function App() {
   const watchingSessionIdRef = useRef(watchingSessionId);
   useEffect(() => { watchingSessionIdRef.current = watchingSessionId; }, [watchingSessionId]);
 
-  const createAiChatPaneRef = useRef<() => string | undefined>();
-  const updateAiChatStateRef = useRef<(id: string, state: Record<string, unknown>) => void>();
+  const createAiChatPaneRef = useRef<() => string | undefined>(undefined);
+  const updateAiChatStateRef = useRef<(id: string, state: Record<string, unknown>) => void>(undefined);
 
   const toggleWatch = useCallback((sessionId?: string) => {
     if (!sessionId) return;
@@ -146,6 +146,7 @@ function App() {
   }, [watchingSessionId]);
 
   const createAiChatPane = useCallback((): string | undefined => {
+    if (!useSettingsStore.getState().enabledFeatures['ai-chat']) return undefined;
     // Only allow one AI chat pane at a time
     const existing = Array.from(featurePanes.values()).find(p => p.type === 'ai-chat');
     if (existing) return existing.id;
@@ -274,6 +275,7 @@ function App() {
   };
 
   const handleNewFeaturePane = useCallback((type: FeaturePaneType) => {
+    if (!useSettingsStore.getState().enabledFeatures[type]) return;
     const id = makeFeaturePaneId(type);
     const displayName = getFeatureDisplayName(type);
     setFeaturePanes((prev) => {
@@ -298,6 +300,7 @@ function App() {
   const [editorInitialFiles, setEditorInitialFiles] = useState<Map<string, string>>(new Map());
 
   const handleOpenFileInEditor = useCallback(async (filePath: string) => {
+    if (!useSettingsStore.getState().enabledFeatures['text-editor']) return;
     try {
       await tauriService.textEditorApproveDroppedFile(filePath);
     } catch { /* proceed — file may already be approved */ }
@@ -420,7 +423,7 @@ function App() {
                     // Wait until all lines are sent + some output received
                     if (attempts * 200 < sendDuration + 300) return;
                     // Detect shell prompt: line ending with common prompt chars
-                    const promptPattern = /[\$#>]\s*$/m;
+                    const promptPattern = /[$#>]\s*$/m;
                     if (newContent.length > 0 && promptPattern.test(newContent)) {
                       clearInterval(pollInterval);
                       clearWatchBuffer(targetId);
@@ -459,11 +462,11 @@ function App() {
             onNew={handleNewConnectionClick}
             onReorder={reorderSessionInStore}
             onToggleWatch={toggleWatch}
-            onNewLogViewer={() => handleNewFeaturePane('log-viewer')}
-            onNewPingMonitor={() => handleNewFeaturePane('ping-monitor')}
-            onNewTextEditor={() => handleNewFeaturePane('text-editor')}
-            onNewFileExplorer={() => handleNewFeaturePane('file-explorer')}
-            onNewAiChat={() => handleNewFeaturePane('ai-chat')}
+            onNewLogViewer={enabledFeatures['log-viewer'] ? () => handleNewFeaturePane('log-viewer') : undefined}
+            onNewPingMonitor={enabledFeatures['ping-monitor'] ? () => handleNewFeaturePane('ping-monitor') : undefined}
+            onNewTextEditor={enabledFeatures['text-editor'] ? () => handleNewFeaturePane('text-editor') : undefined}
+            onNewFileExplorer={enabledFeatures['file-explorer'] ? () => handleNewFeaturePane('file-explorer') : undefined}
+            onNewAiChat={enabledFeatures['ai-chat'] ? () => handleNewFeaturePane('ai-chat') : undefined}
           />
           <div className="content-area">
             <Sidebar

@@ -1,5 +1,39 @@
 # Release Notes
 
+## v2.0.0-beta2
+
+Second beta release with AI integration, connection management UI, and enhanced utility panes.
+
+### New Features
+
+- **AI Chat pane** — multi-provider AI chat with streaming responses, personas, and token cost tracking
+- **AI providers** — support for Google AI Studio (Gemini), Vertex AI, Anthropic (Claude), and OpenAI (GPT) with provider-specific authentication
+- **AI backend services** — Rust-based AI provider infrastructure with SSE streaming support
+- **Ask AI modal** — right-click terminal text to query AI with built-in or custom commands
+- **AI Settings tab** — configure AI provider, model, personas, Ask AI commands, command execution mode, and monitor buffer limits
+- **AI Interactive Mode** — AI can suggest and execute terminal commands with safety classification (safe/destructive/unknown)
+- **AI Watch Mode** — monitor terminal output and send captured logs to AI for analysis
+- **Host Tree** — connection management UI with folders, drag-and-drop reordering, and host tree export/import
+- **Session Dialog** — connection dialog for creating and editing SSH, Telnet, Serial, WSL, Local, and Git Bash sessions with jumpbox and IAP tunnel support
+- **Help modal** — comprehensive in-app documentation covering all features, shortcuts, and AI setup guides
+- **Confirm modal** — reusable confirmation dialog for destructive actions
+- **Command classifier** — categorizes terminal commands as safe, destructive, or unknown for AI auto-execution decisions
+- **AI token pricing** — per-model pricing data for cost estimation across all supported providers
+
+### Improvements
+
+- **Text Editor** — major enhancement with find & replace, go-to-line, sub-tabs for multiple files, encoding/line-ending selection, line wrap, return code visualization, and file association support
+- **File Explorer** — improved navigation with breadcrumb path, hidden file toggle, drive browsing, and double-click to open in editor
+- **Ping Monitor** — enhanced with configurable intervals, log output, and improved layout
+- **Log Viewer** — improved with search/filter, regex toggle, and better file browsing
+- **Tab Bar** — updated with feature pane tab support and improved drag-and-drop
+- **Settings store** — extended with AI settings, enabled features, and additional configuration options
+- **Session manager** — updated to support AI chat terminal integration
+- **App icons** — refreshed application icons across all platforms (Windows, macOS, iOS, Android)
+- **New utility hooks** — useFocusTrap, useModalState, useResize for improved UI interactions
+- **ANSI utilities** — added ANSI code processing functions for terminal output handling
+- **Color and HTML utilities** — added helper functions for color manipulation and HTML processing
+
 ## v2.0.0-beta1
 
 First functional beta of the Rust/Tauri rewrite. This release replaces the Electron-based HoTTY with a Tauri v2 backend for improved memory efficiency and performance.

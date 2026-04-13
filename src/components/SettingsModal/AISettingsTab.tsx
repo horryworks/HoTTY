@@ -4,20 +4,7 @@ import { tauriService } from '../../services/tauriService';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { STORAGE_KEYS } from '../../constants/storage';
 import type { PersonaDefinition, AskAiCommand, CommandExecutionMode } from '../../types/appTypes';
-
-const DEFAULT_AI_COMMANDS: AskAiCommand[] = [
-  { id: 'explain', label: 'Explain', promptTemplate: 'Please explain the following text:\n\n{selection}' },
-  { id: 'root-cause', label: 'Root Cause Analysis', promptTemplate: 'Please analyze the root cause of the following issue:\n\n{selection}' },
-];
-
-const DEFAULT_PERSONAS: PersonaDefinition[] = [
-  {
-    id: 'default',
-    label: 'General Assistant',
-    systemPrompt: 'You are a helpful assistant.',
-    askAiCommands: [...DEFAULT_AI_COMMANDS],
-  },
-];
+import { DEFAULT_AI_COMMANDS, DEFAULT_PERSONAS } from '../../stores/settingsStore';
 
 export function AISettingsTab() {
   const settings = useSettingsStore();
@@ -33,7 +20,7 @@ export function AISettingsTab() {
 
   // Check auth status on mount
   useEffect(() => {
-    tauriService.aiAuthStatus().then(setIsAuthenticated).catch(() => {});
+    tauriService.aiAuthStatus().then((s) => setIsAuthenticated(s.authenticated)).catch(() => {});
   }, []);
 
   const personas = settings.aiPersonas;
@@ -116,7 +103,7 @@ export function AISettingsTab() {
             try {
               await tauriService.aiSetProvider(provider);
               const status = await tauriService.aiAuthStatus();
-              setIsAuthenticated(status);
+              setIsAuthenticated(status.authenticated);
             } catch { /* ignore */ }
             if (provider === 'gemini') {
               setShowGeminiWarning(true);
