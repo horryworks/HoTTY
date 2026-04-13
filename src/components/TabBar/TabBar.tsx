@@ -144,12 +144,12 @@ export function TabBar({
                       fill={item.isWatching ? 'url(#ai-glow-gradient)' : 'currentColor'}
                       opacity={item.isWatching ? 1 : 0.7} />
                     <circle cx="12" cy="12" r="6"
-                      fill={item.isWatching ? 'var(--accent-light, #E0FFE0)' : 'currentColor'}
+                      fill={item.isWatching ? 'var(--accent-light, #42a5f5)' : 'currentColor'}
                       opacity={item.isWatching ? 0.9 : 0.4} />
                     <defs>
                       <linearGradient id="ai-glow-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="var(--success-color, #00FF80)" />
-                        <stop offset="100%" stopColor="var(--accent-color, #00D1FF)" />
+                        <stop offset="0%" stopColor="var(--success-color, #4ade80)" />
+                        <stop offset="100%" stopColor="var(--accent-color, #007acc)" />
                       </linearGradient>
                     </defs>
                   </svg>

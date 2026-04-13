@@ -3,6 +3,7 @@
   max-width: 550px;
   max-height: 80vh;
   z-index: 10001;
+  animation: fadeIn 0.1s ease-out;
 }
 
 .help-modal .settings-modal-header {

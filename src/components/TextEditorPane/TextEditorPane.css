@@ -177,6 +177,11 @@
   background: var(--hover-bg);
 }
 
+.text-editor-menu-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .text-editor-menu-dropdown {
   position: absolute;
   top: 100%;

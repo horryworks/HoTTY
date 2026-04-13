@@ -131,9 +131,13 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
         if (!rec) return;
         // Strip server DECAWM overrides so our lineWrapEnabled setting is authoritative
         const wrap = settingsRef.current.lineWrapEnabled;
+        // eslint-disable-next-line no-control-regex
+        const disableWrap = /\x1b\[\?7l/g;
+        // eslint-disable-next-line no-control-regex
+        const enableWrap = /\x1b\[\?7h/g;
         const filtered = wrap
-          ? data.replace(/\x1b\[\?7l/g, '')   // remove disable when wrap is ON
-          : data.replace(/\x1b\[\?7h/g, '');   // remove enable when wrap is OFF
+          ? data.replace(disableWrap, '')   // remove disable when wrap is ON
+          : data.replace(enableWrap, '');   // remove enable when wrap is OFF
         rec.term.write(filtered);
       })
     );

@@ -1,4 +1,5 @@
 export type ProtocolId = 'ssh' | 'telnet' | 'serial' | 'wsl' | 'cmd' | 'powershell' | 'git-bash';
+export type FeatureId = 'ai-chat' | 'log-viewer' | 'ping-monitor' | 'text-editor' | 'file-explorer';
 
 export type Encoding = 'utf8' | 'shift_jis' | 'euc-jp';
 

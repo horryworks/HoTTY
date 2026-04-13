@@ -31,7 +31,7 @@ describe('AISettingsTab', () => {
 
   it('renders default persona tab', () => {
     render(<AISettingsTab />);
-    expect(screen.getByText('General Assistant')).toBeTruthy();
+    expect(screen.getByText('Network Expert')).toBeTruthy();
   });
 
   it('updates persona name', () => {
@@ -45,14 +45,14 @@ describe('AISettingsTab', () => {
     render(<AISettingsTab />);
     const addBtn = screen.getByText('+');
     fireEvent.click(addBtn);
-    expect(useSettingsStore.getState().aiPersonas).toHaveLength(2);
+    expect(useSettingsStore.getState().aiPersonas).toHaveLength(7);
   });
 
   it('adds a new command to active persona', () => {
     render(<AISettingsTab />);
     const addCmdBtn = screen.getByText('+ Add Command');
     fireEvent.click(addCmdBtn);
-    expect(useSettingsStore.getState().aiPersonas[0].askAiCommands).toHaveLength(3);
+    expect(useSettingsStore.getState().aiPersonas[0].askAiCommands).toHaveLength(7);
   });
 
   it('resets commands to defaults', () => {
@@ -65,7 +65,7 @@ describe('AISettingsTab', () => {
     render(<AISettingsTab />);
     const resetBtn = screen.getByText('Reset Commands');
     fireEvent.click(resetBtn);
-    expect(useSettingsStore.getState().aiPersonas[0].askAiCommands).toHaveLength(2);
+    expect(useSettingsStore.getState().aiPersonas[0].askAiCommands).toHaveLength(4);
   });
 
   it('changes command execution mode', () => {

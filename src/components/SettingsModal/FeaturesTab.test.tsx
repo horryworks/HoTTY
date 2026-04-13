@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { FeaturesTab } from './FeaturesTab';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 describe('FeaturesTab', () => {
   it('renders all feature labels', () => {
@@ -12,13 +13,34 @@ describe('FeaturesTab', () => {
     expect(screen.getByText('File Explorer')).toBeTruthy();
   });
 
-  it('all checkboxes are checked and disabled', () => {
+  it('all checkboxes are checked and enabled by default', () => {
     render(<FeaturesTab />);
     const checkboxes = screen.getAllByRole('checkbox');
     expect(checkboxes.length).toBe(5);
     for (const cb of checkboxes) {
       expect(cb).toHaveProperty('checked', true);
-      expect(cb).toHaveProperty('disabled', true);
+      expect(cb).toHaveProperty('disabled', false);
     }
+  });
+
+  it('toggles a feature off when clicked', () => {
+    render(<FeaturesTab />);
+    const aiChatCheckbox = screen.getByRole('checkbox', { name: 'AI Chat' });
+    fireEvent.click(aiChatCheckbox);
+    const state = useSettingsStore.getState();
+    expect(state.enabledFeatures['ai-chat']).toBe(false);
+  });
+
+  it('reflects disabled feature state', () => {
+    useSettingsStore.getState().update('enabledFeatures', {
+      'ai-chat': false,
+      'log-viewer': true,
+      'ping-monitor': true,
+      'text-editor': true,
+      'file-explorer': true,
+    });
+    render(<FeaturesTab />);
+    const aiChatCheckbox = screen.getByRole('checkbox', { name: 'AI Chat' });
+    expect(aiChatCheckbox).toHaveProperty('checked', false);
   });
 });

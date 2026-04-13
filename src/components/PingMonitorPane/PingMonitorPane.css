@@ -64,6 +64,11 @@
   background: var(--btn-danger-hover-bg);
 }
 
+.ping-monitor-toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .ping-monitor-interval-label {
   display: flex;
   align-items: center;
