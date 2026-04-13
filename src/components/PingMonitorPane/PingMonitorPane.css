@@ -1,6 +1,7 @@
 .ping-monitor-pane {
   display: flex;
   flex-direction: column;
+  width: 100%;
   height: 100%;
   overflow: hidden;
   background: var(--bg-primary);
@@ -8,6 +9,7 @@
   font-family: var(--font-family);
 }
 
+/* Toolbar */
 .ping-monitor-toolbar {
   display: flex;
   align-items: center;
@@ -20,6 +22,17 @@
   flex-shrink: 0;
 }
 
+.ping-monitor-toolbar-title {
+  font-size: calc(var(--font-size-base) - 1px);
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.ping-monitor-toolbar-spacer {
+  flex: 1;
+}
+
 .ping-monitor-toolbar-btn {
   padding: 3px 8px;
   border: none;
@@ -28,6 +41,9 @@
   font-family: var(--font-family);
   font-size: calc(var(--font-size-base) - 2px);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .ping-monitor-btn-start {
@@ -57,8 +73,7 @@
   flex-shrink: 0;
 }
 
-.ping-monitor-interval-input {
-  width: 70px;
+.ping-monitor-interval-select {
   padding: 2px 4px;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
@@ -67,17 +82,11 @@
   font-family: var(--font-family);
   font-size: calc(var(--font-size-base) - 2px);
   outline: none;
-  text-align: right;
+  cursor: pointer;
 }
 
-.ping-monitor-interval-input:focus {
+.ping-monitor-interval-select:focus {
   border-color: var(--accent-color);
-}
-
-.ping-monitor-target-count {
-  font-size: calc(var(--font-size-base) - 2px);
-  color: var(--text-tertiary);
-  flex-shrink: 0;
 }
 
 .ping-monitor-log-indicator {
@@ -89,73 +98,98 @@
   flex-shrink: 0;
 }
 
-.ping-monitor-config {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-secondary);
+/* Error bar */
+.ping-monitor-error {
+  padding: 4px 10px;
+  background: var(--color-danger);
+  color: var(--text-on-accent);
+  font-size: calc(var(--font-size-base) - 2px);
+  flex-shrink: 0;
+}
+
+/* Body: split layout */
+.ping-monitor-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Left: targets panel */
+.ping-monitor-targets-panel {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  background: var(--bg-secondary);
+  overflow: hidden;
 }
 
-.ping-monitor-config-row {
+.ping-monitor-targets-header {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
-.ping-monitor-config-label {
+.ping-monitor-targets-title {
   font-size: calc(var(--font-size-base) - 1px);
-  color: var(--text-secondary);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ping-monitor-targets-count {
+  font-size: calc(var(--font-size-base) - 2px);
+  color: var(--text-tertiary);
 }
 
 .ping-monitor-target-input {
-  width: 100%;
-  padding: 5px 8px;
-  background: var(--input-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
+  flex: 1;
+  min-height: 0;
+  padding: 8px 10px;
+  background: var(--bg-tertiary);
+  border: none;
   color: var(--text-primary);
   font-family: var(--font-family);
   font-size: calc(var(--font-size-base) - 1px);
   outline: none;
-  resize: vertical;
+  resize: none;
   box-sizing: border-box;
+  overflow-y: scroll;
 }
 
-.ping-monitor-target-input:focus {
-  border-color: var(--accent-color);
-}
-
-.ping-monitor-logging-row {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
+.ping-monitor-logging-section {
+  padding: 6px 10px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .ping-monitor-logging-toggle {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: calc(var(--font-size-base) - 1px);
+  font-size: calc(var(--font-size-base) - 2px);
   color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .ping-monitor-logging-path {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
   padding: 3px 8px;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-primary);
   font-family: var(--font-family);
-  font-size: calc(var(--font-size-base) - 1px);
+  font-size: calc(var(--font-size-base) - 2px);
   outline: none;
+  box-sizing: border-box;
 }
 
 .ping-monitor-logging-path:focus {
@@ -167,12 +201,62 @@
   cursor: not-allowed;
 }
 
-.ping-monitor-error {
-  padding: 4px 10px;
-  background: var(--color-danger);
-  color: var(--text-on-accent);
-  font-size: calc(var(--font-size-base) - 2px);
+/* Divider with resize handle and collapse toggle */
+.ping-monitor-divider {
+  position: relative;
   flex-shrink: 0;
+  width: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ping-monitor-divider-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+.ping-monitor-divider-handle:hover {
+  background: var(--accent-color);
+  opacity: 0.5;
+}
+
+.ping-monitor-divider-toggle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  width: 16px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.ping-monitor-divider-toggle:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+/* Right: results panel */
+.ping-monitor-results-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .ping-monitor-results-wrapper {
@@ -226,6 +310,13 @@
   color: var(--color-danger);
 }
 
+.ping-monitor-th-num,
+.ping-monitor-td-num {
+  text-align: center;
+  width: 32px;
+  color: var(--text-tertiary);
+}
+
 .ping-monitor-td-rtt,
 .ping-monitor-td-ttl {
   text-align: right;
@@ -236,8 +327,47 @@
   color: var(--text-tertiary);
 }
 
-.ping-monitor-empty {
-  text-align: center;
-  padding: 20px 10px;
+.ping-monitor-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-tertiary);
+  font-size: calc(var(--font-size-base) - 1px);
+}
+
+/* Status bar */
+.ping-monitor-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  font-size: calc(var(--font-size-base) - 2px);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.ping-monitor-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ping-monitor-status-dot.running {
+  background: var(--success-color);
+}
+
+.ping-monitor-status-dot.stopped {
+  background: var(--text-tertiary);
+}
+
+.ping-monitor-status-label {
+  font-weight: 600;
+}
+
+.ping-monitor-status-info {
   color: var(--text-tertiary);
 }

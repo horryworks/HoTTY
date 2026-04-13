@@ -59,6 +59,7 @@ export interface SettingsState {
   customSafeCommands: string[];
   maxConsecutiveAutoExecutions: number;
   aiPersonas: PersonaDefinition[];
+  watchBufferLimit: number;
 }
 
 export interface SettingsActions {
@@ -104,6 +105,7 @@ const DEFAULTS: SettingsState = {
       ],
     },
   ],
+  watchBufferLimit: 500000,
 };
 
 export const useSettingsStore = create<SettingsState & SettingsActions>()(
@@ -115,7 +117,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 5,
+      version: 6,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -136,6 +138,9 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           state.customSafeCommands ??= DEFAULTS.customSafeCommands;
           state.maxConsecutiveAutoExecutions ??= DEFAULTS.maxConsecutiveAutoExecutions;
           state.aiPersonas ??= DEFAULTS.aiPersonas;
+        }
+        if (version < 6) {
+          state.watchBufferLimit ??= DEFAULTS.watchBufferLimit;
         }
         return state as SettingsState;
       },

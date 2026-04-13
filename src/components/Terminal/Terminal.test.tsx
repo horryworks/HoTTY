@@ -51,6 +51,7 @@ function makeTerm() {
     open: vi.fn(function (this: { element?: HTMLElement }, el: HTMLElement) {
       this.element = el;
     }),
+    write: vi.fn(),
     focus: vi.fn(),
     buffer: {
       active: {

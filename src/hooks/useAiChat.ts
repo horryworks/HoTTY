@@ -257,7 +257,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     let userPrompt = '';
 
     if (type === 'analyze-watch') {
-      systemInstruction = `${defaultPersona} Answer in ${lang}.`;
+      systemInstruction = lang !== 'English' ? `${defaultPersona} You MUST answer in ${lang}.` : defaultPersona;
       userPrompt = `Please analyze the following terminal output and point out any errors, warnings, or findings of interest:\n\n${finalSelection}`;
     } else if (type === 'free-format') {
       setAskAiFreeFormatData({ selection: finalSelection });
@@ -265,7 +265,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     } else {
       const existingCommand = currentCommands.find(c => c.id === type);
       if (existingCommand) {
-        systemInstruction = `${defaultPersona} Answer in ${lang}.`;
+        systemInstruction = lang !== 'English' ? `${defaultPersona} You MUST answer in ${lang}.` : defaultPersona;
         if (existingCommand.id === 'root-cause') {
           systemInstruction = `You are an expert troubleshooter. ${defaultPersona} Answer in ${lang}.`;
         }
@@ -314,7 +314,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     const lang = localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE) || 'English';
     const expertiseLabel = chatState?.selectedExpertise;
     const basePrompt = resolvePersonaPrompt(expertiseLabel);
-    const systemInstruction = `${basePrompt} Answer in ${lang}.`;
+    const systemInstruction = lang !== 'English' ? `${basePrompt} You MUST answer in ${lang}.` : basePrompt;
     const userPrompt = `${prompt}\n\n\`\`\`\n${selection}\n\`\`\``;
 
     updateAiChatStateRef.current(aiPaneId, {

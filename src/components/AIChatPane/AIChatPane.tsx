@@ -213,7 +213,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const [selectedModel, setSelectedModel] = useState(chatState?.selectedModel || 'Unspecified');
     const selectedModelRef = useRef(selectedModel);
     selectedModelRef.current = selectedModel;
-    const [selectedLanguage, setSelectedLanguage] = useState('English');
+    const [selectedLanguage, setSelectedLanguage] = useState(() => localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE) || 'English');
     const defaultExpertise = aiPersonas?.[0]?.label || 'General Assistant';
     const [selectedExpertise, setSelectedExpertise] = useState(chatState?.selectedExpertise || defaultExpertise);
     const [textareaHeight, setTextareaHeight] = useState(0);
@@ -356,9 +356,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     useEffect(() => {
         const selectedPersona = aiPersonas?.find(p => p.label === selectedExpertise);
         const basePrompt = selectedPersona?.systemPrompt || aiPersonas?.[0]?.systemPrompt || 'You are a helpful assistant.';
-        const langInstruction = selectedLanguage !== 'English' ? ` Answer in ${selectedLanguage}.` : '';
         const extraInstructions = buildExecutionRules();
-        setLocalSystemInstruction(`${basePrompt}${langInstruction}${extraInstructions}`);
+        const langInstruction = selectedLanguage !== 'English' ? ` You MUST answer in ${selectedLanguage}.` : '';
+        const newInstruction = `${basePrompt}${extraInstructions}${langInstruction}`;
+        setLocalSystemInstruction(newInstruction);
+        onChatStateChange?.({ systemInstruction: newInstruction });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedExpertise, selectedLanguage, aiPersonas]);
 
     // ── Scroll to bottom on new messages ──
@@ -535,7 +538,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             const candidate = prev === 'Unspecified' && savedModel ? savedModel : prev;
                             if (candidate === 'Unspecified') return 'Unspecified';
                             const stillAvailable = models.some(m => m.name === candidate);
-                            return stillAvailable ? candidate : 'Unspecified';
+                            const resolved = stillAvailable ? candidate : 'Unspecified';
+                            if (resolved !== 'Unspecified') {
+                                onChatStateChange?.({ selectedModel: resolved });
+                            }
+                            return resolved;
                         });
                     } else {
                         setModelLoadError(true);
@@ -567,6 +574,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 const savedModel = localStorage.getItem(STORAGE_KEYS.AI_SELECTED_MODEL_PER_PROVIDER(activeAiProvider));
                 if (savedModel && models.some(m => m.name === savedModel)) {
                     setSelectedModel(savedModel);
+                    onChatStateChange?.({ selectedModel: savedModel });
                 }
             } else {
                 setModelLoadError(true);
@@ -654,14 +662,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         if (!lastTargetSessionId) return;
         const cleanCmd = command.trim();
         onRunCommand?.(lastTargetSessionId, cleanCmd);
-
-        const lines = cleanCmd.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-        const targetId = lastTargetSessionId;
-        lines.forEach((line, index) => {
-            setTimeout(() => {
-                tauriService.sendInput(targetId, line + '\r').catch(() => {});
-            }, index * 150);
-        });
         tauriService.focusWindow().catch(() => {});
         window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: lastTargetSessionId } }));
     };

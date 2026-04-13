@@ -243,7 +243,7 @@ describe('useAiChat', () => {
     const state = result.current.aiChatStates.get('ai-1');
     expect(state?.pendingMessage).toContain('analyze the following terminal output');
     expect(state?.pendingMessage).toContain('terminal output here');
-    expect(state?.systemInstruction).toContain('Answer in English');
+    expect(state?.systemInstruction).toContain('You are a helpful assistant');
   });
 
   it('sendMessage prepends watch buffer when available', async () => {

@@ -21,6 +21,8 @@ vi.mock('./services/tauriService', () => ({
     textEditorApproveDroppedFile: vi.fn().mockResolvedValue(undefined),
     getAppVersion: vi.fn().mockResolvedValue('2.0.0-beta1'),
     setWindowTitle: vi.fn().mockResolvedValue(undefined),
+    onSessionData: vi.fn().mockResolvedValue(() => {}),
+    showContextMenu: vi.fn().mockResolvedValue(null),
   },
 }));
 

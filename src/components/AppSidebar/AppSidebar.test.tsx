@@ -15,6 +15,7 @@ describe('AppSidebar', () => {
       showBottomBar: false,
     });
     useSettingsStore.getState().update('sidebarPosition', 'left');
+    useSettingsStore.getState().update('lineWrapEnabled', false);
   });
 
   it('renders a layout button for each layout mode and marks the active one', () => {
@@ -49,5 +50,21 @@ describe('AppSidebar', () => {
     useSettingsStore.getState().update('sidebarPosition', 'right');
     const { container } = render(<AppSidebar onOpenSettings={() => {}} />);
     expect(container.querySelector('.app-sidebar-right')).not.toBeNull();
+  });
+
+  it('toggles lineWrapEnabled on line wrap button click', () => {
+    useSettingsStore.getState().update('lineWrapEnabled', true);
+    render(<AppSidebar onOpenSettings={() => {}} />);
+    fireEvent.click(screen.getByTitle('Disable Line Wrap'));
+    expect(useSettingsStore.getState().lineWrapEnabled).toBe(false);
+    fireEvent.click(screen.getByTitle('Enable Line Wrap'));
+    expect(useSettingsStore.getState().lineWrapEnabled).toBe(true);
+  });
+
+  it('shows active state on line wrap button when lineWrapEnabled is true', () => {
+    useSettingsStore.getState().update('lineWrapEnabled', true);
+    render(<AppSidebar onOpenSettings={() => {}} />);
+    const btn = screen.getByTitle('Disable Line Wrap');
+    expect(btn.classList.contains('app-sidebar-btn-active')).toBe(true);
   });
 });

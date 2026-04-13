@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { handleTerminalKey, type TerminalKeyHooks } from './useSessionManager';
+import { TERMINAL_SEQUENCES } from '../constants/terminalSequences';
 
 function makeTerm(selection: string) {
   const clearSelection = vi.fn();
@@ -77,5 +78,12 @@ describe('handleTerminalKey', () => {
     const { term } = makeTerm('');
     const r = handleTerminalKey(makeEvent({ key: 'a' }), term, onPaste);
     expect(r).toBe(true);
+  });
+});
+
+describe('TERMINAL_SEQUENCES used by useSessionManager', () => {
+  it('LINE_WRAP sequences are DECAWM escape codes', () => {
+    expect(TERMINAL_SEQUENCES.LINE_WRAP_ENABLED).toBe('\x1b[?7h');
+    expect(TERMINAL_SEQUENCES.LINE_WRAP_DISABLED).toBe('\x1b[?7l');
   });
 });

@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { tauriService } from '../services/tauriService';
 import { useSettingsStore } from '../stores/settingsStore';
+import { TERMINAL_SEQUENCES } from '../constants/terminalSequences';
 import type {
   ProtocolId,
   SessionStatus,
@@ -96,6 +97,17 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
     });
   }, [loggingEnabled, loggingPath]);
 
+  // Apply Line Wrap setting to all terminals when it changes
+  const lineWrapEnabled = settings.lineWrapEnabled;
+  useEffect(() => {
+    const sequence = lineWrapEnabled
+      ? TERMINAL_SEQUENCES.LINE_WRAP_ENABLED
+      : TERMINAL_SEQUENCES.LINE_WRAP_DISABLED;
+    for (const rec of sessionsRef.current.values()) {
+      rec.term.write(sequence);
+    }
+  }, [lineWrapEnabled]);
+
   // Global event subscriptions — one set for the whole app.
   useEffect(() => {
     let cancelled = false;
@@ -116,7 +128,13 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
     track(
       tauriService.onSessionData(({ sessionId, data }) => {
         const rec = sessionsRef.current.get(sessionId);
-        if (rec) rec.term.write(data);
+        if (!rec) return;
+        // Strip server DECAWM overrides so our lineWrapEnabled setting is authoritative
+        const wrap = settingsRef.current.lineWrapEnabled;
+        const filtered = wrap
+          ? data.replace(/\x1b\[\?7l/g, '')   // remove disable when wrap is ON
+          : data.replace(/\x1b\[\?7h/g, '');   // remove enable when wrap is OFF
+        rec.term.write(filtered);
       })
     );
 
@@ -173,6 +191,9 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       });
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
+
+      // Apply initial line wrap state
+      term.write(s.lineWrapEnabled ? TERMINAL_SEQUENCES.LINE_WRAP_ENABLED : TERMINAL_SEQUENCES.LINE_WRAP_DISABLED);
 
       term.onSelectionChange(() => {
         const sel = term.getSelection();

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { tauriService } from '../../services/tauriService';
+import { useSettingsStore } from '../../stores/settingsStore';
+import type { TextEditorTab } from '../../types/appTypes';
 import './TextEditorPane.css';
 
 interface TextEditorPaneProps {
@@ -7,13 +9,31 @@ interface TextEditorPaneProps {
   active: boolean;
   initialFilePath?: string;
   onDisplayNameChange?: (name: string) => void;
+  onOpenFile?: (filePath: string) => void;
+}
+
+export interface TextEditorPaneHandle {
+  openFile: (filePath: string) => void;
 }
 
 const ENCODINGS = ['utf-8', 'shift_jis', 'euc-jp'] as const;
+const LINE_ENDINGS = ['CRLF', 'LF'] as const;
 
 function filenameFromPath(path: string): string {
   const sep = path.includes('\\') ? '\\' : '/';
   return path.split(sep).pop() || path;
+}
+
+function makeTab(overrides?: Partial<TextEditorTab>): TextEditorTab {
+  return {
+    id: crypto.randomUUID(),
+    filePath: null,
+    content: '',
+    savedContent: '',
+    encoding: 'utf-8',
+    lineEnding: 'CRLF',
+    ...overrides,
+  };
 }
 
 export function TextEditorPane({
@@ -22,144 +42,1041 @@ export function TextEditorPane({
   initialFilePath,
   onDisplayNameChange,
 }: TextEditorPaneProps) {
-  const [filePath, setFilePath] = useState<string | null>(null);
-  const [content, setContent] = useState('');
-  const [originalContent, setOriginalContent] = useState('');
-  const [encoding, setEncoding] = useState<string>('utf-8');
-  const [lineEnding, setLineEnding] = useState('LF');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [tabs, setTabs] = useState<TextEditorTab[]>(() => [makeTab()]);
+  const [activeTabId, setActiveTabId] = useState(tabs[0].id);
+  const [cursorLine, setCursorLine] = useState(1);
+  const [cursorCol, setCursorCol] = useState(1);
+  const [openMenu, setOpenMenu] = useState<'file' | 'edit' | 'view' | null>(null);
+  const [showFind, setShowFind] = useState(false);
+  const [showReplace, setShowReplace] = useState(false);
+  const [findText, setFindText] = useState('');
+  const [replaceText, setReplaceText] = useState('');
+  const [showGoto, setShowGoto] = useState(false);
+  const [gotoValue, setGotoValue] = useState('');
+  const [showReturnCodes, setShowReturnCodes] = useState(false);
+  const [showEncodingPicker, setShowEncodingPicker] = useState(false);
+  const [showLineEndingPicker, setShowLineEndingPicker] = useState(false);
+
+  const lineWrapEnabled = useSettingsStore((s) => s.lineWrapEnabled);
+  const updateSetting = useSettingsStore((s) => s.update);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lineNumbersRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const subtabListRef = useRef<HTMLDivElement>(null);
+  const findInputRef = useRef<HTMLInputElement>(null);
+  const gotoInputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const initialLoaded = useRef(false);
+  const measurerRef = useRef<HTMLDivElement | null>(null);
+  const [visualLineNumbers, setVisualLineNumbers] = useState<(number | '')[]>([1]);
 
-  const isDirty = content !== originalContent;
+  const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
 
-  const loadFile = useCallback(async (path: string, enc: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await tauriService.textEditorReadFile(path, enc);
-      setContent(result.content);
-      setOriginalContent(result.content);
-      setLineEnding(result.lineEnding);
-      setFilePath(path);
-      onDisplayNameChange?.(filenameFromPath(path));
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [onDisplayNameChange]);
+  const isTabDirty = useCallback((tab: TextEditorTab) => {
+    if (!tab.filePath && tab.content === '') return false;
+    return tab.content !== tab.savedContent;
+  }, []);
+
+  // Update a single tab's data
+  const updateTab = useCallback((tabId: string, updates: Partial<TextEditorTab>) => {
+    setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, ...updates } : t)));
+  }, []);
+
+  // Update display name based on active tab
+  const syncDisplayName = useCallback(
+    (tab: TextEditorTab) => {
+      const name = tab.filePath ? filenameFromPath(tab.filePath) : 'Text Editor';
+      onDisplayNameChange?.(name);
+    },
+    [onDisplayNameChange],
+  );
+
+  // Load a file into a tab
+  const loadFileIntoTab = useCallback(
+    async (tabId: string, path: string, encoding: string) => {
+      try {
+        const result = await tauriService.textEditorReadFile(path, encoding);
+        updateTab(tabId, {
+          filePath: path,
+          content: result.content,
+          savedContent: result.content,
+          lineEnding: result.lineEnding as 'LF' | 'CRLF',
+        });
+        return true;
+      } catch (err) {
+        console.error('Failed to load file:', err);
+        return false;
+      }
+    },
+    [updateTab],
+  );
+
+  // Open a file (create new tab or reuse empty tab)
+  const openFileInTab = useCallback(
+    async (filePath: string) => {
+      // Check if already open
+      const existing = tabs.find((t) => t.filePath === filePath);
+      if (existing) {
+        setActiveTabId(existing.id);
+        syncDisplayName(existing);
+        return;
+      }
+
+      // Reuse active empty untitled tab
+      const emptyTab = tabs.find((t) => t.id === activeTabId && !t.filePath && !t.content);
+      if (emptyTab) {
+        await loadFileIntoTab(emptyTab.id, filePath, emptyTab.encoding);
+        syncDisplayName({ ...emptyTab, filePath });
+      } else {
+        const newTab = makeTab();
+        setTabs((prev) => [...prev, newTab]);
+        setActiveTabId(newTab.id);
+        await loadFileIntoTab(newTab.id, filePath, 'utf-8');
+        syncDisplayName({ ...newTab, filePath });
+      }
+    },
+    [tabs, activeTabId, loadFileIntoTab, syncDisplayName],
+  );
 
   // Load initial file if provided
   useEffect(() => {
-    if (initialFilePath && !initialLoaded.current) {
-      initialLoaded.current = true;
-      loadFile(initialFilePath, encoding);
+    if (!initialFilePath || initialLoaded.current) return;
+    initialLoaded.current = true;
+    const load = async () => {
+      const existing = tabs.find((t) => t.filePath === initialFilePath);
+      if (existing) return;
+      const emptyTab = tabs.find((t) => !t.filePath && !t.content);
+      if (emptyTab) {
+        await loadFileIntoTab(emptyTab.id, initialFilePath, emptyTab.encoding);
+        syncDisplayName({ ...emptyTab, filePath: initialFilePath });
+      } else {
+        const newTab = makeTab();
+        setTabs((prev) => [...prev, newTab]);
+        setActiveTabId(newTab.id);
+        await loadFileIntoTab(newTab.id, initialFilePath, 'utf-8');
+        syncDisplayName({ ...newTab, filePath: initialFilePath });
+      }
+    };
+    load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFilePath]);
+
+  // Expose openFile for external callers (App.tsx)
+  const handleRef = useRef<TextEditorPaneHandle>({ openFile: openFileInTab });
+
+  // Store handle on the DOM element for App.tsx to access
+  useEffect(() => {
+    handleRef.current.openFile = openFileInTab;
+    const el = document.querySelector(`[data-pane-id="${paneId}"]`);
+    if (el) {
+      (el as HTMLElement & { __editorHandle?: TextEditorPaneHandle }).__editorHandle = handleRef.current;
     }
-  }, [initialFilePath, encoding, loadFile]);
+  }, [paneId, openFileInTab]);
+
+  // Tab operations
+  const addNewTab = useCallback(() => {
+    const newTab = makeTab();
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+    syncDisplayName(newTab);
+  }, [syncDisplayName]);
+
+  const forceCloseTab = useCallback(
+    (tabId: string) => {
+      setTabs((prev) => {
+        if (prev.length <= 1) {
+          const resetTab = makeTab({ id: prev[0].id });
+          setActiveTabId(resetTab.id);
+          syncDisplayName(resetTab);
+          return [resetTab];
+        }
+        const idx = prev.findIndex((t) => t.id === tabId);
+        const next = prev.filter((t) => t.id !== tabId);
+        if (tabId === activeTabId) {
+          const newIdx = Math.min(idx, next.length - 1);
+          setActiveTabId(next[newIdx].id);
+          syncDisplayName(next[newIdx]);
+        }
+        return next;
+      });
+    },
+    [activeTabId, syncDisplayName],
+  );
+
+  const closeTab = useCallback(
+    (tabId: string) => {
+      // TODO: add unsaved changes confirmation
+      forceCloseTab(tabId);
+    },
+    [forceCloseTab],
+  );
+
+  const switchTab = useCallback(
+    (tabId: string) => {
+      setActiveTabId(tabId);
+      const tab = tabs.find((t) => t.id === tabId);
+      if (tab) syncDisplayName(tab);
+      setCursorLine(1);
+      setCursorCol(1);
+    },
+    [tabs, syncDisplayName],
+  );
+
+  // Sync scroll between line numbers, overlay, and textarea
+  const handleTextareaScroll = useCallback(() => {
+    if (textareaRef.current) {
+      if (lineNumbersRef.current) {
+        lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
+      }
+      if (overlayRef.current) {
+        overlayRef.current.scrollTop = textareaRef.current.scrollTop;
+        overlayRef.current.scrollLeft = textareaRef.current.scrollLeft;
+      }
+    }
+  }, []);
+
+  // Update cursor position
+  const updateCursorPosition = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const pos = ta.selectionStart;
+    const textBefore = ta.value.substring(0, pos);
+    const lines = textBefore.split('\n');
+    setCursorLine(lines.length);
+    setCursorCol(lines[lines.length - 1].length + 1);
+  }, []);
+
+  const handleContentChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      updateTab(activeTabId, { content: e.target.value });
+      updateCursorPosition();
+    },
+    [activeTabId, updateTab, updateCursorPosition],
+  );
+
+  // File operations
+  const handleNew = useCallback(() => {
+    addNewTab();
+    setOpenMenu(null);
+  }, [addNewTab]);
 
   const handleOpen = useCallback(async () => {
-    setError(null);
-    try {
-      const path = await tauriService.textEditorOpenFile();
-      if (path) {
-        await loadFile(path, encoding);
-      }
-    } catch (e) {
-      setError(String(e));
-    }
-  }, [encoding, loadFile]);
-
-  const handleSaveAs = useCallback(async () => {
-    setError(null);
-    try {
-      const path = await tauriService.textEditorSaveFile(filePath ?? undefined);
-      if (path) {
-        await tauriService.textEditorWriteFile(path, content, encoding);
-        setFilePath(path);
-        setOriginalContent(content);
-        onDisplayNameChange?.(filenameFromPath(path));
-      }
-    } catch (e) {
-      setError(String(e));
-    }
-  }, [filePath, content, encoding, onDisplayNameChange]);
+    setOpenMenu(null);
+    const path = await tauriService.textEditorOpenFile();
+    if (!path) return;
+    await openFileInTab(path);
+  }, [openFileInTab]);
 
   const handleSave = useCallback(async () => {
-    if (!filePath) {
-      handleSaveAs();
+    setOpenMenu(null);
+    let savePath = activeTab.filePath;
+    if (!savePath) {
+      savePath = await tauriService.textEditorSaveFile();
+      if (!savePath) return;
+      updateTab(activeTabId, { filePath: savePath });
+    }
+    try {
+      let saveContent = activeTab.content;
+      if (activeTab.lineEnding === 'CRLF') {
+        saveContent = activeTab.content.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+      } else {
+        saveContent = activeTab.content.replace(/\r\n/g, '\n');
+      }
+      await tauriService.textEditorWriteFile(savePath, saveContent, activeTab.encoding);
+      updateTab(activeTabId, { savedContent: activeTab.content, filePath: savePath });
+      syncDisplayName({ ...activeTab, filePath: savePath });
+    } catch (err) {
+      console.error('Failed to save file:', err);
+    }
+  }, [activeTab, activeTabId, updateTab, syncDisplayName]);
+
+  const handleSaveAs = useCallback(async () => {
+    setOpenMenu(null);
+    const savePath = await tauriService.textEditorSaveFile(activeTab.filePath || undefined);
+    if (!savePath) return;
+    try {
+      let saveContent = activeTab.content;
+      if (activeTab.lineEnding === 'CRLF') {
+        saveContent = activeTab.content.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+      } else {
+        saveContent = activeTab.content.replace(/\r\n/g, '\n');
+      }
+      await tauriService.textEditorWriteFile(savePath, saveContent, activeTab.encoding);
+      updateTab(activeTabId, { savedContent: activeTab.content, filePath: savePath });
+      syncDisplayName({ ...activeTab, filePath: savePath });
+    } catch (err) {
+      console.error('Failed to save file:', err);
+    }
+  }, [activeTab, activeTabId, updateTab, syncDisplayName]);
+
+  const handleCloseTab = useCallback(() => {
+    setOpenMenu(null);
+    closeTab(activeTabId);
+  }, [activeTabId, closeTab]);
+
+  // Find operations
+  const handleFindNext = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta || !findText) return;
+    const startPos = ta.selectionEnd;
+    let idx = activeTab.content.indexOf(findText, startPos);
+    if (idx === -1) {
+      idx = activeTab.content.indexOf(findText);
+    }
+    if (idx !== -1) {
+      ta.focus();
+      ta.setSelectionRange(idx, idx + findText.length);
+    }
+  }, [activeTab.content, findText]);
+
+  const handleReplaceCurrent = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta || !findText) return;
+    const selStart = ta.selectionStart;
+    const selEnd = ta.selectionEnd;
+    const selected = activeTab.content.substring(selStart, selEnd);
+    if (selected === findText) {
+      const newContent =
+        activeTab.content.substring(0, selStart) + replaceText + activeTab.content.substring(selEnd);
+      updateTab(activeTabId, { content: newContent });
+      ta.focus();
+      ta.setSelectionRange(selStart + replaceText.length, selStart + replaceText.length);
+      handleFindNext();
+    } else {
+      handleFindNext();
+    }
+  }, [activeTab.content, activeTabId, findText, replaceText, updateTab, handleFindNext]);
+
+  const handleReplaceAll = useCallback(() => {
+    if (!findText) return;
+    const newContent = activeTab.content.split(findText).join(replaceText);
+    updateTab(activeTabId, { content: newContent });
+  }, [activeTab.content, activeTabId, findText, replaceText, updateTab]);
+
+  // GoTo line
+  const handleGotoLine = useCallback(() => {
+    const lineNum = parseInt(gotoValue, 10);
+    if (isNaN(lineNum) || lineNum < 1) return;
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const lines = activeTab.content.split('\n');
+    const targetLine = Math.min(lineNum, lines.length);
+    let pos = 0;
+    for (let i = 0; i < targetLine - 1; i++) {
+      pos += lines[i].length + 1;
+    }
+    ta.focus();
+    ta.setSelectionRange(pos, pos);
+    setShowGoto(false);
+    setGotoValue('');
+    updateCursorPosition();
+  }, [gotoValue, activeTab.content, updateCursorPosition]);
+
+  // Encoding / line ending change
+  const handleEncodingChange = useCallback(
+    async (newEncoding: string) => {
+      setShowEncodingPicker(false);
+      updateTab(activeTabId, { encoding: newEncoding });
+      if (activeTab.filePath) {
+        try {
+          const result = await tauriService.textEditorReadFile(activeTab.filePath, newEncoding);
+          updateTab(activeTabId, {
+            encoding: newEncoding,
+            content: result.content,
+            savedContent: result.content,
+          });
+        } catch (err) {
+          console.error('Failed to re-read file with encoding:', err);
+        }
+      }
+    },
+    [activeTab.filePath, activeTabId, updateTab],
+  );
+
+  const handleLineEndingChange = useCallback(
+    (newLineEnding: 'LF' | 'CRLF') => {
+      setShowLineEndingPicker(false);
+      updateTab(activeTabId, { lineEnding: newLineEnding });
+    },
+    [activeTabId, updateTab],
+  );
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`);
+      if (!paneEl?.contains(document.activeElement)) return;
+
+      if (e.ctrlKey) {
+        switch (e.key.toLowerCase()) {
+          case 'o':
+            e.preventDefault();
+            handleOpen();
+            break;
+          case 's':
+            e.preventDefault();
+            if (e.shiftKey) handleSaveAs();
+            else handleSave();
+            break;
+          case 'f':
+            e.preventDefault();
+            setShowFind(true);
+            setShowReplace(false);
+            setTimeout(() => findInputRef.current?.focus(), 0);
+            break;
+          case 'h':
+            e.preventDefault();
+            setShowFind(true);
+            setShowReplace(true);
+            setTimeout(() => findInputRef.current?.focus(), 0);
+            break;
+          case 'g':
+            e.preventDefault();
+            setShowGoto(true);
+            setTimeout(() => gotoInputRef.current?.focus(), 0);
+            break;
+          case 'w':
+            e.preventDefault();
+            closeTab(activeTabId);
+            break;
+        }
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [paneId, handleOpen, handleSave, handleSaveAs, closeTab, activeTabId]);
+
+  // Close menus on click outside
+  useEffect(() => {
+    if (!openMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openMenu]);
+
+  // Close dropdowns on click outside
+  useEffect(() => {
+    if (!showEncodingPicker && !showLineEndingPicker) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.text-editor-status-item')) {
+        setShowEncodingPicker(false);
+        setShowLineEndingPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showEncodingPicker, showLineEndingPicker]);
+
+  // Auto-scroll active sub-tab into view
+  useEffect(() => {
+    const container = subtabListRef.current;
+    if (!container) return;
+    const activeEl = container.querySelector('.text-editor-subtab.active') as HTMLElement | null;
+    activeEl?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [activeTabId]);
+
+  // Horizontal scroll on sub-tab bar with mouse wheel
+  useEffect(() => {
+    const container = subtabListRef.current;
+    if (!container) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        container.scrollLeft += e.deltaY;
+      }
+    };
+    container.addEventListener('wheel', onWheel, { passive: false });
+    return () => container.removeEventListener('wheel', onWheel);
+  }, []);
+
+  // Sub-tab middle-click close
+  const handleSubTabMouseDown = useCallback(
+    (e: React.MouseEvent, tabId: string) => {
+      if (e.button === 1) {
+        e.preventDefault();
+        closeTab(tabId);
+      }
+    },
+    [closeTab],
+  );
+
+  // Sub-tab drag reorder
+  const [dragTabId, setDragTabId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [dropAtEnd, setDropAtEnd] = useState(false);
+
+  const handleTabDragStart = useCallback((e: React.DragEvent, tabId: string) => {
+    setDragTabId(tabId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/x-tab-id', tabId);
+  }, []);
+
+  const handleTabDragOver = useCallback(
+    (e: React.DragEvent, tabId: string) => {
+      if (!dragTabId || dragTabId === tabId) {
+        setDropTargetId(null);
+        return;
+      }
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      setDropTargetId(tabId);
+      setDropAtEnd(false);
+    },
+    [dragTabId],
+  );
+
+  const handleTabDrop = useCallback(
+    (e: React.DragEvent, targetTabId: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!dragTabId || dragTabId === targetTabId) {
+        setDragTabId(null);
+        setDropTargetId(null);
+        setDropAtEnd(false);
+        return;
+      }
+      setTabs((prev) => {
+        const fromIdx = prev.findIndex((t) => t.id === dragTabId);
+        const toIdx = prev.findIndex((t) => t.id === targetTabId);
+        if (fromIdx === -1 || toIdx === -1) return prev;
+        const next = [...prev];
+        const [moved] = next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, moved);
+        return next;
+      });
+      setDragTabId(null);
+      setDropTargetId(null);
+      setDropAtEnd(false);
+    },
+    [dragTabId],
+  );
+
+  const handleTabDragEnd = useCallback(() => {
+    setDragTabId(null);
+    setDropTargetId(null);
+    setDropAtEnd(false);
+  }, []);
+
+  const handleSubtabListDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (e.target !== e.currentTarget) return;
+      if (!dragTabId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      setDropTargetId(null);
+      setDropAtEnd(true);
+    },
+    [dragTabId],
+  );
+
+  const handleSubtabListDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (e.target !== e.currentTarget) return;
+      if (!dragTabId) return;
+      e.preventDefault();
+      setDropAtEnd(false);
+      setTabs((prev) => {
+        const fromIdx = prev.findIndex((t) => t.id === dragTabId);
+        if (fromIdx === -1 || fromIdx === prev.length - 1) return prev;
+        const next = [...prev];
+        const [moved] = next.splice(fromIdx, 1);
+        next.push(moved);
+        return next;
+      });
+      setDragTabId(null);
+      setDropTargetId(null);
+    },
+    [dragTabId],
+  );
+
+  // Compute visual line numbers, accounting for line wrap
+  const computeVisualLineNumbers = useCallback(() => {
+    const lines = activeTab.content.split('\n');
+    if (!lineWrapEnabled) {
+      setVisualLineNumbers(lines.map((_, i) => i + 1));
       return;
     }
-    setError(null);
-    try {
-      await tauriService.textEditorWriteFile(filePath, content, encoding);
-      setOriginalContent(content);
-    } catch (e) {
-      setError(String(e));
+    const ta = textareaRef.current;
+    if (!ta) {
+      setVisualLineNumbers(lines.map((_, i) => i + 1));
+      return;
     }
-  }, [filePath, content, encoding, handleSaveAs]);
+    const style = window.getComputedStyle(ta);
+    const lineHeightPx = parseFloat(style.lineHeight);
+    const paddingLeft = parseFloat(style.paddingLeft);
+    const paddingRight = parseFloat(style.paddingRight);
+    const innerWidth = ta.clientWidth - paddingLeft - paddingRight;
+    if (innerWidth <= 0 || !isFinite(lineHeightPx) || lineHeightPx <= 0) {
+      setVisualLineNumbers(lines.map((_, i) => i + 1));
+      return;
+    }
+    if (!measurerRef.current) {
+      measurerRef.current = document.createElement('div');
+      document.body.appendChild(measurerRef.current);
+    }
+    const measurer = measurerRef.current;
+    measurer.style.cssText = [
+      'position:fixed',
+      'top:-9999px',
+      'left:-9999px',
+      'visibility:hidden',
+      'pointer-events:none',
+      `width:${innerWidth}px`,
+      `font-family:${style.fontFamily}`,
+      `font-size:${style.fontSize}`,
+      `line-height:${style.lineHeight}`,
+      'white-space:pre-wrap',
+      'word-wrap:break-word',
+      'tab-size:4',
+      'padding:0',
+      'margin:0',
+      'border:none',
+      'overflow:hidden',
+    ].join(';');
+    const spans = lines.map((line) => {
+      const el = document.createElement('div');
+      el.textContent = line || '\u200b';
+      return el;
+    });
+    measurer.replaceChildren(...spans);
+    const heights = spans.map((el) => el.offsetHeight);
+    measurer.replaceChildren();
+    const result: (number | '')[] = [];
+    heights.forEach((height, i) => {
+      const visualCount = Math.max(1, Math.round(height / lineHeightPx));
+      result.push(i + 1);
+      for (let j = 1; j < visualCount; j++) result.push('');
+    });
+    setVisualLineNumbers(result);
+  }, [activeTab.content, lineWrapEnabled]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
-      const k = e.key.toLowerCase();
-      if (k === 's') {
-        e.preventDefault();
-        handleSave();
-      } else if (k === 'o') {
-        e.preventDefault();
-        handleOpen();
+  // Recompute visual line numbers on content or wrap change
+  useEffect(() => {
+    computeVisualLineNumbers();
+  }, [computeVisualLineNumbers]);
+
+  // Recompute on textarea resize (relevant when line wrap is on)
+  useEffect(() => {
+    if (!lineWrapEnabled) return;
+    if (typeof ResizeObserver === 'undefined') return;
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const observer = new ResizeObserver(() => computeVisualLineNumbers());
+    observer.observe(ta);
+    return () => observer.disconnect();
+  }, [lineWrapEnabled, computeVisualLineNumbers]);
+
+  // Clean up measurer on unmount
+  useEffect(() => {
+    return () => {
+      if (measurerRef.current) {
+        document.body.removeChild(measurerRef.current);
+        measurerRef.current = null;
       }
-    }
-  }, [handleSave, handleOpen]);
-
-  const displayName = filePath ? filenameFromPath(filePath) : 'Untitled';
+    };
+  }, []);
 
   return (
-    <div
-      className={`text-editor-pane${active ? ' active' : ''}`}
-      data-pane-id={paneId}
-      ref={containerRef}
-      onKeyDown={handleKeyDown}
-    >
-      <div className="text-editor-toolbar">
-        <span className="text-editor-filename">
-          {isDirty && <span className="text-editor-dirty" title="Unsaved changes" />}
-          {displayName}
-        </span>
-        <button type="button" className="text-editor-toolbar-btn" onClick={handleOpen} title="Open file (Ctrl+O)">
-          Open
-        </button>
-        <button type="button" className="text-editor-toolbar-btn" onClick={handleSave} title="Save (Ctrl+S)">
-          Save
-        </button>
-        <button type="button" className="text-editor-toolbar-btn" onClick={handleSaveAs} title="Save As">
-          Save As
-        </button>
-        <select
-          className="text-editor-encoding"
-          value={encoding}
-          onChange={(e) => setEncoding(e.target.value)}
-          title="Encoding"
+    <div className={`text-editor-pane${active ? ' active' : ''}`} data-pane-id={paneId}>
+      {/* Sub-tab bar */}
+      <div className="text-editor-subtab-bar">
+        <div
+          className="text-editor-subtab-list"
+          ref={subtabListRef}
+          onDragOver={handleSubtabListDragOver}
+          onDrop={handleSubtabListDrop}
         >
-          {ENCODINGS.map((enc) => (
-            <option key={enc} value={enc}>{enc}</option>
-          ))}
-        </select>
-        <span className="text-editor-line-ending" title="Line ending">{lineEnding}</span>
+          {tabs.map((tab, tabIndex) => {
+            const fileName = tab.filePath ? filenameFromPath(tab.filePath) : 'Untitled';
+            const dirty = isTabDirty(tab);
+            const isLastTab = tabIndex === tabs.length - 1;
+            return (
+              <div
+                key={tab.id}
+                className={`text-editor-subtab${tab.id === activeTabId ? ' active' : ''}${dragTabId === tab.id ? ' dragging' : ''}${dropTargetId === tab.id ? ' drop-target' : ''}${dropAtEnd && isLastTab ? ' drop-target-right' : ''}`}
+                onClick={() => switchTab(tab.id)}
+                onMouseDown={(e) => handleSubTabMouseDown(e, tab.id)}
+                title={tab.filePath || 'Untitled'}
+                draggable
+                onDragStart={(e) => handleTabDragStart(e, tab.id)}
+                onDragOver={(e) => handleTabDragOver(e, tab.id)}
+                onDrop={(e) => handleTabDrop(e, tab.id)}
+                onDragEnd={handleTabDragEnd}
+              >
+                <span className="text-editor-subtab-title">
+                  {dirty && <span className="text-editor-subtab-dirty">{'\u25CF'} </span>}
+                  {fileName}
+                </span>
+                <div
+                  className="text-editor-subtab-close"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeTab(tab.id);
+                  }}
+                >
+                  <svg
+                    width="8"
+                    height="8"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="text-editor-subtab-new" onClick={addNewTab} title="New Tab">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+          >
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </div>
       </div>
-      {error && <div className="text-editor-error">{error}</div>}
-      {loading ? (
-        <div className="text-editor-loading">Loading...</div>
-      ) : (
-        <textarea
-          className="text-editor-area"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          spellCheck={false}
-          wrap="off"
-          placeholder="Open a file or start typing..."
-        />
+
+      {/* Toolbar: menus + status */}
+      <div className="text-editor-toolbar">
+        <div className="text-editor-menus" ref={menuRef}>
+          {/* File Menu */}
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className={`text-editor-menu-btn${openMenu === 'file' ? ' active' : ''}`}
+              onClick={() => setOpenMenu(openMenu === 'file' ? null : 'file')}
+            >
+              File
+            </button>
+            {openMenu === 'file' && (
+              <div className="text-editor-menu-dropdown">
+                <div className="text-editor-menu-item" onClick={handleNew}>
+                  <span>New Tab</span>
+                  <span className="text-editor-menu-shortcut">Ctrl+N</span>
+                </div>
+                <div className="text-editor-menu-item" onClick={handleOpen}>
+                  <span>Open...</span>
+                  <span className="text-editor-menu-shortcut">Ctrl+O</span>
+                </div>
+                <div className="text-editor-menu-separator" />
+                <div className="text-editor-menu-item" onClick={handleSave}>
+                  <span>Save</span>
+                  <span className="text-editor-menu-shortcut">Ctrl+S</span>
+                </div>
+                <div className="text-editor-menu-item" onClick={handleSaveAs}>
+                  <span>Save As...</span>
+                  <span className="text-editor-menu-shortcut">Ctrl+Shift+S</span>
+                </div>
+                <div className="text-editor-menu-separator" />
+                <div className="text-editor-menu-item" onClick={handleCloseTab}>
+                  <span>Close Tab</span>
+                  <span className="text-editor-menu-shortcut">Ctrl+W</span>
+                </div>
+              </div>
+            )}
+          </div>
+          {/* Edit Menu */}
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className={`text-editor-menu-btn${openMenu === 'edit' ? ' active' : ''}`}
+              onClick={() => setOpenMenu(openMenu === 'edit' ? null : 'edit')}
+            >
+              Edit
+            </button>
+            {openMenu === 'edit' && (
+              <div className="text-editor-menu-dropdown">
+                <div
+                  className="text-editor-menu-item"
+                  onClick={() => {
+                    document.execCommand('undo');
+                    setOpenMenu(null);
+                  }}
+                >
+                  <span>Undo</span>
+                  <span className="text-editor-menu-shortcut">Ctrl+Z</span>
+                </div>
+                <div
+                  className="text-editor-menu-item"
+                  onClick={() => {
+                    document.execCommand('redo');
+                    setOpenMenu(null);
+                  }}
+                >
+                  <span>Redo</span>
+                  <span className="text-editor-menu-shortcut">Ctrl+Y</span>
+                </div>
+                <div className="text-editor-menu-separator" />
+                <div
+                  className="text-editor-menu-item"
+                  onClick={() => {
+                    setShowFind(true);
+                    setShowReplace(false);
+                    setOpenMenu(null);
+                  }}
+                >
+                  <span>Find</span>
+                  <span className="text-editor-menu-shortcut">Ctrl+F</span>
+                </div>
+                <div
+                  className="text-editor-menu-item"
+                  onClick={() => {
+                    setShowFind(true);
+                    setShowReplace(true);
+                    setOpenMenu(null);
+                  }}
+                >
+                  <span>Replace</span>
+                  <span className="text-editor-menu-shortcut">Ctrl+H</span>
+                </div>
+                <div className="text-editor-menu-separator" />
+                <div
+                  className="text-editor-menu-item"
+                  onClick={() => {
+                    setShowGoto(true);
+                    setOpenMenu(null);
+                  }}
+                >
+                  <span>Go to Line...</span>
+                  <span className="text-editor-menu-shortcut">Ctrl+G</span>
+                </div>
+              </div>
+            )}
+          </div>
+          {/* View Menu */}
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className={`text-editor-menu-btn${openMenu === 'view' ? ' active' : ''}`}
+              onClick={() => setOpenMenu(openMenu === 'view' ? null : 'view')}
+            >
+              View
+            </button>
+            {openMenu === 'view' && (
+              <div className="text-editor-menu-dropdown">
+                <div
+                  className="text-editor-menu-item"
+                  onClick={() => {
+                    updateSetting('lineWrapEnabled', !lineWrapEnabled);
+                    setOpenMenu(null);
+                  }}
+                >
+                  <span>{lineWrapEnabled ? '\u2713 ' : '\u2003 '}Line Wrap</span>
+                </div>
+                <div
+                  className="text-editor-menu-item"
+                  onClick={() => {
+                    setShowReturnCodes(!showReturnCodes);
+                    setOpenMenu(null);
+                  }}
+                >
+                  <span>{showReturnCodes ? '\u2713 ' : '\u2003 '}Show Return Codes</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="text-editor-status">
+          {isTabDirty(activeTab) && <span title="Unsaved changes">Modified</span>}
+          <span>
+            Ln {cursorLine}, Col {cursorCol}
+          </span>
+
+          <div style={{ position: 'relative' }}>
+            <span
+              className="text-editor-status-item"
+              onClick={() => {
+                setShowLineEndingPicker(!showLineEndingPicker);
+                setShowEncodingPicker(false);
+              }}
+            >
+              {activeTab.lineEnding}
+            </span>
+            {showLineEndingPicker && (
+              <div className="text-editor-select-dropdown">
+                {LINE_ENDINGS.map((le) => (
+                  <div
+                    key={le}
+                    className={`text-editor-select-item${le === activeTab.lineEnding ? ' selected' : ''}`}
+                    onClick={() => handleLineEndingChange(le)}
+                  >
+                    {le}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ position: 'relative' }}>
+            <span
+              className="text-editor-status-item"
+              onClick={() => {
+                setShowEncodingPicker(!showEncodingPicker);
+                setShowLineEndingPicker(false);
+              }}
+            >
+              {activeTab.encoding.toUpperCase()}
+            </span>
+            {showEncodingPicker && (
+              <div className="text-editor-select-dropdown">
+                {ENCODINGS.map((enc) => (
+                  <div
+                    key={enc}
+                    className={`text-editor-select-item${enc === activeTab.encoding ? ' selected' : ''}`}
+                    onClick={() => handleEncodingChange(enc)}
+                  >
+                    {enc.toUpperCase()}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Find/Replace Bar */}
+      {showFind && (
+        <div className="text-editor-find-bar">
+          <span className="text-editor-find-label">Find:</span>
+          <input
+            ref={findInputRef}
+            className="text-editor-find-input"
+            value={findText}
+            onChange={(e) => setFindText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleFindNext();
+              if (e.key === 'Escape') {
+                setShowFind(false);
+                setShowReplace(false);
+              }
+            }}
+            placeholder="Search..."
+          />
+          <button type="button" className="text-editor-find-btn" onClick={handleFindNext}>
+            Next
+          </button>
+          {showReplace && (
+            <>
+              <span className="text-editor-find-label">Replace:</span>
+              <input
+                className="text-editor-find-input"
+                value={replaceText}
+                onChange={(e) => setReplaceText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleReplaceCurrent();
+                  if (e.key === 'Escape') {
+                    setShowFind(false);
+                    setShowReplace(false);
+                  }
+                }}
+                placeholder="Replace..."
+              />
+              <button type="button" className="text-editor-find-btn" onClick={handleReplaceCurrent}>
+                Replace
+              </button>
+              <button type="button" className="text-editor-find-btn" onClick={handleReplaceAll}>
+                All
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            className="text-editor-find-close"
+            onClick={() => {
+              setShowFind(false);
+              setShowReplace(false);
+            }}
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
+      {/* Editor area */}
+      <div className="text-editor-container">
+        <div className="text-editor-line-numbers" ref={lineNumbersRef}>
+          {visualLineNumbers.map((n, i) => (
+            <div key={i} className="text-editor-line-number">
+              {n}
+            </div>
+          ))}
+        </div>
+        <div className="text-editor-editor-wrapper">
+          <textarea
+            ref={textareaRef}
+            className="text-editor-textarea"
+            style={{
+              whiteSpace: lineWrapEnabled ? 'pre-wrap' : 'pre',
+              wordWrap: lineWrapEnabled ? 'break-word' : 'normal',
+            }}
+            value={activeTab.content}
+            onChange={handleContentChange}
+            onScroll={handleTextareaScroll}
+            onClick={updateCursorPosition}
+            onKeyUp={updateCursorPosition}
+            spellCheck={false}
+            wrap={lineWrapEnabled ? 'soft' : 'off'}
+          />
+          {showReturnCodes && (
+            <div
+              ref={overlayRef}
+              className="text-editor-return-overlay"
+              style={{
+                whiteSpace: lineWrapEnabled ? 'pre-wrap' : 'pre',
+                wordWrap: lineWrapEnabled ? 'break-word' : 'normal',
+                overflowWrap: lineWrapEnabled ? 'break-word' : 'normal',
+              }}
+            >
+              {activeTab.content.split('\n').map((line, i, arr) => (
+                <span key={i}>
+                  <span className="text-editor-return-text">{line || '\u200b'}</span>
+                  {i < arr.length - 1 && <span className="text-editor-newline-symbol">{'\u21B5'}</span>}
+                  {i < arr.length - 1 && '\n'}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Go to Line dialog */}
+      {showGoto && (
+        <div className="text-editor-goto-overlay" onClick={() => setShowGoto(false)}>
+          <div className="text-editor-goto-dialog" onClick={(e) => e.stopPropagation()}>
+            <label>Go to Line (1-{activeTab.content.split('\n').length}):</label>
+            <input
+              ref={gotoInputRef}
+              type="number"
+              min={1}
+              max={activeTab.content.split('\n').length}
+              value={gotoValue}
+              onChange={(e) => setGotoValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleGotoLine();
+                if (e.key === 'Escape') setShowGoto(false);
+              }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

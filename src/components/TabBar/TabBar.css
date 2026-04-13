@@ -1,45 +1,92 @@
 .tab-bar {
   display: flex;
-  align-items: center;
+  background-color: var(--sidebar-bg);
   min-height: 35px;
-  height: 35px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-  padding: 0 6px;
-  gap: 6px;
-  box-sizing: border-box;
+  align-items: flex-start;
+  padding-left: 0px;
+  user-select: none;
+  overflow: visible;
+  --gemini-rainbow: linear-gradient(90deg, var(--accent-light, #42a5f5), var(--accent-color, #007acc), var(--accent-secondary, #ab47bc));
 }
 
 .tab-list {
   display: flex;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
+  align-items: flex-start;
   overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+}
+
+.tab-bar-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 35px;
+  position: relative;
 }
 
 .tab {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  background: var(--tab-bg);
-  border-radius: 8px 8px 0 0;
-  font-family: var(--font-family);
-  font-size: calc(var(--font-size-base) - 2px);
+  padding: 0 10px;
+  height: 35px;
+  background-color: var(--tab-bg);
   color: var(--tab-text);
+  border-right: 1px solid var(--border-color);
   cursor: pointer;
-  flex-shrink: 0;
-  max-width: 220px;
+  font-size: calc(var(--font-size-base) - 1px);
+  min-width: 120px;
+  max-width: 200px;
+  position: relative;
+  transition: background-color 0.2s;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
 }
 
-.tab:hover:not(.active) {
-  background: var(--hover-bg);
+.tab[draggable="true"] {
+  cursor: grab;
+}
+
+.tab[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.tab.drag-over-left {
+  z-index: 10;
+}
+
+.tab.drag-over-left::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background-color: var(--accent-color);
+  z-index: 20;
+}
+
+.tab.drag-over-right {
+  z-index: 10;
+}
+
+.tab.drag-over-right::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 2px;
+  background-color: var(--accent-color);
+  z-index: 20;
+}
+
+.tab:hover {
+  background-color: var(--bg-primary);
 }
 
 .tab.active {
-  background: var(--bg-primary);
+  background-color: var(--bg-primary);
   color: var(--tab-active-text);
 }
 
@@ -47,75 +94,49 @@
   color: var(--color-danger);
 }
 
-.tab.hidden-tab {
-  opacity: 0.55;
-}
-
-.tab.hidden-tab:hover {
-  opacity: 0.8;
-}
-
-.tab.drag-over-left {
-  box-shadow: inset 2px 0 0 0 var(--accent-color);
-}
-
-.tab.drag-over-right {
-  box-shadow: inset -2px 0 0 0 var(--accent-color);
-}
-
 .tab-label {
+  flex: 1;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-right: 8px;
+  text-align: center;
+}
+
+
+/* ── Tab Tooltip (fixed position, shown when title overflows) ── */
+.tab-tooltip {
+  position: fixed;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  background-color: var(--sidebar-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: calc(var(--font-size-base) - 1px);
   white-space: nowrap;
-}
-
-.tab-status {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
-.tab-feature-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--accent-color);
-}
-
-.tab-status-connected {
-  background: var(--status-success);
-}
-
-.tab-status-connecting {
-  background: var(--color-warning);
-}
-
-.tab-status-disconnected {
-  background: var(--text-tertiary);
-}
-
-.tab-status-error {
-  background: var(--status-error);
+  z-index: 1000;
+  pointer-events: none;
+  box-shadow: 0 2px 8px var(--modal-shadow, rgba(0, 0, 0, 0.3));
 }
 
 .tab-close {
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
   width: 16px;
   height: 16px;
-  font-size: calc(var(--font-size-base));
-  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: var(--tab-close-bg);
+  color: var(--text-on-accent);
+  margin-left: 5px;
+  border: none;
   cursor: pointer;
   padding: 0;
-  border-radius: 4px;
 }
 
-.tab-close:hover:not(:disabled) {
-  background: var(--tab-close-bg);
+.tab-close:hover {
+  background-color: var(--tab-close-hover-bg);
   color: var(--text-on-accent);
 }
 
@@ -143,10 +164,11 @@
   transform: scale(1.1);
 }
 
-/* Features dropdown */
-
+/* Features button */
 .features-btn {
   position: relative;
+  width: 35px;
+  height: 35px;
   flex-shrink: 0;
 }
 
@@ -176,35 +198,172 @@
 
 .features-dropdown {
   position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 1000;
-  background: var(--bg-secondary);
+  top: 35px;
+  left: 0;
+  background-color: var(--sidebar-bg);
   border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px;
+  min-width: 140px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px var(--modal-shadow, rgba(0, 0, 0, 0.3));
+}
+
+.features-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
   border-radius: 4px;
-  box-shadow: 0 4px 16px var(--modal-shadow);
-  min-width: 180px;
-  padding: 4px 0;
-  animation: fadeIn 0.1s ease-out;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: calc(var(--font-size-base) - 1px);
+  white-space: nowrap;
+}
+
+.features-item:hover {
+  background-color: var(--bg-primary);
 }
 
 .features-dropdown-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
+  padding: 7px 10px;
+  border-radius: 4px;
   cursor: pointer;
-  font-family: var(--font-family);
-  font-size: calc(var(--font-size-base) - 1px);
   color: var(--text-primary);
+  font-size: calc(var(--font-size-base) - 1px);
   white-space: nowrap;
 }
 
 .features-dropdown-item:hover {
-  background: var(--hover-bg);
+  background-color: var(--bg-primary);
 }
 
 .features-dropdown-item svg {
   flex-shrink: 0;
   color: var(--text-secondary);
+}
+
+.tab.hidden-tab {
+  background-color: var(--hidden-item-bg);
+  color: var(--text-primary);
+}
+
+.tab.hidden-tab:hover {
+  background-color: var(--hidden-item-bg-hover);
+}
+
+.tab.hidden-tab.active {
+  background-color: var(--hidden-item-bg);
+}
+
+/* Tab corresponding to the active pane: blue background */
+.tab.active-pane-tab {
+  background-color: var(--accent-color);
+  color: var(--text-on-accent);
+}
+
+/* ── AI Watch Button ── */
+
+.tab-watch-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.tab-watch-btn.watching {
+  animation: ai-glow-pulse 1.5s infinite ease-in-out;
+}
+
+@keyframes ai-glow-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 2px color-mix(in srgb, var(--success-color) 40%, transparent);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--success-color) 80%, transparent);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 2px color-mix(in srgb, var(--success-color) 40%, transparent);
+  }
+}
+
+.ai-icon-svg {
+  transition: all 0.3s ease;
+}
+
+.ai-icon-svg.pulse {
+  animation: ai-glow-pulse 1.5s infinite ease-in-out;
+}
+
+/* ── Gemini Rainbow Bar ── */
+.tab.gemini-linked-tab::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gemini-rainbow);
+  z-index: 5;
+}
+
+/* Ensure active state doesn't hide it or looks good with it */
+.tab.active.gemini-linked-tab::before {
+  height: 3px;
+}
+
+/* ── Full Rainbow AI Tab ── */
+.tab.is-ai-tab {
+  background: var(--gemini-rainbow) !important;
+  background-color: transparent !important;
+  color: var(--text-on-accent) !important;
+  border: none !important;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Hide the top bar for AI tab since it's already full rainbow */
+.tab.is-ai-tab::before {
+  display: none !important;
+}
+
+.tab.is-ai-tab:hover {
+  filter: brightness(1.1);
+}
+
+.tab.active.is-ai-tab {
+  filter: brightness(1.1);
+  box-shadow: none !important;
+}
+
+.tab.is-ai-tab .tab-close {
+  background-color: color-mix(in srgb, var(--text-primary) 30%, transparent);
+}
+
+.tab.is-ai-tab .tab-close:hover {
+  background-color: color-mix(in srgb, var(--text-primary) 50%, transparent);
+}
+
+/* ── Hidden AI Tab: reddish gradient ── */
+.tab.is-ai-tab.hidden-tab {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-danger) 40%, black), var(--color-danger), color-mix(in srgb, var(--color-danger) 40%, black)) !important;
+}
+
+.tab.is-ai-tab.hidden-tab:hover {
+  filter: brightness(1.15);
 }

@@ -14,22 +14,78 @@ vi.mock('../../services/tauriService', () => ({
   },
 }));
 
+vi.mock('../../hooks/useResize', () => ({
+  useResize: () => ({ startResize: vi.fn(), isResizing: false }),
+}));
+
 const mockStart = vi.mocked(tauriService.pingMonitorStart);
 const mockStop = vi.mocked(tauriService.pingMonitorStop);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Re-setup default mock implementations
   vi.mocked(tauriService.onPingMonitorData).mockResolvedValue(() => {});
   vi.mocked(tauriService.onPingMonitorLogFile).mockResolvedValue(() => {});
 });
 
 describe('PingMonitorPane', () => {
-  it('renders configuration form with target input and Start button', () => {
+  it('renders split layout with targets editor and Start button', () => {
     render(<PingMonitorPane paneId="pm-1" active={true} />);
     expect(screen.getByText('Start')).toBeTruthy();
     expect(screen.getByPlaceholderText(/8\.8\.8\.8/)).toBeTruthy();
-    expect(screen.getByText('Configure targets and click Start')).toBeTruthy();
+    expect(screen.getByText('Enter targets in the editor and click Start')).toBeTruthy();
+  });
+
+  it('renders toolbar with title, interval selector, and start button', () => {
+    render(<PingMonitorPane paneId="pm-1" active={true} />);
+    expect(screen.getByText('Ping Monitor')).toBeTruthy();
+    expect(screen.getByText('Interval:')).toBeTruthy();
+    const select = document.querySelector('.ping-monitor-interval-select') as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    expect(select.value).toBe('5000');
+  });
+
+  it('renders targets panel with header and count', () => {
+    render(<PingMonitorPane paneId="pm-1" active={true} />);
+    expect(screen.getByText('Targets')).toBeTruthy();
+    const countEl = document.querySelector('.ping-monitor-targets-count');
+    expect(countEl).toBeTruthy();
+    expect(countEl!.textContent).toContain('0 target');
+  });
+
+  it('renders status bar showing Stopped state', () => {
+    render(<PingMonitorPane paneId="pm-1" active={true} />);
+    expect(screen.getByText('Stopped')).toBeTruthy();
+    expect(screen.getByText('Interval: 5s')).toBeTruthy();
+  });
+
+  it('renders divider with collapse toggle', () => {
+    render(<PingMonitorPane paneId="pm-1" active={true} />);
+    const divider = document.querySelector('.ping-monitor-divider');
+    expect(divider).toBeTruthy();
+    const toggle = document.querySelector('.ping-monitor-divider-toggle');
+    expect(toggle).toBeTruthy();
+  });
+
+  it('collapses targets panel when toggle is clicked', () => {
+    render(<PingMonitorPane paneId="pm-1" active={true} />);
+    expect(document.querySelector('.ping-monitor-targets-panel')).toBeTruthy();
+
+    const toggle = document.querySelector('.ping-monitor-divider-toggle') as HTMLButtonElement;
+    fireEvent.click(toggle);
+
+    expect(document.querySelector('.ping-monitor-targets-panel')).toBeNull();
+    expect(toggle.classList.contains('collapsed')).toBe(true);
+  });
+
+  it('expands targets panel when toggle is clicked again', () => {
+    render(<PingMonitorPane paneId="pm-1" active={true} />);
+    const toggle = document.querySelector('.ping-monitor-divider-toggle') as HTMLButtonElement;
+
+    fireEvent.click(toggle); // collapse
+    expect(document.querySelector('.ping-monitor-targets-panel')).toBeNull();
+
+    fireEvent.click(toggle); // expand
+    expect(document.querySelector('.ping-monitor-targets-panel')).toBeTruthy();
   });
 
   it('shows error when starting without targets', async () => {
@@ -54,14 +110,14 @@ describe('PingMonitorPane', () => {
       expect(mockStart).toHaveBeenCalledWith(
         'pm-1',
         ['8.8.8.8', '1.1.1.1'],
-        1000,
+        5000,
         false,
         ''
       );
     });
   });
 
-  it('shows Stop button when running', async () => {
+  it('shows Stop button and Running status when running', async () => {
     mockStart.mockResolvedValue();
 
     render(<PingMonitorPane paneId="pm-1" active={true} />);
@@ -71,6 +127,7 @@ describe('PingMonitorPane', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Stop')).toBeTruthy();
+      expect(screen.getByText('Running')).toBeTruthy();
     });
   });
 
@@ -92,18 +149,20 @@ describe('PingMonitorPane', () => {
     await waitFor(() => {
       expect(mockStop).toHaveBeenCalledWith('pm-1');
       expect(screen.getByText('Start')).toBeTruthy();
+      expect(screen.getByText('Stopped')).toBeTruthy();
     });
-  });
-
-  it('renders interval input with default value', () => {
-    render(<PingMonitorPane paneId="pm-1" active={true} />);
-    const input = document.querySelector('.ping-monitor-interval-input') as HTMLInputElement;
-    expect(input).toBeTruthy();
-    expect(input.value).toBe('1000');
   });
 
   it('renders CSV logging toggle', () => {
     render(<PingMonitorPane paneId="pm-1" active={true} />);
     expect(screen.getByText('CSV Logging')).toBeTruthy();
+  });
+
+  it('updates target count as targets are entered', () => {
+    render(<PingMonitorPane paneId="pm-1" active={true} />);
+    const textarea = screen.getByPlaceholderText(/8\.8\.8\.8/);
+    fireEvent.change(textarea, { target: { value: '8.8.8.8\n1.1.1.1' } });
+    const countEl = document.querySelector('.ping-monitor-targets-count');
+    expect(countEl!.textContent).toContain('2 target');
   });
 });

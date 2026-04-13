@@ -153,6 +153,15 @@ export interface ReadFileResult {
   lineEnding: string;
 }
 
+export interface TextEditorTab {
+  id: string;
+  filePath: string | null;
+  content: string;
+  savedContent: string;
+  encoding: string;
+  lineEnding: 'LF' | 'CRLF';
+}
+
 // ---------------------------------------------------------------------------
 // File Explorer
 // ---------------------------------------------------------------------------

@@ -105,6 +105,8 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
   const setLayoutMode = usePaneStore((s) => s.setLayoutMode);
   const sidebar = useSidebarLayoutStore();
   const position = useSettingsStore((s) => s.sidebarPosition);
+  const lineWrapEnabled = useSettingsStore((s) => s.lineWrapEnabled);
+  const updateSetting = useSettingsStore((s) => s.update);
 
   const edgeVisible = (edge: SidebarEdge): boolean =>
     edge === 'left'
@@ -145,6 +147,24 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
         ))}
       </div>
       <div className="app-sidebar-bottom">
+        <button
+          type="button"
+          className={`app-sidebar-btn${lineWrapEnabled ? ' app-sidebar-btn-active' : ''}`}
+          onClick={() => updateSetting('lineWrapEnabled', !lineWrapEnabled)}
+          title={lineWrapEnabled ? 'Disable Line Wrap' : 'Enable Line Wrap'}
+        >
+          {lineWrapEnabled ? (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 10 4 15 9 20" />
+              <path d="M20 4v7a4 4 0 0 1-4 4H4" />
+            </svg>
+          ) : (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          )}
+        </button>
         <button
           type="button"
           className="app-sidebar-btn"

@@ -31,6 +31,7 @@ import {
   type FeaturePaneInfo,
   type FeaturePaneType,
 } from './utils/paneTypes';
+import { stripAnsiCodes } from './utils/ansiUtils';
 import './App.css';
 
 function App() {
@@ -79,11 +80,69 @@ function App() {
     }
   }, [activePaneAllocation]);
 
-  // Watch buffer stubs (will be expanded with useInteractiveFlow later)
+  // AI Watch mode
+  const [watchingSessionId, setWatchingSessionId] = useState<string | null>(null);
   const watchBuffers = useRef(new Map<string, string>());
   const getWatchBuffer = useCallback((sid: string) => watchBuffers.current.get(sid) || '', []);
   const clearWatchBuffer = useCallback((sid: string) => { watchBuffers.current.delete(sid); }, []);
-  const toggleWatch = useCallback((_sid?: string) => { void _sid; /* noop until interactive flow is implemented */ }, []);
+
+  const watchingSessionIdRef = useRef(watchingSessionId);
+  useEffect(() => { watchingSessionIdRef.current = watchingSessionId; }, [watchingSessionId]);
+
+  const createAiChatPaneRef = useRef<() => string | undefined>();
+  const updateAiChatStateRef = useRef<(id: string, state: Record<string, unknown>) => void>();
+
+  const toggleWatch = useCallback((sessionId?: string) => {
+    if (!sessionId) return;
+    const prev = watchingSessionIdRef.current;
+    const isTurningOn = prev !== sessionId;
+
+    if (!isTurningOn) {
+      // Turning off
+      watchBuffers.current.delete(sessionId);
+      setWatchingSessionId(null);
+      return;
+    }
+
+    // Turning on
+    if (prev) watchBuffers.current.delete(prev);
+    watchBuffers.current.set(sessionId, '');
+    setWatchingSessionId(sessionId);
+
+    // Auto-create/focus AI Chat pane and link target session
+    const aiPaneId = createAiChatPaneRef.current?.();
+    if (aiPaneId) {
+      const alloc = usePaneStore.getState().paneAllocations;
+      const paneEntry = Object.entries(alloc).find(([, sid]) => sid === aiPaneId);
+      if (paneEntry) setActivePaneId(paneEntry[0]);
+      const session = sessions.get(sessionId);
+      updateAiChatStateRef.current?.(aiPaneId, {
+        lastTargetSessionId: sessionId,
+        lastTargetSessionTitle: session?.displayName || 'Unknown Terminal',
+      });
+    }
+  }, [sessions, setActivePaneId]);
+
+  // Capture terminal data into watch buffer
+  useEffect(() => {
+    if (!watchingSessionId) return;
+    let cancelled = false;
+    const unlistenPromise = tauriService.onSessionData(({ sessionId, data }) => {
+      if (cancelled || sessionId !== watchingSessionIdRef.current) return;
+      const stripped = stripAnsiCodes(data);
+      const current = watchBuffers.current.get(sessionId) || '';
+      let newBuffer = current + stripped;
+      const limit = useSettingsStore.getState().watchBufferLimit;
+      if (newBuffer.length > limit) {
+        newBuffer = newBuffer.substring(newBuffer.length - limit);
+      }
+      watchBuffers.current.set(sessionId, newBuffer);
+    });
+    return () => {
+      cancelled = true;
+      unlistenPromise.then(fn => fn());
+    };
+  }, [watchingSessionId]);
 
   const createAiChatPane = useCallback((): string | undefined => {
     // Only allow one AI chat pane at a time
@@ -121,6 +180,12 @@ function App() {
     setActivePaneId,
   });
 
+  // Wire up refs for toggleWatch (avoids circular dependency)
+  useEffect(() => {
+    createAiChatPaneRef.current = createAiChatPane;
+    updateAiChatStateRef.current = updateAiChatState;
+  });
+
   const [connectOpen, setConnectOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -154,7 +219,7 @@ function App() {
 
   const featurePanesList: FeaturePaneInfo[] = Array.from(featurePanes.values());
 
-  const tabItems = buildTabItems(orderedSessions, featurePanesList, sessionOrder);
+  const tabItems = buildTabItems(orderedSessions, featurePanesList, sessionOrder, watchingSessionId);
 
   const visibleTabIds: string[] = [
     ...gridPaneIds(layoutMode),
@@ -186,6 +251,10 @@ function App() {
       if (type === 'ping-monitor') {
         tauriService.pingMonitorStop(id).catch(() => {});
       }
+      if (type === 'ai-chat' && watchingSessionId) {
+        watchBuffers.current.delete(watchingSessionId);
+        setWatchingSessionId(null);
+      }
       setFeaturePanes((prev) => {
         const next = new Map(prev);
         next.delete(id);
@@ -193,6 +262,10 @@ function App() {
       });
       removeSessionFromStore(id);
     } else {
+      if (watchingSessionId === id) {
+        watchBuffers.current.delete(id);
+        setWatchingSessionId(null);
+      }
       await closeSession(id);
       removeSessionFromStore(id);
     }
@@ -226,6 +299,29 @@ function App() {
     try {
       await tauriService.textEditorApproveDroppedFile(filePath);
     } catch { /* proceed — file may already be approved */ }
+
+    // Try to find an existing text editor pane and open the file there
+    const existingEditorId = Array.from(featurePanes.values()).find(
+      (fp) => fp.type === 'text-editor',
+    )?.id;
+
+    if (existingEditorId) {
+      // Route the file to the existing text editor's internal sub-tab
+      const el = document.querySelector(`[data-pane-id="${existingEditorId}"]`) as
+        | (HTMLElement & { __editorHandle?: { openFile: (path: string) => void } })
+        | null;
+      if (el?.__editorHandle) {
+        el.__editorHandle.openFile(filePath);
+        // Activate the editor pane
+        const paneEntry = Object.entries(paneAllocations).find(
+          ([, sid]) => sid === existingEditorId,
+        );
+        if (paneEntry) setActivePaneId(paneEntry[0]);
+        return;
+      }
+    }
+
+    // No existing editor — create a new one
     const id = makeFeaturePaneId('text-editor');
     const filename = filePath.split(/[\\/]/).pop() || 'Untitled';
     setFeaturePanes((prev) => {
@@ -239,7 +335,7 @@ function App() {
       return next;
     });
     addSessionToStore(id);
-  }, [addSessionToStore]);
+  }, [addSessionToStore, featurePanes, paneAllocations, setActivePaneId]);
 
   const handleDropSession = (sessionId: string, targetPaneId: string) => {
     moveSessionToPane(sessionId, targetPaneId);
@@ -299,7 +395,40 @@ function App() {
               chatState={aiChatStates.get(featureInfo.id)}
               onChatStateChange={(newState) => updateAiChatState(featureInfo.id, newState)}
               onRunCommand={(targetId, cmd) => {
-                tauriService.sendInput(targetId, cmd + '\r').catch(() => {});
+                // Record buffer position before sending command
+                const startLen = (watchBuffers.current.get(targetId) || '').length;
+
+                // Send command lines to terminal
+                const lines = cmd.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                lines.forEach((line, index) => {
+                  setTimeout(() => {
+                    tauriService.sendInput(targetId, line + '\r').catch(() => {});
+                  }, index * 150);
+                });
+
+                // Poll watch buffer for command completion (shell prompt detection)
+                if (watchingSessionIdRef.current === targetId) {
+                  const sendDuration = lines.length * 150;
+                  let attempts = 0;
+                  const maxAttempts = 150; // 30 seconds max
+                  const pollInterval = setInterval(() => {
+                    attempts++;
+                    const buf = watchBuffers.current.get(targetId) || '';
+                    const newContent = buf.substring(startLen);
+                    // Wait until all lines are sent + some output received
+                    if (attempts * 200 < sendDuration + 300) return;
+                    // Detect shell prompt: line ending with common prompt chars
+                    const promptPattern = /[\$#>]\s*$/m;
+                    if (newContent.length > 0 && promptPattern.test(newContent)) {
+                      clearInterval(pollInterval);
+                      clearWatchBuffer(targetId);
+                      const outputText = `Terminal Output (Command: ${cmd}):\n${newContent.trim()}`;
+                      updateAiChatState(featureInfo.id, { pendingMessage: outputText });
+                    } else if (attempts >= maxAttempts) {
+                      clearInterval(pollInterval);
+                    }
+                  }, 200);
+                }
               }}
               onShowPromptMenu={() => aiShowPromptMenu(featureInfo.id)}
               onSendMessage={(text) => aiSendMessage(featureInfo.id, text)}
@@ -327,6 +456,7 @@ function App() {
             onClose={handleCloseTab}
             onNew={handleNewConnectionClick}
             onReorder={reorderSessionInStore}
+            onToggleWatch={toggleWatch}
             onNewLogViewer={() => handleNewFeaturePane('log-viewer')}
             onNewPingMonitor={() => handleNewFeaturePane('ping-monitor')}
             onNewTextEditor={() => handleNewFeaturePane('text-editor')}

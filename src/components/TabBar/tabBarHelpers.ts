@@ -8,12 +8,15 @@ export interface TabItem {
   status?: string;
   errorMessage?: string;
   featureType?: FeaturePaneType;
+  isWatching?: boolean;
+  isAiTab?: boolean;
 }
 
 export function buildTabItems(
   sessions: SessionRecord[],
   featurePanes: FeaturePaneInfo[],
-  sessionOrder: string[]
+  sessionOrder: string[],
+  watchingSessionId: string | null = null
 ): TabItem[] {
   const sessionMap = new Map(sessions.map((s) => [s.id, s]));
   const featureMap = new Map(featurePanes.map((f) => [f.id, f]));
@@ -28,6 +31,7 @@ export function buildTabItems(
         kind: 'session',
         status: session.status,
         errorMessage: session.errorMessage,
+        isWatching: session.id === watchingSessionId,
       });
       continue;
     }
@@ -38,6 +42,7 @@ export function buildTabItems(
         displayName: feature.displayName,
         kind: 'feature',
         featureType: feature.type,
+        isAiTab: feature.type === 'ai-chat',
       });
     }
   }

@@ -23,7 +23,7 @@ export function AboutTab() {
         style={{
           marginBottom: '16px',
           borderRadius: '12px',
-          backgroundColor: 'var(--bg-primary)',
+          backgroundColor: '#ffffff',
           padding: '4px',
         }}
       />

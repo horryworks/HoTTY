@@ -599,7 +599,7 @@ impl AIProvider for GeminiProvider {
         let app_clone = app.clone();
         let sid = session_id.to_string();
 
-        log::debug!("[gemini] Sending message, model={model}");
+        log::debug!("[gemini] Sending message, model={model}, system_instruction={system_instruction:?}");
 
         let response = self
             .http_client

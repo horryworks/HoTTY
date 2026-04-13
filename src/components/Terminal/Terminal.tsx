@@ -4,6 +4,7 @@ import type { SessionRecord } from '../../hooks/useSessionManager';
 import { usePromptHighlight } from '../../hooks/usePromptHighlight';
 import { tauriService } from '../../services/tauriService';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { TERMINAL_SEQUENCES } from '../../constants/terminalSequences';
 import '@xterm/xterm/css/xterm.css';
 import './Terminal.css';
 
@@ -53,6 +54,11 @@ export function TerminalView({ session, active, onPasteRequest }: TerminalViewPr
     } else {
       session.term.open(el);
     }
+    // Apply DECAWM after open to ensure it takes effect before server data renders
+    const wrap = useSettingsStore.getState().lineWrapEnabled;
+    session.term.write(
+      wrap ? TERMINAL_SEQUENCES.LINE_WRAP_ENABLED : TERMINAL_SEQUENCES.LINE_WRAP_DISABLED
+    );
 
     const resize = () => {
       try {

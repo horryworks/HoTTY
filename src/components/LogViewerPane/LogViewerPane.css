@@ -1,6 +1,7 @@
 .log-viewer-pane {
   display: flex;
   flex-direction: column;
+  width: 100%;
   height: 100%;
   overflow: hidden;
   background: var(--bg-primary);
@@ -8,6 +9,7 @@
   font-family: var(--font-family);
 }
 
+/* Toolbar */
 .log-viewer-toolbar {
   display: flex;
   align-items: center;
@@ -18,6 +20,26 @@
   border-bottom: 1px solid var(--border-color);
   box-sizing: border-box;
   flex-shrink: 0;
+}
+
+.log-viewer-toolbar-title {
+  font-size: calc(var(--font-size-base) - 1px);
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.log-viewer-toolbar-path {
+  font-size: calc(var(--font-size-base) - 1px);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.log-viewer-toolbar-spacer {
+  flex: 1;
 }
 
 .log-viewer-folder-input {
@@ -70,27 +92,86 @@
   white-space: nowrap;
 }
 
-.log-viewer-error {
-  padding: 4px 10px;
-  background: var(--color-danger);
-  color: var(--text-on-accent);
-  font-size: calc(var(--font-size-base) - 2px);
-  flex-shrink: 0;
-}
-
+/* Body: split layout */
 .log-viewer-content {
   display: flex;
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  position: relative;
 }
 
+/* Left: file list panel */
 .log-viewer-file-list {
-  width: 250px;
   flex-shrink: 0;
-  border-right: 1px solid var(--border-color);
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.log-viewer-filter-bar {
+  padding: 6px 8px;
+  flex-shrink: 0;
+}
+
+.log-viewer-filter-input {
+  width: 100%;
+  padding: 4px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.log-viewer-filter-input:focus {
+  border-color: var(--accent-color);
+}
+
+.log-viewer-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: calc(100% - 16px);
+  margin: 0 8px 6px;
+  padding: 4px 8px;
+  background: var(--btn-secondary-bg);
+  border: none;
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  flex-shrink: 0;
+}
+
+.log-viewer-refresh-btn:hover:not(:disabled) {
+  background: var(--btn-secondary-hover-bg);
+}
+
+.log-viewer-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Error inside file list */
+.log-viewer-error {
+  padding: 6px 10px;
+  color: var(--color-danger);
+  font-size: calc(var(--font-size-base) - 2px);
+  flex-shrink: 0;
+}
+
+/* Scrollable file items */
+.log-viewer-file-items {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .log-viewer-file-item {
@@ -122,6 +203,56 @@
   color: var(--text-tertiary);
 }
 
+/* Divider with resize handle and collapse toggle */
+.log-viewer-divider {
+  position: relative;
+  flex-shrink: 0;
+  width: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.log-viewer-divider-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+.log-viewer-divider-handle:hover {
+  background: var(--accent-color);
+  opacity: 0.5;
+}
+
+.log-viewer-divider-toggle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  width: 16px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.log-viewer-divider-toggle:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+/* Right: file content */
 .log-viewer-file-content {
   flex: 1;
   min-width: 0;
