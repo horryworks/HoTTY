@@ -14,6 +14,7 @@ import { AIChatPane } from './components/AIChatPane/AIChatPane';
 import { AskAiModal } from './components/AskAiModal/AskAiModal';
 import { SessionDialog, type ConnectSubmitPayload } from './components/SessionDialog/SessionDialog';
 import { SettingsModal } from './components/SettingsModal/SettingsModal';
+import { CustomThemeCreator } from './components/CustomThemeCreator/CustomThemeCreator';
 import { HelpModal } from './components/HelpModal/HelpModal';
 import { SshHostKeyModal } from './components/SshHostKeyModal/SshHostKeyModal';
 import { PasteConfirmationModal } from './components/PasteConfirmationModal/PasteConfirmationModal';
@@ -23,7 +24,8 @@ import { useAiChat } from './hooks/useAiChat';
 import { usePaneStore, gridPaneIds, SIDEBAR_PANE_IDS } from './stores/paneStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { applyTheme } from './utils/applyTheme';
-import { getTheme } from './themes/defaults';
+import { DEFAULT_THEMES, isBuiltInThemeId } from './themes/defaults';
+import { useThemes } from './hooks/useThemes';
 import {
   makeFeaturePaneId,
   getPaneContentType,
@@ -191,6 +193,28 @@ function App() {
   const [connectOpen, setConnectOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [customThemeOpen, setCustomThemeOpen] = useState(false);
+
+  const { themesData, deleteTheme } = useThemes();
+
+  // If the currently selected theme was deleted/missing, fall back to 'dark'.
+  useEffect(() => {
+    if (!(themeId in themesData) && !isBuiltInThemeId(themeId)) {
+      updateSetting('theme', 'dark');
+    }
+  }, [themeId, themesData, updateSetting]);
+
+  const handleDeleteTheme = useCallback(async (key: string) => {
+    const result = await deleteTheme(key);
+    if (result.success && themeId === key) {
+      updateSetting('theme', 'dark');
+    }
+  }, [deleteTheme, themeId, updateSetting]);
+
+  const handleCustomThemeSaved = useCallback((key: string) => {
+    setCustomThemeOpen(false);
+    updateSetting('theme', key);
+  }, [updateSetting]);
 
   useEffect(() => {
     tauriService.getAppVersion().then((v) => {
@@ -199,7 +223,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const theme = getTheme(themeId);
+    const theme = themesData[themeId] ?? DEFAULT_THEMES.dark;
     applyTheme(theme, fontSize, fontFamily);
     const store = useSettingsStore.getState();
     if (store.terminalForeground !== theme.terminal.foreground) {
@@ -214,7 +238,7 @@ function App() {
     if (store.paneBackground !== theme.terminal.paneBackground) {
       updateSetting('paneBackground', theme.terminal.paneBackground);
     }
-  }, [themeId, fontSize, fontFamily, updateSetting]);
+  }, [themeId, fontSize, fontFamily, themesData, updateSetting]);
 
   const orderedSessions: SessionRecord[] = sessionOrder
     .map((id) => sessions.get(id))
@@ -505,7 +529,20 @@ function App() {
         onClose={() => setConnectOpen(false)}
         onConnect={handleConnectSubmit}
       />
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        themesData={themesData}
+        onOpenCustomThemeCreator={() => setCustomThemeOpen(true)}
+        onDeleteTheme={handleDeleteTheme}
+      />
+      <CustomThemeCreator
+        isOpen={customThemeOpen}
+        themesData={themesData}
+        currentTheme={themeId}
+        onSave={handleCustomThemeSaved}
+        onCancel={() => setCustomThemeOpen(false)}
+      />
       <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
       <SshHostKeyModal />
       {pasteReq && (

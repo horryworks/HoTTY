@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSettingsStore, DEFAULT_PROMPT_PATTERNS } from '../../stores/settingsStore';
-import { DEFAULT_THEMES, DEFAULT_THEME_IDS } from '../../themes/defaults';
+import { DEFAULT_THEMES, DEFAULT_THEME_IDS, isBuiltInThemeId } from '../../themes/defaults';
 import { tauriService } from '../../services/tauriService';
-import type { Encoding, PromptPattern, ThemeId } from '../../types/appTypes';
+import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
+import HelpTooltip from '../HelpTooltip/HelpTooltip';
+import type { Encoding, PromptPattern, Theme } from '../../types/appTypes';
+
+interface AppearanceTabProps {
+  themesData: Record<string, Theme>;
+  onOpenCustomThemeCreator: () => void;
+  onDeleteTheme: (themeKey: string) => Promise<void>;
+}
 
 const FONT_CACHE_KEY = 'hotty-system-fonts-cache';
 
@@ -14,12 +22,21 @@ function isMonospace(fontName: string): boolean {
   return ctx.measureText('W').width === ctx.measureText('i').width;
 }
 
-export function AppearanceTab() {
+export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTheme }: AppearanceTabProps) {
   const settings = useSettingsStore();
   const update = settings.update;
 
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
   const [fontScanning, setFontScanning] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+
+  const themeKeys = Object.keys(themesData);
+  const builtInKeys = DEFAULT_THEME_IDS.filter((k) => k in themesData);
+  const customKeys = themeKeys
+    .filter((k) => !isBuiltInThemeId(k))
+    .sort((a, b) => a.localeCompare(b));
+  const orderedThemeKeys = [...builtInKeys, ...customKeys];
+  const currentIsCustom = !isBuiltInThemeId(settings.theme) && settings.theme in themesData;
 
   const scanAndCacheFonts = useCallback(async () => {
     setFontScanning(true);
@@ -70,17 +87,60 @@ export function AppearanceTab() {
       {/* ── Theme ── */}
       <div className="settings-group">
         <label>Theme</label>
-        <select
-          value={settings.theme}
-          onChange={(e) => update('theme', e.target.value as ThemeId)}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <select
+            value={settings.theme}
+            onChange={(e) => update('theme', e.target.value)}
+            style={{ flex: 1 }}
+          >
+            {orderedThemeKeys.map((id) => {
+              const label = themesData[id]?.name
+                ?? (isBuiltInThemeId(id) ? DEFAULT_THEMES[id].name : id);
+              return (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              );
+            })}
+          </select>
+          {currentIsCustom && (
+            <button
+              type="button"
+              onClick={() => setPendingDelete(settings.theme)}
+              style={{
+                padding: '5px 10px',
+                background: 'var(--btn-danger-bg)',
+                color: 'var(--text-primary)',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              Delete
+            </button>
+          )}
+        </div>
+        <button
+          type="button"
+          className="settings-button"
+          onClick={onOpenCustomThemeCreator}
         >
-          {DEFAULT_THEME_IDS.map((id) => (
-            <option key={id} value={id}>
-              {DEFAULT_THEMES[id].name}
-            </option>
-          ))}
-        </select>
+          Create Custom Theme
+        </button>
       </div>
+      {pendingDelete && (
+        <ConfirmModal
+          title="Delete Theme"
+          message={`Delete custom theme "${themesData[pendingDelete]?.name ?? pendingDelete}"? This cannot be undone.`}
+          confirmLabel="Delete"
+          onConfirm={async () => {
+            const key = pendingDelete;
+            setPendingDelete(null);
+            await onDeleteTheme(key);
+          }}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
 
       {/* ── Font Family ── */}
       <div className="settings-group">
@@ -127,7 +187,7 @@ export function AppearanceTab() {
       <div className="settings-group">
         <label>
           Default encoding
-          <span className="settings-help-text">Applies to new connections.</span>
+          <HelpTooltip text="Applies to new connections." />
         </label>
         <div className="settings-radio-row">
           {(['utf8', 'shift_jis', 'euc-jp'] as Encoding[]).map((enc) => (
@@ -235,8 +295,8 @@ export function AppearanceTab() {
                       border: '1px solid var(--border-color)',
                       borderRadius: '4px',
                       color: 'var(--text-primary)',
-                      fontFamily: 'var(--font-family)',
-                      fontSize: 'var(--font-size-base)',
+                      fontFamily: 'var(--ui-font-family)',
+                      fontSize: 'calc(var(--font-size-base) - 1px)',
                       outline: 'none',
                     }}
                   />
@@ -253,7 +313,7 @@ export function AppearanceTab() {
                       flex: 1,
                       padding: '5px 8px',
                       fontFamily: 'var(--font-family)',
-                      fontSize: 'var(--font-size-base)',
+                      fontSize: 'calc(var(--font-size-base) - 1px)',
                       background: 'var(--input-bg)',
                       border: '1px solid var(--border-color)',
                       borderRadius: '4px',
@@ -285,21 +345,21 @@ export function AppearanceTab() {
             <div style={{ display: 'flex', gap: '10px', paddingBottom: '10px' }}>
               <button
                 type="button"
+                className="settings-button"
                 onClick={() => {
                   const id = crypto.randomUUID();
                   const newPattern: PromptPattern = { id, name: 'New Pattern', pattern: '^pattern\\s*' };
                   update('promptPatterns', [...(settings.promptPatterns || []), newPattern]);
                 }}
-                style={{ padding: '6px 12px', cursor: 'pointer' }}
               >
                 + Add Pattern
               </button>
               <button
                 type="button"
+                className="settings-button"
                 onClick={() => {
                   update('promptPatterns', DEFAULT_PROMPT_PATTERNS);
                 }}
-                style={{ padding: '6px 12px', cursor: 'pointer' }}
               >
                 Reset to Default
               </button>

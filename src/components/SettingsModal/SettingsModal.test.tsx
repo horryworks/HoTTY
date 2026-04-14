@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { SettingsModal } from './SettingsModal';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { DEFAULT_THEMES } from '../../themes/defaults';
+
+const themeProps = {
+  themesData: DEFAULT_THEMES as Record<string, (typeof DEFAULT_THEMES)['dark']>,
+  onOpenCustomThemeCreator: () => {},
+  onDeleteTheme: async () => {},
+};
 
 vi.mock('../../services/tauriService', () => ({
   tauriService: {
@@ -21,46 +28,46 @@ describe('SettingsModal', () => {
   });
 
   it('renders nothing when open=false', () => {
-    const { container } = render(<SettingsModal open={false} onClose={() => {}} />);
+    const { container } = render(<SettingsModal open={false} onClose={() => {}} {...themeProps} />);
     expect(container.firstChild).toBeNull();
   });
 
   it('shows the General tab by default', () => {
-    render(<SettingsModal open onClose={() => {}} />);
+    render(<SettingsModal open onClose={() => {}} {...themeProps} />);
     expect(screen.getByText('Storage')).toBeTruthy();
     expect(screen.getByText('Input')).toBeTruthy();
     expect(screen.getByText('Diagnostics')).toBeTruthy();
   });
 
   it('switches to the Appearance tab', () => {
-    render(<SettingsModal open onClose={() => {}} />);
+    render(<SettingsModal open onClose={() => {}} {...themeProps} />);
     fireEvent.click(screen.getByText('Appearance'));
     expect(screen.getByText('Font family')).toBeTruthy();
   });
 
   it('switches to the Protocols tab', () => {
-    render(<SettingsModal open onClose={() => {}} />);
+    render(<SettingsModal open onClose={() => {}} {...themeProps} />);
     fireEvent.click(screen.getByText('Protocols'));
     expect(screen.getByText('SSH KeepAlive')).toBeTruthy();
     expect(screen.getByText('Telnet KeepAlive')).toBeTruthy();
   });
 
   it('switches to the Features tab', () => {
-    render(<SettingsModal open onClose={() => {}} />);
+    render(<SettingsModal open onClose={() => {}} {...themeProps} />);
     fireEvent.click(screen.getByText('Features'));
     expect(screen.getByText('AI Chat')).toBeTruthy();
     expect(screen.getByText('Log Viewer')).toBeTruthy();
   });
 
   it('switches to the About tab and renders app name', () => {
-    render(<SettingsModal open onClose={() => {}} />);
+    render(<SettingsModal open onClose={() => {}} {...themeProps} />);
     fireEvent.click(screen.getByText('About'));
     expect(screen.getByText('HoTTY')).toBeTruthy();
   });
 
   it('clicking the overlay triggers onClose; clicking the modal body does not', () => {
     const onClose = vi.fn();
-    const { container } = render(<SettingsModal open onClose={onClose} />);
+    const { container } = render(<SettingsModal open onClose={onClose} {...themeProps} />);
     const overlay = container.querySelector('.settings-modal-overlay') as HTMLElement;
     const modal = container.querySelector('.settings-modal') as HTMLElement;
 
@@ -72,7 +79,7 @@ describe('SettingsModal', () => {
   });
 
   it('renders all 5 tab buttons', () => {
-    render(<SettingsModal open onClose={() => {}} />);
+    render(<SettingsModal open onClose={() => {}} {...themeProps} />);
     expect(screen.getByText('General')).toBeTruthy();
     expect(screen.getByText('Appearance')).toBeTruthy();
     expect(screen.getByText('Protocols')).toBeTruthy();

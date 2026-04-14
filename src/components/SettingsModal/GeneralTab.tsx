@@ -1,5 +1,6 @@
 import { useSettingsStore } from '../../stores/settingsStore';
 import { tauriService } from '../../services/tauriService';
+import HelpTooltip from '../HelpTooltip/HelpTooltip';
 
 export function GeneralTab() {
   const settings = useSettingsStore();
@@ -21,9 +22,7 @@ export function GeneralTab() {
         <div className="settings-group">
           <label>
             Log Folder Path
-            <span className="settings-help-text">
-              Logs are saved as YYYYMMDDHHMMSS-(Protocol)-(IP).txt
-            </span>
+            <HelpTooltip text="Logs are saved as YYYYMMDDHHMMSS-(Protocol)-(IP).txt" />
           </label>
           <div className="settings-logging-path-row">
             <input
@@ -47,9 +46,7 @@ export function GeneralTab() {
       <div className="settings-group">
         <label>
           Terminal Scrollback Buffer
-          <span className="settings-help-text">
-            Max lines to keep in memory per terminal (Default: 10000).
-          </span>
+          <HelpTooltip text="Max lines to keep in memory per terminal (Default: 10000)." />
         </label>
         <input
           type="number"
@@ -77,9 +74,7 @@ export function GeneralTab() {
           onChange={(e) => update('backspaceSendsDel', e.target.checked)}
         />
         Backspace sends DEL (0x7F)
-        <span className="settings-help-text">
-          If disabled, Backspace sends 0x08 (BS). Enable if your server expects 0x7F.
-        </span>
+        <HelpTooltip text="If disabled, Backspace sends 0x08 (BS). Enable if your server expects 0x7F." />
       </label>
       <label className="settings-checkbox">
         <input
@@ -88,9 +83,7 @@ export function GeneralTab() {
           onChange={(e) => update('rightClickPaste', e.target.checked)}
         />
         Right-click to paste
-        <span className="settings-help-text">
-          Right-clicking the terminal shows the paste confirmation dialog.
-        </span>
+        <HelpTooltip text="Right-clicking the terminal shows the paste confirmation dialog." />
       </label>
 
       {/* ── Diagnostics ── */}
@@ -98,9 +91,7 @@ export function GeneralTab() {
       <div className="settings-group">
         <label>
           Debug Log
-          <span className="settings-help-text">
-            Share the latest log file when reporting a bug.
-          </span>
+          <HelpTooltip text="Share the latest log file when reporting a bug." />
         </label>
         <div>
           <button

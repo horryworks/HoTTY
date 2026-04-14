@@ -1,5 +1,6 @@
 import type { FeatureId } from '../../types/appTypes';
 import { useSettingsStore } from '../../stores/settingsStore';
+import HelpTooltip from '../HelpTooltip/HelpTooltip';
 
 const FEATURE_LABELS: { id: FeatureId; label: string; description: string }[] = [
   { id: 'ai-chat', label: 'AI Chat', description: 'AI-powered chat panel for terminal assistance' },
@@ -22,9 +23,7 @@ export function FeaturesTab() {
       <div className="settings-group">
         <label>
           Features
-          <span className="settings-help-text">
-            Enable or disable feature panes. Existing open panes are not affected.
-          </span>
+          <HelpTooltip text="Enable or disable feature panes. Existing open panes are not affected." />
         </label>
       </div>
       {FEATURE_LABELS.map(({ id, label, description }) => (

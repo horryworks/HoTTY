@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AppearanceTab } from './AppearanceTab';
 import { useSettingsStore, DEFAULT_PROMPT_PATTERNS } from '../../stores/settingsStore';
-import { DEFAULT_THEME_IDS } from '../../themes/defaults';
+import { DEFAULT_THEME_IDS, DEFAULT_THEMES } from '../../themes/defaults';
 
 vi.mock('../../services/tauriService', () => ({
   tauriService: {
@@ -13,6 +13,16 @@ vi.mock('../../services/tauriService', () => ({
   },
 }));
 
+function renderTab() {
+  return render(
+    <AppearanceTab
+      themesData={DEFAULT_THEMES}
+      onOpenCustomThemeCreator={vi.fn()}
+      onDeleteTheme={vi.fn()}
+    />,
+  );
+}
+
 describe('AppearanceTab', () => {
   beforeEach(() => {
     useSettingsStore.getState().reset();
@@ -20,7 +30,7 @@ describe('AppearanceTab', () => {
   });
 
   it('renders an option per default theme id', () => {
-    render(<AppearanceTab />);
+    renderTab();
     // Theme is the second combobox (after font family)
     const selects = screen.getAllByRole('combobox');
     const themeSelect = selects.find((s) => {
@@ -31,7 +41,7 @@ describe('AppearanceTab', () => {
   });
 
   it('changing the theme updates the settings store', () => {
-    render(<AppearanceTab />);
+    renderTab();
     const selects = screen.getAllByRole('combobox');
     const themeSelect = selects.find((s) => {
       const options = Array.from((s as HTMLSelectElement).options);
@@ -42,7 +52,7 @@ describe('AppearanceTab', () => {
   });
 
   it('changing font size writes a number (or falls back to 14)', () => {
-    render(<AppearanceTab />);
+    renderTab();
     const fontSizeInput = screen
       .getByText('Font size (px)')
       .parentElement!.querySelector('input') as HTMLInputElement;
@@ -54,19 +64,19 @@ describe('AppearanceTab', () => {
   });
 
   it('switching sidebar position via radio updates the store', () => {
-    render(<AppearanceTab />);
+    renderTab();
     fireEvent.click(screen.getByLabelText('right'));
     expect(useSettingsStore.getState().sidebarPosition).toBe('right');
   });
 
   it('renders the prompt highlight checkbox', () => {
-    render(<AppearanceTab />);
+    renderTab();
     const checkbox = screen.getByLabelText('Enable User Input Highlight');
     expect(checkbox).toBeTruthy();
   });
 
   it('toggling prompt highlight updates the store', () => {
-    render(<AppearanceTab />);
+    renderTab();
     const checkbox = screen.getByLabelText('Enable User Input Highlight') as HTMLInputElement;
     expect(checkbox.checked).toBe(true);
     fireEvent.click(checkbox);
@@ -74,7 +84,7 @@ describe('AppearanceTab', () => {
   });
 
   it('shows prompt patterns list when enabled', () => {
-    render(<AppearanceTab />);
+    renderTab();
     expect(screen.getByText('Prompt Patterns (Regex)')).toBeTruthy();
     for (const p of DEFAULT_PROMPT_PATTERNS) {
       expect(screen.getByDisplayValue(p.name)).toBeTruthy();
@@ -83,12 +93,12 @@ describe('AppearanceTab', () => {
 
   it('hides prompt patterns when disabled', () => {
     useSettingsStore.getState().update('enablePromptHighlight', false);
-    render(<AppearanceTab />);
+    renderTab();
     expect(screen.queryByText('Prompt Patterns (Regex)')).toBeNull();
   });
 
   it('add pattern button appends a new pattern', () => {
-    render(<AppearanceTab />);
+    renderTab();
     const addButton = screen.getByText('+ Add Pattern');
     fireEvent.click(addButton);
     const patterns = useSettingsStore.getState().promptPatterns;
@@ -98,26 +108,26 @@ describe('AppearanceTab', () => {
 
   it('reset to default restores original patterns', () => {
     useSettingsStore.getState().update('promptPatterns', [{ id: 'x', name: 'X', pattern: 'x' }]);
-    render(<AppearanceTab />);
+    renderTab();
     fireEvent.click(screen.getByText('Reset to Default'));
     expect(useSettingsStore.getState().promptPatterns).toEqual(DEFAULT_PROMPT_PATTERNS);
   });
 
   it('renders encoding radio buttons', () => {
-    render(<AppearanceTab />);
+    renderTab();
     expect(screen.getByLabelText('utf8')).toBeTruthy();
     expect(screen.getByLabelText('shift_jis')).toBeTruthy();
     expect(screen.getByLabelText('euc-jp')).toBeTruthy();
   });
 
   it('changing encoding updates the store', () => {
-    render(<AppearanceTab />);
+    renderTab();
     fireEvent.click(screen.getByLabelText('shift_jis'));
     expect(useSettingsStore.getState().globalEncoding).toBe('shift_jis');
   });
 
   it('renders the font family dropdown with system monospace default', () => {
-    render(<AppearanceTab />);
+    renderTab();
     const selects = screen.getAllByRole('combobox');
     const fontSelect = selects.find((s) => {
       const options = Array.from((s as HTMLSelectElement).options);
@@ -127,7 +137,7 @@ describe('AppearanceTab', () => {
   });
 
   it('renders the Rescan button after fonts load', async () => {
-    render(<AppearanceTab />);
+    renderTab();
     await waitFor(() => {
       expect(screen.getByText('Rescan')).toBeTruthy();
     });

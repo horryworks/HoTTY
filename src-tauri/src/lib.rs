@@ -67,6 +67,11 @@ pub fn run() {
         .manage(ApprovedEditorPaths::new())
         .manage(PingMonitorState::new())
         .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                let version = app.package_info().version.to_string();
+                let _ = window.set_title(&format!("HoTTY v{}", version));
+            }
+
             let app_data_dir = app
                 .path()
                 .app_data_dir()

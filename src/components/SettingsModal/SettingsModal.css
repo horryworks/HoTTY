@@ -21,7 +21,7 @@
   max-width: 90vw;
   max-height: 90vh;
   color: var(--text-primary);
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
   font-size: var(--font-size-base);
 }
 
@@ -44,7 +44,7 @@
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
   font-size: var(--font-size-base);
 }
 
@@ -72,6 +72,10 @@
   color: var(--text-secondary);
 }
 
+.settings-group input[type='number'] {
+  max-width: 80px;
+}
+
 .settings-group input[type='text'],
 .settings-group input[type='number'],
 .settings-group select {
@@ -80,7 +84,7 @@
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-primary);
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
   font-size: var(--font-size-base);
   outline: none;
   transition: border-color 0.2s;
@@ -130,7 +134,7 @@
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-primary);
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
   font-size: var(--font-size-base);
   outline: none;
   transition: border-color 0.2s;
@@ -147,7 +151,7 @@
   border-radius: 4px;
   color: var(--text-primary);
   cursor: pointer;
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
   font-size: calc(var(--font-size-base) - 1px);
   white-space: nowrap;
 }
@@ -171,10 +175,16 @@
   color: var(--text-primary);
 }
 
+.settings-section-title--first {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
 .settings-help-text {
   display: block;
   font-size: calc(var(--font-size-base) - 2px);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-weight: normal;
   margin-top: 2px;
 }
@@ -187,7 +197,7 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
   font-size: var(--font-size-base);
 }
 
@@ -210,7 +220,7 @@
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-primary);
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
   font-size: var(--font-size-base);
   outline: none;
   transition: border-color 0.2s;
@@ -232,7 +242,7 @@
   border-radius: 4px;
   color: var(--text-primary);
   cursor: pointer;
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
   font-size: calc(var(--font-size-base) - 1px);
   white-space: nowrap;
 }
@@ -335,7 +345,7 @@
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-primary);
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
   font-size: var(--font-size-base);
   outline: none;
 }
@@ -351,7 +361,7 @@
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-primary);
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
   font-size: var(--font-size-base);
   resize: vertical;
   box-sizing: border-box;
@@ -403,7 +413,7 @@
   border-radius: 4px;
   font-size: calc(var(--font-size-base) - 2px);
   color: var(--text-primary);
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
 }
 
 .ai-settings-tag button {

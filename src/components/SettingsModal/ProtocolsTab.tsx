@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { tauriService } from '../../services/tauriService';
+import HelpTooltip from '../HelpTooltip/HelpTooltip';
 import type { SshAlgorithms } from '../../types/appTypes';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -35,7 +36,7 @@ export function ProtocolsTab() {
   return (
     <>
       {/* ── SSH KeepAlive ── */}
-      <h3 className="settings-section-title" style={{ marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
+      <h3 className="settings-section-title settings-section-title--first">
         SSH KeepAlive
       </h3>
       <label className="settings-checkbox">
@@ -45,7 +46,7 @@ export function ProtocolsTab() {
           onChange={(e) => update('sshKeepAliveEnabled', e.target.checked)}
         />
         Enable
-        <span className="settings-help-text">Sends dummy packets to prevent timeouts.</span>
+        <HelpTooltip text="Sends dummy packets to prevent timeouts." />
       </label>
       <div className="settings-group">
         <label>Interval (seconds)</label>
@@ -66,9 +67,7 @@ export function ProtocolsTab() {
         <details className="settings-algorithms-details">
           <summary className="settings-algorithms-summary">
             SSH Algorithms
-            <span className="settings-help-text">
-              Choose which algorithms to enable. Changes apply to new sessions.
-            </span>
+            <HelpTooltip text="Choose which algorithms to enable. Changes apply to new sessions." />
           </summary>
           <div className="settings-algorithms-container">
             {Object.keys(sshAlgorithms).map((category) => (
@@ -103,7 +102,7 @@ export function ProtocolsTab() {
           onChange={(e) => update('telnetKeepAliveEnabled', e.target.checked)}
         />
         Enable
-        <span className="settings-help-text">Sends Telnet NOP commands to prevent idle timeouts.</span>
+        <HelpTooltip text="Sends Telnet NOP commands to prevent idle timeouts." />
       </label>
       <div className="settings-group">
         <label>Interval (seconds)</label>

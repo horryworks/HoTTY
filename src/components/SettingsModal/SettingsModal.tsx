@@ -5,11 +5,15 @@ import { AppearanceTab } from './AppearanceTab';
 import { GeneralTab } from './GeneralTab';
 import { ProtocolsTab } from './ProtocolsTab';
 import { FeaturesTab } from './FeaturesTab';
+import type { Theme } from '../../types/appTypes';
 import './SettingsModal.css';
 
 interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
+  themesData: Record<string, Theme>;
+  onOpenCustomThemeCreator: () => void;
+  onDeleteTheme: (themeKey: string) => Promise<void>;
 }
 
 type Tab = 'general' | 'appearance' | 'protocols' | 'features' | 'ai' | 'about';
@@ -23,7 +27,13 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'about', label: 'About' },
 ];
 
-export function SettingsModal({ open, onClose }: SettingsModalProps) {
+export function SettingsModal({
+  open,
+  onClose,
+  themesData,
+  onOpenCustomThemeCreator,
+  onDeleteTheme,
+}: SettingsModalProps) {
   const [tab, setTab] = useState<Tab>('general');
 
   if (!open) return null;
@@ -48,7 +58,13 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         </div>
         <div className="settings-modal-body">
           {tab === 'general' && <GeneralTab />}
-          {tab === 'appearance' && <AppearanceTab />}
+          {tab === 'appearance' && (
+            <AppearanceTab
+              themesData={themesData}
+              onOpenCustomThemeCreator={onOpenCustomThemeCreator}
+              onDeleteTheme={onDeleteTheme}
+            />
+          )}
           {tab === 'protocols' && <ProtocolsTab />}
           {tab === 'features' && <FeaturesTab />}
           {tab === 'ai' && <AISettingsTab />}

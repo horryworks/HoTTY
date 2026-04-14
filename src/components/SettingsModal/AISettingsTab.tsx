@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { tauriService } from '../../services/tauriService';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
+import HelpTooltip from '../HelpTooltip/HelpTooltip';
 import { STORAGE_KEYS } from '../../constants/storage';
 import type { PersonaDefinition, AskAiCommand, CommandExecutionMode } from '../../types/appTypes';
 import { DEFAULT_AI_COMMANDS, DEFAULT_PERSONAS } from '../../stores/settingsStore';
@@ -87,13 +88,11 @@ export function AISettingsTab() {
   return (
     <>
       {/* -- AI Provider -- */}
-      <h3 className="settings-section-title" style={{ marginTop: 0, paddingTop: 0, borderTop: 'none' }}>Provider</h3>
+      <h3 className="settings-section-title settings-section-title--first">Provider</h3>
       <div className="settings-group">
         <label>
           AI Provider
-          <span className="settings-help-text">
-            Vertex AI and Gemini use Google OAuth. Anthropic and OpenAI require API keys.
-          </span>
+          <HelpTooltip text="Vertex AI and Gemini use Google OAuth. Anthropic and OpenAI require API keys." />
         </label>
         <select
           value={settings.activeAiProvider}
@@ -264,7 +263,7 @@ export function AISettingsTab() {
                     className="ai-settings-textarea"
                     rows={2}
                   />
-                  <span className="settings-help-text">Use {'{selection}'} placeholder for the selected text.</span>
+                  <HelpTooltip text={`Use {selection} placeholder for the selected text.`} />
                 </div>
               ))}
             </div>
@@ -354,9 +353,7 @@ export function AISettingsTab() {
           <div className="settings-group">
             <label>
               Max Consecutive Auto-Executions
-              <span className="settings-help-text">
-                0 = unlimited. After this limit, commands require manual confirmation until you click Run.
-              </span>
+              <HelpTooltip text="0 = unlimited. After this limit, commands require manual confirmation until you click Run." />
             </label>
             <input
               type="number"
@@ -373,9 +370,7 @@ export function AISettingsTab() {
           <div className="settings-group">
             <label>
               Custom Safe Commands
-              <span className="settings-help-text">
-                Add custom command names to the auto-execute whitelist. Built-in safe commands are always included.
-              </span>
+              <HelpTooltip text="Add custom command names to the auto-execute whitelist. Built-in safe commands are always included." />
             </label>
             <div style={{ display: 'flex', gap: '8px' }}>
               <input

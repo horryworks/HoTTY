@@ -60,7 +60,8 @@ export interface PromptPattern {
   pattern: string;
 }
 
-export type ThemeId = 'dark' | 'medium' | 'light';
+export type ThemeId = string;
+export type BuiltInThemeId = 'dark' | 'medium' | 'light';
 
 export interface ThemeTerminalColors {
   foreground: string;
