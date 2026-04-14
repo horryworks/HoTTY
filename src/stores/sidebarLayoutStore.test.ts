@@ -30,7 +30,7 @@ describe('sidebarLayoutStore', () => {
     expect(useSidebarLayoutStore.getState().showLeftSidebar).toBe(false);
   });
 
-  it('setPercent writes per-edge and clamps to [5, 60]', () => {
+  it('setPercent writes per-edge and clamps to [5, 80]', () => {
     const s = useSidebarLayoutStore.getState();
     s.setPercent('left', 35);
     expect(useSidebarLayoutStore.getState().leftSidebarPercent).toBe(35);
@@ -39,7 +39,7 @@ describe('sidebarLayoutStore', () => {
     expect(useSidebarLayoutStore.getState().rightSidebarPercent).toBe(5);
 
     s.setPercent('top', 999);
-    expect(useSidebarLayoutStore.getState().topBarPercent).toBe(60);
+    expect(useSidebarLayoutStore.getState().topBarPercent).toBe(80);
 
     s.setPercent('bottom', 25);
     expect(useSidebarLayoutStore.getState().bottomBarPercent).toBe(25);

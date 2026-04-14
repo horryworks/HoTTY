@@ -1,5 +1,29 @@
 # Release Notes
 
+## v2.0.0-beta3
+
+Third beta release, focused on theme customization, UI refinements, and expanded test coverage.
+
+### New Features
+
+- **Custom Theme Creator** — in-app editor to create user-defined themes by adjusting any CSS variable, with save/edit/delete support from the Appearance tab
+- **Help Tooltip component** — contextual help hints embedded next to settings and controls
+- **Versioned window title** — main window title now includes the current application version
+
+### Improvements
+
+- **Settings modal** — refined styling across all tabs (Appearance, General, Features, Protocols, AI, About) for visual consistency
+- **Settings store** — extended with additional feature toggles and configuration options
+- **Sidebar icon spacing** — tightened and balanced icon layout in the app sidebar
+- **Removed deprecated ConnectForm** — fully superseded by the Session Dialog; legacy component and styles deleted
+- **Expanded test coverage** — added tests for AI chat panels, Ask AI modal, authentication panels, theme utilities, and color/HTML helpers
+- **Help modal** — documentation updated to cover the new Custom Theme Creator workflow
+
+### Bug Fixes
+
+- **Modal CSS consistency** — unified padding, border-radius, and animation timing across PasteConfirmationModal, SettingsModal, and HelpModal
+- **Pane toolbar consistency** — aligned TextEditorPane and PingMonitorPane toolbars with the standard 36px toolbar spec
+
 ## v2.0.0-beta2
 
 Second beta release with AI integration, connection management UI, and enhanced utility panes.

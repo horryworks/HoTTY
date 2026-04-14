@@ -32,35 +32,66 @@ export function Sidebar({ edge, children, onDropSession }: SidebarProps) {
 
   const ref = useRef<HTMLDivElement | null>(null);
   const dragging = useRef(false);
+  const rafId = useRef<number | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
   const [dropActive, setDropActive] = useState(false);
 
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    dragging.current = true;
-  }, []);
+  const onMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragging.current = true;
+      setIsResizing(true);
+      document.body.style.cursor =
+        edge === 'left' || edge === 'right' ? 'col-resize' : 'row-resize';
+    },
+    [edge]
+  );
 
   useEffect(() => {
     if (!visible) return;
     const onMove = (e: MouseEvent) => {
       if (!dragging.current) return;
-      const host = ref.current?.parentElement;
-      if (!host) return;
-      const rect = host.getBoundingClientRect();
-      let pct = 20;
-      if (edge === 'left') pct = ((e.clientX - rect.left) / rect.width) * 100;
-      if (edge === 'right') pct = ((rect.right - e.clientX) / rect.width) * 100;
-      if (edge === 'top') pct = ((e.clientY - rect.top) / rect.height) * 100;
-      if (edge === 'bottom') pct = ((rect.bottom - e.clientY) / rect.height) * 100;
-      setPercent(edge, pct);
+      if (rafId.current !== null) return;
+      const clientX = e.clientX;
+      const clientY = e.clientY;
+      rafId.current = requestAnimationFrame(() => {
+        rafId.current = null;
+        if (!dragging.current) return;
+        const host = ref.current?.parentElement;
+        if (!host) return;
+        const rect = host.getBoundingClientRect();
+        let pct = 20;
+        if (edge === 'left') pct = ((clientX - rect.left) / rect.width) * 100;
+        if (edge === 'right') pct = ((rect.right - clientX) / rect.width) * 100;
+        if (edge === 'top') pct = ((clientY - rect.top) / rect.height) * 100;
+        if (edge === 'bottom') pct = ((rect.bottom - clientY) / rect.height) * 100;
+        setPercent(edge, pct);
+      });
     };
     const onUp = () => {
+      if (!dragging.current) return;
       dragging.current = false;
+      if (rafId.current !== null) {
+        cancelAnimationFrame(rafId.current);
+        rafId.current = null;
+      }
+      setIsResizing(false);
+      document.body.style.cursor = '';
     };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
     return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (rafId.current !== null) {
+        cancelAnimationFrame(rafId.current);
+        rafId.current = null;
+      }
+      if (dragging.current) {
+        dragging.current = false;
+        document.body.style.cursor = '';
+      }
     };
   }, [edge, setPercent, visible]);
 
@@ -100,7 +131,7 @@ export function Sidebar({ edge, children, onDropSession }: SidebarProps) {
     >
       <div className="sidebar-content">{children}</div>
       <div
-        className={`sidebar-resize sidebar-resize-${edge}`}
+        className={`sidebar-resize sidebar-resize-${edge}${isResizing ? ' resizing' : ''}`}
         onMouseDown={onMouseDown}
       />
     </div>

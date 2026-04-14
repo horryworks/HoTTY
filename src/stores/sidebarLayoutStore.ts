@@ -16,7 +16,7 @@ interface SidebarLayoutState {
   setPercent: (edge: SidebarEdge, percent: number) => void;
 }
 
-const clamp = (n: number) => Math.max(5, Math.min(60, n));
+const clamp = (n: number) => Math.max(5, Math.min(80, n));
 
 export const useSidebarLayoutStore = create<SidebarLayoutState>()(
   persist(

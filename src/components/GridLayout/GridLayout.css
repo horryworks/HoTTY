@@ -5,7 +5,7 @@
   min-width: 0;
   width: 100%;
   height: 100%;
-  gap: 2px;
+  gap: 0;
   background: var(--border-color);
 }
 
@@ -17,6 +17,8 @@
   background: var(--bg-primary);
   overflow: hidden;
   position: relative;
+  border: 1px solid var(--border-color);
+  box-sizing: border-box;
 }
 
 .grid-layout-cell.drop-target::after {
@@ -27,4 +29,40 @@
   background: var(--accent-light);
   opacity: 0.25;
   pointer-events: none;
+}
+
+.grid-resizer-v {
+  cursor: col-resize;
+  z-index: 10;
+  background: transparent;
+  transition: background-color 0.2s;
+}
+
+.grid-resizer-v:hover,
+.grid-resizer-v.resizing {
+  background: var(--accent-color);
+}
+
+.grid-resizer-h {
+  cursor: row-resize;
+  z-index: 10;
+  background: transparent;
+  transition: background-color 0.2s;
+}
+
+.grid-resizer-h:hover,
+.grid-resizer-h.resizing {
+  background: var(--accent-color);
+}
+
+.grid-resizer-cross {
+  cursor: move;
+  z-index: 20;
+  background: transparent;
+  transition: background-color 0.2s;
+}
+
+.grid-resizer-cross:hover,
+.grid-resizer-cross.resizing {
+  background: var(--accent-color);
 }

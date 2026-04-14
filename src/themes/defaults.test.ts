@@ -21,7 +21,6 @@ describe('default themes', () => {
 
   it('getTheme falls back to dark for unknown ids', () => {
     expect(getTheme('dark')).toBe(DEFAULT_THEMES.dark);
-    // @ts-expect-error intentionally bad id
     expect(getTheme('bogus')).toBe(DEFAULT_THEMES.dark);
   });
 });
