@@ -10,6 +10,7 @@ import { AuthenticationPanel } from './AuthenticationPanel';
 import { VertexAIAuthPanel } from './VertexAIAuthPanel';
 import { OpenAIAuthPanel } from './OpenAIAuthPanel';
 import { AnthropicAuthPanel } from './AnthropicAuthPanel';
+import { SystemPromptModal } from '../SystemPromptModal/SystemPromptModal';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { tauriService } from '../../services/tauriService';
 import type { AiChatState } from '../../hooks/useAiChat';
@@ -218,6 +219,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const [selectedExpertise, setSelectedExpertise] = useState(chatState?.selectedExpertise || defaultExpertise);
     const [textareaHeight, setTextareaHeight] = useState(0);
     const [localSystemInstruction, setLocalSystemInstruction] = useState(chatState?.systemInstruction || 'You are a helpful assistant.');
+    const [showPromptModal, setShowPromptModal] = useState(false);
 
     // Target session info from parent state
     const lastTargetSessionId = chatState?.lastTargetSessionId;
@@ -760,6 +762,19 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         <option key={persona.id} value={persona.label}>{persona.label}</option>
                                     ))}
                                 </select>
+                                <button
+                                    type="button"
+                                    className="ai-chat-header-icon-btn"
+                                    title="View system prompt"
+                                    aria-label="View system prompt"
+                                    onClick={() => setShowPromptModal(true)}
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <line x1="12" y1="16" x2="12" y2="12" />
+                                        <line x1="12" y1="8" x2="12.01" y2="8" />
+                                    </svg>
+                                </button>
                             </div>
                             <div className="ai-chat-header-item">
                                 <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -994,6 +1009,13 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                         </div>
                     )}
                 </div>
+            )}
+            {showPromptModal && (
+                <SystemPromptModal
+                    personaLabel={selectedExpertise}
+                    systemInstruction={localSystemInstruction}
+                    onClose={() => setShowPromptModal(false)}
+                />
             )}
         </div>
     );

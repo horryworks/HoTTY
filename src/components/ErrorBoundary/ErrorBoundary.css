@@ -1,0 +1,94 @@
+.error-boundary {
+  position: fixed;
+  inset: 0;
+  background: var(--modal-overlay-bg);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.error-boundary-panel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px var(--modal-shadow);
+  display: flex;
+  flex-direction: column;
+  max-width: 720px;
+  width: 100%;
+  max-height: 80vh;
+  overflow: hidden;
+  animation: fadeIn 0.1s ease-out;
+}
+
+.error-boundary-title {
+  margin: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--color-danger);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) + 4px);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.error-boundary-message {
+  margin: 0;
+  padding: 15px 20px 0 20px;
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: var(--font-size-base);
+  word-break: break-word;
+}
+
+.error-boundary-stack {
+  margin: 10px 20px;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  white-space: pre;
+}
+
+.error-boundary-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.error-boundary-btn {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--btn-secondary-bg);
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: var(--font-size-base);
+  transition: background-color 0.1s;
+}
+
+.error-boundary-btn:hover:not(:disabled) {
+  background: var(--btn-secondary-hover-bg);
+}
+
+.error-boundary-btn-primary {
+  background: var(--accent-color);
+  color: var(--text-on-accent);
+}
+
+.error-boundary-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}

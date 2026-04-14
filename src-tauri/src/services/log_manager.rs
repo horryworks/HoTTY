@@ -26,6 +26,15 @@ struct SessionLog {
     at_line_start: bool,
 }
 
+impl Drop for SessionLog {
+    fn drop(&mut self) {
+        // Ensure buffered writes hit disk even if stop_logging/stop_all was
+        // skipped (panic, abrupt session removal, app shutdown).
+        let _ = self.file.flush();
+        let _ = self.ts_file.flush();
+    }
+}
+
 /// Manages session logging for all active sessions.
 ///
 /// Thread-safe via `Arc<Mutex<...>>` — designed to be stored in Tauri managed state.

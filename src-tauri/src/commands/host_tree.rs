@@ -231,8 +231,10 @@ pub async fn export_htree(
     };
 
     // Write file
-    std::fs::write(path.as_path().unwrap(), &payload)
-        .map_err(|e| format!("failed to write file: {e}"))?;
+    let path_ref = path
+        .as_path()
+        .ok_or_else(|| "invalid export path".to_string())?;
+    std::fs::write(path_ref, &payload).map_err(|e| format!("failed to write file: {e}"))?;
 
     Ok(ExportResult {
         success: true,
@@ -265,7 +267,7 @@ pub async fn select_import_file(
 
     let path_str = path
         .as_path()
-        .unwrap()
+        .ok_or_else(|| "invalid import path".to_string())?
         .to_string_lossy()
         .to_string();
 

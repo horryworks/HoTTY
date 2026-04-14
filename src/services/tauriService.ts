@@ -6,6 +6,7 @@ import {
   writeText as clipboardWriteText,
 } from '@tauri-apps/plugin-clipboard-manager';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { ask as dialogAsk } from '@tauri-apps/plugin-dialog';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
 import type {
   ProtocolId,
@@ -42,6 +43,7 @@ import type {
   AIAuthType,
   AIChatResponseData,
   AIAuthResultPayload,
+  UpdateInfo,
 } from '../types/appTypes';
 
 type AnyConfig =
@@ -368,8 +370,40 @@ export const tauriService = {
     await getCurrentWebviewWindow().setTitle(title);
   },
 
+  async onWindowCloseRequested(
+    handler: (preventDefault: () => void) => void | Promise<void>,
+  ): Promise<UnlistenFn> {
+    return getCurrentWebviewWindow().onCloseRequested(async (event) => {
+      await handler(() => event.preventDefault());
+    });
+  },
+
+  async destroyWindow(): Promise<void> {
+    await getCurrentWebviewWindow().destroy();
+  },
+
+  async confirmDialog(
+    message: string,
+    options: { title?: string; okLabel?: string; cancelLabel?: string } = {},
+  ): Promise<boolean> {
+    return dialogAsk(message, {
+      title: options.title ?? 'HoTTY',
+      kind: 'warning',
+      okLabel: options.okLabel,
+      cancelLabel: options.cancelLabel,
+    });
+  },
+
   async openExternal(url: string): Promise<void> {
     await shellOpen(url);
+  },
+
+  // -----------------------------------------------------------------------
+  // Updater
+  // -----------------------------------------------------------------------
+
+  async checkForUpdates(): Promise<UpdateInfo | null> {
+    return invoke<UpdateInfo | null>('check_for_updates');
   },
 
   // -----------------------------------------------------------------------

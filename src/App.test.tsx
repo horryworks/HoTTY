@@ -22,6 +22,10 @@ vi.mock('./services/tauriService', () => ({
     getAppVersion: vi.fn().mockResolvedValue('2.0.0-beta1'),
     setWindowTitle: vi.fn().mockResolvedValue(undefined),
     onSessionData: vi.fn().mockResolvedValue(() => {}),
+    onSessionStatus: vi.fn().mockResolvedValue(() => {}),
+    onWindowCloseRequested: vi.fn().mockResolvedValue(() => {}),
+    destroyWindow: vi.fn().mockResolvedValue(undefined),
+    confirmDialog: vi.fn().mockResolvedValue(false),
     showContextMenu: vi.fn().mockResolvedValue(null),
   },
 }));
@@ -153,6 +157,10 @@ vi.mock('./components/SshHostKeyModal/SshHostKeyModal', () => ({
 
 vi.mock('./components/PasteConfirmationModal/PasteConfirmationModal', () => ({
   PasteConfirmationModal: () => null,
+}));
+
+vi.mock('./components/UpdateNotification/UpdateNotification', () => ({
+  UpdateNotification: () => null,
 }));
 
 import App from './App';

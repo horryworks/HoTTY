@@ -1,5 +1,35 @@
 # Release Notes
 
+## v2.0.0-beta4
+
+Fourth beta release, focused on jumpbox tunneling, auto-update notifications, safer editing workflows, and security hardening.
+
+### New Features
+
+- **SSH/Telnet Jumpbox (bastion) tunneling** — connect through an SSH bastion host to a target SSH or Telnet server via `direct-tcpip` channel forwarding, with its own host-key verification and keyboard-interactive auth
+- **Auto-update notification** — on startup, checks the GitHub releases API for a newer version and shows a dismissible notification linking to the release page
+- **Unsaved changes prompt** — Text Editor now shows a Save / Discard / Cancel modal when closing a tab or quitting with unsaved edits, backed by a dirty-editor tracker shared across panes
+- **AI System Prompt viewer** — inspect the effective system instruction sent to the current AI persona, with copy-to-clipboard support
+- **React Error Boundary** — top-level error boundary catches renderer crashes and shows a recoverable fallback instead of a blank window
+
+### Improvements
+
+- **Telnet service** — refactored connection path to share the jumbox tunnel abstraction with SSH, unifying transport handling
+- **tauriService** — added typed wrappers for the new updater and jumpbox commands
+- **useResize hook** — small ergonomics improvements for pane drag-to-resize
+- **App shell** — composed UpdateNotification, SaveConfirmModal, SystemPromptModal, and ErrorBoundary into the top-level layout
+
+### Security
+
+- **SSH credential validation** — added length caps (host, username, password, passphrase) in `SshConfig::validate` to reject malformed or oversized inputs before they reach the SSH stack
+- **Log viewer TOCTOU mitigation** — re-canonicalizes the resolved path immediately before reading and re-checks the allowed-directory guard, preventing symlink swap attacks between the check and the read
+- **Font enumeration unsafe hardening** — added null-pointer and alignment validation in the Windows font-enumeration callback before dereferencing OS-supplied pointers
+
+### Housekeeping
+
+- **Removed unused asset** — deleted `public/HoTTY_logo.png` (not referenced by the app)
+- **Added tests** — new unit tests for the dirty-editor tracker utility
+
 ## v2.0.0-beta3
 
 Third beta release, focused on theme customization, UI refinements, and expanded test coverage.

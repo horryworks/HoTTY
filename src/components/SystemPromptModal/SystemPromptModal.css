@@ -1,0 +1,121 @@
+.system-prompt-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: var(--modal-overlay-bg);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.system-prompt-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px var(--modal-shadow);
+  width: 640px;
+  max-width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fadeIn 0.1s ease-out;
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+}
+
+.system-prompt-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.system-prompt-modal-title {
+  font-weight: 600;
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.system-prompt-modal-close-x {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: calc(var(--font-size-base) + 6px);
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background-color 0.1s;
+}
+
+.system-prompt-modal-close-x:hover:not(:disabled) {
+  background-color: var(--btn-secondary-hover-bg);
+  color: var(--text-primary);
+}
+
+.system-prompt-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 15px 20px;
+}
+
+.system-prompt-body {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.system-prompt-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.system-prompt-btn {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  transition: background-color 0.1s;
+}
+
+.system-prompt-btn.secondary {
+  background: var(--btn-secondary-bg);
+  color: var(--text-primary);
+}
+
+.system-prompt-btn.secondary:hover:not(:disabled) {
+  background: var(--btn-secondary-hover-bg);
+}
+
+.system-prompt-btn.primary {
+  background: var(--accent-color);
+  color: var(--text-on-accent);
+}
+
+.system-prompt-btn.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}

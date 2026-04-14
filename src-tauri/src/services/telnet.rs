@@ -8,6 +8,7 @@ use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 
+use super::jumpbox::{establish_tunnel, JumpboxConfig, JumpboxHandler};
 use super::session_service::{
     emit_session_data, emit_session_error, emit_session_status, encoding_for, SessionError,
     SessionService,
@@ -45,6 +46,8 @@ pub struct TelnetConfig {
     pub encoding: String,
     #[serde(default)]
     pub keepalive_interval_secs: u32,
+    #[serde(default)]
+    pub jumpbox: Option<JumpboxConfig>,
 }
 
 fn default_encoding() -> String {
@@ -210,6 +213,9 @@ fn is_password_prompt(tail: &str) -> bool {
 pub struct TelnetSession {
     config: TelnetConfig,
     encoding: &'static encoding_rs::Encoding,
+    /// Kept alive for the lifetime of the session when tunneling via a
+    /// jumpbox; dropping this closes the underlying SSH bastion connection.
+    jumpbox_handle: Option<Arc<russh::client::Handle<JumpboxHandler>>>,
     writer_tx: Option<mpsc::Sender<WriterCmd>>,
     join: Vec<JoinHandle<()>>,
     login_done: Arc<Mutex<bool>>,
@@ -227,6 +233,7 @@ impl TelnetSession {
         Self {
             config,
             encoding,
+            jumpbox_handle: None,
             writer_tx: None,
             join: Vec::new(),
             login_done: Arc::new(Mutex::new(false)),
@@ -257,19 +264,42 @@ impl SessionService for TelnetSession {
     ) -> Result<(), SessionError> {
         self.config.validate()?;
 
-        let addr = format!("{}:{}", self.config.host, self.config.port);
-        log::info!("telnet: connecting to {addr} (session {session_id})");
-        let stream = TcpStream::connect(&addr).await.map_err(|e| {
-            log::error!("telnet: TcpStream::connect({addr}) failed: {e}");
-            SessionError::ConnectionFailed(format!("{addr}: {e}"))
-        })?;
-        log::info!("telnet: TCP connected to {addr}");
+        let (read_half, write_half): (
+            Box<dyn tokio::io::AsyncRead + Unpin + Send>,
+            Box<dyn tokio::io::AsyncWrite + Unpin + Send>,
+        ) = if let Some(jumpbox_cfg) = self.config.jumpbox.take() {
+            log::info!(
+                "telnet: tunneling through jumpbox {}:{} to {}:{} (session {session_id})",
+                jumpbox_cfg.host, jumpbox_cfg.port, self.config.host, self.config.port
+            );
+            let tunnel = establish_tunnel(
+                app.clone(),
+                &session_id,
+                jumpbox_cfg,
+                &self.config.host,
+                self.config.port,
+            )
+            .await?;
+            let (jumpbox_handle, stream) = tunnel.into_stream();
+            self.jumpbox_handle = Some(jumpbox_handle);
+            let (r, w) = tokio::io::split(stream);
+            (Box::new(r), Box::new(w))
+        } else {
+            let addr = format!("{}:{}", self.config.host, self.config.port);
+            log::info!("telnet: connecting to {addr} (session {session_id})");
+            let stream = TcpStream::connect(&addr).await.map_err(|e| {
+                log::error!("telnet: TcpStream::connect({addr}) failed: {e}");
+                SessionError::ConnectionFailed(format!("{addr}: {e}"))
+            })?;
+            log::info!("telnet: TCP connected to {addr}");
+            let (r, w) = stream.into_split();
+            (Box::new(r), Box::new(w))
+        };
 
         // Enable TCP keepalive via socket2 (best-effort; portable-pty is unused here).
         // Rust's tokio TcpStream does not expose set_keepalive directly, so we leave the
         // OS defaults and rely on the application-level IAC NOP instead.
 
-        let (read_half, write_half) = stream.into_split();
         let write_half = Arc::new(Mutex::new(write_half));
 
         let (tx, mut rx) = mpsc::channel::<WriterCmd>(64);
@@ -480,6 +510,11 @@ impl SessionService for TelnetSession {
     async fn disconnect(&mut self) -> Result<(), SessionError> {
         if let Some(tx) = self.writer_tx.take() {
             let _ = tx.send(WriterCmd::Close).await;
+        }
+        if let Some(jh) = self.jumpbox_handle.take() {
+            let _ = jh
+                .disconnect(russh::Disconnect::ByApplication, "bye", "en")
+                .await;
         }
         for h in self.join.drain(..) {
             if tokio::time::timeout(std::time::Duration::from_millis(200), h).await.is_err() {

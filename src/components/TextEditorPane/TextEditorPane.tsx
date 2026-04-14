@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { tauriService } from '../../services/tauriService';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { TextEditorTab } from '../../types/appTypes';
+import { SaveConfirmModal } from '../SaveConfirmModal/SaveConfirmModal';
+import { setEditorDirtyCount, clearEditorDirty } from '../../utils/dirtyEditors';
 import './TextEditorPane.css';
 
 interface TextEditorPaneProps {
@@ -56,6 +58,7 @@ export function TextEditorPane({
   const [showReturnCodes, setShowReturnCodes] = useState(false);
   const [showEncodingPicker, setShowEncodingPicker] = useState(false);
   const [showLineEndingPicker, setShowLineEndingPicker] = useState(false);
+  const [pendingCloseTabId, setPendingCloseTabId] = useState<string | null>(null);
 
   const lineWrapEnabled = useSettingsStore((s) => s.lineWrapEnabled);
   const updateSetting = useSettingsStore((s) => s.update);
@@ -77,6 +80,14 @@ export function TextEditorPane({
     if (!tab.filePath && tab.content === '') return false;
     return tab.content !== tab.savedContent;
   }, []);
+
+  useEffect(() => {
+    const dirtyCount = tabs.filter(isTabDirty).length;
+    setEditorDirtyCount(paneId, dirtyCount);
+    return () => {
+      clearEditorDirty(paneId);
+    };
+  }, [tabs, isTabDirty, paneId]);
 
   // Update a single tab's data
   const updateTab = useCallback((tabId: string, updates: Partial<TextEditorTab>) => {
@@ -206,11 +217,74 @@ export function TextEditorPane({
 
   const closeTab = useCallback(
     (tabId: string) => {
-      // TODO: add unsaved changes confirmation
+      const tab = tabs.find((t) => t.id === tabId);
+      if (tab && isTabDirty(tab)) {
+        setPendingCloseTabId(tabId);
+        return;
+      }
       forceCloseTab(tabId);
     },
-    [forceCloseTab],
+    [tabs, isTabDirty, forceCloseTab],
   );
+
+  // Save a specific tab (used by the unsaved-changes flow where the closing
+  // tab may not be the active one). Returns true on success.
+  const saveTab = useCallback(
+    async (tabId: string): Promise<boolean> => {
+      const tab = tabs.find((t) => t.id === tabId);
+      if (!tab) return false;
+      let savePath = tab.filePath;
+      if (!savePath) {
+        savePath = await tauriService.textEditorSaveFile();
+        if (!savePath) return false;
+      }
+      try {
+        let saveContent = tab.content;
+        if (tab.lineEnding === 'CRLF') {
+          saveContent = tab.content.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+        } else {
+          saveContent = tab.content.replace(/\r\n/g, '\n');
+        }
+        await tauriService.textEditorWriteFile(savePath, saveContent, tab.encoding);
+        updateTab(tabId, { savedContent: tab.content, filePath: savePath });
+        if (tabId === activeTabId) {
+          syncDisplayName({ ...tab, filePath: savePath });
+        }
+        return true;
+      } catch (err) {
+        console.error('Failed to save file:', err);
+        return false;
+      }
+    },
+    [tabs, activeTabId, updateTab, syncDisplayName],
+  );
+
+  const handleSaveConfirmSave = useCallback(async () => {
+    if (!pendingCloseTabId) return;
+    const id = pendingCloseTabId;
+    const ok = await saveTab(id);
+    if (ok) {
+      setPendingCloseTabId(null);
+      forceCloseTab(id);
+    }
+    // If save was cancelled or failed, keep the modal open so the user can
+    // choose Discard or Cancel explicitly.
+  }, [pendingCloseTabId, saveTab, forceCloseTab]);
+
+  const handleSaveConfirmDiscard = useCallback(() => {
+    if (!pendingCloseTabId) return;
+    const id = pendingCloseTabId;
+    setPendingCloseTabId(null);
+    forceCloseTab(id);
+  }, [pendingCloseTabId, forceCloseTab]);
+
+  const handleSaveConfirmCancel = useCallback(() => {
+    setPendingCloseTabId(null);
+  }, []);
+
+  const pendingCloseTab = pendingCloseTabId
+    ? tabs.find((t) => t.id === pendingCloseTabId)
+    : null;
 
   const switchTab = useCallback(
     (tabId: string) => {
@@ -1077,6 +1151,19 @@ export function TextEditorPane({
             />
           </div>
         </div>
+      )}
+
+      {pendingCloseTab && (
+        <SaveConfirmModal
+          filename={
+            pendingCloseTab.filePath
+              ? filenameFromPath(pendingCloseTab.filePath)
+              : 'Untitled'
+          }
+          onSave={handleSaveConfirmSave}
+          onDiscard={handleSaveConfirmDiscard}
+          onCancel={handleSaveConfirmCancel}
+        />
       )}
     </div>
   );

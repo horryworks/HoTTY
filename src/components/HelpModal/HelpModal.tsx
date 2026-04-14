@@ -79,6 +79,9 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               <p className="help-text">
                 <strong>GCE IAP Tunnel:</strong> Connect to Google Compute Engine VMs via Identity-Aware Proxy without exposing VMs to the public internet. Check &quot;Connect via Google Cloud IAP&quot; in the SSH form, then select your GCP project, zone, and instance (autocomplete provided via gcloud CLI).
               </p>
+              <p className="help-text">
+                <strong>Update Notifications:</strong> On startup HoTTY checks the GitHub releases feed and shows a dismissible notification when a newer version is available, linking directly to the release page.
+              </p>
             </div>
           </details>
 
@@ -201,6 +204,9 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               <p className="help-text">
                 <strong>Tip:</strong> An unsaved file shows a <code>&bull;</code> dot on its sub-tab title. Save with <code>Ctrl + S</code>.
               </p>
+              <p className="help-text">
+                <strong>Unsaved changes prompt:</strong> Closing a sub-tab or exiting with dirty editors opens a <strong>Save / Discard / Cancel</strong> dialog so you never lose work by accident.
+              </p>
             </div>
           </details>
 
@@ -267,7 +273,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
 
               <p className="help-text" style={{ marginBottom: '4px' }}><strong>Personas</strong></p>
               <p className="help-text">
-                Switch between AI roles (General Helper, Network Expert, Security Analyst, etc.) using the persona selector at the top of the chat. Each persona has a system prompt tailored for that domain.
+                Switch between AI roles (General Helper, Network Expert, Security Analyst, etc.) using the persona selector at the top of the chat. Each persona has a system prompt tailored for that domain. Click the <strong>system prompt</strong> indicator to inspect the exact instruction sent to the model and copy it to the clipboard.
               </p>
             </div>
           </details>

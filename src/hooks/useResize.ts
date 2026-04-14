@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 type ResizeOrientation = 'horizontal' | 'vertical' | 'both';
 
@@ -18,6 +18,13 @@ export function useResize({ onMove, orientation = 'both', cursor }: UseResizeOpt
     const startPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
     const onMoveRef = useRef(onMove);
     onMoveRef.current = onMove;
+    const cleanupRef = useRef<(() => void) | null>(null);
+
+    useEffect(() => {
+        return () => {
+            cleanupRef.current?.();
+        };
+    }, []);
 
     const getCursor = () => {
         if (cursor) return cursor;
@@ -42,15 +49,21 @@ export function useResize({ onMove, orientation = 'both', cursor }: UseResizeOpt
             onMoveRef.current(effectiveDx, effectiveDy);
         };
 
-        const handleMouseUp = () => {
+        const cleanup = () => {
             setIsResizing(false);
             document.body.style.cursor = '';
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
+            cleanupRef.current = null;
+        };
+
+        const handleMouseUp = () => {
+            cleanup();
         };
 
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
+        cleanupRef.current = cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [orientation, cursor]);
 

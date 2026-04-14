@@ -36,6 +36,7 @@ use commands::text_editor::{
     text_editor_save_file, text_editor_write_file, ApprovedEditorPaths,
 };
 use commands::themes::{delete_custom_theme, get_themes, save_custom_theme};
+use commands::updater::check_for_updates;
 use commands::utilities::{log_debug, select_folder, select_image, update_logging};
 use services::ai::providers::anthropic::AnthropicProvider;
 use services::ai::providers::gemini::GeminiProvider;
@@ -167,6 +168,8 @@ pub fn run() {
             ai_list_providers,
             ai_get_auth_type,
             select_service_account_key_file,
+            // Updater
+            check_for_updates,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

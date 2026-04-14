@@ -209,6 +209,24 @@ pub async fn read_log_file(
         });
     }
 
+    // Mitigate TOCTOU: re-canonicalize immediately before the read and ensure
+    // the resolved path still matches and is still inside an allowed directory.
+    let recheck_path = match resolve_real_path(path) {
+        Ok(p) => p,
+        Err(_) => {
+            return Ok(ReadLogFileResult {
+                content: None,
+                error: Some("file not found".into()),
+            });
+        }
+    };
+    if recheck_path != real_path || !log_manager.is_path_allowed(&recheck_path).await {
+        return Ok(ReadLogFileResult {
+            content: None,
+            error: Some("access denied: path changed during access".into()),
+        });
+    }
+
     // Read file contents
     let content = std::fs::read_to_string(&real_path).map_err(|e| {
         format!("failed to read file: {e}")

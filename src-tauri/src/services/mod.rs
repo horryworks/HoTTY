@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod dpapi;
 pub mod iap_tunnel;
+pub mod jumpbox;
 pub mod known_hosts;
 pub mod local;
 pub mod log_manager;

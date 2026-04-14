@@ -189,7 +189,19 @@ pub fn list_system_fonts() -> Result<Vec<FontInfo>, String> {
                 _: u32,
                 lparam: LPARAM,
             ) -> i32 {
-                let families = &mut *(lparam.0 as *mut BTreeSet<String>);
+                // Defensive validation: both pointers are supplied by the OS, but
+                // guard against a null/misaligned input rather than dereferencing blindly.
+                if lpelfe.is_null() || lparam.0 == 0 {
+                    return 1;
+                }
+                let families_ptr = lparam.0 as *mut BTreeSet<String>;
+                if (families_ptr as usize) % std::mem::align_of::<BTreeSet<String>>() != 0 {
+                    return 1;
+                }
+                if (lpelfe as usize) % std::mem::align_of::<ENUMLOGFONTEXW>() != 0 {
+                    return 1;
+                }
+                let families = &mut *families_ptr;
                 let lf = &*(lpelfe as *const ENUMLOGFONTEXW);
                 let name_u16 = &lf.elfLogFont.lfFaceName;
                 let len = name_u16.iter().position(|&c| c == 0).unwrap_or(name_u16.len());

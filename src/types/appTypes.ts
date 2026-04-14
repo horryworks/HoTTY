@@ -265,6 +265,20 @@ export interface HostTreeNode {
 // AI
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Updater
+// ---------------------------------------------------------------------------
+
+export interface UpdateInfo {
+  currentVersion: string;
+  latestVersion: string;
+  releaseName: string;
+  releaseUrl: string;
+  prerelease: boolean;
+  notes: string;
+  isNewer: boolean;
+}
+
 export type AIAuthType = 'oauth2' | 'service_account' | 'api_key' | 'adc';
 
 export interface AIAuthStatus {

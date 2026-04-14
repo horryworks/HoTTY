@@ -86,6 +86,24 @@
     flex-shrink: 0;
 }
 
+.ai-chat-header-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background-color 0.1s, color 0.1s;
+}
+
+.ai-chat-header-icon-btn:hover:not(:disabled) {
+    background: var(--btn-secondary-hover-bg);
+    color: var(--text-primary);
+}
+
 .ai-chat-model-select {
     background-color: var(--input-bg);
     color: var(--text-primary);

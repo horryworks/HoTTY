@@ -14,6 +14,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
 
+use super::jumpbox::{establish_tunnel, JumpboxConfig, JumpboxHandler};
 use super::known_hosts::{
     append_known_host, check_known_host, default_known_hosts_path, remove_known_host, HostKeyCheck,
 };
@@ -39,22 +40,44 @@ pub struct SshConfig {
     pub encoding: String,
     #[serde(default)]
     pub keepalive_interval_secs: u32,
+    #[serde(default)]
+    pub jumpbox: Option<JumpboxConfig>,
 }
 
 fn default_encoding() -> String {
     "utf8".to_string()
 }
 
+const MAX_CREDENTIAL_LEN: usize = 1024;
+const MAX_HOST_LEN: usize = 253;
+const MAX_USERNAME_LEN: usize = 256;
+
 impl SshConfig {
     fn validate(&self) -> Result<(), SessionError> {
         if self.host.trim().is_empty() {
             return Err(SessionError::InvalidConfig("host is empty".into()));
+        }
+        if self.host.len() > MAX_HOST_LEN {
+            return Err(SessionError::InvalidConfig("host too long".into()));
         }
         if self.port == 0 {
             return Err(SessionError::InvalidConfig("port must be > 0".into()));
         }
         if self.username.trim().is_empty() {
             return Err(SessionError::InvalidConfig("username is empty".into()));
+        }
+        if self.username.len() > MAX_USERNAME_LEN {
+            return Err(SessionError::InvalidConfig("username too long".into()));
+        }
+        if let Some(pw) = &self.password {
+            if pw.len() > MAX_CREDENTIAL_LEN {
+                return Err(SessionError::InvalidConfig("password too long".into()));
+            }
+        }
+        if let Some(pp) = &self.private_key_passphrase {
+            if pp.len() > MAX_CREDENTIAL_LEN {
+                return Err(SessionError::InvalidConfig("passphrase too long".into()));
+            }
         }
         Ok(())
     }
@@ -83,6 +106,37 @@ pub async fn resolve_host_key_prompt(session_id: &str, decision: HostKeyDecision
     } else {
         false
     }
+}
+
+/// Cancel any outstanding host-key prompt for this session id (including
+/// jumpbox-suffixed variants). Sends a reject decision so the waiting SSH
+/// handler unblocks cleanly and no sender entry is leaked.
+pub async fn cancel_pending_host_key(session_id: &str) {
+    let reject = HostKeyDecision {
+        accept: false,
+        remember: false,
+    };
+    let mut map = pending_map().lock().await;
+    let keys: Vec<String> = map
+        .keys()
+        .filter(|k| k.as_str() == session_id || k.starts_with(&format!("{session_id}::")))
+        .cloned()
+        .collect();
+    for k in keys {
+        if let Some(tx) = map.remove(&k) {
+            let _ = tx.send(reject);
+        }
+    }
+}
+
+/// Register an external pending host-key prompt. Used by the jumpbox handler
+/// so that a `ssh_host_key_response` call with a jumpbox-suffixed session id
+/// can be routed through this module's shared pending map.
+pub async fn register_external_prompt(
+    session_id: String,
+    tx: oneshot::Sender<HostKeyDecision>,
+) {
+    pending_map().lock().await.insert(session_id, tx);
 }
 
 // --- Event payload for host-key prompt ---------------------------------
@@ -116,8 +170,11 @@ impl Handler for SshHandler {
         server_public_key: &ssh_key::PublicKey,
     ) -> Result<bool, Self::Error> {
         let key_type = server_public_key.algorithm().as_str().to_string();
-        let key_base64 = base64::engine::general_purpose::STANDARD
-            .encode(server_public_key.to_bytes().unwrap_or_default());
+        let key_bytes = server_public_key.to_bytes().map_err(|e| {
+            log::error!("ssh: failed to serialize server public key: {e}");
+            russh::Error::Disconnect
+        })?;
+        let key_base64 = base64::engine::general_purpose::STANDARD.encode(&key_bytes);
         let fingerprint = server_public_key
             .fingerprint(ssh_key::HashAlg::Sha256)
             .to_string();
@@ -179,8 +236,13 @@ pub struct SshSession {
     config: SshConfig,
     encoding: &'static encoding_rs::Encoding,
     handle: Option<Arc<Handle<SshHandler>>>,
+    /// Kept alive for the lifetime of the target session when tunneling via a
+    /// jumpbox; dropping this closes the underlying SSH bastion connection.
+    jumpbox_handle: Option<Arc<Handle<JumpboxHandler>>>,
     writer_tx: Option<mpsc::Sender<WriterCmd>>,
     join: Vec<JoinHandle<()>>,
+    shutdown: Option<Arc<tokio::sync::Notify>>,
+    session_id: Option<String>,
 }
 
 enum WriterCmd {
@@ -196,8 +258,11 @@ impl SshSession {
             config,
             encoding,
             handle: None,
+            jumpbox_handle: None,
             writer_tx: None,
             join: Vec::new(),
+            shutdown: None,
+            session_id: None,
         }
     }
 }
@@ -291,10 +356,30 @@ impl SessionService for SshSession {
             known_hosts_path,
         };
 
-        let addr = (self.config.host.as_str(), self.config.port);
-        let mut handle = client::connect(config, addr, handler)
-            .await
-            .map_err(|e| SessionError::ConnectionFailed(format!("{e}")))?;
+        let mut handle = if let Some(jumpbox_cfg) = self.config.jumpbox.take() {
+            log::info!(
+                "ssh: tunneling through jumpbox {}:{} to {}:{}",
+                jumpbox_cfg.host, jumpbox_cfg.port, self.config.host, self.config.port
+            );
+            let tunnel = establish_tunnel(
+                app.clone(),
+                &session_id,
+                jumpbox_cfg,
+                &self.config.host,
+                self.config.port,
+            )
+            .await?;
+            let (jumpbox_handle, stream) = tunnel.into_stream();
+            self.jumpbox_handle = Some(jumpbox_handle);
+            client::connect_stream(config, stream, handler)
+                .await
+                .map_err(|e| SessionError::ConnectionFailed(format!("ssh-over-jumpbox: {e}")))?
+        } else {
+            let addr = (self.config.host.as_str(), self.config.port);
+            client::connect(config, addr, handler)
+                .await
+                .map_err(|e| SessionError::ConnectionFailed(format!("{e}")))?
+        };
 
         try_authenticate(&mut handle, &self.config).await?;
 
@@ -394,19 +479,27 @@ impl SessionService for SshSession {
         });
         self.join.push(reader_join);
 
+        let shutdown = Arc::new(tokio::sync::Notify::new());
+        self.shutdown = Some(shutdown.clone());
+        self.session_id = Some(session_id.clone());
+
         // Keepalive task: periodic zero-length window change as a no-op ping.
         // russh has no public send_keepalive so we emit a 0-size window change.
         if self.config.keepalive_interval_secs > 0 {
             let interval = Duration::from_secs(self.config.keepalive_interval_secs as u64);
             let ka_writer = write_half.clone();
+            let ka_shutdown = shutdown.clone();
             let ka_join = tokio::spawn(async move {
                 let mut ticker = tokio::time::interval(interval);
                 ticker.tick().await;
                 loop {
-                    ticker.tick().await;
-                    // No-op: avoid changing window; just break if writer dropped.
-                    if ka_writer.writable_packet_size().await == 0 {
-                        continue;
+                    tokio::select! {
+                        _ = ticker.tick() => {
+                            if ka_writer.writable_packet_size().await == 0 {
+                                continue;
+                            }
+                        }
+                        _ = ka_shutdown.notified() => break,
                     }
                 }
             });
@@ -422,9 +515,8 @@ impl SessionService for SshSession {
             .writer_tx
             .as_ref()
             .ok_or_else(|| SessionError::Other("session not connected".into()))?;
-        let as_str = std::str::from_utf8(data)
-            .map_err(|e| SessionError::Protocol(format!("invalid utf-8: {e}")))?;
-        let (encoded, _, _) = self.encoding.encode(as_str);
+        let as_str = String::from_utf8_lossy(data);
+        let (encoded, _, _) = self.encoding.encode(&as_str);
         tx.send(WriterCmd::Bytes(encoded.into_owned()))
             .await
             .map_err(|e| SessionError::Other(format!("writer channel closed: {e}")))
@@ -443,11 +535,22 @@ impl SessionService for SshSession {
     }
 
     async fn disconnect(&mut self) -> Result<(), SessionError> {
+        if let Some(sid) = self.session_id.take() {
+            cancel_pending_host_key(&sid).await;
+        }
+        if let Some(sd) = self.shutdown.take() {
+            sd.notify_waiters();
+        }
         if let Some(tx) = self.writer_tx.take() {
             let _ = tx.send(WriterCmd::Close).await;
         }
         if let Some(h) = self.handle.take() {
             let _ = h
+                .disconnect(Disconnect::ByApplication, "bye", "en")
+                .await;
+        }
+        if let Some(jh) = self.jumpbox_handle.take() {
+            let _ = jh
                 .disconnect(Disconnect::ByApplication, "bye", "en")
                 .await;
         }

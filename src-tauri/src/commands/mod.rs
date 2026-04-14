@@ -10,4 +10,5 @@ pub mod ssh_algorithms;
 pub mod system;
 pub mod text_editor;
 pub mod themes;
+pub mod updater;
 pub mod utilities;

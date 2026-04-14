@@ -1,0 +1,66 @@
+.update-notification {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px var(--modal-shadow);
+  animation: fadeIn 0.2s ease-out;
+  max-width: 420px;
+  font-family: var(--ui-font-family);
+}
+
+.update-notification-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.update-notification-title {
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+}
+
+.update-notification-sub {
+  color: var(--text-secondary);
+  font-size: calc(var(--font-size-base) - 2px);
+}
+
+.update-notification-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.update-notification-btn {
+  padding: 3px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--btn-secondary-bg);
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  transition: background-color 0.1s;
+}
+
+.update-notification-btn:hover:not(:disabled) {
+  background: var(--btn-secondary-hover-bg);
+}
+
+.update-notification-btn-primary {
+  background: var(--accent-color);
+  color: var(--text-on-accent);
+}
+
+.update-notification-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}

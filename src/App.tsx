@@ -18,6 +18,8 @@ import { CustomThemeCreator } from './components/CustomThemeCreator/CustomThemeC
 import { HelpModal } from './components/HelpModal/HelpModal';
 import { SshHostKeyModal } from './components/SshHostKeyModal/SshHostKeyModal';
 import { PasteConfirmationModal } from './components/PasteConfirmationModal/PasteConfirmationModal';
+import { UpdateNotification } from './components/UpdateNotification/UpdateNotification';
+import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary';
 import { tauriService } from './services/tauriService';
 import { useSessionManager, type SessionRecord } from './hooks/useSessionManager';
 import { useAiChat } from './hooks/useAiChat';
@@ -35,6 +37,7 @@ import {
   type FeaturePaneType,
 } from './utils/paneTypes';
 import { stripAnsiCodes } from './utils/ansiUtils';
+import { totalDirtyEditors } from './utils/dirtyEditors';
 import './App.css';
 
 function App() {
@@ -91,6 +94,23 @@ function App() {
 
   const watchingSessionIdRef = useRef(watchingSessionId);
   useEffect(() => { watchingSessionIdRef.current = watchingSessionId; }, [watchingSessionId]);
+
+  // Track active poll intervals from onRunCommand so they can be cleared when
+  // the AI chat pane closes or the watched session disconnects.
+  const runCommandIntervalsRef = useRef<Map<string, Set<ReturnType<typeof setInterval>>>>(new Map());
+  const clearRunCommandIntervals = useCallback((paneId: string) => {
+    const set = runCommandIntervalsRef.current.get(paneId);
+    if (!set) return;
+    set.forEach((id) => clearInterval(id));
+    runCommandIntervalsRef.current.delete(paneId);
+  }, []);
+  useEffect(() => {
+    const ref = runCommandIntervalsRef;
+    return () => {
+      ref.current.forEach((set) => set.forEach((id) => clearInterval(id)));
+      ref.current.clear();
+    };
+  }, []);
 
   const createAiChatPaneRef = useRef<() => string | undefined>(undefined);
   const updateAiChatStateRef = useRef<(id: string, state: Record<string, unknown>) => void>(undefined);
@@ -222,6 +242,47 @@ function App() {
     }).catch(() => {});
   }, []);
 
+  // Intercept window close when text editors have unsaved changes so the user
+  // can confirm before losing work. The native ask dialog is used because the
+  // in-app SaveConfirmModal is keyed per-pane/tab and doesn't cover global quit.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let closing = false;
+    tauriService.onWindowCloseRequested(async (preventDefault) => {
+      if (closing) return;
+      const count = totalDirtyEditors();
+      if (count === 0) return;
+      preventDefault();
+      const proceed = await tauriService.confirmDialog(
+        count === 1
+          ? 'You have 1 unsaved text editor tab. Close anyway and discard changes?'
+          : `You have ${count} unsaved text editor tabs. Close anyway and discard changes?`,
+        { title: 'Unsaved changes', okLabel: 'Discard & Quit', cancelLabel: 'Cancel' },
+      );
+      if (proceed) {
+        closing = true;
+        await tauriService.destroyWindow();
+      }
+    }).then((fn) => { unlisten = fn; }).catch(() => {});
+    return () => { unlisten?.(); };
+  }, []);
+
+  // Reset watch state when the watched session is disconnected (locally or
+  // remotely) so the watch buffer doesn't accumulate for a dead session.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    tauriService
+      .onSessionStatus(({ sessionId, status }) => {
+        if (status === 'disconnected' && watchingSessionIdRef.current === sessionId) {
+          watchBuffers.current.delete(sessionId);
+          setWatchingSessionId(null);
+        }
+      })
+      .then((fn) => { unlisten = fn; })
+      .catch(() => {});
+    return () => { unlisten?.(); };
+  }, []);
+
   useEffect(() => {
     const theme = themesData[themeId] ?? DEFAULT_THEMES.dark;
     applyTheme(theme, fontSize, fontFamily);
@@ -278,9 +339,12 @@ function App() {
       if (type === 'ping-monitor') {
         tauriService.pingMonitorStop(id).catch(() => {});
       }
-      if (type === 'ai-chat' && watchingSessionId) {
-        watchBuffers.current.delete(watchingSessionId);
-        setWatchingSessionId(null);
+      if (type === 'ai-chat') {
+        clearRunCommandIntervals(id);
+        if (watchingSessionId) {
+          watchBuffers.current.delete(watchingSessionId);
+          setWatchingSessionId(null);
+        }
       }
       setFeaturePanes((prev) => {
         const next = new Map(prev);
@@ -382,6 +446,15 @@ function App() {
         onClick={() => setActivePaneId(paneId)}
       >
         <div className="pane-body">
+          <ErrorBoundary
+            fallback={(error, reset) => (
+              <div className="pane-error" role="alert">
+                <h3>Pane crashed</h3>
+                <p>{error.message || String(error)}</p>
+                <button type="button" onClick={reset}>Retry</button>
+              </div>
+            )}
+          >
           {session ? (
             <TerminalView
               key={session.id}
@@ -440,8 +513,21 @@ function App() {
                   const sendDuration = lines.length * 150;
                   let attempts = 0;
                   const maxAttempts = 150; // 30 seconds max
+                  const paneId = featureInfo.id;
+                  let set = runCommandIntervalsRef.current.get(paneId);
+                  if (!set) {
+                    set = new Set();
+                    runCommandIntervalsRef.current.set(paneId, set);
+                  }
+                  const intervalSet = set;
                   const pollInterval = setInterval(() => {
                     attempts++;
+                    // Bail out if the watch target changed or was cleared.
+                    if (watchingSessionIdRef.current !== targetId) {
+                      clearInterval(pollInterval);
+                      intervalSet.delete(pollInterval);
+                      return;
+                    }
                     const buf = watchBuffers.current.get(targetId) || '';
                     const newContent = buf.substring(startLen);
                     // Wait until all lines are sent + some output received
@@ -450,13 +536,16 @@ function App() {
                     const promptPattern = /[$#>]\s*$/m;
                     if (newContent.length > 0 && promptPattern.test(newContent)) {
                       clearInterval(pollInterval);
+                      intervalSet.delete(pollInterval);
                       clearWatchBuffer(targetId);
                       const outputText = `Terminal Output (Command: ${cmd}):\n${newContent.trim()}`;
-                      updateAiChatState(featureInfo.id, { pendingMessage: outputText });
+                      updateAiChatState(paneId, { pendingMessage: outputText });
                     } else if (attempts >= maxAttempts) {
                       clearInterval(pollInterval);
+                      intervalSet.delete(pollInterval);
                     }
                   }, 200);
+                  intervalSet.add(pollInterval);
                 }
               }}
               onShowPromptMenu={() => aiShowPromptMenu(featureInfo.id)}
@@ -467,6 +556,7 @@ function App() {
           ) : (
             <div className="pane-empty">No session</div>
           )}
+          </ErrorBoundary>
         </div>
       </div>
     );
@@ -545,6 +635,7 @@ function App() {
       />
       <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
       <SshHostKeyModal />
+      <UpdateNotification />
       {pasteReq && (
         <PasteConfirmationModal
           content={pasteReq.content}
