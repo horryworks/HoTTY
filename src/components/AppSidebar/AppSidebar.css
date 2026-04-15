@@ -52,6 +52,7 @@
   opacity: 1;
   background-color: var(--sidebar-btn-active-bg);
   color: var(--accent-color);
+  filter: drop-shadow(0 0 4px var(--glow-accent, transparent));
 }
 
 .app-sidebar-separator {

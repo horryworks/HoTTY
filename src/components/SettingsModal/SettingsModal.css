@@ -181,6 +181,40 @@
   border-top: none;
 }
 
+/* ── Section cards (visual grouping of related settings) ── */
+
+.settings-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+}
+
+.settings-card > .settings-section-title,
+.settings-card > .settings-section-title:first-child {
+  margin: 0 0 10px 0;
+  padding: 0 0 0 8px;
+  border-top: none;
+  border-left: 2px solid var(--accent-color);
+  font-size: calc(var(--font-size-base) - 3px);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.settings-subsection-title {
+  margin: 12px 0 6px 0;
+  font-size: calc(var(--font-size-base) - 1px);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.settings-card > .settings-section-title + .settings-subsection-title {
+  margin-top: 0;
+}
+
 .settings-help-text {
   display: block;
   font-size: calc(var(--font-size-base) - 2px);

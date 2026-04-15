@@ -17,7 +17,8 @@ describe('GeneralTab', () => {
 
   it('renders section headers', () => {
     render(<GeneralTab />);
-    expect(screen.getByText('Storage')).toBeTruthy();
+    expect(screen.getByText('Logging')).toBeTruthy();
+    expect(screen.getByText('Terminal')).toBeTruthy();
     expect(screen.getByText('Input')).toBeTruthy();
     expect(screen.getByText('Diagnostics')).toBeTruthy();
   });
@@ -38,7 +39,7 @@ describe('GeneralTab', () => {
 
   it('edits scrollback value', () => {
     render(<GeneralTab />);
-    const input = screen.getByText('Terminal Scrollback Buffer')
+    const input = screen.getByText('Scrollback Buffer')
       .closest('.settings-group')!.querySelector('input[type="number"]') as HTMLInputElement;
     fireEvent.change(input, { target: { value: '5000' } });
     expect(useSettingsStore.getState().scrollback).toBe(5000);

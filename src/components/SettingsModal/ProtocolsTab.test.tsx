@@ -22,8 +22,9 @@ describe('ProtocolsTab', () => {
 
   it('renders SSH and Telnet keepalive sections', () => {
     render(<ProtocolsTab />);
-    expect(screen.getByText('SSH KeepAlive')).toBeTruthy();
-    expect(screen.getByText('Telnet KeepAlive')).toBeTruthy();
+    expect(screen.getByText('SSH')).toBeTruthy();
+    expect(screen.getByText('Telnet')).toBeTruthy();
+    expect(screen.getAllByText('KeepAlive').length).toBeGreaterThanOrEqual(2);
   });
 
   it('toggles SSH keepalive', () => {

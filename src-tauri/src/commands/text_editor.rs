@@ -251,6 +251,18 @@ pub async fn text_editor_read_file(
         }
     }
 
+    // Re-validate sensitive paths at read time (guards against symlink swaps
+    // after a dialog-approved path was inserted).
+    if is_sensitive_path(&resolved) {
+        return Err("access to sensitive directories is not allowed".into());
+    }
+
+    let meta = std::fs::metadata(&resolved)
+        .map_err(|e| format!("failed to stat file: {e}"))?;
+    if meta.len() > MAX_FILE_SIZE {
+        return Err("file is too large (max 50MB)".into());
+    }
+
     let bytes =
         std::fs::read(&resolved).map_err(|e| format!("failed to read file: {e}"))?;
 
@@ -284,6 +296,11 @@ pub async fn text_editor_write_file(
         if !set.contains(&resolved) {
             return Err("file path not approved via dialog".into());
         }
+    }
+
+    // Re-validate sensitive paths at write time (guards against symlink swaps).
+    if is_sensitive_path(&resolved) {
+        return Err("access to sensitive directories is not allowed".into());
     }
 
     let valid_enc = validated_encoding(&encoding);

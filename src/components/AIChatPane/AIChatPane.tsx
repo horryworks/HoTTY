@@ -746,7 +746,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     {isAuthenticated && (
                         <>
                             <div className="ai-chat-header-item">
-                                <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                                     <title>Persona</title>
                                     <path d="M22 10L12 5L2 10L12 15L22 10Z" />
                                     <path d="M6 12V17C8.5 19.5 15.5 19.5 18 17V12" />
@@ -769,7 +769,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     aria-label="View system prompt"
                                     onClick={() => setShowPromptModal(true)}
                                 >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
                                         <circle cx="12" cy="12" r="10" />
                                         <line x1="12" y1="16" x2="12" y2="12" />
                                         <line x1="12" y1="8" x2="12.01" y2="8" />
@@ -777,7 +777,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                 </button>
                             </div>
                             <div className="ai-chat-header-item">
-                                <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                                     <title>Language</title>
                                     <circle cx="12" cy="12" r="10" />
                                     <line x1="2" y1="12" x2="22" y2="12" />
@@ -801,7 +801,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             </div>
                             {activeAiProvider === 'vertexai' && (
                                 <div className="ai-chat-header-item">
-                                    <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                                         <title>Region</title>
                                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                                         <circle cx="12" cy="10" r="3" />

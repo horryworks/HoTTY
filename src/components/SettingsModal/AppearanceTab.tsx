@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { useSettingsStore, DEFAULT_PROMPT_PATTERNS } from '../../stores/settingsStore';
 import { DEFAULT_THEMES, DEFAULT_THEME_IDS, isBuiltInThemeId } from '../../themes/defaults';
 import { tauriService } from '../../services/tauriService';
@@ -67,25 +68,30 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
 
   return (
     <>
-      {/* ── Sidebar Position ── */}
-      <div className="settings-group">
-        <label>Sidebar position</label>
-        <div className="settings-radio-row">
-          {(['left', 'right'] as const).map((pos) => (
-            <label key={pos}>
-              <input
-                type="radio"
-                checked={settings.sidebarPosition === pos}
-                onChange={() => update('sidebarPosition', pos)}
-              />
-              {pos}
-            </label>
-          ))}
+      {/* ── Layout ── */}
+      <div className="settings-card">
+        <h3 className="settings-section-title settings-section-title--first">Layout</h3>
+        <div className="settings-group">
+          <label>Sidebar position</label>
+          <div className="settings-radio-row">
+            {(['left', 'right'] as const).map((pos) => (
+              <label key={pos}>
+                <input
+                  type="radio"
+                  checked={settings.sidebarPosition === pos}
+                  onChange={() => update('sidebarPosition', pos)}
+                />
+                {pos}
+              </label>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* ── Theme ── */}
-      <div className="settings-group">
+      <div className="settings-card">
+        <h3 className="settings-section-title">Theme</h3>
+        <div className="settings-group">
         <label>Theme</label>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <select
@@ -127,6 +133,98 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
         >
           Create Custom Theme
         </button>
+        </div>
+
+        {/* ── Unused Pane Background ── */}
+        <div className="settings-group">
+          <label>Unused pane background</label>
+        <div className="settings-radio-row">
+          {(['color', 'image'] as const).map((mode) => (
+            <label key={mode}>
+              <input
+                type="radio"
+                checked={settings.paneBackgroundMode === mode}
+                onChange={() => update('paneBackgroundMode', mode)}
+              />
+              {mode}
+            </label>
+          ))}
+        </div>
+        {settings.paneBackgroundMode === 'color' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+            <input
+              type="color"
+              value={settings.paneBackground}
+              onChange={(e) => update('paneBackground', e.target.value)}
+              style={{
+                border: 'none',
+                width: '30px',
+                height: '30px',
+                cursor: 'pointer',
+                padding: 0,
+                backgroundColor: 'transparent',
+              }}
+            />
+            <input
+              type="text"
+              value={settings.paneBackground}
+              onChange={(e) => update('paneBackground', e.target.value)}
+              className="settings-input"
+              style={{
+                width: '120px',
+                padding: '5px 8px',
+                background: 'var(--input-bg)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '4px',
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-family)',
+                fontSize: 'var(--font-size-base)',
+                outline: 'none',
+              }}
+            />
+          </div>
+        )}
+        {settings.paneBackgroundMode === 'image' && (
+          <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+            <input
+              type="text"
+              value={settings.paneBackgroundImage}
+              onChange={(e) => update('paneBackgroundImage', e.target.value)}
+              placeholder="e.g. http://asset.localhost/..."
+              className="settings-input"
+              style={{
+                flex: 1,
+                padding: '5px 8px',
+                background: 'var(--input-bg)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '4px',
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-family)',
+                fontSize: 'var(--font-size-base)',
+                outline: 'none',
+              }}
+            />
+            <button
+              type="button"
+              onClick={async () => {
+                const path = await tauriService.selectImage();
+                if (path) update('paneBackgroundImage', convertFileSrc(path));
+              }}
+            >
+              Browse…
+            </button>
+            {settings.paneBackgroundImage && (
+              <button
+                type="button"
+                onClick={() => update('paneBackgroundImage', '')}
+                title="Clear image"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
+        </div>
       </div>
       {pendingDelete && (
         <ConfirmModal
@@ -142,8 +240,10 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
         />
       )}
 
-      {/* ── Font Family ── */}
-      <div className="settings-group">
+      {/* ── Font ── */}
+      <div className="settings-card">
+        <h3 className="settings-section-title">Font</h3>
+        <div className="settings-group">
         <label>Font family</label>
         <div className="settings-font-row">
           <select
@@ -169,26 +269,31 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
             {fontScanning ? 'Scanning...' : 'Rescan'}
           </button>
         </div>
+        </div>
+
+        {/* ── Font Size ── */}
+        <div className="settings-group">
+          <label>Font size (px)</label>
+          <input
+            type="number"
+            min={8}
+            max={48}
+            value={settings.fontSize}
+            onChange={(e) => update('fontSize', parseInt(e.target.value, 10) || 14)}
+          />
+        </div>
       </div>
 
-      {/* ── Font Size ── */}
-      <div className="settings-group">
-        <label>Font size (px)</label>
-        <input
-          type="number"
-          min={8}
-          max={48}
-          value={settings.fontSize}
-          onChange={(e) => update('fontSize', parseInt(e.target.value, 10) || 14)}
-        />
-      </div>
+      {/* ── Terminal Display ── */}
+      <div className="settings-card">
+        <h3 className="settings-section-title">Terminal Display</h3>
 
-      {/* ── Default Encoding ── */}
-      <div className="settings-group">
-        <label>
-          Default encoding
-          <HelpTooltip text="Applies to new connections." />
-        </label>
+        {/* ── Default Encoding ── */}
+        <div className="settings-group">
+          <label>
+            Default encoding
+            <HelpTooltip text="Applies to new connections." />
+          </label>
         <div className="settings-radio-row">
           {(['utf8', 'shift_jis', 'euc-jp'] as Encoding[]).map((enc) => (
             <label key={enc}>
@@ -203,12 +308,9 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
         </div>
       </div>
 
-      {/* ── Prompt Highlight ── */}
-      <div
-        className="settings-group"
-        style={{ paddingTop: '15px', borderTop: '1px solid var(--border-color)' }}
-      >
-        <label>Prompt Highlight</label>
+        {/* ── Prompt Highlight ── */}
+        <div className="settings-group">
+          <label>Prompt Highlight</label>
         <label className="settings-checkbox">
           <input
             type="checkbox"
@@ -366,6 +468,7 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
             </div>
           </>
         )}
+        </div>
       </div>
     </>
   );

@@ -20,22 +20,22 @@ export function FeaturesTab() {
 
   return (
     <>
-      <div className="settings-group">
-        <label>
+      <div className="settings-card">
+        <h3 className="settings-section-title">
           Features
           <HelpTooltip text="Enable or disable feature panes. Existing open panes are not affected." />
-        </label>
+        </h3>
+        {FEATURE_LABELS.map(({ id, label, description }) => (
+          <label key={id} className="settings-checkbox" title={description}>
+            <input
+              type="checkbox"
+              checked={enabledFeatures[id]}
+              onChange={(e) => handleToggle(id, e.target.checked)}
+            />
+            {label}
+          </label>
+        ))}
       </div>
-      {FEATURE_LABELS.map(({ id, label, description }) => (
-        <label key={id} className="settings-checkbox" title={description}>
-          <input
-            type="checkbox"
-            checked={enabledFeatures[id]}
-            onChange={(e) => handleToggle(id, e.target.checked)}
-          />
-          {label}
-        </label>
-      ))}
     </>
   );
 }

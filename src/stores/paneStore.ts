@@ -48,7 +48,7 @@ interface PaneState {
 interface PaneActions {
   setLayoutMode: (mode: LayoutMode) => void;
   setActivePaneId: (id: string) => void;
-  addSession: (sessionId: string) => void;
+  addSession: (sessionId: string, options?: { preferSidebar?: boolean }) => void;
   removeSession: (sessionId: string) => void;
   reorderSession: (fromIndex: number, toIndex: number) => void;
   moveSessionToPane: (sessionId: string, targetPaneId: string) => void;
@@ -85,6 +85,20 @@ function findEmptyPane(
   for (const id of visibleSidebarPaneIdsInOrder()) {
     if (!allocations[id]) return id;
   }
+  return null;
+}
+
+function findEmptyPaneSidebarFirst(
+  allocations: Record<string, string | null>,
+  mode: LayoutMode
+): string | null {
+  const s = useSidebarLayoutStore.getState();
+  if (s.showLeftSidebar && !allocations['bar-left']) return 'bar-left';
+  if (s.showRightSidebar && !allocations['bar-right']) return 'bar-right';
+  const grid = findEmptyGridPane(allocations, mode);
+  if (grid) return grid;
+  if (s.showTopBar && !allocations['bar-top']) return 'bar-top';
+  if (s.showBottomBar && !allocations['bar-bottom']) return 'bar-bottom';
   return null;
 }
 
@@ -129,11 +143,13 @@ export const usePaneStore = create<PaneState & PaneActions>()(
 
       setActivePaneId: (id) => set({ activePaneId: id }),
 
-      addSession: (sessionId) =>
+      addSession: (sessionId, options) =>
         set((s) => {
           if (s.sessionOrder.includes(sessionId)) return s;
           const sessionOrder = [...s.sessionOrder, sessionId];
-          const empty = findEmptyPane(s.paneAllocations, s.layoutMode);
+          const empty = options?.preferSidebar
+            ? findEmptyPaneSidebarFirst(s.paneAllocations, s.layoutMode)
+            : findEmptyPane(s.paneAllocations, s.layoutMode);
           if (empty) {
             return {
               sessionOrder,

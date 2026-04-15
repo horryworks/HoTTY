@@ -80,6 +80,7 @@
         "tab-watching-icon-glow": "#0369a1",
         "terminal-prompt-default": "#dc2626",
         "terminal-prompt-active": "#1d4ed8",
+        "prompt-highlight-default": "rgba(0, 0, 0, 0.1)",
         "text-tertiary": "#888888",
         "status-success": "#388e3c",
         "status-error": "#d32f2f",
@@ -110,7 +111,14 @@
         "provider-gemini-3": "#FF76AB",
         "provider-openai": "#10A37F",
         "provider-anthropic": "#D97757",
-        "provider-vertex-ai": "#4E90FF"
+        "provider-vertex-ai": "#4E90FF",
+        "glow-accent": "rgba(0, 102, 184, 0.25)",
+        "glow-accent-strong": "rgba(0, 102, 184, 0.45)",
+        "glow-blur": "8px",
+        "glass-bg": "rgba(248, 248, 248, 0.99)",
+        "glass-blur": "14px",
+        "glass-border": "rgba(0, 0, 0, 0.18)",
+        "icon-stroke-width": "1.5"
     },
     "terminal": {
         "foreground": "#000000",

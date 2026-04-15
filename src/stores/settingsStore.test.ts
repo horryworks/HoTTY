@@ -29,6 +29,19 @@ describe('settingsStore', () => {
     expect(useSettingsStore.getState().theme).toBe('dark');
   });
 
+  it('defaults pane background to color mode with no image', () => {
+    const s = useSettingsStore.getState();
+    expect(s.paneBackgroundMode).toBe('color');
+    expect(s.paneBackgroundImage).toBe('');
+  });
+
+  it('updates pane background mode and image', () => {
+    useSettingsStore.getState().update('paneBackgroundMode', 'image');
+    useSettingsStore.getState().update('paneBackgroundImage', 'http://asset.localhost/foo.png');
+    expect(useSettingsStore.getState().paneBackgroundMode).toBe('image');
+    expect(useSettingsStore.getState().paneBackgroundImage).toBe('http://asset.localhost/foo.png');
+  });
+
   it('updates the theme field', () => {
     useSettingsStore.getState().update('theme', 'light');
     expect(useSettingsStore.getState().theme).toBe('light');
@@ -37,7 +50,7 @@ describe('settingsStore', () => {
   it('defaults prompt highlight to enabled with default patterns', () => {
     const s = useSettingsStore.getState();
     expect(s.enablePromptHighlight).toBe(true);
-    expect(s.promptHighlightColor).toBe('rgba(255, 255, 255, 0.15)');
+    expect(s.promptHighlightColor).toBe('');
     expect(s.promptPatterns).toEqual(DEFAULT_PROMPT_PATTERNS);
   });
 

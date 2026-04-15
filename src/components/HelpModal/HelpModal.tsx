@@ -2,7 +2,7 @@ import type React from 'react';
 import './HelpModal.css';
 
 const FeaturesIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline', verticalAlign: 'middle', marginInline: '2px' }}>
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline', verticalAlign: 'middle', marginInline: '2px' }}>
     <rect x="3" y="3" width="7" height="7" rx="1" />
     <rect x="14" y="3" width="7" height="7" rx="1" />
     <rect x="3" y="14" width="7" height="7" rx="1" />
@@ -127,6 +127,9 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               </p>
               <p className="help-text">
                 <strong>Resizing:</strong> Resize everything by dragging the dividers or the <strong>2D intersection point</strong> (where 4 panes meet).
+              </p>
+              <p className="help-text">
+                <strong>Empty pane hints:</strong> Empty grid cells show their pane number and a &quot;Drop Tab Here&quot; prompt so you know where to drop a tab.
               </p>
             </div>
           </details>
@@ -416,6 +419,12 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               </p>
               <p className="help-text">
                 <strong>AI Provider Colors:</strong> The theme editor includes an <strong>AI Providers</strong> section for customizing the brand colors used by the Gemini, OpenAI, Anthropic, and Vertex AI icons.
+              </p>
+              <p className="help-text">
+                <strong>Futuristic Effects:</strong> The theme editor&apos;s <strong>Futuristic Effects</strong> section adds optional neon glow on active panes and sidebar icons, glassmorphism backdrop blur on modals, and configurable icon stroke width.
+              </p>
+              <p className="help-text">
+                <strong>Unused Pane Background:</strong> In <strong>Settings &rarr; Appearance</strong>, choose a solid color or custom image to show in empty grid panes.
               </p>
             </div>
           </details>

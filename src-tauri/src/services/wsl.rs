@@ -35,6 +35,20 @@ impl WslConfig {
     pub fn validate(&self) -> Result<(), SessionError> {
         if let Some(ref distro) = self.distribution {
             if !distro.is_empty() {
+                // Defense-in-depth: reject shell metacharacters explicitly
+                // before regex validation. portable_pty passes argv as an
+                // array (no shell interpretation), but this guards against
+                // future changes and any platform-specific quoting quirks.
+                const BLOCKED_CHARS: &[char] = &[
+                    '$', '`', '!', '(', ')', ';', '&', '|', '>', '<',
+                    '\n', '\r', '\t', ' ', '"', '\'', '\\',
+                ];
+                if distro.chars().any(|c| BLOCKED_CHARS.contains(&c)) {
+                    return Err(SessionError::InvalidConfig(format!(
+                        "invalid WSL distribution name: {distro}"
+                    )));
+                }
+
                 use std::sync::OnceLock;
                 static RE: OnceLock<regex_lite::Regex> = OnceLock::new();
                 let re = RE.get_or_init(|| {

@@ -123,6 +123,20 @@
     background: var(--btn-secondary-hover-bg);
 }
 
+.ask-ai-modal-footer .btn-primary {
+    background: var(--accent-color);
+    color: var(--text-on-accent);
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: calc(var(--font-size-base) - 1px);
+}
+
+.ask-ai-modal-footer .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
 .ask-ai-modal-footer .btn-primary:disabled {
     opacity: 0.5;
     cursor: not-allowed;

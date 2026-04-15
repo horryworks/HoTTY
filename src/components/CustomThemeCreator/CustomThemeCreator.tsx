@@ -60,6 +60,11 @@ const THEME_SECTIONS: { title: string; description: string; keys: string[] }[] =
         description: 'Modal dialogs, overlays, and notification banners',
         keys: ['modal-overlay-bg', 'modal-shadow', 'modal-border-warning', 'modal-header-warning-bg', 'modal-header-warning-text', 'modal-border-error', 'modal-header-error-bg', 'modal-header-error-text', 'modal-border-success', 'modal-header-success-bg', 'modal-header-success-text', 'modal-header-info-bg', 'modal-header-info-border', 'modal-header-info-text', 'update-notification-bg', 'update-notification-border', 'update-notification-text', 'update-notification-accent', 'update-notification-btn-bg', 'update-notification-btn-text', 'update-notification-btn-border', 'update-notification-btn-hover'],
     },
+    {
+        title: 'Futuristic Effects',
+        description: 'Neon glow and glassmorphism effects applied to active panes, sidebars, and modals',
+        keys: ['glow-accent', 'glow-accent-strong', 'glow-blur', 'glass-bg', 'glass-blur', 'glass-border', 'icon-stroke-width'],
+    },
 ];
 
 const TERMINAL_KEYS: { key: keyof ThemeTerminalColors; label: string; description: string }[] = [
@@ -190,6 +195,14 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'provider-openai': 'Brand color for the OpenAI icon background.',
     'provider-anthropic': 'Brand color for the Anthropic icon background.',
     'provider-vertex-ai': 'Brand color for the Vertex AI icon.',
+    // Futuristic Effects
+    'glow-accent': 'Neon glow color for the active pane outline and active sidebar icons (rgba recommended).',
+    'glow-accent-strong': 'Stronger variant of the neon glow for emphasized elements.',
+    'glow-blur': 'Blur radius of the neon glow (e.g., 10px). Larger values spread the glow further.',
+    'glass-bg': 'Semi-transparent background for glassmorphism surfaces (modals, sidebars). Use rgba with ~0.7 alpha.',
+    'glass-blur': 'backdrop-filter blur strength for glass surfaces (e.g., 14px).',
+    'glass-border': 'Subtle border color overlaid on glass surfaces (rgba with low alpha).',
+    'icon-stroke-width': 'Default stroke width for line-style SVG icons (e.g., 1.5).',
 };
 
 const isSimpleHexColor = (value: string): boolean =>

@@ -371,7 +371,7 @@ function App() {
       next.set(id, { id, type, displayName });
       return next;
     });
-    addSessionToStore(id);
+    addSessionToStore(id, type === 'file-explorer' ? { preferSidebar: true } : undefined);
   }, [addSessionToStore]);
 
   const handleUpdateFeatureDisplayName = useCallback((id: string, displayName: string) => {
@@ -554,7 +554,12 @@ function App() {
               terminalBackground={useSettingsStore.getState().terminalBackground}
             />
           ) : (
-            <div className="pane-empty">No session</div>
+            <div className="pane-empty">
+              {/^\d+$/.test(paneId) && (
+                <span className="pane-label">Pane {Number(paneId) + 1}</span>
+              )}
+              <span className="drop-hint">Drop Tab Here</span>
+            </div>
           )}
           </ErrorBoundary>
         </div>

@@ -144,25 +144,18 @@ fn gcloud_program() -> (String, bool) {
 async fn run_gcloud(args: &[&str]) -> Result<String, String> {
     let (program, use_shell) = gcloud_program();
 
-    let mut cmd = Command::new(if use_shell { "cmd" } else { &program });
-
-    if use_shell {
-        // On Windows, run via cmd /C to handle .cmd files.
-        // Each argument is quoted and inner quotes are escaped to prevent
-        // shell interpretation of special characters.
-        cmd.arg("/C");
-        let mut full_cmd = format!("\"{}\"", program);
-        for arg in args {
-            let escaped = arg.replace('"', "\"\"");
-            full_cmd.push(' ');
-            full_cmd.push('"');
-            full_cmd.push_str(&escaped);
-            full_cmd.push('"');
-        }
-        cmd.arg(&full_cmd);
+    // Pass args as an array in both shell and non-shell paths. On Windows,
+    // `cmd /C gcloud.cmd <args...>` with array args lets CreateProcess handle
+    // quoting per-argument, avoiding manual shell-string escaping.
+    let mut cmd = if use_shell {
+        let mut c = Command::new("cmd");
+        c.arg("/C").arg(&program).args(args);
+        c
     } else {
-        cmd.args(args);
-    }
+        let mut c = Command::new(&program);
+        c.args(args);
+        c
+    };
 
     #[cfg(target_os = "windows")]
     {

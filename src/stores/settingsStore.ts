@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware';
 import type { Encoding, FeatureId, PromptPattern, ThemeId, CommandExecutionMode, PersonaDefinition, AskAiCommand } from '../types/appTypes';
 import { DEFAULT_THEMES } from '../themes/defaults';
 
+export const DEFAULT_PROMPT_HIGHLIGHT_COLOR = 'rgba(255, 255, 255, 0.15)';
+
 export const DEFAULT_PROMPT_PATTERNS: PromptPattern[] = [
   { id: 'cisco', name: 'Cisco / Allied Telesis', pattern: '^([a-zA-Z0-9_\\-\\./]+(?:\\([a-zA-Z0-9_\\-\\./]+\\))?[>#])\\s*' },
   { id: 'fortigate', name: 'Fortigate', pattern: '^([a-zA-Z0-9_\\-\\.]+(?:\\s\\([a-zA-Z0-9_\\-\\.]+\\))?[#$])\\s*' },
@@ -99,6 +101,8 @@ export interface SettingsState {
   terminalBackground: string;
   terminalBackgroundInactive: string;
   paneBackground: string;
+  paneBackgroundMode: 'color' | 'image';
+  paneBackgroundImage: string;
 
   // SSH keepalive
   sshKeepAliveEnabled: boolean;
@@ -150,6 +154,8 @@ const DEFAULTS: SettingsState = {
   terminalBackground: DEFAULT_THEMES.dark.terminal.background,
   terminalBackgroundInactive: DEFAULT_THEMES.dark.terminal.backgroundInactive,
   paneBackground: DEFAULT_THEMES.dark.terminal.paneBackground,
+  paneBackgroundMode: 'color',
+  paneBackgroundImage: '',
   sshKeepAliveEnabled: true,
   sshKeepAliveInterval: 10,
   telnetKeepAliveEnabled: true,
@@ -159,7 +165,7 @@ const DEFAULTS: SettingsState = {
   backspaceSendsDel: false,
   rightClickPaste: true,
   enablePromptHighlight: true,
-  promptHighlightColor: 'rgba(255, 255, 255, 0.15)',
+  promptHighlightColor: '',
   promptPatterns: DEFAULT_PROMPT_PATTERNS,
   loggingEnabled: false,
   loggingPath: '',
@@ -187,7 +193,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 8,
+      version: 10,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -195,7 +201,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
         }
         if (version < 3) {
           state.enablePromptHighlight ??= true;
-          state.promptHighlightColor ??= 'rgba(255, 255, 255, 0.15)';
+          state.promptHighlightColor ??= DEFAULT_PROMPT_HIGHLIGHT_COLOR;
           state.promptPatterns ??= DEFAULT_PROMPT_PATTERNS;
         }
         if (version < 4) {
@@ -217,6 +223,15 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
         }
         if (version < 8) {
           state.enabledFeatures ??= DEFAULTS.enabledFeatures;
+        }
+        if (version < 9) {
+          state.paneBackgroundMode ??= DEFAULTS.paneBackgroundMode;
+          state.paneBackgroundImage ??= DEFAULTS.paneBackgroundImage;
+        }
+        if (version < 10) {
+          if (state.promptHighlightColor === DEFAULT_PROMPT_HIGHLIGHT_COLOR) {
+            state.promptHighlightColor = '';
+          }
         }
         return state as SettingsState;
       },

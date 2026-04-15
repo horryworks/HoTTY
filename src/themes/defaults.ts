@@ -14,8 +14,3 @@ export const DEFAULT_THEMES: Record<BuiltInThemeId, Theme> = {
 export function isBuiltInThemeId(id: string): id is BuiltInThemeId {
   return id === 'dark' || id === 'medium' || id === 'light';
 }
-
-export function getTheme(id: string): Theme {
-  if (isBuiltInThemeId(id)) return DEFAULT_THEMES[id];
-  return DEFAULT_THEMES.dark;
-}

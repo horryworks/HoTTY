@@ -47,3 +47,19 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
 }
+
+/* Subtle backdrop blur behind modals (futuristic touch, no color changes). */
+
+.settings-modal-overlay,
+.confirm-modal-overlay,
+.ctc-overlay,
+.save-confirm-modal-overlay,
+.host-edit-modal-overlay,
+.paste-modal-overlay,
+.system-prompt-modal-overlay,
+.ssh-host-key-overlay,
+.ask-ai-modal-overlay,
+.connection-dialog-overlay {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}

@@ -34,7 +34,8 @@ describe('SettingsModal', () => {
 
   it('shows the General tab by default', () => {
     render(<SettingsModal open onClose={() => {}} {...themeProps} />);
-    expect(screen.getByText('Storage')).toBeTruthy();
+    expect(screen.getByText('Logging')).toBeTruthy();
+    expect(screen.getByText('Terminal')).toBeTruthy();
     expect(screen.getByText('Input')).toBeTruthy();
     expect(screen.getByText('Diagnostics')).toBeTruthy();
   });
@@ -48,8 +49,8 @@ describe('SettingsModal', () => {
   it('switches to the Protocols tab', () => {
     render(<SettingsModal open onClose={() => {}} {...themeProps} />);
     fireEvent.click(screen.getByText('Protocols'));
-    expect(screen.getByText('SSH KeepAlive')).toBeTruthy();
-    expect(screen.getByText('Telnet KeepAlive')).toBeTruthy();
+    expect(screen.getByText('SSH')).toBeTruthy();
+    expect(screen.getByText('Telnet')).toBeTruthy();
   });
 
   it('switches to the Features tab', () => {

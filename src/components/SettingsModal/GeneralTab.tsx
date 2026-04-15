@@ -8,64 +8,72 @@ export function GeneralTab() {
 
   return (
     <>
-      {/* ── Storage ── */}
-      <h3 className="settings-section-title">Storage</h3>
-      <label className="settings-checkbox">
-        <input
-          type="checkbox"
-          checked={settings.loggingEnabled}
-          onChange={(e) => update('loggingEnabled', e.target.checked)}
-        />
-        Enable Logging
-      </label>
-      {settings.loggingEnabled && (
+      {/* ── Logging ── */}
+      <div className="settings-card">
+        <h3 className="settings-section-title">Logging</h3>
+        <label className="settings-checkbox">
+          <input
+            type="checkbox"
+            checked={settings.loggingEnabled}
+            onChange={(e) => update('loggingEnabled', e.target.checked)}
+          />
+          Enable Logging
+        </label>
+        {settings.loggingEnabled && (
+          <div className="settings-group">
+            <label>
+              Log Folder Path
+              <HelpTooltip text="Logs are saved as YYYYMMDDHHMMSS-(Protocol)-(IP).txt" />
+            </label>
+            <div className="settings-logging-path-row">
+              <input
+                type="text"
+                value={settings.loggingPath}
+                onChange={(e) => update('loggingPath', e.target.value)}
+                placeholder="Select a folder or type path..."
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  const path = await tauriService.selectFolder();
+                  if (path) update('loggingPath', path);
+                }}
+              >
+                Browse...
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Terminal ── */}
+      <div className="settings-card">
+        <h3 className="settings-section-title">Terminal</h3>
         <div className="settings-group">
           <label>
-            Log Folder Path
-            <HelpTooltip text="Logs are saved as YYYYMMDDHHMMSS-(Protocol)-(IP).txt" />
+            Scrollback Buffer
+            <HelpTooltip text="Max lines to keep in memory per terminal (Default: 10000)." />
           </label>
-          <div className="settings-logging-path-row">
-            <input
-              type="text"
-              value={settings.loggingPath}
-              onChange={(e) => update('loggingPath', e.target.value)}
-              placeholder="Select a folder or type path..."
-            />
-            <button
-              type="button"
-              onClick={async () => {
-                const path = await tauriService.selectFolder();
-                if (path) update('loggingPath', path);
-              }}
-            >
-              Browse...
-            </button>
-          </div>
+          <input
+            type="number"
+            min={100}
+            max={100000}
+            value={settings.scrollback}
+            onChange={(e) => update('scrollback', parseInt(e.target.value, 10) || 10000)}
+          />
         </div>
-      )}
-      <div className="settings-group">
-        <label>
-          Terminal Scrollback Buffer
-          <HelpTooltip text="Max lines to keep in memory per terminal (Default: 10000)." />
+        <label className="settings-checkbox">
+          <input
+            type="checkbox"
+            checked={settings.lineWrapEnabled}
+            onChange={(e) => update('lineWrapEnabled', e.target.checked)}
+          />
+          Enable line wrap
         </label>
-        <input
-          type="number"
-          min={100}
-          max={100000}
-          value={settings.scrollback}
-          onChange={(e) => update('scrollback', parseInt(e.target.value, 10) || 10000)}
-        />
       </div>
-      <label className="settings-checkbox">
-        <input
-          type="checkbox"
-          checked={settings.lineWrapEnabled}
-          onChange={(e) => update('lineWrapEnabled', e.target.checked)}
-        />
-        Enable line wrap
-      </label>
 
       {/* ── Input ── */}
+      <div className="settings-card">
       <h3 className="settings-section-title">Input</h3>
       <label className="settings-checkbox">
         <input
@@ -85,8 +93,10 @@ export function GeneralTab() {
         Right-click to paste
         <HelpTooltip text="Right-clicking the terminal shows the paste confirmation dialog." />
       </label>
+      </div>
 
       {/* ── Diagnostics ── */}
+      <div className="settings-card">
       <h3 className="settings-section-title">Diagnostics</h3>
       <div className="settings-group">
         <label>
@@ -102,6 +112,7 @@ export function GeneralTab() {
             Open Debug Log Folder
           </button>
         </div>
+      </div>
       </div>
     </>
   );

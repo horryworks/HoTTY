@@ -114,10 +114,9 @@ export function usePromptHighlight(
 
         decoration.onRender((element: HTMLElement) => {
           trackObj.element = element;
-          const defaultPromptColor =
-            highlightColor && highlightColor !== 'rgba(255, 255, 255, 0.15)'
-              ? highlightColor
-              : 'var(--terminal-prompt-default, #f44336)';
+          const defaultPromptColor = highlightColor
+            ? highlightColor
+            : 'var(--prompt-highlight-default, rgba(255, 255, 255, 0.15))';
           const targetColor = isPrompt
             ? defaultPromptColor
             : 'var(--terminal-prompt-active, #2196f3)';

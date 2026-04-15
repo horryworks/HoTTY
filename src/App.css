@@ -58,6 +58,9 @@
 
 .pane.pane-active {
   border-color: var(--accent-color);
+  box-shadow:
+    0 0 var(--glow-blur, 10px) var(--glow-accent, transparent),
+    inset 0 0 8px var(--glow-accent, transparent);
 }
 
 .pane-body {
@@ -70,10 +73,23 @@
 .pane-empty {
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: var(--text-tertiary);
+  gap: 4px;
+  color: var(--accent-color);
+  background: transparent;
+}
+
+.pane-empty .pane-label {
+  font-size: calc(var(--font-size-base) * 2.3);
+  font-weight: bold;
+  opacity: 0.2;
+}
+
+.pane-empty .drop-hint {
   font-size: calc(var(--font-size-base) - 1px);
+  opacity: 0.6;
 }
 
 .pane-error {

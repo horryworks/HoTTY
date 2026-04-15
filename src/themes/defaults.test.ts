@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_THEMES, DEFAULT_THEME_IDS, getTheme } from './defaults';
+import { DEFAULT_THEMES, DEFAULT_THEME_IDS } from './defaults';
 
 describe('default themes', () => {
   it('exposes dark, medium, light in that order', () => {
@@ -19,8 +19,4 @@ describe('default themes', () => {
     }
   });
 
-  it('getTheme falls back to dark for unknown ids', () => {
-    expect(getTheme('dark')).toBe(DEFAULT_THEMES.dark);
-    expect(getTheme('bogus')).toBe(DEFAULT_THEMES.dark);
-  });
 });

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { usePaneStore, gridPaneIds } from '../../stores/paneStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { STORAGE_KEYS } from '../../constants/storage';
 import './GridLayout.css';
 
@@ -43,6 +44,22 @@ export function GridLayout({ renderPane, onDropSession }: GridLayoutProps) {
   const [rows, cols] = layoutMode.split('x').map((n) => parseInt(n, 10));
   const paneIds = gridPaneIds(layoutMode);
   const [dragOverPaneId, setDragOverPaneId] = useState<string | null>(null);
+
+  const paneBackground = useSettingsStore((s) => s.paneBackground);
+  const paneBackgroundMode = useSettingsStore((s) => s.paneBackgroundMode);
+  const paneBackgroundImage = useSettingsStore((s) => s.paneBackgroundImage);
+  const cellBackgroundStyle = useMemo<CSSProperties>(
+    () => ({
+      backgroundColor: paneBackground || 'var(--bg-primary)',
+      backgroundImage:
+        paneBackgroundMode === 'image' && paneBackgroundImage
+          ? `url("${paneBackgroundImage}")`
+          : 'none',
+      backgroundRepeat: 'repeat',
+      backgroundPosition: 'center',
+    }),
+    [paneBackground, paneBackgroundMode, paneBackgroundImage]
+  );
 
   const [colSizes, setColSizes] = useState<number[]>(() =>
     loadSizes(STORAGE_KEYS.UI_GRID_COL_SIZES(cols), cols)
@@ -241,7 +258,7 @@ export function GridLayout({ renderPane, onDropSession }: GridLayoutProps) {
             className={`grid-layout-cell${dragOverPaneId === paneId ? ' drop-target' : ''}`}
             key={paneId}
             data-pane-id={paneId}
-            style={{ gridColumn: c * 2 + 1, gridRow: r * 2 + 1 }}
+            style={{ gridColumn: c * 2 + 1, gridRow: r * 2 + 1, ...cellBackgroundStyle }}
             onDragOver={handleDragOver(paneId)}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop(paneId)}

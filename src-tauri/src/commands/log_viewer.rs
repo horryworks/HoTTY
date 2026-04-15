@@ -227,8 +227,8 @@ pub async fn read_log_file(
         });
     }
 
-    // Read file contents
-    let content = std::fs::read_to_string(&real_path).map_err(|e| {
+    // Read file contents using the re-canonicalized path (TOCTOU mitigation).
+    let content = std::fs::read_to_string(&recheck_path).map_err(|e| {
         format!("failed to read file: {e}")
     })?;
 

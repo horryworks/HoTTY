@@ -88,6 +88,7 @@ export function AISettingsTab() {
   return (
     <>
       {/* -- AI Provider -- */}
+      <div className="settings-card">
       <h3 className="settings-section-title settings-section-title--first">Provider</h3>
       <div className="settings-group">
         <label>
@@ -141,9 +142,10 @@ export function AISettingsTab() {
         </div>
       </div>
 
-      <div className="settings-separator" />
+      </div>
 
       {/* -- Personas -- */}
+      <div className="settings-card">
       <h3 className="settings-section-title">Personas</h3>
       <div
         className="settings-modal-tabs"
@@ -324,9 +326,10 @@ export function AISettingsTab() {
         </button>
       </div>
 
-      <div className="settings-separator" />
+      </div>
 
       {/* -- Command Execution Mode -- */}
+      <div className="settings-card">
       <h3 className="settings-section-title">Command Execution</h3>
       <div className="settings-group">
         <label>
@@ -421,6 +424,7 @@ export function AISettingsTab() {
           </div>
         </>
       )}
+      </div>
 
       {/* -- Modals -- */}
       {showGeminiWarning && (

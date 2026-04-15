@@ -83,14 +83,6 @@ pub async fn connect_session(
         "connect_session called: session_id={session_id} protocol={protocol}"
     );
 
-    // Prevent duplicate session ids
-    {
-        let map = state.sessions.lock().await;
-        if map.contains_key(&session_id) {
-            return Err(format!("session {session_id} already exists"));
-        }
-    }
-
     let (mut service, meta): (Box<dyn SessionService>, SessionMeta) = match protocol.as_str() {
         "telnet" => {
             let cfg: TelnetConfig = serde_json::from_value(config).map_err(|e| {
@@ -180,6 +172,11 @@ pub async fn connect_session(
 
     log::info!("connect ok for {session_id}, storing in session map");
     let mut map = state.sessions.lock().await;
+    if map.contains_key(&session_id) {
+        drop(map);
+        let _ = service.disconnect().await;
+        return Err(format!("session {session_id} already exists"));
+    }
     map.insert(session_id, (service, meta));
     Ok(())
 }

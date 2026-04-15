@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useSidebarLayoutStore, type SidebarEdge } from '../../stores/sidebarLayoutStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -29,6 +30,22 @@ export function Sidebar({ edge, children, onDropSession }: SidebarProps) {
       : edge === 'top'
       ? state.topBarPercent
       : state.bottomBarPercent;
+
+  const paneBackground = useSettingsStore((s) => s.paneBackground);
+  const paneBackgroundMode = useSettingsStore((s) => s.paneBackgroundMode);
+  const paneBackgroundImage = useSettingsStore((s) => s.paneBackgroundImage);
+  const backgroundStyle = useMemo<CSSProperties>(
+    () => ({
+      backgroundColor: paneBackground || 'var(--sidebar-bg)',
+      backgroundImage:
+        paneBackgroundMode === 'image' && paneBackgroundImage
+          ? `url("${paneBackgroundImage}")`
+          : 'none',
+      backgroundRepeat: 'repeat',
+      backgroundPosition: 'center',
+    }),
+    [paneBackground, paneBackgroundMode, paneBackgroundImage]
+  );
 
   const ref = useRef<HTMLDivElement | null>(null);
   const dragging = useRef(false);
@@ -124,7 +141,7 @@ export function Sidebar({ edge, children, onDropSession }: SidebarProps) {
     <div
       className={`sidebar sidebar-${edge}${dropActive ? ' drop-target' : ''}`}
       ref={ref}
-      style={styleDim}
+      style={{ ...styleDim, ...backgroundStyle }}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

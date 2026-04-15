@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { GridLayout } from './GridLayout';
 import { usePaneStore } from '../../stores/paneStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { STORAGE_KEYS } from '../../constants/storage';
 
 describe('GridLayout', () => {
   beforeEach(() => {
     usePaneStore.setState({ layoutMode: '2x2' });
+    useSettingsStore.getState().reset();
     localStorage.clear();
   });
 
@@ -39,6 +41,29 @@ describe('GridLayout', () => {
     expect(container.querySelectorAll('.grid-resizer-v').length).toBe(1);
     expect(container.querySelectorAll('.grid-resizer-h').length).toBe(1);
     expect(container.querySelectorAll('.grid-resizer-cross').length).toBe(1);
+  });
+
+  it('applies paneBackground color as inline backgroundColor on every cell', () => {
+    useSettingsStore.getState().update('paneBackground', '#112233');
+    useSettingsStore.getState().update('paneBackgroundMode', 'color');
+    const { container } = render(
+      <GridLayout renderPane={() => null} onDropSession={() => {}} />
+    );
+    const cells = container.querySelectorAll('.grid-layout-cell');
+    cells.forEach((c) => {
+      expect((c as HTMLElement).style.backgroundColor).toBe('rgb(17, 34, 51)');
+      expect((c as HTMLElement).style.backgroundImage).toBe('none');
+    });
+  });
+
+  it('applies backgroundImage url when mode is image and image is set', () => {
+    useSettingsStore.getState().update('paneBackgroundMode', 'image');
+    useSettingsStore.getState().update('paneBackgroundImage', 'http://asset.localhost/foo.png');
+    const { container } = render(
+      <GridLayout renderPane={() => null} onDropSession={() => {}} />
+    );
+    const cell = container.querySelector('.grid-layout-cell') as HTMLElement;
+    expect(cell.style.backgroundImage).toContain('http://asset.localhost/foo.png');
   });
 
   it('calls onDropSession with the session id and pane id on drop', () => {
