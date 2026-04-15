@@ -91,27 +91,7 @@ const GeminiIcon: React.FC<{ size?: number; className?: string }> = ({ size = 24
 
 import { sanitizeHtml } from '../../utils/htmlUtils';
 
-// ── Extract execute commands from message content ──
-function extractExecuteCommands(content: string): string[] {
-    const parts = content.split(/(^```+[\s\S]*?^```+)/gm);
-    const commands: string[] = [];
-    for (const part of parts) {
-        const match = part.match(/^```+(\w*)\s*\n?([\s\S]*?)\n?```+$/);
-        if (match) {
-            const lang = match[1].toLowerCase();
-            let command = match[2].trim();
-            const startsWithExecute = command.startsWith('execute\n') || command.startsWith('execute ');
-            const isExecute = lang === 'execute' || (lang === '' && startsWithExecute) || ((lang === 'bash' || lang === 'sh' || lang === 'shell') && startsWithExecute);
-            if (isExecute) {
-                if (startsWithExecute) {
-                    command = command.replace(/^execute\s+/, '').trim();
-                }
-                commands.push(command);
-            }
-        }
-    }
-    return commands;
-}
+import { extractExecuteCommands } from './extractExecuteCommands';
 
 // ── Custom Message Component with Execution Support ──
 const MessageContent: React.FC<{

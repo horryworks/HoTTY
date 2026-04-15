@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { calcAICost } from '../../constants/aiPricing';
 import { sanitizeHtml } from '../../utils/htmlUtils';
+import { extractExecuteCommands } from './extractExecuteCommands';
 
 describe('calcAICost', () => {
     it('returns 0 for zero tokens', () => {
@@ -81,5 +82,80 @@ describe('sanitizeHtml', () => {
         const result = sanitizeHtml('<p><strong>hello</strong> <a href="https://example.com">link</a></p>');
         expect(result).toContain('<strong>hello</strong>');
         expect(result).toContain('href="https://example.com"');
+    });
+});
+
+describe('extractExecuteCommands', () => {
+    it('returns an empty array when no code blocks are present', () => {
+        expect(extractExecuteCommands('just some prose, no code')).toEqual([]);
+    });
+
+    it('extracts a single command from an ```execute block', () => {
+        const content = 'Run this:\n```execute\nls -la\n```\nDone.';
+        expect(extractExecuteCommands(content)).toEqual(['ls -la']);
+    });
+
+    it('extracts multiple commands from separate ```execute blocks', () => {
+        const content =
+            '```execute\necho hello\n```\n' +
+            'text in between\n' +
+            '```execute\necho world\n```';
+        expect(extractExecuteCommands(content)).toEqual(['echo hello', 'echo world']);
+    });
+
+    it('preserves multi-line commands inside one block', () => {
+        const content = '```execute\nls\npwd\nwhoami\n```';
+        expect(extractExecuteCommands(content)).toEqual(['ls\npwd\nwhoami']);
+    });
+
+    it('extracts from an unlabeled block when the body starts with "execute "', () => {
+        const content = '```\nexecute ls -la\n```';
+        expect(extractExecuteCommands(content)).toEqual(['ls -la']);
+    });
+
+    it('extracts from an unlabeled block when the body starts with "execute\\n"', () => {
+        const content = '```\nexecute\nls -la\n```';
+        expect(extractExecuteCommands(content)).toEqual(['ls -la']);
+    });
+
+    it('extracts from a bash-labeled block that starts with "execute"', () => {
+        const content = '```bash\nexecute systemctl status sshd\n```';
+        expect(extractExecuteCommands(content)).toEqual(['systemctl status sshd']);
+    });
+
+    it('extracts from sh/shell-labeled blocks that start with "execute"', () => {
+        expect(extractExecuteCommands('```sh\nexecute uname -a\n```')).toEqual(['uname -a']);
+        expect(extractExecuteCommands('```shell\nexecute uptime\n```')).toEqual(['uptime']);
+    });
+
+    it('ignores plain bash blocks that do not start with "execute"', () => {
+        expect(extractExecuteCommands('```bash\nrm -rf /\n```')).toEqual([]);
+    });
+
+    it('ignores unrelated languages like python and javascript', () => {
+        const content = '```python\nprint("hello")\n```\n```javascript\nconsole.log(1)\n```';
+        expect(extractExecuteCommands(content)).toEqual([]);
+    });
+
+    it('handles fences with 4+ backticks', () => {
+        expect(extractExecuteCommands('````execute\nls\n````')).toEqual(['ls']);
+    });
+
+    it('trims surrounding whitespace inside the block', () => {
+        expect(extractExecuteCommands('```execute\n   ls -la   \n```')).toEqual(['ls -la']);
+    });
+
+    it('is case-insensitive on the language tag', () => {
+        expect(extractExecuteCommands('```EXECUTE\nls\n```')).toEqual(['ls']);
+        expect(extractExecuteCommands('```Execute\nls\n```')).toEqual(['ls']);
+    });
+
+    it('handles an empty string input', () => {
+        expect(extractExecuteCommands('')).toEqual([]);
+    });
+
+    it('does not crash on malformed / unclosed fences', () => {
+        expect(() => extractExecuteCommands('```execute\nls -la\n')).not.toThrow();
+        expect(extractExecuteCommands('```execute\nls -la\n')).toEqual([]);
     });
 });

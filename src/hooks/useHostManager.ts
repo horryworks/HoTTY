@@ -42,6 +42,14 @@ export function getJumpboxReferences(nodes: HostTreeNode[], jumpboxId: string): 
     return flattenHosts(nodes).filter(n => n.entry?.jumpboxId === jumpboxId);
 }
 
+export interface ImportDataResult {
+    folderId: string;
+    /** True when imported data contained [SAFE]/[DPAPI]-wrapped credentials that could
+     *  not be decrypted here (produced by a pre-fix HoTTY build). Those fields were
+     *  cleared — the UI should prompt the user to re-enter them. */
+    hadUnportableCreds: boolean;
+}
+
 export interface HostTreeNode {
     id: string;
     type: 'folder' | 'host';
@@ -126,6 +134,46 @@ async function encryptTree(nodes: HostTreeNode[]): Promise<HostTreeNode[]> {
 
     return newTree;
 }
+
+/**
+ * Decrypts all HostEntry credentials in a tree to plaintext. Used before exporting
+ * so that the .htree file contains portable plaintext credentials (protected by
+ * the user-supplied export password's AES layer), rather than machine-bound
+ * safeStorage/DPAPI ciphertext that cannot be decrypted on another machine.
+ */
+export async function decryptTreeForExport(nodes: HostTreeNode[]): Promise<HostTreeNode[]> {
+    const secrets: (string | undefined)[] = [];
+    const setters: ((val: string | undefined) => void)[] = [];
+
+    function traverse(nodeList: HostTreeNode[]): HostTreeNode[] {
+        return nodeList.map(n => {
+            const children = n.children ? traverse(n.children) : undefined;
+            if (n.type === 'host' && n.entry) {
+                const entry = { ...n.entry };
+                if (entry.username && isEncrypted(entry.username)) {
+                    secrets.push(entry.username);
+                    setters.push((val) => { entry.username = val ?? ''; });
+                }
+                if (entry.password && isEncrypted(entry.password)) {
+                    secrets.push(entry.password);
+                    setters.push((val) => { entry.password = val ?? ''; });
+                }
+                return { ...n, entry, children };
+            }
+            return { ...n, children };
+        });
+    }
+
+    const newTree = traverse(nodes);
+    const decryptedSecrets = await decryptBatch(secrets);
+
+    for (let i = 0; i < decryptedSecrets.length; i++) {
+        setters[i](decryptedSecrets[i]);
+    }
+
+    return newTree;
+}
+
 // ── In-Memory Decryption Cache ──
 
 type DecryptedCredentialInfo = { username?: string; password?: string; decrypted?: boolean };
@@ -495,7 +543,31 @@ export function useHostManager() {
         });
     }, []);
 
-    const importData = useCallback(async (nodes: HostTreeNode[], folderName: string = 'Imported', parentId: string | null = null): Promise<string> => {
+    const importData = useCallback(async (nodes: HostTreeNode[], folderName: string = 'Imported', parentId: string | null = null): Promise<ImportDataResult> => {
+        // Strip unportable (still safeStorage-encrypted) credentials. A .htree produced
+        // by a pre-fix HoTTY contains [SAFE] ciphertext bound to the original machine's
+        // DPAPI key, which cannot be decrypted here. Clear those fields so the user
+        // notices and re-enters them, rather than storing unrecoverable garbage.
+        let hadUnportableCreds = false;
+        const stripUnportable = (nodeList: HostTreeNode[]): HostTreeNode[] =>
+            nodeList.map(n => {
+                const children = n.children ? stripUnportable(n.children) : undefined;
+                if (n.type === 'host' && n.entry) {
+                    const entry = { ...n.entry };
+                    if (entry.username && isEncrypted(entry.username)) {
+                        entry.username = '';
+                        hadUnportableCreds = true;
+                    }
+                    if (entry.password && isEncrypted(entry.password)) {
+                        entry.password = '';
+                        hadUnportableCreds = true;
+                    }
+                    return { ...n, entry, children };
+                }
+                return { ...n, children };
+            });
+        const cleanedNodes = stripUnportable(nodes);
+
         // Build old-to-new ID mapping, then reassign IDs and remap jumpboxId references
         const idMap = new Map<string, string>();
         const buildIdMap = (nodeList: HostTreeNode[]): void => {
@@ -504,7 +576,7 @@ export function useHostManager() {
                 if (n.children) buildIdMap(n.children);
             }
         };
-        buildIdMap(nodes);
+        buildIdMap(cleanedNodes);
 
         const reassignIds = (nodeList: HostTreeNode[]): HostTreeNode[] => {
             return nodeList.map(n => {
@@ -524,7 +596,7 @@ export function useHostManager() {
             });
         };
 
-        const importedNodes = reassignIds(nodes);
+        const importedNodes = reassignIds(cleanedNodes);
         const targetFolderId = parentId || generateId();
 
         setTree(prev => {
@@ -546,7 +618,7 @@ export function useHostManager() {
             return next;
         });
 
-        return targetFolderId;
+        return { folderId: targetFolderId, hadUnportableCreds };
     }, []);
 
     return { tree, addFolder, addHost, editNode, deleteNode, saveTree, moveNode, sortFolder, importData };

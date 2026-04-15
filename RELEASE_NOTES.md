@@ -1,5 +1,10 @@
 # Release Notes - HoTTY
 
+## [v1.0.9-beta3] - 2026-04-15
+
+### Bug Fixes
+- **Host Tree Export Portability**: Fixed `.htree` files produced by the export feature being unusable on other machines (or after reinstall). Credentials in exported files were doubly-wrapped — the inner `safeStorage` layer was bound to the original machine's Windows DPAPI key, so usernames and passwords decrypted back into the literal ciphertext string (`[SAFE]...`) on import. The export now decrypts credentials to plaintext inside the file before applying the user-supplied password's AES-256-GCM container, making `.htree` files portable while remaining encrypted at rest. Importing a pre-fix `.htree` file on a different machine now safely clears the unrecoverable credential fields and shows a notice prompting re-entry instead of storing garbage values.
+
 ## [v1.0.9-beta2] - 2026-04-11
 
 ### Improved

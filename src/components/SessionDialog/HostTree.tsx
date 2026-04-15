@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
-import type { HostTreeNode, HostEntry } from '../../hooks/useHostManager';
-import { flattenHosts, getJumpboxReferences } from '../../hooks/useHostManager';
+import type { HostTreeNode, HostEntry, ImportDataResult } from '../../hooks/useHostManager';
+import { flattenHosts, getJumpboxReferences, decryptTreeForExport } from '../../hooks/useHostManager';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useModalState } from '../../hooks/useModalState';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
@@ -30,7 +30,7 @@ interface HostTreeProps {
     onDeleteNode: (id: string) => void;
     onMoveNode?: (nodeId: string, targetId: string, position: 'before' | 'after' | 'inside') => void;
     onSortFolder?: (folderId: string | null) => void;
-    onImportData?: (nodes: HostTreeNode[], folderName: string, parentId: string | null) => Promise<string | undefined> | void;
+    onImportData?: (nodes: HostTreeNode[], folderName: string, parentId: string | null) => Promise<ImportDataResult | undefined> | void;
     onShowMessage?: (type: 'error' | 'success' | 'info', title: string | undefined, message: string) => void;
 }
 
@@ -304,8 +304,12 @@ export const HostTree: React.FC<HostTreeProps> = ({
             if (!formPassword) return;
             try {
                 electronService.logDebug('Calling exportHTree IPC from modal');
-                // Use selected node or full tree
-                const dataToExport = exportNode ? [exportNode] : tree;
+                // Decrypt safeStorage-wrapped credentials before writing to the .htree file.
+                // The file itself is AES-256-GCM encrypted with the user's export password,
+                // so plaintext credentials inside the container remain protected — and the
+                // result is portable across machines (unlike machine-bound safeStorage).
+                const rawNodes = exportNode ? [exportNode] : tree;
+                const dataToExport = await decryptTreeForExport(rawNodes);
                 const success = await electronService.exportHTree(dataToExport, formPassword);
 
                 // Close modal and reset state BEFORE showing success alert
@@ -337,11 +341,11 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     const fileName = fileNameWithExt.replace(/\.[^/.]+$/, "");
 
                     const currentParentId = parentId;
-                    const folderId = await onImportData(data as HostTreeNode[], currentParentId ? '' : `Imported_${fileName}`, currentParentId);
+                    const result = await onImportData(data as HostTreeNode[], currentParentId ? '' : `Imported_${fileName}`, currentParentId);
 
                     // Auto-expand the target folder
-                    if (folderId) {
-                        setExpanded(prev => ({ ...prev, [folderId]: true }));
+                    if (result?.folderId) {
+                        setExpanded(prev => ({ ...prev, [result.folderId]: true }));
                     }
 
                     // Close modal and reset state BEFORE showing success alert
@@ -350,7 +354,15 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     setFormPassword('');
 
                     setTimeout(() => {
-                        onShowMessage?.('success', 'Import Successful', currentParentId ? 'Hosts imported successfully.' : `Hosts imported and added to "Imported_${fileName}" folder.`);
+                        if (result?.hadUnportableCreds) {
+                            onShowMessage?.(
+                                'info',
+                                'Import Successful (Credentials Cleared)',
+                                'Hosts imported, but some usernames/passwords were encrypted with keys from another machine and could not be recovered. Those fields were cleared — please re-enter them. (Re-export from the source machine with this version of HoTTY to avoid this.)'
+                            );
+                        } else {
+                            onShowMessage?.('success', 'Import Successful', currentParentId ? 'Hosts imported successfully.' : `Hosts imported and added to "Imported_${fileName}" folder.`);
+                        }
                         focusModal();
                     }, 50);
                 }

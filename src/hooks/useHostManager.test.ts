@@ -6,6 +6,7 @@ import {
     setCachedCredential,
     clearDecryptedCache,
     decryptBatch,
+    decryptTreeForExport,
     flattenHosts,
     getJumpboxReferences,
 } from './useHostManager';
@@ -475,6 +476,133 @@ describe('useHostManager — importData jumpbox remapping', () => {
         const nestedHost = subFolder.children![0];
 
         expect(nestedHost.entry?.jumpboxId).toBe(jumpbox.id);
+    });
+});
+
+// ── Export/import portability tests ──
+
+describe('decryptTreeForExport', () => {
+    it('unwraps [SAFE] credentials to plaintext', async () => {
+        const nodes: HostTreeNode[] = [
+            {
+                id: 'h1', type: 'host', name: 'Host1', entry: {
+                    protocol: 'ssh', host: '10.0.0.1', port: 22,
+                    username: '[SAFE]alice', password: '[SAFE]secret',
+                }
+            },
+        ];
+        const result = await decryptTreeForExport(nodes);
+        expect(result[0].entry?.username).toBe('alice');
+        expect(result[0].entry?.password).toBe('secret');
+    });
+
+    it('leaves already-plaintext credentials unchanged', async () => {
+        const nodes: HostTreeNode[] = [
+            {
+                id: 'h1', type: 'host', name: 'Host1', entry: {
+                    protocol: 'ssh', host: '10.0.0.1', port: 22,
+                    username: 'bob', password: 'plain',
+                }
+            },
+        ];
+        const result = await decryptTreeForExport(nodes);
+        expect(result[0].entry?.username).toBe('bob');
+        expect(result[0].entry?.password).toBe('plain');
+    });
+
+    it('recurses into nested folders', async () => {
+        const nodes: HostTreeNode[] = [
+            {
+                id: 'f1', type: 'folder', name: 'Folder', children: [
+                    {
+                        id: 'h1', type: 'host', name: 'Host1', entry: {
+                            protocol: 'ssh', host: '10.0.0.1', port: 22,
+                            username: '[SAFE]alice', password: '[DPAPI]secret',
+                        }
+                    },
+                ]
+            },
+        ];
+        const result = await decryptTreeForExport(nodes);
+        const host = result[0].children![0];
+        expect(host.entry?.username).toBe('alice');
+        expect(host.entry?.password).toBe('secret');
+    });
+
+    it('does not mutate the input tree', async () => {
+        const nodes: HostTreeNode[] = [
+            {
+                id: 'h1', type: 'host', name: 'Host1', entry: {
+                    protocol: 'ssh', host: '10.0.0.1', port: 22,
+                    username: '[SAFE]alice',
+                }
+            },
+        ];
+        await decryptTreeForExport(nodes);
+        expect(nodes[0].entry?.username).toBe('[SAFE]alice');
+    });
+});
+
+describe('useHostManager — importData portability stripping', () => {
+    it('clears [SAFE] credentials on import and reports hadUnportableCreds=true', async () => {
+        const { result } = renderHook(() => useHostManager());
+        const importNodes: HostTreeNode[] = [
+            {
+                id: 'h1', type: 'host', name: 'Host1', entry: {
+                    protocol: 'ssh', host: '10.0.0.1', port: 22,
+                    username: '[SAFE]djEwOZu', password: '[SAFE]abc123',
+                }
+            },
+        ];
+
+        let importResult!: { folderId: string; hadUnportableCreds: boolean };
+        await act(async () => {
+            importResult = await result.current.importData(importNodes, 'TestImport');
+        });
+
+        expect(importResult.hadUnportableCreds).toBe(true);
+        const host = result.current.tree[0].children![0];
+        expect(host.entry?.username).toBe('');
+        expect(host.entry?.password).toBe('');
+    });
+
+    it('reports hadUnportableCreds=false when all credentials are plaintext', async () => {
+        const { result } = renderHook(() => useHostManager());
+        const importNodes: HostTreeNode[] = [
+            {
+                id: 'h1', type: 'host', name: 'Host1', entry: {
+                    protocol: 'ssh', host: '10.0.0.1', port: 22,
+                    username: 'alice', password: 'plain',
+                }
+            },
+        ];
+
+        let importResult!: { folderId: string; hadUnportableCreds: boolean };
+        await act(async () => {
+            importResult = await result.current.importData(importNodes, 'TestImport');
+        });
+
+        expect(importResult.hadUnportableCreds).toBe(false);
+        // Plaintext credentials pass through to state; they are re-encrypted
+        // asynchronously before the next persist, but state itself stays plaintext.
+        const host = result.current.tree[0].children![0];
+        expect(host.entry?.username).toBe('alice');
+        expect(host.entry?.password).toBe('plain');
+    });
+
+    it('returns an object with a folderId for the created wrapper', async () => {
+        const { result } = renderHook(() => useHostManager());
+        const importNodes: HostTreeNode[] = [
+            { id: 'h1', type: 'host', name: 'Host1', entry: { protocol: 'ssh', host: '10.0.0.1', port: 22 } },
+        ];
+
+        let importResult!: { folderId: string; hadUnportableCreds: boolean };
+        await act(async () => {
+            importResult = await result.current.importData(importNodes, 'TestImport');
+        });
+
+        expect(typeof importResult.folderId).toBe('string');
+        expect(result.current.tree[0].id).toBe(importResult.folderId);
     });
 });
 
