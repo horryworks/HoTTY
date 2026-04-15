@@ -25,6 +25,22 @@ pub(crate) fn decrypt_string(ciphertext: &str) -> Result<String, String> {
     }
 }
 
+/// Decrypt a v1 (Electron `safeStorage`) ciphertext written by the previous
+/// HoTTY build. The payload is `[SAFE]` + base64(`"v10"` + DPAPI-blob), where
+/// the 3-byte `v10` marker comes from Chromium's OSCrypt layer that Electron
+/// wraps. Used only by the v1→v2 htree import migration; regular v2 code paths
+/// must go through `decrypt_string`.
+pub(crate) fn decrypt_v1_safe_string(ciphertext: &str) -> Result<String, String> {
+    let b64 = ciphertext
+        .strip_prefix(SAFE_PREFIX)
+        .ok_or_else(|| "missing [SAFE] prefix".to_string())?;
+    let bytes = BASE64.decode(b64).map_err(|e| format!("base64 decode error: {e}"))?;
+    let inner = bytes
+        .strip_prefix(b"v10")
+        .ok_or_else(|| "missing Electron v10 marker".to_string())?;
+    crypt_unprotect(inner)
+}
+
 // ---------------------------------------------------------------------------
 // Platform-specific implementations
 // ---------------------------------------------------------------------------
@@ -155,5 +171,34 @@ mod tests {
         let plain = "no-prefix-text";
         let result = decrypt_string(plain).unwrap();
         assert_eq!(result, plain);
+    }
+
+    #[test]
+    fn decrypt_v1_safe_string_roundtrip() {
+        if cfg!(windows) {
+            // Emulate a v1 Electron safeStorage payload: DPAPI-encrypt, prepend
+            // the "v10" OSCrypt marker, then [SAFE] + base64.
+            let plain = "v1-secret";
+            let dpapi_bytes = crypt_protect(plain).unwrap();
+            let mut with_marker = b"v10".to_vec();
+            with_marker.extend_from_slice(&dpapi_bytes);
+            let v1_ciphertext = format!("{SAFE_PREFIX}{}", BASE64.encode(&with_marker));
+
+            let decrypted = decrypt_v1_safe_string(&v1_ciphertext).unwrap();
+            assert_eq!(decrypted, plain);
+
+            // And the same bytes must NOT decrypt via the v2 path (sanity: the
+            // whole point of the helper is that v2 rejects the v10 marker).
+            assert!(decrypt_string(&v1_ciphertext).is_err());
+        }
+    }
+
+    #[test]
+    fn decrypt_v1_safe_string_rejects_non_v10() {
+        // Missing [SAFE] prefix.
+        assert!(decrypt_v1_safe_string("plaintext").is_err());
+        // Has [SAFE] but no "v10" marker inside.
+        let no_marker = format!("{SAFE_PREFIX}{}", BASE64.encode(b"not-v10-bytes"));
+        assert!(decrypt_v1_safe_string(&no_marker).is_err());
     }
 }

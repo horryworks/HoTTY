@@ -9,6 +9,8 @@ use tauri::State;
 use tauri_plugin_dialog::DialogExt;
 use tokio::sync::Mutex;
 
+use crate::services::dpapi::{decrypt_string, decrypt_v1_safe_string, encrypt_string};
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -311,10 +313,71 @@ pub async fn decrypt_import_file(
         String::from_utf8(plaintext).map_err(|_| "decrypted data is not valid UTF-8")?;
 
     // Validate it's a JSON array
-    let _: Vec<serde_json::Value> =
+    let mut tree: Vec<serde_json::Value> =
         serde_json::from_str(&json_str).map_err(|e| format!("invalid host tree data: {e}"))?;
 
-    Ok(json_str)
+    // Migrate v1 (Electron safeStorage) credentials to v2 DPAPI in place.
+    for node in tree.iter_mut() {
+        migrate_credentials(node);
+    }
+
+    serde_json::to_string(&tree).map_err(|e| format!("failed to serialise host tree: {e}"))
+}
+
+/// Walk a host-tree node and, for every host entry, upgrade any `[SAFE]`-prefixed
+/// `username` / `password` field that was written by the v1 Electron build
+/// (`[SAFE]` + base64(`v10` + DPAPI-blob)) into the v2 format
+/// (`[SAFE]` + base64(DPAPI-blob)). Fields that already decrypt under v2 are left
+/// untouched. Fields that can't be decoded under either scheme are left as-is so
+/// the user can re-enter them manually.
+fn migrate_credentials(node: &mut serde_json::Value) {
+    // Recurse into child folders first.
+    if let Some(children) = node.get_mut("children").and_then(|c| c.as_array_mut()) {
+        for child in children.iter_mut() {
+            migrate_credentials(child);
+        }
+    }
+
+    let is_host = node
+        .get("type")
+        .and_then(|t| t.as_str())
+        .map(|t| t == "host")
+        .unwrap_or(false);
+    if !is_host {
+        return;
+    }
+
+    let Some(entry) = node.get_mut("entry").and_then(|e| e.as_object_mut()) else {
+        return;
+    };
+
+    for field in ["username", "password"] {
+        let Some(current) = entry.get(field).and_then(|v| v.as_str()) else {
+            continue;
+        };
+        if !current.starts_with("[SAFE]") && !current.starts_with("[DPAPI]") {
+            continue;
+        }
+
+        // Already a valid v2 ciphertext? Leave it alone.
+        if decrypt_string(current).is_ok() {
+            continue;
+        }
+
+        match decrypt_v1_safe_string(current) {
+            Ok(plain) => match encrypt_string(&plain) {
+                Ok(v2_cipher) => {
+                    entry.insert(field.to_string(), serde_json::Value::String(v2_cipher));
+                }
+                Err(e) => {
+                    log::warn!("htree import: re-encrypt of migrated {field} failed: {e}");
+                }
+            },
+            Err(e) => {
+                log::warn!("htree import: could not migrate v1 {field}: {e}");
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -463,6 +526,110 @@ mod tests {
         rt.block_on(async {
             assert!(state.inner.lock().await.is_none());
         });
+    }
+
+    #[test]
+    fn migrate_credentials_upgrades_v1_safe_blobs() {
+        if !cfg!(windows) {
+            return;
+        }
+        use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+
+        // Simulate v1 Electron safeStorage: [SAFE] + base64("v10" + DPAPI(plain)).
+        let make_v1 = |plain: &str| {
+            // Reach into dpapi's private crypt_protect via the public encrypt_string
+            // path: v2 encrypt_string gives us a [SAFE]+base64(DPAPI) string, we
+            // decode and prepend the v10 marker to build a fake v1 payload.
+            let v2 = encrypt_string(plain).unwrap();
+            let b64 = v2.strip_prefix("[SAFE]").unwrap();
+            let dpapi_bytes = BASE64.decode(b64).unwrap();
+            let mut v10 = b"v10".to_vec();
+            v10.extend_from_slice(&dpapi_bytes);
+            format!("[SAFE]{}", BASE64.encode(&v10))
+        };
+
+        let mut node = serde_json::json!({
+            "id": "1",
+            "type": "host",
+            "name": "Server",
+            "entry": {
+                "username": make_v1("alice"),
+                "password": make_v1("hunter2"),
+            }
+        });
+
+        migrate_credentials(&mut node);
+
+        let entry = node.get("entry").and_then(|e| e.as_object()).unwrap();
+        let u = entry.get("username").and_then(|v| v.as_str()).unwrap();
+        let p = entry.get("password").and_then(|v| v.as_str()).unwrap();
+
+        // Migrated values are v2 [SAFE] and decrypt under the v2 path.
+        assert!(u.starts_with("[SAFE]"));
+        assert!(p.starts_with("[SAFE]"));
+        assert_eq!(decrypt_string(u).unwrap(), "alice");
+        assert_eq!(decrypt_string(p).unwrap(), "hunter2");
+    }
+
+    #[test]
+    fn migrate_credentials_leaves_v2_blobs_untouched() {
+        if !cfg!(windows) {
+            return;
+        }
+
+        let v2_user = encrypt_string("bob").unwrap();
+        let v2_pass = encrypt_string("s3cret").unwrap();
+
+        let mut node = serde_json::json!({
+            "id": "1",
+            "type": "host",
+            "name": "Server",
+            "entry": {
+                "username": v2_user.clone(),
+                "password": v2_pass.clone(),
+            }
+        });
+
+        migrate_credentials(&mut node);
+
+        let entry = node.get("entry").and_then(|e| e.as_object()).unwrap();
+        assert_eq!(entry.get("username").and_then(|v| v.as_str()).unwrap(), v2_user);
+        assert_eq!(entry.get("password").and_then(|v| v.as_str()).unwrap(), v2_pass);
+    }
+
+    #[test]
+    fn migrate_credentials_recurses_into_folders() {
+        if !cfg!(windows) {
+            return;
+        }
+        use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+
+        let v2 = encrypt_string("nested-user").unwrap();
+        let b64 = v2.strip_prefix("[SAFE]").unwrap();
+        let dpapi_bytes = BASE64.decode(b64).unwrap();
+        let mut v10 = b"v10".to_vec();
+        v10.extend_from_slice(&dpapi_bytes);
+        let v1 = format!("[SAFE]{}", BASE64.encode(&v10));
+
+        let mut root = serde_json::json!({
+            "id": "f1",
+            "type": "folder",
+            "name": "Folder",
+            "children": [{
+                "id": "h1",
+                "type": "host",
+                "name": "Inner",
+                "entry": { "username": v1, "password": "" }
+            }]
+        });
+
+        migrate_credentials(&mut root);
+
+        let inner_user = root
+            .pointer("/children/0/entry/username")
+            .and_then(|v| v.as_str())
+            .unwrap();
+        assert_eq!(decrypt_string(inner_user).unwrap(), "nested-user");
     }
 
     #[test]
