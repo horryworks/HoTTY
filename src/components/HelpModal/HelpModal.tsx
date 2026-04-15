@@ -414,6 +414,9 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               <p className="help-text">
                 <strong>Custom Themes:</strong> Click <strong>&quot;+ Create Custom Theme&quot;</strong> to open the theme editor. Adjust any color variable and save under a custom name. Custom themes can be edited or deleted at any time.
               </p>
+              <p className="help-text">
+                <strong>AI Provider Colors:</strong> The theme editor includes an <strong>AI Providers</strong> section for customizing the brand colors used by the Gemini, OpenAI, Anthropic, and Vertex AI icons.
+              </p>
             </div>
           </details>
 

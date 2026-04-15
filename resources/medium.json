@@ -104,7 +104,13 @@
         "update-notification-btn-bg": "#1e6bb8",
         "update-notification-btn-text": "#ffffff",
         "update-notification-btn-border": "#2a85d8",
-        "update-notification-btn-hover": "#2a85d8"
+        "update-notification-btn-hover": "#2a85d8",
+        "provider-gemini-1": "#4E77FF",
+        "provider-gemini-2": "#A87FF4",
+        "provider-gemini-3": "#FF76AB",
+        "provider-openai": "#10A37F",
+        "provider-anthropic": "#D97757",
+        "provider-vertex-ai": "#4E90FF"
     },
     "terminal": {
         "foreground": "#f0f0f0",

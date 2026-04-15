@@ -27,9 +27,9 @@ export const AuthenticationPanel: React.FC<AuthenticationPanelProps> = ({
                         <path d="M12 2L14.8 9.2L22 12L14.8 14.8L12 22L9.2 14.8L2 12L9.2 9.2L12 2Z" fill="url(#gemini-gradient-auth)" />
                         <defs>
                             <linearGradient id="gemini-gradient-auth" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-                                <stop stopColor="#4E77FF" />
-                                <stop offset="0.5" stopColor="#A87FF4" />
-                                <stop offset="1" stopColor="#FF76AB" />
+                                <stop stopColor="var(--provider-gemini-1)" />
+                                <stop offset="0.5" stopColor="var(--provider-gemini-2)" />
+                                <stop offset="1" stopColor="var(--provider-gemini-3)" />
                             </linearGradient>
                         </defs>
                     </svg>

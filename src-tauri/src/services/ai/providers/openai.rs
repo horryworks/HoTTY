@@ -386,13 +386,15 @@ impl AIProvider for OpenAIProvider {
             }
         }
 
-        // If we got a response (not cancelled), send done event and update history
-        if !cancel_token.is_cancelled() && !full_response.is_empty() {
-            if let Some(history) = self.chat_histories.get_mut(&sid) {
-                history.push(ChatMessage {
-                    role: "assistant".into(),
-                    content: full_response.clone(),
-                });
+        // If not cancelled, send done event (update history only if non-empty)
+        if !cancel_token.is_cancelled() {
+            if !full_response.is_empty() {
+                if let Some(history) = self.chat_histories.get_mut(&sid) {
+                    history.push(ChatMessage {
+                        role: "assistant".into(),
+                        content: full_response.clone(),
+                    });
+                }
             }
             emit_chat_response(
                 &app_clone,

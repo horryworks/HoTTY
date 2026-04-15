@@ -325,9 +325,9 @@ impl AIProvider for GeminiProvider {
         );
 
         // Open the auth URL in the system browser
-        use tauri_plugin_shell::ShellExt;
-        app.shell()
-            .open(&auth_url, None)
+        use tauri_plugin_opener::OpenerExt;
+        app.opener()
+            .open_url(&auth_url, None::<&str>)
             .map_err(|e| format!("Failed to open browser: {e}"))?;
 
         log::debug!("[gemini] OAuth server listening on port {port}");
@@ -693,12 +693,14 @@ impl AIProvider for GeminiProvider {
             }
         }
 
-        if !cancel_token.is_cancelled() && !full_response.is_empty() {
-            if let Some(history) = self.chat_histories.get_mut(&sid) {
-                history.push(ChatMessage {
-                    role: "model".into(),
-                    content: full_response.clone(),
-                });
+        if !cancel_token.is_cancelled() {
+            if !full_response.is_empty() {
+                if let Some(history) = self.chat_histories.get_mut(&sid) {
+                    history.push(ChatMessage {
+                        role: "model".into(),
+                        content: full_response.clone(),
+                    });
+                }
             }
             emit_chat_response(
                 &app_clone,

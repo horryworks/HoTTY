@@ -1151,12 +1151,14 @@ impl AIProvider for VertexAIProvider {
 
         match result {
             Ok((full_response, usage_metadata)) => {
-                if !cancel_token.is_cancelled() && !full_response.is_empty() {
-                    if let Some(history) = self.chat_histories.get_mut(&sid) {
-                        history.push(ChatMessage {
-                            role: "model".into(),
-                            content: full_response.clone(),
-                        });
+                if !cancel_token.is_cancelled() {
+                    if !full_response.is_empty() {
+                        if let Some(history) = self.chat_histories.get_mut(&sid) {
+                            history.push(ChatMessage {
+                                role: "model".into(),
+                                content: full_response.clone(),
+                            });
+                        }
                     }
                     emit_chat_response(
                         app,

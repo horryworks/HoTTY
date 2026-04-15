@@ -1,5 +1,22 @@
 # リリースノート
 
+## v2.0.0-beta5
+
+セキュリティ強化、AI プロバイダーアイコンのテーマ対応、UI 改善に焦点を当てた5番目のベータリリースです。
+
+### 改善
+
+- **AI プロバイダーアイコンのテーマ対応** — Gemini のグラデーション、OpenAI、Anthropic、Vertex AI の各アイコン色をテーマ変数 (`provider-gemini-1/2/3`, `provider-openai`, `provider-anthropic`, `provider-vertex-ai`) から取得するように変更。カスタムテーマエディタに新セクション **AI Providers** を追加
+- **シェルプラグインの置き換え** — 外部 URL 起動用プラグインを `tauri-plugin-shell` から軽量な `tauri-plugin-opener` に移行し、許可する機能範囲を縮小
+- **AI プロバイダーのストリーミング整合性** — Anthropic / Gemini / OpenAI / Vertex AI の各プロバイダーで、キャンセル時や応答が空の場合でも chat-done イベントを発行し、ローディング状態が残らないように修正
+- **モーダルの一貫性** — ConfirmModal / PasteConfirmationModal / AskAiModal のアクションボタン余白 (`6px 16px`) とフッター間隔 (`8px`) を UI 規約に揃えて統一
+
+### セキュリティ
+
+- **SSH 認証失敗時の資格情報消去** — パスワードおよび秘密鍵パスフレーズを認証試行直後 (成功・失敗を問わず) にメモリから消去し、認証失敗時に平文の機密情報が残る隙をなくしました
+- **IAP トンネルのゾーンフィルタ強化** — GCE インスタンス一覧取得で `--filter=zone:(…)` ではなく専用の `--zones=` フラグを使用することで、gcloud フィルタ構文のエッジケース影響を排除
+- **DPAPI unsafe ブロックへの安全性コメント追加** — `CryptProtectData` / `CryptUnprotectData` 呼び出しにバッファ初期化・寿命・`LocalFree` 所有権に関する SAFETY 不変条件を明示
+
 ## v2.0.0-beta4
 
 ジャンプボックス経由の接続、自動アップデート通知、編集ワークフローの安全性向上、セキュリティ強化に焦点を当てた4番目のベータリリースです。

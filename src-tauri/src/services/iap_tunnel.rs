@@ -328,14 +328,17 @@ pub async fn list_instances(project: &str, zone: &str) -> Vec<GceInstance> {
     }
 
     let project_flag = format!("--project={project}");
-    let zone_filter = format!("--filter=zone:({zone})");
+    // Use the native `--zones=` flag instead of a `--filter=` expression so the
+    // zone string is consumed as a scoped allowlist rather than interpreted as
+    // gcloud filter syntax. The zone is already validated against RE_ZONE.
+    let zones_flag = format!("--zones={zone}");
     let args = [
         "compute",
         "instances",
         "list",
         "--format=json",
         &project_flag,
-        &zone_filter,
+        &zones_flag,
         "--sort-by=name",
     ];
     match run_gcloud(&args).await {

@@ -20,7 +20,7 @@ export const AnthropicAuthPanel: React.FC<AnthropicAuthPanelProps> = ({
             <div className="ai-chat-auth-card">
                 <div className="ai-chat-auth-icon">
                     <svg width="64" height="64" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-                        <rect width="24" height="24" rx="4" fill="#D97757" />
+                        <rect width="24" height="24" rx="4" fill="var(--provider-anthropic)" />
                         <text x="12" y="16" textAnchor="middle" fill="white" fontSize="12" fontWeight="bold" fontFamily="serif">A</text>
                     </svg>
                 </div>

@@ -43,6 +43,15 @@ fn crypt_protect(plaintext: &str) -> Result<Vec<u8>, String> {
         pbData: std::ptr::null_mut(),
     };
 
+    // SAFETY:
+    // - `data_in` is a valid, fully-initialized CRYPT_INTEGER_BLOB whose `pbData`
+    //   points to `data_bytes` (owned by this frame) for `cbData` bytes.
+    // - `data_out.pbData` is populated by Windows on success and must be released
+    //   with `LocalFree` per the CryptProtectData contract.
+    // - `from_raw_parts` runs only after `success.is_ok()` confirms Windows
+    //   wrote a valid buffer of `cbData` bytes.
+    // - `LocalFree` is always called on the success path to avoid leaking the
+    //   Windows-allocated buffer.
     unsafe {
         let success = CryptProtectData(
             &data_in,
@@ -79,6 +88,15 @@ fn crypt_unprotect(encrypted: &[u8]) -> Result<String, String> {
         pbData: std::ptr::null_mut(),
     };
 
+    // SAFETY:
+    // - `data_in` is a valid, fully-initialized CRYPT_INTEGER_BLOB whose `pbData`
+    //   points to the caller's `encrypted` slice for `cbData` bytes.
+    // - `data_out.pbData` is populated by Windows on success and must be released
+    //   with `LocalFree` per the CryptUnprotectData contract.
+    // - `from_raw_parts` runs only after `success.is_ok()` confirms Windows
+    //   wrote a valid buffer of `cbData` bytes.
+    // - `LocalFree` is always called on the success path to avoid leaking the
+    //   Windows-allocated buffer.
     unsafe {
         let success = CryptUnprotectData(
             &data_in,

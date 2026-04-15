@@ -43,7 +43,7 @@ export const VertexAIAuthPanel: React.FC<VertexAIAuthPanelProps> = ({
             <div className="ai-chat-auth-card">
                 <div className="ai-chat-auth-icon">
                     <svg width="64" height="64" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" fill="#4E90FF" />
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" fill="var(--provider-vertex-ai)" />
                     </svg>
                 </div>
                 <h2>Connect to Vertex AI</h2>

@@ -46,6 +46,11 @@ const THEME_SECTIONS: { title: string; description: string; keys: string[] }[] =
         keys: ['sidebar-bg', 'sidebar-btn-color', 'sidebar-btn-hover-bg', 'sidebar-btn-hover-color', 'sidebar-btn-active-bg', 'tab-bg', 'tab-text', 'tab-active-text', 'tab-close-bg', 'tab-close-hover-bg', 'tab-watching-text', 'tab-watching-bg', 'tab-watching-icon', 'tab-watching-icon-glow', 'context-menu-bg', 'context-menu-border', 'context-menu-text', 'context-menu-hover-bg', 'hidden-item-bg', 'hidden-item-bg-hover', 'tree-meta-color', 'icon-folder', 'icon-host', 'terminal-prompt-default', 'terminal-prompt-active', 'pane-color-1', 'pane-color-2', 'pane-color-3', 'pane-color-4', 'pane-color-5', 'pane-color-6', 'resize-grip-shadow'],
     },
     {
+        title: 'AI Providers',
+        description: 'Brand colors used for AI provider icons (Gemini, OpenAI, Anthropic, Vertex AI)',
+        keys: ['provider-gemini-1', 'provider-gemini-2', 'provider-gemini-3', 'provider-openai', 'provider-anthropic', 'provider-vertex-ai'],
+    },
+    {
         title: 'Search & Highlight',
         description: 'Search result highlight colors',
         keys: ['search-highlight-bg', 'search-highlight-current-bg', 'search-highlight-current-border', 'search-highlight-mark-bg', 'search-highlight-mark-solid', 'search-highlight-mark-text'],
@@ -178,6 +183,13 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'update-notification-btn-text': 'Text color for the Download button in the update notification.',
     'update-notification-btn-border': 'Border color for the Download button in the update notification.',
     'update-notification-btn-hover': 'Hover background for the Download button in the update notification.',
+    // AI Providers
+    'provider-gemini-1': 'First gradient stop of the Gemini icon (start color).',
+    'provider-gemini-2': 'Middle gradient stop of the Gemini icon.',
+    'provider-gemini-3': 'Final gradient stop of the Gemini icon (end color).',
+    'provider-openai': 'Brand color for the OpenAI icon background.',
+    'provider-anthropic': 'Brand color for the Anthropic icon background.',
+    'provider-vertex-ai': 'Brand color for the Vertex AI icon.',
 };
 
 const isSimpleHexColor = (value: string): boolean =>

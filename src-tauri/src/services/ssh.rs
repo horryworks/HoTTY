@@ -381,9 +381,10 @@ impl SessionService for SshSession {
                 .map_err(|e| SessionError::ConnectionFailed(format!("{e}")))?
         };
 
-        try_authenticate(&mut handle, &self.config).await?;
+        let auth_result = try_authenticate(&mut handle, &self.config).await;
 
-        // Zeroize credentials after successful authentication
+        // Zeroize credentials immediately after the auth attempt — whether it
+        // succeeded or failed — so plaintext secrets do not linger in memory.
         use zeroize::Zeroize;
         if let Some(ref mut pw) = self.config.password {
             pw.zeroize();
@@ -393,6 +394,8 @@ impl SessionService for SshSession {
             pp.zeroize();
         }
         self.config.private_key_passphrase = None;
+
+        auth_result?;
 
         let channel = handle
             .channel_open_session()

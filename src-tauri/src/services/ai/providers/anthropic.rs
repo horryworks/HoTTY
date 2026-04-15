@@ -409,12 +409,14 @@ impl AIProvider for AnthropicProvider {
         }
 
         // Send done event if we got a response
-        if !cancel_token.is_cancelled() && !full_response.is_empty() {
-            if let Some(history) = self.chat_histories.get_mut(&sid) {
-                history.push(ChatMessage {
-                    role: "assistant".into(),
-                    content: full_response.clone(),
-                });
+        if !cancel_token.is_cancelled() {
+            if !full_response.is_empty() {
+                if let Some(history) = self.chat_histories.get_mut(&sid) {
+                    history.push(ChatMessage {
+                        role: "assistant".into(),
+                        content: full_response.clone(),
+                    });
+                }
             }
 
             let usage_metadata = TokenUsage {

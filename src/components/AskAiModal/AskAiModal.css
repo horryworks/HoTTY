@@ -102,7 +102,7 @@
 .ask-ai-modal-footer {
     display: flex;
     justify-content: flex-end;
-    gap: 12px;
+    gap: 8px;
     padding: 12px 16px;
     border-top: 1px solid var(--border-color);
     border-bottom-left-radius: 6px;
@@ -113,7 +113,7 @@
     background: var(--btn-secondary-bg);
     color: var(--text-primary);
     border: none;
-    padding: 6px 20px;
+    padding: 6px 16px;
     border-radius: 4px;
     cursor: pointer;
     font-size: calc(var(--font-size-base) - 1px);
