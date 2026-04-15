@@ -41,13 +41,13 @@ export function AboutTab() {
 
       <p style={{ margin: '0 0 16px 0' }}>
         <a
-          href="https://github.com/horryworks/HoTTY-Rust-Tauri"
+          href="https://github.com/horryworks/HoTTY"
           className="about-link"
           onClick={(e) =>
-            handleLink(e, 'https://github.com/horryworks/HoTTY-Rust-Tauri')
+            handleLink(e, 'https://github.com/horryworks/HoTTY')
           }
         >
-          https://github.com/horryworks/HoTTY-Rust-Tauri
+          https://github.com/horryworks/HoTTY
         </a>
       </p>
 

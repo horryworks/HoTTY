@@ -38,10 +38,10 @@ describe('AboutTab', () => {
 
   it('opens the GitHub link via tauriService.openExternal', () => {
     render(<AboutTab />);
-    const ghLink = screen.getByText('https://github.com/horryworks/HoTTY-Rust-Tauri');
+    const ghLink = screen.getByText('https://github.com/horryworks/HoTTY');
     fireEvent.click(ghLink);
     expect(mockOpenExternal).toHaveBeenCalledWith(
-      'https://github.com/horryworks/HoTTY-Rust-Tauri'
+      'https://github.com/horryworks/HoTTY'
     );
   });
 

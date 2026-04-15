@@ -7,7 +7,7 @@ import {
 } from '@tauri-apps/plugin-clipboard-manager';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { ask as dialogAsk } from '@tauri-apps/plugin-dialog';
-import { open as shellOpen } from '@tauri-apps/plugin-shell';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import type {
   ProtocolId,
   SshConnectionConfig,
@@ -395,7 +395,7 @@ export const tauriService = {
   },
 
   async openExternal(url: string): Promise<void> {
-    await shellOpen(url);
+    await openUrl(url);
   },
 
   // -----------------------------------------------------------------------

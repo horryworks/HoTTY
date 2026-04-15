@@ -19,7 +19,14 @@
     "core:window:allow-destroy",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
-    "opener:allow-open-url",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://*" },
+        { "url": "http://*" },
+        { "url": "mailto:*" }
+      ]
+    },
     "log:default"
   ]
 }
