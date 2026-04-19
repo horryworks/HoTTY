@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "HoTTY",
-  "version": "2.0.0-beta6",
+  "version": "2.0.0-beta7",
   "identifier": "com.hotty.terminal",
   "build": {
     "frontendDist": "../dist",
@@ -31,6 +31,11 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "windows": {
+      "nsis": {
+        "template": "installer.nsi"
+      }
+    },
     "resources": [
       "resources/*"
     ],

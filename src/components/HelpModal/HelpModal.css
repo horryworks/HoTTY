@@ -2,7 +2,7 @@
   position: fixed;
   max-width: 550px;
   max-height: 80vh;
-  z-index: 10001;
+  z-index: 10000;
   animation: fadeIn 0.1s ease-out;
 }
 
