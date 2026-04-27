@@ -4,9 +4,10 @@ import { FitAddon } from '@xterm/addon-fit';
 import { tauriService } from '../services/tauriService';
 import { useSettingsStore } from '../stores/settingsStore';
 import { TERMINAL_SEQUENCES } from '../constants/terminalSequences';
+import { logError } from '../utils/logger';
 import type {
   ProtocolId,
-  SessionStatus,
+  SessionRecordStatus,
   SshConnectionConfig,
   TelnetConnectionConfig,
   SerialConnectionConfig,
@@ -18,7 +19,7 @@ export interface SessionRecord {
   id: string;
   displayName: string;
   protocol: ProtocolId;
-  status: SessionStatus | 'connecting' | 'error';
+  status: SessionRecordStatus;
   errorMessage?: string;
   term: Terminal;
   fitAddon: FitAddon;
@@ -65,23 +66,46 @@ export function handleTerminalKey(
   return true;
 }
 
+// Delay before a connection-failure tab is auto-removed. Brief enough to feel
+// responsive, long enough that the user notices the tab flash to the
+// connecting-failure color before it disappears.
+export const CONNECT_FAILURE_AUTO_CLOSE_MS = 1500;
+
+// Delay before a tab is auto-removed after the session ends (clean exit, remote
+// close, mid-session error). Lets the user see any final output ("logout",
+// "Connection closed.") before the tab disappears.
+export const SESSION_END_AUTO_CLOSE_MS = 1500;
+
 export interface UseSessionManagerOptions {
   onPasteRequest?: (sessionId: string) => void;
+  onSessionRemoved?: (sessionId: string) => void;
 }
 
 export function useSessionManager(options: UseSessionManagerOptions = {}) {
   const onPasteRequestRef = useRef(options.onPasteRequest);
-  onPasteRequestRef.current = options.onPasteRequest;
+  const onSessionRemovedRef = useRef(options.onSessionRemoved);
+  useEffect(() => {
+    onPasteRequestRef.current = options.onPasteRequest;
+    onSessionRemovedRef.current = options.onSessionRemoved;
+  });
 
   const [sessions, setSessions] = useState<Map<string, SessionRecord>>(
     () => new Map()
   );
   const sessionsRef = useRef(sessions);
-  sessionsRef.current = sessions;
 
   const settings = useSettingsStore();
   const settingsRef = useRef(settings);
-  settingsRef.current = settings;
+
+  useEffect(() => {
+    sessionsRef.current = sessions;
+    settingsRef.current = settings;
+  });
+
+  // Pending auto-close timers for sessions that failed during initial connect.
+  // Keyed by sessionId so duplicate failure paths (catch + onSessionError event)
+  // don't schedule two timers for the same id.
+  const autoCloseTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Sync logging settings changes to the backend for active sessions.
   const loggingEnabled = settings.loggingEnabled;
@@ -108,6 +132,40 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
     }
   }, [lineWrapEnabled]);
 
+  // Drop a session record (terminal disposal, map removal) and notify the host
+  // app via onSessionRemoved so layout/pane state can be cleaned up.
+  const finalizeRemoval = useCallback((id: string) => {
+    setSessions((prev) => {
+      const next = new Map(prev);
+      const rec = next.get(id);
+      if (rec) {
+        rec.term.dispose();
+        next.delete(id);
+      }
+      return next;
+    });
+    onSessionRemovedRef.current?.(id);
+  }, []);
+
+  // Schedule auto-close for a session — used both for connection-phase failures
+  // and for normal/error session end. Idempotent: calling twice for the same id
+  // (e.g. duplicate failure paths or repeated `disconnected` events) does not
+  // stack timers.
+  const scheduleAutoClose = useCallback(
+    (id: string, delayMs: number) => {
+      if (autoCloseTimersRef.current.has(id)) return;
+      const timer = setTimeout(() => {
+        autoCloseTimersRef.current.delete(id);
+        // Best-effort backend cleanup; if the session already ended on the
+        // backend (clean exit, remote close) this becomes a no-op.
+        tauriService.disconnectSession(id).catch(() => { /* ignore */ });
+        finalizeRemoval(id);
+      }, delayMs);
+      autoCloseTimersRef.current.set(id, timer);
+    },
+    [finalizeRemoval]
+  );
+
   // Global event subscriptions — one set for the whole app.
   useEffect(() => {
     let cancelled = false;
@@ -121,7 +179,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
           unlisteners.push(fn);
         }
       }).catch((e) => {
-        console.error('Failed to set up session event listener:', e);
+        logError('Session', 'Failed to set up session event listener', e);
       });
     };
 
@@ -144,30 +202,50 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
 
     track(
       tauriService.onSessionStatus(({ sessionId, status }) => {
-        setSessions((prev) => {
-          const next = new Map(prev);
+        const prev = sessionsRef.current.get(sessionId);
+        setSessions((p) => {
+          const next = new Map(p);
           const rec = next.get(sessionId);
           if (rec) next.set(sessionId, { ...rec, status });
           return next;
         });
+        // Auto-close on session end (exit, remote close, mid-session error).
+        // The 'connecting' → 'disconnected' case is owned by the connect-failure
+        // path triggered from onSessionError, so skip it here.
+        if (
+          status === 'disconnected' &&
+          prev &&
+          (prev.status === 'connected' || prev.status === 'error')
+        ) {
+          scheduleAutoClose(sessionId, SESSION_END_AUTO_CLOSE_MS);
+        }
       })
     );
 
     track(
       tauriService.onSessionError(({ sessionId, error }) => {
+        const rec = sessionsRef.current.get(sessionId);
+        if (!rec) return;
+        // Read displayName before scheduling the state update, since the
+        // updater runs asynchronously.
+        const displayName = rec.displayName;
+        const wasConnecting = rec.status === 'connecting';
         setSessions((prev) => {
           const next = new Map(prev);
-          const rec = next.get(sessionId);
-          if (rec) {
+          const r = next.get(sessionId);
+          if (r) {
             next.set(sessionId, {
-              ...rec,
+              ...r,
               status: 'error',
               errorMessage: error,
             });
-            rec.term.write(`\r\n\x1b[31m[error] ${error}\x1b[0m\r\n`);
           }
           return next;
         });
+        logError('Session', displayName ? `${displayName}: ${error}` : error);
+        if (wasConnecting) {
+          scheduleAutoClose(sessionId, CONNECT_FAILURE_AUTO_CLOSE_MS);
+        }
       })
     );
 
@@ -175,10 +253,19 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       cancelled = true;
       for (const u of unlisteners) u();
     };
+  }, [scheduleAutoClose]);
+
+  // Cancel any pending auto-close timers on unmount.
+  useEffect(() => {
+    const timers = autoCloseTimersRef.current;
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+    };
   }, []);
 
   const openSession = useCallback(
-    async (req: OpenRequest): Promise<string> => {
+    (req: OpenRequest): string => {
       const id = makeSessionId();
       const s = settingsRef.current;
       const term = new Terminal({
@@ -235,33 +322,56 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
         return next;
       });
 
-      try {
-        await tauriService.connectSession(
+      // Fire-and-forget: caller gets the id immediately so the tab can render
+      // in the connecting state. Success transitions to 'connected' via the
+      // onSessionStatus listener; failure is handled here and (redundantly via
+      // onSessionError) by surfacing a toast and scheduling the auto-close.
+      tauriService
+        .connectSession(
           id,
           req.protocol,
           req.config,
           s.loggingEnabled,
           s.loggingPath,
-        );
-      } catch (e) {
-        setSessions((prev) => {
-          const next = new Map(prev);
-          const r = next.get(id);
-          if (r)
-            next.set(id, {
-              ...r,
-              status: 'error',
-              errorMessage: String(e),
-            });
-          return next;
+        )
+        .catch((e) => {
+          const errStr = String(e);
+          const current = sessionsRef.current.get(id);
+          if (!current) {
+            // Already cleaned up (manual close, etc.) — nothing to do.
+            return;
+          }
+          const wasConnecting = current.status === 'connecting';
+          setSessions((prev) => {
+            const next = new Map(prev);
+            const r = next.get(id);
+            if (r) {
+              next.set(id, {
+                ...r,
+                status: 'error',
+                errorMessage: errStr,
+              });
+            }
+            return next;
+          });
+          logError('Session', `${req.displayName}: ${errStr}`);
+          if (wasConnecting) {
+            scheduleAutoClose(id, CONNECT_FAILURE_AUTO_CLOSE_MS);
+          }
         });
-      }
+
       return id;
     },
-    []
+    [scheduleAutoClose]
   );
 
   const closeSession = useCallback(async (id: string) => {
+    // Cancel any pending auto-close so it doesn't fire after manual close.
+    const pending = autoCloseTimersRef.current.get(id);
+    if (pending) {
+      clearTimeout(pending);
+      autoCloseTimersRef.current.delete(id);
+    }
     try {
       await tauriService.disconnectSession(id);
     } catch {

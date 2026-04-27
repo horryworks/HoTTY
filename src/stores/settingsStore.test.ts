@@ -14,6 +14,12 @@ describe('settingsStore', () => {
     expect(s.sshKeepAliveInterval).toBe(SETTINGS_DEFAULTS.sshKeepAliveInterval);
   });
 
+  it('defaults SSH and Telnet connect timeouts to 3 seconds', () => {
+    const s = useSettingsStore.getState();
+    expect(s.sshConnectTimeoutSecs).toBe(3);
+    expect(s.telnetConnectTimeoutSecs).toBe(3);
+  });
+
   it('update mutates a single key', () => {
     useSettingsStore.getState().update('fontSize', 20);
     expect(useSettingsStore.getState().fontSize).toBe(20);

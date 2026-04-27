@@ -7,6 +7,8 @@ export type LayoutMode = '1x1' | '1x2' | '2x1' | '2x2' | '2x3' | '3x2';
 
 export type SessionStatus = 'connected' | 'disconnected';
 
+export type SessionRecordStatus = SessionStatus | 'connecting' | 'error';
+
 export interface BaseConnectionConfig {
   host: string;
   port: number;
@@ -14,6 +16,7 @@ export interface BaseConnectionConfig {
   password?: string;
   encoding: Encoding;
   keepaliveIntervalSecs: number;
+  connectTimeoutSecs: number;
 }
 
 export interface SshConnectionConfig extends BaseConnectionConfig {

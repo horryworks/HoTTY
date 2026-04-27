@@ -514,6 +514,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         const globalEncoding = useSettingsStore.getState().globalEncoding;
         const sshKeepAlive = settings.sshKeepAliveEnabled ? settings.sshKeepAliveInterval : 0;
         const telnetKeepAlive = settings.telnetKeepAliveEnabled ? settings.telnetKeepAliveInterval : 0;
+        const sshConnectTimeout = settings.sshConnectTimeoutSecs;
+        const telnetConnectTimeout = settings.telnetConnectTimeoutSecs;
 
         let payload: ConnectSubmitPayload;
         if (e.protocol === 'ssh') {
@@ -524,6 +526,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 password: p || undefined,
                 encoding: globalEncoding,
                 keepaliveIntervalSecs: sshKeepAlive,
+                connectTimeoutSecs: sshConnectTimeout,
             };
             payload = { displayName: node.name, protocol: 'ssh', config };
         } else {
@@ -534,11 +537,12 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 password: p || undefined,
                 encoding: globalEncoding,
                 keepaliveIntervalSecs: telnetKeepAlive,
+                connectTimeoutSecs: telnetConnectTimeout,
             };
             payload = { displayName: node.name, protocol: 'telnet', config };
         }
         onConnect(payload);
-    }, [onConnect, settings.sshKeepAliveEnabled, settings.sshKeepAliveInterval, settings.telnetKeepAliveEnabled, settings.telnetKeepAliveInterval]);
+    }, [onConnect, settings.sshKeepAliveEnabled, settings.sshKeepAliveInterval, settings.telnetKeepAliveEnabled, settings.telnetKeepAliveInterval, settings.sshConnectTimeoutSecs, settings.telnetConnectTimeoutSecs]);
 
     // --- Dirty check ---
     const isDirty = originalState !== null && (
@@ -663,6 +667,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
 
         const sshKeepAlive = settings.sshKeepAliveEnabled ? settings.sshKeepAliveInterval : 0;
         const telnetKeepAlive = settings.telnetKeepAliveEnabled ? settings.telnetKeepAliveInterval : 0;
+        const sshConnectTimeout = settings.sshConnectTimeoutSecs;
+        const telnetConnectTimeout = settings.telnetConnectTimeoutSecs;
         const buildName = (): string => {
             if (displayName) return displayName;
             switch (protocol) {
@@ -695,6 +701,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     privateKeyPassphrase: privateKeyPassphrase || undefined,
                     encoding,
                     keepaliveIntervalSecs: sshKeepAlive,
+                    connectTimeoutSecs: sshConnectTimeout,
                 };
                 onConnect({ displayName: buildName(), protocol, config });
                 break;
@@ -707,6 +714,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     password: finalP || undefined,
                     encoding,
                     keepaliveIntervalSecs: telnetKeepAlive,
+                    connectTimeoutSecs: telnetConnectTimeout,
                 };
                 onConnect({ displayName: buildName(), protocol, config });
                 break;

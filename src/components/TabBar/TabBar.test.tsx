@@ -264,6 +264,35 @@ describe('TabBar', () => {
     );
     expect(container.querySelector('.tab.gemini-linked-tab')).toBeNull();
   });
+
+  it('adds connecting class when status is connecting', () => {
+    const items = [makeTabItem('s-1', { status: 'connecting' })];
+    const { container } = render(
+      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} />
+    );
+    const tab = container.querySelector('.tab');
+    expect(tab?.classList.contains('connecting')).toBe(true);
+    expect(tab?.classList.contains('error')).toBe(false);
+  });
+
+  it('does not add connecting class when status is connected', () => {
+    const items = [makeTabItem('s-1', { status: 'connected' })];
+    const { container } = render(
+      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} />
+    );
+    const tab = container.querySelector('.tab');
+    expect(tab?.classList.contains('connecting')).toBe(false);
+  });
+
+  it('connecting and error are mutually exclusive on a tab', () => {
+    const items = [makeTabItem('s-1', { status: 'error' })];
+    const { container } = render(
+      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} />
+    );
+    const tab = container.querySelector('.tab');
+    expect(tab?.classList.contains('error')).toBe(true);
+    expect(tab?.classList.contains('connecting')).toBe(false);
+  });
 });
 
 describe('buildTabItems', () => {

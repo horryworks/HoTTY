@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 // --- Mocks ---
 
-const mockOpenSession = vi.fn().mockResolvedValue('sess-1');
+const mockOpenSession = vi.fn().mockReturnValue('sess-1');
 const mockCloseSession = vi.fn().mockResolvedValue(undefined);
 vi.mock('./hooks/useSessionManager', () => ({
   useSessionManager: () => ({
@@ -169,7 +169,7 @@ import { useSettingsStore } from './stores/settingsStore';
 describe('App', () => {
   beforeEach(() => {
     useSettingsStore.getState().reset();
-    mockOpenSession.mockReset().mockResolvedValue('sess-1');
+    mockOpenSession.mockReset().mockReturnValue('sess-1');
     mockCloseSession.mockReset().mockResolvedValue(undefined);
   });
 

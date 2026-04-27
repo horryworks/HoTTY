@@ -94,6 +94,27 @@
   color: var(--color-danger);
 }
 
+.tab.connecting {
+  background-color: var(--tab-connecting-bg);
+  color: var(--tab-connecting-text);
+  animation: tab-connecting-pulse 1.6s infinite ease-in-out;
+}
+
+.tab.connecting.active,
+.tab.connecting.active-pane-tab {
+  background-color: var(--tab-connecting-bg);
+  color: var(--tab-connecting-text);
+}
+
+@keyframes tab-connecting-pulse {
+  0%, 100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.18);
+  }
+}
+
 .tab-label {
   flex: 1;
   white-space: nowrap;

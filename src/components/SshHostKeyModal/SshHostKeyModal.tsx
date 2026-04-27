@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { tauriService } from '../../services/tauriService';
+import { logError } from '../../utils/logger';
 import type { SshHostKeyPromptPayload } from '../../types/appTypes';
 import './SshHostKeyModal.css';
 
@@ -11,7 +12,7 @@ export function SshHostKeyModal() {
     tauriService.onSshHostKeyPrompt((p) => setPrompt(p)).then((fn) => {
       unlisten = fn;
     }).catch((e) => {
-      console.error('Failed to listen for SSH host key prompts:', e);
+      logError('SSH', 'Failed to listen for host key prompts', e);
     });
     return () => {
       unlisten?.();

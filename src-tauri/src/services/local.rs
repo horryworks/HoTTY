@@ -176,7 +176,7 @@ impl SessionService for LocalSession {
         }
         cmd.env("TERM", "xterm-256color");
 
-        let _child = pty_pair
+        let child = pty_pair
             .slave
             .spawn_command(cmd)
             .map_err(|e| SessionError::ConnectionFailed(format!("failed to spawn shell: {e}")))?;
@@ -200,6 +200,36 @@ impl SessionService for LocalSession {
         self.writer_tx = Some(tx);
 
         emit_session_status(&app, &session_id, "connected");
+
+        // --- Child watcher task ---
+        // On Windows ConPTY, the master reader may not get EOF when the shell
+        // exits unless we actively wait on the child process. Spawn a watcher
+        // that blocks on child.wait() and emits disconnected when the shell
+        // terminates (e.g. user types `exit`). This is the authoritative
+        // source for session-end on Windows; the reader's Ok(0) path remains
+        // as a fallback for platforms where EOF propagates correctly.
+        let log_mgr: super::log_manager::LogManager =
+            app.state::<super::log_manager::LogManager>().inner().clone();
+        let app_w = app.clone();
+        let sid_w = session_id.clone();
+        let log_mgr_w = log_mgr.clone();
+        let watcher_join = tokio::spawn(async move {
+            let exit_result = tokio::task::spawn_blocking(move || {
+                let mut child = child;
+                child.wait()
+            })
+            .await;
+            match exit_result {
+                Ok(Ok(status)) => {
+                    log::info!("local {sid_w}: shell exited: {status:?}")
+                }
+                Ok(Err(e)) => log::warn!("local {sid_w}: child.wait error: {e}"),
+                Err(e) => log::warn!("local {sid_w}: child wait task error: {e}"),
+            }
+            log_mgr_w.stop_logging(&sid_w).await;
+            emit_session_status(&app_w, &sid_w, "disconnected");
+        });
+        self.join.push(watcher_join);
 
         // --- Writer task ---
         let master_for_resize = master.clone();
@@ -232,7 +262,6 @@ impl SessionService for LocalSession {
         let encoding = self.encoding;
         let app_r = app.clone();
         let sid = session_id.clone();
-        let log_mgr: super::log_manager::LogManager = app.state::<super::log_manager::LogManager>().inner().clone();
 
         let reader_join = tokio::spawn(async move {
             log::info!("local reader task started for {sid}");

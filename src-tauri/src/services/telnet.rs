@@ -46,12 +46,18 @@ pub struct TelnetConfig {
     pub encoding: String,
     #[serde(default)]
     pub keepalive_interval_secs: u32,
+    #[serde(default = "default_connect_timeout_secs")]
+    pub connect_timeout_secs: u32,
     #[serde(default)]
     pub jumpbox: Option<JumpboxConfig>,
 }
 
 fn default_encoding() -> String {
     "utf8".to_string()
+}
+
+fn default_connect_timeout_secs() -> u32 {
+    3
 }
 
 impl TelnetConfig {
@@ -278,6 +284,7 @@ impl SessionService for TelnetSession {
                 jumpbox_cfg,
                 &self.config.host,
                 self.config.port,
+                self.config.connect_timeout_secs,
             )
             .await?;
             let (jumpbox_handle, stream) = tunnel.into_stream();
@@ -286,11 +293,27 @@ impl SessionService for TelnetSession {
             (Box::new(r), Box::new(w))
         } else {
             let addr = format!("{}:{}", self.config.host, self.config.port);
-            log::info!("telnet: connecting to {addr} (session {session_id})");
-            let stream = TcpStream::connect(&addr).await.map_err(|e| {
-                log::error!("telnet: TcpStream::connect({addr}) failed: {e}");
-                SessionError::ConnectionFailed(format!("{addr}: {e}"))
-            })?;
+            let timeout = Duration::from_secs(self.config.connect_timeout_secs.max(1) as u64);
+            log::info!(
+                "telnet: connecting to {addr} (session {session_id}, timeout {}s)",
+                self.config.connect_timeout_secs
+            );
+            let stream = tokio::time::timeout(timeout, TcpStream::connect(&addr))
+                .await
+                .map_err(|_| {
+                    log::error!(
+                        "telnet: TcpStream::connect({addr}) timed out after {}s",
+                        self.config.connect_timeout_secs
+                    );
+                    SessionError::ConnectionFailed(format!(
+                        "{addr}: timed out after {}s",
+                        self.config.connect_timeout_secs
+                    ))
+                })?
+                .map_err(|e| {
+                    log::error!("telnet: TcpStream::connect({addr}) failed: {e}");
+                    SessionError::ConnectionFailed(format!("{addr}: {e}"))
+                })?;
             log::info!("telnet: TCP connected to {addr}");
             let (r, w) = stream.into_split();
             (Box::new(r), Box::new(w))

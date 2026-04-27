@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { STORAGE_KEYS } from '../constants/storage';
 import { tauriService, isEncrypted } from '../services/tauriService';
+import { logError } from '../utils/logger';
 import type { HostTreeNode, HostEntry } from '../types/appTypes';
 
 const STORAGE_KEY = STORAGE_KEYS.HOST_TREE;
@@ -57,7 +59,7 @@ async function encryptBatch(values: (string | undefined)[]): Promise<(string | u
         }
         return result;
     } catch (err) {
-        console.error('[HostManager] Failed to batch encrypt credentials:', err);
+        logError('HostManager', 'Failed to batch encrypt credentials', err);
         return values;
     }
 }
@@ -88,7 +90,7 @@ export async function decryptBatch(values: (string | undefined)[]): Promise<(str
         }
         return result;
     } catch (err) {
-        console.error('[HostManager] Failed to batch decrypt credentials:', err);
+        logError('HostManager', 'Failed to batch decrypt credentials', err);
         return values;
     }
 }
@@ -292,7 +294,7 @@ export function useHostManager() {
                         });
                     const plaintextNodes = replacePlaintext(nodes);
                     encryptTree(plaintextNodes).then(saveRawTree).catch(err => {
-                        console.error('[HostManager] Migration re-encryption failed:', err);
+                        logError('HostManager', 'Migration re-encryption failed', err);
                     });
                 }
             }
@@ -311,7 +313,7 @@ export function useHostManager() {
         };
 
         eagerDecryptTree(raw).catch(err => {
-            console.error('[HostManager] Background eager decryption failed:', err);
+            logError('HostManager', 'Background eager decryption failed', err);
         });
     }, []);
 
@@ -328,11 +330,14 @@ export function useHostManager() {
             name,
             children: [],
         };
-        setTree(prev => {
-            const next = insertNode(prev, parentId, node);
-            encryptTree(next).then(saveRawTree);
-            return next;
+        let next: HostTreeNode[] = [];
+        flushSync(() => {
+            setTree(prev => {
+                next = insertNode(prev, parentId, node);
+                return next;
+            });
         });
+        encryptTree(next).then(saveRawTree);
         return node.id;
     }, []);
 
@@ -343,39 +348,46 @@ export function useHostManager() {
             name,
             entry,
         };
-        setTree(prev => {
-            const next = insertNode(prev, parentId, node);
-            encryptTree(next).then(saveRawTree);
-            return next;
+        let next: HostTreeNode[] = [];
+        flushSync(() => {
+            setTree(prev => {
+                next = insertNode(prev, parentId, node);
+                return next;
+            });
         });
+        encryptTree(next).then(saveRawTree);
         return node.id;
     }, []);
 
     const editNode = useCallback((id: string, patch: Partial<HostTreeNode>) => {
-        setTree(prev => {
-            const next = patchNode(prev, id, patch);
-
-            const patchedNode = flattenHosts(next).find(n => n.id === id);
-            if (patchedNode?.type === 'host' && patchedNode.entry) {
-                if (patch.entry?.username && !isEncrypted(patch.entry.username)) {
-                    setCachedCredential(id, { username: patch.entry.username });
-                }
-                if (patch.entry?.password && !isEncrypted(patch.entry.password)) {
-                    setCachedCredential(id, { password: patch.entry.password });
-                }
-            }
-
-            encryptTree(next).then(saveRawTree);
-            return next;
+        let next: HostTreeNode[] = [];
+        flushSync(() => {
+            setTree(prev => {
+                next = patchNode(prev, id, patch);
+                return next;
+            });
         });
+        const patchedNode = flattenHosts(next).find(n => n.id === id);
+        if (patchedNode?.type === 'host' && patchedNode.entry) {
+            if (patch.entry?.username && !isEncrypted(patch.entry.username)) {
+                setCachedCredential(id, { username: patch.entry.username });
+            }
+            if (patch.entry?.password && !isEncrypted(patch.entry.password)) {
+                setCachedCredential(id, { password: patch.entry.password });
+            }
+        }
+        encryptTree(next).then(saveRawTree);
     }, []);
 
     const deleteNode = useCallback((id: string) => {
-        setTree(prev => {
-            const next = removeNode(prev, id);
-            encryptTree(next).then(saveRawTree);
-            return next;
+        let next: HostTreeNode[] = [];
+        flushSync(() => {
+            setTree(prev => {
+                next = removeNode(prev, id);
+                return next;
+            });
         });
+        encryptTree(next).then(saveRawTree);
     }, []);
 
     const saveTree = useCallback((newTree: HostTreeNode[]) => {
@@ -383,100 +395,109 @@ export function useHostManager() {
     }, [persistAndSet]);
 
     const moveNode = useCallback((nodeId: string, targetId: string, position: 'before' | 'after' | 'inside') => {
-        setTree(prev => {
-            const findNode = (nodes: HostTreeNode[]): HostTreeNode | null => {
-                for (const n of nodes) {
-                    if (n.id === nodeId) return n;
-                    if (n.children) {
-                        const found = findNode(n.children);
-                        if (found) return found;
+        let next: HostTreeNode[] = [];
+        let changed = false;
+        flushSync(() => {
+            setTree(prev => {
+                const findNode = (nodes: HostTreeNode[]): HostTreeNode | null => {
+                    for (const n of nodes) {
+                        if (n.id === nodeId) return n;
+                        if (n.children) {
+                            const found = findNode(n.children);
+                            if (found) return found;
+                        }
                     }
+                    return null;
+                };
+
+                const isDescendant = (parentNode: HostTreeNode, childId: string): boolean => {
+                    if (!parentNode.children) return false;
+                    for (const child of parentNode.children) {
+                        if (child.id === childId) return true;
+                        if (isDescendant(child, childId)) return true;
+                    }
+                    return false;
+                };
+
+                const movingNode = findNode(prev);
+                if (!movingNode) { next = prev; return prev; }
+                if (nodeId === targetId) { next = prev; return prev; }
+                if (isDescendant(movingNode, targetId)) { next = prev; return prev; }
+
+                const treeWithoutNode = removeNode(prev, nodeId);
+
+                if (position === 'inside') {
+                    const insertInside = (nodes: HostTreeNode[]): HostTreeNode[] => {
+                        return nodes.map(n => {
+                            if (n.id === targetId && n.type === 'folder') {
+                                return { ...n, children: [...(n.children ?? []), movingNode] };
+                            }
+                            if (n.children) {
+                                return { ...n, children: insertInside(n.children) };
+                            }
+                            return n;
+                        });
+                    };
+                    next = insertInside(treeWithoutNode);
+                    changed = true;
+                    return next;
                 }
-                return null;
-            };
 
-            const isDescendant = (parentNode: HostTreeNode, childId: string): boolean => {
-                if (!parentNode.children) return false;
-                for (const child of parentNode.children) {
-                    if (child.id === childId) return true;
-                    if (isDescendant(child, childId)) return true;
+                const insertAtPosition = (nodes: HostTreeNode[]): HostTreeNode[] => {
+                    const result: HostTreeNode[] = [];
+                    for (const n of nodes) {
+                        if (n.id === targetId) {
+                            if (position === 'before') {
+                                result.push(movingNode, n);
+                            } else {
+                                result.push(n, movingNode);
+                            }
+                        } else {
+                            if (n.children) {
+                                result.push({ ...n, children: insertAtPosition(n.children) });
+                            } else {
+                                result.push(n);
+                            }
+                        }
+                    }
+                    return result;
+                };
+                next = insertAtPosition(treeWithoutNode);
+                changed = true;
+                return next;
+            });
+        });
+        if (changed) {
+            encryptTree(next).then(saveRawTree);
+        }
+    }, []);
+
+    const sortFolder = useCallback((folderId: string | null) => {
+        let next: HostTreeNode[] = [];
+        flushSync(() => {
+            setTree(prev => {
+                if (folderId === null) {
+                    next = sortNodes(prev);
+                    return next;
                 }
-                return false;
-            };
 
-            const movingNode = findNode(prev);
-            if (!movingNode) return prev;
-            if (nodeId === targetId) return prev;
-            if (isDescendant(movingNode, targetId)) return prev;
-
-            const treeWithoutNode = removeNode(prev, nodeId);
-
-            if (position === 'inside') {
-                const insertInside = (nodes: HostTreeNode[]): HostTreeNode[] => {
+                const sortInTree = (nodes: HostTreeNode[]): HostTreeNode[] => {
                     return nodes.map(n => {
-                        if (n.id === targetId && n.type === 'folder') {
-                            return { ...n, children: [...(n.children ?? []), movingNode] };
+                        if (n.id === folderId && n.type === 'folder') {
+                            return { ...n, children: sortNodes(n.children ?? []) };
                         }
                         if (n.children) {
-                            return { ...n, children: insertInside(n.children) };
+                            return { ...n, children: sortInTree(n.children) };
                         }
                         return n;
                     });
                 };
-                const next = insertInside(treeWithoutNode);
-                encryptTree(next).then(saveRawTree);
+
+                next = sortInTree(prev);
                 return next;
-            }
-
-            const insertAtPosition = (nodes: HostTreeNode[]): HostTreeNode[] => {
-                const result: HostTreeNode[] = [];
-                for (const n of nodes) {
-                    if (n.id === targetId) {
-                        if (position === 'before') {
-                            result.push(movingNode, n);
-                        } else {
-                            result.push(n, movingNode);
-                        }
-                    } else {
-                        if (n.children) {
-                            result.push({ ...n, children: insertAtPosition(n.children) });
-                        } else {
-                            result.push(n);
-                        }
-                    }
-                }
-                return result;
-            };
-            const next = insertAtPosition(treeWithoutNode);
-            encryptTree(next).then(saveRawTree);
-            return next;
+            });
         });
-    }, []);
-
-    const sortFolder = useCallback((folderId: string | null) => {
-        setTree(prev => {
-            if (folderId === null) {
-                const next = sortNodes(prev);
-                encryptTree(next).then(saveRawTree);
-                return next;
-            }
-
-            const sortInTree = (nodes: HostTreeNode[]): HostTreeNode[] => {
-                return nodes.map(n => {
-                    if (n.id === folderId && n.type === 'folder') {
-                        return { ...n, children: sortNodes(n.children ?? []) };
-                    }
-                    if (n.children) {
-                        return { ...n, children: sortInTree(n.children) };
-                    }
-                    return n;
-                });
-            };
-
-            const next = sortInTree(prev);
-            encryptTree(next).then(saveRawTree);
-            return next;
-        });
+        encryptTree(next).then(saveRawTree);
     }, []);
 
     const importData = useCallback(async (nodes: HostTreeNode[], folderName: string = 'Imported', parentId: string | null = null): Promise<string> => {
@@ -510,22 +531,24 @@ export function useHostManager() {
         const importedNodes = reassignIds(nodes);
         const targetFolderId = parentId || generateId();
 
-        setTree(prev => {
-            let next: HostTreeNode[];
-            if (parentId) {
-                next = insertNodes(prev, parentId, importedNodes);
-            } else {
-                const importedFolder: HostTreeNode = {
-                    id: targetFolderId,
-                    type: 'folder',
-                    name: folderName,
-                    children: importedNodes
-                };
-                next = [...prev, importedFolder];
-            }
-            encryptTree(next).then(saveRawTree);
-            return next;
+        let next: HostTreeNode[] = [];
+        flushSync(() => {
+            setTree(prev => {
+                if (parentId) {
+                    next = insertNodes(prev, parentId, importedNodes);
+                } else {
+                    const importedFolder: HostTreeNode = {
+                        id: targetFolderId,
+                        type: 'folder',
+                        name: folderName,
+                        children: importedNodes
+                    };
+                    next = [...prev, importedFolder];
+                }
+                return next;
+            });
         });
+        encryptTree(next).then(saveRawTree);
 
         return targetFolderId;
     }, []);

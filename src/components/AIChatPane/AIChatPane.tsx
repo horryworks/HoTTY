@@ -13,6 +13,7 @@ import { AnthropicAuthPanel } from './AnthropicAuthPanel';
 import { SystemPromptModal } from '../SystemPromptModal/SystemPromptModal';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { tauriService } from '../../services/tauriService';
+import { logError } from '../../utils/logger';
 import type { AiChatState } from '../../hooks/useAiChat';
 import type { PersonaDefinition, AIModelInfo } from '../../types/appTypes';
 import './AIChatPane.css';
@@ -340,7 +341,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     }
                 }
             } catch (err) {
-                console.error('Failed to auto-auth:', err);
+                logError('AI', 'Failed to auto-auth', err);
                 setIsAuthLoading(false);
             }
         };
@@ -459,7 +460,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             }
         }).then(fn => {
             if (cancelled) { fn(); } else { unlisten = fn; }
-        }).catch(console.error);
+        }).catch(e => logError('AI', 'Response listener setup failed', e));
 
         return () => { cancelled = true; unlisten?.(); };
     }, [paneId]);
@@ -482,7 +483,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             }
         }).then(fn => {
             if (cancelled) { fn(); } else { unlisten = fn; }
-        }).catch(console.error);
+        }).catch(e => logError('AI', 'Auth result listener setup failed', e));
 
         return () => { cancelled = true; unlisten?.(); };
     }, []);
@@ -647,7 +648,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             localStorage.setItem(STORAGE_KEYS.GEMINI_CLIENT_ID, encId);
             localStorage.setItem(STORAGE_KEYS.GEMINI_CLIENT_SECRET, encSecret);
         } catch (err) {
-            console.error('Failed to encrypt Gemini credentials:', err);
+            logError('AI', 'Failed to encrypt Gemini credentials', err);
         }
         await tauriService.aiSetProvider('gemini');
         await tauriService.aiAuthStart({ clientId, clientSecret });

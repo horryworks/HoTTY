@@ -6,6 +6,7 @@ import { AppSidebar } from './components/AppSidebar/AppSidebar';
 import { TabBar } from './components/TabBar/TabBar';
 import { buildTabItems } from './components/TabBar/tabBarHelpers';
 import { TerminalView } from './components/Terminal/Terminal';
+import { ConnectingOverlay } from './components/ConnectingOverlay/ConnectingOverlay';
 import { LogViewerPane } from './components/LogViewerPane/LogViewerPane';
 import { TextEditorPane } from './components/TextEditorPane/TextEditorPane';
 import { FileExplorerPane } from './components/FileExplorerPane/FileExplorerPane';
@@ -19,6 +20,7 @@ import { HelpModal } from './components/HelpModal/HelpModal';
 import { SshHostKeyModal } from './components/SshHostKeyModal/SshHostKeyModal';
 import { PasteConfirmationModal } from './components/PasteConfirmationModal/PasteConfirmationModal';
 import { UpdateNotification } from './components/UpdateNotification/UpdateNotification';
+import { ErrorNotification } from './components/ErrorNotification/ErrorNotification';
 import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary';
 import { tauriService } from './services/tauriService';
 import { useSessionManager, type SessionRecord } from './hooks/useSessionManager';
@@ -54,8 +56,12 @@ function App() {
     }
   }, []);
 
+  const handleSessionRemoved = useCallback((id: string) => {
+    usePaneStore.getState().removeSession(id);
+  }, []);
   const { sessions, openSession, closeSession } = useSessionManager({
     onPasteRequest: handlePasteRequest,
+    onSessionRemoved: handleSessionRemoved,
   });
 
   const layoutMode = usePaneStore((s) => s.layoutMode);
@@ -320,9 +326,13 @@ function App() {
 
   const handleNewConnectionClick = () => setConnectOpen(true);
 
-  const handleConnectSubmit = async (payload: ConnectSubmitPayload) => {
+  const handleConnectSubmit = (payload: ConnectSubmitPayload) => {
     setConnectOpen(false);
-    const id = await openSession(payload);
+    // openSession returns the id synchronously; the connect attempt runs in the
+    // background. Adding the tab to the pane store now makes the connecting
+    // state visible immediately, so the user gets feedback while the backend
+    // negotiates the connection.
+    const id = openSession(payload);
     addSessionToStore(id);
   };
 
@@ -456,12 +466,19 @@ function App() {
             )}
           >
           {session ? (
-            <TerminalView
-              key={session.id}
-              session={session}
-              active={paneId === activePaneId}
-              onPasteRequest={handlePasteRequest}
-            />
+            session.status === 'connecting' ? (
+              <ConnectingOverlay
+                key={`${session.id}-connecting`}
+                displayName={session.displayName}
+              />
+            ) : (
+              <TerminalView
+                key={session.id}
+                session={session}
+                active={paneId === activePaneId}
+                onPasteRequest={handlePasteRequest}
+              />
+            )
           ) : featureInfo?.type === 'log-viewer' ? (
             <LogViewerPane
               key={featureInfo.id}
@@ -641,6 +658,7 @@ function App() {
       <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
       <SshHostKeyModal />
       <UpdateNotification />
+      <ErrorNotification />
       {pasteReq && (
         <PasteConfirmationModal
           content={pasteReq.content}

@@ -116,7 +116,9 @@ export function TabBar({
               draggable
               className={`tab${isActive ? ' active active-pane-tab' : ''}${
                 item.status === 'error' ? ' error' : ''
-              }${isHidden ? ' hidden-tab' : ''}${dragOverCls}${
+              }${item.status === 'connecting' ? ' connecting' : ''}${
+                isHidden ? ' hidden-tab' : ''
+              }${dragOverCls}${
                 item.isWatching ? ' gemini-linked-tab' : ''
               }${item.isAiTab ? ' is-ai-tab' : ''}`}
               onClick={() => onSelect(item.id)}

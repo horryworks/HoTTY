@@ -69,6 +69,7 @@ describe('appTypes', () => {
       username: 'alice',
       encoding: 'utf8',
       keepaliveIntervalSecs: 60,
+      connectTimeoutSecs: 3,
     };
     expect(cfg.username).toBe('alice');
     expect(cfg.port).toBe(22);
@@ -80,6 +81,7 @@ describe('appTypes', () => {
       port: 23,
       encoding: 'utf8',
       keepaliveIntervalSecs: 0,
+      connectTimeoutSecs: 3,
     };
     expect(cfg.host).toBe('example.com');
   });
@@ -117,6 +119,7 @@ describe('appTypes', () => {
         username: 'u',
         encoding: 'utf8',
         keepaliveIntervalSecs: 0,
+        connectTimeoutSecs: 3,
       },
     };
     expect(ssh.protocol).toBe('ssh');

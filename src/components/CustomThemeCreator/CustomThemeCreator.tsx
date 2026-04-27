@@ -43,7 +43,7 @@ const THEME_SECTIONS: { title: string; description: string; keys: string[] }[] =
     {
         title: 'UI Specific Components',
         description: 'Sidebar, tabs, context menus, icons, and other UI elements',
-        keys: ['sidebar-bg', 'sidebar-btn-color', 'sidebar-btn-hover-bg', 'sidebar-btn-hover-color', 'sidebar-btn-active-bg', 'tab-bg', 'tab-text', 'tab-active-text', 'tab-close-bg', 'tab-close-hover-bg', 'tab-watching-text', 'tab-watching-bg', 'tab-watching-icon', 'tab-watching-icon-glow', 'context-menu-bg', 'context-menu-border', 'context-menu-text', 'context-menu-hover-bg', 'hidden-item-bg', 'hidden-item-bg-hover', 'tree-meta-color', 'icon-folder', 'icon-host', 'terminal-prompt-default', 'terminal-prompt-active', 'pane-color-1', 'pane-color-2', 'pane-color-3', 'pane-color-4', 'pane-color-5', 'pane-color-6', 'resize-grip-shadow'],
+        keys: ['sidebar-bg', 'sidebar-btn-color', 'sidebar-btn-hover-bg', 'sidebar-btn-hover-color', 'sidebar-btn-active-bg', 'tab-bg', 'tab-text', 'tab-active-text', 'tab-close-bg', 'tab-close-hover-bg', 'tab-watching-text', 'tab-watching-bg', 'tab-watching-icon', 'tab-watching-icon-glow', 'tab-connecting-bg', 'tab-connecting-text', 'pane-connecting-bg', 'context-menu-bg', 'context-menu-border', 'context-menu-text', 'context-menu-hover-bg', 'hidden-item-bg', 'hidden-item-bg-hover', 'tree-meta-color', 'icon-folder', 'icon-host', 'terminal-prompt-default', 'terminal-prompt-active', 'pane-color-1', 'pane-color-2', 'pane-color-3', 'pane-color-4', 'pane-color-5', 'pane-color-6', 'resize-grip-shadow'],
     },
     {
         title: 'AI Providers',
@@ -139,6 +139,9 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'tab-watching-bg': 'Background/fill color for the AI monitoring icon in a tab.',
     'tab-watching-icon': 'Primary glow color for the AI monitoring icon.',
     'tab-watching-icon-glow': 'Secondary glow color for the AI monitoring icon gradient.',
+    'tab-connecting-bg': 'Background color for a tab while its session is connecting.',
+    'tab-connecting-text': 'Text color for a tab while its session is connecting (also used for the pane overlay text).',
+    'pane-connecting-bg': 'Background color of the pane overlay shown while a session is connecting.',
     'context-menu-bg': 'Background for right-click menus.',
     'context-menu-border': 'Border for right-click menus.',
     'context-menu-text': 'Text color for right-click menus.',

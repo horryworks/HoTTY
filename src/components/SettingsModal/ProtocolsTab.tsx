@@ -39,6 +39,21 @@ export function ProtocolsTab() {
       <div className="settings-card">
         <h3 className="settings-section-title settings-section-title--first">SSH</h3>
 
+        <div className="settings-subsection-title">Connect Timeout</div>
+        <div className="settings-group">
+          <label>Timeout (seconds)</label>
+          <input
+            type="number"
+            min={1}
+            max={600}
+            value={settings.sshConnectTimeoutSecs}
+            onChange={(e) =>
+              update('sshConnectTimeoutSecs', parseInt(e.target.value, 10) || 3)
+            }
+          />
+          <HelpTooltip text="Maximum time to wait for the initial TCP and SSH handshake before giving up. Default: 3 seconds." />
+        </div>
+
         <div className="settings-subsection-title">KeepAlive</div>
         <label className="settings-checkbox">
           <input
@@ -98,6 +113,21 @@ export function ProtocolsTab() {
       {/* ── Telnet ── */}
       <div className="settings-card">
         <h3 className="settings-section-title">Telnet</h3>
+
+        <div className="settings-subsection-title">Connect Timeout</div>
+        <div className="settings-group">
+          <label>Timeout (seconds)</label>
+          <input
+            type="number"
+            min={1}
+            max={600}
+            value={settings.telnetConnectTimeoutSecs}
+            onChange={(e) =>
+              update('telnetConnectTimeoutSecs', parseInt(e.target.value, 10) || 3)
+            }
+          />
+          <HelpTooltip text="Maximum time to wait for the initial TCP connection before giving up. Default: 3 seconds." />
+        </div>
 
         <div className="settings-subsection-title">KeepAlive</div>
         <label className="settings-checkbox">

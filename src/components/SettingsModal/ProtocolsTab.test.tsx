@@ -39,7 +39,8 @@ describe('ProtocolsTab', () => {
   it('edits SSH keepalive interval', () => {
     render(<ProtocolsTab />);
     const inputs = screen.getAllByRole('spinbutton');
-    fireEvent.change(inputs[0], { target: { value: '20' } });
+    // inputs[0] is SSH Connect Timeout; inputs[1] is SSH Keepalive Interval.
+    fireEvent.change(inputs[1], { target: { value: '20' } });
     expect(useSettingsStore.getState().sshKeepAliveInterval).toBe(20);
   });
 
@@ -56,6 +57,32 @@ describe('ProtocolsTab', () => {
     useSettingsStore.getState().update('sshKeepAliveEnabled', false);
     render(<ProtocolsTab />);
     const inputs = screen.getAllByRole('spinbutton');
-    expect(inputs[0]).toHaveProperty('disabled', true);
+    // After adding Connect Timeout inputs, the SSH keepalive interval is the
+    // second spinbutton (Connect Timeout, then KeepAlive Interval).
+    expect(inputs[1]).toHaveProperty('disabled', true);
+  });
+
+  it('renders SSH and Telnet connect timeout inputs with default 3', () => {
+    render(<ProtocolsTab />);
+    const labels = screen.getAllByText('Timeout (seconds)');
+    expect(labels.length).toBe(2);
+    const inputs = screen.getAllByRole('spinbutton');
+    // Order in the DOM: SSH Timeout, SSH Interval, Telnet Timeout, Telnet Interval
+    expect((inputs[0] as HTMLInputElement).value).toBe('3');
+    expect((inputs[2] as HTMLInputElement).value).toBe('3');
+  });
+
+  it('edits SSH connect timeout', () => {
+    render(<ProtocolsTab />);
+    const inputs = screen.getAllByRole('spinbutton');
+    fireEvent.change(inputs[0], { target: { value: '7' } });
+    expect(useSettingsStore.getState().sshConnectTimeoutSecs).toBe(7);
+  });
+
+  it('edits Telnet connect timeout', () => {
+    render(<ProtocolsTab />);
+    const inputs = screen.getAllByRole('spinbutton');
+    fireEvent.change(inputs[2], { target: { value: '12' } });
+    expect(useSettingsStore.getState().telnetConnectTimeoutSecs).toBe(12);
   });
 });

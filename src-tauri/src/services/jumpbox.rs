@@ -334,6 +334,7 @@ pub async fn establish_tunnel(
     cfg: JumpboxConfig,
     target_host: &str,
     target_port: u16,
+    connect_timeout_secs: u32,
 ) -> Result<JumpboxTunnel, SessionError> {
     cfg.validate()?;
 
@@ -354,9 +355,16 @@ pub async fn establish_tunnel(
     };
 
     let addr = (cfg.host.as_str(), cfg.port);
-    let mut handle = client::connect(russh_config, addr, handler)
-        .await
-        .map_err(|e| SessionError::ConnectionFailed(format!("jumpbox connect: {e}")))?;
+    let connect_timeout = Duration::from_secs(connect_timeout_secs.max(1) as u64);
+    let mut handle = tokio::time::timeout(
+        connect_timeout,
+        client::connect(russh_config, addr, handler),
+    )
+    .await
+    .map_err(|_| SessionError::ConnectionFailed(format!(
+        "jumpbox connect: timed out after {connect_timeout_secs}s"
+    )))?
+    .map_err(|e| SessionError::ConnectionFailed(format!("jumpbox connect: {e}")))?;
 
     authenticate_jumpbox(&mut handle, &cfg).await?;
 

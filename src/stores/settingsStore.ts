@@ -107,10 +107,12 @@ export interface SettingsState {
   // SSH keepalive
   sshKeepAliveEnabled: boolean;
   sshKeepAliveInterval: number; // seconds
+  sshConnectTimeoutSecs: number; // seconds; how long to wait for the initial TCP/SSH handshake before failing
 
   // Telnet keepalive
   telnetKeepAliveEnabled: boolean;
   telnetKeepAliveInterval: number; // seconds
+  telnetConnectTimeoutSecs: number; // seconds; how long to wait for the initial TCP connection before failing
 
   // Terminal behaviour
   scrollback: number;
@@ -158,8 +160,10 @@ const DEFAULTS: SettingsState = {
   paneBackgroundImage: '',
   sshKeepAliveEnabled: true,
   sshKeepAliveInterval: 10,
+  sshConnectTimeoutSecs: 3,
   telnetKeepAliveEnabled: true,
   telnetKeepAliveInterval: 30,
+  telnetConnectTimeoutSecs: 3,
   scrollback: 10000,
   lineWrapEnabled: true,
   backspaceSendsDel: false,

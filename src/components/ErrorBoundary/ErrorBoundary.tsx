@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { logError } from '../../utils/logger';
 import './ErrorBoundary.css';
 
 interface Props {
@@ -18,7 +19,8 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error('[ErrorBoundary]', error, info.componentStack);
+    const detail = info.componentStack ? `${error.message}\n${info.componentStack}` : error.message;
+    logError('ErrorBoundary', detail, error);
   }
 
   reset = (): void => {

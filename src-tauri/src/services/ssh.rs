@@ -40,12 +40,18 @@ pub struct SshConfig {
     pub encoding: String,
     #[serde(default)]
     pub keepalive_interval_secs: u32,
+    #[serde(default = "default_connect_timeout_secs")]
+    pub connect_timeout_secs: u32,
     #[serde(default)]
     pub jumpbox: Option<JumpboxConfig>,
 }
 
 fn default_encoding() -> String {
     "utf8".to_string()
+}
+
+fn default_connect_timeout_secs() -> u32 {
+    3
 }
 
 const MAX_CREDENTIAL_LEN: usize = 1024;
@@ -356,6 +362,8 @@ impl SessionService for SshSession {
             known_hosts_path,
         };
 
+        let connect_timeout = Duration::from_secs(self.config.connect_timeout_secs.max(1) as u64);
+
         let mut handle = if let Some(jumpbox_cfg) = self.config.jumpbox.take() {
             log::info!(
                 "ssh: tunneling through jumpbox {}:{} to {}:{}",
@@ -367,17 +375,26 @@ impl SessionService for SshSession {
                 jumpbox_cfg,
                 &self.config.host,
                 self.config.port,
+                self.config.connect_timeout_secs,
             )
             .await?;
             let (jumpbox_handle, stream) = tunnel.into_stream();
             self.jumpbox_handle = Some(jumpbox_handle);
-            client::connect_stream(config, stream, handler)
+            tokio::time::timeout(connect_timeout, client::connect_stream(config, stream, handler))
                 .await
+                .map_err(|_| SessionError::ConnectionFailed(format!(
+                    "ssh-over-jumpbox: timed out after {}s",
+                    self.config.connect_timeout_secs
+                )))?
                 .map_err(|e| SessionError::ConnectionFailed(format!("ssh-over-jumpbox: {e}")))?
         } else {
             let addr = (self.config.host.as_str(), self.config.port);
-            client::connect(config, addr, handler)
+            tokio::time::timeout(connect_timeout, client::connect(config, addr, handler))
                 .await
+                .map_err(|_| SessionError::ConnectionFailed(format!(
+                    "{}:{}: timed out after {}s",
+                    self.config.host, self.config.port, self.config.connect_timeout_secs
+                )))?
                 .map_err(|e| SessionError::ConnectionFailed(format!("{e}")))?
         };
 

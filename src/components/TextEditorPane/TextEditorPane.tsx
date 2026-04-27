@@ -4,6 +4,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import type { TextEditorTab } from '../../types/appTypes';
 import { SaveConfirmModal } from '../SaveConfirmModal/SaveConfirmModal';
 import { setEditorDirtyCount, clearEditorDirty } from '../../utils/dirtyEditors';
+import { logError } from '../../utils/logger';
 import './TextEditorPane.css';
 
 interface TextEditorPaneProps {
@@ -116,7 +117,7 @@ export function TextEditorPane({
         });
         return true;
       } catch (err) {
-        console.error('Failed to load file:', err);
+        logError('TextEditor', 'Failed to load file', err);
         return false;
       }
     },
@@ -252,7 +253,7 @@ export function TextEditorPane({
         }
         return true;
       } catch (err) {
-        console.error('Failed to save file:', err);
+        logError('TextEditor', 'Failed to save file', err);
         return false;
       }
     },
@@ -361,7 +362,7 @@ export function TextEditorPane({
       updateTab(activeTabId, { savedContent: activeTab.content, filePath: savePath });
       syncDisplayName({ ...activeTab, filePath: savePath });
     } catch (err) {
-      console.error('Failed to save file:', err);
+      logError('TextEditor', 'Failed to save file', err);
     }
   }, [activeTab, activeTabId, updateTab, syncDisplayName]);
 
@@ -380,7 +381,7 @@ export function TextEditorPane({
       updateTab(activeTabId, { savedContent: activeTab.content, filePath: savePath });
       syncDisplayName({ ...activeTab, filePath: savePath });
     } catch (err) {
-      console.error('Failed to save file:', err);
+      logError('TextEditor', 'Failed to save file (Save As)', err);
     }
   }, [activeTab, activeTabId, updateTab, syncDisplayName]);
 
@@ -461,7 +462,7 @@ export function TextEditorPane({
             savedContent: result.content,
           });
         } catch (err) {
-          console.error('Failed to re-read file with encoding:', err);
+          logError('TextEditor', 'Failed to re-read file with encoding', err);
         }
       }
     },
