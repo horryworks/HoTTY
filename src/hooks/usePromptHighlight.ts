@@ -47,6 +47,33 @@ export function usePromptHighlight(
     let activeLines: ActiveLine[] = [];
     let lastClickedMarkerLine: number | null = null;
 
+    // Position the marker so its right edge sits MARKER_GAP px to the left of
+    // the terminal viewport's visible right edge. We use the .terminal-view
+    // bounding rect (which stays fixed regardless of horizontal scroll) and
+    // express the position in offsetParent coordinates (where xterm places
+    // decoration elements). This keeps markers visible when wrap-off mode
+    // scrolls .terminal-view horizontally.
+    const positionMarker = (element: HTMLElement) => {
+      const xtermEl = element.closest('.xterm') as HTMLElement | null;
+      const terminalView = element.closest('.terminal-view') as HTMLElement | null;
+      const offsetParent = element.offsetParent as HTMLElement | null;
+      if (!xtermEl || !terminalView || !offsetParent) return;
+      const clearance = getScrollbarClearance(xtermEl);
+      const tvRect = terminalView.getBoundingClientRect();
+      const opRect = offsetParent.getBoundingClientRect();
+      // Right edge of visible area in offsetParent's coordinate system.
+      const visibleRightInOp = tvRect.right - clearance - MARKER_GAP - opRect.left;
+      const markerLeft = visibleRightInOp - MARKER_WIDTH;
+      element.style.left = `${markerLeft}px`;
+      element.style.right = 'auto';
+    };
+
+    const repositionAllMarkers = () => {
+      for (const item of activeLines) {
+        if (item.element && !item.marker.isDisposed) positionMarker(item.element);
+      }
+    };
+
     const evaluateLine = (bufferY: number) => {
       try {
         evaluateLineInner(bufferY);
@@ -174,17 +201,7 @@ export function usePromptHighlight(
             } else break;
           }
 
-          // Anchor the marker to the offsetParent's right edge instead of
-          // computing an absolute `left`. This avoids depending on layout
-          // assumptions about parentRect.left vs viewportRect.left, which
-          // diverge in WebView2 / when xterm sizes .xterm-screen to
-          // cols * cellWidth.
-          const xtermEl = element.closest('.xterm') as HTMLElement | null;
-          if (xtermEl) {
-            const clearance = getScrollbarClearance(xtermEl);
-            element.style.left = 'auto';
-            element.style.right = `${clearance + MARKER_GAP}px`;
-          }
+          positionMarker(element);
           element.style.position = 'absolute';
           element.style.boxSizing = 'border-box';
           element.style.width = `${MARKER_WIDTH}px`;
@@ -357,15 +374,7 @@ export function usePromptHighlight(
             } else break;
           }
           item.element.style.transform = `scaleY(${count})`;
-
-          // Recalculate horizontal position on resize (right-anchored, see
-          // decoration.onRender for the rationale).
-          const xtermEl = item.element.closest('.xterm') as HTMLElement | null;
-          if (xtermEl) {
-            const clearance = getScrollbarClearance(xtermEl);
-            item.element.style.left = 'auto';
-            item.element.style.right = `${clearance + MARKER_GAP}px`;
-          }
+          positionMarker(item.element);
         }
       }
 
@@ -387,12 +396,35 @@ export function usePromptHighlight(
       }
     };
 
+    // Re-position markers when the .terminal-view scrolls horizontally
+    // (wrap-off mode). Use rAF to coalesce rapid scroll events.
+    let scrollTarget: HTMLElement | null = null;
+    let scrollRaf: number | null = null;
+    const onScroll = () => {
+      if (scrollRaf !== null) return;
+      scrollRaf = requestAnimationFrame(() => {
+        scrollRaf = null;
+        repositionAllMarkers();
+      });
+    };
+    const attachScrollListener = () => {
+      if (!term.element) return;
+      const tv = term.element.closest('.terminal-view') as HTMLElement | null;
+      if (tv && tv !== scrollTarget) {
+        if (scrollTarget) scrollTarget.removeEventListener('scroll', onScroll);
+        scrollTarget = tv;
+        scrollTarget.addEventListener('scroll', onScroll, { passive: true });
+      }
+    };
+
     if (term.element) {
       scanAllLines();
+      attachScrollListener();
     } else {
       attachCheckInterval = setInterval(() => {
         if (term.element) {
           scanAllLines();
+          attachScrollListener();
           if (attachCheckInterval !== null) clearInterval(attachCheckInterval);
         }
       }, 100);
@@ -403,6 +435,8 @@ export function usePromptHighlight(
       onLineFeed.dispose();
       onRender.dispose();
       if (attachCheckInterval) clearInterval(attachCheckInterval);
+      if (scrollRaf !== null) cancelAnimationFrame(scrollRaf);
+      if (scrollTarget) scrollTarget.removeEventListener('scroll', onScroll);
       activeLines.forEach((item) => {
         if (item.decoration) item.decoration.dispose();
       });

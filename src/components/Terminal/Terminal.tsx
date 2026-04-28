@@ -37,6 +37,7 @@ export function TerminalView({ session, active, onPasteRequest }: TerminalViewPr
   const enablePromptHighlight = useSettingsStore((s) => s.enablePromptHighlight);
   const promptHighlightColor = useSettingsStore((s) => s.promptHighlightColor);
   const promptPatterns = useSettingsStore((s) => s.promptPatterns);
+  const lineWrapEnabled = useSettingsStore((s) => s.lineWrapEnabled);
 
   usePromptHighlight(session.term, enablePromptHighlight, promptHighlightColor, promptPatterns);
 
@@ -60,9 +61,30 @@ export function TerminalView({ session, active, onPasteRequest }: TerminalViewPr
       wrap ? TERMINAL_SEQUENCES.LINE_WRAP_ENABLED : TERMINAL_SEQUENCES.LINE_WRAP_DISABLED
     );
 
+    // When line wrap is OFF, resize the terminal to a very large column count
+    // so xterm renders a canvas wider than the viewport. Combined with
+    // overflow-x: auto on the outer .terminal-view container, this reproduces
+    // the v1 behaviour of a horizontal scrollbar that grows as the cursor
+    // advances.
+    const NO_WRAP_COLS = 5000;
     const resize = () => {
       try {
-        session.fitAddon.fit();
+        // Toggle outer container horizontal overflow. The .wrap-off class is
+        // applied via JSX className so React doesn't clobber it on re-render.
+        el.style.overflowX = lineWrapEnabled ? 'hidden' : 'auto';
+        if (lineWrapEnabled) {
+          el.scrollLeft = 0; // reset leftover scroll from a prior wrap-off run
+        }
+
+        if (lineWrapEnabled) {
+          session.fitAddon.fit();
+        } else {
+          const proposed = session.fitAddon.proposeDimensions();
+          if (proposed) {
+            const newCols = Math.max(proposed.cols, NO_WRAP_COLS);
+            session.term.resize(newCols, proposed.rows);
+          }
+        }
         const { cols, rows } = session.term;
         tauriService.resize(session.id, cols, rows).catch(() => {});
       } catch {
@@ -73,10 +95,20 @@ export function TerminalView({ session, active, onPasteRequest }: TerminalViewPr
     const ro = new ResizeObserver(resize);
     ro.observe(el);
 
+    // When line wrap is OFF, snap the horizontal scroll back to col 0 on
+    // every line feed so pressing Enter brings the cursor back into view.
+    let lineFeedDispose: { dispose: () => void } | undefined;
+    if (!lineWrapEnabled) {
+      lineFeedDispose = session.term.onLineFeed(() => {
+        el.scrollLeft = 0;
+      });
+    }
+
     return () => {
       ro.disconnect();
+      lineFeedDispose?.dispose();
     };
-  }, [session]);
+  }, [session, lineWrapEnabled]);
 
   useEffect(() => {
     if (active) session.term.focus();
@@ -88,9 +120,12 @@ export function TerminalView({ session, active, onPasteRequest }: TerminalViewPr
     onPasteRequest?.(session.id);
   };
 
+  const className =
+    `terminal-view${active ? ' active' : ''}${lineWrapEnabled ? '' : ' wrap-off'}`;
+
   return (
     <div
-      className={`terminal-view${active ? ' active' : ''}`}
+      className={className}
       ref={containerRef}
       onContextMenu={handleContextMenu}
     />

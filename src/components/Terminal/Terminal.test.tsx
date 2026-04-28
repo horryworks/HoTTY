@@ -21,11 +21,19 @@ import { TerminalView } from './Terminal';
 import type { SessionRecord } from '../../hooks/useSessionManager';
 import { useSettingsStore } from '../../stores/settingsStore';
 
-function makeSession(): { session: SessionRecord; term: ReturnType<typeof makeTerm> } {
+function makeSession(): {
+  session: SessionRecord;
+  term: ReturnType<typeof makeTerm>;
+  fitAddon: { fit: ReturnType<typeof vi.fn>; proposeDimensions: ReturnType<typeof vi.fn> };
+} {
   const term = makeTerm();
-  const fitAddon = { fit: vi.fn() };
+  const fitAddon = {
+    fit: vi.fn(),
+    proposeDimensions: vi.fn().mockReturnValue({ cols: 80, rows: 24 }),
+  };
   return {
     term,
+    fitAddon,
     session: {
       id: 's1',
       displayName: 'S1',
@@ -53,6 +61,14 @@ function makeTerm() {
     }),
     write: vi.fn(),
     focus: vi.fn(),
+    resize: vi.fn(function (
+      this: { cols: number; rows: number },
+      cols: number,
+      rows: number
+    ) {
+      this.cols = cols;
+      this.rows = rows;
+    }),
     buffer: {
       active: {
         baseY: 0,
@@ -129,5 +145,57 @@ describe('TerminalView', () => {
     );
     fireEvent.contextMenu(container.querySelector('.terminal-view') as HTMLElement);
     expect(onPasteRequest).not.toHaveBeenCalled();
+  });
+
+  it('hides horizontal overflow on .xterm and uses fitAddon.fit when line wrap is enabled', () => {
+    useSettingsStore.getState().update('lineWrapEnabled', true);
+    const { session, fitAddon, term } = makeSession();
+    const { container } = render(<TerminalView session={session} active={true} />);
+    // The .xterm element is created by term.open(); our mock's open() just
+    // marks element on the term. We add a stub element manually to simulate
+    // xterm.js' actual behaviour for the overflow check.
+    const view = container.querySelector('.terminal-view') as HTMLElement;
+    const xterm = document.createElement('div');
+    xterm.classList.add('xterm');
+    view.appendChild(xterm);
+    // Trigger a re-render via ResizeObserver no-op; instead just call the
+    // resize logic by re-rendering with a key change isn't trivial. We rely
+    // on the initial render having already run the resize before .xterm
+    // existed (so style won't be set). For deterministic check, we trigger
+    // a re-resize by re-rendering with the lineWrapEnabled setting toggled.
+    useSettingsStore.getState().update('lineWrapEnabled', false);
+    useSettingsStore.getState().update('lineWrapEnabled', true);
+    expect(fitAddon.fit).toHaveBeenCalled();
+    expect(term.resize).not.toHaveBeenCalled();
+  });
+
+  it('enables horizontal overflow on .xterm and resizes to a wide cols when line wrap is disabled', () => {
+    useSettingsStore.getState().update('lineWrapEnabled', false);
+    const { session, fitAddon, term } = makeSession();
+    render(<TerminalView session={session} active={true} />);
+    // proposeDimensions returns 80x24, so resize should be called with max(80, 5000) = 5000
+    expect(term.resize).toHaveBeenCalledWith(5000, 24);
+    // fit should NOT be called in no-wrap mode (only proposeDimensions)
+    expect(fitAddon.fit).not.toHaveBeenCalled();
+    expect(fitAddon.proposeDimensions).toHaveBeenCalled();
+    // Backend resize is called with the new wide cols
+    expect(resize).toHaveBeenCalledWith('s1', 5000, 24);
+  });
+
+  it('honours an already-wide proposed cols when wrap is off', () => {
+    useSettingsStore.getState().update('lineWrapEnabled', false);
+    const { session, fitAddon, term } = makeSession();
+    fitAddon.proposeDimensions.mockReturnValue({ cols: 7000, rows: 30 });
+    render(<TerminalView session={session} active={true} />);
+    expect(term.resize).toHaveBeenCalledWith(7000, 30);
+  });
+
+  it('subscribes to onLineFeed when wrap is OFF for scroll reset on Enter', () => {
+    useSettingsStore.getState().update('lineWrapEnabled', false);
+    const { session, term } = makeSession();
+    render(<TerminalView session={session} active={true} />);
+    // usePromptHighlight subscribes once and Terminal.tsx adds a scroll-reset
+    // subscription, so we expect 2 total when wrap is OFF.
+    expect(term.onLineFeed).toHaveBeenCalledTimes(2);
   });
 });

@@ -19,6 +19,17 @@
   overflow-x: hidden !important;
 }
 
+/* In horizontal-scroll (wrap-off) mode, the xterm-viewport's vertical
+   scrollbar would ride along with the horizontal scroll because it lives
+   inside the wide content area. Hide it; users can still scroll the
+   scrollback via mouse wheel or Shift+PageUp/PageDown. */
+.terminal-view.wrap-off .xterm-viewport::-webkit-scrollbar {
+  display: none;
+}
+.terminal-view.wrap-off .xterm-viewport {
+  scrollbar-width: none;
+}
+
 .terminal-view .xterm-decoration-container {
   pointer-events: none;
 }
