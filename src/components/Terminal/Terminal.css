@@ -40,7 +40,7 @@
 .terminal-xterm-host .xterm {
   width: 100%;
   height: 100%;
-  padding: 4px;
+  padding: 4px 0 4px 4px; /* top / right=0 / bottom / left — no right padding so text reaches the marker rail */
   box-sizing: border-box;
 }
 

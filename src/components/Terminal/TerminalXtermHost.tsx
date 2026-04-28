@@ -73,22 +73,57 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
       viewportEl.style.overflow = 'hidden';
     }
 
+    // Compute terminal dimensions ourselves instead of using FitAddon.
+    // FitAddon's `proposeDimensions` subtracts a hardcoded 14px from the
+    // available width to reserve room for xterm's scrollbar — but we use
+    // a separate scrollbar rail outside the host, so that 14px would just
+    // become wasted gap between the rightmost cell and our marker.
+    const computeDimensions = (): { cols: number; rows: number } | null => {
+      const xtermEl = el.querySelector('.xterm') as HTMLElement | null;
+      if (!xtermEl) return null;
+      const dims = (session.term as unknown as {
+        _core?: {
+          _renderService?: {
+            dimensions?: { css?: { cell?: { width?: number; height?: number } } };
+          };
+        };
+      })._core?._renderService?.dimensions?.css?.cell;
+      const cellWidth = dims?.width ?? 0;
+      const cellHeight = dims?.height ?? 0;
+      if (cellWidth <= 0 || cellHeight <= 0) return null;
+      const style = window.getComputedStyle(xtermEl);
+      const padW =
+        parseInt(style.paddingLeft || '0', 10) + parseInt(style.paddingRight || '0', 10);
+      const padH =
+        parseInt(style.paddingTop || '0', 10) + parseInt(style.paddingBottom || '0', 10);
+      const cols = Math.max(2, Math.floor((el.clientWidth - padW) / cellWidth));
+      const rows = Math.max(1, Math.floor((el.clientHeight - padH) / cellHeight));
+      return { cols, rows };
+    };
+
     const resize = () => {
       try {
         if (lineWrapEnabled) {
           el.scrollLeft = 0; // reset leftover horizontal scroll
-          session.fitAddon.fit();
+          const dim = computeDimensions();
+          if (dim && (dim.cols !== session.term.cols || dim.rows !== session.term.rows)) {
+            session.term.resize(dim.cols, dim.rows);
+          } else if (!dim) {
+            // Fallback to FitAddon if our compute failed (e.g. before first paint)
+            session.fitAddon.fit();
+          }
         } else {
-          const proposed = session.fitAddon.proposeDimensions();
-          if (proposed) {
-            const newCols = Math.max(proposed.cols, NO_WRAP_COLS);
-            session.term.resize(newCols, proposed.rows);
+          const dim = computeDimensions() ?? session.fitAddon.proposeDimensions();
+          if (dim) {
+            const newCols = Math.max(dim.cols, NO_WRAP_COLS);
+            session.term.resize(newCols, dim.rows);
           }
         }
+
         const { cols, rows } = session.term;
         tauriService.resize(session.id, cols, rows).catch(() => {});
       } catch {
-        /* fit can throw if element not in DOM yet */
+        /* compute/resize can throw if element not in DOM yet */
       }
     };
     resize();

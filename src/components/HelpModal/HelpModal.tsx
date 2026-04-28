@@ -82,6 +82,9 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               <p className="help-text">
                 <strong>Update Notifications:</strong> On startup HoTTY checks the GitHub releases feed and shows a dismissible notification when a newer version is available, linking directly to the release page.
               </p>
+              <p className="help-text">
+                <strong>Connection Status:</strong> A Connecting overlay is shown while the transport is being established. SSH and Telnet sessions time out after a configurable interval (default 3 seconds) — see <strong>Settings &rarr; Protocols</strong>. Connection failures appear as dismissible toast notifications.
+              </p>
             </div>
           </details>
 
@@ -130,6 +133,9 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               </p>
               <p className="help-text">
                 <strong>Empty pane hints:</strong> Empty grid cells show their pane number and a &quot;Drop Tab Here&quot; prompt so you know where to drop a tab.
+              </p>
+              <p className="help-text">
+                <strong>Line Wrap toggle:</strong> Disable <strong>Settings &rarr; Appearance &rarr; Line Wrap</strong> to enable a horizontal scrollbar on terminal panes. The view auto-scrolls to keep the cursor in sight as you type past the right edge, and snaps back to column 0 on Enter. The vertical scrollbar and prompt marker stay anchored to the pane&apos;s right edge regardless of horizontal scroll position.
               </p>
             </div>
           </details>
