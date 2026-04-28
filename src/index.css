@@ -48,6 +48,15 @@ body {
   background: var(--text-secondary);
 }
 
+::-webkit-scrollbar-corner,
+::-webkit-resizer {
+  background: transparent;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}
+
 /* Subtle backdrop blur behind modals (futuristic touch, no color changes). */
 
 .settings-modal-overlay,

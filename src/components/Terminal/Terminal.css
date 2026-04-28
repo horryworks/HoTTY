@@ -16,6 +16,7 @@
 
 .terminal-view .xterm-viewport {
   background-color: transparent !important;
+  overflow-x: hidden !important;
 }
 
 .terminal-view .xterm-decoration-container {

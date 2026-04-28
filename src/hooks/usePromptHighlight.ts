@@ -2,10 +2,31 @@ import { useEffect } from 'react';
 import type { Terminal, IMarker, IDecoration } from '@xterm/xterm';
 import type { PromptPattern } from '../types/appTypes';
 
-const SCROLLBAR_WIDTH = 10;
 const MARKER_GAP = 2;
 const MARKER_BORDER = 6;
 const MARKER_WIDTH = 8;
+
+// Width of the global ::-webkit-scrollbar rule defined in src/index.css.
+// Used to clear the scrollbar zone when the WebView paints overlay scrollbars
+// (which leave .xterm-screen extended over the scrollbar).
+const CSS_SCROLLBAR_WIDTH = 10;
+
+// Extra horizontal offset (px from the offsetParent's right edge) needed to
+// keep the marker clear of the vertical scrollbar.
+//
+// xterm sizes `.xterm-screen` to `cols × cellWidth`. When the scrollbar takes
+// layout space (`offsetWidth > clientWidth`, the typical native case) the
+// screen's right edge already aligns with the scrollbar's left edge, so no
+// extra offset is needed. When the scrollbar is overlay-painted
+// (`offsetWidth === clientWidth`, common in some WebView modes) the screen
+// extends to the viewport's full width, so we must subtract the scrollbar
+// width as well.
+function getScrollbarClearance(xtermEl: HTMLElement): number {
+  const viewport = xtermEl.querySelector('.xterm-viewport') as HTMLElement | null;
+  if (!viewport) return 0;
+  const measured = viewport.offsetWidth - viewport.clientWidth;
+  return measured > 0 ? 0 : CSS_SCROLLBAR_WIDTH;
+}
 
 interface ActiveLine {
   marker: IMarker;
@@ -54,6 +75,23 @@ export function usePromptHighlight(
       if (!logicalStartLine) return;
 
       const startText = logicalStartLine.translateToString(true).trimEnd();
+      const isEmpty = startText.length === 0;
+      // "Unused trailing" = empty line that has no content anywhere below it
+      // in the buffer. Empty lines BETWEEN content (e.g. blank line in welcome
+      // text above the prompt) still get the non-prompt marker; only the
+      // pre-allocated rows after the bottom-most content are skipped. We use a
+      // content-based check (not cursor-based) because cursorY can be in
+      // transition during terminal startup.
+      let isUnusedTrailingRow = isEmpty;
+      if (isUnusedTrailingRow) {
+        for (let y = startLineY + 1; y < buffer.length; y++) {
+          const probe = buffer.getLine(y);
+          if (probe && probe.translateToString(true).trimEnd().length > 0) {
+            isUnusedTrailingRow = false;
+            break;
+          }
+        }
+      }
 
       // Find existing decoration for this LOGICAL start line
       let existingIdx = -1;
@@ -72,22 +110,25 @@ export function usePromptHighlight(
       const existing = existingIdx !== -1 ? activeLines[existingIdx] : null;
 
       let isPrompt = false;
-      for (const patternObj of patterns) {
-        if (!patternObj.pattern) continue;
-        try {
-          const regex = new RegExp(patternObj.pattern);
-          const match = regex.exec(startText);
-          if (match && match.index === 0) {
-            isPrompt = true;
-            break;
+      if (!isEmpty) {
+        for (const patternObj of patterns) {
+          if (!patternObj.pattern) continue;
+          try {
+            const regex = new RegExp(patternObj.pattern);
+            const match = regex.exec(startText);
+            if (match && match.index === 0) {
+              isPrompt = true;
+              break;
+            }
+          } catch {
+            /* ignore invalid regex */
           }
-        } catch {
-          /* ignore invalid regex */
         }
       }
 
-      if (existing && existing.isPrompt === isPrompt) {
-        return; // Nothing to change
+      // Nothing to do if the line is still in the same state as last time
+      if (existing && !isUnusedTrailingRow && existing.isPrompt === isPrompt) {
+        return;
       }
 
       if (existing) {
@@ -95,6 +136,9 @@ export function usePromptHighlight(
         if (existing.marker && !existing.marker.isDisposed) existing.marker.dispose();
         activeLines.splice(existingIdx, 1);
       }
+
+      // Skip marker registration for unused trailing rows
+      if (isUnusedTrailingRow) return;
 
       // Register new marker and decoration precisely at the LOGICAL start line
       const cursorYOffset = startLineY - (buffer.baseY + buffer.cursorY);
@@ -114,12 +158,11 @@ export function usePromptHighlight(
 
         decoration.onRender((element: HTMLElement) => {
           trackObj.element = element;
-          const defaultPromptColor = highlightColor
+          const promptColor = highlightColor
             ? highlightColor
-            : 'var(--prompt-highlight-default, rgba(255, 255, 255, 0.15))';
-          const targetColor = isPrompt
-            ? defaultPromptColor
-            : 'var(--terminal-prompt-active, #2196f3)';
+            : 'var(--terminal-prompt-default, #f44336)';
+          const nonPromptColor = 'var(--terminal-prompt-active, #2196f3)';
+          const targetColor = isPrompt ? promptColor : nonPromptColor;
 
           let count = 1;
           let checkY = marker.line + 1;
@@ -131,18 +174,18 @@ export function usePromptHighlight(
             } else break;
           }
 
-          // Position marker 2px to the left of the vertical scrollbar
+          // Anchor the marker to the offsetParent's right edge instead of
+          // computing an absolute `left`. This avoids depending on layout
+          // assumptions about parentRect.left vs viewportRect.left, which
+          // diverge in WebView2 / when xterm sizes .xterm-screen to
+          // cols * cellWidth.
           const xtermEl = element.closest('.xterm') as HTMLElement | null;
-          const offsetParent = element.offsetParent as HTMLElement | null;
-          if (xtermEl && offsetParent) {
-            const xtermRect = xtermEl.getBoundingClientRect();
-            const parentRect = offsetParent.getBoundingClientRect();
-            const markerLeft =
-              xtermRect.right - SCROLLBAR_WIDTH - MARKER_GAP - MARKER_WIDTH - parentRect.left;
-            element.style.left = `${markerLeft}px`;
+          if (xtermEl) {
+            const clearance = getScrollbarClearance(xtermEl);
+            element.style.left = 'auto';
+            element.style.right = `${clearance + MARKER_GAP}px`;
           }
           element.style.position = 'absolute';
-          element.style.right = 'auto';
           element.style.boxSizing = 'border-box';
           element.style.width = `${MARKER_WIDTH}px`;
           element.style.backgroundColor = 'transparent';
@@ -315,21 +358,19 @@ export function usePromptHighlight(
           }
           item.element.style.transform = `scaleY(${count})`;
 
-          // Recalculate horizontal position on resize
+          // Recalculate horizontal position on resize (right-anchored, see
+          // decoration.onRender for the rationale).
           const xtermEl = item.element.closest('.xterm') as HTMLElement | null;
-          const offsetParent = item.element.offsetParent as HTMLElement | null;
-          if (xtermEl && offsetParent) {
-            const xtermRect = xtermEl.getBoundingClientRect();
-            const parentRect = offsetParent.getBoundingClientRect();
-            const markerLeft =
-              xtermRect.right - SCROLLBAR_WIDTH - MARKER_GAP - MARKER_WIDTH - parentRect.left;
-            item.element.style.left = `${markerLeft}px`;
+          if (xtermEl) {
+            const clearance = getScrollbarClearance(xtermEl);
+            item.element.style.left = 'auto';
+            item.element.style.right = `${clearance + MARKER_GAP}px`;
           }
         }
       }
 
       for (let i = e.start; i <= e.end; i++) {
-        const bufferY = ((buffer as { ydisp?: number }).ydisp ?? 0) + i;
+        const bufferY = buffer.baseY + i;
         if (bufferY >= 0 && bufferY < buffer.length) {
           evaluateLine(bufferY);
         }
