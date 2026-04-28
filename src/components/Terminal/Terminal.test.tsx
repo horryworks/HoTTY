@@ -69,30 +69,40 @@ function makeTerm() {
       this.cols = cols;
       this.rows = rows;
     }),
+    scrollToLine: vi.fn(),
+    selectLines: vi.fn(),
     buffer: {
       active: {
         baseY: 0,
         cursorY: 0,
+        viewportY: 0,
         length: 0,
         getLine: vi.fn().mockReturnValue(null),
       },
     },
-    registerMarker: vi.fn().mockReturnValue({ line: 0, isDisposed: false, dispose: vi.fn(), onDispose: vi.fn() }),
-    registerDecoration: vi.fn().mockReturnValue({ onRender: vi.fn(), onDispose: vi.fn(), dispose: vi.fn() }),
     onCursorMove: vi.fn(() => makeDisposable()),
     onLineFeed: vi.fn(() => makeDisposable()),
     onRender: vi.fn(() => makeDisposable()),
-    selectLines: vi.fn(),
+    onScroll: vi.fn(() => makeDisposable()),
   };
 }
 
-describe('TerminalView', () => {
+describe('TerminalView (3-rail layout)', () => {
   beforeEach(() => {
     useSettingsStore.getState().reset();
     resize.mockClear();
   });
 
-  it('opens the xterm instance into the container and requests a backend resize', () => {
+  it('renders the three rails: xterm host, marker rail, scrollbar rail', () => {
+    const { session } = makeSession();
+    const { container } = render(<TerminalView session={session} active={true} />);
+    expect(container.querySelector('.terminal-view')).toBeTruthy();
+    expect(container.querySelector('.terminal-xterm-host')).toBeTruthy();
+    expect(container.querySelector('.terminal-marker-rail')).toBeTruthy();
+    expect(container.querySelector('.terminal-scrollbar-rail')).toBeTruthy();
+  });
+
+  it('opens the xterm instance into the host and requests a backend resize', () => {
     const { session, term } = makeSession();
     render(<TerminalView session={session} active={true} />);
     expect(term.open).toHaveBeenCalled();
@@ -147,38 +157,25 @@ describe('TerminalView', () => {
     expect(onPasteRequest).not.toHaveBeenCalled();
   });
 
-  it('hides horizontal overflow on .xterm and uses fitAddon.fit when line wrap is enabled', () => {
+  it('uses fitAddon.fit and adds no .wrap-off class when line wrap is enabled', () => {
     useSettingsStore.getState().update('lineWrapEnabled', true);
     const { session, fitAddon, term } = makeSession();
     const { container } = render(<TerminalView session={session} active={true} />);
-    // The .xterm element is created by term.open(); our mock's open() just
-    // marks element on the term. We add a stub element manually to simulate
-    // xterm.js' actual behaviour for the overflow check.
-    const view = container.querySelector('.terminal-view') as HTMLElement;
-    const xterm = document.createElement('div');
-    xterm.classList.add('xterm');
-    view.appendChild(xterm);
-    // Trigger a re-render via ResizeObserver no-op; instead just call the
-    // resize logic by re-rendering with a key change isn't trivial. We rely
-    // on the initial render having already run the resize before .xterm
-    // existed (so style won't be set). For deterministic check, we trigger
-    // a re-resize by re-rendering with the lineWrapEnabled setting toggled.
-    useSettingsStore.getState().update('lineWrapEnabled', false);
-    useSettingsStore.getState().update('lineWrapEnabled', true);
+    const host = container.querySelector('.terminal-xterm-host') as HTMLElement;
+    expect(host.classList.contains('wrap-off')).toBe(false);
     expect(fitAddon.fit).toHaveBeenCalled();
     expect(term.resize).not.toHaveBeenCalled();
   });
 
-  it('enables horizontal overflow on .xterm and resizes to a wide cols when line wrap is disabled', () => {
+  it('adds .wrap-off class and resizes to wide cols when line wrap is disabled', () => {
     useSettingsStore.getState().update('lineWrapEnabled', false);
     const { session, fitAddon, term } = makeSession();
-    render(<TerminalView session={session} active={true} />);
-    // proposeDimensions returns 80x24, so resize should be called with max(80, 5000) = 5000
+    const { container } = render(<TerminalView session={session} active={true} />);
+    const host = container.querySelector('.terminal-xterm-host') as HTMLElement;
+    expect(host.classList.contains('wrap-off')).toBe(true);
     expect(term.resize).toHaveBeenCalledWith(5000, 24);
-    // fit should NOT be called in no-wrap mode (only proposeDimensions)
     expect(fitAddon.fit).not.toHaveBeenCalled();
     expect(fitAddon.proposeDimensions).toHaveBeenCalled();
-    // Backend resize is called with the new wide cols
     expect(resize).toHaveBeenCalledWith('s1', 5000, 24);
   });
 
@@ -194,8 +191,8 @@ describe('TerminalView', () => {
     useSettingsStore.getState().update('lineWrapEnabled', false);
     const { session, term } = makeSession();
     render(<TerminalView session={session} active={true} />);
-    // usePromptHighlight subscribes once and Terminal.tsx adds a scroll-reset
-    // subscription, so we expect 2 total when wrap is OFF.
+    // usePromptDetection subscribes once and TerminalXtermHost adds a
+    // scroll-reset subscription when wrap is OFF, so we expect 2 total.
     expect(term.onLineFeed).toHaveBeenCalledTimes(2);
   });
 });

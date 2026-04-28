@@ -1,4 +1,18 @@
+/*
+ * Three-rail terminal layout. Each rail is an absolutely positioned child of
+ * .terminal-view so they don't share a coordinate system with the
+ * horizontally-scrolling xterm host. The two right-side rails (marker +
+ * scrollbar) stay anchored to the pane's right edge.
+ *
+ *   ┌─────────────────────────────────────┬────────┬────────┐
+ *   │  .terminal-xterm-host               │ marker │  scrlb │
+ *   │  (right: 18px)                      │ rail   │  rail  │
+ *   │                                     │ 8px    │  10px  │
+ *   └─────────────────────────────────────┴────────┴────────┘
+ */
+
 .terminal-view {
+  position: relative;
   width: 100%;
   height: 100%;
   flex: 1;
@@ -7,33 +21,85 @@
   overflow: hidden;
 }
 
-.terminal-view .xterm {
+/* ── xterm host ─────────────────────────────────────────────────── */
+
+.terminal-xterm-host {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 18px; /* 8px marker + 10px scrollbar */
+  overflow: hidden;
+}
+
+.terminal-xterm-host.wrap-off {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.terminal-xterm-host .xterm {
   width: 100%;
   height: 100%;
   padding: 4px;
   box-sizing: border-box;
 }
 
-.terminal-view .xterm-viewport {
+.terminal-xterm-host .xterm-viewport {
   background-color: transparent !important;
-  overflow-x: hidden !important;
+  overflow: hidden !important;
 }
 
-/* In horizontal-scroll (wrap-off) mode, the xterm-viewport's vertical
-   scrollbar would ride along with the horizontal scroll because it lives
-   inside the wide content area. Hide it; users can still scroll the
-   scrollback via mouse wheel or Shift+PageUp/PageDown. */
-.terminal-view.wrap-off .xterm-viewport::-webkit-scrollbar {
+/* xterm.js v6 ships a Monaco-style DOM scrollbar (.xterm-scrollable-element
+   > .scrollbar > .slider) which is NOT the same as the native
+   .xterm-viewport browser scrollbar. This is the actual visible scrollbar
+   in xterm v6 and must be hidden so we can render our own in
+   .terminal-scrollbar-rail. */
+.terminal-xterm-host .xterm .xterm-scrollable-element > .scrollbar {
+  display: none !important;
+}
+
+/* xterm decorations are unused in this layout; markers are rendered in the
+   marker-rail. Hide the decoration container as a safety net. */
+.terminal-xterm-host .xterm-decoration-container {
   display: none;
 }
-.terminal-view.wrap-off .xterm-viewport {
-  scrollbar-width: none;
+
+/* ── marker rail ────────────────────────────────────────────────── */
+
+.terminal-marker-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 10px; /* immediately to the left of the scrollbar */
+  width: 8px;
+  pointer-events: none; /* rail itself is transparent to clicks; markers re-enable */
+  overflow: hidden;
+  z-index: 10;
 }
 
-.terminal-view .xterm-decoration-container {
+.terminal-marker {
+  position: absolute;
+  right: 0;
+  width: 8px;
+  pointer-events: auto;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+/* ── scrollbar rail ─────────────────────────────────────────────── */
+
+.terminal-scrollbar-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  z-index: 11;
+}
+
+.terminal-scrollbar-spacer {
+  width: 1px; /* width doesn't matter; only height drives scrollHeight */
   pointer-events: none;
-}
-
-.terminal-view .xterm-decoration-container > div {
-  pointer-events: all;
 }
