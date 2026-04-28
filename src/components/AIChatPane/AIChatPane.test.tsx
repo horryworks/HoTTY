@@ -12,8 +12,6 @@ vi.mock('../../services/tauriService', () => ({
     aiListModels: vi.fn().mockResolvedValue([]),
     aiListLocations: vi.fn().mockResolvedValue([]),
     aiSetLocation: vi.fn().mockResolvedValue(undefined),
-    aiGetAuthType: vi.fn().mockResolvedValue('oauth'),
-    aiListProviders: vi.fn().mockResolvedValue([]),
     onAiChatResponse: vi.fn().mockResolvedValue(() => {}),
     onAiAuthResult: vi.fn().mockResolvedValue(() => {}),
     selectServiceAccountKeyFile: vi.fn().mockResolvedValue(null),

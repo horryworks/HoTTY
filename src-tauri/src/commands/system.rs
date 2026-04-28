@@ -239,25 +239,6 @@ pub fn list_system_fonts() -> Result<Vec<FontInfo>, String> {
 }
 
 // ---------------------------------------------------------------------------
-// set_window_size
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
-pub async fn set_window_size(
-    app: AppHandle,
-    width: f64,
-    height: f64,
-) -> Result<(), String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or("main window not found")?;
-    let size = tauri::LogicalSize::new(width, height);
-    window
-        .set_size(tauri::Size::Logical(size))
-        .map_err(|e| format!("failed to set window size: {e}"))
-}
-
-// ---------------------------------------------------------------------------
 // focus_window
 // ---------------------------------------------------------------------------
 

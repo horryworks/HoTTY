@@ -15,25 +15,6 @@ pub fn log_debug(level: String, category: String, message: String) {
 }
 
 // ---------------------------------------------------------------------------
-// update_logging  — adjust the log level filter at runtime
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
-pub fn update_logging(level: String) -> Result<(), String> {
-    let filter = match level.to_lowercase().as_str() {
-        "error" => log::LevelFilter::Error,
-        "warn" => log::LevelFilter::Warn,
-        "info" => log::LevelFilter::Info,
-        "debug" => log::LevelFilter::Debug,
-        "trace" => log::LevelFilter::Trace,
-        other => return Err(format!("invalid log level: {other}")),
-    };
-    log::set_max_level(filter);
-    log::info!("log level changed to {level}");
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
 // select_image  — open a file dialog to select an image file
 // ---------------------------------------------------------------------------
 
@@ -79,19 +60,5 @@ mod tests {
         log_debug("warn".into(), "test".into(), "test message".into());
         log_debug("error".into(), "test".into(), "test message".into());
         log_debug("unknown".into(), "test".into(), "test message".into());
-    }
-
-    #[test]
-    fn update_logging_rejects_invalid_level() {
-        let result = update_logging("potato".into());
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("invalid log level"));
-    }
-
-    #[test]
-    fn update_logging_accepts_valid_levels() {
-        for level in &["error", "warn", "info", "debug", "trace"] {
-            assert!(update_logging(level.to_string()).is_ok());
-        }
     }
 }

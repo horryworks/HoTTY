@@ -43,59 +43,6 @@ pub fn dpapi_decrypt_batch(values: Vec<String>) -> Result<Vec<String>, String> {
 }
 
 // ---------------------------------------------------------------------------
-// dpapi_verify_user  — Windows LogonUser API
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
-pub fn dpapi_verify_user(password: String) -> Result<bool, String> {
-    verify_user_impl(&password)
-}
-
-// ---------------------------------------------------------------------------
-// Platform-specific implementations
-// ---------------------------------------------------------------------------
-
-#[cfg(windows)]
-fn verify_user_impl(password: &str) -> Result<bool, String> {
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
-    use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::Security::{
-        LogonUserW, LOGON32_LOGON_INTERACTIVE, LOGON32_PROVIDER_DEFAULT,
-    };
-
-    let username = std::env::var("USERNAME")
-        .map_err(|_| "USERNAME environment variable not set".to_string())?;
-
-    let username_w: Vec<u16> = OsStr::new(&username).encode_wide().chain(Some(0)).collect();
-    let dot_w: Vec<u16> = OsStr::new(".").encode_wide().chain(Some(0)).collect();
-    let password_w: Vec<u16> = OsStr::new(password).encode_wide().chain(Some(0)).collect();
-
-    unsafe {
-        let mut token = windows::Win32::Foundation::HANDLE::default();
-        let result = LogonUserW(
-            windows::core::PCWSTR(username_w.as_ptr()),
-            windows::core::PCWSTR(dot_w.as_ptr()),
-            windows::core::PCWSTR(password_w.as_ptr()),
-            LOGON32_LOGON_INTERACTIVE,
-            LOGON32_PROVIDER_DEFAULT,
-            &mut token,
-        );
-        if result.is_ok() {
-            let _ = CloseHandle(token);
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
-}
-
-#[cfg(not(windows))]
-fn verify_user_impl(_password: &str) -> Result<bool, String> {
-    Err("User verification is only available on Windows".into())
-}
-
-// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

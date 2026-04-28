@@ -5,12 +5,10 @@ use tauri::Manager;
 
 use commands::ai::{
     ai_auth_auto, ai_auth_logout, ai_auth_start, ai_auth_status, ai_chat_cancel, ai_chat_clear,
-    ai_chat_send, ai_get_auth_type, ai_list_locations, ai_list_models, ai_list_providers,
-    ai_set_location, ai_set_provider, select_service_account_key_file, AIServiceState,
+    ai_chat_send, ai_list_locations, ai_list_models, ai_set_location, ai_set_provider,
+    select_service_account_key_file, AIServiceState,
 };
-use commands::dpapi::{
-    dpapi_decrypt, dpapi_decrypt_batch, dpapi_encrypt, dpapi_encrypt_batch, dpapi_verify_user,
-};
+use commands::dpapi::{dpapi_decrypt, dpapi_decrypt_batch, dpapi_encrypt, dpapi_encrypt_batch};
 use commands::file_explorer::{file_explorer_get_drives, file_explorer_list_directory};
 use commands::host_tree::{decrypt_import_file, export_htree, select_import_file, ImportPathState};
 use commands::iap_tunnel::{
@@ -24,12 +22,12 @@ use commands::ping_monitor::{
 };
 use commands::session::{
     connect_session, disconnect_session, send_input, ssh_host_key_response, term_resize,
-    update_session_encoding, update_session_logging, SessionState,
+    update_session_logging, SessionState,
 };
 use commands::ssh_algorithms::{get_ssh_algorithms, save_ssh_algorithms};
 use commands::system::{
     detect_git_bash, focus_window, list_serial_ports, list_system_fonts, list_wsl_distributions,
-    open_debug_log_folder, set_window_size, show_context_menu,
+    open_debug_log_folder, show_context_menu,
 };
 use commands::text_editor::{
     text_editor_approve_dropped_file, text_editor_open_file, text_editor_read_file,
@@ -37,7 +35,7 @@ use commands::text_editor::{
 };
 use commands::themes::{delete_custom_theme, get_themes, save_custom_theme};
 use commands::updater::check_for_updates;
-use commands::utilities::{log_debug, select_folder, select_image, update_logging};
+use commands::utilities::{log_debug, select_folder, select_image};
 use services::ai::providers::anthropic::AnthropicProvider;
 use services::ai::providers::gemini::GeminiProvider;
 use services::ai::providers::openai::OpenAIProvider;
@@ -96,7 +94,6 @@ pub fn run() {
             disconnect_session,
             send_input,
             term_resize,
-            update_session_encoding,
             update_session_logging,
             ssh_host_key_response,
             // System / utilities
@@ -104,7 +101,6 @@ pub fn run() {
             list_wsl_distributions,
             detect_git_bash,
             list_system_fonts,
-            set_window_size,
             focus_window,
             show_context_menu,
             open_debug_log_folder,
@@ -113,7 +109,6 @@ pub fn run() {
             dpapi_decrypt,
             dpapi_encrypt_batch,
             dpapi_decrypt_batch,
-            dpapi_verify_user,
             // Themes
             get_themes,
             save_custom_theme,
@@ -150,7 +145,6 @@ pub fn run() {
             gce_iap_list_instances,
             // Logging & file dialogs
             log_debug,
-            update_logging,
             select_image,
             select_folder,
             // AI
@@ -165,8 +159,6 @@ pub fn run() {
             ai_list_locations,
             ai_set_provider,
             ai_set_location,
-            ai_list_providers,
-            ai_get_auth_type,
             select_service_account_key_file,
             // Updater
             check_for_updates,

@@ -223,20 +223,6 @@ pub async fn term_resize(
 }
 
 #[tauri::command]
-pub async fn update_session_encoding(
-    state: State<'_, SessionState>,
-    session_id: String,
-    encoding: String,
-) -> Result<(), String> {
-    let mut map = state.sessions.lock().await;
-    let (s, _meta) = map
-        .get_mut(&session_id)
-        .ok_or_else(|| SessionError::NotFound.to_string())?;
-    s.set_encoding(&encoding);
-    Ok(())
-}
-
-#[tauri::command]
 pub async fn update_session_logging(
     state: State<'_, SessionState>,
     log_manager: State<'_, LogManager>,

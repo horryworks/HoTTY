@@ -1,6 +1,6 @@
 import type { Theme } from '../types/appTypes';
 
-export const UI_FONT_FAMILY =
+const UI_FONT_FAMILY =
   'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
 export function applyTheme(theme: Theme, fontSize: number, fontFamily: string): void {

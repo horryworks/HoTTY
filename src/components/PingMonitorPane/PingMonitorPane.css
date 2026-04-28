@@ -79,7 +79,7 @@
 }
 
 .ping-monitor-interval-select {
-  padding: 2px 4px;
+  padding: 3px 8px;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;

@@ -5,7 +5,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 10001;
+    z-index: 10000;
 }
 
 .confirm-modal {

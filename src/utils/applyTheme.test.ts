@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { applyTheme, UI_FONT_FAMILY } from './applyTheme';
+import { applyTheme } from './applyTheme';
 import type { Theme } from '../types/appTypes';
 
 const fakeTheme: Theme = {
@@ -36,11 +36,5 @@ describe('applyTheme', () => {
     const root = document.documentElement;
     expect(root.style.getPropertyValue('--font-family')).toBe('Consolas');
     expect(root.style.getPropertyValue('--font-size-base')).toBe('16px');
-  });
-
-  it('sets --ui-font-family to the fixed UI stack', () => {
-    applyTheme(fakeTheme, 14, 'Consolas');
-    const root = document.documentElement;
-    expect(root.style.getPropertyValue('--ui-font-family')).toBe(UI_FONT_FAMILY);
   });
 });

@@ -39,8 +39,6 @@ import type {
   GceInstance,
   AIAuthStatus,
   AIModelInfo,
-  AIProviderInfo,
-  AIAuthType,
   AIChatResponseData,
   AIAuthResultPayload,
   UpdateInfo,
@@ -87,10 +85,6 @@ export const tauriService = {
 
   async resize(sessionId: string, cols: number, rows: number): Promise<void> {
     await invoke('term_resize', { sessionId, cols, rows });
-  },
-
-  async updateSessionEncoding(sessionId: string, encoding: string): Promise<void> {
-    await invoke('update_session_encoding', { sessionId, encoding });
   },
 
   async updateSessionLogging(loggingEnabled: boolean, loggingPath: string): Promise<void> {
@@ -142,10 +136,6 @@ export const tauriService = {
 
   async listSystemFonts(): Promise<FontInfo[]> {
     return invoke<FontInfo[]>('list_system_fonts');
-  },
-
-  async setWindowSize(width: number, height: number): Promise<void> {
-    await invoke('set_window_size', { width, height });
   },
 
   async focusWindow(): Promise<void> {
@@ -236,20 +226,12 @@ export const tauriService = {
     return invoke<string[]>('dpapi_decrypt_batch', { values });
   },
 
-  async dpapiVerifyUser(password: string): Promise<boolean> {
-    return invoke<boolean>('dpapi_verify_user', { password });
-  },
-
   // -----------------------------------------------------------------------
   // Logging
   // -----------------------------------------------------------------------
 
   async logDebug(level: string, category: string, message: string): Promise<void> {
     await invoke('log_debug', { level, category, message });
-  },
-
-  async updateLogging(level: string): Promise<void> {
-    await invoke('update_logging', { level });
   },
 
   // -----------------------------------------------------------------------
@@ -481,14 +463,6 @@ export const tauriService = {
 
   async aiSetLocation(location: string): Promise<void> {
     await invoke('ai_set_location', { location });
-  },
-
-  async aiListProviders(): Promise<AIProviderInfo[]> {
-    return invoke<AIProviderInfo[]>('ai_list_providers');
-  },
-
-  async aiGetAuthType(): Promise<AIAuthType> {
-    return invoke<AIAuthType>('ai_get_auth_type');
   },
 
   async selectServiceAccountKeyFile(): Promise<string | null> {

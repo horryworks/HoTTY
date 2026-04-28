@@ -2,7 +2,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::Mutex;
 
-use crate::services::ai::{AIService, AuthStatus, AuthType, ModelInfo, ProviderInfo};
+use crate::services::ai::{AIService, AuthStatus, ModelInfo};
 
 /// Managed state holding the AI service behind an async-aware mutex.
 pub struct AIServiceState {
@@ -171,22 +171,6 @@ pub async fn ai_set_location(
     let mut service = state.service.lock().await;
     service.set_location(&location);
     Ok(())
-}
-
-#[tauri::command]
-pub async fn ai_list_providers(
-    state: State<'_, AIServiceState>,
-) -> Result<Vec<ProviderInfo>, String> {
-    let service = state.service.lock().await;
-    Ok(service.list_providers())
-}
-
-#[tauri::command]
-pub async fn ai_get_auth_type(
-    state: State<'_, AIServiceState>,
-) -> Result<AuthType, String> {
-    let service = state.service.lock().await;
-    Ok(service.get_auth_type())
 }
 
 #[tauri::command]

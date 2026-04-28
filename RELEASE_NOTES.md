@@ -22,6 +22,7 @@ Connection lifecycle UI, horizontal scrolling for unwrapped lines, and a rebuilt
 - **Prompt marker detection** — replaced a stale buffer-position reference that caused intermittent detection misses, and trailing unused rows no longer carry markers.
 - **Prompt marker positioning** — markers are now anchored to the right edge directly, so positioning no longer drifts with the parent's left edge or horizontal scroll. Includes a CSS fallback for overlay scrollbars and a content-based check that survives cursor transitions during startup.
 - **Scrollbar corner artifacts** — hides the bottom-right scrollbar corner / resizer / button artifacts that previously appeared in some panes.
+- **Terminal viewport could rewind on output** — in the three-rail layout introduced in this release, fast terminal output (e.g. `dir` listings) could leave the viewport one line behind, hiding the latest prompt until the next keypress forced a re-scroll. The custom scrollbar rail now updates its spacer geometry synchronously with terminal scroll events, so the viewport stays aligned with the newest output.
 
 ## v2.0.0-beta7
 

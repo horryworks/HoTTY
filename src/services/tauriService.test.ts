@@ -92,12 +92,6 @@ describe('tauriService system commands', () => {
     expect(result).toEqual([{ family: 'Consolas' }]);
   });
 
-  it('setWindowSize invokes with width and height', async () => {
-    mockInvoke.mockResolvedValue(undefined);
-    await tauriService.setWindowSize(1024, 768);
-    expect(mockInvoke).toHaveBeenCalledWith('set_window_size', { width: 1024, height: 768 });
-  });
-
   it('focusWindow invokes the correct command', async () => {
     mockInvoke.mockResolvedValue(undefined);
     await tauriService.focusWindow();
@@ -152,12 +146,6 @@ describe('tauriService DPAPI commands', () => {
     expect(result).toEqual(['x', 'y']);
   });
 
-  it('dpapiVerifyUser invokes with password', async () => {
-    mockInvoke.mockResolvedValue(true);
-    const result = await tauriService.dpapiVerifyUser('pass123');
-    expect(mockInvoke).toHaveBeenCalledWith('dpapi_verify_user', { password: 'pass123' });
-    expect(result).toBe(true);
-  });
 });
 
 describe('tauriService logging commands', () => {
@@ -175,11 +163,6 @@ describe('tauriService logging commands', () => {
     });
   });
 
-  it('updateLogging invokes with level', async () => {
-    mockInvoke.mockResolvedValue(undefined);
-    await tauriService.updateLogging('debug');
-    expect(mockInvoke).toHaveBeenCalledWith('update_logging', { level: 'debug' });
-  });
 });
 
 describe('tauriService file dialog commands', () => {
@@ -612,24 +595,6 @@ describe('tauriService AI commands', () => {
     mockInvoke.mockResolvedValue(undefined);
     await tauriService.aiSetLocation('us-east1');
     expect(mockInvoke).toHaveBeenCalledWith('ai_set_location', { location: 'us-east1' });
-  });
-
-  it('aiListProviders invokes the correct command', async () => {
-    const providers = [
-      { id: 'openai', displayName: 'OpenAI', authType: 'api_key' },
-      { id: 'anthropic', displayName: 'Anthropic (Claude)', authType: 'api_key' },
-    ];
-    mockInvoke.mockResolvedValue(providers);
-    const result = await tauriService.aiListProviders();
-    expect(mockInvoke).toHaveBeenCalledWith('ai_list_providers');
-    expect(result).toEqual(providers);
-  });
-
-  it('aiGetAuthType invokes the correct command', async () => {
-    mockInvoke.mockResolvedValue('api_key');
-    const result = await tauriService.aiGetAuthType();
-    expect(mockInvoke).toHaveBeenCalledWith('ai_get_auth_type');
-    expect(result).toBe('api_key');
   });
 
   it('selectServiceAccountKeyFile invokes the correct command', async () => {

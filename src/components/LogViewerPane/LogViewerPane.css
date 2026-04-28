@@ -139,7 +139,7 @@
   gap: 6px;
   width: calc(100% - 16px);
   margin: 0 8px 6px;
-  padding: 4px 8px;
+  padding: 3px 8px;
   background: var(--btn-secondary-bg);
   border: none;
   border-radius: 4px;
