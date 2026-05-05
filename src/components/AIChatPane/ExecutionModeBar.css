@@ -1,0 +1,196 @@
+.execution-mode-bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background-color: var(--sidebar-bg);
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.execution-mode-bar.paused {
+    border-top-color: var(--color-warning);
+    box-shadow: inset 0 1px 0 var(--color-warning);
+}
+
+/* ── Segmented pill buttons ── */
+.execution-mode-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 1px);
+    cursor: pointer;
+    transition: background-color 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.execution-mode-pill:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.execution-mode-pill.active {
+    background: color-mix(in srgb, var(--success-color) 15%, transparent);
+    color: var(--success-color);
+    border-color: var(--success-color);
+}
+
+.execution-mode-pill.active:hover {
+    background: color-mix(in srgb, var(--success-color) 25%, transparent);
+}
+
+.execution-mode-pill-label {
+    white-space: nowrap;
+}
+
+/* ── Max badge inside Auto pill ── */
+.execution-mode-max-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    margin-left: 4px;
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: calc(var(--font-size-base) - 2px);
+    cursor: pointer;
+    transition: background-color 0.1s, color 0.1s;
+}
+
+.execution-mode-max-badge:hover,
+.execution-mode-max-badge:focus-visible {
+    background: var(--accent-light, var(--bg-tertiary));
+    color: var(--text-primary);
+    outline: none;
+}
+
+.execution-mode-pill.active .execution-mode-max-badge {
+    background: color-mix(in srgb, var(--success-color) 25%, transparent);
+    color: var(--success-color);
+}
+
+/* ── Kill switch (Pause/Resume) ── */
+.execution-mode-kill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 1px);
+    cursor: pointer;
+    transition: background-color 0.1s, color 0.1s, border-color 0.1s;
+    margin-left: 4px;
+}
+
+.execution-mode-kill:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.execution-mode-kill.unlimited {
+    border-color: var(--color-warning);
+    color: var(--color-warning);
+}
+
+.execution-mode-kill.paused {
+    background: color-mix(in srgb, var(--color-warning) 20%, transparent);
+    color: var(--color-warning);
+    border-color: var(--color-warning);
+}
+
+.execution-mode-kill.paused:hover {
+    background: color-mix(in srgb, var(--color-warning) 30%, transparent);
+}
+
+/* ── Paused banner ── */
+.execution-mode-paused-banner {
+    margin-left: auto;
+    color: var(--color-warning);
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 2px);
+}
+
+/* ── Popover ── */
+.execution-mode-popover {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    min-width: 220px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px var(--modal-shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: executionModePopoverIn 0.1s ease-out;
+}
+
+@keyframes executionModePopoverIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.execution-mode-popover-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 1px);
+    color: var(--text-secondary);
+}
+
+.execution-mode-popover-label input[type="number"] {
+    padding: 5px 8px;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: var(--ui-font-family);
+    font-size: var(--font-size-base);
+    outline: none;
+    transition: border-color 0.2s;
+    width: 80px;
+}
+
+.execution-mode-popover-label input[type="number"]:focus {
+    border-color: var(--accent-color);
+}
+
+.execution-mode-popover-label input[type="number"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.execution-mode-popover-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 1px);
+    color: var(--text-primary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.execution-mode-popover-hint {
+    margin: 0;
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 3px);
+    color: var(--text-tertiary);
+    line-height: 1.3;
+}

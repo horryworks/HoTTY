@@ -10,6 +10,7 @@ import { AuthenticationPanel } from './AuthenticationPanel';
 import { VertexAIAuthPanel } from './VertexAIAuthPanel';
 import { OpenAIAuthPanel } from './OpenAIAuthPanel';
 import { AnthropicAuthPanel } from './AnthropicAuthPanel';
+import { ExecutionModeBar } from './ExecutionModeBar';
 import { SystemPromptModal } from '../SystemPromptModal/SystemPromptModal';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { tauriService } from '../../services/tauriService';
@@ -203,6 +204,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const [consecutiveAutoExecCount, setConsecutiveAutoExecCount] = useState(0);
     const [autoExecutedCommands] = useState(() => new Set<string>());
     const autoExecProcessedRef = useRef(new Set<string>());
+    const [autoExecPaused, setAutoExecPaused] = useState(false);
 
     // OpenAI auth state
     const [openaiApiKey, setOpenaiApiKey] = useState('');
@@ -496,6 +498,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         prevIsStreamingRef.current = isStreaming;
 
         if (wasStreaming && !isStreaming && commandExecutionMode === 'auto-execute-safe') {
+            if (autoExecPaused) return;
             const lastMsg = messages[messages.length - 1];
             if (!lastMsg || lastMsg.role !== 'model') return;
             if (!lastTargetSessionId) return;
@@ -518,7 +521,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             handleRunCommandRef.current(command);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isStreaming, messages, commandExecutionMode, lastTargetSessionId, customSafeCommands, maxConsecutiveAutoExecutions, consecutiveAutoExecCount]);
+    }, [isStreaming, messages, commandExecutionMode, lastTargetSessionId, customSafeCommands, maxConsecutiveAutoExecutions, consecutiveAutoExecCount, autoExecPaused]);
+
+    useEffect(() => {
+        if (commandExecutionMode === 'ask-before-execute') {
+            setAutoExecPaused(false);
+            setConsecutiveAutoExecCount(0);
+        }
+    }, [commandExecutionMode]);
 
     // ── Load models when authenticated ──
     useEffect(() => {
@@ -998,6 +1008,15 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                         {isStreaming && <button className="ai-chat-cancel-btn" onClick={handleCancel}>&#x25A0;</button>}
                         <button className="ai-chat-send-btn" onClick={handleSend} disabled={!inputText.trim() || isStreaming || selectedModel === 'Unspecified'}>&#x27A4;</button>
                     </div>
+                    <ExecutionModeBar
+                        paused={autoExecPaused}
+                        onPausedChange={(next) => {
+                            setAutoExecPaused(next);
+                            if (next && isStreaming) {
+                                handleCancel();
+                            }
+                        }}
+                    />
                     {(totalInputTokens > 0 || totalOutputTokens > 0) && (
                         <div className="ai-token-status">
                             <span>{totalInputTokens.toLocaleString()} in / {totalOutputTokens.toLocaleString()} out tokens</span>

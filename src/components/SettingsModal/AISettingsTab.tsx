@@ -4,7 +4,7 @@ import { tauriService } from '../../services/tauriService';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import HelpTooltip from '../HelpTooltip/HelpTooltip';
 import { STORAGE_KEYS } from '../../constants/storage';
-import type { PersonaDefinition, AskAiCommand, CommandExecutionMode } from '../../types/appTypes';
+import type { PersonaDefinition, AskAiCommand } from '../../types/appTypes';
 import { DEFAULT_AI_COMMANDS, DEFAULT_PERSONAS } from '../../stores/settingsStore';
 
 export function AISettingsTab() {
@@ -328,102 +328,66 @@ export function AISettingsTab() {
 
       </div>
 
-      {/* -- Command Execution Mode -- */}
+      {/* -- Command Execution -- */}
       <div className="settings-card">
       <h3 className="settings-section-title">Command Execution</h3>
+      <p className="settings-help-text" style={{ marginBottom: '10px' }}>
+        Execution mode and the auto-run limit are configured in the AI Chat pane (below the message input).
+      </p>
+
+      {/* Custom Safe Commands */}
       <div className="settings-group">
         <label>
-          Execution Mode
-          <span className="settings-help-text">
-            {settings.commandExecutionMode === 'auto-execute-safe'
-              ? 'Read-only commands (ls, cat, show, display, ping, etc.) are executed automatically. Destructive or unknown commands still require manual confirmation.'
-              : 'All AI-suggested commands require clicking "Run in Terminal" before execution.'}
-          </span>
+          Custom Safe Commands
+          <HelpTooltip text="Add custom command names to the auto-execute whitelist. Built-in safe commands are always included." />
         </label>
-        <select
-          value={settings.commandExecutionMode}
-          onChange={(e) => update('commandExecutionMode', e.target.value as CommandExecutionMode)}
-          style={{ width: '280px' }}
-        >
-          <option value="ask-before-execute">Ask before execute</option>
-          <option value="auto-execute-safe">Auto-execute safe commands</option>
-        </select>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <input
+            type="text"
+            value={newSafeCommand}
+            onChange={(e) => setNewSafeCommand(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && newSafeCommand.trim()) {
+                const cmd = newSafeCommand.trim().toLowerCase();
+                if (!settings.customSafeCommands.includes(cmd)) {
+                  update('customSafeCommands', [...settings.customSafeCommands, cmd]);
+                }
+                setNewSafeCommand('');
+              }
+            }}
+            placeholder="Command name (e.g., mycheck)"
+            style={{ flex: 1 }}
+          />
+          <button
+            className="settings-button"
+            onClick={() => {
+              const cmd = newSafeCommand.trim().toLowerCase();
+              if (cmd && !settings.customSafeCommands.includes(cmd)) {
+                update('customSafeCommands', [...settings.customSafeCommands, cmd]);
+              }
+              setNewSafeCommand('');
+            }}
+            disabled={!newSafeCommand.trim()}
+          >
+            Add
+          </button>
+        </div>
+        {settings.customSafeCommands.length > 0 && (
+          <div className="ai-settings-tag-list">
+            {settings.customSafeCommands.map((cmd) => (
+              <span key={cmd} className="ai-settings-tag">
+                {cmd}
+                <button
+                  onClick={() => update('customSafeCommands', settings.customSafeCommands.filter(c => c !== cmd))}
+                  title={`Remove ${cmd}`}
+                >
+                  &#10005;
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
-
-      {settings.commandExecutionMode === 'auto-execute-safe' && (
-        <>
-          {/* Max consecutive auto-executions */}
-          <div className="settings-group">
-            <label>
-              Max Consecutive Auto-Executions
-              <HelpTooltip text="0 = unlimited. After this limit, commands require manual confirmation until you click Run." />
-            </label>
-            <input
-              type="number"
-              value={settings.maxConsecutiveAutoExecutions}
-              onChange={(e) => update('maxConsecutiveAutoExecutions', parseInt(e.target.value, 10))}
-              min="0"
-              max="100"
-              step="1"
-              style={{ width: '80px' }}
-            />
-          </div>
-
-          {/* Custom Safe Commands */}
-          <div className="settings-group">
-            <label>
-              Custom Safe Commands
-              <HelpTooltip text="Add custom command names to the auto-execute whitelist. Built-in safe commands are always included." />
-            </label>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input
-                type="text"
-                value={newSafeCommand}
-                onChange={(e) => setNewSafeCommand(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newSafeCommand.trim()) {
-                    const cmd = newSafeCommand.trim().toLowerCase();
-                    if (!settings.customSafeCommands.includes(cmd)) {
-                      update('customSafeCommands', [...settings.customSafeCommands, cmd]);
-                    }
-                    setNewSafeCommand('');
-                  }
-                }}
-                placeholder="Command name (e.g., mycheck)"
-                style={{ flex: 1 }}
-              />
-              <button
-                className="settings-button"
-                onClick={() => {
-                  const cmd = newSafeCommand.trim().toLowerCase();
-                  if (cmd && !settings.customSafeCommands.includes(cmd)) {
-                    update('customSafeCommands', [...settings.customSafeCommands, cmd]);
-                  }
-                  setNewSafeCommand('');
-                }}
-                disabled={!newSafeCommand.trim()}
-              >
-                Add
-              </button>
-            </div>
-            {settings.customSafeCommands.length > 0 && (
-              <div className="ai-settings-tag-list">
-                {settings.customSafeCommands.map((cmd) => (
-                  <span key={cmd} className="ai-settings-tag">
-                    {cmd}
-                    <button
-                      onClick={() => update('customSafeCommands', settings.customSafeCommands.filter(c => c !== cmd))}
-                      title={`Remove ${cmd}`}
-                    >
-                      &#10005;
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        </>
-      )}
       </div>
 
       {/* -- Modals -- */}

@@ -68,22 +68,19 @@ describe('AISettingsTab', () => {
     expect(useSettingsStore.getState().aiPersonas[0].askAiCommands).toHaveLength(4);
   });
 
-  it('changes command execution mode', () => {
+  it('does not render execution mode select (moved to AI Chat pane)', () => {
     render(<AISettingsTab />);
-    const selects = screen.getAllByRole('combobox');
-    const modeSelect = selects[selects.length - 1] as HTMLSelectElement;
-    fireEvent.change(modeSelect, { target: { value: 'auto-execute-safe' } });
-    expect(useSettingsStore.getState().commandExecutionMode).toBe('auto-execute-safe');
+    expect(screen.queryByText('Execution Mode')).toBeNull();
+    expect(screen.queryByText('Max Consecutive Auto-Executions')).toBeNull();
   });
 
-  it('shows custom safe commands input when auto-execute mode is selected', () => {
-    useSettingsStore.getState().update('commandExecutionMode', 'auto-execute-safe');
+  it('always shows custom safe commands input regardless of execution mode', () => {
+    // Default mode is 'ask-before-execute' — input should still be visible.
     render(<AISettingsTab />);
     expect(screen.getByPlaceholderText('Command name (e.g., mycheck)')).toBeTruthy();
   });
 
   it('adds a custom safe command', () => {
-    useSettingsStore.getState().update('commandExecutionMode', 'auto-execute-safe');
     render(<AISettingsTab />);
     const input = screen.getByPlaceholderText('Command name (e.g., mycheck)');
     fireEvent.change(input, { target: { value: 'mytool' } });
