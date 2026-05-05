@@ -230,4 +230,25 @@ mod tests {
         assert_eq!(r, HostKeyCheck::Match);
         let _ = std::fs::remove_file(&p);
     }
+
+    /// I/O errors must surface as Err rather than collapsing into Ok(New) —
+    /// the SSH handler relies on this distinction to refuse connections when
+    /// the known_hosts file cannot be read (e.g. permission denied).
+    /// We provoke an error by passing a directory path where a file is expected.
+    #[test]
+    fn io_error_surfaces_as_err_not_new() {
+        let mut dir = std::env::temp_dir();
+        dir.push(format!(
+            "hotty_kh_dir_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let r = check_known_host(&dir, "example.com", 22, "ssh-ed25519", "AAAA");
+        assert!(r.is_err(), "opening a directory should be an I/O error");
+        let _ = std::fs::remove_dir(&dir);
+    }
 }

@@ -1,16 +1,29 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 // --- Mocks ---
 
 const mockOpenSession = vi.fn().mockReturnValue('sess-1');
 const mockCloseSession = vi.fn().mockResolvedValue(undefined);
+
+// Sessions map exposed to tests so individual tests can plant a session whose
+// term.focus is observable.
+type FocusableTerm = { focus: ReturnType<typeof vi.fn> };
+const mockSessions = new Map<string, { id: string; term: FocusableTerm }>();
+
+// Capture the onPasteRequest callback App passes into useSessionManager so
+// tests can drive the paste flow without going through xterm.
+let capturedOnPasteRequest: ((sessionId: string) => void | Promise<void>) | null = null;
+
 vi.mock('./hooks/useSessionManager', () => ({
-  useSessionManager: () => ({
-    sessions: new Map(),
-    openSession: mockOpenSession,
-    closeSession: mockCloseSession,
-  }),
+  useSessionManager: (opts: { onPasteRequest?: (sessionId: string) => void } = {}) => {
+    capturedOnPasteRequest = opts.onPasteRequest ?? null;
+    return {
+      sessions: mockSessions,
+      openSession: mockOpenSession,
+      closeSession: mockCloseSession,
+    };
+  },
 }));
 
 vi.mock('./services/tauriService', () => ({
@@ -155,8 +168,22 @@ vi.mock('./components/SshHostKeyModal/SshHostKeyModal', () => ({
   SshHostKeyModal: () => null,
 }));
 
+// Capture the modal props so tests can invoke onConfirm/onCancel without
+// rendering the real modal (which would auto-focus its Paste button).
+let pasteModalProps: {
+  content: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+} | null = null;
 vi.mock('./components/PasteConfirmationModal/PasteConfirmationModal', () => ({
-  PasteConfirmationModal: () => null,
+  PasteConfirmationModal: (props: {
+    content: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+  }) => {
+    pasteModalProps = props;
+    return <div data-testid="paste-modal" />;
+  },
 }));
 
 vi.mock('./components/UpdateNotification/UpdateNotification', () => ({
@@ -165,12 +192,18 @@ vi.mock('./components/UpdateNotification/UpdateNotification', () => ({
 
 import App from './App';
 import { useSettingsStore } from './stores/settingsStore';
+import { tauriService } from './services/tauriService';
 
 describe('App', () => {
   beforeEach(() => {
     useSettingsStore.getState().reset();
     mockOpenSession.mockReset().mockReturnValue('sess-1');
     mockCloseSession.mockReset().mockResolvedValue(undefined);
+    mockSessions.clear();
+    capturedOnPasteRequest = null;
+    pasteModalProps = null;
+    (tauriService.readClipboard as Mock).mockReset().mockResolvedValue('');
+    (tauriService.sendInput as Mock).mockReset().mockResolvedValue(undefined);
   });
 
   it('renders without crashing', () => {
@@ -225,5 +258,48 @@ describe('App', () => {
     await waitFor(() => {
       expect(mockOpenSession).toHaveBeenCalledTimes(1);
     });
+  });
+
+  // Helper: drive the paste-confirmation modal flow up to the point where the
+  // modal is rendered and pasteModalProps is captured.
+  async function openPasteModalFor(sessionId: string, clipboardText: string) {
+    (tauriService.readClipboard as Mock).mockResolvedValueOnce(clipboardText);
+    render(<App />);
+    expect(capturedOnPasteRequest).not.toBeNull();
+    await act(async () => {
+      await capturedOnPasteRequest!(sessionId);
+    });
+    await waitFor(() => expect(pasteModalProps).not.toBeNull());
+  }
+
+  it('restores focus to the originating terminal after paste modal confirm', async () => {
+    const focus = vi.fn();
+    mockSessions.set('s-1', { id: 's-1', term: { focus } });
+    await openPasteModalFor('s-1', 'hello');
+    expect(pasteModalProps!.content).toBe('hello');
+
+    act(() => {
+      pasteModalProps!.onConfirm();
+    });
+
+    expect(tauriService.sendInput).toHaveBeenCalledWith('s-1', 'hello');
+    // Focus is scheduled in a microtask so the modal can fully unmount first.
+    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+    expect(focus).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores focus to the originating terminal after paste modal cancel', async () => {
+    const focus = vi.fn();
+    mockSessions.set('s-1', { id: 's-1', term: { focus } });
+    await openPasteModalFor('s-1', 'hello');
+
+    act(() => {
+      pasteModalProps!.onCancel();
+    });
+
+    // Cancel must NOT send the clipboard content.
+    expect(tauriService.sendInput).not.toHaveBeenCalled();
+    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+    expect(focus).toHaveBeenCalledTimes(1);
   });
 });

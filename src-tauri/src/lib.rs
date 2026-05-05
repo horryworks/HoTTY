@@ -10,7 +10,10 @@ use commands::ai::{
 };
 use commands::dpapi::{dpapi_decrypt, dpapi_decrypt_batch, dpapi_encrypt, dpapi_encrypt_batch};
 use commands::file_explorer::{file_explorer_get_drives, file_explorer_list_directory};
-use commands::host_tree::{decrypt_import_file, export_htree, select_import_file, ImportPathState};
+use commands::host_tree::{
+    decrypt_import_file, export_htree, migrate_host_tree_credentials, select_import_file,
+    ImportPathState,
+};
 use commands::iap_tunnel::{
     gce_iap_check_auth, gce_iap_check_gcloud, gce_iap_list_instances, gce_iap_list_projects,
     gce_iap_list_zones,
@@ -123,6 +126,7 @@ pub fn run() {
             export_htree,
             select_import_file,
             decrypt_import_file,
+            migrate_host_tree_credentials,
             // Text editor
             text_editor_open_file,
             text_editor_save_file,

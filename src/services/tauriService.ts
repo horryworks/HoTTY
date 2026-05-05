@@ -206,6 +206,10 @@ export const tauriService = {
     return invoke<string>('decrypt_import_file', { password });
   },
 
+  async migrateHostTreeCredentials(treeJson: string): Promise<string> {
+    return invoke<string>('migrate_host_tree_credentials', { treeJson });
+  },
+
   // -----------------------------------------------------------------------
   // DPAPI encryption
   // -----------------------------------------------------------------------

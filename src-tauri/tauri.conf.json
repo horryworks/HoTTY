@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "HoTTY",
-  "version": "2.0.0-beta8",
+  "version": "2.0.0-beta9",
   "identifier": "com.hotty.terminal",
   "build": {
     "frontendDist": "../dist",
@@ -24,7 +24,16 @@
       "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://*.googleapis.com https://*.anthropic.com https://*.openai.com",
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": [
+          "**/*.png",
+          "**/*.jpg",
+          "**/*.jpeg",
+          "**/*.gif",
+          "**/*.bmp",
+          "**/*.webp",
+          "**/*.ico",
+          "**/*.svg"
+        ]
       }
     }
   },

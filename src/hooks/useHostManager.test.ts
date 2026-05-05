@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { flattenHosts, getJumpboxReferences, useHostManager } from './useHostManager';
+import { tauriService } from '../services/tauriService';
 import type { HostTreeNode } from '../types/appTypes';
 
 // Mock tauriService to prevent actual Tauri calls
@@ -8,7 +9,8 @@ vi.mock('../services/tauriService', () => ({
   tauriService: {
     dpapiEncryptBatch: vi.fn(async (values: string[]) => values.map(v => `[SAFE]${v}`)),
     dpapiDecryptBatch: vi.fn(async (values: string[]) => values.map(v => v.replace(/^\[SAFE\]/, ''))),
-    logDebug: vi.fn(),
+    migrateHostTreeCredentials: vi.fn(async (treeJson: string) => treeJson),
+    logDebug: vi.fn(async () => undefined),
   },
   isEncrypted: (value: string) => value.startsWith('[DPAPI]') || value.startsWith('[SAFE]'),
 }));
@@ -74,6 +76,8 @@ describe('getJumpboxReferences', () => {
 describe('useHostManager', () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.mocked(tauriService.migrateHostTreeCredentials).mockReset();
+    vi.mocked(tauriService.migrateHostTreeCredentials).mockImplementation(async (j: string) => j);
   });
 
   it('starts with empty tree when no localStorage data', () => {
@@ -173,6 +177,72 @@ describe('useHostManager', () => {
     });
     // Tree should remain unchanged
     expect(result.current.tree[0].id).toBe('folder-1');
+  });
+
+  it('calls migrateHostTreeCredentials on mount with the loaded tree JSON', async () => {
+    localStorage.setItem('hotty_host_tree', JSON.stringify(sampleTree));
+    renderHook(() => useHostManager());
+    await waitFor(() => {
+      expect(tauriService.migrateHostTreeCredentials).toHaveBeenCalledTimes(1);
+    });
+    const arg = vi.mocked(tauriService.migrateHostTreeCredentials).mock.calls[0][0];
+    expect(JSON.parse(arg)).toEqual(sampleTree);
+  });
+
+  it('persists the migrated tree to localStorage when migration changed the JSON', async () => {
+    const v1Tree: HostTreeNode[] = [
+      {
+        id: 'h1',
+        type: 'host',
+        name: 'Old',
+        entry: { protocol: 'ssh', host: 'h', port: 22, username: '[SAFE]v1blob' },
+      },
+    ];
+    const migratedTree: HostTreeNode[] = [
+      {
+        id: 'h1',
+        type: 'host',
+        name: 'Old',
+        entry: { protocol: 'ssh', host: 'h', port: 22, username: '[SAFE]v2blob' },
+      },
+    ];
+    localStorage.setItem('hotty_host_tree', JSON.stringify(v1Tree));
+    vi.mocked(tauriService.migrateHostTreeCredentials).mockResolvedValueOnce(
+      JSON.stringify(migratedTree)
+    );
+
+    const { result } = renderHook(() => useHostManager());
+    await waitFor(() => {
+      expect(localStorage.getItem('hotty_host_tree')).toBe(JSON.stringify(migratedTree));
+    });
+    expect(result.current.tree[0].entry?.username).toBe('[SAFE]v2blob');
+  });
+
+  it('does not rewrite localStorage when migration returns identical JSON', async () => {
+    const original = JSON.stringify(sampleTree);
+    localStorage.setItem('hotty_host_tree', original);
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+
+    renderHook(() => useHostManager());
+    await waitFor(() => {
+      expect(tauriService.migrateHostTreeCredentials).toHaveBeenCalled();
+    });
+    // No setItem call for the host tree key after the initial load.
+    expect(
+      setItemSpy.mock.calls.some(([k, v]) => k === 'hotty_host_tree' && v !== original)
+    ).toBe(false);
+    setItemSpy.mockRestore();
+  });
+
+  it('falls back to the raw tree when migration throws', async () => {
+    localStorage.setItem('hotty_host_tree', JSON.stringify(sampleTree));
+    vi.mocked(tauriService.migrateHostTreeCredentials).mockRejectedValueOnce(new Error('boom'));
+
+    const { result } = renderHook(() => useHostManager());
+    await waitFor(() => {
+      expect(result.current.tree).toHaveLength(2);
+    });
+    expect(result.current.tree[0].name).toBe('Servers');
   });
 
   it('sortFolder sorts children alphabetically (folders first)', () => {

@@ -185,14 +185,28 @@ impl Handler for SshHandler {
             .fingerprint(ssh_key::HashAlg::Sha256)
             .to_string();
 
-        let check = check_known_host(
+        // check_known_host returns Ok(New) when the file does not exist (first-time
+        // user). Any actual I/O error (permission denied, partial read, disk failure)
+        // surfaces as Err — refuse the connection rather than silently re-prompting
+        // for a host that may already be on record. Otherwise an attacker who can
+        // corrupt or chmod-zero the file could force the user back into a "new host"
+        // prompt and trick them into accepting an attacker-controlled key.
+        let check = match check_known_host(
             &self.known_hosts_path,
             &self.host,
             self.port,
             &key_type,
             &key_base64,
-        )
-        .unwrap_or(HostKeyCheck::New);
+        ) {
+            Ok(c) => c,
+            Err(e) => {
+                log::error!(
+                    "ssh: failed to read known_hosts at {:?}: {e} — refusing connection",
+                    self.known_hosts_path
+                );
+                return Err(russh::Error::Disconnect);
+            }
+        };
 
         let kind = match check {
             HostKeyCheck::Match => return Ok(true),

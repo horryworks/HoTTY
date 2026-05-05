@@ -664,9 +664,18 @@ function App() {
           content={pasteReq.content}
           onConfirm={() => {
             tauriService.sendInput(pasteReq.sessionId, pasteReq.content).catch(() => {});
+            const term = sessions.get(pasteReq.sessionId)?.term;
             setPasteReq(null);
+            // Microtask: focus after React unmounts the modal so the now-removed
+            // Paste button can't grab focus back, and the xterm helper textarea
+            // is the live focus target.
+            queueMicrotask(() => term?.focus());
           }}
-          onCancel={() => setPasteReq(null)}
+          onCancel={() => {
+            const term = sessions.get(pasteReq.sessionId)?.term;
+            setPasteReq(null);
+            queueMicrotask(() => term?.focus());
+          }}
         />
       )}
       {askAiFreeFormatData && (

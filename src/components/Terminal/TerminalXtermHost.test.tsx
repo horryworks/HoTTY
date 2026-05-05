@@ -190,4 +190,27 @@ describe('TerminalXtermHost', () => {
     expect(term.resize).toHaveBeenCalledWith(5000, 24);
     expect(resize).toHaveBeenCalledWith('s1', 5000, 24);
   });
+
+  it('preventDefaults paste events on the host element to suppress xterm auto-paste', () => {
+    const { session } = makeSession();
+    const { container } = render(<TerminalXtermHost session={session} active={true} />);
+    const host = container.querySelector('.terminal-xterm-host') as HTMLElement;
+    const event = new Event('paste', { cancelable: true, bubbles: true });
+    host.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('removes the paste suppression listener on unmount', () => {
+    const { session } = makeSession();
+    const { container, unmount } = render(
+      <TerminalXtermHost session={session} active={true} />
+    );
+    const host = container.querySelector('.terminal-xterm-host') as HTMLElement;
+    unmount();
+    // After unmount, any latent paste event on the (now-detached) element
+    // should not be cancelled by our listener.
+    const event = new Event('paste', { cancelable: true, bubbles: true });
+    host.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
 });

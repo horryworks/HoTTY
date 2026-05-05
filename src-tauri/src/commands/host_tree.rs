@@ -324,6 +324,22 @@ pub async fn decrypt_import_file(
     serde_json::to_string(&tree).map_err(|e| format!("failed to serialise host tree: {e}"))
 }
 
+/// Migrate v1 (Electron `safeStorage`) credentials in a host-tree JSON string to
+/// v2 (Rust DPAPI) format in place. Idempotent: v2 blobs and plaintext pass
+/// through untouched. Plaintext never crosses IPC — the renderer only sees the
+/// re-encrypted v2 ciphertext.
+#[tauri::command]
+pub fn migrate_host_tree_credentials(tree_json: String) -> Result<String, String> {
+    let mut tree: Vec<serde_json::Value> =
+        serde_json::from_str(&tree_json).map_err(|e| format!("invalid host tree JSON: {e}"))?;
+
+    for node in tree.iter_mut() {
+        migrate_credentials(node);
+    }
+
+    serde_json::to_string(&tree).map_err(|e| format!("failed to serialise host tree: {e}"))
+}
+
 /// Walk a host-tree node and, for every host entry, upgrade any `[SAFE]`-prefixed
 /// `username` / `password` field that was written by the v1 Electron build
 /// (`[SAFE]` + base64(`v10` + DPAPI-blob)) into the v2 format
@@ -630,6 +646,106 @@ mod tests {
             .and_then(|v| v.as_str())
             .unwrap();
         assert_eq!(decrypt_string(inner_user).unwrap(), "nested-user");
+    }
+
+    #[test]
+    fn migrate_host_tree_credentials_migrates_v1_blobs() {
+        if !cfg!(windows) {
+            return;
+        }
+        use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+
+        let make_v1 = |plain: &str| {
+            let v2 = encrypt_string(plain).unwrap();
+            let b64 = v2.strip_prefix("[SAFE]").unwrap();
+            let dpapi_bytes = BASE64.decode(b64).unwrap();
+            let mut v10 = b"v10".to_vec();
+            v10.extend_from_slice(&dpapi_bytes);
+            format!("[SAFE]{}", BASE64.encode(&v10))
+        };
+
+        let tree_json = serde_json::json!([
+            {
+                "id": "f1",
+                "type": "folder",
+                "name": "Folder",
+                "children": [{
+                    "id": "h1",
+                    "type": "host",
+                    "name": "Inner",
+                    "entry": { "username": make_v1("alice"), "password": make_v1("hunter2") }
+                }]
+            },
+            {
+                "id": "h2",
+                "type": "host",
+                "name": "Top",
+                "entry": { "username": make_v1("bob"), "password": "" }
+            }
+        ])
+        .to_string();
+
+        let migrated = migrate_host_tree_credentials(tree_json).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&migrated).unwrap();
+
+        let inner_user = parsed
+            .pointer("/0/children/0/entry/username")
+            .and_then(|v| v.as_str())
+            .unwrap();
+        let inner_pass = parsed
+            .pointer("/0/children/0/entry/password")
+            .and_then(|v| v.as_str())
+            .unwrap();
+        let top_user = parsed
+            .pointer("/1/entry/username")
+            .and_then(|v| v.as_str())
+            .unwrap();
+
+        assert_eq!(decrypt_string(inner_user).unwrap(), "alice");
+        assert_eq!(decrypt_string(inner_pass).unwrap(), "hunter2");
+        assert_eq!(decrypt_string(top_user).unwrap(), "bob");
+    }
+
+    #[test]
+    fn migrate_host_tree_credentials_idempotent_for_v2() {
+        if !cfg!(windows) {
+            return;
+        }
+
+        let v2_user = encrypt_string("carol").unwrap();
+        let v2_pass = encrypt_string("p@ss").unwrap();
+
+        let tree_json = serde_json::json!([{
+            "id": "h1",
+            "type": "host",
+            "name": "Server",
+            "entry": { "username": v2_user.clone(), "password": v2_pass.clone() }
+        }])
+        .to_string();
+
+        let migrated = migrate_host_tree_credentials(tree_json.clone()).unwrap();
+        // Functional equivalence: re-running migration must still decrypt to the same plaintexts.
+        let parsed: serde_json::Value = serde_json::from_str(&migrated).unwrap();
+        let u = parsed.pointer("/0/entry/username").and_then(|v| v.as_str()).unwrap();
+        let p = parsed.pointer("/0/entry/password").and_then(|v| v.as_str()).unwrap();
+        assert_eq!(decrypt_string(u).unwrap(), "carol");
+        assert_eq!(decrypt_string(p).unwrap(), "p@ss");
+
+        // Strict identity: v2 blobs are left untouched, so the JSON string is byte-equal.
+        assert_eq!(migrated, tree_json);
+    }
+
+    #[test]
+    fn migrate_host_tree_credentials_rejects_invalid_json() {
+        let result = migrate_host_tree_credentials("not json at all".into());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid host tree JSON"));
+    }
+
+    #[test]
+    fn migrate_host_tree_credentials_handles_empty_array() {
+        let migrated = migrate_host_tree_credentials("[]".into()).unwrap();
+        assert_eq!(migrated, "[]");
     }
 
     #[test]

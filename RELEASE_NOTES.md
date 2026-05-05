@@ -1,5 +1,23 @@
 # Release Notes
 
+## v2.0.0-beta9
+
+Automatic v1→v2 host-tree credential migration, paste-flow fixes, and security hardening around the asset protocol and SSH known-hosts handling.
+
+### Improvements
+
+- **Automatic v1→v2 host-tree credential migration** — host trees imported or carried over from the previous Electron build of HoTTY (v1) used `[SAFE]` + base64(`v10` + DPAPI blob) for `username` / `password`. On first load, those entries are now upgraded in place to the v2 format (`[SAFE]` + base64(DPAPI blob)). The migration runs in the Rust backend, is idempotent (v2 entries pass through byte-for-byte), and plaintext credentials never cross the IPC boundary.
+
+### Bug Fixes
+
+- **Ctrl+V pasted clipboard content twice** — pressing Ctrl+V used to insert the clipboard content once before the paste-confirmation dialog opened, and again when the user clicked "Paste". xterm.js's internal `paste` DOM listener was firing independently of our keydown interceptor. The terminal host now suppresses the native paste event so the confirmation dialog is the sole paste path. Right-click paste was unaffected.
+- **Terminal lost focus after the paste-confirmation dialog closed** — confirming or cancelling the paste dialog left focus stranded on the (now-removed) Paste button, requiring an extra click before the keyboard worked again. Focus is now restored to the originating terminal pane after the dialog unmounts.
+
+### Security
+
+- **Tighter Tauri asset protocol scope** — the `assetProtocol.scope` in `tauri.conf.json` was widened to `**` (any path) earlier in the v2 line. It is now restricted to image extensions only (`.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.webp`, `.ico`, `.svg`). The pane-background-image feature continues to work; defense-in-depth against renderer compromise.
+- **SSH refuses connection on known_hosts I/O errors** — previously, *any* error reading `known_hosts` (permission denied, disk failure, partial read) was silently treated as "this is a new host" and the user was re-prompted. An attacker who could corrupt or chmod-zero the file could exploit this to coax the user into accepting a substituted host key for an already-trusted host. Real I/O errors now log and refuse the connection; "file not found" still correctly returns the new-host prompt for first-time users.
+
 ## v2.0.0-beta8
 
 Connection lifecycle UI, horizontal scrolling for unwrapped lines, and a rebuilt terminal layout that keeps the marker and scrollbar pinned to the right edge.

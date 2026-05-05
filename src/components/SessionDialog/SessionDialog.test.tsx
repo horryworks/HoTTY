@@ -21,6 +21,7 @@ vi.mock('../../services/tauriService', () => ({
     detectGitBash: vi.fn().mockResolvedValue(null),
     dpapiEncryptBatch: vi.fn(async (values: string[]) => values.map(v => `[SAFE]${v}`)),
     dpapiDecryptBatch: vi.fn(async (values: string[]) => values.map(v => v.replace(/^\[SAFE\]/, ''))),
+    migrateHostTreeCredentials: vi.fn(async (treeJson: string) => treeJson),
   },
   isEncrypted: (value: string) => value.startsWith('[DPAPI]') || value.startsWith('[SAFE]'),
 }));

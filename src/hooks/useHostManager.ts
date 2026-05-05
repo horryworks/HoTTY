@@ -238,6 +238,24 @@ export function useHostManager() {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setTree(raw);
 
+        // v1 (Electron safeStorage) credentials live as [SAFE] + base64("v10" + DPAPI-blob);
+        // v2 expects [SAFE] + base64(DPAPI-blob). The upgrade is done Rust-side so plaintext
+        // never crosses IPC. Idempotent — v2 blobs are byte-equal in the response.
+        const migrateV1Credentials = async (nodes: HostTreeNode[]): Promise<HostTreeNode[]> => {
+            try {
+                const inputJson = JSON.stringify(nodes);
+                const migratedJson = await tauriService.migrateHostTreeCredentials(inputJson);
+                if (migratedJson === inputJson) return nodes;
+                const migrated: HostTreeNode[] = JSON.parse(migratedJson);
+                saveRawTree(migrated);
+                setTree(migrated);
+                return migrated;
+            } catch (err) {
+                logError('HostManager', 'v1→v2 credential migration failed', err);
+                return nodes;
+            }
+        };
+
         const eagerDecryptTree = async (nodes: HostTreeNode[]) => {
             const secrets: (string | undefined)[] = [];
             const targets: { id: string; type: 'username' | 'password' }[] = [];
@@ -312,9 +330,11 @@ export function useHostManager() {
             markDecrypted(nodes);
         };
 
-        eagerDecryptTree(raw).catch(err => {
-            logError('HostManager', 'Background eager decryption failed', err);
-        });
+        migrateV1Credentials(raw)
+            .then(eagerDecryptTree)
+            .catch(err => {
+                logError('HostManager', 'Background eager decryption failed', err);
+            });
     }, []);
 
     const persistAndSet = useCallback(async (decryptedTree: HostTreeNode[]) => {

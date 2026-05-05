@@ -73,6 +73,19 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
       viewportEl.style.overflow = 'hidden';
     }
 
+    // Suppress xterm.js's internal paste handler. xterm attaches a `paste`
+    // listener on its helper textarea that calls term.paste() → onData →
+    // sendInput(), which would bypass the paste-confirmation modal. The
+    // capture-phase listener on the host runs before xterm's bubble-phase
+    // textarea listener, so preventing default here blocks the auto-paste.
+    // The Ctrl+V keydown path in useSessionManager remains the sole driver
+    // of the modal.
+    const suppressPaste = (e: ClipboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    el.addEventListener('paste', suppressPaste, true);
+
     // Compute terminal dimensions ourselves instead of using FitAddon.
     // FitAddon's `proposeDimensions` subtracts a hardcoded 14px from the
     // available width to reserve room for xterm's scrollbar — but we use
@@ -163,6 +176,7 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
       ro.disconnect();
       lineFeedDispose?.dispose();
       cursorMoveDispose?.dispose();
+      el.removeEventListener('paste', suppressPaste, true);
     };
   }, [session, lineWrapEnabled]);
 
