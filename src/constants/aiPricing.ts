@@ -84,3 +84,14 @@ export function calcAICost(inputTokens: number, outputTokens: number, model: str
     const rate = ALL_PRICING[key];
     return (inputTokens * rate.input + outputTokens * rate.output) / 1_000_000;
 }
+
+/**
+ * Formats a USD cost for compact display.
+ *   < $0.01     → "< $0.01"
+ *   < $1        → "$0.05" (2 decimals)
+ *   otherwise   → "$1.23" (2 decimals)
+ */
+export function formatAICost(cost: number): string {
+    if (cost > 0 && cost < 0.01) return '< $0.01';
+    return `$${cost.toFixed(2)}`;
+}

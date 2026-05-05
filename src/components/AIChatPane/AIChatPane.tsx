@@ -4,7 +4,7 @@ import { getTransparentColor } from '../../utils/colorUtils';
 import { sanitizeHtml } from '../../utils/htmlUtils';
 import { classifyCommand } from '../../utils/commandClassifier';
 import { STORAGE_KEYS } from '../../constants/storage';
-import { calcAICost } from '../../constants/aiPricing';
+import { calcAICost, formatAICost } from '../../constants/aiPricing';
 import { buildExecutionRules } from '../../constants/aiPrompts';
 import { AuthenticationPanel } from './AuthenticationPanel';
 import { VertexAIAuthPanel } from './VertexAIAuthPanel';
@@ -12,6 +12,7 @@ import { OpenAIAuthPanel } from './OpenAIAuthPanel';
 import { AnthropicAuthPanel } from './AnthropicAuthPanel';
 import { ExecutionModeBar } from './ExecutionModeBar';
 import { SystemPromptModal } from '../SystemPromptModal/SystemPromptModal';
+import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { tauriService } from '../../services/tauriService';
 import { logError } from '../../utils/logger';
@@ -238,6 +239,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const [totalInputTokens, setTotalInputTokens] = useState(0);
     const [totalOutputTokens, setTotalOutputTokens] = useState(0);
     const [totalCost, setTotalCost] = useState<number | null>(null);
+    const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
+    const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
+    const overflowMenuRef = useRef<HTMLDivElement>(null);
+    const overflowTriggerRef = useRef<HTMLButtonElement>(null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -711,7 +716,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         }
     };
 
-    const handleClearChat = () => {
+    const performNewChat = () => {
         setMessages([]);
         setStreamingContent('');
         setTotalInputTokens(0);
@@ -719,6 +724,33 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         setTotalCost(null);
         tauriService.aiChatClear(paneId).catch(() => {});
     };
+
+    const handleNewChatClick = () => {
+        if (messages.length > 0 || streamingContent) {
+            setShowNewChatConfirm(true);
+        } else {
+            performNewChat();
+        }
+    };
+
+    useEffect(() => {
+        if (!overflowMenuOpen) return;
+        const onMouseDown = (e: MouseEvent) => {
+            const target = e.target as Node;
+            if (overflowMenuRef.current?.contains(target)) return;
+            if (overflowTriggerRef.current?.contains(target)) return;
+            setOverflowMenuOpen(false);
+        };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setOverflowMenuOpen(false);
+        };
+        document.addEventListener('mousedown', onMouseDown);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onMouseDown);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [overflowMenuOpen]);
 
     const handleCancel = () => {
         tauriService.aiChatCancel(paneId).catch(() => {});
@@ -752,6 +784,45 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     <div className="ai-chat-logo">
                         <AIIcon size={24} />
                     </div>
+                    {isAuthenticated && (
+                        <button
+                            type="button"
+                            className="ai-chat-new-chat-btn"
+                            onClick={handleNewChatClick}
+                            title="Start a new chat"
+                            aria-label="Start a new chat"
+                        >
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                            <span>New chat</span>
+                        </button>
+                    )}
+                    {isAuthenticated && lastTargetSessionId && (
+                        <button
+                            type="button"
+                            className="ai-chat-linked-chip"
+                            onClick={() => {
+                                tauriService.focusWindow().catch(() => {});
+                                window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: lastTargetSessionId } }));
+                            }}
+                            onMouseEnter={() => {
+                                window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: lastTargetSessionId, highlighted: true } }));
+                            }}
+                            onMouseLeave={() => {
+                                window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: lastTargetSessionId, highlighted: false } }));
+                            }}
+                            title={`Linked to ${lastTargetSessionTitle || 'terminal'}. Click to focus.`}
+                            aria-label={`Linked terminal: ${lastTargetSessionTitle || 'unknown'}`}
+                        >
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                            </svg>
+                            <span className="ai-chat-linked-chip-name">{lastTargetSessionTitle || 'terminal'}</span>
+                        </button>
+                    )}
                 </div>
                 <div className="ai-chat-header-right">
                     {isAuthenticated && (
@@ -833,10 +904,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     </select>
                                 </div>
                             )}
+                            <div className="ai-chat-header-divider" aria-hidden="true" />
                             <div className="ai-chat-header-item">
                                 <select
                                     className="ai-chat-model-select"
-                                    style={{ width: '150px' }}
+                                    style={{ width: '210px' }}
                                     value={selectedModel}
                                     onChange={(e) => {
                                         const model = e.target.value;
@@ -853,28 +925,42 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     ))}
                                 </select>
                             </div>
-                            <button
-                                className={`ai-chat-header-btn ai-chat-autoexec-toggle${commandExecutionMode === 'auto-execute-safe' ? ' active' : ''}`}
-                                onClick={() => {
-                                    const next = commandExecutionMode === 'ask-before-execute' ? 'auto-execute-safe' : 'ask-before-execute';
-                                    useSettingsStore.getState().update('commandExecutionMode', next);
-                                }}
-                                title={commandExecutionMode === 'auto-execute-safe' ? 'Auto-execute: ON' : 'Auto-execute: OFF'}
-                            >
-                                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                                    <path d="M7 2v11h3v9l7-12h-4l4-8z"/>
-                                </svg>
-                            </button>
-                            <button className="ai-chat-header-btn ai-chat-header-btn--danger" onClick={handleClearChat} title="Clear chat context">
-                                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                                    <path d="M9 3v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5V3H9zm0 5h2v9H9V8zm4 0h2v9h-2V8z"/>
-                                </svg>
-                            </button>
-                            <button className="ai-chat-header-btn" onClick={handleLogout} title="Logout">
-                                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                                    <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
-                                </svg>
-                            </button>
+                            <div className="ai-chat-overflow-wrap">
+                                <button
+                                    ref={overflowTriggerRef}
+                                    type="button"
+                                    className="ai-chat-header-btn ai-chat-overflow-btn"
+                                    onClick={() => setOverflowMenuOpen(o => !o)}
+                                    title="More options"
+                                    aria-label="More options"
+                                    aria-haspopup="menu"
+                                    aria-expanded={overflowMenuOpen}
+                                >
+                                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+                                        <circle cx="12" cy="5" r="1.6" />
+                                        <circle cx="12" cy="12" r="1.6" />
+                                        <circle cx="12" cy="19" r="1.6" />
+                                    </svg>
+                                </button>
+                                {overflowMenuOpen && (
+                                    <div ref={overflowMenuRef} className="ai-chat-overflow-menu" role="menu">
+                                        <button
+                                            type="button"
+                                            className="ai-chat-overflow-item"
+                                            role="menuitem"
+                                            onClick={() => {
+                                                setOverflowMenuOpen(false);
+                                                handleLogout();
+                                            }}
+                                        >
+                                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                                                <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
+                                            </svg>
+                                            <span>Logout</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </>
                     )}
                 </div>
@@ -925,6 +1011,50 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             ) : (
                 <div className="ai-chat-body">
                     <div className="ai-chat-messages" ref={scrollContainerRef}>
+                        {messages.length === 0 && !streamingContent && !isStreaming && (
+                            <div className="ai-chat-empty-state">
+                                <div className="ai-chat-empty-icon">
+                                    <AIIcon size={56} />
+                                </div>
+                                <h2 className="ai-chat-empty-title">How can I help?</h2>
+                                {lastTargetSessionId ? (
+                                    <div className="ai-chat-empty-target">
+                                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                        </svg>
+                                        <span>Linked to <strong>{lastTargetSessionTitle || 'terminal'}</strong></span>
+                                    </div>
+                                ) : (
+                                    <div className="ai-chat-empty-target ai-chat-empty-target--none">
+                                        <span>No terminal linked yet — open a session to enable command execution</span>
+                                    </div>
+                                )}
+                                <div className="ai-chat-empty-suggestions">
+                                    {[
+                                        'What does this terminal output mean?',
+                                        'Find any issues in the recent output',
+                                        "Explain the last command's result",
+                                    ].map((prompt) => (
+                                        <button
+                                            key={prompt}
+                                            type="button"
+                                            className="ai-chat-empty-suggestion"
+                                            onClick={() => {
+                                                setInputText(prompt);
+                                                setTimeout(() => textareaRef.current?.focus(), 0);
+                                            }}
+                                            disabled={selectedModel === 'Unspecified' || isStreaming}
+                                        >
+                                            {prompt}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="ai-chat-empty-tip">
+                                    Tip: right-click on terminal text to use <strong>Ask AI</strong> with the selection.
+                                </p>
+                            </div>
+                        )}
                         {messages.map((msg, idx) => (
                             <div key={idx} className={`ai-chat-message ai-chat-message-${msg.role}`}>
                                 <div className="ai-chat-message-avatar">
@@ -970,7 +1100,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                         {isStreaming && !streamingContent && (
                             <div className="ai-chat-message ai-chat-message-model">
                                 <div className="ai-chat-message-avatar"><AIIcon size={18} /></div>
-                                <div className="ai-chat-message-content">Thinking...</div>
+                                <div className="ai-chat-message-content">
+                                    <span className="ai-chat-thinking">
+                                        Thinking
+                                        <span className="ai-chat-thinking-dots" aria-hidden="true">
+                                            <span>.</span><span>.</span><span>.</span>
+                                        </span>
+                                    </span>
+                                </div>
                             </div>
                         )}
                         <div ref={messagesEndRef} />
@@ -1001,29 +1138,71 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             value={inputText}
                             onChange={(e) => setInputText(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder="Type a message..."
+                            placeholder={selectedModel === 'Unspecified' ? 'Select a model to start...' : 'Type a message...'}
                             disabled={isStreaming}
                         />
-                        <button className="ai-chat-prompt-btn" onClick={onShowPromptMenu} title="Analysis prompts">&#x2728;</button>
-                        {isStreaming && <button className="ai-chat-cancel-btn" onClick={handleCancel}>&#x25A0;</button>}
-                        <button className="ai-chat-send-btn" onClick={handleSend} disabled={!inputText.trim() || isStreaming || selectedModel === 'Unspecified'}>&#x27A4;</button>
+                        <div className="ai-chat-input-toolbar">
+                            <ExecutionModeBar
+                                paused={autoExecPaused}
+                                onPausedChange={(next) => {
+                                    setAutoExecPaused(next);
+                                    if (next && isStreaming) {
+                                        handleCancel();
+                                    }
+                                }}
+                            />
+                            <span className="ai-chat-input-toolbar-spacer" />
+                            <button className="ai-chat-prompt-btn" onClick={onShowPromptMenu} title="Analysis prompts">&#x2728;</button>
+                            {isStreaming && <button className="ai-chat-cancel-btn" onClick={handleCancel}>&#x25A0;</button>}
+                            <button
+                                className="ai-chat-send-btn"
+                                onClick={handleSend}
+                                disabled={!inputText.trim() || isStreaming || selectedModel === 'Unspecified'}
+                                title={
+                                    selectedModel === 'Unspecified'
+                                        ? 'Select a model first'
+                                        : !inputText.trim()
+                                        ? 'Type a message first'
+                                        : isStreaming
+                                        ? 'Streaming…'
+                                        : 'Send'
+                                }
+                            >&#x27A4;</button>
+                        </div>
                     </div>
-                    <ExecutionModeBar
-                        paused={autoExecPaused}
-                        onPausedChange={(next) => {
-                            setAutoExecPaused(next);
-                            if (next && isStreaming) {
-                                handleCancel();
-                            }
-                        }}
-                    />
-                    {(totalInputTokens > 0 || totalOutputTokens > 0) && (
+                    {selectedModel === 'Unspecified' && (
+                        <div className="ai-chat-input-hint">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+                                <path d="M12 2L1 21h22L12 2zm0 4l8.53 14.5H3.47L12 6zm-1 5v5h2v-5h-2zm0 7v2h2v-2h-2z" />
+                            </svg>
+                            <span>Select a model in the header to send messages</span>
+                        </div>
+                    )}
+                    {(inputText.length > 0 || isStreaming || totalInputTokens > 0 || totalOutputTokens > 0) && (
                         <div className="ai-token-status">
-                            <span>{totalInputTokens.toLocaleString()} in / {totalOutputTokens.toLocaleString()} out tokens</span>
-                            {totalCost !== null && (
+                            {isStreaming ? (
+                                streamingContent.length > 0 ? (
+                                    <span>Receiving &middot; {Math.ceil(streamingContent.length / 4).toLocaleString()} tokens</span>
+                                ) : (
+                                    <span>Waiting for response&hellip;</span>
+                                )
+                            ) : (
                                 <>
-                                    <span className="ai-token-status-sep">&middot;</span>
-                                    <span>~${totalCost.toFixed(4)}</span>
+                                    {(totalInputTokens > 0 || totalOutputTokens > 0) && (
+                                        <span>{totalInputTokens.toLocaleString()} in / {totalOutputTokens.toLocaleString()} out tokens</span>
+                                    )}
+                                    {totalCost !== null && (
+                                        <>
+                                            <span className="ai-token-status-sep">&middot;</span>
+                                            <span>~{formatAICost(totalCost)}</span>
+                                        </>
+                                    )}
+                                    {inputText.length > 0 && (
+                                        <>
+                                            {(totalInputTokens > 0 || totalOutputTokens > 0) && <span className="ai-token-status-sep">&middot;</span>}
+                                            <span>~{Math.ceil(inputText.length / 4).toLocaleString()} tokens to send</span>
+                                        </>
+                                    )}
                                 </>
                             )}
                         </div>
@@ -1035,6 +1214,18 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     personaLabel={selectedExpertise}
                     systemInstruction={localSystemInstruction}
                     onClose={() => setShowPromptModal(false)}
+                />
+            )}
+            {showNewChatConfirm && (
+                <ConfirmModal
+                    title="Start a new chat?"
+                    message="The current conversation will be cleared. This cannot be undone."
+                    confirmLabel="Start new chat"
+                    onConfirm={() => {
+                        setShowNewChatConfirm(false);
+                        performNewChat();
+                    }}
+                    onCancel={() => setShowNewChatConfirm(false)}
                 />
             )}
         </div>

@@ -15,7 +15,7 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
 
     const [popoverOpen, setPopoverOpen] = useState(false);
     const popoverRef = useRef<HTMLDivElement | null>(null);
-    const triggerRef = useRef<HTMLSpanElement | null>(null);
+    const triggerRef = useRef<HTMLButtonElement | null>(null);
 
     const isAuto = commandExecutionMode === 'auto-execute-safe';
     const isUnlimited = maxConsecutiveAutoExecutions <= 0;
@@ -48,145 +48,141 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
         useSettingsStore.getState().update('maxConsecutiveAutoExecutions', clamped);
     };
 
-    const handleAskClick = () => {
-        if (commandExecutionMode !== 'ask-before-execute') {
-            setMode('ask-before-execute');
-        }
-    };
-
-    const handleAutoClick = () => {
-        if (commandExecutionMode !== 'auto-execute-safe') {
-            setMode('auto-execute-safe');
-        }
-    };
-
-    const handleBadgeClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!isAuto) {
-            setMode('auto-execute-safe');
-        }
-        setPopoverOpen(prev => !prev);
+    const handleUnlimitedChange = (checked: boolean) => {
+        setMax(checked ? 0 : DEFAULT_MAX_WHEN_LIMITED);
     };
 
     const handlePauseToggle = () => {
         onPausedChange(!paused);
     };
 
-    const handleUnlimitedChange = (checked: boolean) => {
-        setMax(checked ? 0 : DEFAULT_MAX_WHEN_LIMITED);
-    };
+    const chipLabel = isAuto
+        ? `Auto · Max ${isUnlimited ? '∞' : maxConsecutiveAutoExecutions}`
+        : 'Ask before execute';
 
-    const maxLabel = isUnlimited ? '∞' : String(maxConsecutiveAutoExecutions);
+    const chipClass = [
+        'execution-mode-chip',
+        isAuto ? 'auto' : 'ask',
+        paused ? 'paused' : '',
+    ].filter(Boolean).join(' ');
 
     return (
-        <div
-            className={`execution-mode-bar${paused ? ' paused' : ''}`}
-            data-testid="execution-mode-bar"
-            role="group"
-            aria-label="AI command execution mode"
-        >
+        <div className="execution-mode-chip-wrap" data-testid="execution-mode-bar">
             <button
+                ref={triggerRef}
                 type="button"
-                className={`execution-mode-pill${!isAuto ? ' active' : ''}`}
-                onClick={handleAskClick}
-                aria-pressed={!isAuto}
-                title="Require manual confirmation before running AI-suggested commands"
+                className={chipClass}
+                onClick={() => setPopoverOpen(o => !o)}
+                aria-haspopup="dialog"
+                aria-expanded={popoverOpen}
+                aria-label={`Execution mode: ${chipLabel}${paused ? ' (paused)' : ''}`}
+                title="Execution mode"
             >
-                Ask before execute
+                {isAuto ? (
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
+                        <path d="M7 2v11h3v9l7-12h-4l4-8z" />
+                    </svg>
+                ) : (
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                )}
+                <span className="execution-mode-chip-label">{chipLabel}</span>
+                {paused && <span className="execution-mode-chip-paused-tag">Paused</span>}
             </button>
-
-            <button
-                type="button"
-                className={`execution-mode-pill execution-mode-pill--auto${isAuto ? ' active' : ''}`}
-                onClick={handleAutoClick}
-                aria-pressed={isAuto}
-                title="Automatically run safe (read-only) AI-suggested commands"
-            >
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
-                    <path d="M7 2v11h3v9l7-12h-4l4-8z" />
-                </svg>
-                <span className="execution-mode-pill-label">Auto-execute safe commands</span>
-                <span
-                    ref={triggerRef}
-                    className="execution-mode-max-badge"
-                    onClick={handleBadgeClick}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Max consecutive auto-executions: ${isUnlimited ? 'unlimited' : maxConsecutiveAutoExecutions}`}
-                    aria-haspopup="dialog"
-                    aria-expanded={popoverOpen}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            handleBadgeClick(e as unknown as React.MouseEvent);
-                        }
-                    }}
-                >
-                    Max: {maxLabel}
-                </span>
-            </button>
-
-            {isAuto && (
-                <button
-                    type="button"
-                    className={`execution-mode-kill${paused ? ' paused' : ''}${isUnlimited ? ' unlimited' : ''}`}
-                    onClick={handlePauseToggle}
-                    aria-pressed={paused}
-                    title={paused ? 'Resume auto-execution' : 'Pause auto-execution and abort current AI stream'}
-                >
-                    {paused ? (
-                        <>
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
-                                <path d="M8 5v14l11-7z" />
-                            </svg>
-                            <span>Resume</span>
-                        </>
-                    ) : (
-                        <>
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
-                                <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
-                            </svg>
-                            <span>Pause</span>
-                        </>
-                    )}
-                </button>
-            )}
-
-            {paused && isAuto && (
-                <span className="execution-mode-paused-banner">Auto-execution paused</span>
-            )}
 
             {popoverOpen && (
                 <div
                     ref={popoverRef}
                     className="execution-mode-popover"
                     role="dialog"
-                    aria-label="Configure max consecutive auto-executions"
+                    aria-label="Execution mode settings"
                 >
-                    <label className="execution-mode-popover-label">
-                        Max consecutive runs
-                        <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={1}
-                            value={maxConsecutiveAutoExecutions}
-                            onChange={(e) => setMax(parseInt(e.target.value, 10))}
-                            disabled={isUnlimited}
-                            aria-label="Max consecutive runs"
-                        />
-                    </label>
-                    <label className="execution-mode-popover-checkbox">
-                        <input
-                            type="checkbox"
-                            checked={isUnlimited}
-                            onChange={(e) => handleUnlimitedChange(e.target.checked)}
-                        />
-                        <span>Unlimited (∞)</span>
-                    </label>
-                    <p className="execution-mode-popover-hint">
-                        After this many auto-runs in a row, commands require manual confirmation.
-                    </p>
+                    <div className="execution-mode-popover-title">Execution Mode</div>
+
+                    <button
+                        type="button"
+                        className={`execution-mode-popover-option${!isAuto ? ' selected' : ''}`}
+                        role="radio"
+                        aria-checked={!isAuto}
+                        onClick={() => setMode('ask-before-execute')}
+                    >
+                        <span className={`execution-mode-popover-radio${!isAuto ? ' selected' : ''}`} />
+                        <span className="execution-mode-popover-option-text">
+                            <span className="execution-mode-popover-option-title">Ask before execute</span>
+                            <span className="execution-mode-popover-option-desc">Confirm each command manually before it runs.</span>
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
+                        className={`execution-mode-popover-option${isAuto ? ' selected' : ''}`}
+                        role="radio"
+                        aria-checked={isAuto}
+                        onClick={() => setMode('auto-execute-safe')}
+                    >
+                        <span className={`execution-mode-popover-radio${isAuto ? ' selected' : ''}`} />
+                        <span className="execution-mode-popover-option-text">
+                            <span className="execution-mode-popover-option-title">Auto-execute safe commands</span>
+                            <span className="execution-mode-popover-option-desc">Read-only commands run automatically; destructive ones still ask.</span>
+                        </span>
+                    </button>
+
+                    {isAuto && (
+                        <>
+                            <div className="execution-mode-popover-divider" />
+                            <label className="execution-mode-popover-label">
+                                <span>Max consecutive runs</span>
+                                <span className="execution-mode-popover-max-row">
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        step={1}
+                                        value={maxConsecutiveAutoExecutions}
+                                        onChange={(e) => setMax(parseInt(e.target.value, 10))}
+                                        disabled={isUnlimited}
+                                        aria-label="Max consecutive runs"
+                                    />
+                                    <label className="execution-mode-popover-checkbox">
+                                        <input
+                                            type="checkbox"
+                                            checked={isUnlimited}
+                                            onChange={(e) => handleUnlimitedChange(e.target.checked)}
+                                        />
+                                        <span>∞</span>
+                                    </label>
+                                </span>
+                            </label>
+                            <p className="execution-mode-popover-hint">
+                                After this many auto-runs in a row, commands require manual confirmation.
+                            </p>
+                            <div className="execution-mode-popover-divider" />
+                            <button
+                                type="button"
+                                className={`execution-mode-popover-pause${paused ? ' paused' : ''}`}
+                                onClick={handlePauseToggle}
+                            >
+                                {paused ? (
+                                    <>
+                                        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+                                            <path d="M8 5v14l11-7z" />
+                                        </svg>
+                                        <span>Resume auto-execution</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+                                            <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
+                                        </svg>
+                                        <span>Pause auto-execution</span>
+                                    </>
+                                )}
+                            </button>
+                        </>
+                    )}
                 </div>
             )}
         </div>
