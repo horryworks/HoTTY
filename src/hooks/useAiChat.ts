@@ -192,6 +192,14 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     const selectedModel = chatState.selectedModel || 'Unspecified';
     const systemInstruction = chatState.systemInstruction || 'You are a helpful assistant.';
 
+    const prepInfo = `useai-send-prep ${JSON.stringify({
+      aiSessionId,
+      finalMessageLen: finalMessage.length,
+      hasWatchPrefix: prependedContext.length > 0,
+    })}`;
+    console.debug(`[AIExec/info] ${prepInfo}`);
+    tauriService.logDebug('info', 'AIExec', prepInfo)?.catch(() => {});
+
     tauriService.aiChatSend(aiSessionId, finalMessage, selectedModel, systemInstruction);
   }, []);
 

@@ -442,7 +442,21 @@ export const tauriService = {
     model: string,
     systemInstruction?: string,
   ): Promise<void> {
-    await invoke('ai_chat_send', { sessionId, message, model, systemInstruction: systemInstruction ?? null });
+    const messageLen = message.length;
+    const hasWatchPrefix = message.startsWith('[Watched Terminal Output')
+      || message.startsWith('Terminal Output (Command:');
+    const sendInfo = `send-to-ai ${JSON.stringify({ paneId: sessionId, messageLen, hasWatchPrefix })}`;
+    console.debug(`[AIExec/info] ${sendInfo}`);
+    Promise.resolve(invoke('log_debug', { level: 'info', category: 'AIExec', message: sendInfo })).catch(() => {});
+    try {
+      await invoke('ai_chat_send', { sessionId, message, model, systemInstruction: systemInstruction ?? null });
+    } catch (e) {
+      const errStr = typeof e === 'string' ? e : e instanceof Error ? e.message : String(e);
+      const rejInfo = `ai-send-rejected ${JSON.stringify({ messageLen, error: errStr })}`;
+      console.warn(`[AIExec/warn] ${rejInfo}`);
+      Promise.resolve(invoke('log_debug', { level: 'warn', category: 'AIExec', message: rejInfo })).catch(() => {});
+      throw e;
+    }
   },
 
   async aiChatCancel(sessionId: string): Promise<void> {

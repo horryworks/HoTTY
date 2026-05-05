@@ -42,6 +42,24 @@ import { stripAnsiCodes } from './utils/ansiUtils';
 import { totalDirtyEditors } from './utils/dirtyEditors';
 import './App.css';
 
+// Diagnostic logger for the AI command-execution pipeline.
+// Mirrors to console.debug for live inspection in DevTools and to the Rust log
+// file via tauriService.logDebug for post-mortem review of "result was cut off"
+// reproductions. Failures from logDebug must never break the calling flow.
+function aiExecLog(level: 'info' | 'warn', event: string, data: Record<string, unknown>): void {
+  try {
+    const message = `${event} ${JSON.stringify(data)}`;
+    (level === 'warn' ? console.warn : console.debug)(`[AIExec/${level}] ${message}`);
+    tauriService.logDebug(level, 'AIExec', message)?.catch(() => {});
+  } catch {
+    /* logging must never throw into caller */
+  }
+}
+
+function trimCmdForLog(cmd: string): string {
+  return cmd.length > 120 ? `${cmd.slice(0, 120)}...` : cmd;
+}
+
 function App() {
   const [pasteReq, setPasteReq] = useState<{ sessionId: string; content: string } | null>(null);
   const [featurePanes, setFeaturePanes] = useState<Map<string, FeaturePaneInfo>>(new Map());
@@ -163,7 +181,14 @@ function App() {
       let newBuffer = current + stripped;
       const limit = useSettingsStore.getState().watchBufferLimit;
       if (newBuffer.length > limit) {
+        const oldLen = newBuffer.length;
         newBuffer = newBuffer.substring(newBuffer.length - limit);
+        aiExecLog('warn', 'buffer-trimmed', {
+          sessionId,
+          oldLen,
+          limit,
+          droppedBytes: oldLen - limit,
+        });
       }
       watchBuffers.current.set(sessionId, newBuffer);
     });
@@ -519,6 +544,12 @@ function App() {
 
                 // Send command lines to terminal
                 const lines = cmd.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                aiExecLog('info', 'command-start', {
+                  cmd: trimCmdForLog(cmd),
+                  startLen,
+                  lines: lines.length,
+                  watching: watchingSessionIdRef.current === targetId,
+                });
                 lines.forEach((line, index) => {
                   setTimeout(() => {
                     tauriService.sendInput(targetId, line + '\r').catch(() => {});
@@ -537,27 +568,70 @@ function App() {
                     runCommandIntervalsRef.current.set(paneId, set);
                   }
                   const intervalSet = set;
+                  let startLenWarned = false;
+                  aiExecLog('info', 'poll-begin', {
+                    cmd: trimCmdForLog(cmd),
+                    startLen,
+                    maxAttempts,
+                    sendDuration,
+                  });
                   const pollInterval = setInterval(() => {
                     attempts++;
                     // Bail out if the watch target changed or was cleared.
                     if (watchingSessionIdRef.current !== targetId) {
+                      aiExecLog('warn', 'watch-target-changed', {
+                        cmd: trimCmdForLog(cmd),
+                        attempts,
+                      });
                       clearInterval(pollInterval);
                       intervalSet.delete(pollInterval);
                       return;
                     }
                     const buf = watchBuffers.current.get(targetId) || '';
+                    if (!startLenWarned && startLen > buf.length) {
+                      startLenWarned = true;
+                      aiExecLog('warn', 'startlen-out-of-range', {
+                        cmd: trimCmdForLog(cmd),
+                        startLen,
+                        bufLen: buf.length,
+                      });
+                    }
                     const newContent = buf.substring(startLen);
                     // Wait until all lines are sent + some output received
                     if (attempts * 200 < sendDuration + 300) return;
-                    // Detect shell prompt: line ending with common prompt chars
-                    const promptPattern = /[$#>]\s*$/m;
-                    if (newContent.length > 0 && promptPattern.test(newContent)) {
+                    // Detect shell prompt: buffer ending with common prompt chars.
+                    //   $ # — bash / sh / Cisco privileged
+                    //   >   — Huawei VRP user view <hostname>, PowerShell, Cisco user mode
+                    //   ]   — Huawei VRP system view [hostname] / sub-views [hostname-mode]
+                    // No /m flag — $ anchors to end-of-string so we only match a real
+                    // trailing prompt, not stray $ / # / > / ] that happen to land at
+                    // end-of-line mid-stream (e.g. Huawei VRP cipher hashes / config
+                    // values that contain those chars).
+                    const promptPattern = /[$#>\]]\s*$/;
+                    const match = newContent.length > 0 ? newContent.match(promptPattern) : null;
+                    if (match) {
+                      const matchIndex = match.index ?? -1;
+                      const matchedAtEnd = matchIndex >= 0
+                        && matchIndex + match[0].length === newContent.length;
+                      aiExecLog('info', 'prompt-match', {
+                        cmd: trimCmdForLog(cmd),
+                        attempts,
+                        bufLen: buf.length,
+                        newLen: newContent.length,
+                        matchedAtEnd,
+                      });
                       clearInterval(pollInterval);
                       intervalSet.delete(pollInterval);
                       clearWatchBuffer(targetId);
                       const outputText = `Terminal Output (Command: ${cmd}):\n${newContent.trim()}`;
                       updateAiChatState(paneId, { pendingMessage: outputText });
                     } else if (attempts >= maxAttempts) {
+                      aiExecLog('warn', 'timeout', {
+                        cmd: trimCmdForLog(cmd),
+                        attempts,
+                        bufLen: buf.length,
+                        newLen: newContent.length,
+                      });
                       clearInterval(pollInterval);
                       intervalSet.delete(pollInterval);
                     }
