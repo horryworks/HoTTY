@@ -76,6 +76,23 @@ function App() {
 
   const handleSessionRemoved = useCallback((id: string) => {
     usePaneStore.getState().removeSession(id);
+    // If the removed session was being watched, stop watching.
+    if (watchingSessionIdRef.current === id) {
+      watchBuffers.current.delete(id);
+      setWatchingSessionId(null);
+    }
+    // Clear any AI chat panes that were linked to this session.
+    const states = aiChatStatesRef.current;
+    if (states) {
+      for (const [aiPaneId, st] of states.entries()) {
+        if (st.lastTargetSessionId === id) {
+          updateAiChatStateRef.current?.(aiPaneId, {
+            lastTargetSessionId: undefined,
+            lastTargetSessionTitle: undefined,
+          });
+        }
+      }
+    }
   }, []);
   const { sessions, openSession, closeSession } = useSessionManager({
     onPasteRequest: handlePasteRequest,
@@ -138,6 +155,7 @@ function App() {
 
   const createAiChatPaneRef = useRef<() => string | undefined>(undefined);
   const updateAiChatStateRef = useRef<(id: string, state: Record<string, unknown>) => void>(undefined);
+  const aiChatStatesRef = useRef<Map<string, { lastTargetSessionId?: string; lastTargetSessionTitle?: string }>>(new Map());
 
   const toggleWatch = useCallback((sessionId?: string) => {
     if (!sessionId) return;
@@ -145,9 +163,20 @@ function App() {
     const isTurningOn = prev !== sessionId;
 
     if (!isTurningOn) {
-      // Turning off
+      // Turning off — also unlink any AI chat pane that was linked to this session.
       watchBuffers.current.delete(sessionId);
       setWatchingSessionId(null);
+      const states = aiChatStatesRef.current;
+      if (states) {
+        for (const [aiPaneId, st] of states.entries()) {
+          if (st.lastTargetSessionId === sessionId) {
+            updateAiChatStateRef.current?.(aiPaneId, {
+              lastTargetSessionId: undefined,
+              lastTargetSessionTitle: undefined,
+            });
+          }
+        }
+      }
       return;
     }
 
@@ -239,6 +268,7 @@ function App() {
   useEffect(() => {
     createAiChatPaneRef.current = createAiChatPane;
     updateAiChatStateRef.current = updateAiChatState;
+    aiChatStatesRef.current = aiChatStates;
   });
 
   const [connectOpen, setConnectOpen] = useState(false);
