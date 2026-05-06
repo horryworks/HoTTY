@@ -1,0 +1,99 @@
+/* AI Chat tab strip — horizontal tab list with + add and × close. */
+
+.ai-chat-tab-strip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px 0 8px;
+    background: var(--ai-header-bg, var(--bg-secondary));
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.ai-chat-tab-strip-list {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: hidden;
+    min-width: 0;
+}
+
+.ai-chat-tab-strip-list::-webkit-scrollbar {
+    height: 4px;
+}
+
+.ai-chat-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 6px 6px 0 0;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+    font-size: calc(var(--font-size-base) - 1px);
+    border: 1px solid transparent;
+    border-bottom: none;
+    flex-shrink: 0;
+    max-width: 180px;
+    transition: background-color 0.1s, color 0.1s;
+}
+
+.ai-chat-tab:hover:not(.active) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.ai-chat-tab.active {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+.ai-chat-tab-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.ai-chat-tab-close {
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    padding: 0 2px;
+    margin: 0;
+    font-size: calc(var(--font-size-base) + 2px);
+    line-height: 1;
+    border-radius: 3px;
+    transition: background-color 0.1s, color 0.1s;
+}
+
+.ai-chat-tab-close:hover {
+    background: var(--btn-danger-bg, rgba(255, 0, 0, 0.2));
+    color: var(--text-primary);
+}
+
+.ai-chat-tab-add {
+    background: none;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: calc(var(--font-size-base) + 2px);
+    line-height: 1;
+    flex-shrink: 0;
+    transition: background-color 0.1s, color 0.1s;
+}
+
+.ai-chat-tab-add:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}

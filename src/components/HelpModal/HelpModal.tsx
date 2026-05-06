@@ -83,7 +83,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                 <strong>Update Notifications:</strong> On startup HoTTY checks the GitHub releases feed and shows a dismissible notification when a newer version is available, linking directly to the release page.
               </p>
               <p className="help-text">
-                <strong>Connection Status:</strong> A Connecting overlay is shown while the transport is being established. SSH and Telnet sessions time out after a configurable interval (default 3 seconds) — see <strong>Settings &rarr; Protocols</strong>. Connection failures appear as dismissible toast notifications.
+                <strong>Connection Status:</strong> A Connecting overlay is shown while the transport is being established. SSH and Telnet sessions time out after a configurable interval (default 5 seconds) — see <strong>Settings &rarr; Protocols</strong>. Connection failures appear as dismissible toast notifications.
               </p>
             </div>
           </details>
@@ -262,7 +262,10 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
             <div className="help-section-body">
               <p className="help-text" style={{ marginBottom: '4px' }}><strong>AI Chat</strong></p>
               <p className="help-text">
-                Click <strong><FeaturesIcon /></strong> (Features) in the tab bar &rarr; <strong>&quot;AI Chat&quot;</strong> to open a chat tab. You can open multiple AI chat tabs simultaneously. Type your question and press <code>Ctrl + Enter</code> to send.
+                Click <strong><FeaturesIcon /></strong> (Features) in the tab bar &rarr; <strong>&quot;AI Chat&quot;</strong> to open the AI Chat pane. Inside it, the tab strip at the top lets you keep multiple parallel conversations — use <strong>+ New chat</strong> to start a fresh tab. Type your question and press <code>Ctrl + Enter</code> to send.
+              </p>
+              <p className="help-text">
+                <strong>Linked terminal:</strong> When you start AI Monitor on a terminal, the AI Chat pane links a tab to that terminal automatically — toggling AI Monitor on additional terminals creates a new tab per terminal so output streams stay separated. The currently linked terminal is shown as a chip next to the input.
               </p>
 
               <p className="help-text" style={{ marginBottom: '4px' }}><strong>Ask AI (Right-Click)</strong></p>
@@ -275,9 +278,9 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                 When the AI suggests a command, it can send it directly to your terminal session for execution. You&apos;ll see the command before it runs, so you stay in control.
               </p>
 
-              <p className="help-text" style={{ marginBottom: '4px' }}><strong>Auto-Execute Safe Commands</strong></p>
+              <p className="help-text" style={{ marginBottom: '4px' }}><strong>Execution Mode &amp; Auto-Execute</strong></p>
               <p className="help-text">
-                Toggle auto-execution with the <strong>lightning bolt</strong> button in the AI Chat header. When enabled, read-only commands (ls, cat, show, ping, etc.) are executed automatically after the AI responds. Destructive or unknown commands still require manual confirmation. Configure the safe command whitelist and consecutive execution limit in <strong>Settings &rarr; AI &rarr; Command Execution Mode</strong>.
+                The <strong>Execution Mode chip</strong> at the bottom of the AI Chat pane controls how AI-suggested commands run — choose between Ask, Auto-execute safe, or Pause. When Auto-execute is on, read-only commands (ls, cat, show, ping, etc.) run automatically after the AI responds; destructive or unknown commands still require manual confirmation. Pause halts the auto-run loop without changing the mode, and the chip&apos;s controls let you resume. Configure the safe command whitelist, consecutive execution limit, and the <strong>device-response idle timeout</strong> (default 10 seconds; 0 disables) in <strong>Settings &rarr; AI &rarr; Command Execution Mode</strong>.
               </p>
 
               <p className="help-text" style={{ marginBottom: '4px' }}><strong>Personas</strong></p>

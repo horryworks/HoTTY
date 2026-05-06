@@ -24,7 +24,7 @@ import { ErrorNotification } from './components/ErrorNotification/ErrorNotificat
 import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary';
 import { tauriService } from './services/tauriService';
 import { useSessionManager, type SessionRecord } from './hooks/useSessionManager';
-import { useAiChat } from './hooks/useAiChat';
+import { useAiChat, getActiveTab, createDefaultAiChatState, type AiChatState } from './hooks/useAiChat';
 import { usePaneStore, gridPaneIds, SIDEBAR_PANE_IDS } from './stores/paneStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { applyTheme } from './utils/applyTheme';
@@ -81,15 +81,14 @@ function App() {
       watchBuffers.current.delete(id);
       setWatchingSessionId(null);
     }
-    // Clear any AI chat panes that were linked to this session.
+    // Clear any AI chat tabs that were linked to this session (across all panes).
     const states = aiChatStatesRef.current;
     if (states) {
       for (const [aiPaneId, st] of states.entries()) {
-        if (st.lastTargetSessionId === id) {
-          updateAiChatStateRef.current?.(aiPaneId, {
-            lastTargetSessionId: undefined,
-            lastTargetSessionTitle: undefined,
-          });
+        for (const tab of st.tabs) {
+          if (tab.linkedSessionId === id) {
+            setTabLinkRef.current?.(aiPaneId, tab.id, undefined);
+          }
         }
       }
     }
@@ -127,6 +126,23 @@ function App() {
     }
   }, [activePaneAllocation]);
 
+  // When the user selects a terminal tab/pane, mirror the selection in AI Chat
+  // by activating any tab that is linked to that terminal. If no tab is linked,
+  // do nothing (don't auto-create — that would be too aggressive).
+  // Reads aiChatStates via ref so this only fires on terminal selection change,
+  // not on every chat-state mutation.
+  useEffect(() => {
+    if (!lastTerminalSessionId) return;
+    const states = aiChatStatesRef.current;
+    if (!states) return;
+    for (const [aiPaneId, state] of states.entries()) {
+      const matchingTab = state.tabs.find(t => t.linkedSessionId === lastTerminalSessionId);
+      if (matchingTab && matchingTab.id !== state.activeTabId) {
+        setActiveTabRef.current?.(aiPaneId, matchingTab.id);
+      }
+    }
+  }, [lastTerminalSessionId]);
+
   // AI Watch mode
   const [watchingSessionId, setWatchingSessionId] = useState<string | null>(null);
   const watchBuffers = useRef(new Map<string, string>());
@@ -135,6 +151,12 @@ function App() {
 
   const watchingSessionIdRef = useRef(watchingSessionId);
   useEffect(() => { watchingSessionIdRef.current = watchingSessionId; }, [watchingSessionId]);
+
+  // Set of every session linked from any tab in any AI Chat pane.
+  // Used by onSessionData to keep capturing into watchBuffers regardless of
+  // which tab is currently active — this prevents in-flight commands from
+  // losing their output when the user switches tabs mid-execution.
+  const watchingSessionIdsRef = useRef<Set<string>>(new Set());
 
   // Track active poll intervals from onRunCommand so they can be cleared when
   // the AI chat pane closes or the watched session disconnects.
@@ -154,57 +176,79 @@ function App() {
   }, []);
 
   const createAiChatPaneRef = useRef<() => string | undefined>(undefined);
-  const updateAiChatStateRef = useRef<(id: string, state: Record<string, unknown>) => void>(undefined);
-  const aiChatStatesRef = useRef<Map<string, { lastTargetSessionId?: string; lastTargetSessionTitle?: string }>>(new Map());
+  const aiChatStatesRef = useRef<Map<string, AiChatState>>(new Map());
+  const setTabLinkRef = useRef<(aiSessionId: string, tabId: string, linkedSessionId: string | undefined) => void>(undefined);
+  const updateAiChatStateRef = useRef<(aiSessionId: string, partial: Partial<AiChatState>) => void>(undefined);
+  const addTabRef = useRef<(aiSessionId: string, initialLinkSessionId?: string) => string>(undefined);
+  const setActiveTabRef = useRef<(aiSessionId: string, tabId: string) => void>(undefined);
 
+  // "AI Monitor" toggle for the singleton AI Chat pane. Smart tab routing:
+  //   1. Some tab is already linked to this session
+  //        - that tab is active        → unlink it (toggle off)
+  //        - that tab is not active    → switch to it
+  //   2. Active tab has no link        → link it to this session (in-place)
+  //   3. Active tab has a different link → create a new tab linked to this session
+  // This way, AI Monitor on multiple terminals naturally produces one tab per
+  // terminal without overwriting existing links.
   const toggleWatch = useCallback((sessionId?: string) => {
     if (!sessionId) return;
-    const prev = watchingSessionIdRef.current;
-    const isTurningOn = prev !== sessionId;
-
-    if (!isTurningOn) {
-      // Turning off — also unlink any AI chat pane that was linked to this session.
-      watchBuffers.current.delete(sessionId);
-      setWatchingSessionId(null);
-      const states = aiChatStatesRef.current;
-      if (states) {
-        for (const [aiPaneId, st] of states.entries()) {
-          if (st.lastTargetSessionId === sessionId) {
-            updateAiChatStateRef.current?.(aiPaneId, {
-              lastTargetSessionId: undefined,
-              lastTargetSessionTitle: undefined,
-            });
-          }
-        }
-      }
-      return;
-    }
-
-    // Turning on
-    if (prev) watchBuffers.current.delete(prev);
-    watchBuffers.current.set(sessionId, '');
-    setWatchingSessionId(sessionId);
-
-    // Auto-create/focus AI Chat pane and link target session
     const aiPaneId = createAiChatPaneRef.current?.();
-    if (aiPaneId) {
+    if (!aiPaneId) return;
+
+    // Always focus the AI Chat pane.
+    const focusPane = () => {
       const alloc = usePaneStore.getState().paneAllocations;
       const paneEntry = Object.entries(alloc).find(([, sid]) => sid === aiPaneId);
       if (paneEntry) setActivePaneId(paneEntry[0]);
-      const session = sessions.get(sessionId);
-      updateAiChatStateRef.current?.(aiPaneId, {
-        lastTargetSessionId: sessionId,
-        lastTargetSessionTitle: session?.displayName || 'Unknown Terminal',
-      });
+    };
+
+    const state = aiChatStatesRef.current.get(aiPaneId);
+    const session = sessions.get(sessionId);
+
+    // Cold start: no state yet → seed with default tab linked to this session.
+    if (!state) {
+      const seed = createDefaultAiChatState(sessionId, session?.displayName);
+      updateAiChatStateRef.current?.(aiPaneId, seed);
+      watchBuffers.current.set(sessionId, '');
+      focusPane();
+      return;
     }
+
+    // Case 1: a tab is already linked to this session.
+    const matchingTab = state.tabs.find(t => t.linkedSessionId === sessionId);
+    if (matchingTab) {
+      if (matchingTab.id === state.activeTabId) {
+        // Unlink (toggle off).
+        setTabLinkRef.current?.(aiPaneId, matchingTab.id, undefined);
+        watchBuffers.current.delete(sessionId);
+      } else {
+        // Switch to the existing tab.
+        setActiveTabRef.current?.(aiPaneId, matchingTab.id);
+      }
+      focusPane();
+      return;
+    }
+
+    // No existing tab links to this session — find or create one.
+    const activeTab = getActiveTab(state);
+    if (activeTab && !activeTab.linkedSessionId) {
+      // Case 2: empty active tab → link in place.
+      setTabLinkRef.current?.(aiPaneId, activeTab.id, sessionId);
+    } else {
+      // Case 3: create a new tab linked to this session.
+      addTabRef.current?.(aiPaneId, sessionId);
+    }
+    watchBuffers.current.set(sessionId, '');
+    focusPane();
   }, [sessions, setActivePaneId]);
 
-  // Capture terminal data into watch buffer
+  // Capture terminal data into watch buffers for every session that any tab
+  // is linked to (so a tab switch does not drop data for in-flight commands).
   useEffect(() => {
-    if (!watchingSessionId) return;
     let cancelled = false;
     const unlistenPromise = tauriService.onSessionData(({ sessionId, data }) => {
-      if (cancelled || sessionId !== watchingSessionIdRef.current) return;
+      if (cancelled) return;
+      if (!watchingSessionIdsRef.current.has(sessionId)) return;
       const stripped = stripAnsiCodes(data);
       const current = watchBuffers.current.get(sessionId) || '';
       let newBuffer = current + stripped;
@@ -225,7 +269,7 @@ function App() {
       cancelled = true;
       unlistenPromise.then(fn => fn());
     };
-  }, [watchingSessionId]);
+  }, []);
 
   const createAiChatPane = useCallback((): string | undefined => {
     if (!useSettingsStore.getState().enabledFeatures['ai-chat']) return undefined;
@@ -245,6 +289,11 @@ function App() {
   const {
     aiChatStates,
     updateAiChatState,
+    updateTabById,
+    addTab,
+    closeTab,
+    setActiveTab,
+    setTabLink,
     sendMessage: aiSendMessage,
     askAiFreeFormatData,
     setAskAiFreeFormatData,
@@ -255,7 +304,6 @@ function App() {
     aiPersonas,
     getWatchBuffer,
     clearWatchBuffer,
-    toggleWatch,
     createAiChatPane,
     lastTerminalSessionId,
     paneAllocations,
@@ -263,12 +311,39 @@ function App() {
     setActivePaneId,
   });
 
-  // Wire up refs for toggleWatch (avoids circular dependency)
+  // Wire up refs (avoids circular dependency in toggleWatch / handleSessionRemoved)
   useEffect(() => {
     createAiChatPaneRef.current = createAiChatPane;
     updateAiChatStateRef.current = updateAiChatState;
+    setTabLinkRef.current = setTabLink;
+    addTabRef.current = addTab;
+    setActiveTabRef.current = setActiveTab;
     aiChatStatesRef.current = aiChatStates;
   });
+
+  // Re-derive on every aiChatStates change:
+  //   - watchingSessionId: the active tab's link (drives the visual "watching"
+  //     indicator on the upper TabBar).
+  //   - watchingSessionIdsRef: the union of every tab's link across all panes,
+  //     which is what onSessionData actually checks. This is a strict superset
+  //     so that switching tabs does NOT stop capturing for the previously
+  //     active terminal — important for in-flight `execute` commands to
+  //     receive their output even after a tab switch.
+  useEffect(() => {
+    let activeDerived: string | null = null;
+    const allLinked = new Set<string>();
+    for (const state of aiChatStates.values()) {
+      for (const tab of state.tabs) {
+        if (tab.linkedSessionId) allLinked.add(tab.linkedSessionId);
+      }
+      const activeTab = getActiveTab(state);
+      if (activeTab?.linkedSessionId && activeDerived === null) {
+        activeDerived = activeTab.linkedSessionId;
+      }
+    }
+    watchingSessionIdsRef.current = allLinked;
+    setWatchingSessionId((prev) => (prev === activeDerived ? prev : activeDerived));
+  }, [aiChatStates]);
 
   const [connectOpen, setConnectOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -567,7 +642,15 @@ function App() {
               active={paneId === activePaneId}
               chatState={aiChatStates.get(featureInfo.id)}
               onChatStateChange={(newState) => updateAiChatState(featureInfo.id, newState)}
-              onRunCommand={(targetId, cmd) => {
+              onUpdateTabById={(tabId, partial) => updateTabById(featureInfo.id, tabId, partial)}
+              onAddTab={(initialLink) => {
+                const linkId = initialLink ?? lastTerminalSessionId ?? undefined;
+                addTab(featureInfo.id, linkId);
+              }}
+              onCloseTab={(tabId) => closeTab(featureInfo.id, tabId)}
+              onSelectTab={(tabId) => setActiveTab(featureInfo.id, tabId)}
+              sessions={sessions}
+              onRunCommand={(targetId, cmd, originatingTabId) => {
                 // Record buffer position before sending command
                 const startLen = (watchBuffers.current.get(targetId) || '').length;
 
@@ -577,7 +660,8 @@ function App() {
                   cmd: trimCmdForLog(cmd),
                   startLen,
                   lines: lines.length,
-                  watching: watchingSessionIdRef.current === targetId,
+                  originatingTabId,
+                  watching: watchingSessionIdsRef.current.has(targetId),
                 });
                 lines.forEach((line, index) => {
                   setTimeout(() => {
@@ -585,8 +669,11 @@ function App() {
                   }, index * 150);
                 });
 
-                // Poll watch buffer for command completion (shell prompt detection)
-                if (watchingSessionIdRef.current === targetId) {
+                // Poll watch buffer for command completion (shell prompt detection).
+                // Only polls if some tab is linked to this session, ie. its output
+                // is being captured. Tab switches are fine — the originating tab id
+                // is captured here so the result is delivered back to the right tab.
+                if (watchingSessionIdsRef.current.has(targetId)) {
                   const sendDuration = lines.length * 150;
                   const idleSecs = useSettingsStore.getState().aiCommandIdleTimeoutSecs;
                   const idleMs = idleSecs > 0 ? idleSecs * 1000 : 0;
@@ -608,14 +695,18 @@ function App() {
                     startLen,
                     idleSecs,
                     sendDuration,
+                    originatingTabId,
                   });
                   const pollInterval = setInterval(() => {
                     attempts++;
-                    // Bail out if the watch target changed or was cleared.
-                    if (watchingSessionIdRef.current !== targetId) {
-                      aiExecLog('warn', 'watch-target-changed', {
+                    // Bail out if the originating tab no longer exists (user closed it).
+                    const paneState = aiChatStatesRef.current.get(paneId);
+                    const originatingTab = paneState?.tabs.find(t => t.id === originatingTabId);
+                    if (!originatingTab) {
+                      aiExecLog('warn', 'originating-tab-gone', {
                         cmd: trimCmdForLog(cmd),
                         attempts,
+                        originatingTabId,
                       });
                       clearInterval(pollInterval);
                       intervalSet.delete(pollInterval);
@@ -662,7 +753,7 @@ function App() {
                       intervalSet.delete(pollInterval);
                       clearWatchBuffer(targetId);
                       const outputText = `Terminal Output (Command: ${cmd}):\n${newContent.trim()}`;
-                      updateAiChatState(paneId, { pendingMessage: outputText });
+                      updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
                     } else {
                       const now = Date.now();
                       const idleFire = idleMs > 0 && (now - lastChangeAt) >= idleMs && newContent.length > 0;
@@ -683,7 +774,7 @@ function App() {
                           : `[command exceeded safety cap of 30 minutes]`;
                         const captured = newContent.trim();
                         const outputText = `Terminal Output (Command: ${cmd}):\n${captured}\n${reason}`;
-                        updateAiChatState(paneId, { pendingMessage: outputText });
+                        updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
                       }
                     }
                   }, 200);

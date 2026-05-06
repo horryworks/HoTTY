@@ -1,5 +1,29 @@
 # Release Notes
 
+## v2.0.0-beta10
+
+A major AI Chat UX overhaul: per-pane tabs with smart linking to terminal sessions, an inline execution mode bar with pause/resume, a new device-response idle timeout, and a tightened Network Expert persona prompt.
+
+### New Features
+
+- **AI Chat tabs** — AI Chat panes now host multiple tabs in a top-of-pane tab strip. Toggling **AI Monitor** on a terminal links a tab to that session; turning it on for additional terminals creates a new tab per terminal so concurrent watch streams stay separated. Selecting a terminal mirrors the active AI tab back to the matching link, and the currently linked terminal is shown as a chip next to the input. Use **+ New chat** to start a fresh tab.
+- **Inline execution mode bar with pause/resume** — the AI Chat pane now has an Execution Mode chip docked at the bottom of the input card with a dedicated pause/resume control for the auto-run loop. The same controls used to live behind a Settings dialog.
+- **AI command idle timeout** — new `aiCommandIdleTimeoutSecs` setting (default 10 seconds, `0` disables, 30-minute hard cap) replaces the previous silent 30-second wall-clock timeout in the AI execute polling loop. When the timeout fires, the captured output and a `[no response from device for N seconds]` note are sent to the AI so the conversation continues instead of stalling.
+
+### Improvements
+
+- **AI Chat UX redesign** — chip-style mode picker, linked-terminal chip, empty-state onboarding, send-disabled hints, and live streaming-token feedback.
+- **Unified AI Chat input** — input, attachments, and the execution-mode chip are now part of a single rounded card with the chip right-aligned for a cleaner footprint.
+- **AI Chat header settings popover** — settings previously scattered across the AI Chat header are consolidated into a popover triggered from the input toolbar; the standalone System Prompt button is removed and now lives inside the popover.
+- **Collapsible terminal output blocks** — terminal output captured into AI Chat messages renders as a collapsible block with the first command line, line count, and character count visible in the header. Click or press <kbd>Enter</kbd>/<kbd>Space</kbd> to expand.
+- **Network Expert persona prompt** — rewritten with a leading mandatory start-of-session protocol (REPLY 1: show-version equivalent, REPLY 2: terminal-length-0 equivalent, REPLY 3+: address user) so paginated devices no longer stall the AI response loop.
+- **SSH/Telnet connect timeout default** — bumped from 3 seconds to 5 seconds, more forgiving to slower jumpbox / IAP-tunnel paths.
+
+### Bug Fixes
+
+- **AI Chat target chip stuck** — the linked-terminal chip now clears when its session is removed or **AI Monitor** is turned off, instead of staying displayed against a non-existent session.
+- **AI execute output truncation** — fixed a path where long terminal output captured for the AI execute loop was truncated before reaching the model.
+
 ## v2.0.0-beta9
 
 Automatic v1→v2 host-tree credential migration, paste-flow fixes, and security hardening around the asset protocol and SSH known-hosts handling.

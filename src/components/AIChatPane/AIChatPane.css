@@ -451,12 +451,15 @@
     height: 3px;
 }
 
-/* Unified input "card": textarea + toolbar inside one rounded container. */
+/* Unified input "card": textarea + toolbar inside one rounded container.
+   Width is capped at 70% of the pane and centered so the composer doesn't
+   stretch edge-to-edge in wide panes. */
 .ai-chat-input-area {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    margin: 2px 12px 4px;
+    width: 70%;
+    margin: 2px auto 4px;
     padding: 8px 8px 6px 12px;
     background-color: var(--input-bg);
     border: 1px solid var(--border-color);

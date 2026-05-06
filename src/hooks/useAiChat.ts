@@ -8,13 +8,26 @@ import { tauriService } from '../services/tauriService';
 
 // -- Types --
 
+/**
+ * One conversation tab inside the (singleton) AI Chat pane.
+ * Phase 1: each tab has at most one linked terminal session (multi-link is Phase 2).
+ */
+export interface ChatTab {
+  id: string;
+  /** Auto-derived from linkedSessionId; updated on link change. */
+  title: string;
+  /** Stable counter used for "Tab N" titles when no link is set. */
+  ordinal: number;
+  linkedSessionId?: string;
+  pendingMessage?: string;
+}
+
 export interface AiChatState {
   selectedModel: string;
   selectedExpertise?: string;
   systemInstruction: string;
-  pendingMessage?: string;
-  lastTargetSessionId?: string;
-  lastTargetSessionTitle?: string;
+  activeTabId: string;
+  tabs: ChatTab[];
 }
 
 interface UseAiChatOptions {
@@ -23,7 +36,6 @@ interface UseAiChatOptions {
   aiPersonas: PersonaDefinition[];
   getWatchBuffer: (sessionId: string) => string;
   clearWatchBuffer: (sessionId: string) => void;
-  toggleWatch: (sessionId: string) => void;
   createAiChatPane: () => string | undefined;
   lastTerminalSessionId: string | null;
   paneAllocations: Record<string, string | null>;
@@ -34,12 +46,61 @@ interface UseAiChatOptions {
 interface UseAiChatReturn {
   aiChatStates: Map<string, AiChatState>;
   updateAiChatState: (aiSessionId: string, newState: Partial<AiChatState>) => void;
+  updateActiveTab: (aiSessionId: string, partial: Partial<ChatTab>) => void;
+  updateTabById: (aiSessionId: string, tabId: string, partial: Partial<ChatTab>) => void;
+  addTab: (aiSessionId: string, initialLinkSessionId?: string) => string;
+  closeTab: (aiSessionId: string, tabId: string) => void;
+  setActiveTab: (aiSessionId: string, tabId: string) => void;
+  setTabLink: (aiSessionId: string, tabId: string, linkedSessionId: string | undefined) => void;
   sendMessage: (aiSessionId: string, text: string) => void;
   askAi: (selection: string, type: string, targetSessionId?: string) => void;
   showPromptMenu: (aiSessionId: string) => void;
   askAiFreeFormatData: { selection: string } | null;
   setAskAiFreeFormatData: (data: { selection: string } | null) => void;
   handleFreeFormatSubmit: (prompt: string, selection: string) => void;
+}
+
+// -- Pure helpers --
+
+export function getActiveTab(state: AiChatState | undefined): ChatTab | undefined {
+  if (!state) return undefined;
+  return state.tabs.find(t => t.id === state.activeTabId);
+}
+
+/** Build a short title from a tab's linked session, falling back to "Tab N". */
+export function deriveTabTitle(
+  linkedSessionId: string | undefined,
+  sessions: Map<string, SessionRecord>,
+  ordinal: number,
+): string {
+  if (!linkedSessionId) return `Tab ${ordinal}`;
+  const name = sessions.get(linkedSessionId)?.displayName;
+  if (!name) return `Tab ${ordinal}`;
+  return name.length > 12 ? `${name.slice(0, 11)}…` : name;
+}
+
+function makeTabId(): string {
+  return (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function createDefaultAiChatState(
+  initialLinkSessionId?: string,
+  initialTitle?: string,
+): AiChatState {
+  const tabId = makeTabId();
+  return {
+    selectedModel: '',
+    systemInstruction: 'You are a helpful assistant.',
+    activeTabId: tabId,
+    tabs: [{
+      id: tabId,
+      ordinal: 1,
+      title: initialTitle ?? (initialLinkSessionId ? 'Linked' : 'Tab 1'),
+      linkedSessionId: initialLinkSessionId,
+    }],
+  };
 }
 
 // -- Hook --
@@ -51,7 +112,6 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     aiPersonas,
     getWatchBuffer,
     clearWatchBuffer,
-    toggleWatch,
     createAiChatPane,
     lastTerminalSessionId,
     paneAllocations,
@@ -81,40 +141,138 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     aiChatStatesRef.current = aiChatStates;
   });
 
-  // Stable refs for callbacks that don't change identity
   const getWatchBufferRef = useRef(getWatchBuffer);
   const clearWatchBufferRef = useRef(clearWatchBuffer);
-  const toggleWatchRef = useRef(toggleWatch);
   const createAiChatPaneRef = useRef(createAiChatPane);
   const setActivePaneIdRef = useRef(setActivePaneId);
 
   useEffect(() => {
     getWatchBufferRef.current = getWatchBuffer;
     clearWatchBufferRef.current = clearWatchBuffer;
-    toggleWatchRef.current = toggleWatch;
     createAiChatPaneRef.current = createAiChatPane;
     setActivePaneIdRef.current = setActivePaneId;
   });
 
-  // -- State updater --
+  // -- State updaters --
+
   const updateAiChatState = useCallback((aiSessionId: string, newState: Partial<AiChatState>) => {
     setAiChatStates((prev) => {
       const next = new Map(prev);
-      const existing = prev.get(aiSessionId) ?? {
-        selectedModel: '',
-        systemInstruction: 'You are a helpful assistant.',
-      };
+      const existing = prev.get(aiSessionId) ?? createDefaultAiChatState();
       next.set(aiSessionId, { ...existing, ...newState });
       return next;
     });
   }, []);
 
+  const updateActiveTab = useCallback((aiSessionId: string, partial: Partial<ChatTab>) => {
+    setAiChatStates((prev) => {
+      const next = new Map(prev);
+      const existing = prev.get(aiSessionId);
+      if (!existing) return prev;
+      const updatedTabs = existing.tabs.map(t =>
+        t.id === existing.activeTabId ? { ...t, ...partial } : t
+      );
+      next.set(aiSessionId, { ...existing, tabs: updatedTabs });
+      return next;
+    });
+  }, []);
+
+  /** Update a specific tab by id. Used to deliver in-flight command results to the
+      tab that issued the command, even if the user has switched to a different tab. */
+  const updateTabById = useCallback((aiSessionId: string, tabId: string, partial: Partial<ChatTab>) => {
+    setAiChatStates((prev) => {
+      const next = new Map(prev);
+      const existing = prev.get(aiSessionId);
+      if (!existing) return prev;
+      if (!existing.tabs.find(t => t.id === tabId)) return prev;
+      const updatedTabs = existing.tabs.map(t =>
+        t.id === tabId ? { ...t, ...partial } : t
+      );
+      next.set(aiSessionId, { ...existing, tabs: updatedTabs });
+      return next;
+    });
+  }, []);
+
+  const setActiveTab = useCallback((aiSessionId: string, tabId: string) => {
+    setAiChatStates((prev) => {
+      const next = new Map(prev);
+      const existing = prev.get(aiSessionId);
+      if (!existing) return prev;
+      if (!existing.tabs.find(t => t.id === tabId)) return prev;
+      next.set(aiSessionId, { ...existing, activeTabId: tabId });
+      return next;
+    });
+  }, []);
+
+  const addTab = useCallback((aiSessionId: string, initialLinkSessionId?: string): string => {
+    const newTabId = makeTabId();
+    setAiChatStates((prev) => {
+      const next = new Map(prev);
+      const existing = prev.get(aiSessionId) ?? createDefaultAiChatState();
+      const ordinals = existing.tabs.map(t => t.ordinal);
+      const newOrdinal = ordinals.length > 0 ? Math.max(...ordinals) + 1 : 1;
+      const title = deriveTabTitle(initialLinkSessionId, sessionsRef.current, newOrdinal);
+      const newTab: ChatTab = {
+        id: newTabId,
+        ordinal: newOrdinal,
+        title,
+        linkedSessionId: initialLinkSessionId,
+      };
+      next.set(aiSessionId, {
+        ...existing,
+        activeTabId: newTabId,
+        tabs: [...existing.tabs, newTab],
+      });
+      return next;
+    });
+    return newTabId;
+  }, []);
+
+  const closeTab = useCallback((aiSessionId: string, tabId: string) => {
+    setAiChatStates((prev) => {
+      const next = new Map(prev);
+      const existing = prev.get(aiSessionId);
+      if (!existing) return prev;
+      // Guard: keep at least one tab
+      if (existing.tabs.length <= 1) return prev;
+      const idx = existing.tabs.findIndex(t => t.id === tabId);
+      if (idx < 0) return prev;
+      const remaining = existing.tabs.filter(t => t.id !== tabId);
+      let newActive = existing.activeTabId;
+      if (existing.activeTabId === tabId) {
+        // Pick neighbor: prefer next, else previous
+        newActive = (remaining[idx] ?? remaining[idx - 1] ?? remaining[0]).id;
+      }
+      next.set(aiSessionId, { ...existing, tabs: remaining, activeTabId: newActive });
+      return next;
+    });
+  }, []);
+
+  const setTabLink = useCallback((aiSessionId: string, tabId: string, linkedSessionId: string | undefined) => {
+    setAiChatStates((prev) => {
+      const next = new Map(prev);
+      const existing = prev.get(aiSessionId);
+      if (!existing) return prev;
+      const updatedTabs = existing.tabs.map(t => {
+        if (t.id !== tabId) return t;
+        const newTitle = deriveTabTitle(linkedSessionId, sessionsRef.current, t.ordinal);
+        return { ...t, linkedSessionId, title: newTitle };
+      });
+      next.set(aiSessionId, { ...existing, tabs: updatedTabs });
+      return next;
+    });
+  }, []);
+
   const updateAiChatStateRef = useRef(updateAiChatState);
+  const updateActiveTabRef = useRef(updateActiveTab);
+  const setTabLinkRef = useRef(setTabLink);
   useEffect(() => {
     updateAiChatStateRef.current = updateAiChatState;
+    updateActiveTabRef.current = updateActiveTab;
+    setTabLinkRef.current = setTabLink;
   });
 
-  // -- Helper: resolve persona by label --
+  // -- Helper: resolve persona --
   const resolvePersona = useCallback((expertiseLabel?: string): PersonaDefinition | undefined => {
     const currentPersonas = aiPersonasRef.current;
     if (expertiseLabel) {
@@ -123,49 +281,42 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     return currentPersonas[0];
   }, []);
 
-  // -- Helper: resolve persona prompt --
   const resolvePersonaPrompt = useCallback((expertiseLabel?: string): string => {
     const currentPersonas = aiPersonasRef.current;
     let targetPrompt = 'You are a helpful assistant.';
-
     if (expertiseLabel) {
       const found = currentPersonas.find(p => p.label === expertiseLabel);
       if (found) targetPrompt = found.systemPrompt;
     } else if (currentPersonas.length > 0) {
       targetPrompt = currentPersonas[0].systemPrompt;
     }
-
     return targetPrompt + buildExecutionRules();
   }, []);
 
-  // -- Helper: find active terminal --
+  // -- Helper: find target terminal for "ask AI" entry points --
   const resolveTargetTerminal = useCallback((targetSessionId?: string) => {
     const currentSessions = sessionsRef.current;
     const currentFeaturePanes = featurePanesRef.current;
     let activeTermId = targetSessionId || (paneAllocationsRef.current[activePaneIdRef.current || ''] as string);
 
-    // Check if the active allocation is an AI chat pane
     const featureInfo = activeTermId ? currentFeaturePanes.get(activeTermId) : undefined;
     const isAiPane = featureInfo?.type === 'ai-chat';
 
-    // If active pane is an AI chat, use its linked terminal
     if (isAiPane && !targetSessionId) {
       const chatState = aiChatStatesRef.current.get(activeTermId);
-      if (chatState?.lastTargetSessionId) {
-        activeTermId = chatState.lastTargetSessionId;
+      const activeTab = getActiveTab(chatState);
+      if (activeTab?.linkedSessionId) {
+        activeTermId = activeTab.linkedSessionId;
       }
     }
 
     let activeSession = currentSessions.get(activeTermId);
-
-    // If still invalid, fallback to last known terminal
     if (!activeSession) {
       if (lastTerminalSessionIdRef.current) {
         activeTermId = lastTerminalSessionIdRef.current;
         activeSession = currentSessions.get(activeTermId);
       }
     }
-
     return { activeTermId, activeSession };
   }, []);
 
@@ -173,8 +324,10 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
   const sendMessage = useCallback((aiSessionId: string, text: string) => {
     const chatState = aiChatStatesRef.current.get(aiSessionId);
     if (!chatState) return;
+    const activeTab = getActiveTab(chatState);
+    if (!activeTab) return;
 
-    const terminalId = chatState.lastTargetSessionId;
+    const terminalId = activeTab.linkedSessionId;
     let prependedContext = '';
 
     if (terminalId && !text.startsWith('Terminal Output (Command:')) {
@@ -194,6 +347,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
 
     const prepInfo = `useai-send-prep ${JSON.stringify({
       aiSessionId,
+      tabId: activeTab.id,
       finalMessageLen: finalMessage.length,
       hasWatchPrefix: prependedContext.length > 0,
     })}`;
@@ -207,10 +361,8 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
   const askAi = useCallback((selection: string, type: string, targetSessionId?: string) => {
     const actualSelection = selection === '__WATCH_BUFFER__' ? '' : selection;
 
-    // Resolve target terminal
     const { activeTermId, activeSession } = resolveTargetTerminal(targetSessionId);
 
-    // Extract watch buffer
     let prependedContext = '';
     if (activeSession) {
       const buffer = getWatchBufferRef.current(activeTermId);
@@ -243,16 +395,16 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       }
     }
 
-    // Record target session info
-    const existingState = aiChatStatesRef.current.get(aiPaneId);
-    updateAiChatStateRef.current(aiPaneId, {
-      lastTargetSessionId: activeTermId,
-      lastTargetSessionTitle: activeSession?.displayName || 'Unknown Terminal',
-    });
-
-    // Auto-start watching
-    if (activeSession) {
-      toggleWatchRef.current(activeTermId);
+    // Initialize state if missing, or set active tab's link to the target terminal
+    let existingState = aiChatStatesRef.current.get(aiPaneId);
+    if (!existingState) {
+      existingState = createDefaultAiChatState(activeTermId, activeSession?.displayName);
+      updateAiChatStateRef.current(aiPaneId, existingState);
+    } else if (activeSession) {
+      const activeTab = getActiveTab(existingState);
+      if (activeTab && activeTab.linkedSessionId !== activeTermId) {
+        setTabLinkRef.current(aiPaneId, activeTab.id, activeTermId);
+      }
     }
 
     const lang = localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE) || 'English';
@@ -284,10 +436,8 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       }
     }
 
-    updateAiChatStateRef.current(aiPaneId, {
-      pendingMessage: userPrompt,
-      systemInstruction,
-    });
+    updateAiChatStateRef.current(aiPaneId, { systemInstruction });
+    updateActiveTabRef.current(aiPaneId, { pendingMessage: userPrompt });
   }, [resolveTargetTerminal, resolvePersonaPrompt, resolvePersona]);
 
   // -- showPromptMenu --
@@ -325,12 +475,8 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     const systemInstruction = lang !== 'English' ? `${basePrompt} You MUST answer in ${lang}.` : basePrompt;
     const userPrompt = `${prompt}\n\n\`\`\`\n${selection}\n\`\`\``;
 
-    updateAiChatStateRef.current(aiPaneId, {
-      pendingMessage: userPrompt,
-      systemInstruction,
-      lastTargetSessionId: chatState?.lastTargetSessionId,
-      lastTargetSessionTitle: chatState?.lastTargetSessionTitle,
-    });
+    updateAiChatStateRef.current(aiPaneId, { systemInstruction });
+    updateActiveTabRef.current(aiPaneId, { pendingMessage: userPrompt });
     setActivePaneIdRef.current(aiPaneId);
     setAskAiFreeFormatData(null);
   }, [resolvePersonaPrompt]);
@@ -355,6 +501,12 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
   return {
     aiChatStates,
     updateAiChatState,
+    updateActiveTab,
+    updateTabById,
+    addTab,
+    closeTab,
+    setActiveTab,
+    setTabLink,
     sendMessage,
     askAi,
     showPromptMenu,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { marked } from 'marked';
 import { getTransparentColor } from '../../utils/colorUtils';
 import { sanitizeHtml } from '../../utils/htmlUtils';
@@ -18,8 +18,11 @@ import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { tauriService } from '../../services/tauriService';
 import { logError } from '../../utils/logger';
-import type { AiChatState } from '../../hooks/useAiChat';
+import type { AiChatState, ChatTab } from '../../hooks/useAiChat';
+import { getActiveTab } from '../../hooks/useAiChat';
+import type { SessionRecord } from '../../hooks/useSessionManager';
 import type { PersonaDefinition, AIModelInfo } from '../../types/appTypes';
+import { TabStrip } from './TabStrip';
 import './AIChatPane.css';
 
 interface ChatMessage {
@@ -32,7 +35,12 @@ interface AIChatPaneProps {
     active: boolean;
     chatState?: AiChatState;
     onChatStateChange?: (newState: Partial<AiChatState>) => void;
-    onRunCommand?: (sessionId: string, command: string) => void;
+    onUpdateTabById?: (tabId: string, partial: Partial<ChatTab>) => void;
+    onAddTab?: (initialLinkSessionId?: string) => void;
+    onCloseTab?: (tabId: string) => void;
+    onSelectTab?: (tabId: string) => void;
+    sessions?: Map<string, SessionRecord>;
+    onRunCommand?: (sessionId: string, command: string, originatingTabId: string) => void;
     onSendMessage?: (text: string) => void;
     aiPersonas: PersonaDefinition[];
     terminalBackground?: string;
@@ -166,11 +174,19 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     paneId,
     chatState,
     onChatStateChange,
+    onUpdateTabById,
+    onAddTab,
+    onCloseTab,
+    onSelectTab,
+    sessions,
     onRunCommand,
     onSendMessage,
     aiPersonas,
     terminalBackground,
 }) => {
+    // Derive active tab from chatState (Phase 1: tabs[] + activeTabId, single linkedSessionId per tab)
+    const activeTab = chatState ? getActiveTab(chatState) : undefined;
+    const activeTabId = activeTab?.id;
     // Auth state
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isAuthLoading, setIsAuthLoading] = useState(false);
@@ -212,8 +228,24 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // Anthropic auth state
     const [anthropicApiKey, setAnthropicApiKey] = useState('');
 
-    // Chat state
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    // Per-tab chat state (Phase 1: messages stored locally keyed by tabId so tab switch
+    // swaps history without losing in-flight conversations).
+    const [messagesByTab, setMessagesByTab] = useState<Map<string, ChatMessage[]>>(() => new Map());
+    const [streamingByTab, setStreamingByTab] = useState<Map<string, string>>(() => new Map());
+    const [streamingTabIds, setStreamingTabIds] = useState<Set<string>>(() => new Set());
+    const messages = useMemo<ChatMessage[]>(
+        () => (activeTabId ? (messagesByTab.get(activeTabId) ?? []) : []),
+        [activeTabId, messagesByTab],
+    );
+    const setMessages = useCallback((updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
+        if (!activeTabId) return;
+        setMessagesByTab((prev) => {
+            const next = new Map(prev);
+            const cur = prev.get(activeTabId) ?? [];
+            next.set(activeTabId, typeof updater === 'function' ? (updater as (p: ChatMessage[]) => ChatMessage[])(cur) : updater);
+            return next;
+        });
+    }, [activeTabId]);
     const [inputText, setInputText] = useState('');
     const [selectedModel, setSelectedModel] = useState(chatState?.selectedModel || 'Unspecified');
     const selectedModelRef = useRef(selectedModel);
@@ -225,17 +257,48 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const [localSystemInstruction, setLocalSystemInstruction] = useState(chatState?.systemInstruction || 'You are a helpful assistant.');
     const [showPromptModal, setShowPromptModal] = useState(false);
 
-    // Target session info from parent state
-    const lastTargetSessionId = chatState?.lastTargetSessionId;
-    const lastTargetSessionTitle = chatState?.lastTargetSessionTitle;
+    // Target session info derived from the active tab
+    const lastTargetSessionId = activeTab?.linkedSessionId;
+    const lastTargetSessionTitle = lastTargetSessionId ? (sessions?.get(lastTargetSessionId)?.displayName) : undefined;
 
-    // Pending message from parent state
-    const [localPendingMessage, setLocalPendingMessage] = useState<string | undefined>(chatState?.pendingMessage);
-    const processedPendingMessageRef = useRef<string | undefined>(undefined);
+    // De-dup guard: tabId → last pendingMessage text we already started processing.
+    // Prevents re-firing the same auto-send while the parent state is mid-update.
+    const recentlyProcessedRef = useRef<Map<string, string>>(new Map());
 
-    // Streaming state
-    const [isStreaming, setIsStreaming] = useState(false);
-    const [streamingContent, setStreamingContent] = useState('');
+    // Per-tab streaming state. Streamed chunks are routed to whichever tab was active
+    // when the request was sent (captured in streamingForTabIdRef), so a tab switch
+    // mid-stream does not drop chunks into the wrong tab.
+    const streamingForTabIdRef = useRef<string | null>(null);
+    const streamingContent = activeTabId ? (streamingByTab.get(activeTabId) ?? '') : '';
+    const isStreaming = activeTabId ? streamingTabIds.has(activeTabId) : false;
+    const setStreamingForTab = useCallback((tabId: string, value: string | ((prev: string) => string)) => {
+        setStreamingByTab((prev) => {
+            const next = new Map(prev);
+            const cur = prev.get(tabId) ?? '';
+            const v = typeof value === 'function' ? (value as (p: string) => string)(cur) : value;
+            if (v === '') next.delete(tabId); else next.set(tabId, v);
+            return next;
+        });
+    }, []);
+    const markStreaming = useCallback((tabId: string, on: boolean) => {
+        setStreamingTabIds((prev) => {
+            if (on) {
+                if (prev.has(tabId)) return prev;
+                const next = new Set(prev); next.add(tabId); return next;
+            }
+            if (!prev.has(tabId)) return prev;
+            const next = new Set(prev); next.delete(tabId); return next;
+        });
+    }, []);
+    const setStreamingContent = useCallback((updater: string | ((prev: string) => string)) => {
+        if (!activeTabId) return;
+        setStreamingForTab(activeTabId, updater);
+    }, [activeTabId, setStreamingForTab]);
+    const setIsStreaming = useCallback((b: boolean | ((prev: boolean) => boolean)) => {
+        if (!activeTabId) return;
+        const v = typeof b === 'function' ? b(isStreaming) : b;
+        markStreaming(activeTabId, v);
+    }, [activeTabId, isStreaming, markStreaming]);
     const [totalInputTokens, setTotalInputTokens] = useState(0);
     const [totalOutputTokens, setTotalOutputTokens] = useState(0);
     const [totalCost, setTotalCost] = useState<number | null>(null);
@@ -266,8 +329,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     useEffect(() => {
         if (prevProviderRef.current !== activeAiProvider) {
             prevProviderRef.current = activeAiProvider;
-            setMessages([]);
-            setStreamingContent('');
+            // Provider switch invalidates all in-progress conversations.
+            setMessagesByTab(new Map());
+            setStreamingByTab(new Map());
+            setStreamingTabIds(new Set());
+            streamingForTabIdRef.current = null;
             setTotalInputTokens(0);
             setTotalOutputTokens(0);
             setTotalCost(null);
@@ -358,12 +424,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         load();
     }, [activeAiProvider]);
 
-    // ── Sync pending message from parent ──
-    useEffect(() => {
-        if (chatState?.pendingMessage !== undefined && chatState.pendingMessage !== processedPendingMessageRef.current) {
-            setLocalPendingMessage(chatState.pendingMessage);
-        }
-    }, [chatState?.pendingMessage]);
 
     // ── Real-time System Prompt Update ──
     useEffect(() => {
@@ -408,35 +468,57 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         }
     }, [messages, streamingContent, isStreaming]);
 
-    // ── Auto-send pending message if authenticated ──
+    // ── Auto-send pending message for ANY tab (one stream at a time per pane) ──
+    // Scans every tab for a pending message; processes the first one that isn't
+    // currently streaming. Results that arrive on a non-active tab still trigger
+    // the next AI request, so the loop keeps running across tab switches.
     useEffect(() => {
-        if (isAuthenticated && localPendingMessage && !isStreaming) {
-            const text = localPendingMessage;
-            const sysInstr = chatState?.systemInstruction || localSystemInstruction;
+        if (!isAuthenticated || !chatState) return;
+        // Backend uses paneId as the stream session id, so only one in-flight stream
+        // per pane is safe regardless of tab.
+        if (streamingTabIds.size > 0) return;
 
-            setLocalPendingMessage(undefined);
-            processedPendingMessageRef.current = text;
+        for (const tab of chatState.tabs) {
+            const pm = tab.pendingMessage;
+            if (!pm) continue;
+            if (recentlyProcessedRef.current.get(tab.id) === pm) continue;
+            recentlyProcessedRef.current.set(tab.id, pm);
 
-            // Clear pendingMessage in parent state
-            onChatStateChange?.({ pendingMessage: undefined, systemInstruction: sysInstr });
+            const sysInstr = chatState.systemInstruction || localSystemInstruction;
+
+            // Clear the pending message on this tab and persist the system instruction.
+            onUpdateTabById?.(tab.id, { pendingMessage: undefined });
+            onChatStateChange?.({ systemInstruction: sysInstr });
 
             if (selectedModel === 'Unspecified') {
-                setMessages(prev => [
-                    ...prev,
-                    { role: 'user', content: text },
-                    { role: 'model', content: 'AI model not selected. Please select a model from the dropdown at the top right of the screen.' },
-                ]);
-                return;
+                setMessagesByTab((prev) => {
+                    const next = new Map(prev);
+                    const cur = prev.get(tab.id) ?? [];
+                    next.set(tab.id, [
+                        ...cur,
+                        { role: 'user', content: pm },
+                        { role: 'model', content: 'AI model not selected. Please select a model from the dropdown at the top right of the screen.' },
+                    ]);
+                    return next;
+                });
+                continue;
             }
 
-            setMessages(prev => [...prev, { role: 'user', content: text }]);
-            lastSentTextRef.current = text;
-            setIsStreaming(true);
-            setStreamingContent('');
-            tauriService.aiChatSend(paneId, text, selectedModel, sysInstr);
+            setMessagesByTab((prev) => {
+                const next = new Map(prev);
+                const cur = prev.get(tab.id) ?? [];
+                next.set(tab.id, [...cur, { role: 'user', content: pm }]);
+                return next;
+            });
+            lastSentTextRef.current = pm;
+            streamingForTabIdRef.current = tab.id;
+            markStreaming(tab.id, true);
+            setStreamingForTab(tab.id, '');
+            tauriService.aiChatSend(paneId, pm, selectedModel, sysInstr);
+            break;
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isAuthenticated, localPendingMessage, isStreaming, paneId, selectedModel]);
+    }, [chatState, isAuthenticated, streamingTabIds, paneId, selectedModel]);
 
     // ��─ Listen for chat response events ──
     useEffect(() => {
@@ -447,12 +529,22 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             if (cancelled) return;
             if (data.sessionId !== paneId) return;
 
+            // Route chunks/done/error to the tab that initiated this request, not necessarily the currently active tab.
+            const targetTabId = streamingForTabIdRef.current;
+            if (!targetTabId) return;
+
             if (data.responseType === 'chunk') {
-                setStreamingContent(prev => prev + data.content);
+                setStreamingForTab(targetTabId, prev => prev + data.content);
             } else if (data.responseType === 'done') {
-                setMessages(prev => [...prev, { role: 'model', content: data.content }]);
-                setStreamingContent('');
-                setIsStreaming(false);
+                setMessagesByTab(prev => {
+                    const next = new Map(prev);
+                    const cur = prev.get(targetTabId) ?? [];
+                    next.set(targetTabId, [...cur, { role: 'model', content: data.content }]);
+                    return next;
+                });
+                setStreamingForTab(targetTabId, '');
+                markStreaming(targetTabId, false);
+                streamingForTabIdRef.current = null;
                 if (data.usageMetadata) {
                     const inTokens = data.usageMetadata.promptTokenCount || 0;
                     const outTokens = data.usageMetadata.candidatesTokenCount || 0;
@@ -464,16 +556,22 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     }
                 }
             } else if (data.responseType === 'error') {
-                setMessages(prev => [...prev, { role: 'model', content: `Error: ${data.content}` }]);
-                setStreamingContent('');
-                setIsStreaming(false);
+                setMessagesByTab(prev => {
+                    const next = new Map(prev);
+                    const cur = prev.get(targetTabId) ?? [];
+                    next.set(targetTabId, [...cur, { role: 'model', content: `Error: ${data.content}` }]);
+                    return next;
+                });
+                setStreamingForTab(targetTabId, '');
+                markStreaming(targetTabId, false);
+                streamingForTabIdRef.current = null;
             }
         }).then(fn => {
             if (cancelled) { fn(); } else { unlisten = fn; }
         }).catch(e => logError('AI', 'Response listener setup failed', e));
 
         return () => { cancelled = true; unlisten?.(); };
-    }, [paneId]);
+    }, [paneId, setStreamingForTab, markStreaming]);
 
     // ── Listen for auth result events ──
     useEffect(() => {
@@ -676,13 +774,19 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         localStorage.setItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT, '1');
         tauriService.aiAuthLogout().catch(() => {});
         setIsAuthenticated(false);
-        setMessages([]);
+        // Logout clears all in-progress conversations across all tabs.
+        setMessagesByTab(new Map());
+        setStreamingByTab(new Map());
+        setStreamingTabIds(new Set());
+        streamingForTabIdRef.current = null;
     };
 
     const handleRunCommand = (command: string) => {
-        if (!lastTargetSessionId) return;
+        if (!lastTargetSessionId || !activeTabId) return;
         const cleanCmd = command.trim();
-        onRunCommand?.(lastTargetSessionId, cleanCmd);
+        // Pass the originating tab id so the result is delivered back to the same tab,
+        // even if the user switches tabs while the command is executing.
+        onRunCommand?.(lastTargetSessionId, cleanCmd, activeTabId);
         tauriService.focusWindow().catch(() => {});
         window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: lastTargetSessionId } }));
     };
@@ -702,6 +806,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         setMessages(prev => [...prev, { role: 'user', content: text }]);
         lastSentTextRef.current = text;
         setInputText('');
+        // Capture which tab owns this stream so chunks land in the right tab even after a tab switch.
+        streamingForTabIdRef.current = activeTabId ?? null;
         setIsStreaming(true);
         setStreamingContent('');
 
@@ -720,8 +826,26 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     };
 
     const performNewChat = () => {
-        setMessages([]);
-        setStreamingContent('');
+        // Clear only the active tab's messages and streaming state.
+        if (activeTabId) {
+            setMessagesByTab(prev => {
+                const next = new Map(prev);
+                next.delete(activeTabId);
+                return next;
+            });
+            setStreamingByTab(prev => {
+                const next = new Map(prev);
+                next.delete(activeTabId);
+                return next;
+            });
+            setStreamingTabIds(prev => {
+                if (!prev.has(activeTabId)) return prev;
+                const next = new Set(prev);
+                next.delete(activeTabId);
+                return next;
+            });
+            if (streamingForTabIdRef.current === activeTabId) streamingForTabIdRef.current = null;
+        }
         setTotalInputTokens(0);
         setTotalOutputTokens(0);
         setTotalCost(null);
@@ -776,11 +900,22 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
 
     const handleCancel = () => {
         tauriService.aiChatCancel(paneId).catch(() => {});
-        if (streamingContent) {
-            setMessages(prev => [...prev, { role: 'model', content: streamingContent + ' [cancelled]' }]);
+        // Append the partial content + [cancelled] to the tab that owns the in-flight stream.
+        const targetTabId = streamingForTabIdRef.current ?? activeTabId ?? null;
+        if (targetTabId) {
+            const partial = streamingByTab.get(targetTabId) ?? '';
+            if (partial) {
+                setMessagesByTab(prev => {
+                    const next = new Map(prev);
+                    const cur = prev.get(targetTabId) ?? [];
+                    next.set(targetTabId, [...cur, { role: 'model', content: partial + ' [cancelled]' }]);
+                    return next;
+                });
+            }
+            setStreamingForTab(targetTabId, '');
+            markStreaming(targetTabId, false);
         }
-        setStreamingContent('');
-        setIsStreaming(false);
+        streamingForTabIdRef.current = null;
         setInputText(lastSentTextRef.current);
         setTimeout(() => {
             const ta = textareaRef.current;
@@ -795,6 +930,15 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
 
     return (
         <div className="ai-chat-pane" style={{ backgroundColor: effectiveBg }}>
+            {chatState && chatState.tabs.length > 0 && (
+                <TabStrip
+                    tabs={chatState.tabs}
+                    activeTabId={chatState.activeTabId}
+                    onSelect={(id) => onSelectTab?.(id)}
+                    onClose={(id) => onCloseTab?.(id)}
+                    onAdd={() => onAddTab?.()}
+                />
+            )}
             {modelLoadError && (
                 <div className="ai-chat-auth-error" style={{ margin: '8px 12px' }}>
                     Failed to retrieve the AI model list. Please check your authentication and network connection.
