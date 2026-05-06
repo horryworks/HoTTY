@@ -48,10 +48,10 @@ export function ProtocolsTab() {
             max={600}
             value={settings.sshConnectTimeoutSecs}
             onChange={(e) =>
-              update('sshConnectTimeoutSecs', parseInt(e.target.value, 10) || 3)
+              update('sshConnectTimeoutSecs', parseInt(e.target.value, 10) || 5)
             }
           />
-          <HelpTooltip text="Maximum time to wait for the initial TCP and SSH handshake before giving up. Default: 3 seconds." />
+          <HelpTooltip text="Maximum time to wait for the initial TCP and SSH handshake before giving up. Default: 5 seconds." />
         </div>
 
         <div className="settings-subsection-title">KeepAlive</div>
@@ -123,10 +123,10 @@ export function ProtocolsTab() {
             max={600}
             value={settings.telnetConnectTimeoutSecs}
             onChange={(e) =>
-              update('telnetConnectTimeoutSecs', parseInt(e.target.value, 10) || 3)
+              update('telnetConnectTimeoutSecs', parseInt(e.target.value, 10) || 5)
             }
           />
-          <HelpTooltip text="Maximum time to wait for the initial TCP connection before giving up. Default: 3 seconds." />
+          <HelpTooltip text="Maximum time to wait for the initial TCP connection before giving up. Default: 5 seconds." />
         </div>
 
         <div className="settings-subsection-title">KeepAlive</div>

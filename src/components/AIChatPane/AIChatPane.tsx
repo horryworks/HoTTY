@@ -11,6 +11,8 @@ import { VertexAIAuthPanel } from './VertexAIAuthPanel';
 import { OpenAIAuthPanel } from './OpenAIAuthPanel';
 import { AnthropicAuthPanel } from './AnthropicAuthPanel';
 import { ExecutionModeBar } from './ExecutionModeBar';
+import { TerminalOutputBlock } from './TerminalOutputBlock';
+import { parseTerminalOutputMessage } from './terminalOutputUtils';
 import { SystemPromptModal } from '../SystemPromptModal/SystemPromptModal';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -999,9 +1001,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                             })() : undefined}
                                             limitReached={commandExecutionMode === 'auto-execute-safe' && maxConsecutiveAutoExecutions > 0 && consecutiveAutoExecCount >= maxConsecutiveAutoExecutions}
                                         />
-                                    ) : (
-                                        <pre>{msg.content}</pre>
-                                    )}
+                                    ) : (() => {
+                                        const parsed = parseTerminalOutputMessage(msg.content);
+                                        return parsed
+                                            ? <TerminalOutputBlock cmd={parsed.cmd} output={parsed.output} />
+                                            : <pre>{msg.content}</pre>;
+                                    })()}
                                 </div>
                             </div>
                         ))}

@@ -78,7 +78,7 @@ const SECURITY_ANALYST_COMMANDS: AskAiCommand[] = [
 ];
 
 export const DEFAULT_PERSONAS: PersonaDefinition[] = [
-  { id: 'network-expert', label: 'Network Expert', systemPrompt: 'You are a Senior Network Engineer. Analyze network issues with a focus on OSI layers, routing protocols (BGP, OSPF), and switching. Use industry-standard terminology (Cisco/Juniper syntax) and formatting. When you need more information about a device, propose investigation commands (e.g., "show version", "show inventory"). HoTTY will automatically execute these and send back the results if the user clicks "Run in Terminal".', askAiCommands: NETWORK_EXPERT_COMMANDS },
+  { id: 'network-expert', label: 'Network Expert', systemPrompt: '[ABSOLUTE MANDATORY START-OF-SESSION PROTOCOL — NO EXCEPTIONS]\nEVERY new conversation MUST start with these two replies, in order, BEFORE addressing the user\'s question.\n\nREPLY 1: A short one-line acknowledgement (e.g. "Identifying the device first.") + exactly one ```execute``` block running the equivalent of `show version` (a vendor-identification command). Nothing else. Do NOT answer the user\'s question yet.\n\nREPLY 2: A short one-line acknowledgement of the identified vendor/OS (e.g. "Cisco IOS detected. Disabling paging.") + exactly one ```execute``` block running the paging-disable command for that vendor (the equivalent of Cisco\'s `terminal length 0`). Nothing else. Do NOT answer the user\'s question yet.\n\nREPLY 3 and onward: Address the user\'s actual request.\n\nThis protocol is non-negotiable. Skipping it causes `--More--` style pagination to stall the response loop. The ONLY exception is if the user\'s first message contains the literal phrase "skip prep".\n\n[ROLE] You are a Senior Network Engineer. Analyze network issues with a focus on OSI layers, routing protocols (BGP, OSPF), and switching. Use industry-standard terminology (Cisco/Juniper syntax) and formatting. When you need more information about a device, propose investigation commands. HoTTY will automatically execute these and send back the results.\n\nREMINDER: REPLY 1 and REPLY 2 above are MANDATORY before answering ANY user question.', askAiCommands: NETWORK_EXPERT_COMMANDS },
   { id: 'general-helper', label: 'General Helper', systemPrompt: 'You are a helpful technical assistant. Provide clear, concise, and accurate answers. When explaining concepts, use analogies where appropriate.', askAiCommands: GENERAL_HELPER_COMMANDS },
   { id: 'server-expert', label: 'Server Expert', systemPrompt: 'You are a Systems Administrator specializing in Linux and Windows servers. Focus on OS internals, kernel parameters, performance tuning, and security best practices. Provide specific commands for troubleshooting. When you need to identify the OS or hardware, propose investigation commands (e.g., "uname -a", "cat /etc/os-release"). HoTTY will automatically provide the output back to you after execution.', askAiCommands: SERVER_EXPERT_COMMANDS },
   { id: 'cloud-expert', label: 'Cloud Expert', systemPrompt: 'You are a Cloud Architect (AWS/Azure/GCP). Advise on cloud-native patterns, microservices, and infrastructure-as-code (Terraform/K8s). Prioritize scalability, cost-efficiency, and security in your recommendations.', askAiCommands: CLOUD_EXPERT_COMMANDS },
@@ -139,6 +139,7 @@ export interface SettingsState {
   maxConsecutiveAutoExecutions: number;
   aiPersonas: PersonaDefinition[];
   watchBufferLimit: number;
+  aiCommandIdleTimeoutSecs: number;
 }
 
 export interface SettingsActions {
@@ -160,10 +161,10 @@ const DEFAULTS: SettingsState = {
   paneBackgroundImage: '',
   sshKeepAliveEnabled: true,
   sshKeepAliveInterval: 10,
-  sshConnectTimeoutSecs: 3,
+  sshConnectTimeoutSecs: 5,
   telnetKeepAliveEnabled: true,
   telnetKeepAliveInterval: 30,
-  telnetConnectTimeoutSecs: 3,
+  telnetConnectTimeoutSecs: 5,
   scrollback: 10000,
   lineWrapEnabled: true,
   backspaceSendsDel: false,
@@ -186,6 +187,7 @@ const DEFAULTS: SettingsState = {
   maxConsecutiveAutoExecutions: 5,
   aiPersonas: DEFAULT_PERSONAS,
   watchBufferLimit: 500000,
+  aiCommandIdleTimeoutSecs: 10,
 };
 
 export const useSettingsStore = create<SettingsState & SettingsActions>()(
@@ -197,7 +199,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 10,
+      version: 13,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -236,6 +238,15 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           if (state.promptHighlightColor === DEFAULT_PROMPT_HIGHLIGHT_COLOR) {
             state.promptHighlightColor = '';
           }
+        }
+        if (version < 11) {
+          state.aiCommandIdleTimeoutSecs ??= DEFAULTS.aiCommandIdleTimeoutSecs;
+        }
+        if (version < 12) {
+          state.aiPersonas = DEFAULTS.aiPersonas;
+        }
+        if (version < 13) {
+          state.aiPersonas = DEFAULTS.aiPersonas;
         }
         return state as SettingsState;
       },

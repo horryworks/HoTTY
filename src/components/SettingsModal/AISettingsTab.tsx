@@ -335,6 +335,24 @@ export function AISettingsTab() {
         Execution mode and the auto-run limit are configured in the AI Chat pane (below the message input).
       </p>
 
+      {/* Device Response Timeout */}
+      <div className="settings-group">
+        <label>
+          Device Response Timeout (seconds)
+          <HelpTooltip text="If the device produces no new output for this many seconds after a command, the AI is told the device stopped responding so the loop can continue. 0 disables idle detection. Default: 10." />
+        </label>
+        <input
+          type="number"
+          min={0}
+          max={600}
+          value={settings.aiCommandIdleTimeoutSecs}
+          onChange={(e) => {
+            const parsed = parseInt(e.target.value, 10);
+            update('aiCommandIdleTimeoutSecs', Number.isFinite(parsed) && parsed > 0 ? parsed : 0);
+          }}
+        />
+      </div>
+
       {/* Custom Safe Commands */}
       <div className="settings-group">
         <label>

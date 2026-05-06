@@ -1056,3 +1056,103 @@
 .ai-chat-markdown>*:last-child {
     margin-bottom: 0;
 }
+
+/* ── Captured Terminal Output Block (collapsible) ── */
+.ai-terminal-output-block {
+    margin: 8px 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--code-bg);
+    overflow: hidden;
+}
+
+.ai-terminal-output-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    cursor: pointer;
+    user-select: none;
+}
+
+.ai-terminal-output-header:hover {
+    background-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
+}
+
+.ai-terminal-output-header:focus-visible {
+    border-color: var(--accent-color);
+    outline: none;
+}
+
+.ai-terminal-output-chevron {
+    color: var(--text-secondary);
+    transition: transform 0.15s ease-out;
+    flex-shrink: 0;
+}
+
+.ai-terminal-output-block.expanded .ai-terminal-output-chevron {
+    transform: rotate(90deg);
+}
+
+.ai-terminal-output-label {
+    font-weight: 600;
+    font-size: calc(var(--font-size-base) - 1px);
+    color: var(--text-primary);
+    flex-shrink: 0;
+}
+
+.ai-terminal-output-cmd {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-family);
+    font-size: calc(var(--font-size-base) - 2px);
+    color: var(--text-secondary);
+}
+
+.ai-terminal-output-meta {
+    font-size: calc(var(--font-size-base) - 3px);
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.ai-terminal-output-body {
+    max-height: 400px;
+    overflow: auto;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+.ai-terminal-output-body pre {
+    margin: 0;
+    background: none;
+    border: none;
+    padding: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.ai-terminal-output-body code {
+    background: none;
+    padding: 0;
+    color: var(--code-text);
+    font-family: var(--font-family);
+    font-size: 1em;
+}
+
+.ai-terminal-output-cmd-full {
+    margin: 0 0 8px 0 !important;
+    padding: 6px 8px !important;
+    background-color: var(--bg-secondary) !important;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: calc(var(--font-size-base) - 2px) !important;
+}
+
+.ai-terminal-output-empty {
+    font-style: italic;
+    color: var(--text-tertiary);
+}

@@ -92,4 +92,42 @@ describe('AISettingsTab', () => {
     render(<AISettingsTab />);
     expect(screen.getByText('Not Authenticated')).toBeTruthy();
   });
+
+  it('renders device response timeout input with default value', () => {
+    render(<AISettingsTab />);
+    expect(screen.getByText('Device Response Timeout (seconds)')).toBeTruthy();
+    const input = screen.getByText('Device Response Timeout (seconds)')
+      .closest('.settings-group')!
+      .querySelector('input[type="number"]') as HTMLInputElement;
+    expect(input.value).toBe('10');
+  });
+
+  it('updates device response timeout', () => {
+    render(<AISettingsTab />);
+    const input = screen.getByText('Device Response Timeout (seconds)')
+      .closest('.settings-group')!
+      .querySelector('input[type="number"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '60' } });
+    expect(useSettingsStore.getState().aiCommandIdleTimeoutSecs).toBe(60);
+  });
+
+  it('accepts 0 as device response timeout (disabled)', () => {
+    render(<AISettingsTab />);
+    const input = screen.getByText('Device Response Timeout (seconds)')
+      .closest('.settings-group')!
+      .querySelector('input[type="number"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '0' } });
+    expect(useSettingsStore.getState().aiCommandIdleTimeoutSecs).toBe(0);
+  });
+
+  it('clamps invalid device response timeout to 0', () => {
+    render(<AISettingsTab />);
+    const input = screen.getByText('Device Response Timeout (seconds)')
+      .closest('.settings-group')!
+      .querySelector('input[type="number"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '-5' } });
+    expect(useSettingsStore.getState().aiCommandIdleTimeoutSecs).toBe(0);
+    fireEvent.change(input, { target: { value: 'abc' } });
+    expect(useSettingsStore.getState().aiCommandIdleTimeoutSecs).toBe(0);
+  });
 });

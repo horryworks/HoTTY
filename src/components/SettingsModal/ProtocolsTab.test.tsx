@@ -62,14 +62,14 @@ describe('ProtocolsTab', () => {
     expect(inputs[1]).toHaveProperty('disabled', true);
   });
 
-  it('renders SSH and Telnet connect timeout inputs with default 3', () => {
+  it('renders SSH and Telnet connect timeout inputs with default 5', () => {
     render(<ProtocolsTab />);
     const labels = screen.getAllByText('Timeout (seconds)');
     expect(labels.length).toBe(2);
     const inputs = screen.getAllByRole('spinbutton');
     // Order in the DOM: SSH Timeout, SSH Interval, Telnet Timeout, Telnet Interval
-    expect((inputs[0] as HTMLInputElement).value).toBe('3');
-    expect((inputs[2] as HTMLInputElement).value).toBe('3');
+    expect((inputs[0] as HTMLInputElement).value).toBe('5');
+    expect((inputs[2] as HTMLInputElement).value).toBe('5');
   });
 
   it('edits SSH connect timeout', () => {

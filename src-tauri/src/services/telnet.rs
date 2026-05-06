@@ -57,7 +57,7 @@ fn default_encoding() -> String {
 }
 
 fn default_connect_timeout_secs() -> u32 {
-    3
+    5
 }
 
 impl TelnetConfig {

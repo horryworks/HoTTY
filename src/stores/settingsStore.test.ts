@@ -14,10 +14,10 @@ describe('settingsStore', () => {
     expect(s.sshKeepAliveInterval).toBe(SETTINGS_DEFAULTS.sshKeepAliveInterval);
   });
 
-  it('defaults SSH and Telnet connect timeouts to 3 seconds', () => {
+  it('defaults SSH and Telnet connect timeouts to 5 seconds', () => {
     const s = useSettingsStore.getState();
-    expect(s.sshConnectTimeoutSecs).toBe(3);
-    expect(s.telnetConnectTimeoutSecs).toBe(3);
+    expect(s.sshConnectTimeoutSecs).toBe(5);
+    expect(s.telnetConnectTimeoutSecs).toBe(5);
   });
 
   it('update mutates a single key', () => {
@@ -84,5 +84,17 @@ describe('settingsStore', () => {
 
     useSettingsStore.getState().update('loggingPath', 'C:\\logs');
     expect(useSettingsStore.getState().loggingPath).toBe('C:\\logs');
+  });
+
+  it('defaults AI command idle timeout to 10 seconds', () => {
+    expect(useSettingsStore.getState().aiCommandIdleTimeoutSecs).toBe(10);
+  });
+
+  it('updates AI command idle timeout', () => {
+    useSettingsStore.getState().update('aiCommandIdleTimeoutSecs', 60);
+    expect(useSettingsStore.getState().aiCommandIdleTimeoutSecs).toBe(60);
+
+    useSettingsStore.getState().update('aiCommandIdleTimeoutSecs', 0);
+    expect(useSettingsStore.getState().aiCommandIdleTimeoutSecs).toBe(0);
   });
 });

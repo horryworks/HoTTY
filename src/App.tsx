@@ -588,8 +588,13 @@ function App() {
                 // Poll watch buffer for command completion (shell prompt detection)
                 if (watchingSessionIdRef.current === targetId) {
                   const sendDuration = lines.length * 150;
+                  const idleSecs = useSettingsStore.getState().aiCommandIdleTimeoutSecs;
+                  const idleMs = idleSecs > 0 ? idleSecs * 1000 : 0;
+                  const SAFETY_CAP_MS = 30 * 60 * 1000; // 30 min hard ceiling
                   let attempts = 0;
-                  const maxAttempts = 150; // 30 seconds max
+                  let lastBufLen = startLen;
+                  let lastChangeAt = Date.now();
+                  const startedAt = Date.now();
                   const paneId = featureInfo.id;
                   let set = runCommandIntervalsRef.current.get(paneId);
                   if (!set) {
@@ -601,7 +606,7 @@ function App() {
                   aiExecLog('info', 'poll-begin', {
                     cmd: trimCmdForLog(cmd),
                     startLen,
-                    maxAttempts,
+                    idleSecs,
                     sendDuration,
                   });
                   const pollInterval = setInterval(() => {
@@ -624,6 +629,10 @@ function App() {
                         startLen,
                         bufLen: buf.length,
                       });
+                    }
+                    if (buf.length > lastBufLen) {
+                      lastBufLen = buf.length;
+                      lastChangeAt = Date.now();
                     }
                     const newContent = buf.substring(startLen);
                     // Wait until all lines are sent + some output received
@@ -654,15 +663,28 @@ function App() {
                       clearWatchBuffer(targetId);
                       const outputText = `Terminal Output (Command: ${cmd}):\n${newContent.trim()}`;
                       updateAiChatState(paneId, { pendingMessage: outputText });
-                    } else if (attempts >= maxAttempts) {
-                      aiExecLog('warn', 'timeout', {
-                        cmd: trimCmdForLog(cmd),
-                        attempts,
-                        bufLen: buf.length,
-                        newLen: newContent.length,
-                      });
-                      clearInterval(pollInterval);
-                      intervalSet.delete(pollInterval);
+                    } else {
+                      const now = Date.now();
+                      const idleFire = idleMs > 0 && (now - lastChangeAt) >= idleMs && newContent.length > 0;
+                      const safetyFire = (now - startedAt) >= SAFETY_CAP_MS;
+                      if (idleFire || safetyFire) {
+                        aiExecLog('warn', idleFire ? 'idle-timeout' : 'safety-cap', {
+                          cmd: trimCmdForLog(cmd),
+                          attempts,
+                          bufLen: buf.length,
+                          newLen: newContent.length,
+                          idleSecs,
+                        });
+                        clearInterval(pollInterval);
+                        intervalSet.delete(pollInterval);
+                        clearWatchBuffer(targetId);
+                        const reason = idleFire
+                          ? `[no response from device for ${idleSecs} seconds]`
+                          : `[command exceeded safety cap of 30 minutes]`;
+                        const captured = newContent.trim();
+                        const outputText = `Terminal Output (Command: ${cmd}):\n${captured}\n${reason}`;
+                        updateAiChatState(paneId, { pendingMessage: outputText });
+                      }
                     }
                   }, 200);
                   intervalSet.add(pollInterval);
