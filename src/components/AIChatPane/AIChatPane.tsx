@@ -1142,6 +1142,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             disabled={isStreaming}
                         />
                         <div className="ai-chat-input-toolbar">
+                            <button className="ai-chat-prompt-btn" onClick={onShowPromptMenu} title="Analysis prompts">&#x2728;</button>
+                            <span className="ai-chat-input-toolbar-spacer" />
                             <ExecutionModeBar
                                 paused={autoExecPaused}
                                 onPausedChange={(next) => {
@@ -1151,8 +1153,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     }
                                 }}
                             />
-                            <span className="ai-chat-input-toolbar-spacer" />
-                            <button className="ai-chat-prompt-btn" onClick={onShowPromptMenu} title="Analysis prompts">&#x2728;</button>
                             {isStreaming && <button className="ai-chat-cancel-btn" onClick={handleCancel}>&#x25A0;</button>}
                             <button
                                 className="ai-chat-send-btn"

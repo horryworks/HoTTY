@@ -53,11 +53,11 @@
     letter-spacing: 0.5px;
 }
 
-/* ── Popover (opens upward above chip) ── */
+/* ── Popover (opens upward above chip, anchored to right since chip lives on right) ── */
 .execution-mode-popover {
     position: absolute;
     bottom: calc(100% + 6px);
-    left: 0;
+    right: 0;
     z-index: 1000;
     min-width: 280px;
     padding: 10px;
