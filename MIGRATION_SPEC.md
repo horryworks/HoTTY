@@ -923,7 +923,7 @@ PTY起動時に以下パターンにマッチする環境変数を除去:
 - スタートメニューショートカット作成
 
 ### 14.2 アップデートチェック
-GitHub API (`https://api.github.com/repos/horryworks/HoTTY-Rust-Tauri/releases/latest`) をポーリング。セマンティックバージョン比較で新バージョン検出。
+GitHub API (`https://api.github.com/repos/horryworks/HoTTY/releases/latest`) をポーリング。セマンティックバージョン比較で新バージョン検出。
 
 ---
 

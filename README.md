@@ -59,7 +59,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 
 ## Installation
 
-Download the latest installer from the [Releases](https://github.com/horryworks/HoTTY-Rust-Tauri/releases) page.
+Download the latest installer from the [Releases](https://github.com/horryworks/HoTTY/releases) page.
 
 ## Development
 

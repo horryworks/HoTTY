@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-// GitHub releases endpoint for HoTTY-Rust-Tauri.
+// GitHub releases endpoint.
 const RELEASES_URL: &str =
-    "https://api.github.com/repos/horryworks/HoTTY-Rust-Tauri/releases/latest";
+    "https://api.github.com/repos/horryworks/HoTTY/releases/latest";
 
 #[derive(Debug, Deserialize)]
 struct GithubRelease {

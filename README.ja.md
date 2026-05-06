@@ -59,7 +59,7 @@ HoTTY は、SSH、Telnet、シリアル、WSL、ローカルシェル (cmd / Pow
 
 ## インストール
 
-[Releases](https://github.com/horryworks/HoTTY-Rust-Tauri/releases) ページから最新のインストーラーをダウンロードしてください。
+[Releases](https://github.com/horryworks/HoTTY/releases) ページから最新のインストーラーをダウンロードしてください。
 
 ## 開発
 

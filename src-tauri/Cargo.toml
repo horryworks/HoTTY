@@ -4,7 +4,7 @@ version = "2.0.0-beta10"
 description = "HoTTY - AI Integrated Advanced Terminal Emulator (Rust/Tauri)"
 authors = ["horryworks"]
 license = "GPL-3.0-or-later"
-repository = "https://github.com/horryworks/HoTTY-Rust-Tauri"
+repository = "https://github.com/horryworks/HoTTY"
 edition = "2021"
 rust-version = "1.77.2"
 
