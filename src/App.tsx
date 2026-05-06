@@ -246,7 +246,6 @@ function App() {
     aiChatStates,
     updateAiChatState,
     sendMessage: aiSendMessage,
-    showPromptMenu: aiShowPromptMenu,
     askAiFreeFormatData,
     setAskAiFreeFormatData,
     handleFreeFormatSubmit,
@@ -669,7 +668,6 @@ function App() {
                   intervalSet.add(pollInterval);
                 }
               }}
-              onShowPromptMenu={() => aiShowPromptMenu(featureInfo.id)}
               onSendMessage={(text) => aiSendMessage(featureInfo.id, text)}
               aiPersonas={aiPersonas}
               terminalBackground={useSettingsStore.getState().terminalBackground}

@@ -31,7 +31,6 @@ interface AIChatPaneProps {
     chatState?: AiChatState;
     onChatStateChange?: (newState: Partial<AiChatState>) => void;
     onRunCommand?: (sessionId: string, command: string) => void;
-    onShowPromptMenu?: () => void;
     onSendMessage?: (text: string) => void;
     aiPersonas: PersonaDefinition[];
     terminalBackground?: string;
@@ -166,7 +165,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     chatState,
     onChatStateChange,
     onRunCommand,
-    onShowPromptMenu,
     onSendMessage,
     aiPersonas,
     terminalBackground,
@@ -243,6 +241,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
     const overflowMenuRef = useRef<HTMLDivElement>(null);
     const overflowTriggerRef = useRef<HTMLButtonElement>(null);
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const settingsPopoverRef = useRef<HTMLDivElement>(null);
+    const settingsTriggerRef = useRef<HTMLButtonElement>(null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -752,6 +753,25 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         };
     }, [overflowMenuOpen]);
 
+    useEffect(() => {
+        if (!settingsOpen) return;
+        const onMouseDown = (e: MouseEvent) => {
+            const target = e.target as Node;
+            if (settingsPopoverRef.current?.contains(target)) return;
+            if (settingsTriggerRef.current?.contains(target)) return;
+            setSettingsOpen(false);
+        };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setSettingsOpen(false);
+        };
+        document.addEventListener('mousedown', onMouseDown);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onMouseDown);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [settingsOpen]);
+
     const handleCancel = () => {
         tauriService.aiChatCancel(paneId).catch(() => {});
         if (streamingContent) {
@@ -827,104 +847,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 <div className="ai-chat-header-right">
                     {isAuthenticated && (
                         <>
-                            <div className="ai-chat-header-item">
-                                <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <title>Persona</title>
-                                    <path d="M22 10L12 5L2 10L12 15L22 10Z" />
-                                    <path d="M6 12V17C8.5 19.5 15.5 19.5 18 17V12" />
-                                </svg>
-                                <select
-                                    className="ai-chat-model-select"
-                                    style={{ width: '140px' }}
-                                    value={selectedExpertise}
-                                    onChange={(e) => setSelectedExpertise(e.target.value)}
-                                    disabled={isStreaming}
-                                >
-                                    {aiPersonas?.map(persona => (
-                                        <option key={persona.id} value={persona.label}>{persona.label}</option>
-                                    ))}
-                                </select>
-                                <button
-                                    type="button"
-                                    className="ai-chat-header-icon-btn"
-                                    title="View system prompt"
-                                    aria-label="View system prompt"
-                                    onClick={() => setShowPromptModal(true)}
-                                >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-                                        <circle cx="12" cy="12" r="10" />
-                                        <line x1="12" y1="16" x2="12" y2="12" />
-                                        <line x1="12" y1="8" x2="12.01" y2="8" />
-                                    </svg>
-                                </button>
-                            </div>
-                            <div className="ai-chat-header-item">
-                                <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <title>Language</title>
-                                    <circle cx="12" cy="12" r="10" />
-                                    <line x1="2" y1="12" x2="22" y2="12" />
-                                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                                </svg>
-                                <select
-                                    className="ai-chat-model-select"
-                                    style={{ width: '100px' }}
-                                    value={selectedLanguage}
-                                    onChange={(e) => {
-                                        const lang = e.target.value;
-                                        setSelectedLanguage(lang);
-                                        localStorage.setItem(STORAGE_KEYS.GEMINI_LANGUAGE, lang);
-                                    }}
-                                    disabled={isStreaming}
-                                >
-                                    {['Auto', 'English', 'Japanese', 'Chinese', 'Korean', 'Spanish', 'French', 'German', 'Russian'].map(lang => (
-                                        <option key={lang} value={lang}>{lang}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            {activeAiProvider === 'vertexai' && (
-                                <div className="ai-chat-header-item">
-                                    <svg className="ai-chat-header-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                                        <title>Region</title>
-                                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                                        <circle cx="12" cy="10" r="3" />
-                                    </svg>
-                                    <select
-                                        className="ai-chat-model-select"
-                                        style={{ width: '130px' }}
-                                        value={selectedRegion}
-                                        onChange={(e) => handleRegionChange(e.target.value)}
-                                        disabled={isStreaming || isLoadingModels}
-                                    >
-                                        {(availableRegions.length > 0
-                                            ? availableRegions
-                                            : [selectedRegion]
-                                        ).map(r => (
-                                            <option key={r} value={r}>{r}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
-                            <div className="ai-chat-header-divider" aria-hidden="true" />
-                            <div className="ai-chat-header-item">
-                                <select
-                                    className="ai-chat-model-select"
-                                    style={{ width: '210px' }}
-                                    value={selectedModel}
-                                    onChange={(e) => {
-                                        const model = e.target.value;
-                                        setSelectedModel(model);
-                                        localStorage.setItem(STORAGE_KEYS.AI_SELECTED_MODEL, model);
-                                        localStorage.setItem(STORAGE_KEYS.AI_SELECTED_MODEL_PER_PROVIDER(activeAiProvider), model);
-                                        onChatStateChange?.({ selectedModel: model });
-                                    }}
-                                    disabled={isStreaming || isLoadingModels}
-                                >
-                                    {selectedModel === 'Unspecified' && <option value="Unspecified">{isLoadingModels ? 'Loading...' : 'Select a model...'}</option>}
-                                    {availableModels.map(m => (
-                                        <option key={m.name} value={m.name}>{m.displayName}</option>
-                                    ))}
-                                </select>
-                            </div>
                             <div className="ai-chat-overflow-wrap">
                                 <button
                                     ref={overflowTriggerRef}
@@ -1142,7 +1064,102 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             disabled={isStreaming}
                         />
                         <div className="ai-chat-input-toolbar">
-                            <button className="ai-chat-prompt-btn" onClick={onShowPromptMenu} title="Analysis prompts">&#x2728;</button>
+                            <div className="ai-chat-settings-wrap">
+                                <button
+                                    ref={settingsTriggerRef}
+                                    type="button"
+                                    className={`ai-chat-settings-btn${settingsOpen ? ' open' : ''}`}
+                                    onClick={() => setSettingsOpen(o => !o)}
+                                    title="AI settings"
+                                    aria-label="AI settings"
+                                    aria-haspopup="dialog"
+                                    aria-expanded={settingsOpen}
+                                >
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <circle cx="12" cy="12" r="3" />
+                                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                                    </svg>
+                                    <span className="ai-chat-settings-btn-label">{selectedModel === 'Unspecified' ? 'Select model' : (availableModels.find(m => m.name === selectedModel)?.displayName || selectedModel)}</span>
+                                </button>
+                                {settingsOpen && (
+                                    <div ref={settingsPopoverRef} className="ai-chat-settings-popover" role="dialog" aria-label="AI settings">
+                                        <div className="ai-chat-settings-popover-section">
+                                            <label className="ai-chat-settings-popover-label">Model</label>
+                                            <select
+                                                className="ai-chat-settings-popover-select"
+                                                value={selectedModel}
+                                                onChange={(e) => {
+                                                    const model = e.target.value;
+                                                    setSelectedModel(model);
+                                                    localStorage.setItem(STORAGE_KEYS.AI_SELECTED_MODEL, model);
+                                                    localStorage.setItem(STORAGE_KEYS.AI_SELECTED_MODEL_PER_PROVIDER(activeAiProvider), model);
+                                                    onChatStateChange?.({ selectedModel: model });
+                                                }}
+                                                disabled={isStreaming || isLoadingModels}
+                                            >
+                                                {selectedModel === 'Unspecified' && <option value="Unspecified">{isLoadingModels ? 'Loading...' : 'Select a model...'}</option>}
+                                                {availableModels.map(m => (
+                                                    <option key={m.name} value={m.name}>{m.displayName}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="ai-chat-settings-popover-section">
+                                            <label className="ai-chat-settings-popover-label">Persona</label>
+                                            <div className="ai-chat-settings-popover-persona-row">
+                                                <select
+                                                    className="ai-chat-settings-popover-select"
+                                                    value={selectedExpertise}
+                                                    onChange={(e) => setSelectedExpertise(e.target.value)}
+                                                    disabled={isStreaming}
+                                                >
+                                                    {aiPersonas?.map(persona => (
+                                                        <option key={persona.id} value={persona.label}>{persona.label}</option>
+                                                    ))}
+                                                </select>
+                                                <button
+                                                    type="button"
+                                                    className="ai-chat-settings-popover-link-btn"
+                                                    onClick={() => { setSettingsOpen(false); setShowPromptModal(true); }}
+                                                >
+                                                    View prompt
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="ai-chat-settings-popover-section">
+                                            <label className="ai-chat-settings-popover-label">Language</label>
+                                            <select
+                                                className="ai-chat-settings-popover-select"
+                                                value={selectedLanguage}
+                                                onChange={(e) => {
+                                                    const lang = e.target.value;
+                                                    setSelectedLanguage(lang);
+                                                    localStorage.setItem(STORAGE_KEYS.GEMINI_LANGUAGE, lang);
+                                                }}
+                                                disabled={isStreaming}
+                                            >
+                                                {['Auto', 'English', 'Japanese', 'Chinese', 'Korean', 'Spanish', 'French', 'German', 'Russian'].map(lang => (
+                                                    <option key={lang} value={lang}>{lang}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        {activeAiProvider === 'vertexai' && (
+                                            <div className="ai-chat-settings-popover-section">
+                                                <label className="ai-chat-settings-popover-label">Region</label>
+                                                <select
+                                                    className="ai-chat-settings-popover-select"
+                                                    value={selectedRegion}
+                                                    onChange={(e) => handleRegionChange(e.target.value)}
+                                                    disabled={isStreaming || isLoadingModels}
+                                                >
+                                                    {(availableRegions.length > 0 ? availableRegions : [selectedRegion]).map(r => (
+                                                        <option key={r} value={r}>{r}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                             <span className="ai-chat-input-toolbar-spacer" />
                             <ExecutionModeBar
                                 paused={autoExecPaused}

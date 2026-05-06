@@ -695,27 +695,127 @@
     background-color: var(--color-danger-bg-hover);
 }
 
-.ai-chat-prompt-btn {
-    width: 26px;
-    height: 26px;
-    padding: 0;
-    background: none;
-    border: none;
-    border-radius: 6px;
-    color: var(--text-tertiary);
-    cursor: pointer;
-    font-size: calc(var(--font-size-base) - 1px);
+/* ── Settings chip in input toolbar ── */
+.ai-chat-settings-wrap {
+    position: relative;
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-    flex-shrink: 0;
 }
 
-.ai-chat-prompt-btn:hover {
-    background-color: var(--bg-tertiary);
+.ai-chat-settings-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 240px;
+    padding: 3px 10px 3px 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid transparent;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 2px);
+    transition: background-color 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.ai-chat-settings-btn:hover,
+.ai-chat-settings-btn.open {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+.ai-chat-settings-btn-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
+}
+
+.ai-chat-settings-popover {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    z-index: 1000;
+    min-width: 280px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 4px 16px var(--modal-shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    animation: aiChatSettingsPopoverIn 0.1s ease-out;
+}
+
+@keyframes aiChatSettingsPopoverIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.ai-chat-settings-popover-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ai-chat-settings-popover-label {
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 2px);
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.ai-chat-settings-popover-select {
+    width: 100%;
+    padding: 5px 8px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 1px);
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.ai-chat-settings-popover-select:focus {
     border-color: var(--accent-color);
+}
+
+.ai-chat-settings-popover-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.ai-chat-settings-popover-persona-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.ai-chat-settings-popover-persona-row .ai-chat-settings-popover-select {
+    flex: 1;
+}
+
+.ai-chat-settings-popover-link-btn {
+    padding: 4px 10px;
+    background: transparent;
     color: var(--accent-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 2px);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.1s, border-color 0.1s;
+}
+
+.ai-chat-settings-popover-link-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-color);
 }
 
 /* ── Markdown Rendering ── */
