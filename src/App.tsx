@@ -119,6 +119,29 @@ function App() {
 
   // Track last known terminal session for AI targeting
   const [lastTerminalSessionId, setLastTerminalSessionId] = useState<string | null>(null);
+
+  // Briefly flash the pane bound to a session, used when the user clicks an AI
+  // Chat tab so the linked terminal pane is visually identified.
+  const [flashedSessionId, setFlashedSessionId] = useState<string | null>(null);
+  const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashSessionPane = useCallback((sessionId: string) => {
+    if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+    // Toggle off first so a re-click on the same tab restarts the animation.
+    setFlashedSessionId(null);
+    requestAnimationFrame(() => {
+      setFlashedSessionId(sessionId);
+      flashTimeoutRef.current = setTimeout(() => {
+        setFlashedSessionId(null);
+        flashTimeoutRef.current = null;
+      }, 600);
+    });
+  }, []);
+  useEffect(() => {
+    return () => {
+      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+    };
+  }, []);
+
   const activePaneAllocation = paneAllocations[activePaneId];
   useEffect(() => {
     if (activePaneAllocation && !isFeaturePane(activePaneAllocation)) {
@@ -579,9 +602,10 @@ function App() {
     const session = sid && contentType === 'session' ? sessions.get(sid) : undefined;
     const featureInfo = sid && contentType !== 'session' ? featurePanes.get(sid) : undefined;
 
+    const isFlashed = !!sid && sid === flashedSessionId;
     return (
       <div
-        className={`pane${paneId === activePaneId ? ' pane-active' : ''}`}
+        className={`pane${paneId === activePaneId ? ' pane-active' : ''}${isFlashed ? ' pane-flash' : ''}`}
         onClick={() => setActivePaneId(paneId)}
       >
         <div className="pane-body">
@@ -649,6 +673,7 @@ function App() {
               }}
               onCloseTab={(tabId) => closeTab(featureInfo.id, tabId)}
               onSelectTab={(tabId) => setActiveTab(featureInfo.id, tabId)}
+              onFlashSessionPane={flashSessionPane}
               sessions={sessions}
               onRunCommand={(targetId, cmd, originatingTabId) => {
                 // Record buffer position before sending command

@@ -54,6 +54,7 @@
   min-height: 0;
   border: 1px solid transparent;
   box-sizing: border-box;
+  position: relative;
 }
 
 .pane.pane-active {
@@ -61,6 +62,25 @@
   box-shadow:
     0 0 var(--glow-blur, 10px) var(--glow-accent, transparent),
     inset 0 0 8px var(--glow-accent, transparent);
+}
+
+.pane.pane-flash::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 1px solid var(--accent-color);
+  box-shadow:
+    0 0 var(--glow-blur, 10px) var(--glow-accent, transparent),
+    inset 0 0 8px var(--glow-accent, transparent);
+  pointer-events: none;
+  z-index: 100;
+  animation: paneFlash 0.6s ease-out forwards;
+}
+
+@keyframes paneFlash {
+  0% { opacity: 1; }
+  60% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 .pane-body {

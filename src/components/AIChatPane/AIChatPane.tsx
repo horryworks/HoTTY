@@ -39,6 +39,7 @@ interface AIChatPaneProps {
     onAddTab?: (initialLinkSessionId?: string) => void;
     onCloseTab?: (tabId: string) => void;
     onSelectTab?: (tabId: string) => void;
+    onFlashSessionPane?: (sessionId: string) => void;
     sessions?: Map<string, SessionRecord>;
     onRunCommand?: (sessionId: string, command: string, originatingTabId: string) => void;
     onSendMessage?: (text: string) => void;
@@ -178,6 +179,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     onAddTab,
     onCloseTab,
     onSelectTab,
+    onFlashSessionPane,
     sessions,
     onRunCommand,
     onSendMessage,
@@ -934,7 +936,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 <TabStrip
                     tabs={chatState.tabs}
                     activeTabId={chatState.activeTabId}
-                    onSelect={(id) => onSelectTab?.(id)}
+                    onSelect={(id) => {
+                        onSelectTab?.(id);
+                        const linkedId = chatState.tabs.find((t) => t.id === id)?.linkedSessionId;
+                        if (linkedId) onFlashSessionPane?.(linkedId);
+                    }}
                     onClose={(id) => onCloseTab?.(id)}
                     onAdd={() => onAddTab?.()}
                 />
