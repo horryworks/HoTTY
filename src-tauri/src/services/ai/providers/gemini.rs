@@ -104,7 +104,10 @@ impl GeminiProvider {
             chat_histories: HashMap::new(),
             cancel_tokens: HashMap::new(),
             app_data_dir,
-            http_client: reqwest::Client::new(),
+            http_client: reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(30))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
         }
     }
 
@@ -693,15 +696,26 @@ impl AIProvider for GeminiProvider {
             }
         }
 
-        if !cancel_token.is_cancelled() {
-            if !full_response.is_empty() {
-                if let Some(history) = self.chat_histories.get_mut(&sid) {
-                    history.push(ChatMessage {
-                        role: "model".into(),
-                        content: full_response.clone(),
-                    });
+        // Always close out the assistant turn in chat_histories — even on
+        // cancel — so the user/assistant alternation stays consistent for the
+        // next request.
+        if let Some(history) = self.chat_histories.get_mut(&sid) {
+            let content = if cancel_token.is_cancelled() {
+                if full_response.is_empty() {
+                    "[cancelled before response]".to_string()
+                } else {
+                    format!("{full_response}\n\n[cancelled by user]")
                 }
-            }
+            } else {
+                full_response.clone()
+            };
+            history.push(ChatMessage {
+                role: "model".into(),
+                content,
+            });
+        }
+
+        if !cancel_token.is_cancelled() {
             emit_chat_response(
                 &app_clone,
                 ChatResponseData {

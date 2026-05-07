@@ -171,6 +171,11 @@ pub async fn connect_session(
     }
 
     log::info!("connect ok for {session_id}, storing in session map");
+    // Single lock acquisition: build + connect runs outside the lock so SSH
+    // handshakes don't serialize all session opens. The cost is that two
+    // concurrent calls for the same session_id may both connect; the loser
+    // disconnects its own service and returns Err. Acceptable since the
+    // frontend never reuses a session_id.
     let mut map = state.sessions.lock().await;
     if map.contains_key(&session_id) {
         drop(map);

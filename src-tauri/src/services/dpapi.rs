@@ -13,6 +13,13 @@ pub(crate) fn encrypt_string(plaintext: &str) -> Result<String, String> {
 
 /// Decrypt a `[SAFE]`- or `[DPAPI]`-prefixed ciphertext using Windows DPAPI.
 /// If the input has no recognised prefix it is returned as-is (plaintext passthrough).
+///
+/// The passthrough path is intentional — many callers store mixed-content
+/// fields (e.g. host-tree usernames) that may legitimately be plaintext when
+/// the user never enabled encryption. Inputs that look like they were *meant*
+/// to be encrypted (start with `[` but have an unknown tag) are still passed
+/// through unchanged but logged at warn level so accidental corruption of the
+/// prefix is visible.
 pub(crate) fn decrypt_string(ciphertext: &str) -> Result<String, String> {
     if let Some(b64) = ciphertext.strip_prefix(SAFE_PREFIX) {
         let bytes = BASE64.decode(b64).map_err(|e| format!("base64 decode error: {e}"))?;
@@ -21,6 +28,12 @@ pub(crate) fn decrypt_string(ciphertext: &str) -> Result<String, String> {
         let bytes = BASE64.decode(b64).map_err(|e| format!("base64 decode error: {e}"))?;
         crypt_unprotect(&bytes)
     } else {
+        if ciphertext.starts_with('[') {
+            log::warn!(
+                "dpapi: decrypt_string passthrough on bracketed input (unknown encryption tag, possibly corrupted): \"{}…\"",
+                ciphertext.chars().take(16).collect::<String>()
+            );
+        }
         Ok(ciphertext.to_string())
     }
 }

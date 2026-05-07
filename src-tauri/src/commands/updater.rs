@@ -46,6 +46,26 @@ fn parse_version(v: &str) -> (u32, u32, u32, String) {
     (major, minor, patch, pre)
 }
 
+/// Compare two prerelease tags. Falls back to lexicographic, but when both
+/// sides decompose into the same alphabetic prefix + numeric suffix the
+/// suffix is compared numerically. So "beta10" > "beta9", which a plain
+/// string compare would get wrong.
+fn compare_prerelease(a: &str, b: &str) -> std::cmp::Ordering {
+    fn split_alpha_num(s: &str) -> Option<(&str, u64)> {
+        let digit_start = s.find(|c: char| c.is_ascii_digit())?;
+        if digit_start == 0 {
+            return None;
+        }
+        let (alpha, num_str) = s.split_at(digit_start);
+        let num: u64 = num_str.parse().ok()?;
+        Some((alpha, num))
+    }
+    match (split_alpha_num(a), split_alpha_num(b)) {
+        (Some((aa, an)), Some((ba, bn))) if aa == ba => an.cmp(&bn),
+        _ => a.cmp(b),
+    }
+}
+
 /// Return true iff `latest` is strictly newer than `current` using semver-ish comparison.
 /// A release with no pre-release suffix ranks higher than the same core with a pre-release.
 fn is_strictly_newer(current: &str, latest: &str) -> bool {
@@ -58,7 +78,7 @@ fn is_strictly_newer(current: &str, latest: &str) -> bool {
             (false, true) => true,      // current is pre, latest is stable → newer
             (true, false) => false,     // current is stable, latest is pre → not newer
             (true, true) => false,      // identical stable
-            (false, false) => lpre > cpre, // string compare is stable-enough for our beta tags
+            (false, false) => compare_prerelease(&lpre, &cpre).is_gt(),
         },
     }
 }
@@ -149,5 +169,14 @@ mod tests {
     fn later_prerelease_tag_is_newer() {
         assert!(is_strictly_newer("2.0.0-beta3", "2.0.0-beta4"));
         assert!(!is_strictly_newer("2.0.0-beta4", "2.0.0-beta3"));
+    }
+
+    #[test]
+    fn double_digit_prerelease_compares_numerically() {
+        // Lexicographic compare would say "beta10" < "beta9"; numeric-aware
+        // compare must say "beta10" > "beta9".
+        assert!(is_strictly_newer("2.0.0-beta9", "2.0.0-beta10"));
+        assert!(!is_strictly_newer("2.0.0-beta10", "2.0.0-beta9"));
+        assert!(is_strictly_newer("2.0.0-beta9", "2.0.0-beta11"));
     }
 }

@@ -155,7 +155,27 @@ impl Handler for JumpboxHandler {
         };
         let _ = self.app.emit("ssh-host-key-prompt", payload);
 
-        let decision = rx.await.map_err(|_| russh::Error::Disconnect)?;
+        let decision = match tokio::time::timeout(
+            super::ssh::HOST_KEY_PROMPT_TIMEOUT,
+            rx,
+        )
+        .await
+        {
+            Ok(Ok(d)) => d,
+            Ok(Err(_)) => return Err(russh::Error::Disconnect),
+            Err(_) => {
+                log::warn!(
+                    "jumpbox: host-key prompt timed out after {}s for session {}; disconnecting",
+                    super::ssh::HOST_KEY_PROMPT_TIMEOUT.as_secs(),
+                    self.prompt_session_id
+                );
+                jumpbox_pending_map()
+                    .lock()
+                    .await
+                    .remove(&self.prompt_session_id);
+                return Err(russh::Error::Disconnect);
+            }
+        };
         if !decision.accept {
             return Ok(false);
         }
@@ -196,10 +216,16 @@ async fn register_pending_jumpbox_prompt(
     session_id: &str,
     tx: oneshot::Sender<HostKeyDecision>,
 ) {
-    jumpbox_pending_map()
+    if jumpbox_pending_map()
         .lock()
         .await
-        .insert(session_id.to_string(), tx);
+        .insert(session_id.to_string(), tx)
+        .is_some()
+    {
+        log::warn!(
+            "jumpbox: replacing existing pending host-key prompt for session {session_id}; prior waiter cancelled"
+        );
+    }
     // Also register in the shared ssh module's map so `ssh_host_key_response`
     // can route by the same session id.
     register_with_ssh_map(session_id.to_string()).await;

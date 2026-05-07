@@ -243,7 +243,10 @@ impl VertexAIProvider {
             chat_histories: HashMap::new(),
             cancel_tokens: HashMap::new(),
             app_data_dir,
-            http_client: reqwest::Client::new(),
+            http_client: reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(30))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
         }
     }
 
@@ -970,7 +973,10 @@ impl AIProvider for VertexAIProvider {
         }
 
         if let Err(e) = self.save_config() {
-            log::error!("[vertexai] Failed to save config: {e}");
+            log::error!(
+                "[vertexai] Failed to persist config to {}: {e} — auth succeeded for this session but won't survive a restart",
+                self.config_path().display()
+            );
         }
         log::info!(
             "[vertexai] Auth success, project={project_id}, location={location}"
@@ -1151,15 +1157,24 @@ impl AIProvider for VertexAIProvider {
 
         match result {
             Ok((full_response, usage_metadata)) => {
-                if !cancel_token.is_cancelled() {
-                    if !full_response.is_empty() {
-                        if let Some(history) = self.chat_histories.get_mut(&sid) {
-                            history.push(ChatMessage {
-                                role: "model".into(),
-                                content: full_response.clone(),
-                            });
+                // Always close out the assistant turn so user/model alternation
+                // stays consistent for the next request, even on cancel.
+                if let Some(history) = self.chat_histories.get_mut(&sid) {
+                    let content = if cancel_token.is_cancelled() {
+                        if full_response.is_empty() {
+                            "[cancelled before response]".to_string()
+                        } else {
+                            format!("{full_response}\n\n[cancelled by user]")
                         }
-                    }
+                    } else {
+                        full_response.clone()
+                    };
+                    history.push(ChatMessage {
+                        role: "model".into(),
+                        content,
+                    });
+                }
+                if !cancel_token.is_cancelled() {
                     emit_chat_response(
                         app,
                         ChatResponseData {
@@ -1183,6 +1198,13 @@ impl AIProvider for VertexAIProvider {
                             usage_metadata: None,
                         },
                     );
+                }
+                // On error, also pop the user message that was pushed before
+                // the request so the history stays consistent for retry.
+                if let Some(history) = self.chat_histories.get_mut(&sid) {
+                    if matches!(history.last(), Some(m) if m.role == "user") {
+                        history.pop();
+                    }
                 }
             }
         }

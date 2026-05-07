@@ -325,8 +325,10 @@ impl SessionService for LocalSession {
             let _ = tx.send(WriterCmd::Close).await;
         }
         for jh in self.join.drain(..) {
-            if tokio::time::timeout(std::time::Duration::from_millis(200), jh).await.is_err() {
-                log::debug!("Local task did not finish in time, aborting");
+            let abort_handle = jh.abort_handle();
+            if tokio::time::timeout(std::time::Duration::from_millis(1500), jh).await.is_err() {
+                log::warn!("Local task did not finish within 1.5s, aborting");
+                abort_handle.abort();
             }
         }
         Ok(())

@@ -8,7 +8,7 @@ use tauri::Manager;
 // Types
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct AlgorithmEntry {
     pub name: String,
     pub enabled: bool,
@@ -75,6 +75,59 @@ fn validate_algorithms(data: &SshAlgorithms) -> Result<(), String> {
     Ok(())
 }
 
+/// Merge the user's saved algorithm choices with the bundled defaults.
+///
+/// For each category present in `bundled`, returns entries in the bundled
+/// order. Each entry's `enabled` flag is taken from `user` when the algorithm
+/// name is present there, otherwise from `bundled`. Algorithms that exist in
+/// `user` but not in `bundled` are appended at the end of their category, so
+/// users can still toggle algorithms the bundled defaults don't ship.
+///
+/// This lets new algorithm names introduced in a release reach existing
+/// installs (where the user's saved file would otherwise hide them) without
+/// overwriting the user's enabled/disabled choices for names they already
+/// configured.
+pub fn merge_user_with_bundled(user: &SshAlgorithms, bundled: &SshAlgorithms) -> SshAlgorithms {
+    use std::collections::HashSet;
+
+    let mut merged: SshAlgorithms = HashMap::new();
+    for (category, bundled_entries) in bundled {
+        let empty: Vec<AlgorithmEntry> = Vec::new();
+        let user_entries = user.get(category).unwrap_or(&empty);
+        let user_enabled: HashMap<&str, bool> = user_entries
+            .iter()
+            .map(|e| (e.name.as_str(), e.enabled))
+            .collect();
+
+        let mut out: Vec<AlgorithmEntry> = Vec::with_capacity(bundled_entries.len());
+        let mut seen: HashSet<&str> = HashSet::new();
+        for be in bundled_entries {
+            let enabled = user_enabled
+                .get(be.name.as_str())
+                .copied()
+                .unwrap_or(be.enabled);
+            out.push(AlgorithmEntry {
+                name: be.name.clone(),
+                enabled,
+            });
+            seen.insert(be.name.as_str());
+        }
+        for ue in user_entries {
+            if !seen.contains(ue.name.as_str()) {
+                out.push(ue.clone());
+            }
+        }
+        merged.insert(category.clone(), out);
+    }
+    // Preserve any user-only category (defensive: should not happen given
+    // VALID_CATEGORIES, but avoids data loss if the bundled file ever ships
+    // without one).
+    for (cat, entries) in user {
+        merged.entry(cat.clone()).or_insert_with(|| entries.clone());
+    }
+    merged
+}
+
 /// Read and parse an algorithms JSON file.
 fn read_algorithms_file(path: &std::path::Path) -> Result<SshAlgorithms, String> {
     let meta = std::fs::metadata(path)
@@ -96,36 +149,66 @@ fn read_algorithms_file(path: &std::path::Path) -> Result<SshAlgorithms, String>
 // ---------------------------------------------------------------------------
 
 /// Synchronous loader for use outside of Tauri commands (e.g. SSH service).
-/// Reads from user config dir first, then falls back to bundled resources.
-/// Returns Ok(None) if neither file exists — caller should fall back to library defaults.
+/// Reads the user's saved config and merges in any algorithms newly added in
+/// the bundled defaults so that an upgraded install still sees recently
+/// shipped algorithm names. Returns Ok(None) if neither file exists.
 pub fn load_algorithms_sync(app: &AppHandle) -> Result<Option<SshAlgorithms>, String> {
     let user_path = user_algorithms_path(app)?;
-    if user_path.exists() {
-        return read_algorithms_file(&user_path).map(Some);
-    }
     let bundled_path = bundled_algorithms_path(app)?;
-    if bundled_path.exists() {
-        return read_algorithms_file(&bundled_path).map(Some);
+    let bundled = if bundled_path.exists() {
+        Some(read_algorithms_file(&bundled_path)?)
+    } else {
+        None
+    };
+
+    if user_path.exists() {
+        let user = read_algorithms_file(&user_path)?;
+        let merged = match &bundled {
+            Some(b) => merge_user_with_bundled(&user, b),
+            None => user,
+        };
+        return Ok(Some(merged));
     }
-    Ok(None)
+
+    Ok(bundled)
 }
 
 /// Load SSH algorithms configuration.
-/// Reads from user config dir first; if not present, copies from bundled resources.
+/// Reads from user config dir first and merges in any newly-bundled defaults
+/// so upgrades pick up new algorithms. Persists the merged result back to the
+/// user config so subsequent reads are stable. Falls back to bundled-only when
+/// the user config is missing (first run).
 #[tauri::command]
 pub async fn get_ssh_algorithms(app: AppHandle) -> Result<SshAlgorithms, String> {
     let user_path = user_algorithms_path(&app)?;
+    let bundled_path = bundled_algorithms_path(&app)?;
+    let bundled = if bundled_path.exists() {
+        Some(read_algorithms_file(&bundled_path)?)
+    } else {
+        None
+    };
 
-    // If user config exists, use it
     if user_path.exists() {
-        return read_algorithms_file(&user_path);
+        let user = read_algorithms_file(&user_path)?;
+        let merged = match &bundled {
+            Some(b) => merge_user_with_bundled(&user, b),
+            None => user.clone(),
+        };
+        // Persist the merged result if it differs from what was on disk so
+        // newly added bundled entries are visible in the user file.
+        if merged != user {
+            if let Ok(json) = serde_json::to_string_pretty(&merged) {
+                if let Err(e) = std::fs::write(&user_path, &json) {
+                    log::warn!(
+                        "could not persist merged algorithms to user config: {e}"
+                    );
+                }
+            }
+        }
+        return Ok(merged);
     }
 
-    // Otherwise, load from bundled resources and copy to user config
-    let bundled_path = bundled_algorithms_path(&app)?;
-    if bundled_path.exists() {
-        let algorithms = read_algorithms_file(&bundled_path)?;
-        // Copy to user config for future modifications
+    if let Some(algorithms) = bundled {
         if let Ok(json) = serde_json::to_string_pretty(&algorithms) {
             if let Err(e) = std::fs::write(&user_path, &json) {
                 log::warn!(

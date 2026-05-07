@@ -294,6 +294,11 @@ fn pending_map() -> &'static PendingMap {
     MAP.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Maximum time a host-key prompt may stay pending before the SSH handler
+/// gives up and disconnects. Prevents indefinite hangs when the user closes
+/// the modal without responding.
+pub(crate) const HOST_KEY_PROMPT_TIMEOUT: Duration = Duration::from_secs(300);
+
 pub async fn resolve_host_key_prompt(session_id: &str, decision: HostKeyDecision) -> bool {
     let mut map = pending_map().lock().await;
     if let Some(tx) = map.remove(session_id) {
@@ -328,11 +333,20 @@ pub async fn cancel_pending_host_key(session_id: &str) {
 /// Register an external pending host-key prompt. Used by the jumpbox handler
 /// so that a `ssh_host_key_response` call with a jumpbox-suffixed session id
 /// can be routed through this module's shared pending map.
+///
+/// If a prompt is already pending for the same id, the previous sender is
+/// dropped (waking its waiter with a RecvError). This shouldn't happen in
+/// normal flow — log a warning to surface the bug.
 pub async fn register_external_prompt(
     session_id: String,
     tx: oneshot::Sender<HostKeyDecision>,
 ) {
-    pending_map().lock().await.insert(session_id, tx);
+    let mut map = pending_map().lock().await;
+    if map.insert(session_id.clone(), tx).is_some() {
+        log::warn!(
+            "ssh: replacing existing pending host-key prompt for session {session_id}; prior waiter cancelled"
+        );
+    }
 }
 
 // --- Event payload for host-key prompt ---------------------------------
@@ -407,7 +421,12 @@ impl Handler for SshHandler {
         let (tx, rx) = oneshot::channel::<HostKeyDecision>();
         {
             let mut map = pending_map().lock().await;
-            map.insert(self.session_id.clone(), tx);
+            if map.insert(self.session_id.clone(), tx).is_some() {
+                log::warn!(
+                    "ssh: replacing existing pending host-key prompt for session {}; prior waiter cancelled",
+                    self.session_id
+                );
+            }
         }
 
         let payload = SshHostKeyPromptPayload {
@@ -420,21 +439,58 @@ impl Handler for SshHandler {
         };
         let _ = self.app.emit("ssh-host-key-prompt", payload);
 
-        let decision = rx.await.map_err(|_| russh::Error::Disconnect)?;
+        let decision = match tokio::time::timeout(HOST_KEY_PROMPT_TIMEOUT, rx).await {
+            Ok(Ok(d)) => d,
+            Ok(Err(_)) => return Err(russh::Error::Disconnect),
+            Err(_) => {
+                log::warn!(
+                    "ssh: host-key prompt timed out after {}s for session {}; disconnecting",
+                    HOST_KEY_PROMPT_TIMEOUT.as_secs(),
+                    self.session_id
+                );
+                pending_map().lock().await.remove(&self.session_id);
+                return Err(russh::Error::Disconnect);
+            }
+        };
         if !decision.accept {
             return Ok(false);
         }
         if decision.remember {
             if matches!(check, HostKeyCheck::Mismatch { .. }) {
-                let _ = remove_known_host(&self.known_hosts_path, &self.host, self.port, &key_type);
+                if let Err(e) = remove_known_host(
+                    &self.known_hosts_path,
+                    &self.host,
+                    self.port,
+                    &key_type,
+                ) {
+                    log::warn!(
+                        "ssh: failed to remove old known_hosts entry for {}:{}: {e} — the new key will not be remembered",
+                        self.host,
+                        self.port
+                    );
+                    let _ = self.app.emit(
+                        "ssh-known-hosts-warning",
+                        format!("Could not update known_hosts for {}:{}: {e}", self.host, self.port),
+                    );
+                }
             }
-            let _ = append_known_host(
+            if let Err(e) = append_known_host(
                 &self.known_hosts_path,
                 &self.host,
                 self.port,
                 &key_type,
                 &key_base64,
-            );
+            ) {
+                log::warn!(
+                    "ssh: failed to append known_hosts entry for {}:{}: {e} — the new key will not be remembered",
+                    self.host,
+                    self.port
+                );
+                let _ = self.app.emit(
+                    "ssh-known-hosts-warning",
+                    format!("Could not save host key for {}:{} to known_hosts: {e}", self.host, self.port),
+                );
+            }
         }
         Ok(true)
     }
@@ -782,9 +838,13 @@ impl SessionService for SshSession {
                 .await;
         }
         for h in self.join.drain(..) {
-            // Give each task a brief window to finish before forcing abort
-            if tokio::time::timeout(std::time::Duration::from_millis(200), h).await.is_err() {
-                log::debug!("SSH task did not finish in time, aborting");
+            // Give each task up to 1.5s to finish before forcing abort.
+            // Note: timing out only drops the JoinHandle (detach) — the task
+            // would keep running, so we must explicitly abort via the handle.
+            let abort_handle = h.abort_handle();
+            if tokio::time::timeout(std::time::Duration::from_millis(1500), h).await.is_err() {
+                log::warn!("SSH task did not finish within 1.5s, aborting");
+                abort_handle.abort();
             }
         }
         Ok(())

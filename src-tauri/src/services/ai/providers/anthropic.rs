@@ -87,7 +87,13 @@ impl AnthropicProvider {
             chat_histories: HashMap::new(),
             cancel_tokens: HashMap::new(),
             app_data_dir,
-            http_client: reqwest::Client::new(),
+            // connect_timeout fails fast on unreachable endpoints. No request
+            // timeout — streaming responses (SSE) can run for minutes; the
+            // frontend stream watchdog handles stalled streams.
+            http_client: reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(30))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
         }
     }
 
@@ -177,7 +183,10 @@ impl AIProvider for AnthropicProvider {
 
         self.api_key = Some(api_key.to_string());
         if let Err(e) = self.save_config() {
-            log::error!("[anthropic] Failed to save config: {e}");
+            log::error!(
+                "[anthropic] Failed to persist API key to {}: {e} — auth succeeded for this session but the key will not survive a restart",
+                self.config_path().display()
+            );
         }
         log::info!("[anthropic] Auth success");
         emit_auth_result(app, true);
@@ -408,17 +417,28 @@ impl AIProvider for AnthropicProvider {
             }
         }
 
-        // Send done event if we got a response
-        if !cancel_token.is_cancelled() {
-            if !full_response.is_empty() {
-                if let Some(history) = self.chat_histories.get_mut(&sid) {
-                    history.push(ChatMessage {
-                        role: "assistant".into(),
-                        content: full_response.clone(),
-                    });
+        // Always close out the assistant turn in chat_histories — even on
+        // cancel — to preserve the user/assistant alternation Anthropic
+        // requires. Without this, a cancelled turn would leave only the user
+        // message in history, and the next request would send two consecutive
+        // user messages and be rejected by the API.
+        if let Some(history) = self.chat_histories.get_mut(&sid) {
+            let content = if cancel_token.is_cancelled() {
+                if full_response.is_empty() {
+                    "[cancelled before response]".to_string()
+                } else {
+                    format!("{full_response}\n\n[cancelled by user]")
                 }
-            }
+            } else {
+                full_response.clone()
+            };
+            history.push(ChatMessage {
+                role: "assistant".into(),
+                content,
+            });
+        }
 
+        if !cancel_token.is_cancelled() {
             let usage_metadata = TokenUsage {
                 prompt_token_count: Some(input_tokens),
                 candidates_token_count: Some(output_tokens),

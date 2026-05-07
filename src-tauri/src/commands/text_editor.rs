@@ -326,6 +326,17 @@ pub async fn text_editor_approve_dropped_file(
         return Err("invalid file path".into());
     }
 
+    // Refuse to approve a symlink directly: the user may have been tricked
+    // into dropping a link that points elsewhere. resolve_path() follows the
+    // link, so this check uses symlink_metadata on the *requested* path
+    // before it is canonicalized.
+    let raw_path = Path::new(&file_path);
+    if let Ok(raw_meta) = std::fs::symlink_metadata(raw_path) {
+        if raw_meta.file_type().is_symlink() {
+            return Err("symbolic links cannot be approved directly".into());
+        }
+    }
+
     let resolved = resolve_path(&file_path)?;
 
     let meta = std::fs::metadata(&resolved)
