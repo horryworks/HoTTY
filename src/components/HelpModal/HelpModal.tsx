@@ -86,7 +86,10 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                 <strong>Connection Status:</strong> A Connecting overlay is shown while the transport is being established. SSH and Telnet sessions time out after a configurable interval (default 5 seconds) — see <strong>Settings &rarr; Protocols</strong>. Connection failures appear as dismissible toast notifications.
               </p>
               <p className="help-text">
-                <strong>SSH Algorithms:</strong> Toggle which key-exchange, cipher, MAC, and host-key algorithms are offered during the SSH handshake under <strong>Settings &rarr; Protocols &rarr; SSH Algorithms</strong>. Legacy options such as <code>diffie-hellman-group14-sha1</code>, <code>3des-cbc</code>, and <code>ssh-dss</code> are available for older devices (e.g. Cisco Catalyst 3650 / older IOS) that do not negotiate modern algorithms.
+                <strong>SSH Algorithms:</strong> Toggle which key-exchange, cipher, MAC, and host-key algorithms are offered during the SSH handshake under <strong>Settings &rarr; Protocols &rarr; SSH Algorithms</strong>. Modern defaults such as <code>curve25519-sha256</code> and <code>diffie-hellman-group14-sha256</code> are enabled out of the box. Legacy SHA-1 options (<code>diffie-hellman-group14-sha1</code>, <code>3des-cbc</code>, <code>ssh-dss</code>, etc.) remain available for older devices (e.g. Cisco Catalyst 3650 / older IOS) that do not negotiate modern algorithms. Enabling <code>diffie-hellman-group-exchange-sha1</code> shows a confirmation prompt because SHA-1 is considered broken — use a stronger KEX whenever possible.
+              </p>
+              <p className="help-text">
+                When upgrading, any algorithms newly added in a release are merged into your saved configuration so you don&apos;t need to manually opt in to security improvements.
               </p>
             </div>
           </details>
@@ -268,7 +271,10 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                 Click <strong><FeaturesIcon /></strong> (Features) in the tab bar &rarr; <strong>&quot;AI Chat&quot;</strong> to open the AI Chat pane. Inside it, the tab strip at the top lets you keep multiple parallel conversations — use <strong>+ New chat</strong> to start a fresh tab. Type your question and press <code>Ctrl + Enter</code> to send.
               </p>
               <p className="help-text">
-                <strong>Linked terminal:</strong> When you start AI Monitor on a terminal, the AI Chat pane links a tab to that terminal automatically — toggling AI Monitor on additional terminals creates a new tab per terminal so output streams stay separated. The currently linked terminal is shown as a chip next to the input.
+                <strong>Linked terminal:</strong> When you start AI Monitor on a terminal, the AI Chat pane links a tab to that terminal automatically — toggling AI Monitor on additional terminals creates a new tab per terminal so output streams stay separated. The currently linked terminal is shown as a chip next to the input. Clicking a tab also briefly highlights its linked terminal pane so you can see which session it belongs to at a glance.
+              </p>
+              <p className="help-text">
+                <strong>Stream watchdog:</strong> If an AI provider stops sending data mid-response (network drop, hung backend), the in-flight request is automatically cancelled after 3 minutes of silence and an error message appears in the chat — no more stuck &quot;streaming&quot; states.
               </p>
 
               <p className="help-text" style={{ marginBottom: '4px' }}><strong>Ask AI (Right-Click)</strong></p>

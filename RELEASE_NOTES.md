@@ -1,5 +1,44 @@
 # Release Notes
 
+## v2.0.0-beta12
+
+A hardening pass before the stable release. Modernised SSH algorithm defaults, a stream-idle watchdog for AI Chat, fixes for several quiet data-integrity bugs (host tree, AI chat history, persona settings), and a sweep of UX polish around modals, focus, and validation.
+
+### New Features
+
+- **AI Chat tab → linked terminal flash** — clicking an AI Chat tab whose conversation is linked to a terminal session briefly highlights that terminal pane so you can tell at a glance which session it belongs to.
+- **AI stream idle watchdog** — if an AI provider stops sending data mid-response (network drop, hung backend, etc.), the in-flight request is cancelled after 3 minutes of silence and the chat shows an error instead of staying stuck on "streaming".
+- **`diffie-hellman-group-exchange-sha1` confirmation prompt** — enabling this deprecated KEX in **Settings → Protocols → SSH Algorithms** now shows a warning dialog explaining that SHA-1 is broken and offering safer alternatives.
+- **OS-locale-aware AI Chat language** — first-run users on Japanese-locale machines now see the AI Chat language set to 日本語 by default instead of English. Existing users keep whatever they had selected.
+- **SessionDialog input validation** — the connection form now catches empty hosts, ports outside 1–65535, malformed GCP project IDs, and CRLF/whitespace injection before the connect is attempted.
+
+### Improvements
+
+- **Modern SSH KEX defaults** — `diffie-hellman-group14-sha256` ships enabled and `diffie-hellman-group1-sha1` ships disabled in the bundled algorithm list. Existing users keep their saved choices; algorithms newly added in a release are merged into the user's saved file on load so security improvements aren't blocked behind a manual reset.
+- **Jumpbox host-key prompt now times out** — leaving the bastion's host-key prompt unanswered used to hang the whole connect indefinitely. The prompt now disconnects after 5 minutes if no response.
+- **Modal Escape stack** — pressing Escape with multiple modals open now only closes the topmost one. Previously every mounted modal's listener fired in parallel and could close background dialogs you didn't see.
+- **Focus is restored after a modal closes** — closing a modal returns focus to whatever element had it before the modal opened (input field, terminal, button) instead of leaving focus stranded on a removed button.
+- **Multi-byte prompt detection** — terminal text is now NFC-normalised before matching against your prompt-pattern regex, so prompts containing combining marks or full-width characters (Japanese, accented Latin) are detected consistently regardless of how the device sent them.
+- **Surfaced silent failures** — clipboard copy and session-logging toggle failures now show as toast notifications instead of being swallowed, and AI Chat surfaces invoke errors that previously left the UI stuck in a "streaming" state.
+- **Faster failure on unreachable AI providers** — AI HTTP requests now have a 30-second connect timeout so misconfigured endpoints fail quickly rather than hanging the chat.
+
+### Bug Fixes
+
+- **Session disconnect was leaking background tasks.** SSH/Serial/WSL/Local sessions used `tokio::time::timeout` on the reader/writer/keepalive task handles, but timing out only dropped the JoinHandle (detached the task) instead of aborting it. Long-lived runs slowly accumulated zombie tasks. The grace period is now 1.5 seconds and overruns are explicitly aborted.
+- **AI Chat could break after cancelling a response.** Cancelling a stream left the user message in chat history without an assistant reply, violating the user/assistant alternation Anthropic requires. The next request would be rejected by the API. Cancelled turns now record an `[cancelled]` placeholder so subsequent messages send cleanly.
+- **`aiCommandIdleTimeoutSecs`, custom AI personas, and other settings could be wiped on upgrade.** The settings migration unconditionally overwrote `aiPersonas` with the bundled defaults at version bumps. Customised prompts and user-added personas are now preserved across upgrades; use **Reset All Personas** in Settings to pull in the latest stock prompts on demand.
+- **Update notifier got the order of `beta9` vs `beta10` wrong.** Lexicographic string compare ranked `beta10 < beta9`, so users on `beta10` could be told a `beta9` was newer (or no update was offered). Pre-release tags are now compared numerically when they share the same alphabetic prefix.
+- **Host tree edits could be lost under rapid edits.** Encryption is asynchronous, and two quick edits could complete out of order — the older encryption result would overwrite the newer one in `localStorage`. Writes are now guarded by a monotonic counter so only the most recent encryption is persisted.
+- **Session status briefly flickered through duplicate error transitions.** Both the connect-promise catch block and the `onSessionError` listener pushed a state update + log entry for the same failure. The redundant path is now suppressed.
+- **Re-opening Settings could show a stale "enable SHA-1?" warning dialog.** If the user closed the Settings modal while the confirmation prompt was up, the pending state survived and the dialog reappeared on the next open. The state now resets on tab unmount.
+- **Closing an AI Chat pane before its linked terminal leaked watch buffers.** The buffer for the linked session lingered until the session itself was removed. Session removal now always evicts its buffer regardless of which pane was watching.
+
+### Security
+
+- **Text Editor refuses to approve dropped symlinks.** Dragging a file into the Text Editor now rejects symbolic links directly so a user can't be tricked into approving a link that resolves to a sensitive location.
+- **`known_hosts` write failures are now visible to the user.** When SSH cannot save or remove an entry (permission denied, disk full, etc.) the failure is logged and an `ssh-known-hosts-warning` event is emitted so you find out at the time, not on the next connection where the host key prompt reappears unexpectedly.
+- **DPAPI passthrough now warns on suspicious input.** When the credential decryptor falls back to plaintext passthrough on input that *looks* prefixed (starts with `[` but with an unknown tag), it now logs a warning so accidental corruption of the encryption tag is visible in logs.
+
 ## v2.0.0-beta11
 
 A correctness and security release. The SSH algorithm preferences in Settings now actually drive the handshake (they were previously cosmetic), unblocking legacy devices that need SHA-1 KEX, 3DES, or DSA host keys, and the jumpbox SSH path picks up the same `known_hosts` I/O hardening already applied to the direct path.
