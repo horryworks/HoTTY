@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { tauriService } from '../../services/tauriService';
+import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import HelpTooltip from '../HelpTooltip/HelpTooltip';
 import type { SshAlgorithms } from '../../types/appTypes';
 
@@ -11,17 +12,32 @@ const CATEGORY_LABELS: Record<string, string> = {
   mac: 'MAC',
 };
 
+// diffie-hellman-group-exchange-sha1 is a deprecated KEX (SHA-1 collisions,
+// removed by default in OpenSSH 8.2+). Warn before enabling it.
+const DH_GEX_NAMES = new Set<string>([
+  'diffie-hellman-group-exchange-sha1',
+]);
+
+const DH_GEX_WARNING =
+  'diffie-hellman-group-exchange-sha1 relies on SHA-1, which is considered ' +
+  'broken and was removed from OpenSSH defaults in 8.2. Enable it only if ' +
+  'you must talk to legacy devices that offer no stronger key exchange.\n\n' +
+  'Prefer diffie-hellman-group-exchange-sha256, diffie-hellman-group14-sha256, ' +
+  'or curve25519-sha256 whenever the remote device supports them.\n\n' +
+  'Enable diffie-hellman-group-exchange-sha1 anyway?';
+
 export function ProtocolsTab() {
   const settings = useSettingsStore();
   const update = settings.update;
 
   const [sshAlgorithms, setSshAlgorithms] = useState<SshAlgorithms | null>(null);
+  const [pendingDhGex, setPendingDhGex] = useState<{ category: string; name: string } | null>(null);
 
   useEffect(() => {
     tauriService.getSshAlgorithms().then(setSshAlgorithms).catch(() => {});
   }, []);
 
-  const handleAlgorithmToggle = async (category: string, name: string) => {
+  const applyAlgorithmToggle = async (category: string, name: string) => {
     if (!sshAlgorithms) return;
     const updated: SshAlgorithms = {
       ...sshAlgorithms,
@@ -31,6 +47,16 @@ export function ProtocolsTab() {
     };
     setSshAlgorithms(updated);
     await tauriService.saveSshAlgorithms(updated);
+  };
+
+  const handleAlgorithmToggle = (category: string, name: string) => {
+    if (!sshAlgorithms) return;
+    const target = sshAlgorithms[category].find((a) => a.name === name);
+    if (target && !target.enabled && DH_GEX_NAMES.has(name)) {
+      setPendingDhGex({ category, name });
+      return;
+    }
+    void applyAlgorithmToggle(category, name);
   };
 
   return (
@@ -153,6 +179,20 @@ export function ProtocolsTab() {
           />
         </div>
       </div>
+
+      {pendingDhGex && (
+        <ConfirmModal
+          title="Enable diffie-hellman-group-exchange-sha1?"
+          message={DH_GEX_WARNING}
+          confirmLabel="Enable"
+          onConfirm={() => {
+            const p = pendingDhGex;
+            setPendingDhGex(null);
+            void applyAlgorithmToggle(p.category, p.name);
+          }}
+          onCancel={() => setPendingDhGex(null)}
+        />
+      )}
     </>
   );
 }

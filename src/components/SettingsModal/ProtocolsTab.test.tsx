@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { ProtocolsTab } from './ProtocolsTab';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { tauriService } from '../../services/tauriService';
 
 vi.mock('../../services/tauriService', () => ({
   tauriService: {
@@ -9,6 +10,11 @@ vi.mock('../../services/tauriService', () => ({
       serverHostKey: [
         { name: 'ssh-ed25519', enabled: true },
         { name: 'ssh-rsa', enabled: false },
+      ],
+      kex: [
+        { name: 'curve25519-sha256', enabled: true },
+        { name: 'diffie-hellman-group-exchange-sha256', enabled: false },
+        { name: 'diffie-hellman-group-exchange-sha1', enabled: false },
       ],
     }),
     saveSshAlgorithms: vi.fn().mockResolvedValue(true),
@@ -18,6 +24,7 @@ vi.mock('../../services/tauriService', () => ({
 describe('ProtocolsTab', () => {
   beforeEach(() => {
     useSettingsStore.getState().reset();
+    vi.mocked(tauriService.saveSshAlgorithms).mockClear();
   });
 
   it('renders SSH and Telnet keepalive sections', () => {
@@ -84,5 +91,79 @@ describe('ProtocolsTab', () => {
     const inputs = screen.getAllByRole('spinbutton');
     fireEvent.change(inputs[2], { target: { value: '12' } });
     expect(useSettingsStore.getState().telnetConnectTimeoutSecs).toBe(12);
+  });
+
+  it('warns before enabling diffie-hellman-group-exchange-sha1 and applies on confirm', async () => {
+    render(<ProtocolsTab />);
+    const checkbox = await screen.findByLabelText('diffie-hellman-group-exchange-sha1') as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+
+    fireEvent.click(checkbox);
+
+    expect(screen.getByText('Enable diffie-hellman-group-exchange-sha1?')).toBeTruthy();
+    expect(tauriService.saveSshAlgorithms).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+    });
+
+    await waitFor(() => {
+      expect(tauriService.saveSshAlgorithms).toHaveBeenCalledTimes(1);
+    });
+    const saved = vi.mocked(tauriService.saveSshAlgorithms).mock.calls[0][0];
+    const entry = saved.kex.find((a) => a.name === 'diffie-hellman-group-exchange-sha1');
+    expect(entry?.enabled).toBe(true);
+  });
+
+  it('does not enable diffie-hellman-group-exchange-sha1 when the warning is cancelled', async () => {
+    render(<ProtocolsTab />);
+    const checkbox = await screen.findByLabelText('diffie-hellman-group-exchange-sha1') as HTMLInputElement;
+
+    fireEvent.click(checkbox);
+    expect(screen.getByText('Enable diffie-hellman-group-exchange-sha1?')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByText('Enable diffie-hellman-group-exchange-sha1?')).toBeNull();
+    expect(tauriService.saveSshAlgorithms).not.toHaveBeenCalled();
+  });
+
+  it('enables diffie-hellman-group-exchange-sha256 without prompting', async () => {
+    render(<ProtocolsTab />);
+    const checkbox = await screen.findByLabelText('diffie-hellman-group-exchange-sha256') as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(checkbox);
+    });
+
+    expect(screen.queryByText('Enable diffie-hellman-group-exchange-sha1?')).toBeNull();
+    await waitFor(() => {
+      expect(tauriService.saveSshAlgorithms).toHaveBeenCalledTimes(1);
+    });
+    const saved = vi.mocked(tauriService.saveSshAlgorithms).mock.calls[0][0];
+    const entry = saved.kex.find((a) => a.name === 'diffie-hellman-group-exchange-sha256');
+    expect(entry?.enabled).toBe(true);
+  });
+
+  it('disables diffie-hellman-group-exchange-sha1 without prompting', async () => {
+    vi.mocked(tauriService.getSshAlgorithms).mockResolvedValueOnce({
+      kex: [
+        { name: 'diffie-hellman-group-exchange-sha1', enabled: true },
+      ],
+    });
+
+    render(<ProtocolsTab />);
+    const checkbox = await screen.findByLabelText('diffie-hellman-group-exchange-sha1') as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+
+    await act(async () => {
+      fireEvent.click(checkbox);
+    });
+
+    expect(screen.queryByText('Enable diffie-hellman-group-exchange-sha1?')).toBeNull();
+    await waitFor(() => {
+      expect(tauriService.saveSshAlgorithms).toHaveBeenCalledTimes(1);
+    });
   });
 });
