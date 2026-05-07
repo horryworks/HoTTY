@@ -352,7 +352,7 @@ export function useHostManager() {
             .catch(err => {
                 logError('HostManager', 'Background eager decryption failed', err);
             });
-    }, []);
+    }, [persistEncryptedAsync]);
 
     const persistAndSet = useCallback(async (decryptedTree: HostTreeNode[]) => {
         const myId = ++latestEncryptRequestRef.current;
@@ -379,7 +379,7 @@ export function useHostManager() {
         });
         persistEncryptedAsync(next);
         return node.id;
-    }, []);
+    }, [persistEncryptedAsync]);
 
     const addHost = useCallback((parentId: string | null, name: string, entry: HostEntry) => {
         const node: HostTreeNode = {
@@ -397,7 +397,7 @@ export function useHostManager() {
         });
         persistEncryptedAsync(next);
         return node.id;
-    }, []);
+    }, [persistEncryptedAsync]);
 
     const editNode = useCallback((id: string, patch: Partial<HostTreeNode>) => {
         let next: HostTreeNode[] = [];
@@ -417,7 +417,7 @@ export function useHostManager() {
             }
         }
         persistEncryptedAsync(next);
-    }, []);
+    }, [persistEncryptedAsync]);
 
     const deleteNode = useCallback((id: string) => {
         let next: HostTreeNode[] = [];
@@ -428,7 +428,7 @@ export function useHostManager() {
             });
         });
         persistEncryptedAsync(next);
-    }, []);
+    }, [persistEncryptedAsync]);
 
     const saveTree = useCallback((newTree: HostTreeNode[]) => {
         return persistAndSet(newTree);
@@ -510,7 +510,7 @@ export function useHostManager() {
         if (changed) {
             persistEncryptedAsync(next);
         }
-    }, []);
+    }, [persistEncryptedAsync]);
 
     const sortFolder = useCallback((folderId: string | null) => {
         let next: HostTreeNode[] = [];
@@ -538,7 +538,7 @@ export function useHostManager() {
             });
         });
         persistEncryptedAsync(next);
-    }, []);
+    }, [persistEncryptedAsync]);
 
     const importData = useCallback(async (nodes: HostTreeNode[], folderName: string = 'Imported', parentId: string | null = null): Promise<string> => {
         const idMap = new Map<string, string>();
@@ -591,7 +591,7 @@ export function useHostManager() {
         persistEncryptedAsync(next);
 
         return targetFolderId;
-    }, []);
+    }, [persistEncryptedAsync]);
 
     return { tree, addFolder, addHost, editNode, deleteNode, saveTree, moveNode, sortFolder, importData };
 }

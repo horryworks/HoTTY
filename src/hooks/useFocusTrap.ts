@@ -51,15 +51,19 @@ export function useFocusTrap(containerRef: RefObject<HTMLElement | null>, active
             }
         };
 
+        // Capture the container at effect-setup time. Reading
+        // containerRef.current inside the cleanup function would race against
+        // React unmounting the node and clearing the ref.
+        const containerAtSetup = containerRef.current;
+
         document.addEventListener('keydown', handleKeyDown);
         return () => {
             document.removeEventListener('keydown', handleKeyDown);
             // Restore focus only if it is currently inside the (about-to-unmount)
             // container — otherwise the user may have already moved focus
             // intentionally and we shouldn't yank it back.
-            const container = containerRef.current;
             const activeEl = document.activeElement as HTMLElement | null;
-            const focusEscaped = !container || !activeEl || !container.contains(activeEl);
+            const focusEscaped = !containerAtSetup || !activeEl || !containerAtSetup.contains(activeEl);
             if (!focusEscaped && previouslyFocused && document.contains(previouslyFocused)) {
                 try {
                     previouslyFocused.focus();

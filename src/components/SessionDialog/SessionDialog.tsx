@@ -654,7 +654,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         })();
         if (validationError) {
             // Surface inline; keep modal open so the user can correct.
-            // eslint-disable-next-line no-alert
             window.alert(validationError);
             return;
         }
