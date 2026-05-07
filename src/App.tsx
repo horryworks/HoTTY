@@ -76,9 +76,12 @@ function App() {
 
   const handleSessionRemoved = useCallback((id: string) => {
     usePaneStore.getState().removeSession(id);
-    // If the removed session was being watched, stop watching.
+    // Always evict this session's watch buffer — it can persist past the
+    // currently-watched session if an AI pane was closed before the linked
+    // terminal session was removed (the pane's close path only knew about
+    // the live `watchingSessionId`, not stale entries from prior watches).
+    watchBuffers.current.delete(id);
     if (watchingSessionIdRef.current === id) {
-      watchBuffers.current.delete(id);
       setWatchingSessionId(null);
     }
     // Clear any AI chat tabs that were linked to this session (across all panes).

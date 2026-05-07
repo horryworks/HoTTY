@@ -37,6 +37,15 @@ export function ProtocolsTab() {
     tauriService.getSshAlgorithms().then(setSshAlgorithms).catch(() => {});
   }, []);
 
+  // Clear any in-flight warning prompt on unmount so closing the Settings
+  // modal mid-confirmation doesn't leave a stale dialog the next time the
+  // tab is opened.
+  useEffect(() => {
+    return () => {
+      setPendingDhGex(null);
+    };
+  }, []);
+
   const applyAlgorithmToggle = async (category: string, name: string) => {
     if (!sshAlgorithms) return;
     const updated: SshAlgorithms = {

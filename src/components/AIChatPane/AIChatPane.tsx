@@ -252,7 +252,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const [selectedModel, setSelectedModel] = useState(chatState?.selectedModel || 'Unspecified');
     const selectedModelRef = useRef(selectedModel);
     selectedModelRef.current = selectedModel;
-    const [selectedLanguage, setSelectedLanguage] = useState(() => localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE) || 'English');
+    const [selectedLanguage, setSelectedLanguage] = useState(() => {
+        const saved = localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE);
+        if (saved) return saved;
+        // First run: derive from the OS locale so a Japanese-locale user
+        // doesn't have to switch from English manually every time they
+        // install on a new machine.
+        return navigator.language?.toLowerCase().startsWith('ja') ? '日本語' : 'English';
+    });
     const defaultExpertise = aiPersonas?.[0]?.label || 'General Assistant';
     const [selectedExpertise, setSelectedExpertise] = useState(chatState?.selectedExpertise || defaultExpertise);
     const [textareaHeight, setTextareaHeight] = useState(0);
@@ -470,6 +477,18 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         }
     }, [messages, streamingContent, isStreaming]);
 
+    // Prune `recentlyProcessedRef` entries for tabs that have been closed so
+    // the de-dup map doesn't grow unbounded over a long-running session.
+    useEffect(() => {
+        if (!chatState) return;
+        const liveIds = new Set(chatState.tabs.map((t) => t.id));
+        for (const id of recentlyProcessedRef.current.keys()) {
+            if (!liveIds.has(id)) {
+                recentlyProcessedRef.current.delete(id);
+            }
+        }
+    }, [chatState]);
+
     // ── Auto-send pending message for ANY tab (one stream at a time per pane) ──
     // Scans every tab for a pending message; processes the first one that isn't
     // currently streaming. Results that arrive on a non-active tab still trigger
@@ -516,11 +535,52 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             streamingForTabIdRef.current = tab.id;
             markStreaming(tab.id, true);
             setStreamingForTab(tab.id, '');
-            tauriService.aiChatSend(paneId, pm, selectedModel, sysInstr);
+            armStreamWatchdog();
+            tauriService.aiChatSend(paneId, pm, selectedModel, sysInstr).catch((err) => {
+                logError('AI', 'aiChatSend invoke failed', err);
+                clearStreamWatchdog();
+                markStreaming(tab.id, false);
+                streamingForTabIdRef.current = null;
+            });
             break;
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatState, isAuthenticated, streamingTabIds, paneId, selectedModel]);
+
+    // Watchdog: if no chunk arrives for STREAM_IDLE_TIMEOUT_MS while a stream
+    // is in flight, cancel the request and surface an error. Backstop against
+    // hung HTTP connections / unresponsive providers; complements the backend
+    // request timeout.
+    const STREAM_IDLE_TIMEOUT_MS = 180_000;
+    const streamWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const clearStreamWatchdog = useCallback(() => {
+        if (streamWatchdogRef.current) {
+            clearTimeout(streamWatchdogRef.current);
+            streamWatchdogRef.current = null;
+        }
+    }, []);
+    const armStreamWatchdog = useCallback(() => {
+        clearStreamWatchdog();
+        streamWatchdogRef.current = setTimeout(() => {
+            const targetTabId = streamingForTabIdRef.current;
+            if (!targetTabId) return;
+            tauriService.aiChatCancel(paneId).catch(() => {});
+            setMessagesByTab(prev => {
+                const next = new Map(prev);
+                const cur = prev.get(targetTabId) ?? [];
+                const partial = streamingByTab.get(targetTabId) ?? '';
+                const body = partial
+                    ? `${partial}\n\n[Error: AI stream idle for ${Math.round(STREAM_IDLE_TIMEOUT_MS / 1000)}s — request cancelled]`
+                    : `Error: AI stream idle for ${Math.round(STREAM_IDLE_TIMEOUT_MS / 1000)}s — request cancelled`;
+                next.set(targetTabId, [...cur, { role: 'model', content: body }]);
+                return next;
+            });
+            setStreamingForTab(targetTabId, '');
+            markStreaming(targetTabId, false);
+            streamingForTabIdRef.current = null;
+            streamWatchdogRef.current = null;
+        }, STREAM_IDLE_TIMEOUT_MS);
+    }, [clearStreamWatchdog, paneId, setStreamingForTab, markStreaming, streamingByTab]);
 
     // ��─ Listen for chat response events ──
     useEffect(() => {
@@ -537,7 +597,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
 
             if (data.responseType === 'chunk') {
                 setStreamingForTab(targetTabId, prev => prev + data.content);
+                armStreamWatchdog();
             } else if (data.responseType === 'done') {
+                clearStreamWatchdog();
                 setMessagesByTab(prev => {
                     const next = new Map(prev);
                     const cur = prev.get(targetTabId) ?? [];
@@ -558,6 +620,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     }
                 }
             } else if (data.responseType === 'error') {
+                clearStreamWatchdog();
                 setMessagesByTab(prev => {
                     const next = new Map(prev);
                     const cur = prev.get(targetTabId) ?? [];
@@ -572,8 +635,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             if (cancelled) { fn(); } else { unlisten = fn; }
         }).catch(e => logError('AI', 'Response listener setup failed', e));
 
-        return () => { cancelled = true; unlisten?.(); };
-    }, [paneId, setStreamingForTab, markStreaming]);
+        return () => { cancelled = true; unlisten?.(); clearStreamWatchdog(); };
+    }, [paneId, setStreamingForTab, markStreaming, armStreamWatchdog, clearStreamWatchdog]);
 
     // ── Listen for auth result events ──
     useEffect(() => {
@@ -773,6 +836,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     };
 
     const handleLogout = () => {
+        clearStreamWatchdog();
         localStorage.setItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT, '1');
         tauriService.aiAuthLogout().catch(() => {});
         setIsAuthenticated(false);
@@ -812,11 +876,17 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         streamingForTabIdRef.current = activeTabId ?? null;
         setIsStreaming(true);
         setStreamingContent('');
+        armStreamWatchdog();
 
         if (onSendMessage) {
             onSendMessage(text);
         } else {
-            tauriService.aiChatSend(paneId, text, selectedModel, localSystemInstruction);
+            tauriService.aiChatSend(paneId, text, selectedModel, localSystemInstruction).catch((err) => {
+                logError('AI', 'aiChatSend invoke failed', err);
+                clearStreamWatchdog();
+                setIsStreaming(false);
+                streamingForTabIdRef.current = null;
+            });
         }
     };
 
@@ -901,6 +971,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     }, [settingsOpen]);
 
     const handleCancel = () => {
+        clearStreamWatchdog();
         tauriService.aiChatCancel(paneId).catch(() => {});
         // Append the partial content + [cancelled] to the tab that owns the in-flight stream.
         const targetTabId = streamingForTabIdRef.current ?? activeTabId ?? null;

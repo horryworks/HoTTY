@@ -116,8 +116,10 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       mountedRef.current = true;
       return;
     }
-    tauriService.updateSessionLogging(loggingEnabled, loggingPath).catch(() => {
-      /* non-fatal */
+    tauriService.updateSessionLogging(loggingEnabled, loggingPath).catch((err) => {
+      // Surface so users notice when their logging-toggle silently fails to
+      // take effect (e.g. log dir not writable).
+      logError('Logging', 'failed to update session logging', err);
     });
   }, [loggingEnabled, loggingPath]);
 
@@ -226,6 +228,9 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       tauriService.onSessionError(({ sessionId, error }) => {
         const rec = sessionsRef.current.get(sessionId);
         if (!rec) return;
+        // First-error wins: if the connect-promise catch already transitioned
+        // this session to 'error', skip the redundant state update + log.
+        if (rec.status === 'error') return;
         // Read displayName before scheduling the state update, since the
         // updater runs asynchronously.
         const displayName = rec.displayName;
@@ -289,8 +294,10 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       term.onSelectionChange(() => {
         const sel = term.getSelection();
         if (sel) {
-          tauriService.writeClipboard(sel).catch(() => {
-            /* clipboard errors are non-fatal */
+          tauriService.writeClipboard(sel).catch((err) => {
+            // Surface clipboard failures: the user just selected text expecting
+            // it to be copied; silent swallow leaves them confused on paste.
+            logError('Clipboard', 'failed to copy selection', err);
           });
         }
       });
@@ -341,6 +348,8 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
             // Already cleaned up (manual close, etc.) — nothing to do.
             return;
           }
+          // First-error wins: if onSessionError already handled this, skip.
+          if (current.status === 'error') return;
           const wasConnecting = current.status === 'connecting';
           setSessions((prev) => {
             const next = new Map(prev);
@@ -377,14 +386,12 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
     } catch {
       /* ignore — treat as disconnected anyway */
     }
-    setSessions((prev) => {
-      const next = new Map(prev);
-      const rec = next.get(id);
-      if (rec) rec.term.dispose();
-      next.delete(id);
-      return next;
-    });
-  }, []);
+    // Centralize dispose + map removal in finalizeRemoval so both manual
+    // close and auto-close paths take the same code path. setSessions inside
+    // finalizeRemoval is a no-op if the record was already removed by an
+    // earlier auto-close, preventing a double xterm dispose.
+    finalizeRemoval(id);
+  }, [finalizeRemoval]);
 
   const getSession = useCallback(
     (id: string | null): SessionRecord | undefined =>

@@ -11,10 +11,17 @@ const FOCUSABLE_SELECTORS = [
 
 /**
  * Traps Tab/Shift+Tab focus within `containerRef` while `active` is true.
+ *
+ * Also captures the element that had focus when the trap activated and
+ * restores focus to it on deactivation, so closing a modal returns focus
+ * to whatever the user was working on (input, button, terminal, …).
  */
 export function useFocusTrap(containerRef: RefObject<HTMLElement | null>, active: boolean) {
     useEffect(() => {
         if (!active) return;
+
+        const previouslyFocused =
+            (document.activeElement as HTMLElement | null) ?? null;
 
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key !== 'Tab') return;
@@ -45,6 +52,21 @@ export function useFocusTrap(containerRef: RefObject<HTMLElement | null>, active
         };
 
         document.addEventListener('keydown', handleKeyDown);
-        return () => document.removeEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            // Restore focus only if it is currently inside the (about-to-unmount)
+            // container — otherwise the user may have already moved focus
+            // intentionally and we shouldn't yank it back.
+            const container = containerRef.current;
+            const activeEl = document.activeElement as HTMLElement | null;
+            const focusEscaped = !container || !activeEl || !container.contains(activeEl);
+            if (!focusEscaped && previouslyFocused && document.contains(previouslyFocused)) {
+                try {
+                    previouslyFocused.focus();
+                } catch {
+                    /* element became unfocusable — ignore */
+                }
+            }
+        };
     }, [containerRef, active]);
 }

@@ -86,6 +86,27 @@ export const DEFAULT_PERSONAS: PersonaDefinition[] = [
   { id: 'security-analyst', label: 'Security Analyst', systemPrompt: 'You are a Cybersecurity Analyst. Analyze logs and configurations for potential vulnerabilities, threats, and indicators of compromise (IoCs). Recommend mitigation strategies based on industry standards (NIST/CIS).', askAiCommands: SECURITY_ANALYST_COMMANDS },
 ];
 
+/**
+ * Merge default personas into the user's saved list without losing user data.
+ *
+ * Behavior:
+ * - User personas (matched by id) are kept as-is — preserves both edits to
+ *   stock prompts and user-added custom personas.
+ * - Any default persona missing from the user's list is appended.
+ *
+ * Migrations from older versions that used to overwrite `aiPersonas` outright
+ * delegate to this helper, so customized personas survive upgrades. Users who
+ * want the latest stock prompts can use "Reset All Personas" in Settings.
+ */
+function mergeDefaultPersonas(
+  userPersonas: PersonaDefinition[] | undefined,
+): PersonaDefinition[] {
+  const userArr = Array.isArray(userPersonas) ? userPersonas : [];
+  const userIds = new Set(userArr.map((p) => p.id));
+  const additions = DEFAULT_PERSONAS.filter((d) => !userIds.has(d.id));
+  return [...userArr, ...additions];
+}
+
 interface SettingsState {
   // Appearance
   theme: ThemeId;
@@ -225,7 +246,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           state.watchBufferLimit ??= DEFAULTS.watchBufferLimit;
         }
         if (version < 7) {
-          state.aiPersonas = DEFAULTS.aiPersonas;
+          state.aiPersonas = mergeDefaultPersonas(state.aiPersonas);
         }
         if (version < 8) {
           state.enabledFeatures ??= DEFAULTS.enabledFeatures;
@@ -235,6 +256,10 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           state.paneBackgroundImage ??= DEFAULTS.paneBackgroundImage;
         }
         if (version < 10) {
+          // Empty string is the new "use theme default" sentinel: TerminalMarkerRail
+          // falls back to `var(--terminal-prompt-default)` when the value is empty,
+          // so existing users who never customised the colour migrate to the
+          // theme-driven default instead of being pinned to the old hardcoded value.
           if (state.promptHighlightColor === DEFAULT_PROMPT_HIGHLIGHT_COLOR) {
             state.promptHighlightColor = '';
           }
@@ -243,10 +268,10 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           state.aiCommandIdleTimeoutSecs ??= DEFAULTS.aiCommandIdleTimeoutSecs;
         }
         if (version < 12) {
-          state.aiPersonas = DEFAULTS.aiPersonas;
+          state.aiPersonas = mergeDefaultPersonas(state.aiPersonas);
         }
         if (version < 13) {
-          state.aiPersonas = DEFAULTS.aiPersonas;
+          state.aiPersonas = mergeDefaultPersonas(state.aiPersonas);
         }
         return state as SettingsState;
       },

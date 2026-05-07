@@ -622,6 +622,43 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        // Front-end validation. Catches obvious mistakes (empty host, bad
+        // port, malformed GCP IDs, CRLF injection) before the backend has to.
+        const validationError = ((): string | null => {
+            if (protocol === 'ssh' || protocol === 'telnet') {
+                const h = host.trim();
+                if (!iapEnabled) {
+                    if (!h) return 'Host is required.';
+                    if (/[\s\r\n\0]/.test(h)) return 'Host contains invalid whitespace or newline characters.';
+                }
+                const p = parseInt(port, 10);
+                if (!Number.isInteger(p) || p < 1 || p > 65535) {
+                    return 'Port must be an integer between 1 and 65535.';
+                }
+                if (protocol === 'ssh' && !iapEnabled && !username.trim()) {
+                    return 'Username is required for SSH.';
+                }
+                if (/[\r\n\0]/.test(username)) {
+                    return 'Username contains invalid newline characters.';
+                }
+            }
+            if (iapEnabled) {
+                const projectOk = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(iapProject);
+                if (!projectOk) {
+                    return 'IAP project ID must be 6-30 chars, lowercase alphanumeric or hyphen, starting with a letter.';
+                }
+                if (!iapZone.trim()) return 'IAP zone is required.';
+                if (!iapInstance.trim()) return 'IAP instance is required.';
+            }
+            return null;
+        })();
+        if (validationError) {
+            // Surface inline; keep modal open so the user can correct.
+            // eslint-disable-next-line no-alert
+            window.alert(validationError);
+            return;
+        }
+
         let finalU = username;
         let finalP = password;
         if (isEncrypted(finalU) || isEncrypted(finalP)) {

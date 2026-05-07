@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useModalEscape } from '../../hooks/useModalEscape';
 import './SaveConfirmModal.css';
 
 interface SaveConfirmModalProps {
@@ -18,16 +19,9 @@ export const SaveConfirmModal: React.FC<SaveConfirmModalProps> = ({
 
   useEffect(() => {
     saveButtonRef.current?.focus();
+  }, []);
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onCancel();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onCancel]);
+  useModalEscape(onCancel);
 
   return (
     <div className="save-confirm-modal-overlay" role="dialog" aria-modal="true">

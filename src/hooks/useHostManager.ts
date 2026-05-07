@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { STORAGE_KEYS } from '../constants/storage';
 import { tauriService, isEncrypted } from '../services/tauriService';
@@ -233,6 +233,25 @@ function sortNodes(nodes: HostTreeNode[]): HostTreeNode[] {
 export function useHostManager() {
     const [tree, setTree] = useState<HostTreeNode[]>([]);
 
+    // Monotonic counter to discard out-of-order encryptTree results. Without
+    // this, two rapid edits could land in localStorage in the wrong order
+    // (encryption is async and may resolve out of submission order), losing
+    // the later edit. Each call captures the next id and only writes if it
+    // is still the latest at resolve time.
+    const latestEncryptRequestRef = useRef(0);
+    const persistEncryptedAsync = useCallback((nodes: HostTreeNode[]) => {
+        const myId = ++latestEncryptRequestRef.current;
+        encryptTree(nodes)
+            .then((encrypted) => {
+                if (latestEncryptRequestRef.current === myId) {
+                    saveRawTree(encrypted);
+                }
+            })
+            .catch((err) => {
+                logError('HostManager', 'encryptTree failed', err);
+            });
+    }, []);
+
     useEffect(() => {
         const raw = loadRawTree();
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -311,9 +330,7 @@ export function useHostManager() {
                             return { ...n, children };
                         });
                     const plaintextNodes = replacePlaintext(nodes);
-                    encryptTree(plaintextNodes).then(saveRawTree).catch(err => {
-                        logError('HostManager', 'Migration re-encryption failed', err);
-                    });
+                    persistEncryptedAsync(plaintextNodes);
                 }
             }
 
@@ -338,8 +355,11 @@ export function useHostManager() {
     }, []);
 
     const persistAndSet = useCallback(async (decryptedTree: HostTreeNode[]) => {
+        const myId = ++latestEncryptRequestRef.current;
         const encrypted = await encryptTree(decryptedTree);
-        saveRawTree(encrypted);
+        if (latestEncryptRequestRef.current === myId) {
+            saveRawTree(encrypted);
+        }
         setTree(decryptedTree);
     }, []);
 
@@ -357,7 +377,7 @@ export function useHostManager() {
                 return next;
             });
         });
-        encryptTree(next).then(saveRawTree);
+        persistEncryptedAsync(next);
         return node.id;
     }, []);
 
@@ -375,7 +395,7 @@ export function useHostManager() {
                 return next;
             });
         });
-        encryptTree(next).then(saveRawTree);
+        persistEncryptedAsync(next);
         return node.id;
     }, []);
 
@@ -396,7 +416,7 @@ export function useHostManager() {
                 setCachedCredential(id, { password: patch.entry.password });
             }
         }
-        encryptTree(next).then(saveRawTree);
+        persistEncryptedAsync(next);
     }, []);
 
     const deleteNode = useCallback((id: string) => {
@@ -407,7 +427,7 @@ export function useHostManager() {
                 return next;
             });
         });
-        encryptTree(next).then(saveRawTree);
+        persistEncryptedAsync(next);
     }, []);
 
     const saveTree = useCallback((newTree: HostTreeNode[]) => {
@@ -488,7 +508,7 @@ export function useHostManager() {
             });
         });
         if (changed) {
-            encryptTree(next).then(saveRawTree);
+            persistEncryptedAsync(next);
         }
     }, []);
 
@@ -517,7 +537,7 @@ export function useHostManager() {
                 return next;
             });
         });
-        encryptTree(next).then(saveRawTree);
+        persistEncryptedAsync(next);
     }, []);
 
     const importData = useCallback(async (nodes: HostTreeNode[], folderName: string = 'Imported', parentId: string | null = null): Promise<string> => {
@@ -568,7 +588,7 @@ export function useHostManager() {
                 return next;
             });
         });
-        encryptTree(next).then(saveRawTree);
+        persistEncryptedAsync(next);
 
         return targetFolderId;
     }, []);

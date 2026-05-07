@@ -75,7 +75,13 @@ export function usePromptDetection(
       const logicalStartLine = buffer.getLine(startLineY);
       if (!logicalStartLine) return;
 
-      const startText = logicalStartLine.translateToString(true).trimEnd();
+      // Normalise to NFC so prompts containing combining marks (composed vs.
+      // decomposed Japanese / accented Latin) match user-supplied regex
+      // patterns regardless of how the terminal sent the bytes.
+      const startText = logicalStartLine
+        .translateToString(true)
+        .normalize('NFC')
+        .trimEnd();
       const isEmpty = startText.length === 0;
 
       // "Unused trailing" = empty line with no content anywhere below it.

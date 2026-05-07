@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useModalEscape } from '../../hooks/useModalEscape';
 import './SystemPromptModal.css';
 
 interface SystemPromptModalProps {
@@ -17,16 +18,9 @@ export const SystemPromptModal: React.FC<SystemPromptModalProps> = ({
 
   useEffect(() => {
     closeButtonRef.current?.focus();
+  }, []);
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  useModalEscape(onClose);
 
   const handleCopy = async () => {
     try {

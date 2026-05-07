@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useModalEscape } from '../../hooks/useModalEscape';
 import './PasteConfirmationModal.css';
 
 interface PasteConfirmationModalProps {
@@ -16,14 +17,13 @@ export function PasteConfirmationModal({ content, onConfirm, onCancel }: PasteCo
       if (e.key === 'Enter') {
         e.preventDefault();
         onConfirm();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        onCancel();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onConfirm, onCancel]);
+  }, [onConfirm]);
+
+  useModalEscape(onCancel);
 
   const hasNewlines = /\r\n|\n|\r/.test(content);
 

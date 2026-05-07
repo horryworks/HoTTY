@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useModalEscape } from '../../hooks/useModalEscape';
 import './AskAiModal.css';
 
 interface AskAiModalProps {
@@ -22,16 +23,7 @@ const AskAiModalInner: React.FC<Omit<AskAiModalProps, 'isOpen'>> = ({
         return () => clearTimeout(timer);
     }, []);
 
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                onClose();
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [onClose]);
+    useModalEscape(onClose);
 
     const handleSubmit = () => {
         if (!prompt.trim()) return;
