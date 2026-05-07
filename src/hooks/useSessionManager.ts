@@ -386,12 +386,19 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
     } catch {
       /* ignore — treat as disconnected anyway */
     }
-    // Centralize dispose + map removal in finalizeRemoval so both manual
-    // close and auto-close paths take the same code path. setSessions inside
-    // finalizeRemoval is a no-op if the record was already removed by an
-    // earlier auto-close, preventing a double xterm dispose.
-    finalizeRemoval(id);
-  }, [finalizeRemoval]);
+    // Manual close intentionally does not invoke onSessionRemoved — the
+    // caller (App.tsx) drives its own pane/store cleanup explicitly. Only
+    // the auto-close path (finalizeRemoval) notifies the host. xterm.dispose
+    // is idempotent, so the rare race with an in-flight auto-close that
+    // disposes first is harmless.
+    setSessions((prev) => {
+      const next = new Map(prev);
+      const rec = next.get(id);
+      if (rec) rec.term.dispose();
+      next.delete(id);
+      return next;
+    });
+  }, []);
 
   const getSession = useCallback(
     (id: string | null): SessionRecord | undefined =>
