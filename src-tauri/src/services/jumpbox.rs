@@ -26,7 +26,7 @@ use super::known_hosts::{
     append_known_host, check_known_host, default_known_hosts_path, remove_known_host, HostKeyCheck,
 };
 use super::session_service::SessionError;
-use super::ssh::{resolve_host_key_prompt, HostKeyDecision};
+use super::ssh::HostKeyDecision;
 
 // ---------------------------------------------------------------------------
 // Config
@@ -115,14 +115,26 @@ impl Handler for JumpboxHandler {
             .fingerprint(ssh_key::HashAlg::Sha256)
             .to_string();
 
-        let check = check_known_host(
+        // Refuse the connection if the known_hosts file cannot be read (permission
+        // denied, partial read, disk failure, etc.) rather than treating the host as
+        // new — see ssh.rs for the full rationale. The same MITM concern applies to
+        // the bastion path.
+        let check = match check_known_host(
             &self.known_hosts_path,
             &self.host,
             self.port,
             &key_type,
             &key_base64,
-        )
-        .unwrap_or(HostKeyCheck::New);
+        ) {
+            Ok(c) => c,
+            Err(e) => {
+                log::error!(
+                    "jumpbox: failed to read known_hosts at {:?}: {e} — refusing connection",
+                    self.known_hosts_path
+                );
+                return Err(russh::Error::Disconnect);
+            }
+        };
 
         let kind = match check {
             HostKeyCheck::Match => return Ok(true),
@@ -209,19 +221,6 @@ async fn register_with_ssh_map(prompt_session_id: String) {
             }
         }
     });
-}
-
-/// Resolve a jumpbox host-key prompt. Used by tests; production flow goes
-/// through `ssh_host_key_response` → `resolve_host_key_prompt`.
-#[allow(dead_code)]
-pub async fn resolve_jumpbox_prompt(session_id: &str, decision: HostKeyDecision) -> bool {
-    if let Some(tx) = jumpbox_pending_map().lock().await.remove(session_id) {
-        let _ = tx.send(decision);
-        true
-    } else {
-        // Fall back to the shared ssh map in case we mis-routed.
-        resolve_host_key_prompt(session_id, decision).await
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -343,6 +342,7 @@ pub async fn establish_tunnel(
 
     let russh_config = Arc::new(client::Config {
         inactivity_timeout: Some(Duration::from_secs(3600)),
+        preferred: super::ssh::load_preferred(&app)?,
         ..client::Config::default()
     });
 

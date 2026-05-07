@@ -1,6 +1,6 @@
 [package]
 name = "hotty"
-version = "2.0.0-beta10"
+version = "2.0.0-beta11"
 description = "HoTTY - AI Integrated Advanced Terminal Emulator (Rust/Tauri)"
 authors = ["horryworks"]
 license = "GPL-3.0-or-later"
@@ -38,7 +38,10 @@ log = "0.4"
 portable-pty = "0.8"
 
 # SSH
-russh = "0.60"
+# Enable optional legacy algorithm features that the user can opt into via Settings:
+#   - "des" enables 3des-cbc (older Cisco IOS, etc.)
+#   - "dsa" enables ssh-dss host keys
+russh = { version = "0.60", features = ["des", "dsa"] }
 
 # Serial Port
 serialport = "4.7"

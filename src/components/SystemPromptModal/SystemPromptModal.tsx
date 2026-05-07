@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './SystemPromptModal.css';
 
-export interface SystemPromptModalProps {
+interface SystemPromptModalProps {
   personaLabel: string;
   systemInstruction: string;
   onClose: () => void;

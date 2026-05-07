@@ -3,7 +3,7 @@ import { tauriService } from '../services/tauriService';
 import { DEFAULT_THEMES } from '../themes/defaults';
 import type { SaveThemeResult, Theme } from '../types/appTypes';
 
-export interface UseThemesApi {
+interface UseThemesApi {
   themesData: Record<string, Theme>;
   reloadThemes: () => Promise<void>;
   saveTheme: (key: string, data: Theme) => Promise<SaveThemeResult>;

@@ -1,11 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   usePaneStore,
-  paneCount,
   gridPaneIds,
-  allPaneIds,
-  SIDEBAR_PANE_IDS,
-  isSidebarPaneId,
 } from './paneStore';
 import { useSidebarLayoutStore } from './sidebarLayoutStore';
 
@@ -26,15 +22,14 @@ describe('paneStore', () => {
     localStorage.clear();
   });
 
-  it('paneCount computes rows*cols', () => {
-    expect(paneCount('1x1')).toBe(1);
-    expect(paneCount('2x2')).toBe(4);
-    expect(paneCount('3x2')).toBe(6);
-  });
-
   it('gridPaneIds returns stringified indices', () => {
     expect(gridPaneIds('1x1')).toEqual(['0']);
     expect(gridPaneIds('2x2')).toEqual(['0', '1', '2', '3']);
+  });
+
+  it('gridPaneIds covers rows*cols for non-square layouts', () => {
+    expect(gridPaneIds('3x2')).toHaveLength(6);
+    expect(gridPaneIds('2x3')).toHaveLength(6);
   });
 
   it('addSession allocates to first empty pane and activates it', () => {
@@ -124,18 +119,6 @@ describe('paneStore', () => {
     usePaneStore.setState({ layoutMode: '2x3', activePaneId: '5' });
     usePaneStore.getState().setLayoutMode('1x1');
     expect(usePaneStore.getState().activePaneId).toBe('0');
-  });
-
-  it('isSidebarPaneId identifies sidebar pane ids', () => {
-    expect(isSidebarPaneId('bar-left')).toBe(true);
-    expect(isSidebarPaneId('bar-right')).toBe(true);
-    expect(isSidebarPaneId('bar-top')).toBe(true);
-    expect(isSidebarPaneId('bar-bottom')).toBe(true);
-    expect(isSidebarPaneId('0')).toBe(false);
-  });
-
-  it('allPaneIds includes grid panes and sidebar panes', () => {
-    expect(allPaneIds('1x1')).toEqual(['0', ...SIDEBAR_PANE_IDS]);
   });
 
   it('moveSessionToPane allocates a session to a sidebar pane', () => {

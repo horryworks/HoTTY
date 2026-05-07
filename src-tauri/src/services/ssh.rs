@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
@@ -9,10 +10,12 @@ use std::time::Duration;
 use russh::client::{self, Handle, Handler};
 use russh::keys::ssh_key;
 use russh::keys::{load_secret_key, HashAlg, PrivateKey, PrivateKeyWithHashAlg};
-use russh::{ChannelMsg, Disconnect};
+use russh::{cipher, kex, mac, ChannelMsg, Disconnect, Preferred};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
+
+use crate::commands::ssh_algorithms::{load_algorithms_sync, SshAlgorithms};
 
 use super::jumpbox::{establish_tunnel, JumpboxConfig, JumpboxHandler};
 use super::known_hosts::{
@@ -87,6 +90,193 @@ impl SshConfig {
         }
         Ok(())
     }
+}
+
+// --- Algorithm preference mapping --------------------------------------
+
+/// Map a KEX algorithm name (as used in SSH) to russh's `kex::Name` constant.
+/// Returns `None` for names russh 0.60 does not implement.
+fn map_kex_name(s: &str) -> Option<kex::Name> {
+    match s {
+        "curve25519-sha256" => Some(kex::CURVE25519),
+        "curve25519-sha256@libssh.org" => Some(kex::CURVE25519_PRE_RFC_8731),
+        "mlkem768x25519-sha256" => Some(kex::MLKEM768X25519_SHA256),
+        "diffie-hellman-group-exchange-sha1" => Some(kex::DH_GEX_SHA1),
+        "diffie-hellman-group-exchange-sha256" => Some(kex::DH_GEX_SHA256),
+        "diffie-hellman-group1-sha1" => Some(kex::DH_G1_SHA1),
+        "diffie-hellman-group14-sha1" => Some(kex::DH_G14_SHA1),
+        "diffie-hellman-group14-sha256" => Some(kex::DH_G14_SHA256),
+        "diffie-hellman-group15-sha512" => Some(kex::DH_G15_SHA512),
+        "diffie-hellman-group16-sha512" => Some(kex::DH_G16_SHA512),
+        "diffie-hellman-group17-sha512" => Some(kex::DH_G17_SHA512),
+        "diffie-hellman-group18-sha512" => Some(kex::DH_G18_SHA512),
+        "ecdh-sha2-nistp256" => Some(kex::ECDH_SHA2_NISTP256),
+        "ecdh-sha2-nistp384" => Some(kex::ECDH_SHA2_NISTP384),
+        "ecdh-sha2-nistp521" => Some(kex::ECDH_SHA2_NISTP521),
+        _ => None,
+    }
+}
+
+fn map_cipher_name(s: &str) -> Option<cipher::Name> {
+    match s {
+        "3des-cbc" => Some(cipher::TRIPLE_DES_CBC),
+        "aes128-ctr" => Some(cipher::AES_128_CTR),
+        "aes192-ctr" => Some(cipher::AES_192_CTR),
+        "aes256-ctr" => Some(cipher::AES_256_CTR),
+        "aes128-cbc" => Some(cipher::AES_128_CBC),
+        "aes192-cbc" => Some(cipher::AES_192_CBC),
+        "aes256-cbc" => Some(cipher::AES_256_CBC),
+        "aes128-gcm@openssh.com" | "aes128-gcm" => Some(cipher::AES_128_GCM),
+        "aes256-gcm@openssh.com" | "aes256-gcm" => Some(cipher::AES_256_GCM),
+        "chacha20-poly1305@openssh.com" => Some(cipher::CHACHA20_POLY1305),
+        _ => None,
+    }
+}
+
+fn map_mac_name(s: &str) -> Option<mac::Name> {
+    match s {
+        "hmac-sha1" => Some(mac::HMAC_SHA1),
+        "hmac-sha2-256" => Some(mac::HMAC_SHA256),
+        "hmac-sha2-512" => Some(mac::HMAC_SHA512),
+        "hmac-sha1-etm@openssh.com" => Some(mac::HMAC_SHA1_ETM),
+        "hmac-sha2-256-etm@openssh.com" => Some(mac::HMAC_SHA256_ETM),
+        "hmac-sha2-512-etm@openssh.com" => Some(mac::HMAC_SHA512_ETM),
+        _ => None,
+    }
+}
+
+fn map_host_key_algo(s: &str) -> Option<ssh_key::Algorithm> {
+    use ssh_key::EcdsaCurve;
+    match s {
+        "ssh-ed25519" => Some(ssh_key::Algorithm::Ed25519),
+        "ecdsa-sha2-nistp256" => Some(ssh_key::Algorithm::Ecdsa {
+            curve: EcdsaCurve::NistP256,
+        }),
+        "ecdsa-sha2-nistp384" => Some(ssh_key::Algorithm::Ecdsa {
+            curve: EcdsaCurve::NistP384,
+        }),
+        "ecdsa-sha2-nistp521" => Some(ssh_key::Algorithm::Ecdsa {
+            curve: EcdsaCurve::NistP521,
+        }),
+        "rsa-sha2-512" => Some(ssh_key::Algorithm::Rsa {
+            hash: Some(HashAlg::Sha512),
+        }),
+        "rsa-sha2-256" => Some(ssh_key::Algorithm::Rsa {
+            hash: Some(HashAlg::Sha256),
+        }),
+        "ssh-rsa" => Some(ssh_key::Algorithm::Rsa { hash: None }),
+        "ssh-dss" => Some(ssh_key::Algorithm::Dsa),
+        _ => None,
+    }
+}
+
+/// Collect enabled entries for `category` from the user config, mapping each name
+/// via `mapper`. Unknown names are logged and skipped. Returns `Err` if the
+/// category exists but no enabled entry could be mapped (configuration mistake
+/// that would otherwise silently fall back to the library default).
+///
+/// Returns `Ok(None)` if the category is absent from the config — caller should
+/// fall back to the library default for that category.
+fn collect_category<T>(
+    algorithms: &SshAlgorithms,
+    category: &str,
+    mapper: impl Fn(&str) -> Option<T>,
+) -> Result<Option<Vec<T>>, String> {
+    let Some(entries) = algorithms.get(category) else {
+        return Ok(None);
+    };
+
+    let mut mapped = Vec::with_capacity(entries.len());
+    let mut enabled_any = false;
+    for entry in entries {
+        if !entry.enabled {
+            continue;
+        }
+        enabled_any = true;
+        match mapper(&entry.name) {
+            Some(v) => mapped.push(v),
+            None => log::warn!(
+                "ssh: unsupported {category} algorithm '{}' in config — skipping",
+                entry.name
+            ),
+        }
+    }
+
+    if !enabled_any {
+        return Err(format!(
+            "ssh: no algorithms enabled in category '{category}' — enable at least one in Settings"
+        ));
+    }
+    if mapped.is_empty() {
+        return Err(format!(
+            "ssh: every enabled '{category}' algorithm is unsupported by the SSH library — \
+             enable at least one supported algorithm in Settings"
+        ));
+    }
+    Ok(Some(mapped))
+}
+
+/// Load the user's SSH algorithm config and build a `russh::Preferred` from it.
+/// Falls back to library defaults if the config file is absent or unreadable.
+/// Returns `Err(SessionError::InvalidConfig)` if the config is structurally valid
+/// but has an unusable category (every entry disabled, or every enabled entry
+/// unsupported by russh).
+pub(crate) fn load_preferred(app: &AppHandle) -> Result<Preferred, SessionError> {
+    match load_algorithms_sync(app) {
+        Ok(Some(algos)) => build_preferred(&algos).map_err(SessionError::InvalidConfig),
+        Ok(None) => Ok(Preferred::DEFAULT),
+        Err(e) => {
+            log::warn!(
+                "ssh: failed to load ssh_algorithms config ({e}); using library defaults"
+            );
+            Ok(Preferred::DEFAULT)
+        }
+    }
+}
+
+/// Build a `russh::Preferred` from the user's algorithm configuration.
+/// Categories absent from the config use russh's defaults.
+/// Returns `Err` if any present category has no usable algorithm.
+fn build_preferred(algorithms: &SshAlgorithms) -> Result<Preferred, String> {
+    let default = Preferred::DEFAULT;
+
+    let kex = match collect_category(algorithms, "kex", map_kex_name)? {
+        Some(mut v) => {
+            // Always preserve russh's ext-info / strict-kex pseudo-KEX names so
+            // the SSH protocol extension negotiation continues to work.
+            v.extend([
+                kex::EXTENSION_SUPPORT_AS_CLIENT,
+                kex::EXTENSION_SUPPORT_AS_SERVER,
+                kex::EXTENSION_OPENSSH_STRICT_KEX_AS_CLIENT,
+                kex::EXTENSION_OPENSSH_STRICT_KEX_AS_SERVER,
+            ]);
+            Cow::Owned(v)
+        }
+        None => default.kex.clone(),
+    };
+
+    let cipher = match collect_category(algorithms, "cipher", map_cipher_name)? {
+        Some(v) => Cow::Owned(v),
+        None => default.cipher.clone(),
+    };
+
+    let mac = match collect_category(algorithms, "hmac", map_mac_name)? {
+        Some(v) => Cow::Owned(v),
+        None => default.mac.clone(),
+    };
+
+    let key = match collect_category(algorithms, "serverHostKey", map_host_key_algo)? {
+        Some(v) => Cow::Owned(v),
+        None => default.key.clone(),
+    };
+
+    Ok(Preferred {
+        kex,
+        cipher,
+        mac,
+        key,
+        compression: default.compression,
+    })
 }
 
 // --- Host-key prompt pending map ---------------------------------------
@@ -363,8 +553,11 @@ impl SessionService for SshSession {
 
         let known_hosts_path = resolve_known_hosts_path(&app);
 
+        let preferred = load_preferred(&app)?;
+
         let config = Arc::new(client::Config {
             inactivity_timeout: Some(Duration::from_secs(3600)),
+            preferred,
             ..client::Config::default()
         });
 
@@ -606,5 +799,213 @@ impl Drop for SshSession {
                 h.abort();
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commands::ssh_algorithms::AlgorithmEntry;
+
+    fn entry(name: &str, enabled: bool) -> AlgorithmEntry {
+        AlgorithmEntry {
+            name: name.into(),
+            enabled,
+        }
+    }
+
+    fn algos(map: &[(&str, Vec<AlgorithmEntry>)]) -> SshAlgorithms {
+        let mut h = HashMap::new();
+        for (k, v) in map {
+            h.insert((*k).to_string(), v.clone());
+        }
+        h
+    }
+
+    #[test]
+    fn map_kex_supports_legacy_sha1() {
+        // The whole point of the user-configurable list: russh DEFAULT excludes
+        // these, but russh 0.60 implements them — we must be able to opt in.
+        assert_eq!(
+            map_kex_name("diffie-hellman-group1-sha1"),
+            Some(kex::DH_G1_SHA1)
+        );
+        assert_eq!(
+            map_kex_name("diffie-hellman-group14-sha1"),
+            Some(kex::DH_G14_SHA1)
+        );
+        assert_eq!(
+            map_kex_name("diffie-hellman-group-exchange-sha1"),
+            Some(kex::DH_GEX_SHA1)
+        );
+    }
+
+    #[test]
+    fn map_kex_returns_none_for_unknown() {
+        assert_eq!(map_kex_name("totally-fake-algo"), None);
+    }
+
+    #[test]
+    fn map_cipher_aliases_gcm_short_name() {
+        assert_eq!(
+            map_cipher_name("aes128-gcm"),
+            Some(cipher::AES_128_GCM)
+        );
+        assert_eq!(
+            map_cipher_name("aes128-gcm@openssh.com"),
+            Some(cipher::AES_128_GCM)
+        );
+    }
+
+    #[test]
+    fn map_host_key_supports_dss_and_rsa_variants() {
+        assert_eq!(map_host_key_algo("ssh-dss"), Some(ssh_key::Algorithm::Dsa));
+        assert_eq!(
+            map_host_key_algo("ssh-rsa"),
+            Some(ssh_key::Algorithm::Rsa { hash: None })
+        );
+        assert_eq!(
+            map_host_key_algo("rsa-sha2-256"),
+            Some(ssh_key::Algorithm::Rsa {
+                hash: Some(HashAlg::Sha256)
+            })
+        );
+    }
+
+    #[test]
+    fn build_preferred_includes_only_enabled_kex() {
+        let a = algos(&[(
+            "kex",
+            vec![
+                entry("curve25519-sha256", true),
+                entry("diffie-hellman-group14-sha1", true),
+                entry("diffie-hellman-group-exchange-sha256", false),
+            ],
+        )]);
+        let p = build_preferred(&a).expect("should build");
+        assert!(p.kex.contains(&kex::CURVE25519));
+        assert!(p.kex.contains(&kex::DH_G14_SHA1));
+        assert!(!p.kex.contains(&kex::DH_GEX_SHA256));
+    }
+
+    #[test]
+    fn build_preferred_appends_ext_info_pseudo_kex() {
+        let a = algos(&[(
+            "kex",
+            vec![entry("curve25519-sha256", true)],
+        )]);
+        let p = build_preferred(&a).expect("should build");
+        // Pseudo-KEX names that drive SSH protocol extension negotiation must
+        // remain present — losing them would break ext-info handshakes.
+        assert!(p.kex.contains(&kex::EXTENSION_SUPPORT_AS_CLIENT));
+        assert!(p.kex.contains(&kex::EXTENSION_OPENSSH_STRICT_KEX_AS_CLIENT));
+    }
+
+    #[test]
+    fn build_preferred_skips_unknown_names() {
+        let a = algos(&[(
+            "kex",
+            vec![
+                entry("curve25519-sha256", true),
+                entry("not-a-real-algo", true),
+            ],
+        )]);
+        let p = build_preferred(&a).expect("should build");
+        assert!(p.kex.contains(&kex::CURVE25519));
+        // Unknown names produce a warning and are silently dropped — verified by
+        // the only mapped name being the one we recognise.
+        let mapped_count = p
+            .kex
+            .iter()
+            .filter(|n| **n == kex::CURVE25519 || **n == kex::DH_G14_SHA1)
+            .count();
+        assert_eq!(mapped_count, 1);
+    }
+
+    #[test]
+    fn build_preferred_errors_on_all_disabled_category() {
+        let a = algos(&[(
+            "kex",
+            vec![
+                entry("curve25519-sha256", false),
+                entry("diffie-hellman-group14-sha256", false),
+            ],
+        )]);
+        let err = build_preferred(&a).expect_err("must reject");
+        assert!(err.contains("kex"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn build_preferred_errors_when_all_enabled_are_unsupported() {
+        let a = algos(&[(
+            "cipher",
+            vec![
+                entry("arcfour256", true),
+                entry("blowfish-cbc", true),
+            ],
+        )]);
+        let err = build_preferred(&a).expect_err("must reject");
+        assert!(err.contains("cipher"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn build_preferred_falls_back_to_default_for_missing_category() {
+        let a = algos(&[(
+            "kex",
+            vec![entry("curve25519-sha256", true)],
+        )]);
+        // No cipher / hmac / serverHostKey entries at all -> use russh defaults.
+        let p = build_preferred(&a).expect("should build");
+        let default = Preferred::DEFAULT;
+        assert_eq!(
+            p.cipher.as_ref().len(),
+            default.cipher.as_ref().len()
+        );
+        assert_eq!(p.mac.as_ref().len(), default.mac.as_ref().len());
+        assert_eq!(p.key.as_ref().len(), default.key.as_ref().len());
+    }
+
+    #[test]
+    fn build_preferred_handles_full_config_with_legacy_only() {
+        // Reproduces the Catalyst 3650 scenario: only SHA-1 KEX, only CBC ciphers,
+        // only hmac-sha1, only ssh-dss / ssh-rsa host keys enabled.
+        let a = algos(&[
+            (
+                "kex",
+                vec![
+                    entry("diffie-hellman-group-exchange-sha1", true),
+                    entry("diffie-hellman-group14-sha1", true),
+                    entry("diffie-hellman-group1-sha1", true),
+                ],
+            ),
+            (
+                "cipher",
+                vec![
+                    entry("aes256-cbc", true),
+                    entry("3des-cbc", true),
+                ],
+            ),
+            (
+                "hmac",
+                vec![entry("hmac-sha1", true)],
+            ),
+            (
+                "serverHostKey",
+                vec![
+                    entry("ssh-rsa", true),
+                    entry("ssh-dss", true),
+                ],
+            ),
+        ]);
+        let p = build_preferred(&a).expect("should build legacy preferred");
+        assert!(p.kex.contains(&kex::DH_G14_SHA1));
+        assert!(p.cipher.contains(&cipher::AES_256_CBC));
+        assert!(p.cipher.contains(&cipher::TRIPLE_DES_CBC));
+        assert!(p.mac.contains(&mac::HMAC_SHA1));
+        assert!(p.key.contains(&ssh_key::Algorithm::Dsa));
     }
 }

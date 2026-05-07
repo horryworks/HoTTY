@@ -10,7 +10,6 @@ import type {
   SerialConnectionConfig,
   WslConnectionConfig,
   LocalConnectionConfig,
-  ConnectionRequest,
   SshHostKeyPromptPayload,
   Theme,
   HostEntry,
@@ -107,22 +106,6 @@ describe('appTypes', () => {
   it('LocalConnectionConfig accepts every shellType', () => {
     const shells: LocalConnectionConfig['shellType'][] = ['cmd', 'powershell', 'git-bash'];
     expect(shells).toHaveLength(3);
-  });
-
-  it('ConnectionRequest.config accepts any protocol variant', () => {
-    const ssh: ConnectionRequest = {
-      protocol: 'ssh',
-      displayName: 'host',
-      config: {
-        host: 'h',
-        port: 22,
-        username: 'u',
-        encoding: 'utf8',
-        keepaliveIntervalSecs: 0,
-        connectTimeoutSecs: 3,
-      },
-    };
-    expect(ssh.protocol).toBe('ssh');
   });
 
   it('SshHostKeyPromptPayload.kind is restricted to "new" | "changed"', () => {

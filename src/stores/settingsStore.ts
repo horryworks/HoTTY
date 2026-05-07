@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { Encoding, FeatureId, PromptPattern, ThemeId, CommandExecutionMode, PersonaDefinition, AskAiCommand } from '../types/appTypes';
 import { DEFAULT_THEMES } from '../themes/defaults';
 
-export const DEFAULT_PROMPT_HIGHLIGHT_COLOR = 'rgba(255, 255, 255, 0.15)';
+const DEFAULT_PROMPT_HIGHLIGHT_COLOR = 'rgba(255, 255, 255, 0.15)';
 
 export const DEFAULT_PROMPT_PATTERNS: PromptPattern[] = [
   { id: 'cisco', name: 'Cisco / Allied Telesis', pattern: '^([a-zA-Z0-9_\\-\\./]+(?:\\([a-zA-Z0-9_\\-\\./]+\\))?[>#])\\s*' },
@@ -86,7 +86,7 @@ export const DEFAULT_PERSONAS: PersonaDefinition[] = [
   { id: 'security-analyst', label: 'Security Analyst', systemPrompt: 'You are a Cybersecurity Analyst. Analyze logs and configurations for potential vulnerabilities, threats, and indicators of compromise (IoCs). Recommend mitigation strategies based on industry standards (NIST/CIS).', askAiCommands: SECURITY_ANALYST_COMMANDS },
 ];
 
-export interface SettingsState {
+interface SettingsState {
   // Appearance
   theme: ThemeId;
   fontSize: number;
@@ -142,7 +142,7 @@ export interface SettingsState {
   aiCommandIdleTimeoutSecs: number;
 }
 
-export interface SettingsActions {
+interface SettingsActions {
   update: <K extends keyof SettingsState>(key: K, value: SettingsState[K]) => void;
   reset: () => void;
 }
@@ -259,5 +259,3 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }
   )
 );
-
-export { DEFAULTS as SETTINGS_DEFAULTS };

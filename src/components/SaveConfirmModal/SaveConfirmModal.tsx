@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import './SaveConfirmModal.css';
 
-export interface SaveConfirmModalProps {
+interface SaveConfirmModalProps {
   filename: string;
   onSave: () => void;
   onDiscard: () => void;

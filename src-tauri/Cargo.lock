@@ -1269,6 +1269,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "des"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffdd80ce8ce993de27e9f063a444a4d53ce8e8db4c1f00cc03af5ad5a9867a1e"
+dependencies = [
+ "cipher 0.4.4",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1387,6 +1396,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "dsa"
+version = "0.7.0-rc.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a914d1d3e30ea021331fc4c4b3558aba5b1a26d91cddb920322d209a3a43cb99"
+dependencies = [
+ "crypto-bigint",
+ "crypto-primes",
+ "der",
+ "digest 0.11.2",
+ "rfc6979",
+ "sha2 0.11.0",
+ "signature",
+ "zeroize",
 ]
 
 [[package]]
@@ -2366,7 +2391,7 @@ dependencies = [
 
 [[package]]
 name = "hotty"
-version = "2.0.0-beta10"
+version = "2.0.0-beta11"
 dependencies = [
  "aes-gcm 0.10.3",
  "anyhow",
@@ -2781,6 +2806,7 @@ dependencies = [
  "argon2",
  "bcrypt-pbkdf",
  "crypto-bigint",
+ "dsa",
  "ecdsa",
  "ed25519-dalek",
  "hex",
@@ -4897,6 +4923,7 @@ dependencies = [
  "data-encoding",
  "delegate",
  "der",
+ "des",
  "digest 0.10.7",
  "ecdsa",
  "ed25519-dalek",

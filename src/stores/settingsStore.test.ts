@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useSettingsStore, SETTINGS_DEFAULTS, DEFAULT_PROMPT_PATTERNS } from './settingsStore';
+import { useSettingsStore, DEFAULT_PROMPT_PATTERNS } from './settingsStore';
 
 describe('settingsStore', () => {
   beforeEach(() => {
@@ -9,9 +9,9 @@ describe('settingsStore', () => {
 
   it('starts with defaults', () => {
     const s = useSettingsStore.getState();
-    expect(s.globalEncoding).toBe(SETTINGS_DEFAULTS.globalEncoding);
-    expect(s.fontSize).toBe(SETTINGS_DEFAULTS.fontSize);
-    expect(s.sshKeepAliveInterval).toBe(SETTINGS_DEFAULTS.sshKeepAliveInterval);
+    expect(s.globalEncoding).toBe('utf8');
+    expect(s.fontSize).toBe(14);
+    expect(s.sshKeepAliveInterval).toBe(10);
   });
 
   it('defaults SSH and Telnet connect timeouts to 5 seconds', () => {
@@ -28,7 +28,7 @@ describe('settingsStore', () => {
   it('reset restores defaults', () => {
     useSettingsStore.getState().update('fontSize', 99);
     useSettingsStore.getState().reset();
-    expect(useSettingsStore.getState().fontSize).toBe(SETTINGS_DEFAULTS.fontSize);
+    expect(useSettingsStore.getState().fontSize).toBe(14);
   });
 
   it('defaults to the dark theme', () => {

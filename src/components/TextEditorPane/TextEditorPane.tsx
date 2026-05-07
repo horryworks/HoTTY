@@ -15,7 +15,7 @@ interface TextEditorPaneProps {
   onOpenFile?: (filePath: string) => void;
 }
 
-export interface TextEditorPaneHandle {
+interface TextEditorPaneHandle {
   openFile: (filePath: string) => void;
 }
 

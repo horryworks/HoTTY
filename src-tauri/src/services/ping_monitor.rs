@@ -35,16 +35,16 @@ pub struct PingResult {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PingDataPayload {
-    pub session_id: String,
-    pub results: Vec<PingResult>,
+struct PingDataPayload {
+    session_id: String,
+    results: Vec<PingResult>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PingLogFilePayload {
-    pub session_id: String,
-    pub file_name: String,
+struct PingLogFilePayload {
+    session_id: String,
+    file_name: String,
 }
 
 /// Shared state: maps sessionId → running PingMonitor handle.

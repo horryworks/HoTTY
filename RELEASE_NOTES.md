@@ -1,5 +1,18 @@
 # Release Notes
 
+## v2.0.0-beta11
+
+A correctness and security release. The SSH algorithm preferences in Settings now actually drive the handshake (they were previously cosmetic), unblocking legacy devices that need SHA-1 KEX, 3DES, or DSA host keys, and the jumpbox SSH path picks up the same `known_hosts` I/O hardening already applied to the direct path.
+
+### Bug Fixes
+
+- **SSH algorithm preferences from Settings now apply to connections.** Previously the kex / cipher / MAC / host-key toggles in **Settings &rarr; Protocols &rarr; SSH Algorithms** were saved but never read by the SSH client — every session offered russh's hardcoded default list regardless of what was selected in the UI. They now drive the handshake for both direct SSH and jumpbox connections. This unblocks legacy devices (e.g. Cisco Catalyst 3650, older Cisco IOS) that require SHA-1 KEX (`diffie-hellman-group14-sha1`, `diffie-hellman-group1-sha1`, `diffie-hellman-group-exchange-sha1`), `3des-cbc`, or `ssh-dss` host keys — these are now selectable and effective.
+- Disabling every algorithm in a category now fails the connection with a clear error rather than silently falling back to library defaults. Unknown algorithm names in the saved config log a warning and are skipped instead of being silently ignored.
+
+### Security
+
+- **Jumpbox known_hosts I/O errors now refuse the connection** instead of treating the host as new. Matches the existing hardening on the direct SSH path; prevents an attacker who can corrupt or chmod-zero the bastion's `known_hosts` from coaxing the user back into a "new host" prompt and accepting an attacker-controlled key.
+
 ## v2.0.0-beta10
 
 A major AI Chat UX overhaul: per-pane tabs with smart linking to terminal sessions, an inline execution mode bar with pause/resume, a new device-response idle timeout, and a tightened Network Expert persona prompt.

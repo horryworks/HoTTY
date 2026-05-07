@@ -3,15 +3,6 @@ import { persist } from 'zustand/middleware';
 import type { LayoutMode } from '../types/appTypes';
 import { useSidebarLayoutStore } from './sidebarLayoutStore';
 
-export const LAYOUT_MODES: LayoutMode[] = [
-  '1x1',
-  '1x2',
-  '2x1',
-  '2x2',
-  '2x3',
-  '3x2',
-];
-
 export const SIDEBAR_PANE_IDS = [
   'bar-left',
   'bar-right',
@@ -19,23 +10,19 @@ export const SIDEBAR_PANE_IDS = [
   'bar-bottom',
 ] as const;
 
-export type SidebarPaneId = (typeof SIDEBAR_PANE_IDS)[number];
+type SidebarPaneId = (typeof SIDEBAR_PANE_IDS)[number];
 
-export function isSidebarPaneId(id: string): id is SidebarPaneId {
+function isSidebarPaneId(id: string): id is SidebarPaneId {
   return (SIDEBAR_PANE_IDS as readonly string[]).includes(id);
 }
 
-export function paneCount(mode: LayoutMode): number {
+function paneCount(mode: LayoutMode): number {
   const [c, r] = mode.split('x').map((n) => parseInt(n, 10));
   return c * r;
 }
 
 export function gridPaneIds(mode: LayoutMode): string[] {
   return Array.from({ length: paneCount(mode) }, (_, i) => String(i));
-}
-
-export function allPaneIds(mode: LayoutMode): string[] {
-  return [...gridPaneIds(mode), ...SIDEBAR_PANE_IDS];
 }
 
 interface PaneState {

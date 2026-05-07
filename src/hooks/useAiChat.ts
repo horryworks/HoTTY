@@ -68,7 +68,7 @@ export function getActiveTab(state: AiChatState | undefined): ChatTab | undefine
 }
 
 /** Build a short title from a tab's linked session, falling back to "Tab N". */
-export function deriveTabTitle(
+function deriveTabTitle(
   linkedSessionId: string | undefined,
   sessions: Map<string, SessionRecord>,
   ordinal: number,

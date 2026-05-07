@@ -85,6 +85,9 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               <p className="help-text">
                 <strong>Connection Status:</strong> A Connecting overlay is shown while the transport is being established. SSH and Telnet sessions time out after a configurable interval (default 5 seconds) — see <strong>Settings &rarr; Protocols</strong>. Connection failures appear as dismissible toast notifications.
               </p>
+              <p className="help-text">
+                <strong>SSH Algorithms:</strong> Toggle which key-exchange, cipher, MAC, and host-key algorithms are offered during the SSH handshake under <strong>Settings &rarr; Protocols &rarr; SSH Algorithms</strong>. Legacy options such as <code>diffie-hellman-group14-sha1</code>, <code>3des-cbc</code>, and <code>ssh-dss</code> are available for older devices (e.g. Cisco Catalyst 3650 / older IOS) that do not negotiate modern algorithms.
+              </p>
             </div>
           </details>
 

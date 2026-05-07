@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useAiChat, getActiveTab, createDefaultAiChatState, deriveTabTitle } from './useAiChat';
+import { useAiChat, getActiveTab, createDefaultAiChatState } from './useAiChat';
 import type { SessionRecord } from './useSessionManager';
 import type { FeaturePaneInfo } from '../utils/paneTypes';
 import type { PersonaDefinition } from '../types/appTypes';
@@ -434,25 +434,3 @@ describe('useAiChat', () => {
   });
 });
 
-describe('deriveTabTitle', () => {
-  const sessions = new Map<string, SessionRecord>();
-  sessions.set('s1', makeSessionRecord('s1', { displayName: 'Router1' }));
-  sessions.set('s2', makeSessionRecord('s2', { displayName: 'AVeryLongHostnameWithExtras' }));
-
-  it('returns "Tab N" when no link', () => {
-    expect(deriveTabTitle(undefined, sessions, 1)).toBe('Tab 1');
-    expect(deriveTabTitle(undefined, sessions, 7)).toBe('Tab 7');
-  });
-
-  it('returns linked session displayName', () => {
-    expect(deriveTabTitle('s1', sessions, 1)).toBe('Router1');
-  });
-
-  it('truncates long names with an ellipsis', () => {
-    expect(deriveTabTitle('s2', sessions, 1)).toBe('AVeryLongHo…');
-  });
-
-  it('falls back to "Tab N" if linked session is missing', () => {
-    expect(deriveTabTitle('missing', sessions, 3)).toBe('Tab 3');
-  });
-});

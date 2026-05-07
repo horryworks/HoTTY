@@ -76,7 +76,7 @@ export const CONNECT_FAILURE_AUTO_CLOSE_MS = 1500;
 // "Connection closed.") before the tab disappears.
 export const SESSION_END_AUTO_CLOSE_MS = 1500;
 
-export interface UseSessionManagerOptions {
+interface UseSessionManagerOptions {
   onPasteRequest?: (sessionId: string) => void;
   onSessionRemoved?: (sessionId: string) => void;
 }

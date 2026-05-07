@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import './ConfirmModal.css';
 
-export interface ConfirmModalProps {
+interface ConfirmModalProps {
     title?: string;
     message: string;
     confirmLabel?: string;

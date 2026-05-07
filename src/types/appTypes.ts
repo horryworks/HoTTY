@@ -27,12 +27,6 @@ export interface SshConnectionConfig extends BaseConnectionConfig {
 
 export type TelnetConnectionConfig = BaseConnectionConfig;
 
-export interface ConnectionRequest {
-  protocol: ProtocolId;
-  displayName: string;
-  config: SshConnectionConfig | TelnetConnectionConfig | SerialConnectionConfig | WslConnectionConfig | LocalConnectionConfig;
-}
-
 export interface SessionDataPayload {
   sessionId: string;
   data: string;
@@ -309,12 +303,6 @@ export interface AIChatResponseData {
 
 export interface AIAuthResultPayload {
   success: boolean;
-}
-
-export interface AIProviderInfo {
-  id: string;
-  displayName: string;
-  authType: AIAuthType;
 }
 
 export type CommandExecutionMode = 'ask-before-execute' | 'auto-execute-safe';

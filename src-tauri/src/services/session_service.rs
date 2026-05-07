@@ -64,23 +64,23 @@ pub trait SessionService: Send + Sync {
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct SessionDataPayload {
-    pub session_id: String,
-    pub data: String,
+struct SessionDataPayload {
+    session_id: String,
+    data: String,
 }
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct SessionStatusPayload {
-    pub session_id: String,
-    pub status: String,
+struct SessionStatusPayload {
+    session_id: String,
+    status: String,
 }
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct SessionErrorPayload {
-    pub session_id: String,
-    pub error: String,
+struct SessionErrorPayload {
+    session_id: String,
+    error: String,
 }
 
 pub fn emit_session_data(app: &AppHandle, session_id: &str, data: String) {

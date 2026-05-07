@@ -95,6 +95,21 @@ fn read_algorithms_file(path: &std::path::Path) -> Result<SshAlgorithms, String>
 // Commands
 // ---------------------------------------------------------------------------
 
+/// Synchronous loader for use outside of Tauri commands (e.g. SSH service).
+/// Reads from user config dir first, then falls back to bundled resources.
+/// Returns Ok(None) if neither file exists — caller should fall back to library defaults.
+pub fn load_algorithms_sync(app: &AppHandle) -> Result<Option<SshAlgorithms>, String> {
+    let user_path = user_algorithms_path(app)?;
+    if user_path.exists() {
+        return read_algorithms_file(&user_path).map(Some);
+    }
+    let bundled_path = bundled_algorithms_path(app)?;
+    if bundled_path.exists() {
+        return read_algorithms_file(&bundled_path).map(Some);
+    }
+    Ok(None)
+}
+
 /// Load SSH algorithms configuration.
 /// Reads from user config dir first; if not present, copies from bundled resources.
 #[tauri::command]
