@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::path::Path;
-use tauri::State;
+use tauri::{AppHandle, State};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use crate::services::log_manager::LogManager;
 
@@ -60,7 +61,6 @@ fn is_allowed_extension(path: &Path) -> bool {
 
 /// Get the real/canonical path, resolving symlinks.
 fn resolve_real_path(path: &Path) -> Result<std::path::PathBuf, String> {
-    // On Windows, canonicalize adds the \\?\ prefix; we normalize it away
     let canonical = path
         .canonicalize()
         .map_err(|e| format!("failed to resolve path: {e}"))?;
@@ -80,8 +80,12 @@ fn system_time_to_millis(time: std::time::SystemTime) -> u64 {
 
 /// List log files (.txt, .log) in a given folder.
 ///
-/// Security: The folder must be registered in the LogManager's allowed directories.
-/// Files with `.tslog` extension are excluded from the listing (they are internal).
+/// The folder MUST already be user-approved (via `select_folder`'s file
+/// picker dialog or `confirm_log_dir`'s yes/no prompt). A compromised
+/// renderer cannot synthesise that approval, so it cannot point the log
+/// viewer at arbitrary directories on the user's machine just by calling
+/// this command. Files with `.tslog` extension are excluded from the
+/// listing (they are internal).
 #[tauri::command]
 pub async fn list_log_files(
     log_manager: State<'_, LogManager>,
@@ -89,18 +93,17 @@ pub async fn list_log_files(
 ) -> Result<ListLogFilesResult, String> {
     let folder = Path::new(&folder_path);
 
-    // Validate the folder is allowed
-    if !log_manager.is_path_allowed(folder).await {
-        return Ok(ListLogFilesResult {
-            files: None,
-            error: Some("access denied: folder is not registered for logging".into()),
-        });
-    }
-
     if !folder.is_dir() {
         return Ok(ListLogFilesResult {
             files: None,
             error: Some("folder does not exist".into()),
+        });
+    }
+
+    if !log_manager.is_dir_approved(folder).await {
+        return Ok(ListLogFilesResult {
+            files: None,
+            error: Some("folder not approved: please use Browse to select".into()),
         });
     }
 
@@ -236,6 +239,46 @@ pub async fn read_log_file(
         content: Some(content),
         error: None,
     })
+}
+
+/// Show a native confirm dialog asking the user to approve `path` for
+/// logging / log-file reading. The native dialog is what gives this
+/// command teeth — a compromised renderer can call this command, but it
+/// cannot fake a user click on the OS-level button.
+///
+/// Returns `true` if the user approved (or if the path was already
+/// approved); `false` if they declined or cancelled.
+#[tauri::command]
+pub async fn confirm_log_dir(
+    app: AppHandle,
+    log_manager: State<'_, LogManager>,
+    path: String,
+) -> Result<bool, String> {
+    let folder = Path::new(&path);
+
+    if log_manager.is_dir_approved(folder).await {
+        return Ok(true);
+    }
+
+    if !folder.is_dir() {
+        return Err(format!("folder does not exist: {path}"));
+    }
+
+    let body = format!(
+        "Allow HoTTY to read and write log files in this folder?\n\n{path}"
+    );
+    let approved = app
+        .dialog()
+        .message(body)
+        .title("Approve log folder")
+        .kind(MessageDialogKind::Info)
+        .buttons(MessageDialogButtons::OkCancel)
+        .blocking_show();
+
+    if approved {
+        log_manager.approve_dir(folder).await;
+    }
+    Ok(approved)
 }
 
 // ---------------------------------------------------------------------------

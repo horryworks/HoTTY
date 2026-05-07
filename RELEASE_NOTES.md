@@ -1,5 +1,21 @@
 # Release Notes
 
+## v2.0.0-beta13
+
+A second hardening pass before the stable release. Terminal font and scrollback settings now apply to already-open sessions, AI Chat tabs follow their linked terminal through close events, and three security mitigations land around frontend logging, log-folder access, and external URL opening.
+
+### Improvements
+
+- **Terminal font and scrollback updates apply to open sessions.** Changing **Settings &rarr; Appearance &rarr; Font Size**, **Font Family**, or **Settings &rarr; General &rarr; Scrollback Buffer** now retunes already-running terminals immediately. Previously the new values only took effect for new connections.
+- **AI Chat tabs follow session lifecycle.** When a terminal session closes (auto-close on disconnect or manual close), tabs in any AI Chat pane that were linked to that session are closed too. The last tab in a pane is unlinked instead of closed so the pane keeps a usable tab.
+- **Modal close-X buttons unified.** The header close-X font size in **Ask AI** and **System Prompt** dialogs now matches the rest of the modal family.
+
+### Security
+
+- **Log folders require explicit approval.** Logging only writes to — and Log Viewer only reads from — folders that the user has approved. Picking a folder via the **Browse...** button approves it automatically; a typed path triggers a native OS confirm dialog the first time it is used. Approvals are persisted to `%APPDATA%\com.hotty.terminal\approved_log_dirs.json` (per-user, renderer cannot write to it), so the dialog only appears once per folder ever — not on every app launch. A compromised renderer cannot synthesise that approval, so it cannot point logging or the Log Viewer at attacker-supplied paths just by calling Tauri commands.
+- **External URLs outside a curated allowlist now require user confirmation.** Links to the HoTTY repository, gcloud install docs, the GPL license, and the Google OAuth consent flow continue to open immediately. Any other URL — including links the user clicks in terminal output or AI chat — opens a native confirm dialog showing the full URL before it is handed to the system browser. The Tauri capability scope is correspondingly narrowed so only the curated hosts are reachable through the plugin.
+- **Frontend log forwarding redacts credential-like fields.** Calls to `logDebug` (the channel that forwards messages from the renderer to the persisted debug log under `%APPDATA%/com.hotty.terminal/logs/`) now strip values for fields named `password`, `apikey` / `api_key` / `api-key`, `secret`, `token`, `clientSecret`, `privateKey`, `refreshToken`, `accessToken`, plus `Bearer` HTTP headers. Messages are also capped at 4 KB on both ends. This is defence-in-depth: it does not fix a known leak in current code, it limits the blast radius of any future regression that accidentally logs a credential.
+
 ## v2.0.0-beta12
 
 A hardening pass before the stable release. Modernised SSH algorithm defaults, a stream-idle watchdog for AI Chat, fixes for several quiet data-integrity bugs (host tree, AI chat history, persona settings), and a sweep of UX polish around modals, focus, and validation.

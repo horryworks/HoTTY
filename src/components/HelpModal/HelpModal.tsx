@@ -193,6 +193,9 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                 <strong>Session Logging:</strong> Enable automatic logging in <strong>Settings &rarr; General</strong>. All terminal output is saved as timestamped <code>.log</code> files to the folder you specify.
               </p>
               <p className="help-text">
+                <strong>Folder approval:</strong> The first time HoTTY uses a logging folder — whether you start a session, toggle logging on, or open the Log Viewer — a native confirm dialog asks you to approve that folder. Picking a folder via the <strong>Browse...</strong> button approves it automatically. Approvals persist across app launches (saved under <code>%APPDATA%\com.hotty.terminal\approved_log_dirs.json</code>), so you only see the dialog once per folder. The mechanism exists so a typed or imported path can&apos;t silently grant log access.
+              </p>
+              <p className="help-text">
                 <strong>Log Viewer:</strong> Click the <strong>Log Viewer</strong> button in the tab bar to open a dedicated log-browsing pane. It lists all saved log files and lets you open and search them without leaving HoTTY.
               </p>
               <p className="help-text">

@@ -69,7 +69,17 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
     setLoading(true);
     setError(null);
     try {
-      const result = await tauriService.listLogFiles(path);
+      let result = await tauriService.listLogFiles(path);
+      // If the backend rejected because the folder isn't user-approved yet,
+      // ask via a native confirm dialog and retry once. The dialog is what
+      // gates this — a compromised renderer can call `confirmLogDir` but
+      // cannot fake the OS-level click.
+      if (result.error?.includes('not approved')) {
+        const ok = await tauriService.confirmLogDir(path);
+        if (ok) {
+          result = await tauriService.listLogFiles(path);
+        }
+      }
       if (result.error) {
         setError(result.error);
         setFiles([]);

@@ -43,7 +43,7 @@
     background: none;
     border: none;
     color: var(--text-secondary);
-    font-size: calc(var(--font-size-base) + 3px);
+    font-size: calc(var(--font-size-base) + 4px);
     cursor: pointer;
     line-height: 1;
 }

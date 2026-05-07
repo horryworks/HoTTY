@@ -108,19 +108,47 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
   const autoCloseTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Sync logging settings changes to the backend for active sessions.
+  //
+  // Only fire when the user actually toggles or edits the setting — not on
+  // initial mount (where the values come from persisted settings) and not
+  // on StrictMode's double effect-invocation. Without this guard the
+  // confirm-log-dir dialog would pop up on every app launch.
   const loggingEnabled = settings.loggingEnabled;
   const loggingPath = settings.loggingPath;
-  const mountedRef = useRef(false);
+  const prevLoggingRef = useRef<{ enabled: boolean; path: string } | null>(null);
   useEffect(() => {
-    if (!mountedRef.current) {
-      mountedRef.current = true;
+    const current = { enabled: loggingEnabled, path: loggingPath };
+    const prev = prevLoggingRef.current;
+    prevLoggingRef.current = current;
+    if (
+      prev === null ||
+      (prev.enabled === current.enabled && prev.path === current.path)
+    ) {
       return;
     }
-    tauriService.updateSessionLogging(loggingEnabled, loggingPath).catch((err) => {
-      // Surface so users notice when their logging-toggle silently fails to
-      // take effect (e.g. log dir not writable).
-      logError('Logging', 'failed to update session logging', err);
-    });
+    (async () => {
+      // If logging is being enabled or pointed at a new path, ensure the
+      // path is user-approved via a native dialog before propagating the
+      // change. Approval is required because `start_logging` rejects
+      // unapproved paths on the backend. Approvals are persisted, so this
+      // dialog only appears the first time a folder is used.
+      let approved = loggingEnabled && !!loggingPath;
+      if (approved) {
+        try {
+          approved = await tauriService.confirmLogDir(loggingPath);
+        } catch {
+          approved = false;
+        }
+      }
+      try {
+        await tauriService.updateSessionLogging(
+          approved,
+          approved ? loggingPath : '',
+        );
+      } catch (err) {
+        logError('Logging', 'failed to update session logging', err);
+      }
+    })();
   }, [loggingEnabled, loggingPath]);
 
   // Apply Line Wrap setting to all terminals when it changes
@@ -329,17 +357,33 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
         return next;
       });
 
+      // Pre-flight: if logging is enabled, prompt the user via a native
+      // dialog to approve the log folder. The backend rejects logging to
+      // unapproved folders, so this is the only way a typed (non-Browse)
+      // path can take effect — and the dialog is what gives a compromised
+      // renderer no way to silently grow the approval set.
+      const ensureLoggingApproved = async (): Promise<boolean> => {
+        if (!s.loggingEnabled || !s.loggingPath) return false;
+        try {
+          return await tauriService.confirmLogDir(s.loggingPath);
+        } catch {
+          return false;
+        }
+      };
+
       // Fire-and-forget: caller gets the id immediately so the tab can render
       // in the connecting state. Success transitions to 'connected' via the
       // onSessionStatus listener; failure is handled here and (redundantly via
       // onSessionError) by surfacing a toast and scheduling the auto-close.
-      tauriService
-        .connectSession(
-          id,
-          req.protocol,
-          req.config,
-          s.loggingEnabled,
-          s.loggingPath,
+      ensureLoggingApproved()
+        .then((approved) =>
+          tauriService.connectSession(
+            id,
+            req.protocol,
+            req.config,
+            approved,
+            approved ? s.loggingPath : '',
+          ),
         )
         .catch((e) => {
           const errStr = String(e);

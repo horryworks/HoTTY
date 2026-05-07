@@ -15,7 +15,6 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
   getCurrentWebviewWindow: () => ({ setTitle: vi.fn() }),
 }));
-vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
 
 import { tauriService, isEncrypted } from './tauriService';
 
@@ -163,6 +162,15 @@ describe('tauriService logging commands', () => {
     });
   });
 
+  it('logDebug redacts credential-like fields before forwarding', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await tauriService.logDebug('error', 'auth', 'login failed: password=hunter2 token=abc');
+    const callArgs = mockInvoke.mock.calls[0][1] as { message: string };
+    expect(callArgs.message).not.toContain('hunter2');
+    expect(callArgs.message).not.toContain('abc');
+    expect(callArgs.message).toContain('<redacted>');
+  });
+
 });
 
 describe('tauriService file dialog commands', () => {
@@ -194,6 +202,27 @@ describe('tauriService file dialog commands', () => {
     mockInvoke.mockResolvedValue(null);
     const result = await tauriService.selectFolder();
     expect(result).toBeNull();
+  });
+
+  it('confirmLogDir invokes confirm_log_dir with the path', async () => {
+    mockInvoke.mockResolvedValue(true);
+    const result = await tauriService.confirmLogDir('/tmp/logs');
+    expect(mockInvoke).toHaveBeenCalledWith('confirm_log_dir', { path: '/tmp/logs' });
+    expect(result).toBe(true);
+  });
+
+  it('confirmLogDir returns false when the user declines', async () => {
+    mockInvoke.mockResolvedValue(false);
+    const result = await tauriService.confirmLogDir('/tmp/logs');
+    expect(result).toBe(false);
+  });
+
+  it('openExternal forwards the URL to open_external', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await tauriService.openExternal('https://github.com/horryworks/HoTTY');
+    expect(mockInvoke).toHaveBeenCalledWith('open_external', {
+      url: 'https://github.com/horryworks/HoTTY',
+    });
   });
 });
 

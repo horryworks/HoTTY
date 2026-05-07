@@ -45,8 +45,19 @@ pub struct LogManager {
 struct LogManagerInner {
     /// sessionId → active log state
     logs: HashMap<String, SessionLog>,
-    /// Set of directories the user has authorized for logging.
+    /// Set of directories the user has explicitly attested for logging — only
+    /// populated via a native dialog round-trip (`select_folder`'s file picker
+    /// or `confirm_log_dir`'s yes/no prompt). The renderer cannot synthesise
+    /// this attestation, so a compromised renderer cannot grow this set just
+    /// by calling Tauri commands.
     allowed_dirs: Vec<PathBuf>,
+    /// File where `allowed_dirs` is persisted across app sessions. Set by
+    /// `set_persist_path` during app startup; written each time
+    /// `approve_dir` adds a new directory; loaded by
+    /// `load_persisted_approvals` on startup. Lives under `app_data_dir`
+    /// which the renderer cannot write to, so persistence does not weaken
+    /// the dialog-attestation guarantee.
+    persist_path: Option<PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
@@ -254,20 +265,105 @@ impl LogManager {
             inner: Arc::new(Mutex::new(LogManagerInner {
                 logs: HashMap::new(),
                 allowed_dirs: Vec::new(),
+                persist_path: None,
             })),
         }
     }
 
-    /// Register a directory as allowed for logging / reading.
-    pub async fn register_allowed_dir(&self, dir: &Path) {
+    /// Set the file path used to persist approved log directories.
+    /// Called once during app startup with `<app_data_dir>/approved_log_dirs.json`.
+    pub async fn set_persist_path(&self, path: PathBuf) {
         let mut inner = self.inner.lock().await;
-        let canonical = dir.to_path_buf();
-        if !inner.allowed_dirs.contains(&canonical) {
-            inner.allowed_dirs.push(canonical);
+        inner.persist_path = Some(path);
+    }
+
+    /// Load previously-persisted approvals from disk into memory.
+    /// Errors are logged and swallowed — a missing or corrupt file simply
+    /// means the user will be re-prompted next time logging is used.
+    pub async fn load_persisted_approvals(&self) {
+        let path_opt = {
+            let inner = self.inner.lock().await;
+            inner.persist_path.clone()
+        };
+        let Some(path) = path_opt else { return };
+        match std::fs::read_to_string(&path) {
+            Ok(content) => match serde_json::from_str::<Vec<String>>(&content) {
+                Ok(dirs) => {
+                    let mut inner = self.inner.lock().await;
+                    for d in dirs {
+                        let pb = PathBuf::from(d);
+                        if !inner.allowed_dirs.contains(&pb) {
+                            inner.allowed_dirs.push(pb);
+                        }
+                    }
+                    log::info!(
+                        "loaded {} persisted log-dir approvals",
+                        inner.allowed_dirs.len()
+                    );
+                }
+                Err(e) => log::warn!("approved_log_dirs.json is corrupt: {e}"),
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                // First run — no persisted file yet.
+            }
+            Err(e) => log::warn!("failed to load approved log dirs: {e}"),
         }
     }
 
-    /// Check if a path is within an allowed directory.
+    /// Approve a directory for logging and log-file reading.
+    ///
+    /// Must only be called from code paths that have user attestation outside
+    /// the renderer's control — currently `select_folder` (file picker dialog)
+    /// and `confirm_log_dir` (native yes/no dialog). A compromised renderer
+    /// can call Tauri commands but cannot synthesise the user click these
+    /// commands require, so it cannot grow this set on its own.
+    ///
+    /// Approvals are persisted to `<app_data_dir>/approved_log_dirs.json` so
+    /// the user only sees the confirm dialog once per folder ever (rather
+    /// than once per app launch).
+    pub async fn approve_dir(&self, dir: &Path) {
+        let mut inner = self.inner.lock().await;
+        let canonical = canonicalize_for_compare(dir);
+        if !inner.allowed_dirs.contains(&canonical) {
+            inner.allowed_dirs.push(canonical);
+            Self::persist_locked(&inner);
+        }
+    }
+
+    /// Write `allowed_dirs` to disk. Caller must already hold the inner lock.
+    fn persist_locked(inner: &LogManagerInner) {
+        let Some(path) = &inner.persist_path else { return };
+        let dirs: Vec<String> = inner
+            .allowed_dirs
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
+        let content = match serde_json::to_string_pretty(&dirs) {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!("failed to serialize approved log dirs: {e}");
+                return;
+            }
+        };
+        if let Some(parent) = path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                log::warn!("failed to create app data dir for approvals: {e}");
+                return;
+            }
+        }
+        if let Err(e) = std::fs::write(path, content) {
+            log::warn!("failed to save approved log dirs: {e}");
+        }
+    }
+
+    /// Check if a directory has been user-approved.
+    pub async fn is_dir_approved(&self, dir: &Path) -> bool {
+        let inner = self.inner.lock().await;
+        let canonical = canonicalize_for_compare(dir);
+        inner.allowed_dirs.iter().any(|d| d == &canonical)
+    }
+
+    /// Check if a path is within an approved directory.
     pub async fn is_path_allowed(&self, path: &Path) -> bool {
         let inner = self.inner.lock().await;
         is_path_in_allowed_dirs(path, &inner.allowed_dirs)
@@ -294,10 +390,16 @@ impl LogManager {
         fs::create_dir_all(log_dir)
             .map_err(|e| format!("failed to create log dir: {e}"))?;
 
-        // Register the directory as allowed
-        let dir_buf = log_dir.to_path_buf();
+        // Require the directory to have been user-approved via a native dialog
+        // (Browse-to-pick or yes/no confirm). This means a compromised
+        // renderer cannot start logging to attacker-supplied paths just by
+        // forging `connect_session` / `update_session_logging` arguments.
+        let dir_buf = canonicalize_for_compare(log_dir);
         if !inner.allowed_dirs.contains(&dir_buf) {
-            inner.allowed_dirs.push(dir_buf);
+            return Err(format!(
+                "log directory not approved: {}",
+                log_dir.display()
+            ));
         }
 
         let txt_path = build_log_path(log_dir, protocol, host);
@@ -394,10 +496,33 @@ impl Clone for LogManager {
     }
 }
 
+/// Canonicalize a path for use in allowed-directory comparisons.
+///
+/// Falls back to the original path if canonicalization fails (e.g., the
+/// directory was deleted, drive unmounted, ACL denies access). Logs a warning
+/// in that case so disappearing dirs don't silently degrade to permissive
+/// behavior — security is still enforced via byte-exact `starts_with` against
+/// whatever was stored at registration time.
+fn canonicalize_for_compare(p: &Path) -> PathBuf {
+    match p.canonicalize() {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("canonicalize failed for {}: {e}", p.display());
+            p.to_path_buf()
+        }
+    }
+}
+
 /// Check if a given path is within one of the allowed directories.
+///
+/// `allowed` entries are stored in canonical form (see `register_allowed_dir`
+/// and `start_logging`). The input `path` is canonicalized here so callers
+/// can pass either raw or already-canonical paths. `Path::starts_with` is
+/// component-wise, so a sibling like `<dir>_evil` cannot bypass `<dir>`.
 fn is_path_in_allowed_dirs(path: &Path, allowed: &[PathBuf]) -> bool {
+    let canon_path = canonicalize_for_compare(path);
     for dir in allowed {
-        if path.starts_with(dir) {
+        if canon_path.starts_with(dir) {
             return true;
         }
     }
@@ -497,7 +622,9 @@ mod tests {
     }
 
     #[test]
-    fn is_path_in_allowed_dirs_works() {
+    fn is_path_in_allowed_dirs_with_unresolvable_paths_falls_back() {
+        // When neither side can be canonicalized (paths don't exist), the
+        // helper falls back to raw `starts_with` comparison.
         let allowed = vec![PathBuf::from("/logs"), PathBuf::from("/data/logs")];
         assert!(is_path_in_allowed_dirs(
             Path::new("/logs/session.txt"),
@@ -513,12 +640,71 @@ mod tests {
         ));
     }
 
+    /// Regression test for the Windows `\\?\` extended-length prefix bug:
+    /// `read_log_file` canonicalizes the requested file before the security
+    /// check, so the path it tests against allowed_dirs has the `\\?\`
+    /// prefix on Windows. Allowed_dirs must be stored canonicalized so that
+    /// `Path::starts_with` matches.
+    #[tokio::test]
+    async fn registered_dir_matches_canonical_file_path() {
+        let dir = std::env::temp_dir().join("hotty_test_canonical_match");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let mgr = LogManager::new();
+        // Register raw (as the user would supply via settings).
+        mgr.approve_dir(&dir).await;
+
+        // Create a file inside and canonicalize its path — mimics what
+        // `read_log_file` passes to `is_path_allowed`.
+        let file = dir.join("session.txt");
+        File::create(&file).unwrap();
+        let canonical_file = file.canonicalize().unwrap();
+
+        assert!(
+            mgr.is_path_allowed(&canonical_file).await,
+            "canonical file path inside registered dir must be allowed (got {})",
+            canonical_file.display()
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// `Path::starts_with` is component-wise, so a sibling directory whose
+    /// name shares a prefix with the registered dir must NOT be allowed.
+    #[tokio::test]
+    async fn registered_dir_does_not_allow_sibling_with_shared_prefix() {
+        let parent = std::env::temp_dir().join("hotty_test_prefix_boundary");
+        let _ = fs::remove_dir_all(&parent);
+        let allowed_dir = parent.join("logs");
+        let evil_dir = parent.join("logs_evil");
+        fs::create_dir_all(&allowed_dir).unwrap();
+        fs::create_dir_all(&evil_dir).unwrap();
+
+        let mgr = LogManager::new();
+        mgr.approve_dir(&allowed_dir).await;
+
+        let evil_file = evil_dir.join("steal.txt");
+        File::create(&evil_file).unwrap();
+        let canonical_evil = evil_file.canonicalize().unwrap();
+
+        assert!(
+            !mgr.is_path_allowed(&canonical_evil).await,
+            "sibling dir with shared name prefix must NOT be allowed (got {})",
+            canonical_evil.display()
+        );
+
+        let _ = fs::remove_dir_all(&parent);
+    }
+
     #[tokio::test]
     async fn log_manager_start_write_stop() {
         let dir = std::env::temp_dir().join("hotty_test_log_manager");
         let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
 
         let mgr = LogManager::new();
+        mgr.approve_dir(&dir).await;
         mgr.start_logging("s1", &dir, "ssh", "test-host")
             .await
             .unwrap();
@@ -559,8 +745,10 @@ mod tests {
     async fn log_manager_double_start_is_idempotent() {
         let dir = std::env::temp_dir().join("hotty_test_double_start");
         let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
 
         let mgr = LogManager::new();
+        mgr.approve_dir(&dir).await;
         mgr.start_logging("s1", &dir, "ssh", "host")
             .await
             .unwrap();
@@ -574,10 +762,73 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn approvals_persist_across_log_manager_instances() {
+        let tmp = std::env::temp_dir().join("hotty_test_persist_approvals");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        let dir = tmp.join("logs");
+        fs::create_dir_all(&dir).unwrap();
+        let persist_path = tmp.join("approved.json");
+
+        let mgr1 = LogManager::new();
+        mgr1.set_persist_path(persist_path.clone()).await;
+        mgr1.approve_dir(&dir).await;
+        assert!(mgr1.is_dir_approved(&dir).await);
+        assert!(persist_path.exists(), "approve_dir must write the file");
+
+        // New instance — must pick up the persisted approval after load.
+        let mgr2 = LogManager::new();
+        mgr2.set_persist_path(persist_path.clone()).await;
+        assert!(
+            !mgr2.is_dir_approved(&dir).await,
+            "fresh instance should be empty before load"
+        );
+        mgr2.load_persisted_approvals().await;
+        assert!(
+            mgr2.is_dir_approved(&dir).await,
+            "load must restore approvals"
+        );
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[tokio::test]
+    async fn approve_dir_is_a_noop_without_persist_path() {
+        let dir = std::env::temp_dir().join("hotty_test_no_persist");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        // No set_persist_path call — approve must still work in-memory.
+        let mgr = LogManager::new();
+        mgr.approve_dir(&dir).await;
+        assert!(mgr.is_dir_approved(&dir).await);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn start_logging_rejects_unapproved_dir() {
+        let dir = std::env::temp_dir().join("hotty_test_unapproved_dir");
+        let _ = fs::remove_dir_all(&dir);
+
+        let mgr = LogManager::new();
+        // No approve_dir call — start_logging must refuse.
+        let result = mgr.start_logging("s1", &dir, "ssh", "host").await;
+        assert!(result.is_err(), "expected error for unapproved dir");
+        let msg = result.unwrap_err();
+        assert!(
+            msg.contains("not approved"),
+            "expected 'not approved' in error, got: {msg}"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
     async fn log_manager_allowed_dirs() {
         let mgr = LogManager::new();
         let dir = Path::new("/test/logs");
-        mgr.register_allowed_dir(dir).await;
+        mgr.approve_dir(dir).await;
 
         assert!(mgr.is_path_allowed(Path::new("/test/logs/file.txt")).await);
         assert!(!mgr.is_path_allowed(Path::new("/other/file.txt")).await);

@@ -22,8 +22,10 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [
-        { "url": "https://*" },
-        { "url": "http://*" },
+        { "url": "https://github.com/*" },
+        { "url": "https://cloud.google.com/*" },
+        { "url": "https://www.gnu.org/*" },
+        { "url": "https://accounts.google.com/*" },
         { "url": "mailto:*" }
       ]
     },

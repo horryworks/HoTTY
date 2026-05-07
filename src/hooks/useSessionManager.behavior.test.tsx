@@ -40,6 +40,7 @@ const sendInputMock = vi.fn().mockResolvedValue(undefined);
 const writeClipboardMock = vi.fn().mockResolvedValue(undefined);
 const updateSessionLoggingMock = vi.fn().mockResolvedValue(undefined);
 const logDebugMock = vi.fn().mockResolvedValue(undefined);
+const confirmLogDirMock = vi.fn().mockResolvedValue(true);
 
 vi.mock('../services/tauriService', () => ({
   tauriService: {
@@ -49,6 +50,7 @@ vi.mock('../services/tauriService', () => ({
     writeClipboard: (...args: unknown[]) => writeClipboardMock(...args),
     updateSessionLogging: (...args: unknown[]) => updateSessionLoggingMock(...args),
     logDebug: (...args: unknown[]) => logDebugMock(...args),
+    confirmLogDir: (...args: unknown[]) => confirmLogDirMock(...args),
     onSessionData: vi.fn().mockImplementation((cb: typeof onSessionDataCb.current) => {
       onSessionDataCb.current = cb;
       return Promise.resolve(() => { onSessionDataCb.current = null; });

@@ -18,7 +18,7 @@ use commands::iap_tunnel::{
     gce_iap_check_auth, gce_iap_check_gcloud, gce_iap_list_instances, gce_iap_list_projects,
     gce_iap_list_zones,
 };
-use commands::log_viewer::{list_log_files, read_log_file};
+use commands::log_viewer::{confirm_log_dir, list_log_files, read_log_file};
 use commands::ping_monitor::{
     ping_monitor_start, ping_monitor_stop, ping_monitor_update_interval,
     ping_monitor_update_targets,
@@ -30,7 +30,7 @@ use commands::session::{
 use commands::ssh_algorithms::{get_ssh_algorithms, save_ssh_algorithms};
 use commands::system::{
     detect_git_bash, focus_window, list_serial_ports, list_system_fonts, list_wsl_distributions,
-    open_debug_log_folder, show_context_menu,
+    open_debug_log_folder, open_external, show_context_menu,
 };
 use commands::text_editor::{
     text_editor_approve_dropped_file, text_editor_open_file, text_editor_read_file,
@@ -79,6 +79,20 @@ pub fn run() {
                 .app_data_dir()
                 .expect("Failed to resolve app data directory");
 
+            // Bootstrap LogManager's approved-log-dirs persistence. The file
+            // is per-user under app_data_dir, so the renderer cannot write
+            // to it; this lets users approve a logging folder once and not
+            // be re-prompted on every app launch.
+            {
+                let log_mgr_state: tauri::State<LogManager> = app.state();
+                let log_mgr = (*log_mgr_state).clone();
+                let persist_path = app_data_dir.join("approved_log_dirs.json");
+                tauri::async_runtime::block_on(async move {
+                    log_mgr.set_persist_path(persist_path).await;
+                    log_mgr.load_persisted_approvals().await;
+                });
+            }
+
             let mut registry = AIProviderRegistry::new();
             registry.register(Box::new(OpenAIProvider::new(app_data_dir.clone())));
             registry.register(Box::new(AnthropicProvider::new(app_data_dir.clone())));
@@ -107,6 +121,7 @@ pub fn run() {
             focus_window,
             show_context_menu,
             open_debug_log_folder,
+            open_external,
             // DPAPI encryption
             dpapi_encrypt,
             dpapi_decrypt,
@@ -122,6 +137,7 @@ pub fn run() {
             // Log viewer
             list_log_files,
             read_log_file,
+            confirm_log_dir,
             // Host tree import/export
             export_htree,
             select_import_file,

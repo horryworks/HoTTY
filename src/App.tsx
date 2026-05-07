@@ -74,6 +74,25 @@ function App() {
     }
   }, []);
 
+  // Close (or unlink, if last) any AI Chat tabs linked to this session across
+  // all AI panes. Used by both the auto-close (handleSessionRemoved) and the
+  // manual-close (handleCloseTab) paths so the two stay in sync.
+  const removeAiChatTabsForSession = useCallback((sessionId: string) => {
+    const states = aiChatStatesRef.current;
+    if (!states) return;
+    for (const [aiPaneId, st] of states.entries()) {
+      for (const tab of st.tabs) {
+        if (tab.linkedSessionId !== sessionId) continue;
+        if (st.tabs.length <= 1) {
+          // Last tab in the pane — unlink only so the pane keeps a usable tab.
+          setTabLinkRef.current?.(aiPaneId, tab.id, undefined);
+        } else {
+          closeTabRef.current?.(aiPaneId, tab.id);
+        }
+      }
+    }
+  }, []);
+
   const handleSessionRemoved = useCallback((id: string) => {
     usePaneStore.getState().removeSession(id);
     // Always evict this session's watch buffer — it can persist past the
@@ -84,18 +103,8 @@ function App() {
     if (watchingSessionIdRef.current === id) {
       setWatchingSessionId(null);
     }
-    // Clear any AI chat tabs that were linked to this session (across all panes).
-    const states = aiChatStatesRef.current;
-    if (states) {
-      for (const [aiPaneId, st] of states.entries()) {
-        for (const tab of st.tabs) {
-          if (tab.linkedSessionId === id) {
-            setTabLinkRef.current?.(aiPaneId, tab.id, undefined);
-          }
-        }
-      }
-    }
-  }, []);
+    removeAiChatTabsForSession(id);
+  }, [removeAiChatTabsForSession]);
   const { sessions, openSession, closeSession } = useSessionManager({
     onPasteRequest: handlePasteRequest,
     onSessionRemoved: handleSessionRemoved,
@@ -207,6 +216,7 @@ function App() {
   const updateAiChatStateRef = useRef<(aiSessionId: string, partial: Partial<AiChatState>) => void>(undefined);
   const addTabRef = useRef<(aiSessionId: string, initialLinkSessionId?: string) => string>(undefined);
   const setActiveTabRef = useRef<(aiSessionId: string, tabId: string) => void>(undefined);
+  const closeTabRef = useRef<(aiSessionId: string, tabId: string) => void>(undefined);
 
   // "AI Monitor" toggle for the singleton AI Chat pane. Smart tab routing:
   //   1. Some tab is already linked to this session
@@ -344,6 +354,7 @@ function App() {
     setTabLinkRef.current = setTabLink;
     addTabRef.current = addTab;
     setActiveTabRef.current = setActiveTab;
+    closeTabRef.current = closeTab;
     aiChatStatesRef.current = aiChatStates;
   });
 
@@ -523,6 +534,7 @@ function App() {
         setWatchingSessionId(null);
       }
       await closeSession(id);
+      removeAiChatTabsForSession(id);
       removeSessionFromStore(id);
     }
   };

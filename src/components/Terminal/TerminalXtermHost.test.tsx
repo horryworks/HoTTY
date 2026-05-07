@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 
 const resize = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../services/tauriService', () => ({
@@ -27,7 +27,14 @@ function makeDisposable() {
 
 function makeTerm() {
   return {
-    options: { theme: {} as Record<string, string> },
+    options: {
+      theme: {} as Record<string, string>,
+    } as {
+      theme: Record<string, string>;
+      fontSize?: number;
+      fontFamily?: string;
+      scrollback?: number;
+    },
     element: undefined as HTMLElement | undefined,
     cols: 80,
     rows: 24,
@@ -198,6 +205,45 @@ describe('TerminalXtermHost', () => {
     const event = new Event('paste', { cancelable: true, bubbles: true });
     host.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('applies fontSize/fontFamily/scrollback from settings to xterm options on mount', () => {
+    useSettingsStore.getState().update('fontSize', 18);
+    useSettingsStore.getState().update('fontFamily', 'Cascadia Code');
+    useSettingsStore.getState().update('scrollback', 5000);
+    const { session, term } = makeSession();
+    render(<TerminalXtermHost session={session} active={true} />);
+    expect(term.options.fontSize).toBe(18);
+    expect(term.options.fontFamily).toBe('Cascadia Code');
+    expect(term.options.scrollback).toBe(5000);
+  });
+
+  it('reactively updates fontSize on existing terminal when setting changes', () => {
+    const { session, term } = makeSession();
+    render(<TerminalXtermHost session={session} active={true} />);
+    expect(term.options.fontSize).toBe(14);
+    act(() => {
+      useSettingsStore.getState().update('fontSize', 22);
+    });
+    expect(term.options.fontSize).toBe(22);
+  });
+
+  it('reactively updates fontFamily on existing terminal when setting changes', () => {
+    const { session, term } = makeSession();
+    render(<TerminalXtermHost session={session} active={true} />);
+    act(() => {
+      useSettingsStore.getState().update('fontFamily', 'Hack, monospace');
+    });
+    expect(term.options.fontFamily).toBe('Hack, monospace');
+  });
+
+  it('reactively updates scrollback on existing terminal when setting changes', () => {
+    const { session, term } = makeSession();
+    render(<TerminalXtermHost session={session} active={true} />);
+    act(() => {
+      useSettingsStore.getState().update('scrollback', 50);
+    });
+    expect(term.options.scrollback).toBe(50);
   });
 
   it('removes the paste suppression listener on unmount', () => {

@@ -1,5 +1,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_opener::OpenerExt;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -329,6 +331,79 @@ pub async fn open_debug_log_folder(app: AppHandle) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
+// open_external  — open an http(s)/mailto URL in the user's default app
+// ---------------------------------------------------------------------------
+
+/// URLs that match one of these prefixes open without a confirm dialog —
+/// these are the destinations the app itself wires up (About tab, gcloud
+/// install docs, GitHub repo + release pages, GPL license).
+const CURATED_URL_PREFIXES: &[&str] = &[
+    "https://github.com/",
+    "https://cloud.google.com/",
+    "https://www.gnu.org/",
+    "https://accounts.google.com/",
+];
+
+/// Returns `true` if `url` starts with one of the curated prefixes.
+/// Matching is case-sensitive on the path (URL paths are case-sensitive)
+/// but case-insensitive on the scheme + host portion.
+fn is_curated_url(url: &str) -> bool {
+    // Find the boundary between authority and path so we can lowercase only
+    // the scheme://host portion (RFC 3986: scheme + host are case-insensitive,
+    // path is case-sensitive).
+    let split_at = url
+        .find("://")
+        .and_then(|i| url[i + 3..].find('/').map(|p| i + 3 + p))
+        .unwrap_or(url.len());
+    let (authority, rest) = url.split_at(split_at);
+    let normalized = format!("{}{}", authority.to_ascii_lowercase(), rest);
+    CURATED_URL_PREFIXES
+        .iter()
+        .any(|prefix| normalized.starts_with(prefix))
+}
+
+/// Returns `true` if the URL has a scheme we are willing to hand to the
+/// system opener. Anything else (`file:`, `javascript:`, custom schemes) is
+/// rejected outright, with no fallback dialog.
+fn is_allowed_scheme(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    lower.starts_with("https://")
+        || lower.starts_with("http://")
+        || lower.starts_with("mailto:")
+}
+
+/// Open an external URL in the user's default browser / mail client.
+///
+/// URLs matching a curated prefix open immediately. Anything else triggers
+/// a native confirmation dialog showing the full URL — a compromised
+/// renderer can call this command, but it cannot fake the OS-level click,
+/// so it cannot silently send the user to attacker-chosen destinations.
+#[tauri::command]
+pub async fn open_external(app: AppHandle, url: String) -> Result<(), String> {
+    if !is_allowed_scheme(&url) {
+        return Err(format!("scheme not allowed: {url}"));
+    }
+
+    if !is_curated_url(&url) {
+        let body = format!("Open this URL in your default browser?\n\n{url}");
+        let approved = app
+            .dialog()
+            .message(body)
+            .title("Open external URL")
+            .kind(MessageDialogKind::Info)
+            .buttons(MessageDialogButtons::OkCancel)
+            .blocking_show();
+        if !approved {
+            return Ok(());
+        }
+    }
+
+    app.opener()
+        .open_url(&url, None::<&str>)
+        .map_err(|e| format!("failed to open url: {e}"))
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -345,6 +420,48 @@ mod tests {
         let json = serde_json::to_value(&info).unwrap();
         assert_eq!(json["path"], "COM3");
         assert_eq!(json["displayName"], "COM3");
+    }
+
+    #[test]
+    fn curated_urls_match() {
+        assert!(is_curated_url("https://github.com/horryworks/HoTTY"));
+        assert!(is_curated_url(
+            "https://github.com/horryworks/HoTTY/releases/download/v2.0.0/HoTTY.exe"
+        ));
+        assert!(is_curated_url("https://cloud.google.com/sdk/docs/install"));
+        assert!(is_curated_url("https://www.gnu.org/licenses/gpl-3.0.html"));
+        assert!(is_curated_url("https://accounts.google.com/o/oauth2/v2/auth"));
+    }
+
+    #[test]
+    fn curated_urls_are_case_insensitive_on_host() {
+        assert!(is_curated_url("https://GITHUB.com/horryworks/HoTTY"));
+        assert!(is_curated_url("HTTPS://github.com/horryworks/HoTTY"));
+    }
+
+    #[test]
+    fn non_curated_urls_do_not_match() {
+        assert!(!is_curated_url("https://example.com/"));
+        assert!(!is_curated_url("https://github.com.evil.example/"));
+        assert!(!is_curated_url("https://evil.com/?u=https://github.com/"));
+        assert!(!is_curated_url("http://github.com/"));
+        assert!(!is_curated_url("https://raw.githubusercontent.com/"));
+    }
+
+    #[test]
+    fn allowed_schemes_match() {
+        assert!(is_allowed_scheme("https://example.com"));
+        assert!(is_allowed_scheme("HTTP://example.com"));
+        assert!(is_allowed_scheme("mailto:user@example.com"));
+    }
+
+    #[test]
+    fn disallowed_schemes_reject() {
+        assert!(!is_allowed_scheme("file:///etc/passwd"));
+        assert!(!is_allowed_scheme("javascript:alert(1)"));
+        assert!(!is_allowed_scheme("ftp://example.com"));
+        assert!(!is_allowed_scheme("data:text/html,<script>"));
+        assert!(!is_allowed_scheme(""));
     }
 
     #[test]

@@ -7,7 +7,7 @@ import {
 } from '@tauri-apps/plugin-clipboard-manager';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { ask as dialogAsk } from '@tauri-apps/plugin-dialog';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { redactSensitive } from '../utils/redaction';
 import type {
   ProtocolId,
   SshConnectionConfig,
@@ -235,7 +235,7 @@ export const tauriService = {
   // -----------------------------------------------------------------------
 
   async logDebug(level: string, category: string, message: string): Promise<void> {
-    await invoke('log_debug', { level, category, message });
+    await invoke('log_debug', { level, category, message: redactSensitive(message) });
   },
 
   // -----------------------------------------------------------------------
@@ -248,6 +248,10 @@ export const tauriService = {
 
   async selectFolder(): Promise<string | null> {
     return invoke<string | null>('select_folder');
+  },
+
+  async confirmLogDir(path: string): Promise<boolean> {
+    return invoke<boolean>('confirm_log_dir', { path });
   },
 
   // -----------------------------------------------------------------------
@@ -380,8 +384,15 @@ export const tauriService = {
     });
   },
 
+  /**
+   * Open an external URL in the user's default app.
+   *
+   * Curated destinations (HoTTY's repo, gcloud install docs, GPL license,
+   * Gemini OAuth) open immediately. Anything else triggers a native confirm
+   * dialog on the backend before the URL is handed to the system opener.
+   */
   async openExternal(url: string): Promise<void> {
-    await openUrl(url);
+    await invoke('open_external', { url });
   },
 
   // -----------------------------------------------------------------------
@@ -447,14 +458,14 @@ export const tauriService = {
       || message.startsWith('Terminal Output (Command:');
     const sendInfo = `send-to-ai ${JSON.stringify({ paneId: sessionId, messageLen, hasWatchPrefix })}`;
     console.debug(`[AIExec/info] ${sendInfo}`);
-    Promise.resolve(invoke('log_debug', { level: 'info', category: 'AIExec', message: sendInfo })).catch(() => {});
+    Promise.resolve(invoke('log_debug', { level: 'info', category: 'AIExec', message: redactSensitive(sendInfo) })).catch(() => {});
     try {
       await invoke('ai_chat_send', { sessionId, message, model, systemInstruction: systemInstruction ?? null });
     } catch (e) {
       const errStr = typeof e === 'string' ? e : e instanceof Error ? e.message : String(e);
       const rejInfo = `ai-send-rejected ${JSON.stringify({ messageLen, error: errStr })}`;
       console.warn(`[AIExec/warn] ${rejInfo}`);
-      Promise.resolve(invoke('log_debug', { level: 'warn', category: 'AIExec', message: rejInfo })).catch(() => {});
+      Promise.resolve(invoke('log_debug', { level: 'warn', category: 'AIExec', message: redactSensitive(rejInfo) })).catch(() => {});
       throw e;
     }
   },

@@ -7,6 +7,7 @@ vi.mock('../../services/tauriService', () => ({
   tauriService: {
     listLogFiles: vi.fn(),
     readLogFile: vi.fn(),
+    confirmLogDir: vi.fn().mockResolvedValue(true),
   },
 }));
 
