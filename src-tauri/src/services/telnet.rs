@@ -33,7 +33,7 @@ const NAWS: u8 = 0x1F;
 
 // --- Config -----------------------------------------------------------
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TelnetConfig {
     pub host: String,
@@ -50,6 +50,21 @@ pub struct TelnetConfig {
     pub connect_timeout_secs: u32,
     #[serde(default)]
     pub jumpbox: Option<JumpboxConfig>,
+}
+
+impl std::fmt::Debug for TelnetConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TelnetConfig")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("username", &self.username)
+            .field("password", &self.password.as_ref().map(|_| "<redacted>"))
+            .field("encoding", &self.encoding)
+            .field("keepalive_interval_secs", &self.keepalive_interval_secs)
+            .field("connect_timeout_secs", &self.connect_timeout_secs)
+            .field("jumpbox", &self.jumpbox)
+            .finish()
+    }
 }
 
 fn default_encoding() -> String {
@@ -441,6 +456,13 @@ impl SessionService for TelnetSession {
                     }
                     match login_state {
                         LoginState::WaitingForUsername => {
+                            // Only react to a username prompt while we still have
+                            // a username to send. We deliberately do NOT fall
+                            // through on a password prompt here: a malicious or
+                            // unusual banner whose text ends in "...Password:"
+                            // before the real username prompt would otherwise
+                            // cause us to dispatch the user's password into the
+                            // username field.
                             if is_username_prompt(&tail) {
                                 let mut line = username.clone();
                                 line.push_str("\r\n");
@@ -448,16 +470,6 @@ impl SessionService for TelnetSession {
                                     .send(WriterCmd::Bytes(line.into_bytes()))
                                     .await;
                                 login_state = LoginState::WaitingForPassword;
-                                tail.clear();
-                            } else if is_password_prompt(&tail) {
-                                // Server jumped directly to password
-                                let mut line = password.clone();
-                                line.push_str("\r\n");
-                                let _ = writer_tx_for_login
-                                    .send(WriterCmd::Bytes(line.into_bytes()))
-                                    .await;
-                                login_state = LoginState::Done;
-                                *login_done.lock().await = true;
                                 tail.clear();
                             }
                         }
@@ -676,5 +688,22 @@ mod tests {
         assert_eq!(f, [IAC, SB, NAWS, 0, 80, 0, 24, IAC, SE]);
         let f = naws_frame(300, 100);
         assert_eq!(f, [IAC, SB, NAWS, 1, 44, 0, 100, IAC, SE]);
+    }
+
+    #[test]
+    fn debug_redacts_password() {
+        let cfg = TelnetConfig {
+            host: "h".into(),
+            port: 23,
+            username: Some("u".into()),
+            password: Some("hunter2".into()),
+            encoding: "utf8".into(),
+            keepalive_interval_secs: 0,
+            connect_timeout_secs: 5,
+            jumpbox: None,
+        };
+        let s = format!("{cfg:?}");
+        assert!(!s.contains("hunter2"), "password leaked: {s}");
+        assert!(s.contains("redacted"));
     }
 }

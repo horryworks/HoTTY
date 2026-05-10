@@ -1,6 +1,6 @@
 export type FeaturePaneType = 'log-viewer' | 'ping-monitor' | 'text-editor' | 'file-explorer' | 'ai-chat';
 
-export type PaneContentType = 'session' | FeaturePaneType;
+type PaneContentType = 'session' | FeaturePaneType;
 
 export interface FeaturePaneInfo {
   id: string;

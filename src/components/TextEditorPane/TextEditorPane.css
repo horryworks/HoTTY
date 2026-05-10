@@ -169,7 +169,7 @@
   font-size: calc(var(--font-size-base) - 2px);
   padding: 3px 8px;
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .text-editor-menu-btn:hover,
@@ -278,7 +278,7 @@
   font-size: calc(var(--font-size-base) - 2px);
   padding: 3px 8px;
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .text-editor-find-btn:hover {
@@ -307,7 +307,7 @@
   padding: 2px 4px;
   font-size: calc(var(--font-size-base) - 1px);
   line-height: 1;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .text-editor-find-close:hover {

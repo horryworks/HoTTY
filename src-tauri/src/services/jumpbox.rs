@@ -32,7 +32,7 @@ use super::ssh::HostKeyDecision;
 // Config
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct JumpboxConfig {
     pub host: String,
@@ -44,6 +44,22 @@ pub struct JumpboxConfig {
     pub private_key_path: Option<String>,
     #[serde(default)]
     pub private_key_passphrase: Option<String>,
+}
+
+impl std::fmt::Debug for JumpboxConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("JumpboxConfig")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("username", &self.username)
+            .field("password", &self.password.as_ref().map(|_| "<redacted>"))
+            .field("private_key_path", &self.private_key_path)
+            .field(
+                "private_key_passphrase",
+                &self.private_key_passphrase.as_ref().map(|_| "<redacted>"),
+            )
+            .finish()
+    }
 }
 
 impl JumpboxConfig {
@@ -488,5 +504,21 @@ mod tests {
     #[test]
     fn jumpbox_prompt_session_id_format() {
         assert_eq!(jumpbox_prompt_session_id("s1"), "s1::jumpbox");
+    }
+
+    #[test]
+    fn debug_redacts_password_and_passphrase() {
+        let cfg = JumpboxConfig {
+            host: "jump.example".into(),
+            port: 22,
+            username: "user".into(),
+            password: Some("hunter2".into()),
+            private_key_path: Some("/k".into()),
+            private_key_passphrase: Some("supersecret".into()),
+        };
+        let s = format!("{cfg:?}");
+        assert!(!s.contains("hunter2"), "password leaked: {s}");
+        assert!(!s.contains("supersecret"), "passphrase leaked: {s}");
+        assert!(s.contains("redacted"));
     }
 }

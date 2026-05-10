@@ -544,25 +544,27 @@ mod tests {
         });
     }
 
+    #[cfg(windows)]
+    fn make_v1_test_blob(plain: &str) -> String {
+        use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+        // Real v1 Electron safeStorage: [SAFE] + base64("v10" + DPAPI(plain))
+        // where DPAPI was called WITHOUT app entropy and the plaintext had no
+        // HoTTY marker. We use crypt_protect_raw with no entropy to faithfully
+        // reproduce that on-disk shape.
+        let dpapi_bytes =
+            crate::services::dpapi::crypt_protect_raw(plain.as_bytes(), None).unwrap();
+        let mut v10 = b"v10".to_vec();
+        v10.extend_from_slice(&dpapi_bytes);
+        format!("[SAFE]{}", BASE64.encode(&v10))
+    }
+
     #[test]
     fn migrate_credentials_upgrades_v1_safe_blobs() {
         if !cfg!(windows) {
             return;
         }
-        use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 
-        // Simulate v1 Electron safeStorage: [SAFE] + base64("v10" + DPAPI(plain)).
-        let make_v1 = |plain: &str| {
-            // Reach into dpapi's private crypt_protect via the public encrypt_string
-            // path: v2 encrypt_string gives us a [SAFE]+base64(DPAPI) string, we
-            // decode and prepend the v10 marker to build a fake v1 payload.
-            let v2 = encrypt_string(plain).unwrap();
-            let b64 = v2.strip_prefix("[SAFE]").unwrap();
-            let dpapi_bytes = BASE64.decode(b64).unwrap();
-            let mut v10 = b"v10".to_vec();
-            v10.extend_from_slice(&dpapi_bytes);
-            format!("[SAFE]{}", BASE64.encode(&v10))
-        };
+        let make_v1 = make_v1_test_blob;
 
         let mut node = serde_json::json!({
             "id": "1",
@@ -618,14 +620,8 @@ mod tests {
         if !cfg!(windows) {
             return;
         }
-        use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 
-        let v2 = encrypt_string("nested-user").unwrap();
-        let b64 = v2.strip_prefix("[SAFE]").unwrap();
-        let dpapi_bytes = BASE64.decode(b64).unwrap();
-        let mut v10 = b"v10".to_vec();
-        v10.extend_from_slice(&dpapi_bytes);
-        let v1 = format!("[SAFE]{}", BASE64.encode(&v10));
+        let v1 = make_v1_test_blob("nested-user");
 
         let mut root = serde_json::json!({
             "id": "f1",
@@ -653,16 +649,8 @@ mod tests {
         if !cfg!(windows) {
             return;
         }
-        use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 
-        let make_v1 = |plain: &str| {
-            let v2 = encrypt_string(plain).unwrap();
-            let b64 = v2.strip_prefix("[SAFE]").unwrap();
-            let dpapi_bytes = BASE64.decode(b64).unwrap();
-            let mut v10 = b"v10".to_vec();
-            v10.extend_from_slice(&dpapi_bytes);
-            format!("[SAFE]{}", BASE64.encode(&v10))
-        };
+        let make_v1 = make_v1_test_blob;
 
         let tree_json = serde_json::json!([
             {

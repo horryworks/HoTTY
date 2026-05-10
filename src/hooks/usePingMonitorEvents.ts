@@ -5,7 +5,7 @@ import type { PingResult } from '../types/appTypes';
 
 const MAX_HISTORY = 60;
 
-export interface PingMonitorEventData {
+interface PingMonitorEventData {
   latestResults: Map<string, PingResult>;
   logFileName: string | null;
 }

@@ -3,8 +3,23 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 const SAFE_PREFIX: &str = "[SAFE]";
 const LEGACY_PREFIX: &str = "[DPAPI]";
 
+/// App-specific entropy passed to CryptProtectData / CryptUnprotectData. Binds
+/// HoTTY-produced ciphertexts to HoTTY: a renderer-supplied DPAPI blob from
+/// another application (e.g. Chrome's encrypted-key blob) cannot be decrypted
+/// through `dpapi_decrypt` because Windows requires the same entropy used at
+/// encrypt time.
+#[cfg(windows)]
+const HOTTY_ENTROPY: &[u8] = b"com.hotty.terminal.v2.credential.entropy.2026";
+
+/// Magic byte sequence prepended to plaintext before encryption. Provides an
+/// internal "this is a HoTTY blob" signal so the decrypt path can distinguish
+/// new entropy-protected blobs from pre-entropy legacy blobs without a separate
+/// `[SAFE2]` prefix.
+const HOTTY_MARKER: &[u8] = b"\x01HOTTYv2\x01";
+
 /// Encrypt a plaintext string using Windows DPAPI and return a `[SAFE]`-prefixed
-/// base64-encoded ciphertext.
+/// base64-encoded ciphertext. New blobs are bound to HoTTY via app-specific
+/// entropy and an internal marker; see `HOTTY_ENTROPY` / `HOTTY_MARKER`.
 pub(crate) fn encrypt_string(plaintext: &str) -> Result<String, String> {
     let encrypted = crypt_protect(plaintext)?;
     let encoded = BASE64.encode(&encrypted);
@@ -51,22 +66,84 @@ pub(crate) fn decrypt_v1_safe_string(ciphertext: &str) -> Result<String, String>
     let inner = bytes
         .strip_prefix(b"v10")
         .ok_or_else(|| "missing Electron v10 marker".to_string())?;
-    crypt_unprotect(inner)
+    // v1 Electron data has no HoTTY entropy and no HoTTY marker — go through
+    // the raw legacy path directly.
+    let plain_bytes = crypt_unprotect_raw_no_entropy(inner)?;
+    String::from_utf8(plain_bytes)
+        .map_err(|e| format!("DPAPI decrypted data is not valid UTF-8: {e}"))
 }
 
 // ---------------------------------------------------------------------------
-// Platform-specific implementations
+// High-level protect / unprotect with HoTTY entropy + marker
 // ---------------------------------------------------------------------------
 
 #[cfg(windows)]
 fn crypt_protect(plaintext: &str) -> Result<Vec<u8>, String> {
+    let mut framed = Vec::with_capacity(HOTTY_MARKER.len() + plaintext.len());
+    framed.extend_from_slice(HOTTY_MARKER);
+    framed.extend_from_slice(plaintext.as_bytes());
+    crypt_protect_raw(&framed, Some(HOTTY_ENTROPY))
+}
+
+#[cfg(windows)]
+fn crypt_unprotect(encrypted: &[u8]) -> Result<String, String> {
+    // Preferred path: HoTTY entropy + HoTTY marker.
+    match crypt_unprotect_raw(encrypted, Some(HOTTY_ENTROPY)) {
+        Ok(bytes) => {
+            if let Some(rest) = bytes.strip_prefix(HOTTY_MARKER) {
+                return String::from_utf8(rest.to_vec())
+                    .map_err(|e| format!("DPAPI decrypted data is not valid UTF-8: {e}"));
+            }
+            // Cryptographically near-impossible: entropy matched but the marker
+            // is missing. Treat as corruption rather than returning content
+            // we can't authenticate as HoTTY-produced.
+            return Err("DPAPI: entropy matched but HoTTY marker missing".into());
+        }
+        Err(_) => {
+            // Fall through to legacy compatibility path.
+        }
+    }
+
+    // Legacy compatibility: pre-entropy HoTTY blobs (`[SAFE]` + base64(DPAPI))
+    // were encrypted without entropy or marker. Accept them, but only if the
+    // decrypted bytes do NOT carry the HoTTY marker (otherwise we would be
+    // accepting a HoTTY-marked blob that lost its entropy binding, which is
+    // never a legitimate state).
+    let plain_bytes = crypt_unprotect_raw(encrypted, None)
+        .map_err(|_| "DPAPI CryptUnprotectData failed".to_string())?;
+    if plain_bytes.starts_with(HOTTY_MARKER) {
+        return Err("DPAPI: legacy-decrypted blob unexpectedly carries HoTTY marker".into());
+    }
+    log::warn!(
+        "dpapi: decrypted legacy (no-entropy) ciphertext; re-save to upgrade to entropy-protected format"
+    );
+    String::from_utf8(plain_bytes)
+        .map_err(|e| format!("DPAPI decrypted data is not valid UTF-8: {e}"))
+}
+
+// ---------------------------------------------------------------------------
+// Raw Windows DPAPI bindings
+// ---------------------------------------------------------------------------
+
+#[cfg(windows)]
+pub(crate) fn crypt_protect_raw(plaintext: &[u8], entropy: Option<&[u8]>) -> Result<Vec<u8>, String> {
     use windows::Win32::Security::Cryptography::{CryptProtectData, CRYPT_INTEGER_BLOB};
 
-    let data_bytes = plaintext.as_bytes().to_vec();
+    let data_bytes = plaintext.to_vec();
     let data_in = CRYPT_INTEGER_BLOB {
         cbData: data_bytes.len() as u32,
         pbData: data_bytes.as_ptr() as *mut u8,
     };
+
+    let entropy_bytes = entropy.map(|e| e.to_vec());
+    let entropy_blob = entropy_bytes.as_ref().map(|e| CRYPT_INTEGER_BLOB {
+        cbData: e.len() as u32,
+        pbData: e.as_ptr() as *mut u8,
+    });
+    let entropy_ptr = entropy_blob
+        .as_ref()
+        .map(|b| b as *const CRYPT_INTEGER_BLOB);
+
     let mut data_out = CRYPT_INTEGER_BLOB {
         cbData: 0,
         pbData: std::ptr::null_mut(),
@@ -75,6 +152,8 @@ fn crypt_protect(plaintext: &str) -> Result<Vec<u8>, String> {
     // SAFETY:
     // - `data_in` is a valid, fully-initialized CRYPT_INTEGER_BLOB whose `pbData`
     //   points to `data_bytes` (owned by this frame) for `cbData` bytes.
+    // - When `entropy` is Some, `entropy_blob`/`entropy_bytes` live for the full
+    //   call below and `entropy_ptr` points to a valid CRYPT_INTEGER_BLOB.
     // - `data_out.pbData` is populated by Windows on success and must be released
     //   with `LocalFree` per the CryptProtectData contract.
     // - `from_raw_parts` runs only after `success.is_ok()` confirms Windows
@@ -85,7 +164,7 @@ fn crypt_protect(plaintext: &str) -> Result<Vec<u8>, String> {
         let success = CryptProtectData(
             &data_in,
             None,
-            None,
+            entropy_ptr,
             None,
             None,
             0,
@@ -105,13 +184,23 @@ fn crypt_protect(plaintext: &str) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(windows)]
-fn crypt_unprotect(encrypted: &[u8]) -> Result<String, String> {
+fn crypt_unprotect_raw(encrypted: &[u8], entropy: Option<&[u8]>) -> Result<Vec<u8>, String> {
     use windows::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
 
     let data_in = CRYPT_INTEGER_BLOB {
         cbData: encrypted.len() as u32,
         pbData: encrypted.as_ptr() as *mut u8,
     };
+
+    let entropy_bytes = entropy.map(|e| e.to_vec());
+    let entropy_blob = entropy_bytes.as_ref().map(|e| CRYPT_INTEGER_BLOB {
+        cbData: e.len() as u32,
+        pbData: e.as_ptr() as *mut u8,
+    });
+    let entropy_ptr = entropy_blob
+        .as_ref()
+        .map(|b| b as *const CRYPT_INTEGER_BLOB);
+
     let mut data_out = CRYPT_INTEGER_BLOB {
         cbData: 0,
         pbData: std::ptr::null_mut(),
@@ -120,6 +209,8 @@ fn crypt_unprotect(encrypted: &[u8]) -> Result<String, String> {
     // SAFETY:
     // - `data_in` is a valid, fully-initialized CRYPT_INTEGER_BLOB whose `pbData`
     //   points to the caller's `encrypted` slice for `cbData` bytes.
+    // - When `entropy` is Some, `entropy_blob`/`entropy_bytes` live for the full
+    //   call below and `entropy_ptr` points to a valid CRYPT_INTEGER_BLOB.
     // - `data_out.pbData` is populated by Windows on success and must be released
     //   with `LocalFree` per the CryptUnprotectData contract.
     // - `from_raw_parts` runs only after `success.is_ok()` confirms Windows
@@ -130,7 +221,7 @@ fn crypt_unprotect(encrypted: &[u8]) -> Result<String, String> {
         let success = CryptUnprotectData(
             &data_in,
             None,
-            None,
+            entropy_ptr,
             None,
             None,
             0,
@@ -141,14 +232,22 @@ fn crypt_unprotect(encrypted: &[u8]) -> Result<String, String> {
         }
 
         let slice = std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize);
-        let result = String::from_utf8(slice.to_vec())
-            .map_err(|e| format!("DPAPI decrypted data is not valid UTF-8: {e}"))?;
+        let result = slice.to_vec();
         let _ = windows::Win32::Foundation::LocalFree(
             windows::Win32::Foundation::HLOCAL(data_out.pbData as _),
         );
         Ok(result)
     }
 }
+
+#[cfg(windows)]
+fn crypt_unprotect_raw_no_entropy(encrypted: &[u8]) -> Result<Vec<u8>, String> {
+    crypt_unprotect_raw(encrypted, None)
+}
+
+// ---------------------------------------------------------------------------
+// Non-Windows stubs
+// ---------------------------------------------------------------------------
 
 #[cfg(not(windows))]
 fn crypt_protect(_plaintext: &str) -> Result<Vec<u8>, String> {
@@ -157,6 +256,11 @@ fn crypt_protect(_plaintext: &str) -> Result<Vec<u8>, String> {
 
 #[cfg(not(windows))]
 fn crypt_unprotect(_encrypted: &[u8]) -> Result<String, String> {
+    Err("DPAPI is only available on Windows".into())
+}
+
+#[cfg(not(windows))]
+fn crypt_unprotect_raw_no_entropy(_encrypted: &[u8]) -> Result<Vec<u8>, String> {
     Err("DPAPI is only available on Windows".into())
 }
 
@@ -186,13 +290,55 @@ mod tests {
         assert_eq!(result, plain);
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn legacy_no_entropy_blob_still_decrypts() {
+        // Simulate a pre-M3 HoTTY blob: DPAPI-encrypted plaintext, no entropy,
+        // no HoTTY marker. The new decrypt path must accept it (but log a warn).
+        let plain = "legacy secret";
+        let raw = crypt_protect_raw(plain.as_bytes(), None).unwrap();
+        let legacy_blob = format!("{SAFE_PREFIX}{}", BASE64.encode(&raw));
+        let decrypted = decrypt_string(&legacy_blob).unwrap();
+        assert_eq!(decrypted, plain);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn foreign_no_entropy_blob_with_marker_byte_pattern_is_rejected() {
+        // Defensive: if a foreign blob happens to start with the HoTTY marker
+        // bytes after no-entropy decryption (cryptographic accident), we must
+        // refuse to return it.
+        let mut framed = HOTTY_MARKER.to_vec();
+        framed.extend_from_slice(b"impostor");
+        let raw = crypt_protect_raw(&framed, None).unwrap();
+        let blob = format!("{SAFE_PREFIX}{}", BASE64.encode(&raw));
+        let result = decrypt_string(&blob);
+        assert!(result.is_err(), "marker-bearing legacy blob must be rejected");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn entropy_protected_blob_cannot_be_decrypted_without_entropy() {
+        // CryptUnprotectData with no entropy must fail on a HoTTY-encrypted
+        // blob — this is the property M3 relies on to refuse foreign blobs
+        // that lack HoTTY entropy.
+        let plain = "entropy-bound";
+        let raw = crypt_protect(plain).unwrap();
+        let no_entropy_attempt = crypt_unprotect_raw(&raw, None);
+        assert!(
+            no_entropy_attempt.is_err(),
+            "entropy-bound DPAPI blob must not decrypt without entropy"
+        );
+    }
+
     #[test]
     fn decrypt_v1_safe_string_roundtrip() {
         if cfg!(windows) {
-            // Emulate a v1 Electron safeStorage payload: DPAPI-encrypt, prepend
-            // the "v10" OSCrypt marker, then [SAFE] + base64.
+            // Emulate a v1 Electron safeStorage payload: DPAPI-encrypt without
+            // entropy or marker, prepend the "v10" OSCrypt marker, then [SAFE]
+            // + base64.
             let plain = "v1-secret";
-            let dpapi_bytes = crypt_protect(plain).unwrap();
+            let dpapi_bytes = crypt_protect_raw(plain.as_bytes(), None).unwrap();
             let mut with_marker = b"v10".to_vec();
             with_marker.extend_from_slice(&dpapi_bytes);
             let v1_ciphertext = format!("{SAFE_PREFIX}{}", BASE64.encode(&with_marker));

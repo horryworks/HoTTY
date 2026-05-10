@@ -1,5 +1,21 @@
 # Release Notes
 
+## v2.0.0
+
+The v2.0.0 stable release. A final hardening pass lands five additional defence-in-depth measures around credential storage and the Tauri command surface, plus minor visual cleanup across the modal family.
+
+### Improvements
+
+- **Modal consistency polish.** Several minor visual inconsistencies were aligned across the modal family: **Ask AI** now clips its content cleanly to the rounded corners while scrolling, the **System Prompt** overlay no longer adds an extra inset, the **Custom Theme Creator** dialog uses the standard modal z-index, and the **Paste Confirmation** and **SSH Host Key** dialogs use the chrome font for their containers (inner monospace previews and fingerprints unchanged). The Text Editor menu, find-bar, and find-close buttons now use the standard 4px corner radius.
+
+### Security
+
+- **AI service-account key files require dialog attestation.** Vertex AI's `service_account` auth path now refuses any `keyFilePath` that was not picked through the native file dialog. A compromised renderer can no longer point AI authentication at an arbitrary on-disk JSON key. The `auto_auth` resume path is unaffected — it loads `client_email` and `private_key` from the DPAPI-encrypted on-disk config and never re-reads the user's key file.
+- **DPAPI ciphertexts are now bound to HoTTY.** New credentials are encrypted with `CryptProtectData` using HoTTY-specific entropy plus an internal "HoTTY" marker prepended to the plaintext. The renderer-callable `dpapi_decrypt` / `dpapi_decrypt_batch` commands therefore refuse foreign DPAPI blobs (e.g. another application's encrypted-key blob), where they previously functioned as a generic per-user decrypt oracle. Pre-entropy `[SAFE]` blobs from earlier HoTTY versions still decrypt transparently and upgrade in place on the next save.
+- **Sensitive-path block list extended.** The Text Editor and dropped-file approval flow now refuse paths under `~/.aws`, `~/.azure`, `%APPDATA%\Roaming\gcloud`, `%APPDATA%\Local\Microsoft\Vault`, `~/.config/gcloud`, and HoTTY's own `%APPDATA%\{Roaming,Local}\com.hotty.terminal` directories. The last entry matters: it prevents a write-via-editor path from tampering with HoTTY's `approved_log_dirs.json`, `vertexai_config.json`, etc., which would otherwise undermine the dialog-attestation invariants used elsewhere in the app.
+- **Telnet auto-login no longer leaks the password as the username.** A telnet server whose pre-login banner ended in `...Password:` (instead of the expected `Username:`) used to make the auto-login state machine fall straight through to the password phase before sending the username — causing the configured password to be sent into the username field. The state machine now reacts only to a real username prompt while waiting for the username.
+- **Backend session config debug output redacts credentials.** `SshConfig`, `TelnetConfig`, and `JumpboxConfig` no longer expose `password` / `private_key_passphrase` values through Rust's `{:?}` debug formatter. They were not reaching any log call site today; this is defence-in-depth against a future log-format regression accidentally dumping them.
+
 ## v2.0.0-beta13
 
 A second hardening pass before the stable release. Terminal font and scrollback settings now apply to already-open sessions, AI Chat tabs follow their linked terminal through close events, and three security mitigations land around frontend logging, log-folder access, and external URL opening.

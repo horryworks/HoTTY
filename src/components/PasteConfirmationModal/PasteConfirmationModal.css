@@ -21,7 +21,7 @@
   max-width: 90vw;
   max-height: 90vh;
   color: var(--text-primary);
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
   font-size: var(--font-size-base);
 }
 

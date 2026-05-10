@@ -20,7 +20,7 @@
   width: 520px;
   max-width: 90vw;
   color: var(--text-primary);
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
   font-size: var(--font-size-base);
 }
 

@@ -27,7 +27,7 @@ use super::session_service::{
 
 // --- Config ------------------------------------------------------------
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SshConfig {
     pub host: String,
@@ -47,6 +47,26 @@ pub struct SshConfig {
     pub connect_timeout_secs: u32,
     #[serde(default)]
     pub jumpbox: Option<JumpboxConfig>,
+}
+
+impl std::fmt::Debug for SshConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SshConfig")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("username", &self.username)
+            .field("password", &self.password.as_ref().map(|_| "<redacted>"))
+            .field("private_key_path", &self.private_key_path)
+            .field(
+                "private_key_passphrase",
+                &self.private_key_passphrase.as_ref().map(|_| "<redacted>"),
+            )
+            .field("encoding", &self.encoding)
+            .field("keepalive_interval_secs", &self.keepalive_interval_secs)
+            .field("connect_timeout_secs", &self.connect_timeout_secs)
+            .field("jumpbox", &self.jumpbox)
+            .finish()
+    }
 }
 
 fn default_encoding() -> String {
@@ -1067,5 +1087,25 @@ mod tests {
         assert!(p.cipher.contains(&cipher::TRIPLE_DES_CBC));
         assert!(p.mac.contains(&mac::HMAC_SHA1));
         assert!(p.key.contains(&ssh_key::Algorithm::Dsa));
+    }
+
+    #[test]
+    fn debug_redacts_password_and_passphrase() {
+        let cfg = SshConfig {
+            host: "h".into(),
+            port: 22,
+            username: "u".into(),
+            password: Some("hunter2".into()),
+            private_key_path: Some("/k".into()),
+            private_key_passphrase: Some("supersecret".into()),
+            encoding: "utf8".into(),
+            keepalive_interval_secs: 0,
+            connect_timeout_secs: 5,
+            jumpbox: None,
+        };
+        let s = format!("{cfg:?}");
+        assert!(!s.contains("hunter2"), "password leaked: {s}");
+        assert!(!s.contains("supersecret"), "passphrase leaked: {s}");
+        assert!(s.contains("redacted"));
     }
 }

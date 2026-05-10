@@ -145,7 +145,7 @@ export function getCachedCredential(id: string): DecryptedCredentialInfo | undef
     return decryptedCache[id];
 }
 
-export function setCachedCredential(id: string, info: DecryptedCredentialInfo) {
+function setCachedCredential(id: string, info: DecryptedCredentialInfo) {
     if (!decryptedCache[id]) decryptedCache[id] = {};
     if (info.username !== undefined) decryptedCache[id].username = info.username;
     if (info.password !== undefined) decryptedCache[id].password = info.password;

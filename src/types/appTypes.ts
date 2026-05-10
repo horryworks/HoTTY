@@ -109,7 +109,7 @@ export interface ContextMenuItem {
   enabled?: boolean;
 }
 
-export interface AlgorithmEntry {
+interface AlgorithmEntry {
   name: string;
   enabled: boolean;
 }
@@ -233,7 +233,7 @@ export interface GceInstance {
 // Host Tree
 // ---------------------------------------------------------------------------
 
-export interface IapTunnelEntry {
+interface IapTunnelEntry {
   project: string;
   zone: string;
   instance: string;
@@ -288,7 +288,7 @@ export interface AIModelInfo {
   displayName: string;
 }
 
-export interface AITokenUsage {
+interface AITokenUsage {
   promptTokenCount?: number;
   candidatesTokenCount?: number;
   totalTokenCount?: number;

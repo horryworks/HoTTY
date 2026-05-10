@@ -6,6 +6,8 @@ use serde::Serialize;
 use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 
+use crate::services::path_safety::is_sensitive_path;
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -15,23 +17,6 @@ const MAX_FILE_SIZE: u64 = 50 * 1024 * 1024;
 
 /// Allowed encodings for read/write operations.
 const ALLOWED_ENCODINGS: &[&str] = &["utf-8", "utf8", "shift_jis", "euc-jp"];
-
-/// Blocked directory suffixes on Windows (case-insensitive comparison).
-#[cfg(windows)]
-const BLOCKED_DIR_SUFFIXES: &[&str] = &[
-    r"\windows\system32",
-    r"\windows\syswow64",
-    r"\programdata\ssh",
-];
-
-/// Blocked directories relative to user home on Windows.
-#[cfg(windows)]
-const BLOCKED_HOME_DIRS: &[&str] = &[
-    ".ssh",
-    ".gnupg",
-    r"appdata\roaming\microsoft\credentials",
-    r"appdata\local\microsoft\credentials",
-];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -100,61 +85,6 @@ fn encode_string(content: &str, encoding: &str) -> Vec<u8> {
     let enc = crate::services::session_service::encoding_for(encoding);
     let (encoded, _, _) = enc.encode(content);
     encoded.into_owned()
-}
-
-/// Check if a path is within a sensitive/blocked directory.
-fn is_sensitive_path(resolved: &Path) -> bool {
-    #[cfg(windows)]
-    {
-        let lower = resolved
-            .to_string_lossy()
-            .to_lowercase()
-            .replace('/', "\\");
-
-        // Check absolute blocked dirs
-        for suffix in BLOCKED_DIR_SUFFIXES {
-            if lower.contains(suffix) {
-                return true;
-            }
-        }
-
-        // Check home-relative blocked dirs
-        if let Some(home) = dirs_home() {
-            let home_lower = home.to_lowercase().replace('/', "\\");
-            for dir in BLOCKED_HOME_DIRS {
-                let blocked = format!("{}\\{}", home_lower, dir);
-                if lower.starts_with(&blocked) {
-                    return true;
-                }
-            }
-        }
-
-        false
-    }
-
-    #[cfg(not(windows))]
-    {
-        if let Some(home) = dirs_home() {
-            let lower = resolved.to_string_lossy().to_lowercase();
-            let home_lower = home.to_lowercase();
-            let blocked = [".ssh", ".gnupg"];
-            for dir in &blocked {
-                let blocked_path = format!("{}/{}", home_lower, dir);
-                if lower.starts_with(&blocked_path) {
-                    return true;
-                }
-            }
-        }
-        let _ = resolved; // suppress unused warning
-        false
-    }
-}
-
-/// Get the user home directory as a string.
-fn dirs_home() -> Option<String> {
-    std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .ok()
 }
 
 // ---------------------------------------------------------------------------
@@ -425,36 +355,6 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    #[cfg(windows)]
-    #[test]
-    fn is_sensitive_path_blocks_system32() {
-        let p = Path::new(r"C:\Windows\System32\config\SAM");
-        assert!(is_sensitive_path(p));
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn is_sensitive_path_allows_normal() {
-        let p = Path::new(r"C:\Users\Public\test.txt");
-        assert!(!is_sensitive_path(p));
-    }
-
-    #[test]
-    fn is_sensitive_path_blocks_ssh_dir() {
-        if let Some(home) = dirs_home() {
-            let ssh_path = PathBuf::from(&home).join(".ssh").join("id_rsa");
-            assert!(is_sensitive_path(&ssh_path));
-        }
-    }
-
-    #[test]
-    fn is_sensitive_path_blocks_gnupg_dir() {
-        if let Some(home) = dirs_home() {
-            let gnupg_path = PathBuf::from(&home).join(".gnupg").join("pubring.kbx");
-            assert!(is_sensitive_path(&gnupg_path));
-        }
-    }
-
     #[tokio::test]
     async fn approved_paths_lifecycle() {
         let paths = ApprovedEditorPaths::new();
@@ -476,9 +376,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn dirs_home_returns_some() {
-        // On any test environment, home should be set
-        assert!(dirs_home().is_some());
-    }
 }
