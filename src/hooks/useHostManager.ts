@@ -275,6 +275,46 @@ export function useHostManager() {
             }
         };
 
+        // IAP protocol migration: in v2.0.0 IAP hosts were stored as
+        // `protocol: 'ssh' + iapTunnel: {...}`. v2.0.1 makes IAP its own
+        // protocol. On load, rewrite legacy entries to `protocol: 'gcloud-iap'`
+        // and clear username/password/jumpboxId (gcloud handles auth).
+        // Idempotent: hosts already on 'gcloud-iap' pass through unchanged.
+        const migrateIapProtocol = (nodes: HostTreeNode[]): HostTreeNode[] => {
+            let changed = false;
+            const walk = (list: HostTreeNode[]): HostTreeNode[] =>
+                list.map(n => {
+                    const children = n.children ? walk(n.children) : undefined;
+                    if (
+                        n.type === 'host' &&
+                        n.entry &&
+                        n.entry.protocol === 'ssh' &&
+                        n.entry.iapTunnel
+                    ) {
+                        changed = true;
+                        return {
+                            ...n,
+                            entry: {
+                                ...n.entry,
+                                protocol: 'gcloud-iap',
+                                username: undefined,
+                                password: undefined,
+                                isJumpbox: undefined,
+                                jumpboxId: undefined,
+                            },
+                            children,
+                        };
+                    }
+                    return children ? { ...n, children } : n;
+                });
+            const result = walk(nodes);
+            if (changed) {
+                saveRawTree(result);
+                setTree(result);
+            }
+            return result;
+        };
+
         const eagerDecryptTree = async (nodes: HostTreeNode[]) => {
             const secrets: (string | undefined)[] = [];
             const targets: { id: string; type: 'username' | 'password' }[] = [];
@@ -348,6 +388,7 @@ export function useHostManager() {
         };
 
         migrateV1Credentials(raw)
+            .then(migrateIapProtocol)
             .then(eagerDecryptTree)
             .catch(err => {
                 logError('HostManager', 'Background eager decryption failed', err);

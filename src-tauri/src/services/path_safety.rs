@@ -40,10 +40,16 @@ const BLOCKED_HOME_DIRS_UNIX: &[&str] = &[
 pub fn is_sensitive_path(resolved: &Path) -> bool {
     #[cfg(windows)]
     {
-        let lower = resolved
+        let raw = resolved
             .to_string_lossy()
             .to_lowercase()
             .replace('/', "\\");
+        // canonicalize() on Windows returns `\\?\C:\...` (verbatim prefix);
+        // strip it so prefix-based comparisons against ordinary paths match.
+        let lower = raw
+            .strip_prefix(r"\\?\")
+            .map(str::to_string)
+            .unwrap_or(raw);
 
         for suffix in BLOCKED_DIR_SUFFIXES {
             if lower.contains(suffix) {
@@ -52,7 +58,11 @@ pub fn is_sensitive_path(resolved: &Path) -> bool {
         }
 
         if let Some(home) = dirs_home() {
-            let home_lower = home.to_lowercase().replace('/', "\\");
+            let home_raw = home.to_lowercase().replace('/', "\\");
+            let home_lower = home_raw
+                .strip_prefix(r"\\?\")
+                .map(str::to_string)
+                .unwrap_or(home_raw);
             for dir in BLOCKED_HOME_DIRS {
                 let blocked = format!("{}\\{}", home_lower, dir);
                 if lower.starts_with(&blocked) {
@@ -97,6 +107,18 @@ mod tests {
     fn is_sensitive_path_blocks_system32() {
         let p = Path::new(r"C:\Windows\System32\config\SAM");
         assert!(is_sensitive_path(p));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn is_sensitive_path_handles_verbatim_prefix() {
+        // canonicalize() on Windows returns paths with a \\?\ prefix; the
+        // check must still match against an ordinary blocked path.
+        if let Some(home) = dirs_home() {
+            let verbatim =
+                PathBuf::from(format!(r"\\?\{}", home)).join(".ssh").join("id_rsa");
+            assert!(is_sensitive_path(&verbatim));
+        }
     }
 
     #[cfg(windows)]

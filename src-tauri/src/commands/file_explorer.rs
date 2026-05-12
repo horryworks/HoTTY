@@ -1,6 +1,8 @@
 use serde::Serialize;
 use std::path::Path;
 
+use crate::services::path_safety::is_sensitive_path;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -84,6 +86,13 @@ pub async fn file_explorer_list_directory(
         return Ok(ListDirectoryResult {
             entries: None,
             error: Some("path is not a directory".into()),
+        });
+    }
+
+    if is_sensitive_path(&resolved) {
+        return Ok(ListDirectoryResult {
+            entries: None,
+            error: Some("permission denied".into()),
         });
     }
 
@@ -302,5 +311,22 @@ mod tests {
         let result = file_explorer_get_drives().await.unwrap();
         assert!(!result.drives.is_empty());
         assert!(!result.homedir.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_directory_refuses_sensitive_path() {
+        use crate::services::path_safety::dirs_home;
+        let Some(home) = dirs_home() else { return };
+        let ssh = std::path::PathBuf::from(&home).join(".ssh");
+        if !ssh.is_dir() {
+            // No real .ssh directory on this test machine; skip — the
+            // canonicalize() step would fail before reaching the gate.
+            return;
+        }
+        let result = file_explorer_list_directory(ssh.to_string_lossy().to_string())
+            .await
+            .unwrap();
+        assert!(result.entries.is_none());
+        assert_eq!(result.error.as_deref(), Some("permission denied"));
     }
 }

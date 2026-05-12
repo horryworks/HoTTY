@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod dpapi;
+pub mod gcloud_iap;
 pub mod iap_tunnel;
 pub mod jumpbox;
 pub mod known_hosts;

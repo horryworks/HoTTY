@@ -343,9 +343,14 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
         });
       });
 
+      // Fallback display name: if the caller passed an empty/whitespace-only
+      // string, the tab strip would render a blank label which is unfriendly.
+      // Derive something readable from the protocol so the tab is always
+      // identifiable.
+      const displayName = (req.displayName ?? '').trim() || `${req.protocol} session`;
       const rec: SessionRecord = {
         id,
-        displayName: req.displayName,
+        displayName,
         protocol: req.protocol,
         status: 'connecting',
         term,

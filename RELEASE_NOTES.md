@@ -1,5 +1,22 @@
 # Release Notes
 
+## v2.0.1
+
+A focused follow-up to v2.0.0. The headline change makes **Google Cloud IAP** a top-level protocol so IAP connections no longer require any SSH credentials. The rest is security — two file-system protections that close a renderer-side enumeration gap and repair a Windows-only matcher bug that had been silently disabling the existing sensitive-path checks — plus a small UI-font consistency pass left over from the v2.0.0 polish round.
+
+### New Features
+
+- **Google Cloud IAP is now a first-class protocol.** Previously a "Connect via Google Cloud IAP" checkbox inside the SSH form, IAP is now its own entry in the Protocol dropdown (in both the New Session dialog and the host-tree add/edit modal). When you select it, the username / password / private-key fields disappear entirely — HoTTY delegates the connection to <code>gcloud compute ssh --tunnel-through-iap</code>, which handles the IAP tunnel, OS Login mapping, automatic SSH key generation (<code>~/.ssh/google_compute_engine</code>), key registration with the project, and authentication on your behalf. You only need a Google Cloud SDK install and a completed `gcloud auth login`. The host tree shows IAP entries as `<project>:<instance> (IAP)` so they're easy to recognise.
+
+### Improvements
+
+- **UI font consistency.** Action buttons in the **Confirm**, **Paste Confirmation**, **SSH Host Key**, **Ask AI**, and **Custom Theme Creator** modals, plus toolbar buttons in the **Log Viewer**, **Ping Monitor**, and **Text Editor** panes, now use the UI chrome font (`--ui-font-family`). Several were rendering in the monospace `--font-family`, which looked subtly off against the surrounding chrome. Inner monospace content (paste preview, host-key fingerprint, etc.) is unchanged. The Confirm, Ask AI, and Custom Theme Creator modal containers also pick up an explicit chrome-font declaration that was missing.
+
+### Security
+
+- **File Explorer refuses to list sensitive directories.** The file-browser pane (and the underlying `file_explorer_list_directory` Tauri command) now refuses to enumerate paths that resolve under credential-store directories — `~/.ssh`, `~/.aws`, `~/.azure`, `~/.gnupg`, `%APPDATA%\Roaming\gcloud`, `%APPDATA%\Local\Microsoft\Vault`, HoTTY's own `%APPDATA%\{Roaming,Local}\com.hotty.terminal`, and the rest of the existing block-list. Previously the renderer could enumerate any directory; while contents were not exposed, filenames and mtimes leaked which credentials existed and when they were last touched. This is defence-in-depth — exploitation required a renderer compromise to begin with — but the Text Editor and Log Viewer read paths were already gated this way, and the File Explorer should match.
+- **Sensitive-path matcher repaired on Windows.** `is_sensitive_path()` — the gate behind the Text Editor read/write, dropped-file approval, and Vertex AI service-account key file flows — compared canonical paths via a `starts_with(home + dir)` prefix check. On Windows, `canonicalize()` returns paths with a `\\?\` verbatim prefix, which the matcher did not strip, so the comparison never matched and the gate was effectively a no-op on canonical paths. The matcher now strips the verbatim prefix from both the resolved path and the home directory before comparing, and a regression test covers it. No exploitation has been reported, but the on-disk protection these flows were nominally enforcing now actually fires.
+
 ## v2.0.0
 
 The v2.0.0 stable release. A final hardening pass lands five additional defence-in-depth measures around credential storage and the Tauri command surface, plus minor visual cleanup across the modal family.

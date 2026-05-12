@@ -105,4 +105,56 @@ describe('SessionDialog', () => {
     const { container } = render(<SessionDialog {...defaultProps} />);
     expect(container.querySelector('.dialog-resize-handle')).toBeTruthy();
   });
+
+  describe('Google Cloud IAP protocol', () => {
+    beforeEach(async () => {
+      // Stub out the IAP discovery commands so the useEffect that fires when
+      // protocol switches to 'gcloud-iap' doesn't throw on undefined returns.
+      const { tauriService } = await import('../../services/tauriService');
+      vi.mocked(tauriService.gceIapCheckGcloud).mockResolvedValue({ available: false });
+      vi.mocked(tauriService.gceIapCheckAuth).mockResolvedValue({ authenticated: false });
+      vi.mocked(tauriService.gceIapListProjects).mockResolvedValue([]);
+      vi.mocked(tauriService.gceIapListZones).mockResolvedValue([]);
+      vi.mocked(tauriService.gceIapListInstances).mockResolvedValue([]);
+    });
+
+    it('protocol selector includes Google Cloud IAP option', () => {
+      render(<SessionDialog {...defaultProps} />);
+      expect(screen.getByText('Google Cloud IAP')).toBeTruthy();
+    });
+
+    it('does not render a "Connect via Google Cloud IAP" checkbox anymore', () => {
+      render(<SessionDialog {...defaultProps} />);
+      expect(screen.queryByText(/Connect via Google Cloud IAP/i)).toBeNull();
+    });
+
+    it('hides host/port/username/password/private-key fields when protocol is gcloud-iap', () => {
+      const { container } = render(<SessionDialog {...defaultProps} />);
+      const select = container.querySelector('select') as HTMLSelectElement;
+      fireEvent.change(select, { target: { value: 'gcloud-iap' } });
+
+      expect(screen.queryByText('Host/IP')).toBeNull();
+      expect(screen.queryByText('Username')).toBeNull();
+      expect(screen.queryByText('Password')).toBeNull();
+      expect(screen.queryByText('Private Key Path (optional)')).toBeNull();
+    });
+
+    it('shows project / zone / instance fields when protocol is gcloud-iap', () => {
+      const { container } = render(<SessionDialog {...defaultProps} />);
+      const select = container.querySelector('select') as HTMLSelectElement;
+      fireEvent.change(select, { target: { value: 'gcloud-iap' } });
+
+      expect(screen.getByText('GCP Project')).toBeTruthy();
+      expect(screen.getByText('Zone')).toBeTruthy();
+      expect(screen.getByText('Instance')).toBeTruthy();
+    });
+
+    it('shows the no-credentials info banner when protocol is gcloud-iap', () => {
+      const { container } = render(<SessionDialog {...defaultProps} />);
+      const select = container.querySelector('select') as HTMLSelectElement;
+      fireEvent.change(select, { target: { value: 'gcloud-iap' } });
+
+      expect(screen.getByText(/handled automatically by gcloud/i)).toBeTruthy();
+    });
+  });
 });

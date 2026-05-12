@@ -77,7 +77,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                 <strong>Jumpbox (Bastion Host):</strong> SSH and Telnet connections can be routed through a jumpbox. Mark any SSH host as a jumpbox in the host tree, then select it as the &quot;via&quot; host when editing a target host.
               </p>
               <p className="help-text">
-                <strong>GCE IAP Tunnel:</strong> Connect to Google Compute Engine VMs via Identity-Aware Proxy without exposing VMs to the public internet. Check &quot;Connect via Google Cloud IAP&quot; in the SSH form, then select your GCP project, zone, and instance (autocomplete provided via gcloud CLI).
+                <strong>Google Cloud IAP:</strong> Connect to Google Compute Engine VMs via Identity-Aware Proxy without exposing VMs to the public internet. Select &quot;Google Cloud IAP&quot; from the Protocol dropdown, then pick your GCP project, zone, and instance (autocomplete provided via gcloud CLI). <strong>No SSH username, password, or private key is required</strong> — HoTTY delegates the connection to <code>gcloud compute ssh --tunnel-through-iap</code>, which handles IAP tunneling, OS Login mapping, automatic SSH key generation (<code>~/.ssh/google_compute_engine</code>), key registration, and authentication on your behalf. Requires the Google Cloud SDK and a completed <code>gcloud auth login</code>.
               </p>
               <p className="help-text">
                 <strong>Update Notifications:</strong> On startup HoTTY checks the GitHub releases feed and shows a dismissible notification when a newer version is available, linking directly to the release page.

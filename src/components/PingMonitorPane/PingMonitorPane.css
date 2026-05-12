@@ -38,7 +38,7 @@
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
   font-size: calc(var(--font-size-base) - 2px);
   flex-shrink: 0;
   display: flex;

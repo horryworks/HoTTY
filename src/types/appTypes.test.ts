@@ -27,8 +27,8 @@ import type {
 
 describe('appTypes', () => {
   it('ProtocolId accepts every declared member', () => {
-    const values: ProtocolId[] = ['ssh', 'telnet', 'serial', 'wsl', 'cmd', 'powershell', 'git-bash'];
-    expect(values).toHaveLength(7);
+    const values: ProtocolId[] = ['ssh', 'telnet', 'serial', 'wsl', 'cmd', 'powershell', 'git-bash', 'gcloud-iap'];
+    expect(values).toHaveLength(8);
   });
 
   it('FeatureId accepts every declared member', () => {

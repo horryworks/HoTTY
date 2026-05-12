@@ -245,6 +245,80 @@ describe('useHostManager', () => {
     expect(result.current.tree[0].name).toBe('Servers');
   });
 
+  it('migrates legacy SSH+iapTunnel entries to gcloud-iap protocol on load', async () => {
+    const legacyTree: HostTreeNode[] = [
+      {
+        id: 'iap-1',
+        type: 'host',
+        name: 'My IAP host',
+        entry: {
+          protocol: 'ssh',
+          host: 'instance-name',
+          port: 22,
+          username: 'someone',
+          password: '[SAFE]ignored',
+          jumpboxId: 'should-be-cleared',
+          iapTunnel: { project: 'my-project', zone: 'us-central1-a', instance: 'instance-name' },
+        },
+      },
+    ];
+    localStorage.setItem('hotty_host_tree', JSON.stringify(legacyTree));
+
+    const { result } = renderHook(() => useHostManager());
+    await waitFor(() => {
+      expect(result.current.tree[0].entry?.protocol).toBe('gcloud-iap');
+    });
+    const entry = result.current.tree[0].entry!;
+    expect(entry.username).toBeUndefined();
+    expect(entry.password).toBeUndefined();
+    expect(entry.jumpboxId).toBeUndefined();
+    expect(entry.iapTunnel?.instance).toBe('instance-name');
+
+    // Persisted to localStorage so the next load is idempotent.
+    const persisted: HostTreeNode[] = JSON.parse(localStorage.getItem('hotty_host_tree') || '[]');
+    expect(persisted[0].entry?.protocol).toBe('gcloud-iap');
+  });
+
+  it('leaves regular SSH/Telnet entries untouched by the IAP migration', async () => {
+    localStorage.setItem('hotty_host_tree', JSON.stringify(sampleTree));
+    const { result } = renderHook(() => useHostManager());
+    await waitFor(() => {
+      expect(result.current.tree).toHaveLength(2);
+    });
+    const hosts = flattenHosts(result.current.tree);
+    for (const h of hosts) {
+      expect(h.entry?.protocol).not.toBe('gcloud-iap');
+    }
+  });
+
+  it('migrates IAP entries nested inside folders', async () => {
+    const nested: HostTreeNode[] = [
+      {
+        id: 'f1',
+        type: 'folder',
+        name: 'GCP',
+        children: [
+          {
+            id: 'h-nested',
+            type: 'host',
+            name: 'nested IAP',
+            entry: {
+              protocol: 'ssh',
+              host: 'vm-01',
+              port: 22,
+              iapTunnel: { project: 'p', zone: 'us-central1-a', instance: 'vm-01' },
+            },
+          },
+        ],
+      },
+    ];
+    localStorage.setItem('hotty_host_tree', JSON.stringify(nested));
+    const { result } = renderHook(() => useHostManager());
+    await waitFor(() => {
+      expect(result.current.tree[0].children?.[0].entry?.protocol).toBe('gcloud-iap');
+    });
+  });
+
   it('sortFolder sorts children alphabetically (folders first)', () => {
     const unsorted: HostTreeNode[] = [
       {

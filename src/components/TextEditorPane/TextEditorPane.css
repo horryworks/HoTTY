@@ -165,7 +165,7 @@
   background: none;
   border: none;
   color: var(--text-primary);
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
   font-size: calc(var(--font-size-base) - 2px);
   padding: 3px 8px;
   cursor: pointer;
@@ -274,7 +274,7 @@
   background: none;
   border: 1px solid var(--border-color);
   color: var(--text-primary);
-  font-family: var(--font-family);
+  font-family: var(--ui-font-family);
   font-size: calc(var(--font-size-base) - 2px);
   padding: 3px 8px;
   cursor: pointer;

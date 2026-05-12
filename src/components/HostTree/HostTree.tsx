@@ -60,13 +60,13 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [editingName, setEditingName] = useState('');
 
     const [formName, setFormName] = useState('');
-    const [formProtocol, setFormProtocol] = useState<'ssh' | 'telnet'>('ssh');
+    const [formProtocol, setFormProtocol] = useState<'ssh' | 'telnet' | 'gcloud-iap'>('ssh');
     const [formHost, setFormHost] = useState('');
     const [formPort, setFormPort] = useState('22');
     const [formUsername, setFormUsername] = useState('');
     const [formPassword, setFormPassword] = useState('');
     const [formIsJumpbox, setFormIsJumpbox] = useState(false);
-    const [formIapEnabled, setFormIapEnabled] = useState(false);
+    // IAP enablement is driven by `formProtocol === 'gcloud-iap'`.
     const [formIapProject, setFormIapProject] = useState('');
     const [formIapZone, setFormIapZone] = useState('');
     const [formIapInstance, setFormIapInstance] = useState('');
@@ -119,10 +119,11 @@ export const HostTree: React.FC<HostTreeProps> = ({
         }
     }, [editModalOpen, focusModal]);
 
-    // IAP: check gcloud and auth when IAP is enabled in the modal
+    // IAP: check gcloud and auth when the form protocol is set to gcloud-iap
+    const formIsIap = formProtocol === 'gcloud-iap';
     /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
-        if (!formIapEnabled) {
+        if (!formIsIap) {
             setIapGcloudStatus(null);
             setIapAuthStatus(null);
             setIapProjects([]);
@@ -147,7 +148,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
             }
         })();
         return () => { cancelled = true; };
-    }, [formIapEnabled]);
+    }, [formIsIap]);
 
     // IAP: auto-load projects when auth succeeds
     useEffect(() => {
@@ -256,7 +257,6 @@ export const HostTree: React.FC<HostTreeProps> = ({
         setFormUsername('');
         setFormPassword('');
         setFormIsJumpbox(false);
-        setFormIapEnabled(false);
         setFormIapProject('');
         setFormIapZone('');
         setFormIapInstance('');
@@ -345,19 +345,20 @@ export const HostTree: React.FC<HostTreeProps> = ({
             return;
         }
 
+        const isIapProto = formProtocol === 'gcloud-iap';
         if (existingNode) {
             if (mode === 'folder') {
                 onEditNode(existingNode.id, { name: formName });
             } else {
                 const entry: HostEntry = {
                     protocol: formProtocol,
-                    host: formIapEnabled ? formIapInstance : formHost,
+                    host: isIapProto ? formIapInstance : formHost,
                     port: parseInt(formPort),
-                    username: formUsername || undefined,
-                    password: formPassword || undefined,
+                    username: isIapProto ? undefined : (formUsername || undefined),
+                    password: isIapProto ? undefined : (formPassword || undefined),
                     isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,
-                    jumpboxId: formIapEnabled ? undefined : existingNode.entry?.jumpboxId,
-                    iapTunnel: formIapEnabled ? { project: formIapProject, zone: formIapZone, instance: formIapInstance } : undefined,
+                    jumpboxId: isIapProto ? undefined : existingNode.entry?.jumpboxId,
+                    iapTunnel: isIapProto ? { project: formIapProject, zone: formIapZone, instance: formIapInstance } : undefined,
                 };
                 onEditNode(existingNode.id, { name: formName, entry });
             }
@@ -367,12 +368,12 @@ export const HostTree: React.FC<HostTreeProps> = ({
             } else {
                 const entry: HostEntry = {
                     protocol: formProtocol,
-                    host: formIapEnabled ? formIapInstance : formHost,
+                    host: isIapProto ? formIapInstance : formHost,
                     port: parseInt(formPort),
-                    username: formUsername || undefined,
-                    password: formPassword || undefined,
+                    username: isIapProto ? undefined : (formUsername || undefined),
+                    password: isIapProto ? undefined : (formPassword || undefined),
                     isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,
-                    iapTunnel: formIapEnabled ? { project: formIapProject, zone: formIapZone, instance: formIapInstance } : undefined,
+                    iapTunnel: isIapProto ? { project: formIapProject, zone: formIapZone, instance: formIapInstance } : undefined,
                 };
                 onAddHost(parentId, formName, entry);
             }
@@ -559,8 +560,8 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                 {node.name}
                                 {node.type === 'host' && node.entry && (
                                     <span className="tree-meta">
-                                        {node.entry.iapTunnel ? (
-                                            <>{' '}{node.entry.iapTunnel.project}:{node.entry.iapTunnel.instance} <span className="tree-meta-via">(IAP)</span></>
+                                        {node.entry.protocol === 'gcloud-iap' ? (
+                                            <>{' '}{node.entry.iapTunnel?.project}:{node.entry.iapTunnel?.instance} <span className="tree-meta-via">(IAP)</span></>
                                         ) : (
                                             <>
                                                 {' '}{node.entry.host}
@@ -839,43 +840,31 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                     <select
                                         value={formProtocol}
                                         onChange={e => {
-                                            const p = e.target.value as 'ssh' | 'telnet';
+                                            const p = e.target.value as 'ssh' | 'telnet' | 'gcloud-iap';
                                             setFormProtocol(p);
-                                            setFormPort(p === 'ssh' ? '22' : '23');
+                                            if (p === 'ssh') setFormPort('22');
+                                            else if (p === 'telnet') setFormPort('23');
                                             if (p !== 'ssh') setFormIsJumpbox(false);
                                         }}
                                     >
                                         <option value="ssh">SSH</option>
                                         <option value="telnet">Telnet</option>
+                                        <option value="gcloud-iap">Google Cloud IAP</option>
                                     </select>
-                                </div>
-                                <div className="modal-form-group modal-form-group-checkbox">
-                                    <label>
-                                        <input
-                                            type="checkbox"
-                                            checked={formIsJumpbox}
-                                            onChange={e => setFormIsJumpbox(e.target.checked)}
-                                            disabled={formProtocol !== 'ssh' || formIapEnabled}
-                                        />
-                                        Use as Jumpbox
-                                    </label>
                                 </div>
                                 {formProtocol === 'ssh' && (
                                     <div className="modal-form-group modal-form-group-checkbox">
                                         <label>
                                             <input
                                                 type="checkbox"
-                                                checked={formIapEnabled}
-                                                onChange={e => {
-                                                    setFormIapEnabled(e.target.checked);
-                                                    if (e.target.checked) setFormIsJumpbox(false);
-                                                }}
+                                                checked={formIsJumpbox}
+                                                onChange={e => setFormIsJumpbox(e.target.checked)}
                                             />
-                                            Connect via Google Cloud IAP
+                                            Use as Jumpbox
                                         </label>
                                     </div>
                                 )}
-                                {formProtocol === 'ssh' && formIapEnabled && (
+                                {formProtocol === 'gcloud-iap' && (
                                     <>
                                         <div className="modal-form-group">
                                             {iapCheckingGcloud ? (
@@ -964,33 +953,40 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                                 />
                                             )}
                                         </div>
+                                        <div className="modal-form-group" style={{ marginTop: '4px' }}>
+                                            <span style={{
+                                                fontSize: 'calc(var(--font-size-base) - 2px)',
+                                                color: 'var(--text-secondary)',
+                                                fontStyle: 'italic',
+                                            }}>
+                                                Authentication is handled automatically by gcloud (OS Login / SSH key auto-generation at ~/.ssh/google_compute_engine). No credentials needed.
+                                            </span>
+                                        </div>
                                     </>
-                                )}
-                                {!formIapEnabled && (
-                                    <div className="modal-form-row">
-                                        <div className="modal-form-group flex-3">
-                                            <label>Host/IP</label>
-                                            <input
-                                                type="text"
-                                                value={formHost}
-                                                onChange={e => setFormHost(e.target.value)}
-                                                onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
-                                                placeholder="192.168.1.1"
-                                            />
-                                        </div>
-                                        <div className="modal-form-group flex-1">
-                                            <label>Port</label>
-                                            <input
-                                                type="number"
-                                                value={formPort}
-                                                onChange={e => setFormPort(e.target.value)}
-                                                onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
-                                            />
-                                        </div>
-                                    </div>
                                 )}
                                 {(formProtocol === 'ssh' || formProtocol === 'telnet') && (
                                     <>
+                                        <div className="modal-form-row">
+                                            <div className="modal-form-group flex-3">
+                                                <label>Host/IP</label>
+                                                <input
+                                                    type="text"
+                                                    value={formHost}
+                                                    onChange={e => setFormHost(e.target.value)}
+                                                    onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
+                                                    placeholder="192.168.1.1"
+                                                />
+                                            </div>
+                                            <div className="modal-form-group flex-1">
+                                                <label>Port</label>
+                                                <input
+                                                    type="number"
+                                                    value={formPort}
+                                                    onChange={e => setFormPort(e.target.value)}
+                                                    onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
+                                                />
+                                            </div>
+                                        </div>
                                         <div className="modal-form-group">
                                             <label>Username</label>
                                             <input

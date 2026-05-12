@@ -6,5 +6,10 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // vitest 4.1.4 + jsdom races on worker init in parallel mode, causing
+    // every test file to fail collection with "Cannot read properties of
+    // undefined (reading 'config')". Run files sequentially until upstream
+    // fixes it.
+    fileParallelism: false,
   },
 });

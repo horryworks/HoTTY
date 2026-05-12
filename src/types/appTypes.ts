@@ -1,4 +1,4 @@
-export type ProtocolId = 'ssh' | 'telnet' | 'serial' | 'wsl' | 'cmd' | 'powershell' | 'git-bash';
+export type ProtocolId = 'ssh' | 'telnet' | 'serial' | 'wsl' | 'cmd' | 'powershell' | 'git-bash' | 'gcloud-iap';
 export type FeatureId = 'ai-chat' | 'log-viewer' | 'ping-monitor' | 'text-editor' | 'file-explorer';
 
 export type Encoding = 'utf8' | 'shift_jis' | 'euc-jp';
@@ -26,6 +26,13 @@ export interface SshConnectionConfig extends BaseConnectionConfig {
 }
 
 export type TelnetConnectionConfig = BaseConnectionConfig;
+
+export interface GcloudIapConnectionConfig {
+  project: string;
+  zone: string;
+  instance: string;
+  encoding: Encoding;
+}
 
 export interface SessionDataPayload {
   sessionId: string;
@@ -240,7 +247,7 @@ interface IapTunnelEntry {
 }
 
 export interface HostEntry {
-  protocol: 'ssh' | 'telnet';
+  protocol: 'ssh' | 'telnet' | 'gcloud-iap';
   host: string;
   port: number;
   username?: string;

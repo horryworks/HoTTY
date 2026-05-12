@@ -13,6 +13,7 @@ import type {
     SerialConnectionConfig,
     WslConnectionConfig,
     LocalConnectionConfig,
+    GcloudIapConnectionConfig,
     SerialPortInfo,
     GcloudStatus,
     GcloudAuthStatus,
@@ -26,7 +27,8 @@ type AnyConfig =
     | TelnetConnectionConfig
     | SerialConnectionConfig
     | WslConnectionConfig
-    | LocalConnectionConfig;
+    | LocalConnectionConfig
+    | GcloudIapConnectionConfig;
 
 export interface ConnectSubmitPayload {
     displayName: string;
@@ -43,6 +45,7 @@ interface SessionDialogProps {
 const PROTOCOLS: { value: ProtocolId; label: string }[] = [
     { value: 'ssh', label: 'SSH' },
     { value: 'telnet', label: 'Telnet' },
+    { value: 'gcloud-iap', label: 'Google Cloud IAP' },
     { value: 'serial', label: 'Serial' },
     { value: 'wsl', label: 'WSL' },
     { value: 'cmd', label: 'Command Prompt' },
@@ -166,8 +169,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const [isJumpbox, setIsJumpbox] = useState(false);
     const [jumpboxId, setJumpboxId] = useState('');
 
-    // IAP tunnel state
-    const [iapEnabled, setIapEnabled] = useState(false);
+    // IAP tunnel state — visibility/enablement is driven by `protocol === 'gcloud-iap'`,
+    // so there is no separate `iapEnabled` flag.
     const [iapProject, setIapProject] = useState('');
     const [iapZone, setIapZone] = useState('');
     const [iapInstance, setIapInstance] = useState('');
@@ -216,7 +219,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         password: string;
         isJumpbox: boolean;
         jumpboxId: string;
-        iapEnabled: boolean;
         iapProject: string;
         iapZone: string;
         iapInstance: string;
@@ -290,8 +292,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     }, [protocol, isOpen, selectedDistro, serialPath]);
 
     // --- IAP effects ---
+    const isIap = protocol === 'gcloud-iap';
     useEffect(() => {
-        if (!iapEnabled) {
+        if (!isIap) {
             // eslint-disable-next-line react-hooks/set-state-in-effect
             setIapGcloudStatus(null);
             setIapAuthStatus(null);
@@ -317,7 +320,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             }
         })();
         return () => { cancelled = true; };
-    }, [iapEnabled]);
+    }, [isIap]);
 
     const handleLoadProjects = useCallback(async () => {
         if (iapLoadingProjects || iapProjects.length > 0) return;
@@ -397,7 +400,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setPassword('');
         setIsJumpbox(false);
         setJumpboxId('');
-        setIapEnabled(false);
         setIapProject('');
         setIapZone('');
         setIapInstance('');
@@ -415,7 +417,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             setPassword('');
             setIsJumpbox(false);
             setJumpboxId('');
-            setIapEnabled(false);
             setIapProject('');
             setIapZone('');
             setIapInstance('');
@@ -455,15 +456,13 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setIsJumpbox(!!e.isJumpbox);
         setJumpboxId(e.jumpboxId ?? '');
 
-        // IAP tunnel state
+        // IAP tunnel state — protocol === 'gcloud-iap' is the source of truth.
         iapLoadingFromHostRef.current = true;
-        if (e.iapTunnel) {
-            setIapEnabled(true);
+        if (e.protocol === 'gcloud-iap' && e.iapTunnel) {
             setIapProject(e.iapTunnel.project);
             setIapZone(e.iapTunnel.zone);
             setIapInstance(e.iapTunnel.instance);
         } else {
-            setIapEnabled(false);
             setIapProject('');
             setIapZone('');
             setIapInstance('');
@@ -480,7 +479,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             password: p,
             isJumpbox: !!e.isJumpbox,
             jumpboxId: e.jumpboxId ?? '',
-            iapEnabled: !!e.iapTunnel,
             iapProject: e.iapTunnel?.project ?? '',
             iapZone: e.iapTunnel?.zone ?? '',
             iapInstance: e.iapTunnel?.instance ?? '',
@@ -491,6 +489,25 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const handleDoubleClickHost = useCallback(async (node: HostTreeNode) => {
         if (node.type !== 'host' || !node.entry) return;
         const e = node.entry;
+        const globalEncoding = useSettingsStore.getState().globalEncoding;
+
+        // Fast path: IAP hosts have no credentials to decrypt — gcloud handles
+        // authentication entirely.
+        if (e.protocol === 'gcloud-iap' && e.iapTunnel) {
+            const config: GcloudIapConnectionConfig = {
+                project: e.iapTunnel.project,
+                zone: e.iapTunnel.zone,
+                instance: e.iapTunnel.instance,
+                encoding: globalEncoding,
+            };
+            // Fall back to a generated label when the tree node has no name
+            // (e.g. the user double-clicked an unnamed entry created from the
+            // host-tree "+" modal). An empty tab title is unfriendly.
+            const fallbackName = `IAP ${e.iapTunnel.instance}`;
+            const displayName = node.name?.trim() || fallbackName;
+            onConnect({ displayName, protocol: 'gcloud-iap', config });
+            return;
+        }
 
         let u = e.username ?? '';
         let p = e.password ?? '';
@@ -511,7 +528,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             if (decP !== undefined) p = decP;
         }
 
-        const globalEncoding = useSettingsStore.getState().globalEncoding;
         const sshKeepAlive = settings.sshKeepAliveEnabled ? settings.sshKeepAliveInterval : 0;
         const telnetKeepAlive = settings.telnetKeepAliveEnabled ? settings.telnetKeepAliveInterval : 0;
         const sshConnectTimeout = settings.sshConnectTimeoutSecs;
@@ -520,7 +536,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         let payload: ConnectSubmitPayload;
         if (e.protocol === 'ssh') {
             const config: SshConnectionConfig = {
-                host: e.iapTunnel ? e.iapTunnel.instance : e.host,
+                host: e.host,
                 port: e.port,
                 username: u,
                 password: p || undefined,
@@ -554,7 +570,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         originalState.password !== password ||
         originalState.isJumpbox !== isJumpbox ||
         originalState.jumpboxId !== jumpboxId ||
-        originalState.iapEnabled !== iapEnabled ||
         originalState.iapProject !== iapProject ||
         originalState.iapZone !== iapZone ||
         originalState.iapInstance !== iapInstance
@@ -598,21 +613,21 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             password: finalP,
             isJumpbox,
             jumpboxId,
-            iapEnabled,
             iapProject,
             iapZone,
             iapInstance,
         });
 
+        const isIapProto = protocol === 'gcloud-iap';
         const entry: HostEntry = {
-            protocol: protocol as 'ssh' | 'telnet',
-            host: iapEnabled ? iapInstance : host,
+            protocol: protocol as 'ssh' | 'telnet' | 'gcloud-iap',
+            host: isIapProto ? iapInstance : host,
             port: parseInt(port),
-            username: (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
-            password: (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
+            username: isIapProto ? undefined : (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
+            password: isIapProto ? undefined : (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
             isJumpbox: protocol === 'ssh' ? (isJumpbox || undefined) : undefined,
-            jumpboxId: iapEnabled ? undefined : (jumpboxId || undefined),
-            iapTunnel: iapEnabled ? { project: iapProject, zone: iapZone, instance: iapInstance } : undefined,
+            jumpboxId: isIapProto ? undefined : (jumpboxId || undefined),
+            iapTunnel: isIapProto ? { project: iapProject, zone: iapZone, instance: iapInstance } : undefined,
         };
 
         hostManager.editNode(selectedHostId, { name: displayName, entry });
@@ -625,30 +640,31 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         // Front-end validation. Catches obvious mistakes (empty host, bad
         // port, malformed GCP IDs, CRLF injection) before the backend has to.
         const validationError = ((): string | null => {
+            if (protocol === 'gcloud-iap') {
+                const projectOk = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(iapProject);
+                const zoneOk = /^[a-z]+-[a-z]+[0-9]+-[a-z]$/.test(iapZone);
+                const instanceOk = /^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$/.test(iapInstance);
+                if (!projectOk) {
+                    return 'IAP project ID must be 6-30 chars, lowercase alphanumeric or hyphen, starting with a letter.';
+                }
+                if (!zoneOk) return 'IAP zone is invalid (e.g., us-central1-a).';
+                if (!instanceOk) return 'IAP instance name is invalid (lowercase letters/digits/hyphens, must start with a letter, max 63 chars).';
+                return null;
+            }
             if (protocol === 'ssh' || protocol === 'telnet') {
                 const h = host.trim();
-                if (!iapEnabled) {
-                    if (!h) return 'Host is required.';
-                    if (/[\s\r\n\0]/.test(h)) return 'Host contains invalid whitespace or newline characters.';
-                }
+                if (!h) return 'Host is required.';
+                if (/[\s\r\n\0]/.test(h)) return 'Host contains invalid whitespace or newline characters.';
                 const p = parseInt(port, 10);
                 if (!Number.isInteger(p) || p < 1 || p > 65535) {
                     return 'Port must be an integer between 1 and 65535.';
                 }
-                if (protocol === 'ssh' && !iapEnabled && !username.trim()) {
+                if (protocol === 'ssh' && !username.trim()) {
                     return 'Username is required for SSH.';
                 }
                 if (/[\r\n\0]/.test(username)) {
                     return 'Username contains invalid newline characters.';
                 }
-            }
-            if (iapEnabled) {
-                const projectOk = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(iapProject);
-                if (!projectOk) {
-                    return 'IAP project ID must be 6-30 chars, lowercase alphanumeric or hyphen, starting with a letter.';
-                }
-                if (!iapZone.trim()) return 'IAP zone is required.';
-                if (!iapInstance.trim()) return 'IAP instance is required.';
             }
             return null;
         })();
@@ -681,16 +697,17 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         }
 
         // Persist credential changes back to the selected tree node
-        if (selectedHostId && (protocol === 'ssh' || protocol === 'telnet')) {
+        if (selectedHostId && (protocol === 'ssh' || protocol === 'telnet' || protocol === 'gcloud-iap')) {
+            const isIapProto = protocol === 'gcloud-iap';
             const entry: HostEntry = {
-                protocol: protocol as 'ssh' | 'telnet',
-                host: iapEnabled ? iapInstance : host,
+                protocol: protocol as 'ssh' | 'telnet' | 'gcloud-iap',
+                host: isIapProto ? iapInstance : host,
                 port: parseInt(port),
-                username: (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
-                password: (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
+                username: isIapProto ? undefined : (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
+                password: isIapProto ? undefined : (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
                 isJumpbox: protocol === 'ssh' ? (isJumpbox || undefined) : undefined,
-                jumpboxId: iapEnabled ? undefined : (jumpboxId || undefined),
-                iapTunnel: iapEnabled ? { project: iapProject, zone: iapZone, instance: iapInstance } : undefined,
+                jumpboxId: isIapProto ? undefined : (jumpboxId || undefined),
+                iapTunnel: isIapProto ? { project: iapProject, zone: iapZone, instance: iapInstance } : undefined,
             };
             const patchTree = (nodes: HostTreeNode[], id: string): HostTreeNode[] =>
                 nodes.map(n => {
@@ -713,6 +730,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     const u = finalU.trim();
                     return `${protocol.toUpperCase()} ${u ? u + '@' : ''}${host.trim()}:${port}`;
                 }
+                case 'gcloud-iap':
+                    return `IAP ${iapInstance.trim()}`;
                 case 'serial':
                     return `Serial ${serialPath} (${baudRate})`;
                 case 'wsl':
@@ -727,9 +746,19 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         };
 
         switch (protocol) {
+            case 'gcloud-iap': {
+                const config: GcloudIapConnectionConfig = {
+                    project: iapProject.trim(),
+                    zone: iapZone.trim(),
+                    instance: iapInstance.trim(),
+                    encoding,
+                };
+                onConnect({ displayName: buildName(), protocol, config });
+                break;
+            }
             case 'ssh': {
                 const config: SshConnectionConfig = {
-                    host: iapEnabled ? iapInstance : host.trim(),
+                    host: host.trim(),
                     port: parseInt(port),
                     username: finalU.trim(),
                     password: finalP || undefined,
@@ -807,6 +836,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 return host.trim().length > 0 && parseInt(port) > 0 && parseInt(port) <= 65535 && username.trim().length > 0;
             case 'telnet':
                 return host.trim().length > 0 && parseInt(port) > 0 && parseInt(port) <= 65535;
+            case 'gcloud-iap':
+                return iapProject.trim().length > 0 && iapZone.trim().length > 0 && iapInstance.trim().length > 0;
             case 'serial':
                 return serialPath.trim().length > 0;
             case 'wsl':
@@ -919,35 +950,15 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                                 type="checkbox"
                                                 checked={isJumpbox}
                                                 onChange={e => setIsJumpbox(e.target.checked)}
-                                                disabled={protocol !== 'ssh' || iapEnabled}
+                                                disabled={protocol !== 'ssh'}
                                             />
                                             Use as Jumpbox
                                         </label>
                                     </div>
                                 )}
 
-                                {/* IAP checkbox */}
-                                {protocol === 'ssh' && (
-                                    <div className="form-group form-group-checkbox">
-                                        <label>
-                                            <input
-                                                type="checkbox"
-                                                checked={iapEnabled}
-                                                onChange={e => {
-                                                    setIapEnabled(e.target.checked);
-                                                    if (e.target.checked) {
-                                                        setIsJumpbox(false);
-                                                        setJumpboxId('');
-                                                    }
-                                                }}
-                                            />
-                                            Connect via Google Cloud IAP
-                                        </label>
-                                    </div>
-                                )}
-
                                 {/* IAP tunnel fields */}
-                                {protocol === 'ssh' && iapEnabled && (
+                                {protocol === 'gcloud-iap' && (
                                     <>
                                         <div className="form-group">
                                             {iapCheckingGcloud ? (
@@ -1018,64 +1029,67 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                                 <input type="text" value={iapInstance} onChange={e => setIapInstance(e.target.value)} placeholder="my-instance" required />
                                             )}
                                         </div>
+                                        <div className="form-group" style={{ marginTop: '4px' }}>
+                                            <span style={{
+                                                fontSize: 'calc(var(--font-size-base) - 2px)',
+                                                color: 'var(--text-secondary)',
+                                                fontStyle: 'italic',
+                                            }}>
+                                                Authentication is handled automatically by gcloud (OS Login / SSH key auto-generation at ~/.ssh/google_compute_engine). No username, password, or private key is required.
+                                            </span>
+                                        </div>
                                     </>
                                 )}
 
                                 {/* SSH/Telnet fields */}
                                 {NETWORK_PROTOCOLS.has(protocol) && (
                                     <>
-                                        {!iapEnabled && (
-                                            <div className="form-row">
-                                                <div className="form-group" style={{ flex: 3 }}>
-                                                    <label>Host/IP</label>
-                                                    <input
-                                                        type="text"
-                                                        value={host}
-                                                        onChange={e => setHost(e.target.value)}
-                                                        placeholder="example.com"
-                                                        required
-                                                        autoFocus
-                                                    />
-                                                </div>
-                                                <div className="form-group" style={{ flex: 1 }}>
-                                                    <label>Port</label>
-                                                    <input
-                                                        type="number"
-                                                        value={port}
-                                                        onChange={e => setPort(e.target.value)}
-                                                        required
-                                                    />
-                                                </div>
-                                            </div>
-                                        )}
-                                        {(protocol === 'ssh' || protocol === 'telnet') && (
-                                            <div className="form-group">
-                                                <label>Username</label>
+                                        <div className="form-row">
+                                            <div className="form-group" style={{ flex: 3 }}>
+                                                <label>Host/IP</label>
                                                 <input
                                                     type="text"
-                                                    value={isDecrypting ? 'Decrypting...' : username}
-                                                    onChange={e => setUsername(e.target.value)}
-                                                    className={isDecrypting ? 'decrypting-placeholder' : ''}
-                                                    disabled={isDecrypting}
-                                                    autoComplete="off"
-                                                    required={protocol === 'ssh'}
+                                                    value={host}
+                                                    onChange={e => setHost(e.target.value)}
+                                                    placeholder="example.com"
+                                                    required
+                                                    autoFocus
                                                 />
                                             </div>
-                                        )}
-                                        {(protocol === 'ssh' || protocol === 'telnet') && (
-                                            <div className="form-group">
-                                                <label>Password</label>
+                                            <div className="form-group" style={{ flex: 1 }}>
+                                                <label>Port</label>
                                                 <input
-                                                    type="password"
-                                                    value={isDecrypting ? 'Decrypting...' : password}
-                                                    onChange={e => setPassword(e.target.value)}
-                                                    className={isDecrypting ? 'decrypting-placeholder' : ''}
-                                                    disabled={isDecrypting}
-                                                    autoComplete="new-password"
+                                                    type="number"
+                                                    value={port}
+                                                    onChange={e => setPort(e.target.value)}
+                                                    required
                                                 />
                                             </div>
-                                        )}
-                                        {(protocol === 'ssh' || protocol === 'telnet') && !iapEnabled && jumpboxHosts.length > 0 && (
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Username</label>
+                                            <input
+                                                type="text"
+                                                value={isDecrypting ? 'Decrypting...' : username}
+                                                onChange={e => setUsername(e.target.value)}
+                                                className={isDecrypting ? 'decrypting-placeholder' : ''}
+                                                disabled={isDecrypting}
+                                                autoComplete="off"
+                                                required={protocol === 'ssh'}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Password</label>
+                                            <input
+                                                type="password"
+                                                value={isDecrypting ? 'Decrypting...' : password}
+                                                onChange={e => setPassword(e.target.value)}
+                                                className={isDecrypting ? 'decrypting-placeholder' : ''}
+                                                disabled={isDecrypting}
+                                                autoComplete="new-password"
+                                            />
+                                        </div>
+                                        {jumpboxHosts.length > 0 && (
                                             <div className="form-group">
                                                 <label>Jumpbox (Bastion)</label>
                                                 <select

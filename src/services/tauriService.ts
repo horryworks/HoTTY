@@ -15,6 +15,7 @@ import type {
   SerialConnectionConfig,
   WslConnectionConfig,
   LocalConnectionConfig,
+  GcloudIapConnectionConfig,
   SessionDataPayload,
   SessionStatusPayload,
   SessionErrorPayload,
@@ -49,7 +50,8 @@ type AnyConfig =
   | TelnetConnectionConfig
   | SerialConnectionConfig
   | WslConnectionConfig
-  | LocalConnectionConfig;
+  | LocalConnectionConfig
+  | GcloudIapConnectionConfig;
 
 const CLIPBOARD_MAX_BYTES = 10 * 1024 * 1024;
 

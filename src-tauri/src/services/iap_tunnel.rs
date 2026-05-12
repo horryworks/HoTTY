@@ -24,6 +24,9 @@ const RE_PROJECT: &str = r"^[a-z][a-z0-9\-]{4,28}[a-z0-9]$";
 /// GCP zone: e.g. us-central1-a
 const RE_ZONE: &str = r"^[a-z]+-[a-z]+[0-9]+-[a-z]$";
 
+/// GCE instance name: lowercase letters/digits/hyphens, 1-63 chars, starts with letter.
+const RE_INSTANCE: &str = r"^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$";
+
 // ---------------------------------------------------------------------------
 // Result types (returned to frontend via Tauri commands)
 // ---------------------------------------------------------------------------
@@ -60,16 +63,22 @@ pub struct GceInstance {
 // Validation helpers
 // ---------------------------------------------------------------------------
 
-fn is_valid_project(project: &str) -> bool {
+pub(crate) fn is_valid_project(project: &str) -> bool {
     use std::sync::OnceLock;
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(RE_PROJECT).unwrap()).is_match(project)
 }
 
-fn is_valid_zone(zone: &str) -> bool {
+pub(crate) fn is_valid_zone(zone: &str) -> bool {
     use std::sync::OnceLock;
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(RE_ZONE).unwrap()).is_match(zone)
+}
+
+pub(crate) fn is_valid_instance(instance: &str) -> bool {
+    use std::sync::OnceLock;
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(RE_INSTANCE).unwrap()).is_match(instance)
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +131,7 @@ fn find_gcloud_path() -> Option<PathBuf> {
 }
 
 /// Return the gcloud program name and whether shell mode is needed.
-fn gcloud_program() -> (String, bool) {
+pub(crate) fn gcloud_program() -> (String, bool) {
     if let Some(path) = find_gcloud_path() {
         (path.to_string_lossy().into_owned(), cfg!(target_os = "windows"))
     } else {
@@ -404,6 +413,39 @@ mod tests {
         assert!(!is_valid_zone("us-central1"));
         assert!(!is_valid_zone("US-CENTRAL1-A"));
         assert!(!is_valid_zone("us_central1_a"));
+    }
+
+    #[test]
+    fn valid_instance_names() {
+        assert!(is_valid_instance("vm-01"));
+        assert!(is_valid_instance("web"));
+        assert!(is_valid_instance("a"));
+        assert!(is_valid_instance("instance-20260512-103057"));
+        assert!(is_valid_instance("vm-with-many-hyphens-and-digits-123"));
+    }
+
+    #[test]
+    fn invalid_instance_names() {
+        // Empty
+        assert!(!is_valid_instance(""));
+        // Starts with digit
+        assert!(!is_valid_instance("1vm"));
+        // Starts with hyphen
+        assert!(!is_valid_instance("-vm"));
+        // Ends with hyphen
+        assert!(!is_valid_instance("vm-"));
+        // Uppercase
+        assert!(!is_valid_instance("VM"));
+        // Underscore
+        assert!(!is_valid_instance("my_vm"));
+        // Too long (>63 chars)
+        let long = "a".repeat(64);
+        assert!(!is_valid_instance(&long));
+        // Shell metacharacters
+        assert!(!is_valid_instance("vm;ls"));
+        assert!(!is_valid_instance("vm$(whoami)"));
+        assert!(!is_valid_instance("vm\nrm"));
+        assert!(!is_valid_instance("vm 01"));
     }
 
     // -- Serialization tests --

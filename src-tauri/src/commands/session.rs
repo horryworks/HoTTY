@@ -6,6 +6,7 @@ use serde_json::Value;
 use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 
+use crate::services::gcloud_iap::{GcloudIapConfig, GcloudIapSession};
 use crate::services::local::{LocalConfig, LocalSession};
 use crate::services::log_manager::LogManager;
 use crate::services::serial::{SerialConfig, SerialSession};
@@ -24,6 +25,7 @@ pub enum ProtocolId {
     Cmd,
     PowerShell,
     GitBash,
+    GcloudIap,
 }
 
 impl ProtocolId {
@@ -36,6 +38,7 @@ impl ProtocolId {
             Self::Cmd => "cmd",
             Self::PowerShell => "powershell",
             Self::GitBash => "git-bash",
+            Self::GcloudIap => "gcloud-iap",
         }
     }
 }
@@ -150,6 +153,20 @@ pub async fn connect_session(
             log::info!("building LocalSession: type={}", cfg.shell_type);
             let meta = SessionMeta { protocol: ProtocolId::GitBash, host: cfg.shell_type.clone() };
             (Box::new(LocalSession::new(cfg)), meta)
+        }
+        "gcloud-iap" => {
+            let cfg: GcloudIapConfig = serde_json::from_value(config).map_err(|e| {
+                log::error!("invalid gcloud-iap config: {e}");
+                format!("invalid gcloud-iap config: {e}")
+            })?;
+            log::info!(
+                "building GcloudIapSession: project={} zone={} instance={}",
+                cfg.project, cfg.zone, cfg.instance
+            );
+            // '/' is illegal in Windows filenames; '-' keeps log filenames safe.
+            let host_label = format!("{}-{}", cfg.project, cfg.instance);
+            let meta = SessionMeta { protocol: ProtocolId::GcloudIap, host: host_label };
+            (Box::new(GcloudIapSession::new(cfg)), meta)
         }
         other => return Err(format!("unsupported protocol: {other}")),
     };
