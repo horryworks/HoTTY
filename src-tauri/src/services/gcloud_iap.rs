@@ -9,10 +9,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::net::TcpStream;
 use tokio::process::{Child, Command as TokioCommand};
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
-use tokio::time::timeout;
+use tokio::time::{timeout, MissedTickBehavior};
 
 use super::iap_tunnel::{gcloud_program, is_valid_instance, is_valid_project, is_valid_zone};
 use super::session_service::{
@@ -73,11 +74,17 @@ impl GcloudIapConfig {
 const GCLOUD_KEY_FILENAME: &str = "google_compute_engine";
 
 /// How long to wait for `start-iap-tunnel` to print its "Listening on port"
-/// line before giving up. Includes the IAP backend handshake (can be ~10s).
-const TUNNEL_READY_TIMEOUT: Duration = Duration::from_secs(30);
+/// line before giving up. The IAP backend handshake plus the "Testing if
+/// tunnel connection works." probe can easily take 30s+ on slow networks, so
+/// the budget needs headroom past gcloud's own internal timeouts.
+const TUNNEL_READY_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// Stdout patterns gcloud uses when reporting the listening port. The exact
-/// wording has varied across SDK releases; match the union of known forms.
+/// Stdout patterns gcloud uses when reporting that the tunnel is *actually
+/// listening* on a local port. Used as a fast-path readiness signal — but
+/// in practice gcloud's Python stderr is block-buffered when redirected to
+/// a pipe, so this line often gets stuck in the buffer and never reaches
+/// us. The TCP probe (see `pick_port_regex` / `can_tcp_connect_localhost`)
+/// is the actual workhorse.
 fn tunnel_port_regexes() -> &'static [Regex] {
     use std::sync::OnceLock;
     static RES: OnceLock<Vec<Regex>> = OnceLock::new();
@@ -87,10 +94,34 @@ fn tunnel_port_regexes() -> &'static [Regex] {
             Regex::new(r"Listening on port \[(\d+)\]").unwrap(),
             // Older: "Listening on 127.0.0.1:12345"
             Regex::new(r"Listening on (?:127\.0\.0\.1|localhost):(\d+)").unwrap(),
-            // Picking: "Picking local unused port [12345]."
-            Regex::new(r"Picking local unused port \[(\d+)\]").unwrap(),
         ]
     })
+}
+
+/// Extracts the local port from gcloud's "Picking local unused port [N]." line.
+/// This line *does* reach us reliably (it's part of a multi-line burst that
+/// includes the NumPy warning, so the buffer flushes). The port number it
+/// reveals is the one MakeSocket() is about to listen on a few ms later, so
+/// once we see it we can directly TCP-probe the listener.
+fn pick_port_regex() -> &'static Regex {
+    use std::sync::OnceLock;
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"Picking local unused port \[(\d+)\]").unwrap())
+}
+
+/// Best-effort TCP connect to localhost:port with a short deadline. Returns
+/// true iff the connection completes (kernel accepts SYN-ACK). Used to detect
+/// when gcloud's IAP tunnel listener becomes available, independent of
+/// gcloud's stderr buffering.
+async fn can_tcp_connect_localhost(port: u16) -> bool {
+    matches!(
+        tokio::time::timeout(
+            Duration::from_millis(500),
+            TcpStream::connect(("127.0.0.1", port)),
+        )
+        .await,
+        Ok(Ok(_))
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -496,6 +527,13 @@ fn build_tunnel_argv(cfg: &GcloudIapConfig) -> Vec<String> {
         format!("--zone={}", cfg.zone),
         format!("--project={}", cfg.project),
         "--local-host-port=localhost:0".into(),
+        // Skip gcloud's "Testing if tunnel connection works." probe. It can
+        // hang for many seconds (sometimes minutes) on slow or partially
+        // misconfigured IAP backends, preventing the "Listening on port [N]."
+        // banner we wait for. The tunnel itself works without the probe; any
+        // real backend issue will surface as a clean ssh-handshake failure
+        // instead of an opaque pre-connect timeout.
+        "--iap-tunnel-disable-connection-check".into(),
         "--quiet".into(),
     ]
 }
@@ -537,11 +575,19 @@ struct IapTunnel {
     port: u16,
 }
 
-/// Spawn the IAP tunnel and parse stdout until we see the local port. On
-/// success the child remains alive (the tunnel keeps the local TCP listener
-/// open). The caller is responsible for killing the child when the SSH session
-/// ends.
-async fn start_iap_tunnel(cfg: &GcloudIapConfig) -> Result<IapTunnel, SessionError> {
+/// Spawn the IAP tunnel and parse stdout/stderr until we see the local port.
+/// While we wait, each non-empty gcloud output line is also forwarded to the
+/// session terminal so the user can see startup progress (gcloud's "Picking
+/// local unused port", "Testing if tunnel connection works.", warnings, and
+/// any errors) live instead of staring at a blank screen for up to a minute.
+/// On success the child remains alive (the tunnel keeps the local TCP
+/// listener open). The caller is responsible for killing the child when the
+/// SSH session ends.
+async fn start_iap_tunnel(
+    cfg: &GcloudIapConfig,
+    app: &AppHandle,
+    session_id: &str,
+) -> Result<IapTunnel, SessionError> {
     let args = build_tunnel_argv(cfg);
     let mut cmd = build_gcloud_command(&args);
     cmd.stdout(Stdio::piped());
@@ -568,8 +614,18 @@ async fn start_iap_tunnel(cfg: &GcloudIapConfig) -> Result<IapTunnel, SessionErr
 
     let mut combined_log = String::new();
     let regexes = tunnel_port_regexes();
+    let pick_re = pick_port_regex();
+    let mut picked_port: Option<u16> = None;
 
     let port = timeout(TUNNEL_READY_TIMEOUT, async {
+        // Once we learn the port from "Picking local unused port [N].", probe
+        // the local TCP listener every 250ms. gcloud's Python stderr is
+        // block-buffered when piped, so the "Listening on port [N]." banner
+        // (printed only milliseconds after Picking) routinely never reaches
+        // us — the TCP probe is what actually detects readiness.
+        let mut probe_interval = tokio::time::interval(Duration::from_millis(250));
+        probe_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
         loop {
             tokio::select! {
                 line = stdout_lines.next_line() => {
@@ -578,6 +634,16 @@ async fn start_iap_tunnel(cfg: &GcloudIapConfig) -> Result<IapTunnel, SessionErr
                             log::debug!("iap-tunnel stdout: {line}");
                             combined_log.push_str(&line);
                             combined_log.push('\n');
+                            if !line.trim().is_empty() {
+                                emit_session_data(app, session_id, format!("{line}\r\n"));
+                            }
+                            if picked_port.is_none() {
+                                if let Some(c) = pick_re.captures(&line) {
+                                    if let Ok(p) = c.get(1).unwrap().as_str().parse::<u16>() {
+                                        picked_port = Some(p);
+                                    }
+                                }
+                            }
                             for re in regexes {
                                 if let Some(c) = re.captures(&line) {
                                     if let Ok(p) = c.get(1).unwrap().as_str().parse::<u16>() {
@@ -598,6 +664,16 @@ async fn start_iap_tunnel(cfg: &GcloudIapConfig) -> Result<IapTunnel, SessionErr
                             log::debug!("iap-tunnel stderr: {line}");
                             combined_log.push_str(&line);
                             combined_log.push('\n');
+                            if !line.trim().is_empty() {
+                                emit_session_data(app, session_id, format!("{line}\r\n"));
+                            }
+                            if picked_port.is_none() {
+                                if let Some(c) = pick_re.captures(&line) {
+                                    if let Ok(p) = c.get(1).unwrap().as_str().parse::<u16>() {
+                                        picked_port = Some(p);
+                                    }
+                                }
+                            }
                             for re in regexes {
                                 if let Some(c) = re.captures(&line) {
                                     if let Ok(p) = c.get(1).unwrap().as_str().parse::<u16>() {
@@ -608,6 +684,14 @@ async fn start_iap_tunnel(cfg: &GcloudIapConfig) -> Result<IapTunnel, SessionErr
                         }
                         Ok(None) => { /* stderr closed; keep looping for stdout */ }
                         Err(e) => return Err(SessionError::ConnectionFailed(format!("gcloud stderr read error: {e}"))),
+                    }
+                }
+                _ = probe_interval.tick(), if picked_port.is_some() => {
+                    if let Some(p) = picked_port {
+                        if can_tcp_connect_localhost(p).await {
+                            log::info!("gcloud-iap: TCP probe confirmed listener up on localhost:{p}");
+                            return Ok::<u16, SessionError>(p);
+                        }
                     }
                 }
             }
@@ -742,7 +826,7 @@ impl SessionService for GcloudIapSession {
 
         // --- Start the IAP tunnel ---
         emit_session_data(&app, &session_id, "Starting IAP tunnel...\r\n".to_string());
-        let tunnel = start_iap_tunnel(&self.config).await?;
+        let tunnel = start_iap_tunnel(&self.config, &app, &session_id).await?;
         let port = tunnel.port;
         self.tunnel_child = Some(tunnel.child);
         emit_session_data(
@@ -1035,8 +1119,23 @@ mod tests {
                 "--zone=us-central1-a".to_string(),
                 "--project=my-project-123".to_string(),
                 "--local-host-port=localhost:0".to_string(),
+                "--iap-tunnel-disable-connection-check".to_string(),
                 "--quiet".to_string(),
             ]
+        );
+    }
+
+    /// Regression guard: `--iap-tunnel-disable-connection-check` must remain
+    /// in the argv. Without it, gcloud's "Testing if tunnel connection works."
+    /// probe can block our readiness wait indefinitely on slow/partially
+    /// misconfigured IAP backends.
+    #[test]
+    fn build_tunnel_argv_disables_connection_check() {
+        let c = cfg("my-project-123", "us-central1-a", "vm-01");
+        let argv = build_tunnel_argv(&c);
+        assert!(
+            argv.contains(&"--iap-tunnel-disable-connection-check".to_string()),
+            "argv missing --iap-tunnel-disable-connection-check: {argv:?}"
         );
     }
 
@@ -1088,7 +1187,6 @@ mod tests {
         let cases = &[
             ("Listening on port [54321].", 54321),
             ("Listening on 127.0.0.1:8765", 8765),
-            ("Picking local unused port [12345].", 12345),
         ];
         for (input, expected) in cases {
             let mut found = None;
@@ -1102,6 +1200,75 @@ mod tests {
             }
             assert_eq!(found, Some(*expected), "no regex matched: {input}");
         }
+    }
+
+    /// "Picking local unused port [N]." fires before the listener is up, so
+    /// it must NOT be treated as a readiness signal. Regression guard for the
+    /// bug where matching this line caused ssh to dial an unbound port and
+    /// exit 255 (Connection refused).
+    #[test]
+    fn tunnel_port_regex_ignores_picking_banner() {
+        let regexes = tunnel_port_regexes();
+        let picking = "Picking local unused port [12345].";
+        for re in regexes {
+            assert!(
+                re.captures(picking).is_none(),
+                "regex {re:?} unexpectedly matched the 'Picking' banner"
+            );
+        }
+    }
+
+    /// `pick_port_regex` is the separate regex used to learn the port number
+    /// (for the TCP-probe path). It MUST match the "Picking …" line that
+    /// `tunnel_port_regexes` ignores.
+    #[test]
+    fn pick_port_regex_extracts_port_from_picking_line() {
+        let re = pick_port_regex();
+        let cases = &[
+            ("Picking local unused port [12345].", 12345u16),
+            ("Picking local unused port [65535]", 65535),
+            ("Picking local unused port [1024].", 1024),
+        ];
+        for (input, expected) in cases {
+            let cap = re
+                .captures(input)
+                .unwrap_or_else(|| panic!("pick_port_regex did not match: {input}"));
+            let port: u16 = cap.get(1).unwrap().as_str().parse().unwrap();
+            assert_eq!(port, *expected, "input: {input}");
+        }
+    }
+
+    #[test]
+    fn pick_port_regex_rejects_listening_lines() {
+        let re = pick_port_regex();
+        // The "Listening" lines are handled by `tunnel_port_regexes`; this
+        // one only fires for "Picking ...".
+        assert!(re.captures("Listening on port [12345].").is_none());
+        assert!(re.captures("Listening on 127.0.0.1:12345").is_none());
+    }
+
+    /// `can_tcp_connect_localhost` must return true when a listener is bound
+    /// on the target port, and false when nothing is listening. This is the
+    /// core of the bufferless readiness detection path.
+    #[tokio::test]
+    async fn tcp_probe_detects_listener_state() {
+        // Bind to an ephemeral port and detect it.
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        assert!(
+            can_tcp_connect_localhost(port).await,
+            "probe should succeed while listener is bound on {port}"
+        );
+
+        // Drop the listener; subsequent probe should fail (the OS releases
+        // the port). We can't guarantee TIME_WAIT-style edge cases, so we
+        // only assert that an unbound high port fails — pick one we never
+        // bound to.
+        drop(listener);
+        assert!(
+            !can_tcp_connect_localhost(1).await,
+            "probe to a port unlikely to be listening (1) should fail"
+        );
     }
 
     #[test]
