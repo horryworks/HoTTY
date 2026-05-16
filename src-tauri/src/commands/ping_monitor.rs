@@ -1,5 +1,8 @@
+use std::path::Path;
+
 use tauri::{AppHandle, State};
 
+use crate::services::log_manager::LogManager;
 use crate::services::ping_monitor::{PingMonitorState, StartMonitorConfig};
 
 // ---------------------------------------------------------------------------
@@ -7,16 +10,38 @@ use crate::services::ping_monitor::{PingMonitorState, StartMonitorConfig};
 // ---------------------------------------------------------------------------
 
 /// Start a ping monitor for a session.
+///
+/// CSV logging is only enabled if the supplied `logging_path` has been
+/// user-approved via `LogManager` (native dialog round-trip). This matches
+/// `update_session_logging`'s gating — a compromised renderer cannot have the
+/// monitor write files to an arbitrary directory just by setting
+/// `logging_enabled=true`. The monitor still runs without CSV logging in that
+/// case; only the file-write side is suppressed.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn ping_monitor_start(
     app: AppHandle,
     state: State<'_, PingMonitorState>,
+    log_manager: State<'_, LogManager>,
     session_id: String,
     targets: Vec<String>,
     interval_ms: u64,
     logging_enabled: bool,
     logging_path: String,
 ) -> Result<(), String> {
+    let effective_logging_enabled = if logging_enabled && !logging_path.is_empty() {
+        let approved = log_manager.is_dir_approved(Path::new(&logging_path)).await;
+        if !approved {
+            log::warn!(
+                "ping-monitor: refusing CSV logging for session {session_id} — \
+                 directory not user-approved: {logging_path}"
+            );
+        }
+        approved
+    } else {
+        false
+    };
+
     let mut monitors = state.monitors.lock().await;
     crate::services::ping_monitor::start_monitor(
         app,
@@ -25,7 +50,7 @@ pub async fn ping_monitor_start(
             session_id,
             targets,
             interval_ms,
-            logging_enabled,
+            logging_enabled: effective_logging_enabled,
             logging_path,
         },
     );

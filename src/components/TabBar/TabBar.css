@@ -382,7 +382,7 @@
 
 /* ── Hidden AI Tab: reddish gradient ── */
 .tab.is-ai-tab.hidden-tab {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--color-danger) 40%, black), var(--color-danger), color-mix(in srgb, var(--color-danger) 40%, black)) !important;
+  background: linear-gradient(90deg, var(--color-danger-shade), var(--color-danger), var(--color-danger-shade)) !important;
 }
 
 .tab.is-ai-tab.hidden-tab:hover {

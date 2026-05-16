@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use serde::Serialize;
 use tauri::{AppHandle, State};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tokio::sync::Mutex;
 
 use crate::services::path_safety::is_sensitive_path;
@@ -243,12 +244,22 @@ pub async fn text_editor_write_file(
 }
 
 /// Approve a file path from drag-and-drop.
-/// Validates:
-/// - Path exists and is a regular file
-/// - File size is under 50 MB
+///
+/// The renderer can call this command with any path, so we cannot trust the
+/// "drag-and-drop" framing on its own — Tauri-level native drag-and-drop is
+/// disabled by `tauri.conf.json` (`dragDropEnabled: false`), and the
+/// webview-level drop event the caller may attribute is fully attacker-
+/// controllable. A native OK/Cancel confirm dialog is required for paths the
+/// user has not already approved this session; once approved, the path is
+/// cached so re-opening the same file in this session does not re-prompt.
+///
+/// Validates before showing the dialog:
+/// - Path is non-empty and not a symlink at the raw (pre-canonical) path
+/// - Resolves and is a regular file under 50 MB
 /// - Not in a sensitive directory
 #[tauri::command]
 pub async fn text_editor_approve_dropped_file(
+    app: AppHandle,
     paths: State<'_, ApprovedEditorPaths>,
     file_path: String,
 ) -> Result<bool, String> {
@@ -282,6 +293,30 @@ pub async fn text_editor_approve_dropped_file(
 
     if is_sensitive_path(&resolved) {
         return Err("access to sensitive directories is not allowed".into());
+    }
+
+    // Fast path: already approved this session — don't re-prompt.
+    {
+        let set = paths.inner.lock().await;
+        if set.contains(&resolved) {
+            return Ok(true);
+        }
+    }
+
+    // Native confirm dialog — gives this command teeth a compromised renderer
+    // cannot synthesise, since the OS-level click cannot be faked from the
+    // webview.
+    let body = format!("Allow HoTTY to open this file?\n\n{file_path}");
+    let approved = app
+        .dialog()
+        .message(body)
+        .title("Approve file open")
+        .kind(MessageDialogKind::Info)
+        .buttons(MessageDialogButtons::OkCancel)
+        .blocking_show();
+
+    if !approved {
+        return Ok(false);
     }
 
     let mut set = paths.inner.lock().await;

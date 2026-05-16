@@ -33,7 +33,7 @@ const THEME_SECTIONS: { title: string; description: string; keys: string[] }[] =
     {
         title: 'Status & Signals',
         description: 'Success, error, warning, and danger indicator colors',
-        keys: ['success-color', 'status-success', 'status-error', 'color-danger', 'color-danger-bg', 'color-danger-bg-hover', 'color-danger-border', 'color-warning'],
+        keys: ['success-color', 'status-success', 'status-error', 'color-danger', 'color-danger-shade', 'color-danger-bg', 'color-danger-bg-hover', 'color-danger-border', 'color-warning'],
     },
     {
         title: 'AI Chat',
@@ -105,6 +105,7 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'status-success': 'Color for authenticated/success status indicator dots.',
     'status-error': 'Color for unauthenticated/error status indicator dots.',
     'color-danger': 'Color indicating destructive actions or errors.',
+    'color-danger-shade': 'Darker shade of the danger color, used at the ends of the hidden-AI-tab gradient.',
     'color-danger-bg': 'Background tint for danger elements.',
     'color-danger-bg-hover': 'Hover background tint for danger elements.',
     'color-danger-border': 'Border color for danger elements.',

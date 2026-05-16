@@ -47,6 +47,7 @@
         "btn-danger-bg": "#dc2626",
         "btn-danger-hover-bg": "#b91c1c",
         "color-danger": "#dc2626",
+        "color-danger-shade": "#580f0f",
         "color-danger-bg": "rgba(220, 38, 38, 0.08)",
         "color-danger-bg-hover": "rgba(220, 38, 38, 0.18)",
         "color-danger-border": "rgba(220, 38, 38, 0.3)",

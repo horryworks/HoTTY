@@ -172,7 +172,7 @@
   border-radius: 4px;
 }
 
-.text-editor-menu-btn:hover,
+.text-editor-menu-btn:hover:not(:disabled),
 .text-editor-menu-btn.active {
   background: var(--hover-bg);
 }
@@ -272,7 +272,7 @@
 
 .text-editor-find-btn {
   background: none;
-  border: 1px solid var(--border-color);
+  border: none;
   color: var(--text-primary);
   font-family: var(--ui-font-family);
   font-size: calc(var(--font-size-base) - 2px);
@@ -281,17 +281,13 @@
   border-radius: 4px;
 }
 
-.text-editor-find-btn:hover {
+.text-editor-find-btn:hover:not(:disabled) {
   background: var(--hover-bg);
 }
 
 .text-editor-find-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.text-editor-find-btn:disabled:hover {
-  background: none;
 }
 
 .text-editor-find-label {

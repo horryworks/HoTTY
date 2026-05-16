@@ -1,5 +1,23 @@
 # Release Notes
 
+## v2.0.2
+
+A maintenance release. The headline change is a fix to the Google Cloud IAP tunnel readiness detection that caused fresh IAP connections to retry several times before succeeding. Two security follow-ups close renderer-side bypass gaps in the file-drop and ping-monitor flows — both no-known-exploit, but they were quietly eating into the dialog-attestation pattern used elsewhere in the app — and a small theming and UI consistency pass rounds out the release.
+
+### Improvements
+
+- **Hidden AI tab gradient is now themeable end-to-end.** Added a new `--color-danger-shade` theme variable (a darker variant of `--color-danger`) for the gradient endpoints on hidden AI chat tabs. Previously the endpoints mixed toward a hardcoded `black`, which looked right on dark themes but didn't reverse on light. Custom themes can now tune the shade alongside the other danger colors via **Settings &rarr; Appearance &rarr; Create Custom Theme &rarr; Status & Signals**.
+- **Text Editor pane button consistency.** The Text Editor menu button and find-bar button now follow the standard `:hover:not(:disabled)` pattern (matching the Log Viewer and Ping Monitor toolbar buttons), and the find-bar button drops a stray border so it visually matches the menu button in the same pane.
+
+### Bug Fixes
+
+- **gcloud IAP tunnel readiness detection no longer trips on Python stderr buffering.** Connecting via Google Cloud IAP would silently fail readiness detection because `gcloud`'s `tunnel-through-iap` subprocess block-buffers its stderr when piped, so the "Listening on port N" line never reached HoTTY in time and the connect retried. Detection is now a TCP probe against the chosen local port rather than a stderr text scan, and the redundant pre-connect probe is removed.
+
+### Security
+
+- **Text Editor file-drop now requires explicit user attestation.** When the renderer asks the backend to approve a file path that was dragged into the Text Editor, the backend now shows a native OS confirm dialog before adding the path to the approved set. The previous flow accepted any non-symlink, non-sensitive, &le;50 MB path that the renderer supplied, which left a renderer-side bypass of the dialog-attestation pattern already used by `text_editor_open_file` / `text_editor_save_file`. Approvals are cached per-session so re-opening the same file in the same launch does not re-prompt; a fresh app launch prompts again. The Tauri-level drag-and-drop event is still disabled, so the prompt cannot be triggered without a renderer-initiated request.
+- **Ping Monitor CSV logging now requires a user-approved log directory.** When CSV logging is enabled on a ping monitor, the backend now consults `LogManager::is_dir_approved` before writing the file — matching the gating already in place for session logging. If the directory has not been approved via the **Browse...** picker or the native confirm dialog, the monitor still runs but does not produce a CSV (and does not emit a fake log-file path back to the renderer). Use the **Browse...** button on the Ping Monitor pane to approve the directory once; the approval persists alongside the existing session-log approvals.
+
 ## v2.0.1
 
 A focused follow-up to v2.0.0. The headline change makes **Google Cloud IAP** a top-level protocol so IAP connections no longer require any SSH credentials. The rest is security — two file-system protections that close a renderer-side enumeration gap and repair a Windows-only matcher bug that had been silently disabling the existing sensitive-path checks — plus a small UI-font consistency pass left over from the v2.0.0 polish round.
