@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.3-beta1
+
+A diagnostic-focused pre-release. The headline change instruments the Google Cloud IAP connection path end-to-end so when an IAP connect fails in a real environment, the debug log captures every phase boundary — gcloud and ssh.exe resolution, OS Login detection result, full subprocess argv and PIDs, gcloud stdout/stderr line-by-line, TCP-probe attempts, and elapsed times — instead of surfacing as an opaque "connection failed" string.
+
+### Improvements
+
+- **Google Cloud IAP connect now writes detailed phase-by-phase diagnostic logs.** Connecting via Google Cloud IAP now emits info-level logs at every step to the debug log file (open via the **Open Debug Log Folder** action). The log records the resolved `gcloud` program and `ssh.exe` paths, the presence of relevant environment variables (`PATH`, `APPDATA`, `USERPROFILE`, `CLOUDSDK_CONFIG`, …), the OS Login detection result and resolved username, the full `gcloud start-iap-tunnel` and `ssh.exe` argv, both subprocess PIDs, every line of `gcloud` stdout/stderr (previously debug-level and silently dropped in release builds), TCP-probe attempts against the picked local port, a heartbeat while waiting for tunnel-readiness, the captured `combined_log` if `gcloud` exits prematurely or readiness times out, and elapsed times for each phase. When an IAP connect fails, attaching this log file to a bug report is now enough to triangulate the cause (auth / network / OS Login / SSH key) without further reproduction.
+
 ## v2.0.2
 
 A maintenance release. The headline change is a fix to the Google Cloud IAP tunnel readiness detection that caused fresh IAP connections to retry several times before succeeding. Two security follow-ups close renderer-side bypass gaps in the file-drop and ping-monitor flows — both no-known-exploit, but they were quietly eating into the dialog-attestation pattern used elsewhere in the app — and a small theming and UI consistency pass rounds out the release.

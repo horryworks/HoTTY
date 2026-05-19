@@ -278,22 +278,53 @@ fn build_gcloud_command(args: &[String]) -> TokioCommand {
 }
 
 /// Run a short-lived gcloud invocation and collect its stdout.
+///
+/// Logs at info level so failures (and total elapsed time) of auxiliary gcloud
+/// calls (OS Login lookup, metadata describe, …) are visible in release-mode
+/// log files — these calls happen BEFORE the tunnel-startup phase, so when an
+/// IAP connect hangs we need to know which of them is responsible.
 async fn run_gcloud_capture(args: &[String], deadline: Duration) -> Result<String, SessionError> {
+    let started = std::time::Instant::now();
+    let pretty_args = args.join(" ");
+    log::info!("gcloud-iap: run_gcloud_capture begin: gcloud {pretty_args}");
+
     let mut cmd = build_gcloud_command(args);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
     let output = timeout(deadline, cmd.output())
         .await
-        .map_err(|_| SessionError::ConnectionFailed("gcloud command timed out".into()))?
-        .map_err(|e| SessionError::ConnectionFailed(format!("failed to run gcloud: {e}")))?;
+        .map_err(|_| {
+            log::error!(
+                "gcloud-iap: run_gcloud_capture TIMED OUT after {:?}: gcloud {pretty_args}",
+                started.elapsed()
+            );
+            SessionError::ConnectionFailed("gcloud command timed out".into())
+        })?
+        .map_err(|e| {
+            log::error!(
+                "gcloud-iap: run_gcloud_capture spawn failed after {:?}: {e} (args: gcloud {pretty_args})",
+                started.elapsed()
+            );
+            SessionError::ConnectionFailed(format!("failed to run gcloud: {e}"))
+        })?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        log::warn!(
+            "gcloud-iap: run_gcloud_capture exited {} after {:?}: stderr={} (args: gcloud {pretty_args})",
+            output.status,
+            started.elapsed(),
+            stderr.trim()
+        );
         return Err(SessionError::ConnectionFailed(format!(
             "gcloud exited with {}: {}",
             output.status,
             stderr.trim()
         )));
     }
+    log::info!(
+        "gcloud-iap: run_gcloud_capture ok in {:?}: gcloud {pretty_args}",
+        started.elapsed()
+    );
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
@@ -588,15 +619,27 @@ async fn start_iap_tunnel(
     app: &AppHandle,
     session_id: &str,
 ) -> Result<IapTunnel, SessionError> {
+    let phase_start = std::time::Instant::now();
     let args = build_tunnel_argv(cfg);
+    log::info!(
+        "gcloud-iap: start_iap_tunnel begin session={session_id} argv={args:?}"
+    );
+
     let mut cmd = build_gcloud_command(&args);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
     cmd.kill_on_drop(true);
 
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| SessionError::ConnectionFailed(format!("failed to spawn gcloud: {e}")))?;
+    let mut child = cmd.spawn().map_err(|e| {
+        log::error!("gcloud-iap: failed to spawn gcloud subprocess: {e}");
+        SessionError::ConnectionFailed(format!("failed to spawn gcloud: {e}"))
+    })?;
+
+    let gcloud_pid = child.id().unwrap_or(0);
+    log::info!(
+        "gcloud-iap: gcloud start-iap-tunnel spawned pid={gcloud_pid} (timeout={}s)",
+        TUNNEL_READY_TIMEOUT.as_secs()
+    );
 
     let stdout = child
         .stdout
@@ -616,8 +659,10 @@ async fn start_iap_tunnel(
     let regexes = tunnel_port_regexes();
     let pick_re = pick_port_regex();
     let mut picked_port: Option<u16> = None;
+    let mut picked_at: Option<std::time::Instant> = None;
+    let mut probe_attempts: u32 = 0;
 
-    let port = timeout(TUNNEL_READY_TIMEOUT, async {
+    let result: Result<u16, SessionError> = timeout(TUNNEL_READY_TIMEOUT, async {
         // Once we learn the port from "Picking local unused port [N].", probe
         // the local TCP listener every 250ms. gcloud's Python stderr is
         // block-buffered when piped, so the "Listening on port [N]." banner
@@ -626,12 +671,21 @@ async fn start_iap_tunnel(
         let mut probe_interval = tokio::time::interval(Duration::from_millis(250));
         probe_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
+        // Periodic "still waiting" heartbeat so we can see in the log how far
+        // we got before a hang. Skip the first tick (interval fires immediately).
+        let mut heartbeat = tokio::time::interval(Duration::from_secs(5));
+        heartbeat.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        heartbeat.tick().await;
+
         loop {
             tokio::select! {
                 line = stdout_lines.next_line() => {
                     match line {
                         Ok(Some(line)) => {
-                            log::debug!("iap-tunnel stdout: {line}");
+                            // Promoted to info: in release builds debug is filtered
+                            // out, but these are the most useful diagnostic lines
+                            // when an IAP connect fails.
+                            log::info!("gcloud-iap[{gcloud_pid}] stdout: {line}");
                             combined_log.push_str(&line);
                             combined_log.push('\n');
                             if !line.trim().is_empty() {
@@ -641,27 +695,45 @@ async fn start_iap_tunnel(
                                 if let Some(c) = pick_re.captures(&line) {
                                     if let Ok(p) = c.get(1).unwrap().as_str().parse::<u16>() {
                                         picked_port = Some(p);
+                                        picked_at = Some(std::time::Instant::now());
+                                        log::info!(
+                                            "gcloud-iap[{gcloud_pid}]: picked_port={p} detected at +{:?}",
+                                            phase_start.elapsed()
+                                        );
                                     }
                                 }
                             }
                             for re in regexes {
                                 if let Some(c) = re.captures(&line) {
                                     if let Ok(p) = c.get(1).unwrap().as_str().parse::<u16>() {
+                                        log::info!(
+                                            "gcloud-iap[{gcloud_pid}]: 'Listening' banner matched port={p} at +{:?}",
+                                            phase_start.elapsed()
+                                        );
                                         return Ok::<u16, SessionError>(p);
                                     }
                                 }
                             }
                         }
-                        Ok(None) => return Err(SessionError::ConnectionFailed(format!(
-                            "gcloud start-iap-tunnel exited before producing a port. Output:\n{combined_log}"
-                        ))),
-                        Err(e) => return Err(SessionError::ConnectionFailed(format!("gcloud stdout read error: {e}"))),
+                        Ok(None) => {
+                            log::error!(
+                                "gcloud-iap[{gcloud_pid}]: gcloud stdout closed before producing a port (elapsed={:?}). Combined output follows:\n{combined_log}",
+                                phase_start.elapsed()
+                            );
+                            return Err(SessionError::ConnectionFailed(format!(
+                                "gcloud start-iap-tunnel exited before producing a port. Output:\n{combined_log}"
+                            )));
+                        }
+                        Err(e) => {
+                            log::error!("gcloud-iap[{gcloud_pid}]: stdout read error: {e}");
+                            return Err(SessionError::ConnectionFailed(format!("gcloud stdout read error: {e}")));
+                        }
                     }
                 }
                 line = stderr_lines.next_line() => {
                     match line {
                         Ok(Some(line)) => {
-                            log::debug!("iap-tunnel stderr: {line}");
+                            log::info!("gcloud-iap[{gcloud_pid}] stderr: {line}");
                             combined_log.push_str(&line);
                             combined_log.push('\n');
                             if !line.trim().is_empty() {
@@ -671,39 +743,82 @@ async fn start_iap_tunnel(
                                 if let Some(c) = pick_re.captures(&line) {
                                     if let Ok(p) = c.get(1).unwrap().as_str().parse::<u16>() {
                                         picked_port = Some(p);
+                                        picked_at = Some(std::time::Instant::now());
+                                        log::info!(
+                                            "gcloud-iap[{gcloud_pid}]: picked_port={p} detected at +{:?}",
+                                            phase_start.elapsed()
+                                        );
                                     }
                                 }
                             }
                             for re in regexes {
                                 if let Some(c) = re.captures(&line) {
                                     if let Ok(p) = c.get(1).unwrap().as_str().parse::<u16>() {
+                                        log::info!(
+                                            "gcloud-iap[{gcloud_pid}]: 'Listening' banner matched port={p} at +{:?}",
+                                            phase_start.elapsed()
+                                        );
                                         return Ok::<u16, SessionError>(p);
                                     }
                                 }
                             }
                         }
                         Ok(None) => { /* stderr closed; keep looping for stdout */ }
-                        Err(e) => return Err(SessionError::ConnectionFailed(format!("gcloud stderr read error: {e}"))),
+                        Err(e) => {
+                            log::error!("gcloud-iap[{gcloud_pid}]: stderr read error: {e}");
+                            return Err(SessionError::ConnectionFailed(format!("gcloud stderr read error: {e}")));
+                        }
                     }
                 }
                 _ = probe_interval.tick(), if picked_port.is_some() => {
                     if let Some(p) = picked_port {
-                        if can_tcp_connect_localhost(p).await {
-                            log::info!("gcloud-iap: TCP probe confirmed listener up on localhost:{p}");
+                        probe_attempts += 1;
+                        let probe_start = std::time::Instant::now();
+                        let connected = can_tcp_connect_localhost(p).await;
+                        let probe_dur = probe_start.elapsed();
+                        if connected {
+                            let since_pick = picked_at.map(|t| t.elapsed()).unwrap_or_default();
+                            log::info!(
+                                "gcloud-iap[{gcloud_pid}]: TCP probe #{probe_attempts} to 127.0.0.1:{p} OK in {probe_dur:?} (since pick={since_pick:?}, total={:?})",
+                                phase_start.elapsed()
+                            );
                             return Ok::<u16, SessionError>(p);
+                        } else if probe_attempts == 1 || probe_attempts % 8 == 0 {
+                            // Log first failure plus every ~2s of failures
+                            // (8 × 250 ms tick = 2 s) so the log shows progress
+                            // without a flood of identical lines.
+                            log::info!(
+                                "gcloud-iap[{gcloud_pid}]: TCP probe #{probe_attempts} to 127.0.0.1:{p} not yet listening (probe took {probe_dur:?}); retrying"
+                            );
                         }
                     }
+                }
+                _ = heartbeat.tick() => {
+                    log::info!(
+                        "gcloud-iap[{gcloud_pid}]: still waiting for tunnel ready... elapsed={:?} picked_port={:?} probe_attempts={probe_attempts}",
+                        phase_start.elapsed(), picked_port
+                    );
                 }
             }
         }
     })
     .await
-    .map_err(|_| SessionError::ConnectionFailed(format!(
-        "gcloud start-iap-tunnel did not become ready within {}s. Output:\n{combined_log}",
-        TUNNEL_READY_TIMEOUT.as_secs()
-    )))??;
+    .unwrap_or_else(|_| {
+        log::error!(
+            "gcloud-iap[{gcloud_pid}]: tunnel readiness TIMED OUT after {:?} (picked_port={:?}, probe_attempts={probe_attempts}). Combined gcloud output follows:\n{combined_log}",
+            TUNNEL_READY_TIMEOUT, picked_port
+        );
+        Err(SessionError::ConnectionFailed(format!(
+            "gcloud start-iap-tunnel did not become ready within {}s. Output:\n{combined_log}",
+            TUNNEL_READY_TIMEOUT.as_secs()
+        )))
+    });
 
-    log::info!("gcloud-iap: tunnel ready on localhost:{port}");
+    let port = result?;
+    log::info!(
+        "gcloud-iap[{gcloud_pid}]: tunnel ready on localhost:{port} (took {:?}, probe_attempts={probe_attempts})",
+        phase_start.elapsed()
+    );
     Ok(IapTunnel { child, port })
 }
 
@@ -749,26 +864,54 @@ impl SessionService for GcloudIapSession {
     ) -> Result<(), SessionError> {
         self.config.validate()?;
 
+        let connect_start = std::time::Instant::now();
         log::info!(
-            "gcloud-iap: connecting to {}/{}/{} (session {session_id})",
+            "gcloud-iap: connect() begin project={} zone={} instance={} encoding={} session={session_id}",
             self.config.project,
             self.config.zone,
-            self.config.instance
+            self.config.instance,
+            self.config.encoding,
         );
+        // Surface the gcloud resolver result + the relevant env-var presence
+        // up front so log readers can see which gcloud HoTTY actually invokes
+        // and whether the env passed to it has the bits gcloud's bundled
+        // Python needs (PATH, APPDATA for ~/.config/gcloud equivalent, etc.).
+        {
+            let (program, use_shell) = gcloud_program();
+            let env_present = |k: &str| std::env::var_os(k).is_some();
+            log::info!(
+                "gcloud-iap: gcloud program={program:?} use_shell={use_shell} env(PATH={}, APPDATA={}, LOCALAPPDATA={}, USERPROFILE={}, CLOUDSDK_CONFIG={}, CLOUDSDK_PYTHON={})",
+                env_present("PATH"),
+                env_present("APPDATA"),
+                env_present("LOCALAPPDATA"),
+                env_present("USERPROFILE"),
+                env_present("CLOUDSDK_CONFIG"),
+                env_present("CLOUDSDK_PYTHON"),
+            );
+        }
 
         // --- Locate the OpenSSH client ---
         let ssh_exe = find_openssh_path().ok_or_else(|| {
+            log::error!("gcloud-iap: Windows OpenSSH client (ssh.exe) not found on this system");
             SessionError::ConnectionFailed(
                 "Windows OpenSSH client (ssh.exe) not found. Enable it via \
                  Settings → Apps → Optional Features → OpenSSH Client."
                     .into(),
             )
         })?;
+        log::info!("gcloud-iap: openssh client resolved to {ssh_exe:?}");
 
         // --- Ensure SSH key exists; generate if missing ---
+        let key_phase = std::time::Instant::now();
         let (priv_key_path, generated) = ensure_ssh_key().await?;
+        log::info!(
+            "gcloud-iap: ssh key path={priv_key_path:?} generated={generated} (resolved in {:?})",
+            key_phase.elapsed()
+        );
         if generated {
-            log::info!("gcloud-iap: generated new key at {priv_key_path:?}; pushing to OS Login (best-effort)");
+            log::info!(
+                "gcloud-iap: pushing freshly generated public key to OS Login (best-effort)"
+            );
             let pub_path = priv_key_path.with_extension("pub");
             // Best-effort, errors logged but non-fatal: the project may not
             // have OS Login enabled, in which case the user must run
@@ -781,8 +924,14 @@ impl SessionService for GcloudIapSession {
         // Repair NTFS ACL — Windows OpenSSH rejects keys whose ACL contains
         // entries outside (owner, SYSTEM, Administrators). gcloud's generated
         // keys often inherit an `OWNER RIGHTS` ACE that triggers this.
+        let acl_phase = std::time::Instant::now();
         if let Err(e) = ensure_key_permissions(&priv_key_path).await {
             log::warn!("gcloud-iap: ensure_key_permissions failed (non-fatal): {e}");
+        } else {
+            log::info!(
+                "gcloud-iap: ensure_key_permissions ok in {:?}",
+                acl_phase.elapsed()
+            );
         }
         let priv_key_str = priv_key_path
             .to_str()
@@ -796,6 +945,7 @@ impl SessionService for GcloudIapSession {
         // is what `gcloud compute ssh` does on legacy-metadata projects and is
         // the user under whose name the existing instance-metadata SSH key was
         // registered.
+        let user_phase = std::time::Instant::now();
         let user = if is_oslogin_enabled(
             &self.config.project,
             &self.config.zone,
@@ -803,9 +953,13 @@ impl SessionService for GcloudIapSession {
         )
         .await
         {
+            log::info!(
+                "gcloud-iap: OS Login is ENABLED (detected in {:?}); resolving POSIX username",
+                user_phase.elapsed()
+            );
             match resolve_oslogin_username().await {
                 Some(u) => {
-                    log::info!("gcloud-iap: OS Login enabled; using POSIX username '{u}'");
+                    log::info!("gcloud-iap: OS Login POSIX username='{u}'");
                     u
                 }
                 None => {
@@ -819,13 +973,18 @@ impl SessionService for GcloudIapSession {
         } else {
             let u = fallback_local_username();
             log::info!(
-                "gcloud-iap: OS Login disabled on project/instance; using local username '{u}'"
+                "gcloud-iap: OS Login DISABLED on project/instance (detected in {:?}); using local username '{u}'",
+                user_phase.elapsed()
             );
             u
         };
 
         // --- Start the IAP tunnel ---
         emit_session_data(&app, &session_id, "Starting IAP tunnel...\r\n".to_string());
+        log::info!(
+            "gcloud-iap: invoking start_iap_tunnel (pre-tunnel elapsed={:?})",
+            connect_start.elapsed()
+        );
         let tunnel = start_iap_tunnel(&self.config, &app, &session_id).await?;
         let port = tunnel.port;
         self.tunnel_child = Some(tunnel.child);
@@ -837,6 +996,9 @@ impl SessionService for GcloudIapSession {
 
         // --- Build the ssh.exe command for the PTY ---
         let argv = build_ssh_argv(&user, port, &priv_key_str, &self.config.instance);
+        log::info!(
+            "gcloud-iap: ssh.exe argv={argv:?} (ssh_exe={ssh_exe:?})"
+        );
 
         let pty_system = native_pty_system();
         let pty_pair = pty_system
@@ -861,10 +1023,15 @@ impl SessionService for GcloudIapSession {
         }
         cmd.env("TERM", "xterm-256color");
 
-        let child = pty_pair
-            .slave
-            .spawn_command(cmd)
-            .map_err(|e| SessionError::ConnectionFailed(format!("failed to spawn ssh: {e}")))?;
+        let child = pty_pair.slave.spawn_command(cmd).map_err(|e| {
+            log::error!("gcloud-iap: failed to spawn ssh.exe via PTY: {e}");
+            SessionError::ConnectionFailed(format!("failed to spawn ssh: {e}"))
+        })?;
+        let ssh_pid = child.process_id().unwrap_or(0);
+        log::info!(
+            "gcloud-iap: ssh.exe spawned pid={ssh_pid} via tunnel localhost:{port} (total connect elapsed={:?})",
+            connect_start.elapsed()
+        );
 
         // Drop the slave end — we communicate through the master
         drop(pty_pair.slave);
@@ -903,10 +1070,16 @@ impl SessionService for GcloudIapSession {
             .await;
             match exit_result {
                 Ok(Ok(status)) => {
-                    log::info!("gcloud-iap {sid_w}: ssh exited: {status:?}")
+                    log::info!(
+                        "gcloud-iap[ssh pid={ssh_pid}] {sid_w}: ssh exited: {status:?}"
+                    )
                 }
-                Ok(Err(e)) => log::warn!("gcloud-iap {sid_w}: child.wait error: {e}"),
-                Err(e) => log::warn!("gcloud-iap {sid_w}: child wait task error: {e}"),
+                Ok(Err(e)) => log::warn!(
+                    "gcloud-iap[ssh pid={ssh_pid}] {sid_w}: child.wait error: {e}"
+                ),
+                Err(e) => log::warn!(
+                    "gcloud-iap[ssh pid={ssh_pid}] {sid_w}: child wait task error: {e}"
+                ),
             }
             log_mgr_w.stop_logging(&sid_w).await;
             emit_session_status(&app_w, &sid_w, "disconnected");
@@ -946,25 +1119,33 @@ impl SessionService for GcloudIapSession {
         let sid = session_id.clone();
 
         let reader_join = tokio::spawn(async move {
-            log::info!("gcloud-iap reader task started for {sid}");
+            log::info!(
+                "gcloud-iap[ssh pid={ssh_pid}] reader task started for {sid}"
+            );
             let mut reader = reader;
             let mut buf = [0u8; 4096];
+            let mut total_bytes: u64 = 0;
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => {
-                        log::info!("gcloud-iap {sid}: read returned 0 (ssh exited)");
+                        log::info!(
+                            "gcloud-iap[ssh pid={ssh_pid}] {sid}: PTY read returned 0 (ssh exited); total_bytes={total_bytes}"
+                        );
                         log_mgr.stop_logging(&sid).await;
                         emit_session_status(&app_r, &sid, "disconnected");
                         break;
                     }
                     Ok(n) => {
+                        total_bytes = total_bytes.saturating_add(n as u64);
                         let (decoded, _enc, _had_errors) = encoding.decode(&buf[..n]);
                         let text = decoded.into_owned();
                         emit_session_data(&app_r, &sid, text.clone());
                         log_mgr.write(&sid, &text).await;
                     }
                     Err(e) => {
-                        log::error!("gcloud-iap {sid}: read error: {e}");
+                        log::error!(
+                            "gcloud-iap[ssh pid={ssh_pid}] {sid}: PTY read error after {total_bytes} bytes: {e}"
+                        );
                         log_mgr.stop_logging(&sid).await;
                         emit_session_error(&app_r, &sid, format!("read error: {e}"));
                         emit_session_status(&app_r, &sid, "disconnected");
