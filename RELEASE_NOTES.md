@@ -1,5 +1,18 @@
 # Release Notes
 
+## v2.0.3-beta2
+
+A UX overhaul for Google Cloud IAP. IAP is no longer a per-host form field — the New Session dialog gains a dedicated **GCP** tab that browses every GCE instance across every project you have access to, with live status, start/stop controls, and a one-click connect. The connect path also now handles the "VM is stopped" case gracefully: HoTTY prompts before starting, or auto-starts when the host is configured to.
+
+### Breaking Changes
+
+- **Google Cloud IAP is no longer in the Protocol dropdown.** Both the **New Session** dialog and the host-tree add/edit modal drop the `Google Cloud IAP` protocol entry. Existing IAP entries in your saved host tree still connect on double-click (the IAP protocol itself, the `iapTunnel` shape, and the `gcloud-iap` connection path are unchanged on disk and at the backend), but they can no longer be created or edited through the host-tree form. To make a new IAP connection, open the **GCP** tab in the New Session dialog and double-click the VM you want.
+
+### New Features
+
+- **New GCP Instances tab in the New Session dialog.** A second tab next to **Hosts** lists every Google Compute Engine VM across every project you have access to, grouped by project, with live status glyphs (🟢 RUNNING, 🔴 stopped, 🟡 transitioning) and the last-refreshed timestamp. Selecting an instance highlights it; **double-clicking** an instance connects via IAP immediately. Each row has its own **Start** / **Stop** buttons — backed by `gcloud compute instances start` / `stop` — that show an optimistic "starting…" / "stopping…" label while polling `describe` for the real transition (PROVISIONING / STAGING / STOPPING) so the row reflects what GCP is actually doing. A top-of-pane **Refresh** action re-runs the full inventory: gcloud check, auth check, `projects list`, then `instances list --filter='zone:*'` per project. The pane streams progress (`gcloud → auth → projects → instances → done`) so a long refresh against many projects doesn't look hung.
+- **Pre-connect VM auto-start prompt.** When you start an IAP connection — from the GCP tab, from a legacy saved IAP host entry, or from anywhere else — and the target VM is in `TERMINATED` or `SUSPENDED`, HoTTY now intercepts the connect before tunneling and either auto-starts the VM (when the saved host entry has `autoStart` set) or surfaces a modal asking whether to start it. The backend awaits the user's decision via a session-scoped one-shot and only proceeds with the IAP tunnel once the VM reaches `RUNNING`. Previously a connect to a stopped VM would hand off to `gcloud start-iap-tunnel`, hang briefly, and fail with an opaque tunnel error. One-shot connects from the new GCP tab default to auto-start (the user explicitly chose that VM, so prompting again would be churn).
+
 ## v2.0.3-beta1
 
 A diagnostic-focused pre-release. The headline change instruments the Google Cloud IAP connection path end-to-end so when an IAP connect fails in a real environment, the debug log captures every phase boundary — gcloud and ssh.exe resolution, OS Login detection result, full subprocess argv and PIDs, gcloud stdout/stderr line-by-line, TCP-probe attempts, and elapsed times — instead of surfacing as an opaque "connection failed" string.

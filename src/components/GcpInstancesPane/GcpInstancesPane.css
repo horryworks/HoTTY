@@ -1,0 +1,251 @@
+.gcp-instances-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  user-select: none;
+}
+
+.gcp-pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.gcp-pane-title {
+  font-size: calc(var(--font-size-base) - 1px);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.gcp-refresh-btn {
+  background: var(--btn-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.gcp-refresh-btn:hover:not(:disabled) {
+  background: var(--btn-hover-bg);
+  border-color: var(--accent-color);
+}
+
+.gcp-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gcp-pane-subtitle {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: calc(var(--font-size-base) - 3px);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gcp-pane-error {
+  padding: 6px 8px;
+  background: var(--color-danger);
+  color: var(--text-on-accent);
+  font-size: calc(var(--font-size-base) - 2px);
+  flex-shrink: 0;
+}
+
+.gcp-pane-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+  min-height: 0;
+}
+
+.gcp-empty {
+  color: var(--text-secondary);
+  font-size: calc(var(--font-size-base) - 3px);
+  text-align: center;
+  padding: 20px 12px;
+  line-height: 1.6;
+}
+
+.gcp-project-group {
+  margin: 0;
+}
+
+.gcp-project-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: calc(var(--font-size-base) - 1px);
+  font-weight: 600;
+  text-align: left;
+  font-family: var(--ui-font-family);
+}
+
+.gcp-project-header:hover {
+  background: var(--hover-bg);
+}
+
+.gcp-chevron {
+  display: inline-block;
+  color: var(--text-secondary);
+  transition: transform 0.15s ease-in-out;
+  font-size: calc(var(--font-size-base) - 4px);
+  width: 12px;
+}
+
+.gcp-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.gcp-project-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gcp-project-warning {
+  color: var(--color-warning);
+  font-size: var(--font-size-base);
+}
+
+.gcp-project-body {
+  padding: 2px 0 4px;
+}
+
+.gcp-project-error {
+  padding: 4px 16px;
+  color: var(--color-warning);
+  font-size: calc(var(--font-size-base) - 3px);
+  line-height: 1.4;
+}
+
+.gcp-zone-group {
+  padding: 0;
+}
+
+.gcp-zone-label {
+  padding: 2px 16px;
+  color: var(--text-tertiary);
+  font-size: calc(var(--font-size-base) - 3px);
+  font-style: italic;
+}
+
+.gcp-zone-empty {
+  padding: 4px 16px;
+  color: var(--text-secondary);
+  font-size: calc(var(--font-size-base) - 3px);
+}
+
+.gcp-instance-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 24px;
+  margin: 0 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: calc(var(--font-size-base) - 2px);
+  color: var(--text-primary);
+  transition: background 0.12s;
+  min-height: 24px;
+}
+
+.gcp-instance-row:hover {
+  background: var(--hover-bg);
+}
+
+.gcp-instance-row.selected {
+  background: var(--accent-color);
+  color: var(--text-on-accent);
+}
+
+.gcp-status-glyph {
+  flex-shrink: 0;
+  font-size: calc(var(--font-size-base) - 4px);
+  width: 14px;
+  text-align: center;
+}
+
+.gcp-instance-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gcp-instance-status {
+  flex-shrink: 0;
+  font-size: calc(var(--font-size-base) - 3px);
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  opacity: 0.85;
+}
+
+.gcp-instance-row.selected .gcp-instance-status {
+  color: var(--text-on-accent);
+  opacity: 0.95;
+}
+
+.gcp-instance-error {
+  color: var(--color-warning);
+  font-size: calc(var(--font-size-base) - 2px);
+  flex-shrink: 0;
+  cursor: help;
+}
+
+.gcp-instance-row.selected .gcp-instance-error {
+  color: var(--text-on-accent);
+}
+
+.gcp-instance-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.gcp-action-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 1px 6px;
+  cursor: pointer;
+  font-size: calc(var(--font-size-base) - 3px);
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.gcp-action-btn:hover:not(:disabled) {
+  background: var(--btn-hover-bg);
+  border-color: var(--accent-color);
+}
+
+.gcp-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gcp-instance-row.selected .gcp-action-btn {
+  color: var(--text-on-accent);
+  border-color: var(--text-on-accent);
+}

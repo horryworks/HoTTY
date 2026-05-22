@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware';
 
 export type SidebarEdge = 'left' | 'right' | 'top' | 'bottom';
 
+export type SidebarTab = 'hosts' | 'gcp';
+
 interface SidebarLayoutState {
   showLeftSidebar: boolean;
   showRightSidebar: boolean;
@@ -12,8 +14,10 @@ interface SidebarLayoutState {
   rightSidebarPercent: number;
   topBarPercent: number;
   bottomBarPercent: number;
+  activeSidebarTab: SidebarTab;
   toggle: (edge: SidebarEdge) => void;
   setPercent: (edge: SidebarEdge, percent: number) => void;
+  setActiveSidebarTab: (tab: SidebarTab) => void;
 }
 
 const clamp = (n: number) => Math.max(5, Math.min(80, n));
@@ -29,6 +33,7 @@ export const useSidebarLayoutStore = create<SidebarLayoutState>()(
       rightSidebarPercent: 20,
       topBarPercent: 20,
       bottomBarPercent: 20,
+      activeSidebarTab: 'hosts',
       toggle: (edge) =>
         set((s) => {
           switch (edge) {
@@ -56,6 +61,7 @@ export const useSidebarLayoutStore = create<SidebarLayoutState>()(
               return { bottomBarPercent: v };
           }
         }),
+      setActiveSidebarTab: (tab) => set({ activeSidebarTab: tab }),
     }),
     {
       name: 'hotty-sidebar-layout',

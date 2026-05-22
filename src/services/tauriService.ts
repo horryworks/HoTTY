@@ -38,6 +38,8 @@ import type {
   GcloudAuthStatus,
   GcpProject,
   GceInstance,
+  GcloudCacheSnapshot,
+  GcpRefreshProgress,
   IapVmStartPromptPayload,
   AIAuthStatus,
   AIModelInfo,
@@ -359,6 +361,54 @@ export const tauriService = {
   /** Deliver the user's response to a pending VM-start prompt. */
   async gceIapRespondVmStart(sessionId: string, approved: boolean): Promise<void> {
     await invoke('gce_iap_respond_vm_start', { sessionId, approved });
+  },
+
+  /** Read the current GCP discovery cache (never triggers a fetch). */
+  async gceIapGetCache(): Promise<GcloudCacheSnapshot> {
+    return invoke<GcloudCacheSnapshot>('gce_iap_get_cache');
+  },
+
+  /**
+   * Force-refresh the GCP discovery cache. Emits `gcp-refresh-progress` events
+   * during the run and `gcp-cache-updated` on completion. Returns the final
+   * snapshot.
+   */
+  async gceIapRefreshCache(): Promise<GcloudCacheSnapshot> {
+    return invoke<GcloudCacheSnapshot>('gce_iap_refresh_cache');
+  },
+
+  /** Start a stopped GCE instance. Blocks until gcloud returns. */
+  async gceIapStartInstance(project: string, zone: string, instance: string): Promise<void> {
+    await invoke('gce_iap_start_instance', { project, zone, instance });
+  },
+
+  /** Stop a running GCE instance. Blocks until gcloud returns. */
+  async gceIapStopInstance(project: string, zone: string, instance: string): Promise<void> {
+    await invoke('gce_iap_stop_instance', { project, zone, instance });
+  },
+
+  /**
+   * Single-VM status probe (one `gcloud compute instances describe`). Used by
+   * the GCP tab to poll an in-flight start/stop so the UI can show real
+   * transitions (PROVISIONING / STAGING / STOPPING) instead of the cached
+   * pre-action status.
+   */
+  async gceIapGetInstanceStatus(
+    project: string,
+    zone: string,
+    instance: string,
+  ): Promise<string> {
+    return invoke<string>('gce_iap_get_instance_status', { project, zone, instance });
+  },
+
+  /** Subscribe to GCP cache refresh progress updates. */
+  onGcpRefreshProgress(cb: (p: GcpRefreshProgress) => void): Promise<UnlistenFn> {
+    return listen<GcpRefreshProgress>('gcp-refresh-progress', (e) => cb(e.payload));
+  },
+
+  /** Subscribe to "cache refresh completed" notifications. */
+  onGcpCacheUpdated(cb: () => void): Promise<UnlistenFn> {
+    return listen<void>('gcp-cache-updated', () => cb());
   },
 
   // -----------------------------------------------------------------------

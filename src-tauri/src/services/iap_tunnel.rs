@@ -1,9 +1,16 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::sync::{
+    atomic::{AtomicU32, Ordering},
+    Arc, RwLock,
+};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use regex_lite::Regex;
+use tauri::{AppHandle, Emitter};
 use tokio::process::Command;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -11,6 +18,14 @@ use tokio::process::Command;
 
 /// Default timeout for short-lived gcloud CLI commands (e.g. `describe`, `list`).
 const GCLOUD_CMD_TIMEOUT_SECS: u64 = 15;
+
+/// Timeout for the per-project `compute instances list` call used by GCP
+/// Discovery. Larger than the default because it must round-trip the Compute
+/// Engine API for every zone in the project, and because projects without
+/// Compute Engine enabled don't return their "API is not enabled" error within
+/// the default 15s window — we need to wait long enough for gcloud to surface
+/// stderr so the mapper below can translate it into a friendly message.
+const GCP_LIST_INSTANCES_TIMEOUT_SECS: u64 = 60;
 
 /// Hard ceiling for the blocking `gcloud compute instances start` call.
 const INSTANCE_START_TIMEOUT_SECS: u64 = 300;
@@ -67,9 +82,15 @@ pub struct GcpProject {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GceInstance {
     pub name: String,
     pub status: String,
+    /// Zone short name (e.g. "us-central1-a"). Always populated for entries
+    /// produced by `list_instances` and `list_instances_across_zones`; the
+    /// optionality preserves serialization compatibility for older payloads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zone: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -194,16 +215,40 @@ async fn run_gcloud_with_timeout(args: &[&str], timeout_secs: u64) -> Result<Str
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let output = tokio::time::timeout(Duration::from_secs(timeout_secs), cmd.output())
-        .await
-        .map_err(|_| "gcloud command timed out".to_string())?
-        .map_err(|e| format!("Failed to run gcloud: {e}"))?;
+    let started = Instant::now();
+    let args_preview: String = args.join(" ").chars().take(160).collect();
+    log::debug!("run_gcloud: begin args=`{args_preview}` timeout={timeout_secs}s");
+    let result = tokio::time::timeout(Duration::from_secs(timeout_secs), cmd.output()).await;
+    let elapsed = started.elapsed();
+
+    let output = match result {
+        Err(_) => {
+            log::warn!(
+                "run_gcloud: TIMED OUT after {elapsed:?} (timeout={timeout_secs}s) args=`{args_preview}`"
+            );
+            return Err("gcloud command timed out".to_string());
+        }
+        Ok(Err(e)) => {
+            log::warn!("run_gcloud: spawn/io error after {elapsed:?}: {e}");
+            return Err(format!("Failed to run gcloud: {e}"));
+        }
+        Ok(Ok(out)) => out,
+    };
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr_preview: String = stderr.chars().take(240).collect();
+        log::warn!(
+            "run_gcloud: non-zero exit ({:?}) after {elapsed:?} args=`{args_preview}` stderr=`{stderr_preview}`",
+            output.status.code()
+        );
         return Err(format!("gcloud error: {}", stderr.trim()));
     }
 
+    log::debug!(
+        "run_gcloud: ok after {elapsed:?} stdout_bytes={} args=`{args_preview}`",
+        output.stdout.len()
+    );
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
@@ -375,7 +420,11 @@ pub async fn list_instances(project: &str, zone: &str) -> Vec<GceInstance> {
                         .and_then(|s| s.as_str())
                         .unwrap_or("UNKNOWN")
                         .to_string();
-                    Some(GceInstance { name, status })
+                    Some(GceInstance {
+                        name,
+                        status,
+                        zone: Some(zone.to_string()),
+                    })
                 })
                 .collect()
         }
@@ -384,6 +433,80 @@ pub async fn list_instances(project: &str, zone: &str) -> Vec<GceInstance> {
             Vec::new()
         }
     }
+}
+
+/// List all compute instances across all zones for a given project in a single
+/// gcloud call. Each returned `GceInstance` carries its zone in `zone`.
+/// Returns `Err(message)` only when the gcloud command itself fails (permission
+/// denied, project not found, etc.) so that the caller can surface a per-project
+/// error in the UI rather than silently dropping data.
+pub async fn list_instances_across_zones(project: &str) -> Result<Vec<GceInstance>, String> {
+    if !is_valid_project(project) {
+        return Err(format!("invalid project: {project}"));
+    }
+    let project_flag = format!("--project={project}");
+    // `--quiet` prevents gcloud from emitting the interactive "Do you want to
+    // enable the API?" prompt when Compute Engine API is disabled. Without it
+    // gcloud may stall on a stdin read against a closed pipe instead of
+    // failing fast with the real error message.
+    let args = [
+        "compute",
+        "instances",
+        "list",
+        "--format=json",
+        &project_flag,
+        "--sort-by=zone,name",
+        "--quiet",
+    ];
+    let started = Instant::now();
+    log::info!(
+        "gcp-cache: list_instances_across_zones begin project={project} (timeout={GCP_LIST_INSTANCES_TIMEOUT_SECS}s)"
+    );
+    let output = match run_gcloud_with_timeout(&args, GCP_LIST_INSTANCES_TIMEOUT_SECS).await {
+        Ok(out) => {
+            log::info!(
+                "gcp-cache: list_instances_across_zones ok project={project} elapsed={:?} bytes={}",
+                started.elapsed(),
+                out.len()
+            );
+            out
+        }
+        Err(e) => {
+            // Truncate the raw error so the log line stays readable; the
+            // mapped error keeps the actionable bits.
+            let preview: String = e.chars().take(240).collect();
+            log::warn!(
+                "gcp-cache: list_instances_across_zones FAILED project={project} elapsed={:?} err={preview}",
+                started.elapsed()
+            );
+            return Err(map_list_instances_error(&e, project));
+        }
+    };
+    let entries: Vec<serde_json::Value> = serde_json::from_str(&output)
+        .map_err(|e| format!("failed to parse gcloud instances list JSON: {e}"))?;
+    let instances = entries
+        .iter()
+        .filter_map(|e| {
+            let name = e.get("name")?.as_str()?.to_string();
+            let status = e
+                .get("status")
+                .and_then(|s| s.as_str())
+                .unwrap_or("UNKNOWN")
+                .to_string();
+            let zone_raw = e.get("zone").and_then(|z| z.as_str()).unwrap_or("");
+            // Zone field may be a full URL like
+            //   "https://www.googleapis.com/compute/v1/projects/X/zones/us-central1-a"
+            // or just "us-central1-a". Take the last path component.
+            let zone_name = zone_raw.rsplit('/').next().unwrap_or(zone_raw).to_string();
+            let zone = if zone_name.is_empty() {
+                None
+            } else {
+                Some(zone_name)
+            };
+            Some(GceInstance { name, status, zone })
+        })
+        .collect();
+    Ok(instances)
 }
 
 // ---------------------------------------------------------------------------
@@ -531,6 +654,59 @@ pub async fn get_instance_status(
     Ok(InstanceStatus::from_gcloud_str(&raw))
 }
 
+/// Translate gcloud stderr for `instances list` (used by GCP Discovery) into a
+/// more actionable message when we recognise a known failure pattern; otherwise
+/// pass the original string through.
+///
+/// Targets two common failure modes the user will hit during Discovery:
+///   * Compute Engine API not enabled on the project (the typical case for
+///     "Default Gemini Project" / Vertex / AI-Studio-managed projects that
+///     never opted in to Compute Engine).
+///   * Missing `compute.instances.list` IAM permission.
+pub(crate) fn map_list_instances_error(raw: &str, project: &str) -> String {
+    let lower = raw.to_ascii_lowercase();
+
+    // Compute Engine API not enabled. Examples from gcloud stderr:
+    //   "Compute Engine API has not been used in project NNN before or it is disabled"
+    //   "compute.googleapis.com is not enabled"
+    let api_not_enabled = lower.contains("compute engine api has not been used")
+        || lower.contains("compute engine api is not enabled")
+        || (lower.contains("compute.googleapis.com")
+            && (lower.contains("not enabled") || lower.contains("has not been used")));
+    if api_not_enabled {
+        return format!(
+            "Compute Engine API is not enabled for project '{project}'. \
+             Enable it in the Cloud Console, or run \
+             `gcloud services enable compute.googleapis.com --project={project}`."
+        );
+    }
+
+    // Missing list permission (the granular one is more useful than a generic
+    // PERMISSION_DENIED bucket).
+    let missing_list_perm = lower.contains("required 'compute.instances.list' permission")
+        || lower.contains("required \"compute.instances.list\" permission")
+        || lower.contains("does not have compute.instances.list")
+        || lower.contains("compute.instances.list permission");
+    if missing_list_perm {
+        return format!(
+            "Permission denied: this account does not have \
+             `compute.instances.list` on project '{project}'."
+        );
+    }
+
+    // Generic permission denied that isn't list-specific.
+    if lower.contains("permission_denied") || lower.contains("permission denied") {
+        return format!(
+            "Permission denied while listing instances on project '{project}': {}",
+            raw.trim()
+        );
+    }
+
+    // Fall-through: surface the raw gcloud error so the user has *something*
+    // to act on even when we don't recognise the pattern.
+    raw.trim().to_string()
+}
+
 /// Translate gcloud stderr for `instances start` into a more actionable message when
 /// we recognise a known failure pattern; otherwise pass the original string through.
 fn map_start_error(stderr: &str) -> String {
@@ -570,6 +746,32 @@ pub async fn start_instance(project: &str, zone: &str, instance: &str) -> Result
         Ok(_) => Ok(()),
         Err(e) => Err(map_start_error(&e)),
     }
+}
+
+/// Stop a running GCE instance via blocking `gcloud compute instances stop`.
+pub async fn stop_instance(project: &str, zone: &str, instance: &str) -> Result<(), String> {
+    if !is_valid_project(project) {
+        return Err("invalid project".to_string());
+    }
+    if !is_valid_zone(zone) {
+        return Err("invalid zone".to_string());
+    }
+    if !is_valid_instance(instance) {
+        return Err("invalid instance".to_string());
+    }
+
+    let project_flag = format!("--project={project}");
+    let zone_flag = format!("--zone={zone}");
+    let args = [
+        "compute",
+        "instances",
+        "stop",
+        instance,
+        &project_flag,
+        &zone_flag,
+    ];
+    run_gcloud_with_timeout(&args, INSTANCE_START_TIMEOUT_SECS).await?;
+    Ok(())
 }
 
 /// Poll `describe` until the VM reaches RUNNING (or fails / times out). Invokes
@@ -638,6 +840,242 @@ where
         }
         tokio::time::sleep(interval).await;
     }
+}
+
+// ---------------------------------------------------------------------------
+// GCP cache (used by the "GCP" sidebar tab — lazy refresh on first open)
+// ---------------------------------------------------------------------------
+
+/// Maximum concurrent `gcloud compute instances list` calls during refresh.
+/// Bounded to be polite to the GCP API and to keep the UI progress events
+/// at a comprehensible pace.
+const GCP_REFRESH_MAX_CONCURRENCY: usize = 5;
+
+#[derive(Debug, Default, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GcloudCacheSnapshot {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gcloud: Option<GcloudStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth: Option<GcloudAuthStatus>,
+    pub projects: Vec<GcpProject>,
+    pub instances_by_project: HashMap<String, Vec<GceInstance>>,
+    pub project_errors: HashMap<String, String>,
+    /// Milliseconds since the Unix epoch when the cache was last fully refreshed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_refreshed_ms: Option<u64>,
+    pub refresh_in_progress: bool,
+}
+
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct GcpRefreshProgressEvent {
+    /// One of: "gcloud", "auth", "projects", "instances", "done"
+    stage: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    current_project: Option<String>,
+    done: u32,
+    total: u32,
+}
+
+pub struct GcloudCacheState {
+    inner: RwLock<GcloudCacheSnapshot>,
+}
+
+impl Default for GcloudCacheState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl GcloudCacheState {
+    pub fn new() -> Self {
+        Self {
+            inner: RwLock::new(GcloudCacheSnapshot::default()),
+        }
+    }
+
+    pub fn snapshot(&self) -> GcloudCacheSnapshot {
+        self.inner
+            .read()
+            .map(|g| g.clone())
+            .unwrap_or_default()
+    }
+
+    /// Begin a refresh; returns `false` if another refresh is already in flight.
+    fn begin_refresh(&self) -> bool {
+        match self.inner.write() {
+            Ok(mut g) => {
+                if g.refresh_in_progress {
+                    false
+                } else {
+                    g.refresh_in_progress = true;
+                    true
+                }
+            }
+            Err(_) => false,
+        }
+    }
+
+    fn write_partial<F: FnOnce(&mut GcloudCacheSnapshot)>(&self, f: F) {
+        if let Ok(mut g) = self.inner.write() {
+            f(&mut g);
+        }
+    }
+
+    /// Run a full refresh: gcloud check → auth check → projects → instances per
+    /// project (bounded concurrency). Emits `gcp-refresh-progress` events along
+    /// the way and a `gcp-cache-updated` event on completion. Safe to call
+    /// concurrently — overlapping calls become no-ops.
+    pub async fn refresh_all(self: &Arc<Self>, app: AppHandle) {
+        if !self.begin_refresh() {
+            log::info!("gcp-cache: refresh already in progress, skipping new request");
+            return;
+        }
+        let refresh_started = Instant::now();
+        log::info!("gcp-cache: refresh begin");
+
+        emit_progress(&app, "gcloud", None, 0, 0);
+        let gcloud = check_gcloud().await;
+        log::info!(
+            "gcp-cache: check_gcloud done (available={}, version={:?})",
+            gcloud.available,
+            gcloud.version
+        );
+        self.write_partial(|s| s.gcloud = Some(gcloud.clone()));
+
+        emit_progress(&app, "auth", None, 0, 0);
+        let auth = check_auth().await;
+        log::info!(
+            "gcp-cache: check_auth done (authenticated={}, account={:?})",
+            auth.authenticated,
+            auth.account
+        );
+        self.write_partial(|s| s.auth = Some(auth.clone()));
+
+        // Skip projects/instances when gcloud unavailable or unauthenticated.
+        if !gcloud.available || !auth.authenticated {
+            self.write_partial(|s| {
+                s.projects.clear();
+                s.instances_by_project.clear();
+                s.project_errors.clear();
+                s.last_refreshed_ms = now_ms();
+                s.refresh_in_progress = false;
+            });
+            emit_progress(&app, "done", None, 0, 0);
+            let _ = app.emit("gcp-cache-updated", ());
+            return;
+        }
+
+        emit_progress(&app, "projects", None, 0, 0);
+        let projects = list_projects().await;
+        let total = projects.len() as u32;
+        log::info!(
+            "gcp-cache: list_projects done — {} projects: {}",
+            projects.len(),
+            projects
+                .iter()
+                .map(|p| p.id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        self.write_partial(|s| {
+            s.projects = projects.clone();
+            s.instances_by_project.clear();
+            s.project_errors.clear();
+        });
+
+        // Fan out `instances list` calls with bounded concurrency.
+        let sem = Arc::new(Semaphore::new(GCP_REFRESH_MAX_CONCURRENCY));
+        let done_counter = Arc::new(AtomicU32::new(0));
+        let mut set: JoinSet<(String, Result<Vec<GceInstance>, String>)> = JoinSet::new();
+
+        for p in &projects {
+            let pid = p.id.clone();
+            let sem = Arc::clone(&sem);
+            let counter = Arc::clone(&done_counter);
+            let app_for_progress = app.clone();
+            let total_for_progress = total;
+            set.spawn(async move {
+                let _permit = match sem.acquire().await {
+                    Ok(p) => p,
+                    Err(_) => return (pid, Err("semaphore closed".to_string())),
+                };
+                let result = list_instances_across_zones(&pid).await;
+                let done = counter.fetch_add(1, Ordering::SeqCst) + 1;
+                emit_progress(
+                    &app_for_progress,
+                    "instances",
+                    Some(pid.clone()),
+                    done,
+                    total_for_progress,
+                );
+                (pid, result)
+            });
+        }
+
+        while let Some(joined) = set.join_next().await {
+            match joined {
+                Ok((pid, Ok(list))) => {
+                    self.write_partial(|s| {
+                        s.instances_by_project.insert(pid, list);
+                    });
+                }
+                Ok((pid, Err(e))) => {
+                    self.write_partial(|s| {
+                        s.project_errors.insert(pid, e);
+                    });
+                }
+                Err(join_err) => {
+                    log::warn!("gcp-cache: instances list task panicked: {join_err}");
+                }
+            }
+        }
+
+        self.write_partial(|s| {
+            s.last_refreshed_ms = now_ms();
+            s.refresh_in_progress = false;
+        });
+        let snap = self.snapshot();
+        log::info!(
+            "gcp-cache: refresh done elapsed={:?} projects={} with_instances={} errors={}",
+            refresh_started.elapsed(),
+            snap.projects.len(),
+            snap.instances_by_project.len(),
+            snap.project_errors.len()
+        );
+        for (pid, msg) in &snap.project_errors {
+            let preview: String = msg.chars().take(240).collect();
+            log::warn!("gcp-cache: project_errors[{pid}] = {preview}");
+        }
+        emit_progress(&app, "done", None, total, total);
+        let _ = app.emit("gcp-cache-updated", ());
+    }
+}
+
+fn now_ms() -> Option<u64> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_millis() as u64)
+}
+
+fn emit_progress(
+    app: &AppHandle,
+    stage: &'static str,
+    current_project: Option<String>,
+    done: u32,
+    total: u32,
+) {
+    let _ = app.emit(
+        "gcp-refresh-progress",
+        GcpRefreshProgressEvent {
+            stage,
+            current_project,
+            done,
+            total,
+        },
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -779,15 +1217,143 @@ mod tests {
         assert_eq!(json["name"], "My Project");
     }
 
+    // -- map_list_instances_error tests --
+
     #[test]
-    fn gce_instance_serialize() {
+    fn map_list_instances_error_detects_api_not_enabled() {
+        let raw = "gcloud error: ERROR: (gcloud.compute.instances.list) HTTPError 403: \
+                   Compute Engine API has not been used in project 1234567890 before \
+                   or it is disabled. Enable it by visiting ...";
+        let msg = map_list_instances_error(raw, "my-project");
+        assert!(msg.contains("Compute Engine API is not enabled"));
+        assert!(msg.contains("my-project"));
+        assert!(msg.contains("gcloud services enable compute.googleapis.com"));
+    }
+
+    #[test]
+    fn map_list_instances_error_detects_api_disabled_alt_phrasing() {
+        let raw = "ERROR: compute.googleapis.com is not enabled";
+        let msg = map_list_instances_error(raw, "p-x");
+        assert!(msg.contains("Compute Engine API is not enabled"));
+    }
+
+    #[test]
+    fn map_list_instances_error_detects_missing_list_permission() {
+        let raw = "ERROR: (gcloud.compute.instances.list) Required \
+                   'compute.instances.list' permission for 'projects/foo'";
+        let msg = map_list_instances_error(raw, "foo");
+        assert!(msg.contains("Permission denied"));
+        assert!(msg.contains("compute.instances.list"));
+        assert!(msg.contains("foo"));
+    }
+
+    #[test]
+    fn map_list_instances_error_generic_permission_denied_falls_through() {
+        let raw = "ERROR: PERMISSION_DENIED: weird upstream error";
+        let msg = map_list_instances_error(raw, "p");
+        assert!(msg.contains("Permission denied while listing instances"));
+        // Underlying message is preserved.
+        assert!(msg.contains("weird upstream error"));
+    }
+
+    #[test]
+    fn map_list_instances_error_unknown_passes_through() {
+        let raw = "gcloud command timed out";
+        let msg = map_list_instances_error(raw, "p");
+        assert_eq!(msg, "gcloud command timed out");
+    }
+
+    #[test]
+    fn gce_instance_serialize_with_zone() {
         let instance = GceInstance {
             name: "vm-web-01".to_string(),
             status: "RUNNING".to_string(),
+            zone: Some("us-central1-a".to_string()),
         };
         let json = serde_json::to_value(&instance).unwrap();
         assert_eq!(json["name"], "vm-web-01");
         assert_eq!(json["status"], "RUNNING");
+        assert_eq!(json["zone"], "us-central1-a");
+    }
+
+    #[test]
+    fn gce_instance_serialize_zone_omitted_when_none() {
+        let instance = GceInstance {
+            name: "vm-x".to_string(),
+            status: "RUNNING".to_string(),
+            zone: None,
+        };
+        let json = serde_json::to_value(&instance).unwrap();
+        assert!(json.get("zone").is_none());
+    }
+
+    // -- GcloudCacheState tests --
+
+    #[test]
+    fn cache_default_state_is_empty() {
+        let cache = GcloudCacheState::new();
+        let snap = cache.snapshot();
+        assert!(snap.gcloud.is_none());
+        assert!(snap.auth.is_none());
+        assert!(snap.projects.is_empty());
+        assert!(snap.instances_by_project.is_empty());
+        assert!(snap.project_errors.is_empty());
+        assert!(snap.last_refreshed_ms.is_none());
+        assert!(!snap.refresh_in_progress);
+    }
+
+    #[test]
+    fn cache_begin_refresh_is_single_writer() {
+        let cache = GcloudCacheState::new();
+        assert!(cache.begin_refresh(), "first call should succeed");
+        assert!(
+            !cache.begin_refresh(),
+            "second call while in progress should fail"
+        );
+        // Clear the flag and verify a new refresh can begin.
+        cache.write_partial(|s| s.refresh_in_progress = false);
+        assert!(
+            cache.begin_refresh(),
+            "after clearing the flag a new refresh can start"
+        );
+    }
+
+    #[test]
+    fn cache_snapshot_clones_independent_data() {
+        let cache = GcloudCacheState::new();
+        cache.write_partial(|s| {
+            s.projects = vec![GcpProject {
+                id: "p1".to_string(),
+                name: "P1".to_string(),
+            }];
+            s.project_errors
+                .insert("p2".to_string(), "permission denied".to_string());
+        });
+        let snap1 = cache.snapshot();
+        cache.write_partial(|s| s.projects.clear());
+        let snap2 = cache.snapshot();
+        assert_eq!(snap1.projects.len(), 1, "first snapshot retains its data");
+        assert!(snap2.projects.is_empty());
+        assert_eq!(
+            snap1.project_errors.get("p2").map(|s| s.as_str()),
+            Some("permission denied")
+        );
+    }
+
+    #[test]
+    fn cache_snapshot_serialize_camel_case() {
+        let snap = GcloudCacheSnapshot {
+            last_refreshed_ms: Some(1_700_000_000_000),
+            refresh_in_progress: true,
+            ..Default::default()
+        };
+        let json = serde_json::to_value(&snap).unwrap();
+        assert_eq!(json["lastRefreshedMs"], 1_700_000_000_000_u64);
+        assert_eq!(json["refreshInProgress"], true);
+        // HashMap fields are always present (even when empty) to make the
+        // frontend's life simpler.
+        assert!(json.get("instancesByProject").is_some());
+        assert!(json.get("projectErrors").is_some());
     }
 
     // -- gcloud program discovery --
@@ -910,7 +1476,11 @@ mod tests {
                     .and_then(|s| s.as_str())
                     .unwrap_or("UNKNOWN")
                     .to_string();
-                Some(GceInstance { name, status })
+                Some(GceInstance {
+                    name,
+                    status,
+                    zone: None,
+                })
             })
             .collect();
         assert_eq!(instances.len(), 2);

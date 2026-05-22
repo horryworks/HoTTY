@@ -244,6 +244,27 @@ export interface GcpProject {
 export interface GceInstance {
   name: string;
   status: string;
+  zone?: string;
+}
+
+export interface GcloudCacheSnapshot {
+  gcloud?: GcloudStatus;
+  auth?: GcloudAuthStatus;
+  projects: GcpProject[];
+  /** Map of project ID → list of instances (includes zone). */
+  instancesByProject: Record<string, GceInstance[]>;
+  /** Map of project ID → error message for projects whose `instances list` failed. */
+  projectErrors: Record<string, string>;
+  /** Milliseconds since the Unix epoch of the last successful full refresh. */
+  lastRefreshedMs?: number;
+  refreshInProgress: boolean;
+}
+
+export interface GcpRefreshProgress {
+  stage: 'gcloud' | 'auth' | 'projects' | 'instances' | 'done';
+  currentProject?: string;
+  done: number;
+  total: number;
 }
 
 // ---------------------------------------------------------------------------

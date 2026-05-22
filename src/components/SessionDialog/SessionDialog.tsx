@@ -4,6 +4,8 @@ import { useHostManager, decryptBatch, getCachedCredential, clearDecryptedCache,
 import { isEncrypted } from '../../services/tauriService';
 import { tauriService } from '../../services/tauriService';
 import { HostTree } from '../HostTree/HostTree';
+import { GcpInstancesPane, type VmSelection } from '../GcpInstancesPane/GcpInstancesPane';
+import { useSidebarLayoutStore } from '../../stores/sidebarLayoutStore';
 import { useResize } from '../../hooks/useResize';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { HostTreeNode, HostEntry, ProtocolId, Encoding } from '../../types/appTypes';
@@ -15,10 +17,6 @@ import type {
     LocalConnectionConfig,
     GcloudIapConnectionConfig,
     SerialPortInfo,
-    GcloudStatus,
-    GcloudAuthStatus,
-    GcpProject,
-    GceInstance,
 } from '../../types/appTypes';
 import './SessionDialog.css';
 
@@ -45,7 +43,6 @@ interface SessionDialogProps {
 const PROTOCOLS: { value: ProtocolId; label: string }[] = [
     { value: 'ssh', label: 'SSH' },
     { value: 'telnet', label: 'Telnet' },
-    { value: 'gcloud-iap', label: 'Google Cloud IAP' },
     { value: 'serial', label: 'Serial' },
     { value: 'wsl', label: 'WSL' },
     { value: 'cmd', label: 'Command Prompt' },
@@ -62,6 +59,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
 }) => {
     const hostManager = useHostManager();
     const settings = useSettingsStore();
+    const activeSidebarTab = useSidebarLayoutStore((s) => s.activeSidebarTab);
+    const setActiveSidebarTab = useSidebarLayoutStore((s) => s.setActiveSidebarTab);
 
     const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
     const [isDecrypting, setIsDecrypting] = useState(false);
@@ -169,24 +168,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const [isJumpbox, setIsJumpbox] = useState(false);
     const [jumpboxId, setJumpboxId] = useState('');
 
-    // IAP tunnel state — visibility/enablement is driven by `protocol === 'gcloud-iap'`,
-    // so there is no separate `iapEnabled` flag.
-    const [iapProject, setIapProject] = useState('');
-    const [iapZone, setIapZone] = useState('');
-    const [iapInstance, setIapInstance] = useState('');
-    const [iapAutoStart, setIapAutoStart] = useState(false);
-    const [iapGcloudStatus, setIapGcloudStatus] = useState<GcloudStatus | null>(null);
-    const [iapAuthStatus, setIapAuthStatus] = useState<GcloudAuthStatus | null>(null);
-    const [iapCheckingGcloud, setIapCheckingGcloud] = useState(false);
-    const [iapCheckingAuth, setIapCheckingAuth] = useState(false);
-    const [iapProjects, setIapProjects] = useState<GcpProject[]>([]);
-    const [iapZones, setIapZones] = useState<string[]>([]);
-    const [iapInstances, setIapInstances] = useState<GceInstance[]>([]);
-    const [iapLoadingProjects, setIapLoadingProjects] = useState(false);
-    const [iapLoadingZones, setIapLoadingZones] = useState(false);
-    const [iapLoadingInstances, setIapLoadingInstances] = useState(false);
-    const iapLoadingFromHostRef = useRef(false);
-
     // SSH-specific
     const [privateKeyPath, setPrivateKeyPath] = useState('');
     const [privateKeyPassphrase, setPrivateKeyPassphrase] = useState('');
@@ -220,10 +201,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         password: string;
         isJumpbox: boolean;
         jumpboxId: string;
-        iapProject: string;
-        iapZone: string;
-        iapInstance: string;
-        iapAutoStart: boolean;
     } | null>(null);
 
     // Available jumpbox hosts
@@ -293,84 +270,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         return () => { aborted = true; };
     }, [protocol, isOpen, selectedDistro, serialPath]);
 
-    // --- IAP effects ---
-    const isIap = protocol === 'gcloud-iap';
-    useEffect(() => {
-        if (!isIap) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            setIapGcloudStatus(null);
-            setIapAuthStatus(null);
-            setIapProjects([]);
-            setIapZones([]);
-            setIapInstances([]);
-            return;
-        }
-        let cancelled = false;
-        setIapCheckingGcloud(true);
-        setIapCheckingAuth(false);
-        (async () => {
-            const gcloud = await tauriService.gceIapCheckGcloud();
-            if (cancelled) return;
-            setIapGcloudStatus(gcloud);
-            setIapCheckingGcloud(false);
-            if (gcloud.available) {
-                setIapCheckingAuth(true);
-                const auth = await tauriService.gceIapCheckAuth();
-                if (cancelled) return;
-                setIapAuthStatus(auth);
-                setIapCheckingAuth(false);
-            }
-        })();
-        return () => { cancelled = true; };
-    }, [isIap]);
-
-    const handleLoadProjects = useCallback(async () => {
-        if (iapLoadingProjects || iapProjects.length > 0) return;
-        setIapLoadingProjects(true);
-        const projects = await tauriService.gceIapListProjects();
-        setIapProjects(projects);
-        setIapLoadingProjects(false);
-    }, [iapLoadingProjects, iapProjects.length]);
-
-    const handleLoadZones = useCallback(async () => {
-        if (!iapProject || iapLoadingZones) return;
-        setIapLoadingZones(true);
-        const zones = await tauriService.gceIapListZones(iapProject);
-        setIapZones(zones);
-        setIapLoadingZones(false);
-    }, [iapProject, iapLoadingZones]);
-
-    const handleLoadInstances = useCallback(async () => {
-        if (!iapProject || !iapZone || iapLoadingInstances) return;
-        setIapLoadingInstances(true);
-        const instances = await tauriService.gceIapListInstances(iapProject, iapZone);
-        setIapInstances(instances);
-        setIapLoadingInstances(false);
-    }, [iapProject, iapZone, iapLoadingInstances]);
-
-    useEffect(() => {
-        if (iapAuthStatus?.authenticated && iapProjects.length === 0 && !iapLoadingProjects) {
-            handleLoadProjects(); // eslint-disable-line react-hooks/set-state-in-effect
-        }
-    }, [iapAuthStatus?.authenticated]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    useEffect(() => {
-        if (iapLoadingFromHostRef.current) return;
-        setIapZones([]); // eslint-disable-line react-hooks/set-state-in-effect
-        setIapInstances([]);
-        if (iapProject) {
-            handleLoadZones();
-        }
-    }, [iapProject]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    useEffect(() => {
-        if (iapLoadingFromHostRef.current) return;
-        setIapInstances([]); // eslint-disable-line react-hooks/set-state-in-effect
-        if (iapZone) {
-            handleLoadInstances();
-        }
-    }, [iapZone]); // eslint-disable-line react-hooks/exhaustive-deps
-
     // Sync displayName when the selected host is renamed in the tree
     useEffect(() => {
         if (!selectedHostId) return;
@@ -402,9 +301,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setPassword('');
         setIsJumpbox(false);
         setJumpboxId('');
-        setIapProject('');
-        setIapZone('');
-        setIapInstance('');
     }, []);
 
     // --- Select a host from the tree ---
@@ -419,9 +315,16 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             setPassword('');
             setIsJumpbox(false);
             setJumpboxId('');
-            setIapProject('');
-            setIapZone('');
-            setIapInstance('');
+            return;
+        }
+
+        // Legacy gcloud-iap entries are no longer editable from the Hosts tab —
+        // creation/edit moved to the GCP tab and only supports one-shot
+        // connections. Show the selection visually but leave the form blank so
+        // the user doesn't accidentally save destructive changes.
+        if (node.entry.protocol === 'gcloud-iap') {
+            setOriginalState(null);
+            setDisplayName(node.name);
             return;
         }
 
@@ -458,21 +361,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setIsJumpbox(!!e.isJumpbox);
         setJumpboxId(e.jumpboxId ?? '');
 
-        // IAP tunnel state — protocol === 'gcloud-iap' is the source of truth.
-        iapLoadingFromHostRef.current = true;
-        if (e.protocol === 'gcloud-iap' && e.iapTunnel) {
-            setIapProject(e.iapTunnel.project);
-            setIapZone(e.iapTunnel.zone);
-            setIapInstance(e.iapTunnel.instance);
-            setIapAutoStart(!!e.iapTunnel.autoStart);
-        } else {
-            setIapProject('');
-            setIapZone('');
-            setIapInstance('');
-            setIapAutoStart(false);
-        }
-        requestAnimationFrame(() => { iapLoadingFromHostRef.current = false; });
-
         setDisplayName(node.name);
         setOriginalState({
             name: node.name,
@@ -483,12 +371,31 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             password: p,
             isJumpbox: !!e.isJumpbox,
             jumpboxId: e.jumpboxId ?? '',
-            iapProject: e.iapTunnel?.project ?? '',
-            iapZone: e.iapTunnel?.zone ?? '',
-            iapInstance: e.iapTunnel?.instance ?? '',
-            iapAutoStart: !!e.iapTunnel?.autoStart,
         });
     };
+
+    // --- GCP discovery tab: double-click connects immediately ---
+    const handleActivateGcpInstance = useCallback(
+        (sel: VmSelection) => {
+            const globalEncoding = useSettingsStore.getState().globalEncoding;
+            const config: GcloudIapConnectionConfig = {
+                project: sel.project,
+                zone: sel.zone,
+                instance: sel.instance,
+                encoding: globalEncoding,
+                // Default to auto-start for one-shot connections from the GCP
+                // tab — the user explicitly chose this VM, so prompting again
+                // would be churn.
+                autoStart: true,
+            };
+            onConnect({
+                displayName: `IAP ${sel.instance}`,
+                protocol: 'gcloud-iap',
+                config,
+            });
+        },
+        [onConnect],
+    );
 
     // --- Double-click: connect immediately ---
     const handleDoubleClickHost = useCallback(async (node: HostTreeNode) => {
@@ -575,11 +482,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         originalState.username !== username ||
         originalState.password !== password ||
         originalState.isJumpbox !== isJumpbox ||
-        originalState.jumpboxId !== jumpboxId ||
-        originalState.iapProject !== iapProject ||
-        originalState.iapZone !== iapZone ||
-        originalState.iapInstance !== iapInstance ||
-        originalState.iapAutoStart !== iapAutoStart
+        originalState.jumpboxId !== jumpboxId
     );
 
     // --- Save changes to host entry ---
@@ -620,29 +523,16 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             password: finalP,
             isJumpbox,
             jumpboxId,
-            iapProject,
-            iapZone,
-            iapInstance,
-            iapAutoStart,
         });
 
-        const isIapProto = protocol === 'gcloud-iap';
         const entry: HostEntry = {
-            protocol: protocol as 'ssh' | 'telnet' | 'gcloud-iap',
-            host: isIapProto ? iapInstance : host,
+            protocol: protocol as 'ssh' | 'telnet',
+            host,
             port: parseInt(port),
-            username: isIapProto ? undefined : (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
-            password: isIapProto ? undefined : (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
+            username: (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
+            password: (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
             isJumpbox: protocol === 'ssh' ? (isJumpbox || undefined) : undefined,
-            jumpboxId: isIapProto ? undefined : (jumpboxId || undefined),
-            iapTunnel: isIapProto
-                ? {
-                      project: iapProject,
-                      zone: iapZone,
-                      instance: iapInstance,
-                      autoStart: iapAutoStart || undefined,
-                  }
-                : undefined,
+            jumpboxId: jumpboxId || undefined,
         };
 
         hostManager.editNode(selectedHostId, { name: displayName, entry });
@@ -653,19 +543,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         e.preventDefault();
 
         // Front-end validation. Catches obvious mistakes (empty host, bad
-        // port, malformed GCP IDs, CRLF injection) before the backend has to.
+        // port, CRLF injection) before the backend has to.
         const validationError = ((): string | null => {
-            if (protocol === 'gcloud-iap') {
-                const projectOk = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(iapProject);
-                const zoneOk = /^[a-z]+-[a-z]+[0-9]+-[a-z]$/.test(iapZone);
-                const instanceOk = /^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$/.test(iapInstance);
-                if (!projectOk) {
-                    return 'IAP project ID must be 6-30 chars, lowercase alphanumeric or hyphen, starting with a letter.';
-                }
-                if (!zoneOk) return 'IAP zone is invalid (e.g., us-central1-a).';
-                if (!instanceOk) return 'IAP instance name is invalid (lowercase letters/digits/hyphens, must start with a letter, max 63 chars).';
-                return null;
-            }
             if (protocol === 'ssh' || protocol === 'telnet') {
                 const h = host.trim();
                 if (!h) return 'Host is required.';
@@ -712,24 +591,15 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         }
 
         // Persist credential changes back to the selected tree node
-        if (selectedHostId && (protocol === 'ssh' || protocol === 'telnet' || protocol === 'gcloud-iap')) {
-            const isIapProto = protocol === 'gcloud-iap';
+        if (selectedHostId && (protocol === 'ssh' || protocol === 'telnet')) {
             const entry: HostEntry = {
-                protocol: protocol as 'ssh' | 'telnet' | 'gcloud-iap',
-                host: isIapProto ? iapInstance : host,
+                protocol: protocol as 'ssh' | 'telnet',
+                host,
                 port: parseInt(port),
-                username: isIapProto ? undefined : (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
-                password: isIapProto ? undefined : (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
+                username: finalU,
+                password: finalP,
                 isJumpbox: protocol === 'ssh' ? (isJumpbox || undefined) : undefined,
-                jumpboxId: isIapProto ? undefined : (jumpboxId || undefined),
-                iapTunnel: isIapProto
-                    ? {
-                          project: iapProject,
-                          zone: iapZone,
-                          instance: iapInstance,
-                          autoStart: iapAutoStart || undefined,
-                      }
-                    : undefined,
+                jumpboxId: jumpboxId || undefined,
             };
             const patchTree = (nodes: HostTreeNode[], id: string): HostTreeNode[] =>
                 nodes.map(n => {
@@ -752,8 +622,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     const u = finalU.trim();
                     return `${protocol.toUpperCase()} ${u ? u + '@' : ''}${host.trim()}:${port}`;
                 }
-                case 'gcloud-iap':
-                    return `IAP ${iapInstance.trim()}`;
                 case 'serial':
                     return `Serial ${serialPath} (${baudRate})`;
                 case 'wsl':
@@ -764,21 +632,14 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     return 'PowerShell';
                 case 'git-bash':
                     return 'Git Bash';
+                // gcloud-iap is not configurable from this form; the GCP tab
+                // owns IAP connections. Treat as no-op for type exhaustiveness.
+                case 'gcloud-iap':
+                    return displayName || 'IAP';
             }
         };
 
         switch (protocol) {
-            case 'gcloud-iap': {
-                const config: GcloudIapConnectionConfig = {
-                    project: iapProject.trim(),
-                    zone: iapZone.trim(),
-                    instance: iapInstance.trim(),
-                    encoding,
-                    autoStart: iapAutoStart,
-                };
-                onConnect({ displayName: buildName(), protocol, config });
-                break;
-            }
             case 'ssh': {
                 const config: SshConnectionConfig = {
                     host: host.trim(),
@@ -860,7 +721,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             case 'telnet':
                 return host.trim().length > 0 && parseInt(port) > 0 && parseInt(port) <= 65535;
             case 'gcloud-iap':
-                return iapProject.trim().length > 0 && iapZone.trim().length > 0 && iapInstance.trim().length > 0;
+                // Not selectable from the Hosts-tab dropdown; the GCP tab
+                // bypasses this form entirely.
+                return false;
             case 'serial':
                 return serialPath.trim().length > 0;
             case 'wsl':
@@ -906,23 +769,59 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
 
                 <h2 style={{ marginTop: 0, paddingRight: '20px', marginBottom: '10px' }}>New Session</h2>
 
-                {/* Two-panel body */}
-                <div className="dialog-body">
-                    {/* Left: Host tree */}
-                    <div className="host-panel" style={{ width: treePanelWidth, flexShrink: 0 }}>
-                        <HostTree
-                            tree={hostManager.tree}
-                            selectedId={selectedHostId}
-                            onSelect={handleSelectHost}
-                            onDoubleClickHost={handleDoubleClickHost}
-                            onAddFolder={hostManager.addFolder}
-                            onAddHost={hostManager.addHost}
-                            onEditNode={hostManager.editNode}
-                            onDeleteNode={hostManager.deleteNode}
-                            onMoveNode={hostManager.moveNode}
-                            onSortFolder={hostManager.sortFolder}
-                            onImportData={hostManager.importData}
-                        />
+                {/* Two-panel body. When the GCP tab is active the right-hand
+                    form is hidden (see SessionDialog.css `.dialog-body.tab-gcp`)
+                    and the host panel expands to fill the row, since GCP
+                    connections happen via double-click and don't need the form. */}
+                <div className={`dialog-body tab-${activeSidebarTab}`}>
+                    {/* Left: Host tree / GCP discovery tabs */}
+                    <div
+                        className="host-panel"
+                        style={
+                            activeSidebarTab === 'gcp'
+                                ? { flex: 1, minWidth: 0 }
+                                : { width: treePanelWidth, flexShrink: 0 }
+                        }
+                    >
+                        <div className="host-panel-tabs" role="tablist" aria-label="Connection source">
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={activeSidebarTab === 'hosts'}
+                                className={`host-panel-tab${activeSidebarTab === 'hosts' ? ' active' : ''}`}
+                                onClick={() => setActiveSidebarTab('hosts')}
+                            >
+                                <span aria-hidden="true">📡 </span>Hosts
+                            </button>
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={activeSidebarTab === 'gcp'}
+                                className={`host-panel-tab${activeSidebarTab === 'gcp' ? ' active' : ''}`}
+                                onClick={() => setActiveSidebarTab('gcp')}
+                            >
+                                <span aria-hidden="true">☁ </span>GCP
+                            </button>
+                        </div>
+                        {activeSidebarTab === 'hosts' ? (
+                            <HostTree
+                                tree={hostManager.tree}
+                                selectedId={selectedHostId}
+                                onSelect={handleSelectHost}
+                                onDoubleClickHost={handleDoubleClickHost}
+                                onAddFolder={hostManager.addFolder}
+                                onAddHost={hostManager.addHost}
+                                onEditNode={hostManager.editNode}
+                                onDeleteNode={hostManager.deleteNode}
+                                onMoveNode={hostManager.moveNode}
+                                onSortFolder={hostManager.sortFolder}
+                                onImportData={hostManager.importData}
+                            />
+                        ) : (
+                            <GcpInstancesPane
+                                onActivateInstance={handleActivateGcpInstance}
+                            />
+                        )}
                     </div>
 
                     {/* Divider */}
@@ -978,100 +877,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                             Use as Jumpbox
                                         </label>
                                     </div>
-                                )}
-
-                                {/* IAP tunnel fields */}
-                                {protocol === 'gcloud-iap' && (
-                                    <>
-                                        <div className="form-group">
-                                            {iapCheckingGcloud ? (
-                                                <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--text-secondary)' }}>
-                                                    Checking gcloud SDK...
-                                                </span>
-                                            ) : iapCheckingAuth ? (
-                                                <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--text-secondary)' }}>
-                                                    Checking authentication...
-                                                </span>
-                                            ) : iapGcloudStatus && !iapGcloudStatus.available ? (
-                                                <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--color-danger)' }}>
-                                                    gcloud SDK not found.{' '}
-                                                    <a
-                                                        href="#"
-                                                        onClick={(ev) => { ev.preventDefault(); tauriService.openExternal('https://cloud.google.com/sdk/docs/install'); }}
-                                                        style={{ color: 'var(--accent-color)' }}
-                                                    >
-                                                        Install
-                                                    </a>
-                                                </span>
-                                            ) : iapAuthStatus && !iapAuthStatus.authenticated ? (
-                                                <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--color-warning)' }}>
-                                                    Not authenticated. Run <code>gcloud auth login</code> first.
-                                                </span>
-                                            ) : iapAuthStatus?.authenticated ? (
-                                                <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', color: 'var(--success-color)' }}>
-                                                    Authenticated as {iapAuthStatus.account}
-                                                </span>
-                                            ) : null}
-                                        </div>
-                                        <div className="form-group">
-                                            <label>GCP Project{iapLoadingProjects && <span style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}> (loading...)</span>}</label>
-                                            {iapProjects.length > 0 ? (
-                                                <select value={iapProject} onChange={e => setIapProject(e.target.value)} required>
-                                                    <option value="">Select a project</option>
-                                                    {iapProjects.map(p => (
-                                                        <option key={p.id} value={p.id}>{p.name !== p.id ? `${p.name} (${p.id})` : p.id}</option>
-                                                    ))}
-                                                </select>
-                                            ) : (
-                                                <input type="text" value={iapProject} onChange={e => setIapProject(e.target.value)} placeholder="my-project-id" required />
-                                            )}
-                                        </div>
-                                        <div className="form-group">
-                                            <label>Zone{iapLoadingZones && <span style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}> (loading...)</span>}</label>
-                                            {iapZones.length > 0 ? (
-                                                <select value={iapZone} onChange={e => setIapZone(e.target.value)} required>
-                                                    <option value="">Select a zone</option>
-                                                    {iapZones.map(z => (
-                                                        <option key={z} value={z}>{z}</option>
-                                                    ))}
-                                                </select>
-                                            ) : (
-                                                <input type="text" value={iapZone} onChange={e => setIapZone(e.target.value)} placeholder="us-central1-a" required />
-                                            )}
-                                        </div>
-                                        <div className="form-group">
-                                            <label>Instance{iapLoadingInstances && <span style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}> (loading...)</span>}</label>
-                                            {iapInstances.length > 0 ? (
-                                                <select value={iapInstance} onChange={e => setIapInstance(e.target.value)} required>
-                                                    <option value="">Select an instance</option>
-                                                    {iapInstances.map(i => (
-                                                        <option key={i.name} value={i.name}>{`${i.name} (${i.status})`}</option>
-                                                    ))}
-                                                </select>
-                                            ) : (
-                                                <input type="text" value={iapInstance} onChange={e => setIapInstance(e.target.value)} placeholder="my-instance" required />
-                                            )}
-                                        </div>
-                                        <div className="form-group">
-                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={iapAutoStart}
-                                                    onChange={e => setIapAutoStart(e.target.checked)}
-                                                />
-                                                Auto-start VM if stopped
-                                            </label>
-                                        </div>
-                                        <div className="form-group" style={{ marginTop: '4px' }}>
-                                            <span style={{
-                                                fontSize: 'calc(var(--font-size-base) - 2px)',
-                                                color: 'var(--text-secondary)',
-                                                fontStyle: 'italic',
-                                            }}>
-                                                Authentication is handled automatically by gcloud (OS Login / SSH key auto-generation at ~/.ssh/google_compute_engine). No username, password, or private key is required.
-                                            </span>
-                                        </div>
-                                    </>
                                 )}
 
                                 {/* SSH/Telnet fields */}

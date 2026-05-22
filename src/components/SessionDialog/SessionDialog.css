@@ -62,10 +62,54 @@
     overflow: hidden;
 }
 
+/* When the GCP discovery tab is active, the right-hand connection form
+   is irrelevant (connecting happens via double-click), so we hide the
+   divider and form-panel and let .host-panel expand to fill the row. */
+.dialog-body.tab-gcp .panel-divider,
+.dialog-body.tab-gcp .form-panel {
+    display: none;
+}
+
 .host-panel {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+}
+
+.host-panel-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    flex-shrink: 0;
+}
+
+.host-panel-tab {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 6px 8px;
+    cursor: pointer;
+    font-size: calc(var(--font-size-base) - 2px);
+    font-family: var(--ui-font-family);
+    font-weight: 600;
+    transition: background 0.15s, color 0.15s;
+}
+
+.host-panel-tab:last-child {
+    border-right: none;
+}
+
+.host-panel-tab:hover {
+    background: var(--hover-bg);
+    color: var(--text-primary);
+}
+
+.host-panel-tab.active {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-bottom: 2px solid var(--accent-color);
 }
 
 .panel-divider {

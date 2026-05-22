@@ -1,6 +1,8 @@
 pub mod commands;
 pub mod services;
 
+use std::sync::Arc;
+
 use tauri::Manager;
 
 use commands::ai::{
@@ -15,8 +17,9 @@ use commands::host_tree::{
     ImportPathState,
 };
 use commands::iap_tunnel::{
-    gce_iap_check_auth, gce_iap_check_gcloud, gce_iap_list_instances, gce_iap_list_projects,
-    gce_iap_list_zones, gce_iap_respond_vm_start,
+    gce_iap_check_auth, gce_iap_check_gcloud, gce_iap_get_cache, gce_iap_get_instance_status,
+    gce_iap_list_instances, gce_iap_list_projects, gce_iap_list_zones, gce_iap_refresh_cache,
+    gce_iap_respond_vm_start, gce_iap_start_instance, gce_iap_stop_instance,
 };
 use commands::log_viewer::{confirm_log_dir, list_log_files, read_log_file};
 use commands::ping_monitor::{
@@ -44,6 +47,7 @@ use services::ai::providers::gemini::GeminiProvider;
 use services::ai::providers::openai::OpenAIProvider;
 use services::ai::providers::vertexai::VertexAIProvider;
 use services::ai::{AIProviderRegistry, AIService};
+use services::iap_tunnel::GcloudCacheState;
 use services::log_manager::LogManager;
 use services::ping_monitor::PingMonitorState;
 
@@ -69,6 +73,7 @@ pub fn run() {
         .manage(ApprovedEditorPaths::new())
         .manage(ApprovedServiceAccountKeys::new())
         .manage(PingMonitorState::new())
+        .manage(Arc::new(GcloudCacheState::new()))
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 let version = app.package_info().version.to_string();
@@ -165,6 +170,11 @@ pub fn run() {
             gce_iap_list_zones,
             gce_iap_list_instances,
             gce_iap_respond_vm_start,
+            gce_iap_get_cache,
+            gce_iap_refresh_cache,
+            gce_iap_start_instance,
+            gce_iap_stop_instance,
+            gce_iap_get_instance_status,
             // Logging & file dialogs
             log_debug,
             select_image,

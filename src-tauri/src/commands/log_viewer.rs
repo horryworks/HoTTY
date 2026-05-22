@@ -150,7 +150,7 @@ pub async fn list_log_files(
     }
 
     // Sort by modification time, newest first
-    files.sort_by(|a, b| b.mtime.cmp(&a.mtime));
+    files.sort_by_key(|f| std::cmp::Reverse(f.mtime));
 
     Ok(ListLogFilesResult {
         files: Some(files),
