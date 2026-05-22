@@ -168,6 +168,10 @@ vi.mock('./components/SshHostKeyModal/SshHostKeyModal', () => ({
   SshHostKeyModal: () => null,
 }));
 
+vi.mock('./components/IapVmStartModal/IapVmStartModal', () => ({
+  IapVmStartModal: () => null,
+}));
+
 // Capture the modal props so tests can invoke onConfirm/onCancel without
 // rendering the real modal (which would auto-focus its Paste button).
 let pasteModalProps: {

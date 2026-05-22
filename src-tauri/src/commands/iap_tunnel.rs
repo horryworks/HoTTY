@@ -1,3 +1,4 @@
+use crate::services::gcloud_iap;
 use crate::services::iap_tunnel::{
     self, GceInstance, GcloudAuthStatus, GcloudStatus, GcpProject,
 };
@@ -37,4 +38,12 @@ pub async fn gce_iap_list_instances(
     zone: String,
 ) -> Result<Vec<GceInstance>, String> {
     Ok(iap_tunnel::list_instances(&project, &zone).await)
+}
+
+/// Deliver the user's response to an `iap-vm-start-prompt` event. The backend's
+/// pre-flight `ensure_vm_running` is awaiting a oneshot keyed by `session_id`;
+/// this command unblocks it.
+#[tauri::command]
+pub fn gce_iap_respond_vm_start(session_id: String, approved: bool) -> Result<(), String> {
+    gcloud_iap::respond_vm_start(&session_id, approved)
 }

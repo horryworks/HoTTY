@@ -38,6 +38,7 @@ import type {
   GcloudAuthStatus,
   GcpProject,
   GceInstance,
+  IapVmStartPromptPayload,
   AIAuthStatus,
   AIModelInfo,
   AIChatResponseData,
@@ -348,6 +349,16 @@ export const tauriService = {
 
   async gceIapListInstances(project: string, zone: string): Promise<GceInstance[]> {
     return invoke<GceInstance[]>('gce_iap_list_instances', { project, zone });
+  },
+
+  /** Subscribe to the backend's "VM is stopped — ask the user before starting" prompt. */
+  onIapVmStartPrompt(cb: (p: IapVmStartPromptPayload) => void): Promise<UnlistenFn> {
+    return listen<IapVmStartPromptPayload>('iap-vm-start-prompt', (e) => cb(e.payload));
+  },
+
+  /** Deliver the user's response to a pending VM-start prompt. */
+  async gceIapRespondVmStart(sessionId: string, approved: boolean): Promise<void> {
+    await invoke('gce_iap_respond_vm_start', { sessionId, approved });
   },
 
   // -----------------------------------------------------------------------

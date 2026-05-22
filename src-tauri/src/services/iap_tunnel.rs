@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use regex_lite::Regex;
 use tokio::process::Command;
@@ -8,8 +9,20 @@ use tokio::process::Command;
 // Constants
 // ---------------------------------------------------------------------------
 
-/// Timeout for gcloud CLI commands (milliseconds).
+/// Default timeout for short-lived gcloud CLI commands (e.g. `describe`, `list`).
 const GCLOUD_CMD_TIMEOUT_SECS: u64 = 15;
+
+/// Hard ceiling for the blocking `gcloud compute instances start` call.
+const INSTANCE_START_TIMEOUT_SECS: u64 = 300;
+
+/// Total budget for the post-start poll-to-RUNNING phase.
+pub const WAIT_RUNNING_TIMEOUT_SECS: u64 = 240;
+
+/// Polling cadence while waiting for the VM to reach RUNNING.
+const STATUS_POLL_INTERVAL_SECS: u64 = 3;
+
+/// After receiving an `Unknown(...)` status this many cycles in a row, give up.
+const UNKNOWN_STATUS_TOLERANCE: u32 = 3;
 
 /// Maximum number of projects returned by `list_projects`.
 const MAX_PROJECTS: usize = 100;
@@ -130,18 +143,27 @@ fn find_gcloud_path() -> Option<PathBuf> {
     None
 }
 
-/// Return the gcloud program name and whether shell mode is needed.
+/// Return the gcloud program name and whether to wrap the invocation in `cmd /C`.
+///
+/// `use_shell` is always `false`: on Windows the `.cmd` extension is detected by
+/// the Rust standard library, which then spawns the script via `cmd.exe` with the
+/// BatBadBut-safe argument escaping (since Rust 1.77.2). Wrapping it ourselves in
+/// `cmd /C` reintroduces cmd's "strip outer quotes when 3+ `"` are present" rule,
+/// which breaks any gcloud invocation whose `--format=value("...")` filter expression
+/// embeds double quotes (see HoTTY.log around `is_oslogin_enabled` failing with
+/// `'C:\...\Google\Cloud' is not recognized`).
 pub(crate) fn gcloud_program() -> (String, bool) {
     if let Some(path) = find_gcloud_path() {
-        (path.to_string_lossy().into_owned(), cfg!(target_os = "windows"))
+        (path.to_string_lossy().into_owned(), false)
     } else {
-        // Fallback: rely on shell PATH resolution
+        // No full path: fall back to PATH lookup. Rust's Command still detects the
+        // .cmd extension after PATH resolution and applies the same safe escaping.
         let name = if cfg!(target_os = "windows") {
             "gcloud.cmd".to_string()
         } else {
             "gcloud".to_string()
         };
-        (name, cfg!(target_os = "windows"))
+        (name, false)
     }
 }
 
@@ -149,22 +171,22 @@ pub(crate) fn gcloud_program() -> (String, bool) {
 // gcloud command runner
 // ---------------------------------------------------------------------------
 
-/// Run a gcloud command with the given arguments and return stdout.
+/// Run a gcloud command with the default timeout. Convenience wrapper.
 async fn run_gcloud(args: &[&str]) -> Result<String, String> {
-    let (program, use_shell) = gcloud_program();
+    run_gcloud_with_timeout(args, GCLOUD_CMD_TIMEOUT_SECS).await
+}
 
-    // Pass args as an array in both shell and non-shell paths. On Windows,
-    // `cmd /C gcloud.cmd <args...>` with array args lets CreateProcess handle
-    // quoting per-argument, avoiding manual shell-string escaping.
-    let mut cmd = if use_shell {
-        let mut c = Command::new("cmd");
-        c.arg("/C").arg(&program).args(args);
-        c
-    } else {
-        let mut c = Command::new(&program);
-        c.args(args);
-        c
-    };
+/// Run a gcloud command with a caller-supplied timeout (seconds) and return stdout.
+/// On non-zero exit, returns `Err` with the trimmed stderr.
+async fn run_gcloud_with_timeout(args: &[&str], timeout_secs: u64) -> Result<String, String> {
+    let (program, _use_shell) = gcloud_program();
+
+    // Invoke the .cmd file directly. Rust's Command detects the .cmd extension on
+    // Windows and spawns it via cmd.exe with BatBadBut-safe escaping; doing the
+    // `cmd /C` wrapping ourselves would re-introduce cmd's brittle quote-stripping
+    // rules (see gcloud_program() doc comment).
+    let mut cmd = Command::new(&program);
+    cmd.args(args);
 
     #[cfg(target_os = "windows")]
     {
@@ -172,13 +194,10 @@ async fn run_gcloud(args: &[&str]) -> Result<String, String> {
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let output = tokio::time::timeout(
-        std::time::Duration::from_secs(GCLOUD_CMD_TIMEOUT_SECS),
-        cmd.output(),
-    )
-    .await
-    .map_err(|_| "gcloud command timed out".to_string())?
-    .map_err(|e| format!("Failed to run gcloud: {e}"))?;
+    let output = tokio::time::timeout(Duration::from_secs(timeout_secs), cmd.output())
+        .await
+        .map_err(|_| "gcloud command timed out".to_string())?
+        .map_err(|e| format!("Failed to run gcloud: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -368,6 +387,260 @@ pub async fn list_instances(project: &str, zone: &str) -> Vec<GceInstance> {
 }
 
 // ---------------------------------------------------------------------------
+// VM instance status (for auto-start pre-flight)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InstanceStatus {
+    Provisioning,
+    Staging,
+    Running,
+    Stopping,
+    Suspending,
+    Suspended,
+    Repairing,
+    Terminated,
+    Unknown(String),
+}
+
+impl InstanceStatus {
+    pub fn from_gcloud_str(raw: &str) -> Self {
+        let trimmed = raw.trim();
+        match trimmed {
+            "PROVISIONING" => Self::Provisioning,
+            "STAGING" => Self::Staging,
+            "RUNNING" => Self::Running,
+            "STOPPING" => Self::Stopping,
+            "SUSPENDING" => Self::Suspending,
+            "SUSPENDED" => Self::Suspended,
+            "REPAIRING" => Self::Repairing,
+            "TERMINATED" | "STOPPED" => Self::Terminated,
+            other => Self::Unknown(other.to_string()),
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Provisioning => "PROVISIONING",
+            Self::Staging => "STAGING",
+            Self::Running => "RUNNING",
+            Self::Stopping => "STOPPING",
+            Self::Suspending => "SUSPENDING",
+            Self::Suspended => "SUSPENDED",
+            Self::Repairing => "REPAIRING",
+            Self::Terminated => "TERMINATED",
+            Self::Unknown(s) => s.as_str(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum WaitAction {
+    Done,
+    Continue,
+    Fail(String),
+}
+
+pub(crate) fn classify_wait_status(status: &InstanceStatus) -> WaitAction {
+    match status {
+        InstanceStatus::Running => WaitAction::Done,
+        InstanceStatus::Provisioning
+        | InstanceStatus::Staging
+        | InstanceStatus::Repairing
+        | InstanceStatus::Stopping
+        | InstanceStatus::Suspending => WaitAction::Continue,
+        InstanceStatus::Terminated => WaitAction::Fail(
+            "VM returned to TERMINATED after start was issued; check GCE quotas and the instance's last-stop reason.".to_string(),
+        ),
+        InstanceStatus::Suspended => WaitAction::Fail(
+            "VM transitioned to SUSPENDED while waiting for RUNNING.".to_string(),
+        ),
+        InstanceStatus::Unknown(_) => WaitAction::Continue,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PreConnectAction {
+    Proceed,
+    Start,
+    Wait,
+    AskUser { current: String },
+    ErrUnknown(String),
+}
+
+pub fn decide_preconnect_action(status: &InstanceStatus, auto_start: bool) -> PreConnectAction {
+    match status {
+        InstanceStatus::Running => PreConnectAction::Proceed,
+        InstanceStatus::Terminated | InstanceStatus::Suspended => {
+            if auto_start {
+                PreConnectAction::Start
+            } else {
+                PreConnectAction::AskUser {
+                    current: status.as_str().to_string(),
+                }
+            }
+        }
+        InstanceStatus::Provisioning
+        | InstanceStatus::Staging
+        | InstanceStatus::Repairing
+        | InstanceStatus::Stopping
+        | InstanceStatus::Suspending => PreConnectAction::Wait,
+        InstanceStatus::Unknown(s) => PreConnectAction::ErrUnknown(s.clone()),
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum WaitEvent {
+    Polling {
+        status: InstanceStatus,
+        elapsed: Duration,
+    },
+    Running {
+        total: Duration,
+    },
+}
+
+/// Query the current status of a GCE instance via `gcloud compute instances describe`.
+pub async fn get_instance_status(
+    project: &str,
+    zone: &str,
+    instance: &str,
+) -> Result<InstanceStatus, String> {
+    if !is_valid_project(project) {
+        return Err("invalid project".to_string());
+    }
+    if !is_valid_zone(zone) {
+        return Err("invalid zone".to_string());
+    }
+    if !is_valid_instance(instance) {
+        return Err("invalid instance".to_string());
+    }
+
+    let project_flag = format!("--project={project}");
+    let zone_flag = format!("--zone={zone}");
+    let args = [
+        "compute",
+        "instances",
+        "describe",
+        instance,
+        &project_flag,
+        &zone_flag,
+        "--format=value(status)",
+    ];
+    let raw = run_gcloud(&args).await?;
+    Ok(InstanceStatus::from_gcloud_str(&raw))
+}
+
+/// Translate gcloud stderr for `instances start` into a more actionable message when
+/// we recognise a known failure pattern; otherwise pass the original string through.
+fn map_start_error(stderr: &str) -> String {
+    let lower = stderr.to_ascii_lowercase();
+    if lower.contains("permission_denied")
+        || lower.contains("required 'compute.instances.start' permission")
+        || lower.contains("does not have compute.instances.start")
+    {
+        return "Permission denied: your gcloud account lacks 'compute.instances.start' on this instance. Grant the Compute Instance Admin role and retry.".to_string();
+    }
+    stderr.to_string()
+}
+
+/// Start a (stopped) GCE instance via blocking `gcloud compute instances start`.
+pub async fn start_instance(project: &str, zone: &str, instance: &str) -> Result<(), String> {
+    if !is_valid_project(project) {
+        return Err("invalid project".to_string());
+    }
+    if !is_valid_zone(zone) {
+        return Err("invalid zone".to_string());
+    }
+    if !is_valid_instance(instance) {
+        return Err("invalid instance".to_string());
+    }
+
+    let project_flag = format!("--project={project}");
+    let zone_flag = format!("--zone={zone}");
+    let args = [
+        "compute",
+        "instances",
+        "start",
+        instance,
+        &project_flag,
+        &zone_flag,
+    ];
+    match run_gcloud_with_timeout(&args, INSTANCE_START_TIMEOUT_SECS).await {
+        Ok(_) => Ok(()),
+        Err(e) => Err(map_start_error(&e)),
+    }
+}
+
+/// Poll `describe` until the VM reaches RUNNING (or fails / times out). Invokes
+/// `on_event` once per poll cycle with the observed status, and once more with
+/// `WaitEvent::Running` on success. UI-agnostic by design.
+pub async fn wait_for_status_running<F>(
+    project: &str,
+    zone: &str,
+    instance: &str,
+    mut on_event: F,
+) -> Result<Duration, String>
+where
+    F: FnMut(WaitEvent) + Send,
+{
+    let start = Instant::now();
+    let deadline = start + Duration::from_secs(WAIT_RUNNING_TIMEOUT_SECS);
+    let interval = Duration::from_secs(STATUS_POLL_INTERVAL_SECS);
+    let mut unknown_streak: u32 = 0;
+    let mut last_status_str = String::from("UNKNOWN");
+
+    loop {
+        let status = match get_instance_status(project, zone, instance).await {
+            Ok(s) => s,
+            Err(e) => {
+                log::warn!("wait_for_status_running: describe failed: {e}");
+                // Treat transient describe failures as a poll cycle; deadline check will bail.
+                if Instant::now() >= deadline {
+                    return Err(format!(
+                        "VM did not reach RUNNING within {WAIT_RUNNING_TIMEOUT_SECS}s (last status: {last_status_str}). Check the GCE console for boot issues."
+                    ));
+                }
+                tokio::time::sleep(interval).await;
+                continue;
+            }
+        };
+        let elapsed = start.elapsed();
+        last_status_str = status.as_str().to_string();
+
+        on_event(WaitEvent::Polling {
+            status: status.clone(),
+            elapsed,
+        });
+
+        match classify_wait_status(&status) {
+            WaitAction::Done => {
+                on_event(WaitEvent::Running { total: elapsed });
+                return Ok(elapsed);
+            }
+            WaitAction::Fail(msg) => return Err(msg),
+            WaitAction::Continue => {
+                if matches!(status, InstanceStatus::Unknown(_)) {
+                    unknown_streak += 1;
+                    if unknown_streak >= UNKNOWN_STATUS_TOLERANCE {
+                        return Err(format!("Unknown VM status: {}", status.as_str()));
+                    }
+                } else {
+                    unknown_streak = 0;
+                }
+            }
+        }
+
+        if Instant::now() >= deadline {
+            return Err(format!(
+                "VM did not reach RUNNING within {WAIT_RUNNING_TIMEOUT_SECS}s (last status: {last_status_str}). Check the GCE console for boot issues."
+            ));
+        }
+        tokio::time::sleep(interval).await;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -525,6 +798,20 @@ mod tests {
         assert!(!prog.is_empty());
     }
 
+    /// Regression guard: gcloud_program must report `use_shell = false` so that
+    /// callers do NOT wrap the invocation in `cmd /C`. The wrapper was the
+    /// source of the "'C:\…\Google\Cloud' is not recognized" failure when
+    /// `--format=value("...")` filter expressions were passed — see the
+    /// gcloud_program() doc comment.
+    #[test]
+    fn gcloud_program_never_uses_manual_cmd_shell() {
+        let (_prog, use_shell) = gcloud_program();
+        assert!(
+            !use_shell,
+            "gcloud_program returned use_shell=true; this re-enables cmd /C wrapping which mis-parses args containing embedded quotes"
+        );
+    }
+
     // -- Zone extraction from URL --
 
     #[test]
@@ -629,6 +916,158 @@ mod tests {
         assert_eq!(instances.len(), 2);
         assert_eq!(instances[0].status, "RUNNING");
         assert_eq!(instances[1].status, "UNKNOWN");
+    }
+
+    // -- InstanceStatus parsing --
+
+    #[test]
+    fn status_from_known_strings() {
+        assert_eq!(InstanceStatus::from_gcloud_str("RUNNING"), InstanceStatus::Running);
+        assert_eq!(InstanceStatus::from_gcloud_str("TERMINATED"), InstanceStatus::Terminated);
+        assert_eq!(InstanceStatus::from_gcloud_str("STOPPED"), InstanceStatus::Terminated);
+        assert_eq!(InstanceStatus::from_gcloud_str("STAGING"), InstanceStatus::Staging);
+        assert_eq!(InstanceStatus::from_gcloud_str("PROVISIONING"), InstanceStatus::Provisioning);
+        assert_eq!(InstanceStatus::from_gcloud_str("STOPPING"), InstanceStatus::Stopping);
+        assert_eq!(InstanceStatus::from_gcloud_str("SUSPENDED"), InstanceStatus::Suspended);
+        assert_eq!(InstanceStatus::from_gcloud_str("SUSPENDING"), InstanceStatus::Suspending);
+        assert_eq!(InstanceStatus::from_gcloud_str("REPAIRING"), InstanceStatus::Repairing);
+    }
+
+    #[test]
+    fn status_trims_whitespace_and_newline() {
+        assert_eq!(InstanceStatus::from_gcloud_str("RUNNING\n"), InstanceStatus::Running);
+        assert_eq!(InstanceStatus::from_gcloud_str("  TERMINATED  "), InstanceStatus::Terminated);
+    }
+
+    #[test]
+    fn status_unknown_string_fallback() {
+        match InstanceStatus::from_gcloud_str("FOO_BAR") {
+            InstanceStatus::Unknown(s) => assert_eq!(s, "FOO_BAR"),
+            other => panic!("expected Unknown, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn status_as_str_round_trip() {
+        assert_eq!(InstanceStatus::Running.as_str(), "RUNNING");
+        assert_eq!(InstanceStatus::Terminated.as_str(), "TERMINATED");
+        assert_eq!(InstanceStatus::Unknown("Q".to_string()).as_str(), "Q");
+    }
+
+    // -- classify_wait_status --
+
+    #[test]
+    fn classify_running_is_done() {
+        assert_eq!(classify_wait_status(&InstanceStatus::Running), WaitAction::Done);
+    }
+
+    #[test]
+    fn classify_transitional_continues() {
+        for s in [
+            InstanceStatus::Provisioning,
+            InstanceStatus::Staging,
+            InstanceStatus::Repairing,
+            InstanceStatus::Stopping,
+            InstanceStatus::Suspending,
+        ] {
+            assert_eq!(classify_wait_status(&s), WaitAction::Continue, "{s:?}");
+        }
+    }
+
+    #[test]
+    fn classify_terminated_fails() {
+        match classify_wait_status(&InstanceStatus::Terminated) {
+            WaitAction::Fail(_) => {}
+            other => panic!("expected Fail, got {other:?}"),
+        }
+        match classify_wait_status(&InstanceStatus::Suspended) {
+            WaitAction::Fail(_) => {}
+            other => panic!("expected Fail, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_unknown_continues_initially() {
+        assert_eq!(
+            classify_wait_status(&InstanceStatus::Unknown("X".to_string())),
+            WaitAction::Continue
+        );
+    }
+
+    // -- decide_preconnect_action --
+
+    #[test]
+    fn preconnect_running_proceeds() {
+        assert_eq!(
+            decide_preconnect_action(&InstanceStatus::Running, true),
+            PreConnectAction::Proceed
+        );
+        assert_eq!(
+            decide_preconnect_action(&InstanceStatus::Running, false),
+            PreConnectAction::Proceed
+        );
+    }
+
+    #[test]
+    fn preconnect_stopped_with_autostart() {
+        assert_eq!(
+            decide_preconnect_action(&InstanceStatus::Terminated, true),
+            PreConnectAction::Start
+        );
+        assert_eq!(
+            decide_preconnect_action(&InstanceStatus::Suspended, true),
+            PreConnectAction::Start
+        );
+    }
+
+    #[test]
+    fn preconnect_stopped_without_autostart_asks_user() {
+        match decide_preconnect_action(&InstanceStatus::Terminated, false) {
+            PreConnectAction::AskUser { current } => assert_eq!(current, "TERMINATED"),
+            other => panic!("expected AskUser, got {other:?}"),
+        }
+        match decide_preconnect_action(&InstanceStatus::Suspended, false) {
+            PreConnectAction::AskUser { current } => assert_eq!(current, "SUSPENDED"),
+            other => panic!("expected AskUser, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn preconnect_transitional_waits() {
+        for s in [
+            InstanceStatus::Provisioning,
+            InstanceStatus::Staging,
+            InstanceStatus::Repairing,
+            InstanceStatus::Stopping,
+            InstanceStatus::Suspending,
+        ] {
+            assert_eq!(decide_preconnect_action(&s, true), PreConnectAction::Wait, "{s:?} true");
+            assert_eq!(decide_preconnect_action(&s, false), PreConnectAction::Wait, "{s:?} false");
+        }
+    }
+
+    #[test]
+    fn preconnect_unknown_errors() {
+        match decide_preconnect_action(&InstanceStatus::Unknown("XYZ".to_string()), true) {
+            PreConnectAction::ErrUnknown(s) => assert_eq!(s, "XYZ"),
+            other => panic!("expected ErrUnknown, got {other:?}"),
+        }
+    }
+
+    // -- map_start_error --
+
+    #[test]
+    fn map_start_error_recognises_permission_denied() {
+        let raw = "ERROR: (gcloud.compute.instances.start) Some error: PERMISSION_DENIED";
+        let mapped = map_start_error(raw);
+        assert!(mapped.contains("Permission denied"));
+        assert!(mapped.contains("Compute Instance Admin"));
+    }
+
+    #[test]
+    fn map_start_error_passes_through_unknown() {
+        let raw = "ERROR: weird unrelated message";
+        assert_eq!(map_start_error(raw), raw);
     }
 
     #[test]

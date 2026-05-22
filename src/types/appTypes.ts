@@ -32,6 +32,16 @@ export interface GcloudIapConnectionConfig {
   zone: string;
   instance: string;
   encoding: Encoding;
+  /** Auto-start the VM if it is stopped instead of prompting the user. */
+  autoStart?: boolean;
+}
+
+export interface IapVmStartPromptPayload {
+  sessionId: string;
+  project: string;
+  zone: string;
+  instance: string;
+  currentStatus: string;
 }
 
 export interface SessionDataPayload {
@@ -244,6 +254,8 @@ interface IapTunnelEntry {
   project: string;
   zone: string;
   instance: string;
+  /** Auto-start the VM if it is stopped (persisted per-host preference). */
+  autoStart?: boolean;
 }
 
 export interface HostEntry {

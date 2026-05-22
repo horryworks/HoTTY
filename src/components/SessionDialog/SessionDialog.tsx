@@ -174,6 +174,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const [iapProject, setIapProject] = useState('');
     const [iapZone, setIapZone] = useState('');
     const [iapInstance, setIapInstance] = useState('');
+    const [iapAutoStart, setIapAutoStart] = useState(false);
     const [iapGcloudStatus, setIapGcloudStatus] = useState<GcloudStatus | null>(null);
     const [iapAuthStatus, setIapAuthStatus] = useState<GcloudAuthStatus | null>(null);
     const [iapCheckingGcloud, setIapCheckingGcloud] = useState(false);
@@ -222,6 +223,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         iapProject: string;
         iapZone: string;
         iapInstance: string;
+        iapAutoStart: boolean;
     } | null>(null);
 
     // Available jumpbox hosts
@@ -462,10 +464,12 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             setIapProject(e.iapTunnel.project);
             setIapZone(e.iapTunnel.zone);
             setIapInstance(e.iapTunnel.instance);
+            setIapAutoStart(!!e.iapTunnel.autoStart);
         } else {
             setIapProject('');
             setIapZone('');
             setIapInstance('');
+            setIapAutoStart(false);
         }
         requestAnimationFrame(() => { iapLoadingFromHostRef.current = false; });
 
@@ -482,6 +486,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             iapProject: e.iapTunnel?.project ?? '',
             iapZone: e.iapTunnel?.zone ?? '',
             iapInstance: e.iapTunnel?.instance ?? '',
+            iapAutoStart: !!e.iapTunnel?.autoStart,
         });
     };
 
@@ -499,6 +504,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 zone: e.iapTunnel.zone,
                 instance: e.iapTunnel.instance,
                 encoding: globalEncoding,
+                autoStart: !!e.iapTunnel.autoStart,
             };
             // Fall back to a generated label when the tree node has no name
             // (e.g. the user double-clicked an unnamed entry created from the
@@ -572,7 +578,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         originalState.jumpboxId !== jumpboxId ||
         originalState.iapProject !== iapProject ||
         originalState.iapZone !== iapZone ||
-        originalState.iapInstance !== iapInstance
+        originalState.iapInstance !== iapInstance ||
+        originalState.iapAutoStart !== iapAutoStart
     );
 
     // --- Save changes to host entry ---
@@ -616,6 +623,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             iapProject,
             iapZone,
             iapInstance,
+            iapAutoStart,
         });
 
         const isIapProto = protocol === 'gcloud-iap';
@@ -627,7 +635,14 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             password: isIapProto ? undefined : (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
             isJumpbox: protocol === 'ssh' ? (isJumpbox || undefined) : undefined,
             jumpboxId: isIapProto ? undefined : (jumpboxId || undefined),
-            iapTunnel: isIapProto ? { project: iapProject, zone: iapZone, instance: iapInstance } : undefined,
+            iapTunnel: isIapProto
+                ? {
+                      project: iapProject,
+                      zone: iapZone,
+                      instance: iapInstance,
+                      autoStart: iapAutoStart || undefined,
+                  }
+                : undefined,
         };
 
         hostManager.editNode(selectedHostId, { name: displayName, entry });
@@ -707,7 +722,14 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 password: isIapProto ? undefined : (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
                 isJumpbox: protocol === 'ssh' ? (isJumpbox || undefined) : undefined,
                 jumpboxId: isIapProto ? undefined : (jumpboxId || undefined),
-                iapTunnel: isIapProto ? { project: iapProject, zone: iapZone, instance: iapInstance } : undefined,
+                iapTunnel: isIapProto
+                    ? {
+                          project: iapProject,
+                          zone: iapZone,
+                          instance: iapInstance,
+                          autoStart: iapAutoStart || undefined,
+                      }
+                    : undefined,
             };
             const patchTree = (nodes: HostTreeNode[], id: string): HostTreeNode[] =>
                 nodes.map(n => {
@@ -752,6 +774,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     zone: iapZone.trim(),
                     instance: iapInstance.trim(),
                     encoding,
+                    autoStart: iapAutoStart,
                 };
                 onConnect({ displayName: buildName(), protocol, config });
                 break;
@@ -1028,6 +1051,16 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                             ) : (
                                                 <input type="text" value={iapInstance} onChange={e => setIapInstance(e.target.value)} placeholder="my-instance" required />
                                             )}
+                                        </div>
+                                        <div className="form-group">
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={iapAutoStart}
+                                                    onChange={e => setIapAutoStart(e.target.checked)}
+                                                />
+                                                Auto-start VM if stopped
+                                            </label>
                                         </div>
                                         <div className="form-group" style={{ marginTop: '4px' }}>
                                             <span style={{

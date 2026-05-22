@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::process::{Child, Command as TokioCommand};
@@ -15,7 +15,10 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::{timeout, MissedTickBehavior};
 
-use super::iap_tunnel::{gcloud_program, is_valid_instance, is_valid_project, is_valid_zone};
+use super::iap_tunnel::{
+    self, decide_preconnect_action, gcloud_program, is_valid_instance, is_valid_project,
+    is_valid_zone, InstanceStatus, PreConnectAction, WaitEvent,
+};
 use super::session_service::{
     emit_session_data, emit_session_error, emit_session_status, encoding_for, SessionError,
     SessionService,
@@ -34,6 +37,12 @@ pub struct GcloudIapConfig {
 
     #[serde(default = "default_encoding")]
     pub encoding: String,
+
+    /// When the target VM is stopped, automatically issue `gcloud compute instances start`
+    /// without prompting. When false (default), the backend emits an `iap-vm-start-prompt`
+    /// event and waits for the user to approve or decline.
+    #[serde(default)]
+    pub auto_start: bool,
 }
 
 fn default_encoding() -> String {
@@ -245,22 +254,20 @@ fn find_ssh_keygen_path() -> Option<PathBuf> {
 // ---------------------------------------------------------------------------
 
 /// Build a `tokio::process::Command` for invoking gcloud with the given args.
-/// On Windows the wrapper is `gcloud.cmd`, which CreateProcessW cannot run
-/// directly, so we wrap in `cmd /C <gcloud.cmd> <args>`. Args are passed as a
-/// vector so per-argument quoting is delegated to CreateProcessW — combined
-/// with the regex validation in `GcloudIapConfig::validate`, shell-injection
-/// is prevented in depth.
+///
+/// On Windows the wrapper is `gcloud.cmd`. We do NOT wrap it in `cmd /C`
+/// ourselves because cmd's rule "if there are 3+ `"` characters on the command
+/// line, strip the outermost pair" breaks the path quoting whenever an arg
+/// contains an embedded `"` (e.g. the `--format=value("...")` filter exprs in
+/// `is_oslogin_enabled`). Rust's standard library detects the `.cmd` extension
+/// and invokes cmd.exe with BatBadBut-safe escaping (since Rust 1.77.2), so
+/// passing the path directly to `Command::new` is both safer and simpler. The
+/// `_use_shell` flag returned by `gcloud_program()` is retained only for
+/// signature compatibility.
 fn build_gcloud_command(args: &[String]) -> TokioCommand {
-    let (program, use_shell) = gcloud_program();
-    let mut cmd = if use_shell {
-        let mut c = TokioCommand::new("cmd");
-        c.arg("/C").arg(&program).args(args);
-        c
-    } else {
-        let mut c = TokioCommand::new(&program);
-        c.args(args);
-        c
-    };
+    let (program, _use_shell) = gcloud_program();
+    let mut cmd = TokioCommand::new(&program);
+    cmd.args(args);
     #[cfg(target_os = "windows")]
     {
         // tokio::process::Command exposes creation_flags as an inherent method
@@ -330,13 +337,18 @@ async fn run_gcloud_capture(args: &[String], deadline: Duration) -> Result<Strin
 
 /// Read the `enable-oslogin` metadata flag from project or instance scope.
 /// Returns `true` only when explicitly set to TRUE; missing or any other value
-/// counts as not-enabled. Best-effort — on gcloud failure, returns `false`,
-/// which is the safe default (matches `gcloud compute ssh` semantics for
-/// projects with no OS Login configuration).
+/// counts as not-enabled. Returns `Some(true)` / `Some(false)` when the
+/// metadata read succeeds (TRUE / FALSE / empty respectively), and `None`
+/// when *both* the instance and project describe calls fail (auth, network,
+/// or insufficient `compute.instances.get` / `compute.projects.get`
+/// permissions). Callers should treat `None` as "unknown" and still attempt
+/// `resolve_oslogin_username()` — orgs using OS Login almost always grant
+/// a POSIX profile to the active gcloud account, so resolving succeeds even
+/// when metadata reads don't.
 ///
 /// Per Google's resolution order, the **instance** metadata value (if any)
 /// overrides the project metadata value. We honor that here.
-async fn is_oslogin_enabled(project: &str, zone: &str, instance: &str) -> bool {
+async fn is_oslogin_enabled(project: &str, zone: &str, instance: &str) -> Option<bool> {
     // 1. Instance metadata (highest priority)
     let inst_args = vec![
         "compute".to_string(),
@@ -348,11 +360,14 @@ async fn is_oslogin_enabled(project: &str, zone: &str, instance: &str) -> bool {
         "--format=value(metadata.items.filter(\"key:enable-oslogin\").extract(\"value\").flatten())"
             .to_string(),
     ];
-    if let Ok(out) = run_gcloud_capture(&inst_args, Duration::from_secs(10)).await {
+    let inst_result = run_gcloud_capture(&inst_args, Duration::from_secs(10)).await;
+    if let Ok(out) = &inst_result {
         let v = out.trim();
         if !v.is_empty() {
-            return v.eq_ignore_ascii_case("TRUE");
+            return Some(v.eq_ignore_ascii_case("TRUE"));
         }
+        // Empty stdout = no enable-oslogin key on the instance; fall through
+        // to project metadata.
     }
     // 2. Project metadata (fallback)
     let proj_args = vec![
@@ -364,8 +379,12 @@ async fn is_oslogin_enabled(project: &str, zone: &str, instance: &str) -> bool {
             .to_string(),
     ];
     match run_gcloud_capture(&proj_args, Duration::from_secs(10)).await {
-        Ok(out) => out.trim().eq_ignore_ascii_case("TRUE"),
-        Err(_) => false,
+        Ok(out) => Some(out.trim().eq_ignore_ascii_case("TRUE")),
+        Err(_) => {
+            // Both describes failed. If the instance describe also failed (not
+            // just empty), we have no signal at all — return None.
+            if inst_result.is_err() { None } else { Some(false) }
+        }
     }
 }
 
@@ -823,6 +842,260 @@ async fn start_iap_tunnel(
 }
 
 // ---------------------------------------------------------------------------
+// VM-start approval prompt (session_id -> oneshot::Sender<bool>)
+// ---------------------------------------------------------------------------
+
+use std::collections::HashMap;
+use std::sync::OnceLock;
+use tokio::sync::oneshot;
+
+type VmStartSender = oneshot::Sender<bool>;
+
+fn vm_start_prompts() -> &'static std::sync::Mutex<HashMap<String, VmStartSender>> {
+    static MAP: OnceLock<std::sync::Mutex<HashMap<String, VmStartSender>>> = OnceLock::new();
+    MAP.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+fn register_vm_start_prompt(session_id: &str) -> oneshot::Receiver<bool> {
+    let (tx, rx) = oneshot::channel::<bool>();
+    let mut map = vm_start_prompts().lock().expect("vm_start_prompts poisoned");
+    // If a stale entry exists (previous attempt timed out), drop it — the
+    // sender goes out of scope and the old receiver will see Err(RecvError).
+    map.insert(session_id.to_string(), tx);
+    rx
+}
+
+fn drop_vm_start_prompt(session_id: &str) {
+    if let Ok(mut map) = vm_start_prompts().lock() {
+        map.remove(session_id);
+    }
+}
+
+/// Deliver the user's answer to a pending VM-start prompt. Returns `Err` if
+/// there is no pending prompt for the session (e.g. the wait already timed
+/// out or the user clicked twice).
+pub fn respond_vm_start(session_id: &str, approved: bool) -> Result<(), String> {
+    let sender = {
+        let mut map = vm_start_prompts().lock().expect("vm_start_prompts poisoned");
+        map.remove(session_id)
+    };
+    match sender {
+        Some(tx) => tx
+            .send(approved)
+            .map_err(|_| "VM-start prompt receiver already dropped".to_string()),
+        None => Err("No pending VM-start prompt for this session".to_string()),
+    }
+}
+
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct IapVmStartPromptPayload {
+    session_id: String,
+    project: String,
+    zone: String,
+    instance: String,
+    current_status: String,
+}
+
+/// Safety timeout on the awaiting side: even though the user controls when
+/// they click, we don't want to block a session forever (e.g. if HoTTY's
+/// frontend dropped the event).
+const VM_START_PROMPT_TIMEOUT_SECS: u64 = 300;
+
+/// Run the pre-flight: query instance status, optionally prompt the user,
+/// optionally start the VM, and wait for RUNNING. Returns on success or with
+/// a descriptive error suitable for `SessionError::ConnectionFailed`.
+async fn ensure_vm_running(
+    app: &AppHandle,
+    session_id: &str,
+    config: &GcloudIapConfig,
+) -> Result<(), String> {
+    emit_session_data(app, session_id, "Checking VM status...\r\n".to_string());
+    let status = match iap_tunnel::get_instance_status(
+        &config.project,
+        &config.zone,
+        &config.instance,
+    )
+    .await
+    {
+        Ok(s) => s,
+        Err(e) => {
+            log::warn!(
+                "gcloud-iap: get_instance_status failed (auto_start={}): {e}",
+                config.auto_start,
+            );
+            if config.auto_start {
+                // Auto-start was requested but we cannot determine current status;
+                // refusing to act blindly is safer than firing an unconditional `start`.
+                return Err(format!(
+                    "Failed to query VM status (required for auto-start): {e}\n\
+                     Grant 'compute.instances.get' on this instance, or uncheck \
+                     'Auto-start VM if stopped' to skip the pre-flight."
+                ));
+            }
+            // Graceful fallback: the IAP tunnel itself only needs the IAP tunnel
+            // accessor permission, not compute.instances.get. Preserve pre-feature
+            // behavior for users whose IAM role doesn't include `describe`.
+            emit_session_data(
+                app,
+                session_id,
+                format!(
+                    "Could not query VM status — skipping pre-flight ({e}).\r\n\
+                     Proceeding with IAP tunnel; if the VM is stopped, gcloud will report it shortly.\r\n"
+                ),
+            );
+            return Ok(());
+        }
+    };
+    log::info!(
+        "gcloud-iap: pre-flight describe status={} auto_start={} (session={session_id})",
+        status.as_str(),
+        config.auto_start,
+    );
+
+    match decide_preconnect_action(&status, config.auto_start) {
+        PreConnectAction::Proceed => {
+            emit_session_data(
+                app,
+                session_id,
+                "VM is RUNNING. Starting IAP tunnel...\r\n".to_string(),
+            );
+            Ok(())
+        }
+        PreConnectAction::Wait => {
+            emit_session_data(
+                app,
+                session_id,
+                format!(
+                    "VM status: {} — waiting for RUNNING...\r\n",
+                    status.as_str()
+                ),
+            );
+            run_wait_loop(app, session_id, config).await
+        }
+        PreConnectAction::Start => {
+            emit_session_data(
+                app,
+                session_id,
+                format!(
+                    "VM is {}. Auto-start enabled — starting VM...\r\n",
+                    status.as_str()
+                ),
+            );
+            start_and_wait(app, session_id, config).await
+        }
+        PreConnectAction::AskUser { current } => {
+            emit_session_data(
+                app,
+                session_id,
+                format!(
+                    "VM is {current}. Waiting for user approval to start...\r\n"
+                ),
+            );
+            let rx = register_vm_start_prompt(session_id);
+            let payload = IapVmStartPromptPayload {
+                session_id: session_id.to_string(),
+                project: config.project.clone(),
+                zone: config.zone.clone(),
+                instance: config.instance.clone(),
+                current_status: current.clone(),
+            };
+            if let Err(e) = app.emit("iap-vm-start-prompt", payload) {
+                drop_vm_start_prompt(session_id);
+                return Err(format!("Failed to emit VM-start prompt: {e}"));
+            }
+            let approved = match timeout(
+                Duration::from_secs(VM_START_PROMPT_TIMEOUT_SECS),
+                rx,
+            )
+            .await
+            {
+                Ok(Ok(v)) => v,
+                Ok(Err(_)) => {
+                    drop_vm_start_prompt(session_id);
+                    return Err("VM-start prompt was dismissed without an answer".to_string());
+                }
+                Err(_) => {
+                    drop_vm_start_prompt(session_id);
+                    return Err(format!(
+                        "Timed out waiting for user approval to start VM ({VM_START_PROMPT_TIMEOUT_SECS}s)"
+                    ));
+                }
+            };
+            if !approved {
+                return Err(format!(
+                    "VM '{}' is {current}. Start was declined.",
+                    config.instance
+                ));
+            }
+            emit_session_data(
+                app,
+                session_id,
+                "User approved — starting VM...\r\n".to_string(),
+            );
+            start_and_wait(app, session_id, config).await
+        }
+        PreConnectAction::ErrUnknown(s) => Err(format!("Unknown VM status: {s}")),
+    }
+}
+
+async fn start_and_wait(
+    app: &AppHandle,
+    session_id: &str,
+    config: &GcloudIapConfig,
+) -> Result<(), String> {
+    iap_tunnel::start_instance(&config.project, &config.zone, &config.instance).await?;
+    emit_session_data(
+        app,
+        session_id,
+        "VM start initiated. Waiting for RUNNING state...\r\n".to_string(),
+    );
+    run_wait_loop(app, session_id, config).await
+}
+
+async fn run_wait_loop(
+    app: &AppHandle,
+    session_id: &str,
+    config: &GcloudIapConfig,
+) -> Result<(), String> {
+    let app_cb = app.clone();
+    let sid_cb = session_id.to_string();
+    iap_tunnel::wait_for_status_running(
+        &config.project,
+        &config.zone,
+        &config.instance,
+        move |event| match event {
+            WaitEvent::Polling { status, elapsed } => {
+                if matches!(status, InstanceStatus::Running) {
+                    return;
+                }
+                emit_session_data(
+                    &app_cb,
+                    &sid_cb,
+                    format!(
+                        "VM status: {} — waiting for RUNNING... (elapsed: {}s)\r\n",
+                        status.as_str(),
+                        elapsed.as_secs()
+                    ),
+                );
+            }
+            WaitEvent::Running { total } => {
+                emit_session_data(
+                    &app_cb,
+                    &sid_cb,
+                    format!(
+                        "VM is RUNNING after {}s. Starting IAP tunnel...\r\n",
+                        total.as_secs()
+                    ),
+                );
+            }
+        },
+    )
+    .await
+    .map(|_| ())
+}
+
+// ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
@@ -946,41 +1219,76 @@ impl SessionService for GcloudIapSession {
         // the user under whose name the existing instance-metadata SSH key was
         // registered.
         let user_phase = std::time::Instant::now();
-        let user = if is_oslogin_enabled(
+        let oslogin_state = is_oslogin_enabled(
             &self.config.project,
             &self.config.zone,
             &self.config.instance,
         )
-        .await
-        {
-            log::info!(
-                "gcloud-iap: OS Login is ENABLED (detected in {:?}); resolving POSIX username",
-                user_phase.elapsed()
-            );
-            match resolve_oslogin_username().await {
-                Some(u) => {
-                    log::info!("gcloud-iap: OS Login POSIX username='{u}'");
-                    u
-                }
-                None => {
-                    let u = fallback_local_username();
-                    log::warn!(
-                        "gcloud-iap: OS Login enabled but profile lookup failed; falling back to '{u}'"
-                    );
-                    u
+        .await;
+        let user = match oslogin_state {
+            Some(true) => {
+                log::info!(
+                    "gcloud-iap: OS Login is ENABLED (detected in {:?}); resolving POSIX username",
+                    user_phase.elapsed()
+                );
+                match resolve_oslogin_username().await {
+                    Some(u) => {
+                        log::info!("gcloud-iap: OS Login POSIX username='{u}'");
+                        u
+                    }
+                    None => {
+                        let u = fallback_local_username();
+                        log::warn!(
+                            "gcloud-iap: OS Login enabled but profile lookup failed; falling back to '{u}'"
+                        );
+                        u
+                    }
                 }
             }
-        } else {
-            let u = fallback_local_username();
-            log::info!(
-                "gcloud-iap: OS Login DISABLED on project/instance (detected in {:?}); using local username '{u}'",
-                user_phase.elapsed()
-            );
-            u
+            None => {
+                // Defense-in-depth: metadata describes failed entirely (could be
+                // auth, permissions, or transient gcloud error). Don't assume
+                // OS Login is disabled — try the POSIX lookup; if the account
+                // has a profile, that's a much better username than the local
+                // Windows one.
+                log::warn!(
+                    "gcloud-iap: OS Login metadata describe FAILED (detected in {:?}); attempting POSIX username lookup as a defensive fallback",
+                    user_phase.elapsed()
+                );
+                match resolve_oslogin_username().await {
+                    Some(u) => {
+                        log::info!(
+                            "gcloud-iap: POSIX profile found despite metadata describe failure — using OS Login username '{u}'"
+                        );
+                        u
+                    }
+                    None => {
+                        let u = fallback_local_username();
+                        log::warn!(
+                            "gcloud-iap: no POSIX profile either; falling back to local username '{u}' (SSH may fail if this user is not on the VM)"
+                        );
+                        u
+                    }
+                }
+            }
+            Some(false) => {
+                let u = fallback_local_username();
+                log::info!(
+                    "gcloud-iap: OS Login DISABLED on project/instance (detected in {:?}); using local username '{u}'",
+                    user_phase.elapsed()
+                );
+                u
+            }
         };
 
+        // --- Pre-flight: ensure the VM is RUNNING (start or wait if needed) ---
+        if let Err(e) = ensure_vm_running(&app, &session_id, &self.config).await {
+            drop_vm_start_prompt(&session_id);
+            log::warn!("gcloud-iap: ensure_vm_running failed: {e}");
+            return Err(SessionError::ConnectionFailed(e));
+        }
+
         // --- Start the IAP tunnel ---
-        emit_session_data(&app, &session_id, "Starting IAP tunnel...\r\n".to_string());
         log::info!(
             "gcloud-iap: invoking start_iap_tunnel (pre-tunnel elapsed={:?})",
             connect_start.elapsed()
@@ -1234,6 +1542,7 @@ mod tests {
             zone: zone.into(),
             instance: instance.into(),
             encoding: "utf8".into(),
+            auto_start: false,
         }
     }
 
@@ -1349,6 +1658,42 @@ mod tests {
         let json = r#"{"project":"my-project-123","zone":"us-central1-a","instance":"vm-01"}"#;
         let cfg: GcloudIapConfig = serde_json::from_str(json).unwrap();
         assert_eq!(cfg.encoding, "utf8");
+    }
+
+    #[test]
+    fn config_auto_start_defaults_false() {
+        // Backward-compat: hosts saved before this feature have no `autoStart` field.
+        let json = r#"{"project":"my-project-123","zone":"us-central1-a","instance":"vm-01","encoding":"utf8"}"#;
+        let cfg: GcloudIapConfig = serde_json::from_str(json).unwrap();
+        assert!(!cfg.auto_start);
+    }
+
+    #[test]
+    fn config_auto_start_round_trip_true() {
+        let json = r#"{"project":"my-project-123","zone":"us-central1-a","instance":"vm-01","encoding":"utf8","autoStart":true}"#;
+        let cfg: GcloudIapConfig = serde_json::from_str(json).unwrap();
+        assert!(cfg.auto_start);
+    }
+
+    #[test]
+    fn config_auto_start_explicit_false() {
+        let json = r#"{"project":"my-project-123","zone":"us-central1-a","instance":"vm-01","encoding":"utf8","autoStart":false}"#;
+        let cfg: GcloudIapConfig = serde_json::from_str(json).unwrap();
+        assert!(!cfg.auto_start);
+    }
+
+    #[test]
+    fn respond_vm_start_without_pending_errors() {
+        let res = respond_vm_start("nonexistent-session-xyz", true);
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn respond_vm_start_delivers_to_pending() {
+        let sid = "test-session-respond-delivers";
+        let rx = register_vm_start_prompt(sid);
+        respond_vm_start(sid, true).expect("send should succeed");
+        assert!(rx.await.unwrap());
     }
 
     #[test]

@@ -70,6 +70,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [formIapProject, setFormIapProject] = useState('');
     const [formIapZone, setFormIapZone] = useState('');
     const [formIapInstance, setFormIapInstance] = useState('');
+    const [formIapAutoStart, setFormIapAutoStart] = useState(false);
     // IAP autocomplete state
     const [iapGcloudStatus, setIapGcloudStatus] = useState<{ available: boolean; version?: string } | null>(null);
     const [iapAuthStatus, setIapAuthStatus] = useState<{ authenticated: boolean; account?: string } | null>(null);
@@ -260,6 +261,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
         setFormIapProject('');
         setFormIapZone('');
         setFormIapInstance('');
+        setFormIapAutoStart(false);
         openEditModal({ mode: 'host', parentId });
         setContextMenu(null);
     }, [openEditModal]);
@@ -358,7 +360,14 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     password: isIapProto ? undefined : (formPassword || undefined),
                     isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,
                     jumpboxId: isIapProto ? undefined : existingNode.entry?.jumpboxId,
-                    iapTunnel: isIapProto ? { project: formIapProject, zone: formIapZone, instance: formIapInstance } : undefined,
+                    iapTunnel: isIapProto
+                        ? {
+                              project: formIapProject,
+                              zone: formIapZone,
+                              instance: formIapInstance,
+                              autoStart: formIapAutoStart || undefined,
+                          }
+                        : undefined,
                 };
                 onEditNode(existingNode.id, { name: formName, entry });
             }
@@ -373,7 +382,14 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     username: isIapProto ? undefined : (formUsername || undefined),
                     password: isIapProto ? undefined : (formPassword || undefined),
                     isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,
-                    iapTunnel: isIapProto ? { project: formIapProject, zone: formIapZone, instance: formIapInstance } : undefined,
+                    iapTunnel: isIapProto
+                        ? {
+                              project: formIapProject,
+                              zone: formIapZone,
+                              instance: formIapInstance,
+                              autoStart: formIapAutoStart || undefined,
+                          }
+                        : undefined,
                 };
                 onAddHost(parentId, formName, entry);
             }
@@ -952,6 +968,16 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                                     placeholder="my-instance"
                                                 />
                                             )}
+                                        </div>
+                                        <div className="modal-form-group">
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={formIapAutoStart}
+                                                    onChange={e => setFormIapAutoStart(e.target.checked)}
+                                                />
+                                                Auto-start VM if stopped
+                                            </label>
                                         </div>
                                         <div className="modal-form-group" style={{ marginTop: '4px' }}>
                                             <span style={{

@@ -18,6 +18,7 @@ import { SettingsModal } from './components/SettingsModal/SettingsModal';
 import { CustomThemeCreator } from './components/CustomThemeCreator/CustomThemeCreator';
 import { HelpModal } from './components/HelpModal/HelpModal';
 import { SshHostKeyModal } from './components/SshHostKeyModal/SshHostKeyModal';
+import { IapVmStartModal } from './components/IapVmStartModal/IapVmStartModal';
 import { PasteConfirmationModal } from './components/PasteConfirmationModal/PasteConfirmationModal';
 import { UpdateNotification } from './components/UpdateNotification/UpdateNotification';
 import { ErrorNotification } from './components/ErrorNotification/ErrorNotification';
@@ -912,6 +913,7 @@ function App() {
       />
       <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
       <SshHostKeyModal />
+      <IapVmStartModal />
       <UpdateNotification />
       <ErrorNotification />
       {pasteReq && (
