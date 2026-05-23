@@ -675,9 +675,7 @@ pub(crate) fn map_list_instances_error(raw: &str, project: &str) -> String {
             && (lower.contains("not enabled") || lower.contains("has not been used")));
     if api_not_enabled {
         return format!(
-            "Compute Engine API is not enabled for project '{project}'. \
-             Enable it in the Cloud Console, or run \
-             `gcloud services enable compute.googleapis.com --project={project}`."
+            "Compute Engine API is not enabled. Run `gcloud services enable compute.googleapis.com --project={project}`."
         );
     }
 

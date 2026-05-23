@@ -1,5 +1,14 @@
 # Release Notes
 
+## v2.0.3-beta3
+
+A small UI polish release. The headline change tidies up the **New Session** dialog so the **Hosts** and **GCP** tabs have matching widths and the Hosts tab clearly encloses both the host tree and the protocol form. A separate tweak shortens an over-long error string that appeared when GCP Discovery encountered projects without the Compute Engine API enabled.
+
+### Improvements
+
+- **New Session dialog: Hosts / GCP tabs now share a consistent layout.** Previously the **Hosts** tab visually shrank to 380 px (the tab bar sitting only above the host tree) while the **GCP** tab stretched to fill the modal — making the two tabs look like different widgets. The tab bar now spans the full modal width on both tabs, and on the **Hosts** tab the host tree, resize divider, and protocol form all live inside the tab body. The tab buttons themselves were also rebuilt as natural-width pills at the top-left of the strip (instead of two 50/50 half-width panes), so the protocol form on the right of the **Hosts** tab no longer reads as if it belonged to the **GCP** tab.
+- **GCP Discovery: shorter "Compute Engine API not enabled" message.** The error that appears under a project row in the **GCP Instances** pane when the Compute Engine API is disabled (the typical case for `Default Gemini Project` / Vertex / AI-Studio-managed projects that never opted in to Compute Engine) was rewritten from two redundant sentences down to one. The duplicated project name and the "or enable it in the Cloud Console" alternative have been dropped; the remaining message keeps both the actionable `gcloud services enable compute.googleapis.com --project=…` command and the project ID, just less noisy in the pane.
+
 ## v2.0.3-beta2
 
 A UX overhaul for Google Cloud IAP. IAP is no longer a per-host form field — the New Session dialog gains a dedicated **GCP** tab that browses every GCE instance across every project you have access to, with live status, start/stop controls, and a one-click connect. The connect path also now handles the "VM is stopped" case gracefully: HoTTY prompts before starting, or auto-starts when the host is configured to.

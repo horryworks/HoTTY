@@ -769,20 +769,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
 
                 <h2 style={{ marginTop: 0, paddingRight: '20px', marginBottom: '10px' }}>New Session</h2>
 
-                {/* Two-panel body. When the GCP tab is active the right-hand
-                    form is hidden (see SessionDialog.css `.dialog-body.tab-gcp`)
-                    and the host panel expands to fill the row, since GCP
-                    connections happen via double-click and don't need the form. */}
                 <div className={`dialog-body tab-${activeSidebarTab}`}>
                     {/* Left: Host tree / GCP discovery tabs */}
-                    <div
-                        className="host-panel"
-                        style={
-                            activeSidebarTab === 'gcp'
-                                ? { flex: 1, minWidth: 0 }
-                                : { width: treePanelWidth, flexShrink: 0 }
-                        }
-                    >
+                    <div className="host-panel" style={{ flex: 1, minWidth: 0 }}>
                         <div className="host-panel-tabs" role="tablist" aria-label="Connection source">
                             <button
                                 type="button"
@@ -804,31 +793,24 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                             </button>
                         </div>
                         {activeSidebarTab === 'hosts' ? (
-                            <HostTree
-                                tree={hostManager.tree}
-                                selectedId={selectedHostId}
-                                onSelect={handleSelectHost}
-                                onDoubleClickHost={handleDoubleClickHost}
-                                onAddFolder={hostManager.addFolder}
-                                onAddHost={hostManager.addHost}
-                                onEditNode={hostManager.editNode}
-                                onDeleteNode={hostManager.deleteNode}
-                                onMoveNode={hostManager.moveNode}
-                                onSortFolder={hostManager.sortFolder}
-                                onImportData={hostManager.importData}
-                            />
-                        ) : (
-                            <GcpInstancesPane
-                                onActivateInstance={handleActivateGcpInstance}
-                            />
-                        )}
-                    </div>
-
-                    {/* Divider */}
-                    <div className="panel-divider" onMouseDown={handlePanelDividerMouseDownWrapped} />
-
-                    {/* Right: Connection form */}
-                    <div className="form-panel">
+                            <div className="hosts-tab-content">
+                                <div className="hosts-tab-tree" style={{ width: treePanelWidth, flexShrink: 0 }}>
+                                    <HostTree
+                                        tree={hostManager.tree}
+                                        selectedId={selectedHostId}
+                                        onSelect={handleSelectHost}
+                                        onDoubleClickHost={handleDoubleClickHost}
+                                        onAddFolder={hostManager.addFolder}
+                                        onAddHost={hostManager.addHost}
+                                        onEditNode={hostManager.editNode}
+                                        onDeleteNode={hostManager.deleteNode}
+                                        onMoveNode={hostManager.moveNode}
+                                        onSortFolder={hostManager.sortFolder}
+                                        onImportData={hostManager.importData}
+                                    />
+                                </div>
+                                <div className="panel-divider" onMouseDown={handlePanelDividerMouseDownWrapped} />
+                                <div className="form-panel">
                         <form ref={formRef} onSubmit={handleSubmit}>
                             <fieldset disabled={isDecrypting} style={{ border: 'none', padding: 0, margin: 0 }}>
                                 {/* Display Name (only when a host is selected) */}
@@ -1116,6 +1098,13 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 </button>
                             </div>
                         </form>
+                    </div>
+                            </div>
+                        ) : (
+                            <GcpInstancesPane
+                                onActivateInstance={handleActivateGcpInstance}
+                            />
+                        )}
                     </div>
                 </div>
 
