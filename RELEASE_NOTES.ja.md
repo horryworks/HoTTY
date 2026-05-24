@@ -1,5 +1,36 @@
 # リリースノート
 
+## v2.0.3-beta4
+
+仕上げと不具合修正にフォーカスしたリリースです。目玉の変更は **SSH / Telnet / Jumpbox の接続失敗メッセージ** で、ライブラリ生エラー (`connection failed: example.com:22: failed to lookup address information: ...`) を短く分かりやすい英語ラベル (`Host not found`、`Wrong passphrase for private key`、`Jumpbox: Connection refused`、…) に置き換えました。**GCP Instances ペイン** には IAP トンネル権限を持たない VM を非表示にする IAM 連動フィルタを追加しています。あわせて、beta2 / beta3 で一部ユーザーが遭遇していた OS Login メタデータプローブの回帰 (`gcloud` projection に埋め込まれた `"` が `cmd.exe` のクォート処理を破壊し、`'C:\…\Google\Cloud' is not recognized` で失敗) を修正し、同じプローブが組織レベル OS Login の強制も正しく扱うようになりました。
+
+### 新機能
+
+- **GCP Instances ペイン: IAM 連動フィルタを追加。** リフレッシュ時に HoTTY が `gcloud projects test-iam-permissions` / `gcloud compute instances test-iam-permissions` 経由で `iap.tunnelInstances.accessViaIAP` と `compute.instances.osLogin` をプロジェクトレベル (プロジェクト IAP が拒否された場合はインスタンスレベルでも) プローブします。IAP トンネル権限を持たない VM はデフォルトで非表示にし、ペインヘッダの **🔒 カウンターボタン**で再表示をトグルできます。OS Login 権限を持たないインスタンスは引き続き表示されますが (メタデータ SSH 鍵経由なら SSH できる可能性があるため)、**🔑 警告アイコン**が付きます。IAM プローブそのものが失敗した場合 (ネットワーク瞬断、プロジェクト削除など) はインスタンスを表示したままにし、アクセス可能な VM を誤って隠さないようにしています。「非表示インスタンスを表示」のトグル状態は `localStorage` で起動間で保持されます。
+
+### 改善
+
+- **SSH / Telnet / Jumpbox の接続エラーを平易な英語表記に変更。** 接続失敗トーストの本文を `russh` / `std::io::Error` の生文字列ではなく、短く分かりやすいラベルに書き換えました。例:
+
+  | 旧 | 新 |
+  | --- | --- |
+  | `connection failed: example.com:22: failed to lookup address information: ...` | `Host not found` |
+  | `connection failed: example.com:22: Connection refused (os error 10061)` | `Connection refused` |
+  | `connection failed: example.com:22: timed out after 15s` | `Connection timed out (15s)` |
+  | `connection failed: no common kex algorithms` | `No common kex algorithm with server` |
+  | `authentication failed: all authentication methods failed` | `Authentication failed` |
+  | `authentication failed: password: Disconnect ServiceNotAvailable` | `Password authentication failed` |
+  | `authentication failed: load key failed: ... bad decrypt ...` | `Wrong passphrase for private key` |
+  | `connection failed: ssh-over-jumpbox: timed out after 15s` | `Target connection timed out via jumpbox (15s)` |
+
+  踏み台側で接続が落ちた場合は `Jumpbox: …` プレフィックスが付くため、どちらのホップで失敗したかが一目で分かります。元の生エラーは引き続きデバッグログファイルに記録されるため、原因解析には影響しません — 変わるのはトースト表示のみです。
+- **gcloud の OS Login 判定が組織レベルの強制を考慮するようになりました。** 従来はインスタンスとプロジェクトのメタデータがいずれも `enable-oslogin=TRUE` でない場合、ローカルの Windows ユーザー名にそのままフォールバックしていました。これは `constraints/compute.requireOsLogin` ポリシーで組織レベルに OS Login を強制している GCP テナント (エンタープライズでは一般的) では問題で、メタデータ側に `enable-oslogin` フラグが書かれないため IAP 接続が成立しなくなる原因でした。本リリースではこのケースでもアクティブな gcloud アカウントの POSIX プロファイルをプローブし、存在する場合はその OS Login ユーザー名を採用するようになりました — `gcloud compute ssh` 本体の解決順序と一致します。POSIX プロファイルが存在しない場合のみ、従来通りローカルユーザー名にフォールバックします。
+- **「Compute Engine API not enabled」メッセージをさらに短縮**しました (beta3 のフォローアップ)。**GCP Instances** ペインで Compute Engine API が無効なプロジェクト行下に表示されていたエラーを `Compute Engine API is not enabled.` の 1 文だけに整理しました。以前ペインに表示していた対処コマンド `gcloud services enable compute.googleapis.com --project=…` は本文から外し、対応コマンドを含む gcloud stderr の全文は引き続きデバッグログに残します (コピー/ペーストして使いたい場合はそちらをご確認ください)。
+
+### バグ修正
+
+- **gcloud の OS Login プローブが `'C:\…\Google\Cloud' is not recognized` で失敗する不具合を修正。** beta2 で追加した OS Login 判定の metadata describe 呼び出しは `--format=value("...filter("key:enable-oslogin")...")` を指定しており、引数列に `"` を埋め込んでいました。Windows では `gcloud` が `gcloud.cmd` として配布されており、Rust 標準ライブラリは `.cmd` ファイルを `cmd.exe` 経由で起動します。`cmd.exe` の「コマンドライン全体に `"` が 3 個以上あった場合、外側のペアを 1 組削る」ルールがプログラムパスのクォートを剥がしてしまい、gcloud が起動する前にパス解決で失敗していました。本リリースでは `--format=json(metadata.items)` (引数に `"` を含まない形式) に変更し、出力を `serde_json` でパースするようにしました。あわせて `run_gcloud_capture` 内に `"` を含む引数を弾く debug-assert を追加して、今後同じ回帰が再発しないように保護しています。
+
 ## v2.0.3-beta3
 
 UI 仕上げを目的とした小規模リリースです。目玉の変更は **New Session** ダイアログの整理で、**Hosts** タブと **GCP** タブの横幅が揃い、Hosts タブの中にホストツリーとプロトコル設定フォームの両方が明確に内包されるようになりました。あわせて、Compute Engine API が無効なプロジェクトを GCP Discovery でリフレッシュした際に表示されていた冗長なエラーメッセージを短縮しています。

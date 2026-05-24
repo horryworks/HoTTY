@@ -10,8 +10,8 @@ use tokio::task::JoinHandle;
 
 use super::jumpbox::{establish_tunnel, JumpboxConfig, JumpboxHandler};
 use super::session_service::{
-    emit_session_data, emit_session_error, emit_session_status, encoding_for, SessionError,
-    SessionService,
+    emit_session_data, emit_session_error, emit_session_status, encoding_for, humanize_io_error,
+    SessionError, SessionService,
 };
 
 // --- Telnet protocol constants -----------------------------------------
@@ -78,10 +78,10 @@ fn default_connect_timeout_secs() -> u32 {
 impl TelnetConfig {
     pub fn validate(&self) -> Result<(), SessionError> {
         if self.host.trim().is_empty() {
-            return Err(SessionError::InvalidConfig("host is empty".into()));
+            return Err(SessionError::InvalidConfig("Host is required".into()));
         }
         if self.port == 0 {
-            return Err(SessionError::InvalidConfig("port must be > 0".into()));
+            return Err(SessionError::InvalidConfig("Port must be 1-65535".into()));
         }
         Ok(())
     }
@@ -313,21 +313,18 @@ impl SessionService for TelnetSession {
                 "telnet: connecting to {addr} (session {session_id}, timeout {}s)",
                 self.config.connect_timeout_secs
             );
+            let timeout_secs = self.config.connect_timeout_secs;
             let stream = tokio::time::timeout(timeout, TcpStream::connect(&addr))
                 .await
                 .map_err(|_| {
                     log::error!(
-                        "telnet: TcpStream::connect({addr}) timed out after {}s",
-                        self.config.connect_timeout_secs
+                        "telnet: TcpStream::connect({addr}) timed out after {timeout_secs}s"
                     );
-                    SessionError::ConnectionFailed(format!(
-                        "{addr}: timed out after {}s",
-                        self.config.connect_timeout_secs
-                    ))
+                    SessionError::ConnectionFailed(format!("Connection timed out ({timeout_secs}s)"))
                 })?
                 .map_err(|e| {
                     log::error!("telnet: TcpStream::connect({addr}) failed: {e}");
-                    SessionError::ConnectionFailed(format!("{addr}: {e}"))
+                    SessionError::ConnectionFailed(humanize_io_error(&e, Some(timeout_secs)))
                 })?;
             log::info!("telnet: TCP connected to {addr}");
             let (r, w) = stream.into_split();
@@ -424,7 +421,7 @@ impl SessionService for TelnetSession {
                     Ok(n) => n,
                     Err(e) => {
                         log::error!("telnet {sid}: read error: {e}");
-                        emit_session_error(&app_r, &sid, format!("read error: {e}"));
+                        emit_session_error(&app_r, &sid, format!("Connection lost: {e}"));
                         emit_session_status(&app_r, &sid, "disconnected");
                         break;
                     }
@@ -705,5 +702,39 @@ mod tests {
         let s = format!("{cfg:?}");
         assert!(!s.contains("hunter2"), "password leaked: {s}");
         assert!(s.contains("redacted"));
+    }
+
+    // -- validate produces humanized config errors --
+
+    #[test]
+    fn validate_empty_host_message() {
+        let cfg = TelnetConfig {
+            host: "".into(),
+            port: 23,
+            username: None,
+            password: None,
+            encoding: "utf8".into(),
+            keepalive_interval_secs: 0,
+            connect_timeout_secs: 5,
+            jumpbox: None,
+        };
+        let err = cfg.validate().unwrap_err();
+        assert_eq!(err.to_string(), "Host is required");
+    }
+
+    #[test]
+    fn validate_zero_port_message() {
+        let cfg = TelnetConfig {
+            host: "h".into(),
+            port: 0,
+            username: None,
+            password: None,
+            encoding: "utf8".into(),
+            keepalive_interval_secs: 0,
+            connect_timeout_secs: 5,
+            jumpbox: None,
+        };
+        let err = cfg.validate().unwrap_err();
+        assert_eq!(err.to_string(), "Port must be 1-65535");
     }
 }

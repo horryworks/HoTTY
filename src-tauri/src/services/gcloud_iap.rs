@@ -258,10 +258,12 @@ fn find_ssh_keygen_path() -> Option<PathBuf> {
 /// On Windows the wrapper is `gcloud.cmd`. We do NOT wrap it in `cmd /C`
 /// ourselves because cmd's rule "if there are 3+ `"` characters on the command
 /// line, strip the outermost pair" breaks the path quoting whenever an arg
-/// contains an embedded `"` (e.g. the `--format=value("...")` filter exprs in
-/// `is_oslogin_enabled`). Rust's standard library detects the `.cmd` extension
-/// and invokes cmd.exe with BatBadBut-safe escaping (since Rust 1.77.2), so
-/// passing the path directly to `Command::new` is both safer and simpler. The
+/// itself contains a `"` (the same hazard applies even with Rust's BatBadBut
+/// escaping). The `run_gcloud_capture` guard now rejects such args at runtime
+/// — callers must use `--format=json(projection)` and parse with serde_json
+/// instead. Rust's standard library detects the `.cmd` extension and invokes
+/// cmd.exe with BatBadBut-safe escaping (since Rust 1.77.2), so passing the
+/// path directly to `Command::new` is both safer and simpler. The
 /// `_use_shell` flag returned by `gcloud_program()` is retained only for
 /// signature compatibility.
 fn build_gcloud_command(args: &[String]) -> TokioCommand {
@@ -291,6 +293,24 @@ fn build_gcloud_command(args: &[String]) -> TokioCommand {
 /// log files — these calls happen BEFORE the tunnel-startup phase, so when an
 /// IAP connect hangs we need to know which of them is responsible.
 async fn run_gcloud_capture(args: &[String], deadline: Duration) -> Result<String, SessionError> {
+    // Regression guard: gcloud is shipped as `gcloud.cmd` and Rust's std spawns
+    // .cmd files via cmd.exe. cmd.exe applies a "if there are 3+ `\"` characters
+    // on the command line, strip the outermost pair" rule which truncates the
+    // program path at the first space when args themselves contain `\"` — see
+    // the 2026-05-22 IAP regression where `--format=value(\"key:enable-oslogin\"...)`
+    // caused gcloud to fail with "'C:\\…\\Google\\Cloud' is not recognized".
+    // Use `--format=json(projection)` and parse with serde_json instead; the
+    // projection syntax avoids embedded quotes entirely.
+    if args.iter().any(|a| a.contains('"')) {
+        log::error!(
+            "gcloud-iap: run_gcloud_capture called with `\"` in args — cmd.exe will mangle the program path: {args:?}"
+        );
+        debug_assert!(
+            !args.iter().any(|a| a.contains('"')),
+            "run_gcloud_capture invoked with `\"` in arg(s): {args:?} — use --format=json(projection) instead, see is_oslogin_enabled"
+        );
+    }
+
     let started = std::time::Instant::now();
     let pretty_args = args.join(" ");
     log::info!("gcloud-iap: run_gcloud_capture begin: gcloud {pretty_args}");
@@ -335,51 +355,98 @@ async fn run_gcloud_capture(args: &[String], deadline: Duration) -> Result<Strin
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-/// Read the `enable-oslogin` metadata flag from project or instance scope.
-/// Returns `true` only when explicitly set to TRUE; missing or any other value
-/// counts as not-enabled. Returns `Some(true)` / `Some(false)` when the
-/// metadata read succeeds (TRUE / FALSE / empty respectively), and `None`
-/// when *both* the instance and project describe calls fail (auth, network,
-/// or insufficient `compute.instances.get` / `compute.projects.get`
-/// permissions). Callers should treat `None` as "unknown" and still attempt
-/// `resolve_oslogin_username()` — orgs using OS Login almost always grant
-/// a POSIX profile to the active gcloud account, so resolving succeeds even
-/// when metadata reads don't.
-///
-/// Per Google's resolution order, the **instance** metadata value (if any)
-/// overrides the project metadata value. We honor that here.
-async fn is_oslogin_enabled(project: &str, zone: &str, instance: &str) -> Option<bool> {
-    // 1. Instance metadata (highest priority)
-    let inst_args = vec![
+/// Build the args for `gcloud compute instances describe` that yield only
+/// `metadata.items` as JSON. Extracted so unit tests can verify no `"`
+/// characters leak into the arg vector (see the `run_gcloud_capture`
+/// regression guard).
+fn instance_oslogin_describe_args(project: &str, zone: &str, instance: &str) -> Vec<String> {
+    vec![
         "compute".to_string(),
         "instances".to_string(),
         "describe".to_string(),
         instance.to_string(),
         format!("--zone={zone}"),
         format!("--project={project}"),
-        "--format=value(metadata.items.filter(\"key:enable-oslogin\").extract(\"value\").flatten())"
-            .to_string(),
-    ];
-    let inst_result = run_gcloud_capture(&inst_args, Duration::from_secs(10)).await;
-    if let Ok(out) = &inst_result {
-        let v = out.trim();
-        if !v.is_empty() {
-            return Some(v.eq_ignore_ascii_case("TRUE"));
-        }
-        // Empty stdout = no enable-oslogin key on the instance; fall through
-        // to project metadata.
-    }
-    // 2. Project metadata (fallback)
-    let proj_args = vec![
+        "--format=json(metadata.items)".to_string(),
+    ]
+}
+
+/// Build the args for `gcloud compute project-info describe` that yield only
+/// `commonInstanceMetadata.items` as JSON.
+fn project_oslogin_describe_args(project: &str) -> Vec<String> {
+    vec![
         "compute".to_string(),
         "project-info".to_string(),
         "describe".to_string(),
         format!("--project={project}"),
-        "--format=value(commonInstanceMetadata.items.filter(\"key:enable-oslogin\").extract(\"value\").flatten())"
-            .to_string(),
-    ];
+        "--format=json(commonInstanceMetadata.items)".to_string(),
+    ]
+}
+
+/// Walk `json[container]["items"]` looking for an object whose `key` field
+/// equals `item_key`, and return its `value` string. Returns `None` if any
+/// step in the path is missing — including when the key simply isn't set.
+///
+/// This replaces the legacy `--format=value(...filter("key:X")...)` projection
+/// which embeds `"` in the argument and is unsafe when gcloud.cmd is invoked
+/// via cmd.exe (see `run_gcloud_capture`'s doc).
+fn extract_metadata_value(json: &str, container_key: &str, item_key: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(json.trim()).ok()?;
+    let items = v.get(container_key)?.get("items")?.as_array()?;
+    for item in items {
+        if item.get("key").and_then(|k| k.as_str()) == Some(item_key) {
+            return item.get("value").and_then(|val| val.as_str()).map(String::from);
+        }
+    }
+    None
+}
+
+/// Read the `enable-oslogin` metadata flag from project or instance scope.
+/// Returns `true` only when explicitly set to TRUE; missing or any other value
+/// counts as not-enabled. Returns `Some(true)` / `Some(false)` when the
+/// metadata read succeeds (TRUE / FALSE / empty respectively), and `None`
+/// when *both* the instance and project describe calls fail (auth, network,
+/// or insufficient `compute.instances.get` / `compute.projects.get`
+/// permissions).
+///
+/// **Important:** the per-resource flag does NOT capture org-level OS Login
+/// enforcement (`constraints/compute.requireOsLogin` policy), so a `Some(false)`
+/// return value does not mean OS Login is off for the user. Callers MUST also
+/// probe `resolve_oslogin_username()` on ALL three states (`Some(true)`,
+/// `Some(false)`, and `None`) and prefer the POSIX username when one exists.
+/// Only fall back to the local Windows username when no POSIX profile is
+/// available. This mirrors `gcloud compute ssh`'s resolution order.
+///
+/// Per Google's resolution order, the **instance** metadata value (if any)
+/// overrides the project metadata value. We honor that here.
+async fn is_oslogin_enabled(project: &str, zone: &str, instance: &str) -> Option<bool> {
+    // 1. Instance metadata (highest priority)
+    let inst_args = instance_oslogin_describe_args(project, zone, instance);
+    let inst_result = run_gcloud_capture(&inst_args, Duration::from_secs(10)).await;
+    if let Ok(out) = &inst_result {
+        // Debug-log the raw JSON so misclassifications (e.g. org-level
+        // enforcement vs. per-resource flag) can be diagnosed from logs.
+        // The projection limits this to `metadata.items`, so output is small.
+        log::debug!("gcloud-iap: instance describe JSON (metadata.items) = {}", out.trim());
+        let val = extract_metadata_value(out, "metadata", "enable-oslogin");
+        log::debug!("gcloud-iap: instance enable-oslogin extracted = {val:?}");
+        if let Some(val) = val {
+            return Some(val.eq_ignore_ascii_case("TRUE"));
+        }
+        // Key absent on the instance; fall through to project metadata.
+    }
+    // 2. Project metadata (fallback)
+    let proj_args = project_oslogin_describe_args(project);
     match run_gcloud_capture(&proj_args, Duration::from_secs(10)).await {
-        Ok(out) => Some(out.trim().eq_ignore_ascii_case("TRUE")),
+        Ok(out) => {
+            log::debug!("gcloud-iap: project-info describe JSON (commonInstanceMetadata.items) = {}", out.trim());
+            let val = extract_metadata_value(&out, "commonInstanceMetadata", "enable-oslogin");
+            log::debug!("gcloud-iap: project enable-oslogin extracted = {val:?}");
+            // Key found → TRUE/FALSE; key absent → treat as not-enabled at
+            // the metadata layer (the caller still probes POSIX profile to
+            // catch org-level enforcement).
+            Some(val.map(|v| v.eq_ignore_ascii_case("TRUE")).unwrap_or(false))
+        }
         Err(_) => {
             // Both describes failed. If the instance describe also failed (not
             // just empty), we have no signal at all — return None.
@@ -1272,12 +1339,34 @@ impl SessionService for GcloudIapSession {
                 }
             }
             Some(false) => {
-                let u = fallback_local_username();
+                // Instance and project metadata both lack `enable-oslogin=TRUE`,
+                // but that does NOT prove OS Login is off. GCP org-level
+                // policies (`constraints/compute.requireOsLogin`) can enforce
+                // OS Login across an entire org without writing the per-resource
+                // flag — typical for enterprise tenants. `gcloud compute ssh`
+                // handles this by checking whether the active account actually
+                // has an OS Login POSIX profile and using it if so. Mirror that
+                // behavior here: probe `describe-profile` first, and only fall
+                // back to the local Windows username when no profile exists.
                 log::info!(
-                    "gcloud-iap: OS Login DISABLED on project/instance (detected in {:?}); using local username '{u}'",
+                    "gcloud-iap: enable-oslogin metadata is FALSE/absent on instance and project (detected in {:?}); probing POSIX profile in case of org-level OS Login enforcement",
                     user_phase.elapsed()
                 );
-                u
+                match resolve_oslogin_username().await {
+                    Some(u) => {
+                        log::info!(
+                            "gcloud-iap: POSIX profile found for active gcloud account — using OS Login username '{u}' (likely org-level enforcement; per-resource enable-oslogin flag was not set)"
+                        );
+                        u
+                    }
+                    None => {
+                        let u = fallback_local_username();
+                        log::info!(
+                            "gcloud-iap: no POSIX profile for active gcloud account; OS Login is genuinely off — using local username '{u}'"
+                        );
+                        u
+                    }
+                }
             }
         };
 
@@ -1694,6 +1783,135 @@ mod tests {
         let rx = register_vm_start_prompt(sid);
         respond_vm_start(sid, true).expect("send should succeed");
         assert!(rx.await.unwrap());
+    }
+
+    // -- OS Login metadata describe (regression: cmd.exe quote-stripping) --
+
+    /// `cmd.exe` mangles the program path when args contain `"`, so the OS
+    /// Login describes MUST use `--format=json(projection)` rather than
+    /// `--format=value("filter")`. Guards both describe arg builders.
+    #[test]
+    fn oslogin_describe_args_have_no_embedded_quotes() {
+        let inst = instance_oslogin_describe_args("my-project-123", "us-central1-a", "vm-01");
+        for a in &inst {
+            assert!(
+                !a.contains('"'),
+                "instance describe arg contains `\"` — cmd.exe will break gcloud.cmd's path: {a}"
+            );
+        }
+        let proj = project_oslogin_describe_args("my-project-123");
+        for a in &proj {
+            assert!(
+                !a.contains('"'),
+                "project describe arg contains `\"` — cmd.exe will break gcloud.cmd's path: {a}"
+            );
+        }
+    }
+
+    #[test]
+    fn instance_describe_args_layout() {
+        let args = instance_oslogin_describe_args("p", "z", "i");
+        assert_eq!(args[0], "compute");
+        assert_eq!(args[1], "instances");
+        assert_eq!(args[2], "describe");
+        assert_eq!(args[3], "i");
+        assert!(args.contains(&"--zone=z".to_string()));
+        assert!(args.contains(&"--project=p".to_string()));
+        assert!(args.contains(&"--format=json(metadata.items)".to_string()));
+    }
+
+    #[test]
+    fn project_describe_args_layout() {
+        let args = project_oslogin_describe_args("p");
+        assert_eq!(args[0], "compute");
+        assert_eq!(args[1], "project-info");
+        assert_eq!(args[2], "describe");
+        assert!(args.contains(&"--project=p".to_string()));
+        assert!(args.contains(&"--format=json(commonInstanceMetadata.items)".to_string()));
+    }
+
+    #[test]
+    fn extract_metadata_value_finds_enable_oslogin_true() {
+        let json = r#"{"metadata":{"items":[{"key":"enable-oslogin","value":"TRUE"}]}}"#;
+        assert_eq!(
+            extract_metadata_value(json, "metadata", "enable-oslogin"),
+            Some("TRUE".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_metadata_value_finds_enable_oslogin_false() {
+        let json = r#"{"metadata":{"items":[{"key":"enable-oslogin","value":"FALSE"}]}}"#;
+        assert_eq!(
+            extract_metadata_value(json, "metadata", "enable-oslogin"),
+            Some("FALSE".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_metadata_value_picks_right_key_among_many() {
+        let json = r#"{
+            "metadata": {
+                "items": [
+                    {"key": "ssh-keys", "value": "user:key"},
+                    {"key": "enable-oslogin", "value": "TRUE"},
+                    {"key": "block-project-ssh-keys", "value": "false"}
+                ]
+            }
+        }"#;
+        assert_eq!(
+            extract_metadata_value(json, "metadata", "enable-oslogin"),
+            Some("TRUE".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_metadata_value_handles_project_info_container() {
+        let json = r#"{"commonInstanceMetadata":{"items":[{"key":"enable-oslogin","value":"TRUE"}]}}"#;
+        assert_eq!(
+            extract_metadata_value(json, "commonInstanceMetadata", "enable-oslogin"),
+            Some("TRUE".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_metadata_value_returns_none_when_key_absent() {
+        let json = r#"{"metadata":{"items":[{"key":"ssh-keys","value":"user:key"}]}}"#;
+        assert_eq!(extract_metadata_value(json, "metadata", "enable-oslogin"), None);
+    }
+
+    #[test]
+    fn extract_metadata_value_returns_none_for_empty_items() {
+        let json = r#"{"metadata":{"items":[]}}"#;
+        assert_eq!(extract_metadata_value(json, "metadata", "enable-oslogin"), None);
+    }
+
+    #[test]
+    fn extract_metadata_value_returns_none_for_missing_container() {
+        // gcloud emits `{}` when the projected field doesn't exist on the resource.
+        let json = "{}";
+        assert_eq!(extract_metadata_value(json, "metadata", "enable-oslogin"), None);
+    }
+
+    #[test]
+    fn extract_metadata_value_returns_none_for_missing_items_array() {
+        let json = r#"{"metadata":{}}"#;
+        assert_eq!(extract_metadata_value(json, "metadata", "enable-oslogin"), None);
+    }
+
+    #[test]
+    fn extract_metadata_value_returns_none_for_invalid_json() {
+        assert_eq!(extract_metadata_value("", "metadata", "enable-oslogin"), None);
+        assert_eq!(extract_metadata_value("not-json", "metadata", "enable-oslogin"), None);
+    }
+
+    #[test]
+    fn extract_metadata_value_tolerates_surrounding_whitespace() {
+        let json = "  \n{\"metadata\":{\"items\":[{\"key\":\"enable-oslogin\",\"value\":\"TRUE\"}]}}\n  ";
+        assert_eq!(
+            extract_metadata_value(json, "metadata", "enable-oslogin"),
+            Some("TRUE".to_string())
+        );
     }
 
     #[test]

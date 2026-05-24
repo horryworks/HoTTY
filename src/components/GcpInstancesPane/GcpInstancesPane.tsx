@@ -5,6 +5,12 @@ import type {
   GcloudCacheSnapshot,
   GcpRefreshProgress,
 } from '../../types/appTypes';
+import { STORAGE_KEYS } from '../../constants/storage';
+import {
+  getEffectiveIapAccess,
+  getEffectiveOsLoginAccess,
+  isInstanceAccessible,
+} from './gcpAccessHelpers';
 import './GcpInstancesPane.css';
 
 const EMPTY_SNAPSHOT: GcloudCacheSnapshot = {
@@ -139,6 +145,13 @@ export function GcpInstancesPane({
   const [liveStatus, setLiveStatus] = useState<Map<string, string>>(() => new Map());
   const [vmErrors, setVmErrors] = useState<Map<string, string>>(() => new Map());
   const [error, setError] = useState<string | null>(null);
+  const [showInaccessible, setShowInaccessible] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.GCP_SHOW_INACCESSIBLE) === '1';
+    } catch {
+      return false;
+    }
+  });
   const didInitialFetchRef = useRef(false);
   /** Map of vmKey → abort flag for an in-flight start/stop tracking loop. */
   const activeActionsRef = useRef<Map<string, VmAbortFlag>>(new Map());
@@ -418,12 +431,39 @@ export function GcpInstancesPane({
     });
   }, []);
 
+  const toggleShowInaccessible = useCallback(() => {
+    setShowInaccessible((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(STORAGE_KEYS.GCP_SHOW_INACCESSIBLE, next ? '1' : '0');
+      } catch {
+        /* localStorage may be unavailable in some test envs — ignore. */
+      }
+      return next;
+    });
+  }, []);
+
   const projects = snapshot.projects;
   const isUnauthenticated = Boolean(snapshot.auth && !snapshot.auth.authenticated);
   const isGcloudMissing = Boolean(snapshot.gcloud && !snapshot.gcloud.available);
   const hasCacheData = snapshot.lastRefreshedMs !== undefined;
 
   const isRefreshing = snapshot.refreshInProgress || (progress !== null && progress.stage !== 'done');
+
+  /** Number of instances filtered out across all projects (denied IAP access). */
+  const hiddenCount = useMemo(() => {
+    if (showInaccessible) return 0;
+    let n = 0;
+    const projAccess = snapshot.projectAccess ?? {};
+    for (const p of projects) {
+      const pa = projAccess[p.id];
+      const insts = snapshot.instancesByProject[p.id] ?? [];
+      for (const inst of insts) {
+        if (!isInstanceAccessible(inst, pa)) n += 1;
+      }
+    }
+    return n;
+  }, [projects, snapshot.instancesByProject, snapshot.projectAccess, showInaccessible]);
 
   const headerSubtitle = useMemo(() => {
     if (isRefreshing) {
@@ -459,16 +499,34 @@ export function GcpInstancesPane({
         <div className="gcp-pane-title">
           <span aria-hidden="true">☁ </span>Google Cloud GCE
         </div>
-        <button
-          type="button"
-          className="gcp-refresh-btn"
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-          title="Refresh GCP discovery"
-          aria-label="Refresh"
-        >
-          {isRefreshing ? '⟳' : '↻'}
-        </button>
+        <div className="gcp-pane-header-actions">
+          {(hiddenCount > 0 || showInaccessible) && (
+            <button
+              type="button"
+              className={`gcp-toggle-btn${showInaccessible ? ' active' : ''}`}
+              onClick={toggleShowInaccessible}
+              title={
+                showInaccessible
+                  ? 'Hide instances without IAP tunnel permission'
+                  : `Show ${hiddenCount} hidden instance${hiddenCount === 1 ? '' : 's'} (no IAP tunnel permission)`
+              }
+              aria-label={showInaccessible ? 'Hide inaccessible instances' : 'Show inaccessible instances'}
+              aria-pressed={showInaccessible}
+            >
+              {showInaccessible ? '👁' : `🔒 ${hiddenCount}`}
+            </button>
+          )}
+          <button
+            type="button"
+            className="gcp-refresh-btn"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            title="Refresh GCP discovery"
+            aria-label="Refresh"
+          >
+            {isRefreshing ? '⟳' : '↻'}
+          </button>
+        </div>
       </div>
       <div className="gcp-pane-subtitle">{headerSubtitle}</div>
       {error && (
@@ -491,7 +549,21 @@ export function GcpInstancesPane({
           projects.map((project) => {
             const collapsed = collapsedProjects.has(project.id);
             const projectError = snapshot.projectErrors[project.id];
-            const instances = snapshot.instancesByProject[project.id] ?? [];
+            const allInstances = snapshot.instancesByProject[project.id] ?? [];
+            const projAccess = snapshot.projectAccess?.[project.id];
+            const instances = showInaccessible
+              ? allInstances
+              : allInstances.filter((inst) => isInstanceAccessible(inst, projAccess));
+            // Suppress entire project when nothing to show: every instance was
+            // filtered out by the IAP-tunnel permission gate AND there's no
+            // surfaced project-level error worth keeping visible. Projects with
+            // zero instances total stay visible so users can see they exist.
+            const isProjectFullyHidden =
+              !showInaccessible &&
+              !projectError &&
+              allInstances.length > 0 &&
+              instances.length === 0;
+            if (isProjectFullyHidden) return null;
             const grouped = groupByZone(instances);
             return (
               <div key={project.id} className="gcp-project-group">
@@ -527,6 +599,10 @@ export function GcpInstancesPane({
                               zone,
                               instance: inst.name,
                             };
+                            const iapAccess = getEffectiveIapAccess(inst, projAccess);
+                            const osLoginAccess = getEffectiveOsLoginAccess(inst, projAccess);
+                            const isAccessDenied = iapAccess === 'denied';
+                            const osLoginMissing = osLoginAccess === 'denied';
                             const isSelected =
                               selected !== null &&
                               selected.project === project.id &&
@@ -559,20 +635,47 @@ export function GcpInstancesPane({
                               pending !== undefined || isTransitional(displayStatus);
                             const isRunning = displayStatus.toUpperCase() === 'RUNNING';
                             const vmError = vmErrors.get(key);
+                            const rowClass =
+                              `gcp-instance-row${isSelected ? ' selected' : ''}` +
+                              (isAccessDenied ? ' gcp-access-denied' : '');
+                            const rowTitle = isAccessDenied
+                              ? 'No IAP tunnel permission on this instance — cannot connect.'
+                              : osLoginMissing
+                                ? 'No OS Login permission — SSH may require a metadata SSH key.'
+                                : undefined;
                             return (
                               <div
                                 key={key}
-                                className={`gcp-instance-row${isSelected ? ' selected' : ''}`}
-                                onClick={() => handleSelect(sel)}
-                                onDoubleClick={() => handleActivate(sel)}
+                                className={rowClass}
+                                onClick={isAccessDenied ? undefined : () => handleSelect(sel)}
+                                onDoubleClick={isAccessDenied ? undefined : () => handleActivate(sel)}
                                 role="button"
-                                tabIndex={0}
+                                tabIndex={isAccessDenied ? -1 : 0}
+                                aria-disabled={isAccessDenied || undefined}
                                 aria-label={`${inst.name} (${displayStatus})`}
+                                title={rowTitle}
                               >
                                 <span className="gcp-status-glyph" aria-hidden="true">
                                   {statusGlyph(displayStatus)}
                                 </span>
                                 <span className="gcp-instance-name">{inst.name}</span>
+                                {isAccessDenied && (
+                                  <span
+                                    className="gcp-instance-locked"
+                                    aria-label="No IAP tunnel permission"
+                                  >
+                                    🔒
+                                  </span>
+                                )}
+                                {!isAccessDenied && osLoginMissing && (
+                                  <span
+                                    className="gcp-instance-warning"
+                                    aria-label="No OS Login permission"
+                                    title="No OS Login permission — SSH may require a metadata SSH key."
+                                  >
+                                    🔑
+                                  </span>
+                                )}
                                 <span className="gcp-instance-status">{displayStatus}</span>
                                 {vmError && (
                                   <span
@@ -584,7 +687,7 @@ export function GcpInstancesPane({
                                   </span>
                                 )}
                                 <span className="gcp-instance-actions">
-                                  {!isRunning && !transitional && (
+                                  {!isAccessDenied && !isRunning && !transitional && (
                                     <button
                                       type="button"
                                       className="gcp-action-btn"
@@ -598,7 +701,7 @@ export function GcpInstancesPane({
                                       ▶
                                     </button>
                                   )}
-                                  {isRunning && !transitional && (
+                                  {!isAccessDenied && isRunning && !transitional && (
                                     <button
                                       type="button"
                                       className="gcp-action-btn"

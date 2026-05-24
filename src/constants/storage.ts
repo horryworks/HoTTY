@@ -13,4 +13,5 @@ export const STORAGE_KEYS = {
   AI_EXPLICIT_LOGOUT: 'hotty_ai_explicit_logout',
   UI_GRID_COL_SIZES: (cols: number) => `hotty_ui_gridColSizes_${cols}`,
   UI_GRID_ROW_SIZES: (rows: number) => `hotty_ui_gridRowSizes_${rows}`,
+  GCP_SHOW_INACCESSIBLE: 'hotty_gcp_show_inaccessible',
 } as const;

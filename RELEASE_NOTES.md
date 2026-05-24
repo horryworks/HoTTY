@@ -1,5 +1,36 @@
 # Release Notes
 
+## v2.0.3-beta4
+
+A focused polish-and-fix release. The headline change rewrites the **SSH / Telnet / Jumpbox connection-failure messages** from raw library text (`connection failed: example.com:22: failed to lookup address information: ...`) into short, plain-English labels (`Host not found`, `Wrong passphrase for private key`, `Jumpbox: Connection refused`, …). The **GCP Instances pane** gains an IAM-aware filter that hides VMs you have no IAP tunnel permission for. A regression in the OS Login metadata probe — embedded `"` in the gcloud projection broke `cmd.exe`'s quoting and surfaced as `'C:\…\Google\Cloud' is not recognized` for some users on beta2 / beta3 — is fixed, and the same probe now also handles org-level OS Login enforcement correctly.
+
+### New Features
+
+- **GCP Instances pane: IAM-aware filter.** During Refresh, HoTTY now probes `iap.tunnelInstances.accessViaIAP` and `compute.instances.osLogin` at the project level (and, when project-level IAP is denied, also at the instance level) via `gcloud projects test-iam-permissions` / `gcloud compute instances test-iam-permissions`. VMs without IAP-tunnel permission are hidden by default, and a **🔒 counter button** in the pane header lets you toggle them back on. Instances without OS Login permission stay visible (SSH may still work via metadata SSH keys) but display a **🔑 warning glyph**. When the IAM probe itself fails (network blip, deleted project) the instance stays visible so accessible VMs are never hidden by accident. The "show hidden" toggle persists across launches via `localStorage`.
+
+### Improvements
+
+- **Plain-English SSH / Telnet / Jumpbox connection errors.** Connection-failure toasts now show short, human-friendly labels in place of the raw `russh` / `std::io::Error` text. Examples:
+
+  | Before | After |
+  | --- | --- |
+  | `connection failed: example.com:22: failed to lookup address information: ...` | `Host not found` |
+  | `connection failed: example.com:22: Connection refused (os error 10061)` | `Connection refused` |
+  | `connection failed: example.com:22: timed out after 15s` | `Connection timed out (15s)` |
+  | `connection failed: no common kex algorithms` | `No common kex algorithm with server` |
+  | `authentication failed: all authentication methods failed` | `Authentication failed` |
+  | `authentication failed: password: Disconnect ServiceNotAvailable` | `Password authentication failed` |
+  | `authentication failed: load key failed: ... bad decrypt ...` | `Wrong passphrase for private key` |
+  | `connection failed: ssh-over-jumpbox: timed out after 15s` | `Target connection timed out via jumpbox (15s)` |
+
+  Failures on the jumpbox hop are tagged `Jumpbox: …` so you can tell which hop dropped the connection. The raw underlying error string is still written to the debug log file for diagnostics — only the toast text changes.
+- **gcloud OS Login detection now respects org-level enforcement.** Previously, when neither the instance metadata nor the project metadata had `enable-oslogin=TRUE`, HoTTY would fall straight back to the local Windows username. That broke IAP connections in GCP organizations that enforce OS Login via the `constraints/compute.requireOsLogin` policy (typical for enterprise tenants), where the per-resource flag is never written. HoTTY now also probes the active account's POSIX profile in this case and uses the OS Login username when one exists, mirroring `gcloud compute ssh`'s own resolution order. Only when no POSIX profile is found does it fall back to the local username.
+- **Shorter "Compute Engine API not enabled" message** (follow-up to beta3). The error that appears under a project row in the GCP Instances pane when the Compute Engine API is disabled has been further trimmed to just `Compute Engine API is not enabled.`. The previously-included `gcloud services enable compute.googleapis.com --project=…` command is dropped from the visible message; the full gcloud stderr (including that command) is still captured in the debug log if you want to copy / paste it.
+
+### Bug Fixes
+
+- **gcloud OS Login probe no longer fails with `'C:\…\Google\Cloud' is not recognized`.** The metadata describe call that beta2 added for OS Login detection used `--format=value("...filter("key:enable-oslogin")...")`, embedding `"` characters in the argument vector. Because `gcloud` ships on Windows as `gcloud.cmd` and Rust's standard library spawns `.cmd` files via `cmd.exe`, the cmd.exe "3-or-more `"` rule" stripped the outer quotes around the program path and gcloud failed before it ever ran. The probe now uses `--format=json(metadata.items)` (no embedded quotes) and parses the result with `serde_json`; a regression-guarded debug assertion in `run_gcloud_capture` rejects any future arg vector that contains `"` so the issue cannot return.
+
 ## v2.0.3-beta3
 
 A small UI polish release. The headline change tidies up the **New Session** dialog so the **Hosts** and **GCP** tabs have matching widths and the Hosts tab clearly encloses both the host tree and the protocol form. A separate tweak shortens an over-long error string that appeared when GCP Discovery encountered projects without the Compute Engine API enabled.

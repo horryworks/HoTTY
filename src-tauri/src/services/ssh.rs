@@ -84,28 +84,28 @@ const MAX_USERNAME_LEN: usize = 256;
 impl SshConfig {
     fn validate(&self) -> Result<(), SessionError> {
         if self.host.trim().is_empty() {
-            return Err(SessionError::InvalidConfig("host is empty".into()));
+            return Err(SessionError::InvalidConfig("Host is required".into()));
         }
         if self.host.len() > MAX_HOST_LEN {
-            return Err(SessionError::InvalidConfig("host too long".into()));
+            return Err(SessionError::InvalidConfig("Host is too long".into()));
         }
         if self.port == 0 {
-            return Err(SessionError::InvalidConfig("port must be > 0".into()));
+            return Err(SessionError::InvalidConfig("Port must be 1-65535".into()));
         }
         if self.username.trim().is_empty() {
-            return Err(SessionError::InvalidConfig("username is empty".into()));
+            return Err(SessionError::InvalidConfig("Username is required".into()));
         }
         if self.username.len() > MAX_USERNAME_LEN {
-            return Err(SessionError::InvalidConfig("username too long".into()));
+            return Err(SessionError::InvalidConfig("Username is too long".into()));
         }
         if let Some(pw) = &self.password {
             if pw.len() > MAX_CREDENTIAL_LEN {
-                return Err(SessionError::InvalidConfig("password too long".into()));
+                return Err(SessionError::InvalidConfig("Password is too long".into()));
             }
         }
         if let Some(pp) = &self.private_key_passphrase {
             if pp.len() > MAX_CREDENTIAL_LEN {
-                return Err(SessionError::InvalidConfig("passphrase too long".into()));
+                return Err(SessionError::InvalidConfig("Passphrase is too long".into()));
             }
         }
         Ok(())
@@ -562,6 +562,108 @@ fn resolve_known_hosts_path(app: &AppHandle) -> PathBuf {
     default_known_hosts_path(&base)
 }
 
+/// Convert a `russh::Error` Display string into a short, human-friendly message
+/// for the toast. Detects common SSH handshake-layer failure modes plus the
+/// inner `IO error: ...` wrapping that russh applies to underlying transport
+/// failures so they can be routed back through [`humanize_io_error`] semantics.
+pub(crate) fn humanize_ssh_error(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let lower = trimmed.to_ascii_lowercase();
+
+    // russh wraps transport-layer io::Errors as "IO error: <inner>". Map the
+    // most common inner messages so the user sees the same labels as a direct
+    // TCP failure (see humanize_io_error in session_service.rs).
+    if lower.contains("connection refused") {
+        return "Connection refused".to_string();
+    }
+    if lower.contains("failed to lookup address")
+        || lower.contains("no such host")
+        || lower.contains("name or service not known")
+    {
+        return "Host not found".to_string();
+    }
+    if lower.contains("unreachable network") {
+        return "Network unreachable".to_string();
+    }
+    if lower.contains("unreachable host") {
+        return "Host unreachable".to_string();
+    }
+
+    // No common algorithm — russh exposes separate variants for kex/cipher/mac/
+    // host-key but the Display strings all contain "no common"+the category.
+    if lower.contains("no common") {
+        let category = if lower.contains("kex") {
+            "kex"
+        } else if lower.contains("cipher") {
+            "cipher"
+        } else if lower.contains("mac") {
+            "MAC"
+        } else if lower.contains("key") {
+            "host key"
+        } else {
+            "algorithm"
+        };
+        return format!("No common {category} algorithm with server");
+    }
+
+    // Server sent a Disconnect packet. Strip the russh prefix if any and
+    // surface whatever reason the server provided.
+    if lower.contains("disconnect") {
+        // russh Disconnect Display is typically "Disconnect: <code> <reason>".
+        let reason = trimmed
+            .split_once(':')
+            .map(|(_, r)| r.trim())
+            .filter(|s| !s.is_empty())
+            .unwrap_or(trimmed);
+        return format!("Server closed connection: {reason}");
+    }
+
+    // Generic russh handshake fallback: keep it short, no `russh::Error::` prefix.
+    let stripped = trimmed
+        .strip_prefix("IO error: ")
+        .or_else(|| trimmed.strip_prefix("Error: "))
+        .unwrap_or(trimmed);
+    format!("SSH handshake failed: {stripped}")
+}
+
+/// Variant of [`humanize_ssh_error`] for the SSH-over-jumpbox path. Re-labels
+/// the generic SSH-handshake messages so the user can tell which hop failed.
+fn humanize_ssh_handshake_via_jumpbox(raw: &str) -> String {
+    let humanized = humanize_ssh_error(raw);
+    if let Some(rest) = humanized.strip_prefix("SSH handshake failed: ") {
+        format!("Target SSH handshake failed via jumpbox: {rest}")
+    } else {
+        // Already a specific label (timeout, "No common kex algorithm", etc.);
+        // prefix it so the user knows the failure is at the target hop.
+        format!("Target via jumpbox: {humanized}")
+    }
+}
+
+/// Convert a russh auth-call error into a short message scoped to the auth
+/// stage that produced it. `stage` is one of "publickey" / "password" /
+/// "keyboard-interactive".
+fn humanize_auth_error(stage: &str, raw: &str) -> String {
+    let lower = raw.to_ascii_lowercase();
+    // load_secret_key wrong-passphrase failures surface as a decryption error.
+    if stage == "load-key"
+        && (lower.contains("bad decrypt")
+            || lower.contains("incorrect passphrase")
+            || lower.contains("decryption")
+            || lower.contains("invalid passphrase"))
+    {
+        return "Wrong passphrase for private key".to_string();
+    }
+    if stage == "load-key" {
+        return format!("Cannot read private key file: {}", raw.trim());
+    }
+    match stage {
+        "publickey" => "Public key authentication failed".to_string(),
+        "password" => "Password authentication failed".to_string(),
+        "keyboard-interactive" => "Keyboard-interactive authentication failed".to_string(),
+        _ => "Authentication failed".to_string(),
+    }
+}
+
 async fn try_authenticate(
     handle: &mut Handle<SshHandler>,
     cfg: &SshConfig,
@@ -569,12 +671,12 @@ async fn try_authenticate(
     // 1. Public key (if path provided)
     if let Some(key_path) = &cfg.private_key_path {
         let pk: PrivateKey = load_secret_key(key_path, cfg.private_key_passphrase.as_deref())
-            .map_err(|e| SessionError::AuthFailed(format!("load key failed: {e}")))?;
+            .map_err(|e| SessionError::AuthFailed(humanize_auth_error("load-key", &e.to_string())))?;
         let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(pk), Some(HashAlg::Sha256));
         let res = handle
             .authenticate_publickey(&cfg.username, key_with_hash)
             .await
-            .map_err(|e| SessionError::AuthFailed(format!("publickey: {e}")))?;
+            .map_err(|e| SessionError::AuthFailed(humanize_auth_error("publickey", &e.to_string())))?;
         if matches!(res, russh::client::AuthResult::Success) {
             return Ok(());
         }
@@ -584,7 +686,7 @@ async fn try_authenticate(
         let res = handle
             .authenticate_password(&cfg.username, pw.clone())
             .await
-            .map_err(|e| SessionError::AuthFailed(format!("password: {e}")))?;
+            .map_err(|e| SessionError::AuthFailed(humanize_auth_error("password", &e.to_string())))?;
         if matches!(res, russh::client::AuthResult::Success) {
             return Ok(());
         }
@@ -593,7 +695,7 @@ async fn try_authenticate(
         let mut kb = handle
             .authenticate_keyboard_interactive_start(&cfg.username, None)
             .await
-            .map_err(|e| SessionError::AuthFailed(format!("kbd-interactive start: {e}")))?;
+            .map_err(|e| SessionError::AuthFailed(humanize_auth_error("keyboard-interactive", &e.to_string())))?;
         loop {
             match kb {
                 russh::client::KeyboardInteractiveAuthResponse::Success => return Ok(()),
@@ -605,15 +707,16 @@ async fn try_authenticate(
                         .authenticate_keyboard_interactive_respond(responses)
                         .await
                         .map_err(|e| {
-                            SessionError::AuthFailed(format!("kbd-interactive resp: {e}"))
+                            SessionError::AuthFailed(humanize_auth_error(
+                                "keyboard-interactive",
+                                &e.to_string(),
+                            ))
                         })?;
                 }
             }
         }
     }
-    Err(SessionError::AuthFailed(
-        "all authentication methods failed".into(),
-    ))
+    Err(SessionError::AuthFailed("Authentication failed".into()))
 }
 
 use tauri::Manager;
@@ -663,22 +766,24 @@ impl SessionService for SshSession {
             .await?;
             let (jumpbox_handle, stream) = tunnel.into_stream();
             self.jumpbox_handle = Some(jumpbox_handle);
+            let timeout_secs = self.config.connect_timeout_secs;
             tokio::time::timeout(connect_timeout, client::connect_stream(config, stream, handler))
                 .await
                 .map_err(|_| SessionError::ConnectionFailed(format!(
-                    "ssh-over-jumpbox: timed out after {}s",
-                    self.config.connect_timeout_secs
+                    "Target connection timed out via jumpbox ({timeout_secs}s)"
                 )))?
-                .map_err(|e| SessionError::ConnectionFailed(format!("ssh-over-jumpbox: {e}")))?
+                .map_err(|e| SessionError::ConnectionFailed(
+                    humanize_ssh_handshake_via_jumpbox(&e.to_string()),
+                ))?
         } else {
             let addr = (self.config.host.as_str(), self.config.port);
+            let timeout_secs = self.config.connect_timeout_secs;
             tokio::time::timeout(connect_timeout, client::connect(config, addr, handler))
                 .await
                 .map_err(|_| SessionError::ConnectionFailed(format!(
-                    "{}:{}: timed out after {}s",
-                    self.config.host, self.config.port, self.config.connect_timeout_secs
+                    "Connection timed out ({timeout_secs}s)"
                 )))?
-                .map_err(|e| SessionError::ConnectionFailed(format!("{e}")))?
+                .map_err(|e| SessionError::ConnectionFailed(humanize_ssh_error(&e.to_string())))?
         };
 
         let auth_result = try_authenticate(&mut handle, &self.config).await;
@@ -700,16 +805,25 @@ impl SessionService for SshSession {
         let channel = handle
             .channel_open_session()
             .await
-            .map_err(|e| SessionError::Protocol(format!("channel: {e}")))?;
+            .map_err(|e| {
+                log::error!("ssh: channel_open_session failed: {e}");
+                SessionError::Protocol("Failed to open SSH channel".into())
+            })?;
 
         channel
             .request_pty(true, "xterm-256color", 80, 24, 0, 0, &[])
             .await
-            .map_err(|e| SessionError::Protocol(format!("request_pty: {e}")))?;
+            .map_err(|e| {
+                log::error!("ssh: request_pty failed: {e}");
+                SessionError::Protocol("Failed to allocate PTY".into())
+            })?;
         channel
             .request_shell(true)
             .await
-            .map_err(|e| SessionError::Protocol(format!("request_shell: {e}")))?;
+            .map_err(|e| {
+                log::error!("ssh: request_shell failed: {e}");
+                SessionError::Protocol("Failed to start remote shell".into())
+            })?;
 
         emit_session_status(&app, &session_id, "connected");
 
@@ -1107,5 +1221,138 @@ mod tests {
         assert!(!s.contains("hunter2"), "password leaked: {s}");
         assert!(!s.contains("supersecret"), "passphrase leaked: {s}");
         assert!(s.contains("redacted"));
+    }
+
+    // -- humanize_ssh_error tests --
+
+    #[test]
+    fn humanize_ssh_error_connection_refused_through_russh() {
+        // russh wraps an inner io::Error as "IO error: Connection refused..."
+        let raw = "IO error: Connection refused (os error 10061)";
+        assert_eq!(humanize_ssh_error(raw), "Connection refused");
+    }
+
+    #[test]
+    fn humanize_ssh_error_dns_lookup_failure() {
+        let raw = "IO error: failed to lookup address information: ...";
+        assert_eq!(humanize_ssh_error(raw), "Host not found");
+    }
+
+    #[test]
+    fn humanize_ssh_error_no_common_kex() {
+        let raw = "no common kex algorithms";
+        assert_eq!(
+            humanize_ssh_error(raw),
+            "No common kex algorithm with server"
+        );
+    }
+
+    #[test]
+    fn humanize_ssh_error_no_common_cipher() {
+        let raw = "no common cipher";
+        assert_eq!(
+            humanize_ssh_error(raw),
+            "No common cipher algorithm with server"
+        );
+    }
+
+    #[test]
+    fn humanize_ssh_error_no_common_host_key() {
+        let raw = "no common host key algorithm";
+        assert_eq!(
+            humanize_ssh_error(raw),
+            "No common host key algorithm with server"
+        );
+    }
+
+    #[test]
+    fn humanize_ssh_error_disconnect() {
+        let raw = "Disconnect: 11 service not available";
+        assert_eq!(
+            humanize_ssh_error(raw),
+            "Server closed connection: 11 service not available"
+        );
+    }
+
+    #[test]
+    fn humanize_ssh_error_unknown_fallback() {
+        let raw = "Strange unmapped russh state";
+        assert_eq!(
+            humanize_ssh_error(raw),
+            "SSH handshake failed: Strange unmapped russh state"
+        );
+    }
+
+    #[test]
+    fn humanize_ssh_error_strips_io_prefix_in_fallback() {
+        let raw = "IO error: something obscure";
+        assert_eq!(
+            humanize_ssh_error(raw),
+            "SSH handshake failed: something obscure"
+        );
+    }
+
+    // -- humanize_auth_error tests --
+
+    #[test]
+    fn humanize_auth_error_password_method() {
+        assert_eq!(
+            humanize_auth_error("password", "Disconnect: ServiceNotAvailable"),
+            "Password authentication failed"
+        );
+    }
+
+    #[test]
+    fn humanize_auth_error_publickey_method() {
+        assert_eq!(
+            humanize_auth_error("publickey", "some russh error"),
+            "Public key authentication failed"
+        );
+    }
+
+    #[test]
+    fn humanize_auth_error_kbi_method() {
+        assert_eq!(
+            humanize_auth_error("keyboard-interactive", "x"),
+            "Keyboard-interactive authentication failed"
+        );
+    }
+
+    #[test]
+    fn humanize_auth_error_bad_passphrase() {
+        assert_eq!(
+            humanize_auth_error("load-key", "bad decrypt: invalid passphrase"),
+            "Wrong passphrase for private key"
+        );
+    }
+
+    #[test]
+    fn humanize_auth_error_unreadable_key() {
+        assert_eq!(
+            humanize_auth_error("load-key", "No such file or directory"),
+            "Cannot read private key file: No such file or directory"
+        );
+    }
+
+    // -- humanize_ssh_handshake_via_jumpbox tests --
+
+    #[test]
+    fn jumpbox_handshake_wraps_generic_handshake_failure() {
+        let raw = "IO error: something obscure";
+        // humanize_ssh_error returns "SSH handshake failed: something obscure"
+        // which the jumpbox wrapper rewrites to identify the failing hop.
+        assert_eq!(
+            humanize_ssh_handshake_via_jumpbox(raw),
+            "Target SSH handshake failed via jumpbox: something obscure"
+        );
+    }
+
+    #[test]
+    fn jumpbox_handshake_preserves_specific_label() {
+        let raw = "IO error: Connection refused (os error 10061)";
+        assert_eq!(
+            humanize_ssh_handshake_via_jumpbox(raw),
+            "Target via jumpbox: Connection refused"
+        );
     }
 }

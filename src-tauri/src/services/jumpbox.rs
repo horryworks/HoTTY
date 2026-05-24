@@ -26,7 +26,7 @@ use super::known_hosts::{
     append_known_host, check_known_host, default_known_hosts_path, remove_known_host, HostKeyCheck,
 };
 use super::session_service::SessionError;
-use super::ssh::HostKeyDecision;
+use super::ssh::{humanize_ssh_error, HostKeyDecision};
 
 // ---------------------------------------------------------------------------
 // Config
@@ -65,16 +65,16 @@ impl std::fmt::Debug for JumpboxConfig {
 impl JumpboxConfig {
     pub fn validate(&self) -> Result<(), SessionError> {
         if self.host.trim().is_empty() {
-            return Err(SessionError::InvalidConfig("jumpbox host is empty".into()));
+            return Err(SessionError::InvalidConfig("Jumpbox host is required".into()));
         }
         if self.port == 0 {
             return Err(SessionError::InvalidConfig(
-                "jumpbox port must be > 0".into(),
+                "Jumpbox port must be 1-65535".into(),
             ));
         }
         if self.username.trim().is_empty() {
             return Err(SessionError::InvalidConfig(
-                "jumpbox username is empty".into(),
+                "Jumpbox username is required".into(),
             ));
         }
         Ok(())
@@ -269,18 +269,36 @@ async fn register_with_ssh_map(prompt_session_id: String) {
 // Auth (mirrors ssh.rs::try_authenticate but accepting JumpboxConfig)
 // ---------------------------------------------------------------------------
 
+/// Convert a private-key load error into a short message for the jumpbox path.
+fn humanize_jumpbox_load_key(raw: &str) -> String {
+    let lower = raw.to_ascii_lowercase();
+    if lower.contains("bad decrypt")
+        || lower.contains("incorrect passphrase")
+        || lower.contains("decryption")
+        || lower.contains("invalid passphrase")
+    {
+        return "Jumpbox: Wrong passphrase for private key".to_string();
+    }
+    format!("Jumpbox: Cannot read private key file: {}", raw.trim())
+}
+
 async fn authenticate_jumpbox(
     handle: &mut Handle<JumpboxHandler>,
     cfg: &JumpboxConfig,
 ) -> Result<(), SessionError> {
     if let Some(key_path) = &cfg.private_key_path {
         let pk: PrivateKey = load_secret_key(key_path, cfg.private_key_passphrase.as_deref())
-            .map_err(|e| SessionError::AuthFailed(format!("jumpbox load key failed: {e}")))?;
+            .map_err(|e| {
+                SessionError::AuthFailed(humanize_jumpbox_load_key(&e.to_string()))
+            })?;
         let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(pk), Some(HashAlg::Sha256));
         let res = handle
             .authenticate_publickey(&cfg.username, key_with_hash)
             .await
-            .map_err(|e| SessionError::AuthFailed(format!("jumpbox publickey: {e}")))?;
+            .map_err(|e| {
+                log::error!("jumpbox: publickey auth failed: {e}");
+                SessionError::AuthFailed("Jumpbox: Public key authentication failed".into())
+            })?;
         if matches!(res, russh::client::AuthResult::Success) {
             return Ok(());
         }
@@ -289,7 +307,10 @@ async fn authenticate_jumpbox(
         let res = handle
             .authenticate_password(&cfg.username, pw.clone())
             .await
-            .map_err(|e| SessionError::AuthFailed(format!("jumpbox password: {e}")))?;
+            .map_err(|e| {
+                log::error!("jumpbox: password auth failed: {e}");
+                SessionError::AuthFailed("Jumpbox: Password authentication failed".into())
+            })?;
         if matches!(res, russh::client::AuthResult::Success) {
             return Ok(());
         }
@@ -298,7 +319,10 @@ async fn authenticate_jumpbox(
             .authenticate_keyboard_interactive_start(&cfg.username, None)
             .await
             .map_err(|e| {
-                SessionError::AuthFailed(format!("jumpbox kbd-interactive start: {e}"))
+                log::error!("jumpbox: kbd-interactive start failed: {e}");
+                SessionError::AuthFailed(
+                    "Jumpbox: Keyboard-interactive authentication failed".into(),
+                )
             })?;
         loop {
             match kb {
@@ -312,16 +336,17 @@ async fn authenticate_jumpbox(
                         .authenticate_keyboard_interactive_respond(responses)
                         .await
                         .map_err(|e| {
-                            SessionError::AuthFailed(format!(
-                                "jumpbox kbd-interactive resp: {e}"
-                            ))
+                            log::error!("jumpbox: kbd-interactive resp failed: {e}");
+                            SessionError::AuthFailed(
+                                "Jumpbox: Keyboard-interactive authentication failed".into(),
+                            )
                         })?;
                 }
             }
         }
     }
     Err(SessionError::AuthFailed(
-        "jumpbox: all authentication methods failed".into(),
+        "Jumpbox: Authentication failed".into(),
     ))
 }
 
@@ -404,9 +429,12 @@ pub async fn establish_tunnel(
     )
     .await
     .map_err(|_| SessionError::ConnectionFailed(format!(
-        "jumpbox connect: timed out after {connect_timeout_secs}s"
+        "Jumpbox: Connection timed out ({connect_timeout_secs}s)"
     )))?
-    .map_err(|e| SessionError::ConnectionFailed(format!("jumpbox connect: {e}")))?;
+    .map_err(|e| {
+        let msg = humanize_ssh_error(&e.to_string());
+        SessionError::ConnectionFailed(format!("Jumpbox: {msg}"))
+    })?;
 
     authenticate_jumpbox(&mut handle, &cfg).await?;
 
@@ -426,9 +454,12 @@ pub async fn establish_tunnel(
         .channel_open_direct_tcpip(target_host, target_port as u32, "127.0.0.1", 0)
         .await
         .map_err(|e| {
-            SessionError::ConnectionFailed(format!(
-                "jumpbox direct-tcpip to {target_host}:{target_port}: {e}"
-            ))
+            log::error!(
+                "jumpbox: direct-tcpip to {target_host}:{target_port} failed: {e}"
+            );
+            SessionError::ConnectionFailed(
+                "Jumpbox refused to forward to target host".into(),
+            )
         })?;
 
     // Drain any initial control messages so we reach a data-ready state. We

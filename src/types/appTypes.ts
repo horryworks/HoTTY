@@ -241,10 +241,39 @@ export interface GcpProject {
   name: string;
 }
 
+/**
+ * Result of probing an IAM permission. `unknown` means the probe itself failed
+ * (network blip, project deleted mid-list, etc.); the UI defaults to showing
+ * such items rather than hiding accessible VMs.
+ */
+export type AccessState = 'granted' | 'denied' | 'unknown';
+
+/**
+ * Project-level IAM probe result. `iapTunnel` is the gate for IAP-tunneled
+ * SSH (the only connection path supported by this pane). `osLogin` is shown
+ * as a warning only — it's not used to filter because instances may still
+ * accept SSH via metadata-based keys.
+ */
+export interface ProjectAccess {
+  iapTunnel: AccessState;
+  osLogin: AccessState;
+}
+
+/**
+ * Per-instance IAM probe result. Populated by the refresh task only when a
+ * resource-level fallback probe ran (because project-level IAP was denied).
+ */
+export interface InstanceAccess {
+  iapTunnel: AccessState;
+  osLogin: AccessState;
+}
+
 export interface GceInstance {
   name: string;
   status: string;
   zone?: string;
+  /** Resource-level IAM probe result. Absent → inherit project-level. */
+  access?: InstanceAccess;
 }
 
 export interface GcloudCacheSnapshot {
@@ -255,6 +284,8 @@ export interface GcloudCacheSnapshot {
   instancesByProject: Record<string, GceInstance[]>;
   /** Map of project ID → error message for projects whose `instances list` failed. */
   projectErrors: Record<string, string>;
+  /** Map of project ID → IAM probe result. Missing entries are treated as `unknown`. */
+  projectAccess?: Record<string, ProjectAccess>;
   /** Milliseconds since the Unix epoch of the last successful full refresh. */
   lastRefreshedMs?: number;
   refreshInProgress: boolean;

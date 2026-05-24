@@ -22,7 +22,14 @@
   color: var(--text-primary);
 }
 
-.gcp-refresh-btn {
+.gcp-pane-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.gcp-refresh-btn,
+.gcp-toggle-btn {
   background: var(--btn-bg);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
@@ -32,16 +39,28 @@
   font-size: var(--font-size-base);
   line-height: 1;
   transition: background 0.15s, border-color 0.15s;
+  font-family: var(--ui-font-family);
 }
 
-.gcp-refresh-btn:hover:not(:disabled) {
+.gcp-refresh-btn:hover:not(:disabled),
+.gcp-toggle-btn:hover:not(:disabled) {
   background: var(--btn-hover-bg);
   border-color: var(--accent-color);
 }
 
-.gcp-refresh-btn:disabled {
+.gcp-refresh-btn:disabled,
+.gcp-toggle-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.gcp-toggle-btn {
+  font-size: calc(var(--font-size-base) - 2px);
+}
+
+.gcp-toggle-btn.active {
+  border-color: var(--accent-color);
+  background: var(--btn-hover-bg);
 }
 
 .gcp-pane-subtitle {
@@ -248,4 +267,25 @@
 .gcp-instance-row.selected .gcp-action-btn {
   color: var(--text-on-accent);
   border-color: var(--text-on-accent);
+}
+
+.gcp-instance-row.gcp-access-denied {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gcp-instance-row.gcp-access-denied:hover {
+  background: transparent;
+}
+
+.gcp-instance-locked {
+  flex-shrink: 0;
+  font-size: calc(var(--font-size-base) - 3px);
+  color: var(--text-tertiary);
+}
+
+.gcp-instance-warning {
+  flex-shrink: 0;
+  font-size: calc(var(--font-size-base) - 3px);
+  cursor: help;
 }

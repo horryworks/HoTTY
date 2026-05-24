@@ -81,6 +81,48 @@ pub struct GcpProject {
     pub name: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AccessState {
+    Granted,
+    Denied,
+    Unknown,
+}
+
+/// Per-project IAM probe result for IAP/SSH login capability.
+///
+/// `iap_tunnel` (`iap.tunnelInstances.accessViaIAP`) is the gate for the IAP
+/// tunnel itself — without it the connection cannot be established.
+/// `os_login` (`compute.instances.osLogin`) is informational only: missing
+/// OS Login does not necessarily mean SSH is impossible because the instance
+/// may grant access via metadata SSH keys instead.
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectAccess {
+    pub iap_tunnel: AccessState,
+    pub os_login: AccessState,
+}
+
+impl ProjectAccess {
+    pub fn unknown() -> Self {
+        Self {
+            iap_tunnel: AccessState::Unknown,
+            os_login: AccessState::Unknown,
+        }
+    }
+}
+
+/// Per-instance IAM probe result. Same semantics as `ProjectAccess` but
+/// resolved at the resource level — used as a fallback when project-level
+/// IAP access is denied so we don't hide instances that have resource-level
+/// IAM grants.
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstanceAccess {
+    pub iap_tunnel: AccessState,
+    pub os_login: AccessState,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GceInstance {
@@ -91,6 +133,11 @@ pub struct GceInstance {
     /// optionality preserves serialization compatibility for older payloads.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub zone: Option<String>,
+    /// Per-instance IAM probe result. Present only when refresh ran a
+    /// resource-level fallback test (i.e. project-level IAP was denied).
+    /// When absent, the project-level `ProjectAccess` should be consulted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access: Option<InstanceAccess>,
 }
 
 // ---------------------------------------------------------------------------
@@ -344,6 +391,140 @@ pub async fn list_projects() -> Vec<GcpProject> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// IAM permission probes (used to filter the GCP pane to instances the user
+// actually has IAP/SSH access to).
+// ---------------------------------------------------------------------------
+
+/// IAM permission required for the IAP tunnel itself.
+pub(crate) const PERM_IAP_TUNNEL: &str = "iap.tunnelInstances.accessViaIAP";
+
+/// IAM permission corresponding to OS Login (the modern SSH-via-OAuth path).
+/// Missing this permission does NOT guarantee SSH is impossible — instances
+/// running without OS Login still accept metadata-based SSH keys — so the UI
+/// surfaces it as a warning rather than using it as a filter.
+pub(crate) const PERM_OS_LOGIN: &str = "compute.instances.osLogin";
+
+fn classify_permission(granted: &[String], wanted: &str) -> AccessState {
+    if granted.iter().any(|p| p == wanted) {
+        AccessState::Granted
+    } else {
+        AccessState::Denied
+    }
+}
+
+/// Probe project-level IAM permissions relevant to IAP-tunneled SSH.
+///
+/// Calls `gcloud projects test-iam-permissions <project> --permissions=...`.
+/// gcloud returns only the subset of permissions the caller actually holds,
+/// so an empty/omitted entry maps to `Denied`. Any failure of the underlying
+/// gcloud command (network blip, project deleted mid-list, …) is returned as
+/// `Err` so the caller can mark the project as `Unknown` and default to
+/// showing it in the UI rather than hiding accessible VMs.
+pub async fn test_project_iam_permissions(project: &str) -> Result<ProjectAccess, String> {
+    if !is_valid_project(project) {
+        return Err(format!("invalid project: {project}"));
+    }
+    let permissions = format!("--permissions={PERM_IAP_TUNNEL},{PERM_OS_LOGIN}");
+    let args = [
+        "projects",
+        "test-iam-permissions",
+        project,
+        permissions.as_str(),
+        "--format=json",
+        "--quiet",
+    ];
+    let output = run_gcloud(&args).await?;
+    parse_test_iam_permissions(&output)
+}
+
+/// Parse the JSON returned by `*.testIamPermissions`. The response shape is
+/// `{ "permissions": ["perm.a", "perm.b", ...] }` — permissions not granted
+/// are simply omitted, and an empty / missing `permissions` field means none
+/// were granted.
+fn parse_test_iam_permissions(json_str: &str) -> Result<ProjectAccess, String> {
+    let value: serde_json::Value = serde_json::from_str(json_str.trim())
+        .map_err(|e| format!("failed to parse test-iam-permissions JSON: {e}"))?;
+    let granted: Vec<String> = value
+        .get("permissions")
+        .and_then(|p| p.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(ProjectAccess {
+        iap_tunnel: classify_permission(&granted, PERM_IAP_TUNNEL),
+        os_login: classify_permission(&granted, PERM_OS_LOGIN),
+    })
+}
+
+/// Probe instance-level IAM permissions via the Compute Engine REST API.
+///
+/// `gcloud` does not expose a CLI subcommand for compute-instance
+/// `testIamPermissions`, so we shell out to `gcloud auth print-access-token`
+/// for an OAuth bearer and post directly to the REST endpoint. Failure to
+/// obtain a token or any HTTP-level error is returned as `Err` so the caller
+/// can record `Unknown` and default to showing the instance.
+pub async fn test_instance_iam_permissions(
+    project: &str,
+    zone: &str,
+    instance: &str,
+) -> Result<InstanceAccess, String> {
+    if !is_valid_project(project) {
+        return Err(format!("invalid project: {project}"));
+    }
+    if !is_valid_zone(zone) {
+        return Err(format!("invalid zone: {zone}"));
+    }
+    if !is_valid_instance(instance) {
+        return Err(format!("invalid instance: {instance}"));
+    }
+
+    let token = run_gcloud(&["auth", "print-access-token"]).await?;
+    let token = token.trim();
+    if token.is_empty() {
+        return Err("gcloud returned an empty access token".to_string());
+    }
+
+    // URL components are all validated by the regexes above; no path traversal
+    // or query-string injection is reachable here.
+    let url = format!(
+        "https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{instance}/testIamPermissions"
+    );
+    let body = serde_json::json!({
+        "permissions": [PERM_IAP_TUNNEL, PERM_OS_LOGIN],
+    });
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .bearer_auth(token)
+        .json(&body)
+        .timeout(Duration::from_secs(GCLOUD_CMD_TIMEOUT_SECS))
+        .send()
+        .await
+        .map_err(|e| format!("testIamPermissions request failed: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        let preview: String = text.chars().take(160).collect();
+        return Err(format!(
+            "testIamPermissions HTTP {status}: {preview}"
+        ));
+    }
+    let payload = resp
+        .text()
+        .await
+        .map_err(|e| format!("failed to read testIamPermissions response: {e}"))?;
+    let parsed = parse_test_iam_permissions(&payload)?;
+    Ok(InstanceAccess {
+        iap_tunnel: parsed.iap_tunnel,
+        os_login: parsed.os_login,
+    })
+}
+
 /// List zones that have compute instances for a given project.
 pub async fn list_zones(project: &str) -> Vec<String> {
     if !is_valid_project(project) {
@@ -424,6 +605,7 @@ pub async fn list_instances(project: &str, zone: &str) -> Vec<GceInstance> {
                         name,
                         status,
                         zone: Some(zone.to_string()),
+                        access: None,
                     })
                 })
                 .collect()
@@ -503,7 +685,12 @@ pub async fn list_instances_across_zones(project: &str) -> Result<Vec<GceInstanc
             } else {
                 Some(zone_name)
             };
-            Some(GceInstance { name, status, zone })
+            Some(GceInstance {
+                name,
+                status,
+                zone,
+                access: None,
+            })
         })
         .collect();
     Ok(instances)
@@ -674,9 +861,7 @@ pub(crate) fn map_list_instances_error(raw: &str, project: &str) -> String {
         || (lower.contains("compute.googleapis.com")
             && (lower.contains("not enabled") || lower.contains("has not been used")));
     if api_not_enabled {
-        return format!(
-            "Compute Engine API is not enabled. Run `gcloud services enable compute.googleapis.com --project={project}`."
-        );
+        return "Compute Engine API is not enabled.".to_string();
     }
 
     // Missing list permission (the granular one is more useful than a generic
@@ -849,6 +1034,11 @@ where
 /// at a comprehensible pace.
 const GCP_REFRESH_MAX_CONCURRENCY: usize = 5;
 
+/// Maximum concurrent per-instance `testIamPermissions` REST calls within a
+/// single project's refresh task (only invoked as a fallback when project-
+/// level IAP access is denied). Kept small to avoid swamping the Compute API.
+const GCP_REFRESH_PER_INSTANCE_CONCURRENCY: usize = 3;
+
 #[derive(Debug, Default, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GcloudCacheSnapshot {
@@ -859,6 +1049,9 @@ pub struct GcloudCacheSnapshot {
     pub projects: Vec<GcpProject>,
     pub instances_by_project: HashMap<String, Vec<GceInstance>>,
     pub project_errors: HashMap<String, String>,
+    /// Per-project IAM probe result. Projects missing from this map have not
+    /// been probed yet (treated by the frontend as `Unknown` → show by default).
+    pub project_access: HashMap<String, ProjectAccess>,
     /// Milliseconds since the Unix epoch when the cache was last fully refreshed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_refreshed_ms: Option<u64>,
@@ -957,6 +1150,7 @@ impl GcloudCacheState {
                 s.projects.clear();
                 s.instances_by_project.clear();
                 s.project_errors.clear();
+                s.project_access.clear();
                 s.last_refreshed_ms = now_ms();
                 s.refresh_in_progress = false;
             });
@@ -981,12 +1175,20 @@ impl GcloudCacheState {
             s.projects = projects.clone();
             s.instances_by_project.clear();
             s.project_errors.clear();
+            s.project_access.clear();
         });
 
-        // Fan out `instances list` calls with bounded concurrency.
+        // Fan out per-project work with bounded concurrency. Each task probes
+        // project-level IAM permissions, lists instances, and (if the
+        // project-level IAP check was denied) probes per-instance permissions
+        // as a fallback to catch resource-level IAM bindings.
         let sem = Arc::new(Semaphore::new(GCP_REFRESH_MAX_CONCURRENCY));
         let done_counter = Arc::new(AtomicU32::new(0));
-        let mut set: JoinSet<(String, Result<Vec<GceInstance>, String>)> = JoinSet::new();
+        let mut set: JoinSet<(
+            String,
+            ProjectAccess,
+            Result<Vec<GceInstance>, String>,
+        )> = JoinSet::new();
 
         for p in &projects {
             let pid = p.id.clone();
@@ -997,9 +1199,104 @@ impl GcloudCacheState {
             set.spawn(async move {
                 let _permit = match sem.acquire().await {
                     Ok(p) => p,
-                    Err(_) => return (pid, Err("semaphore closed".to_string())),
+                    Err(_) => {
+                        return (
+                            pid,
+                            ProjectAccess::unknown(),
+                            Err("semaphore closed".to_string()),
+                        );
+                    }
                 };
-                let result = list_instances_across_zones(&pid).await;
+
+                let proj_access = match test_project_iam_permissions(&pid).await {
+                    Ok(a) => a,
+                    Err(e) => {
+                        log::warn!(
+                            "gcp-cache: test_project_iam_permissions failed project={pid} err={e}"
+                        );
+                        ProjectAccess::unknown()
+                    }
+                };
+                log::debug!(
+                    "gcp-cache: project_access[{pid}] iap={:?} osLogin={:?}",
+                    proj_access.iap_tunnel,
+                    proj_access.os_login
+                );
+
+                let list_result = list_instances_across_zones(&pid).await;
+                let mut instances = match list_result {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let done = counter.fetch_add(1, Ordering::SeqCst) + 1;
+                        emit_progress(
+                            &app_for_progress,
+                            "instances",
+                            Some(pid.clone()),
+                            done,
+                            total_for_progress,
+                        );
+                        return (pid, proj_access, Err(e));
+                    }
+                };
+
+                match proj_access.iap_tunnel {
+                    AccessState::Granted => {
+                        // Inherit project-level grant to every instance — saves
+                        // N resource-level probes that would all return Granted.
+                        for inst in &mut instances {
+                            inst.access = Some(InstanceAccess {
+                                iap_tunnel: AccessState::Granted,
+                                os_login: proj_access.os_login,
+                            });
+                        }
+                    }
+                    AccessState::Denied if !instances.is_empty() => {
+                        // Fallback: probe each instance directly via the
+                        // Compute REST API to detect resource-level IAP grants
+                        // that wouldn't show up at the project level.
+                        let inner_sem = Arc::new(Semaphore::new(
+                            GCP_REFRESH_PER_INSTANCE_CONCURRENCY,
+                        ));
+                        let mut inner_set: JoinSet<(usize, Option<InstanceAccess>)> =
+                            JoinSet::new();
+                        for (idx, inst) in instances.iter().enumerate() {
+                            let zone = match inst.zone.clone() {
+                                Some(z) => z,
+                                None => continue,
+                            };
+                            let name = inst.name.clone();
+                            let proj = pid.clone();
+                            let inner_sem = Arc::clone(&inner_sem);
+                            inner_set.spawn(async move {
+                                let _p = match inner_sem.acquire().await {
+                                    Ok(p) => p,
+                                    Err(_) => return (idx, None),
+                                };
+                                match test_instance_iam_permissions(&proj, &zone, &name).await {
+                                    Ok(a) => (idx, Some(a)),
+                                    Err(e) => {
+                                        log::debug!(
+                                            "gcp-cache: instance probe failed {proj}/{zone}/{name}: {e}"
+                                        );
+                                        (idx, None)
+                                    }
+                                }
+                            });
+                        }
+                        while let Some(j) = inner_set.join_next().await {
+                            if let Ok((idx, Some(access))) = j {
+                                if let Some(inst) = instances.get_mut(idx) {
+                                    inst.access = Some(access);
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        // Denied with no instances, or Unknown: don't annotate
+                        // — frontend treats absent `access` as Unknown → show.
+                    }
+                }
+
                 let done = counter.fetch_add(1, Ordering::SeqCst) + 1;
                 emit_progress(
                     &app_for_progress,
@@ -1008,19 +1305,21 @@ impl GcloudCacheState {
                     done,
                     total_for_progress,
                 );
-                (pid, result)
+                (pid, proj_access, Ok(instances))
             });
         }
 
         while let Some(joined) = set.join_next().await {
             match joined {
-                Ok((pid, Ok(list))) => {
+                Ok((pid, proj_access, Ok(list))) => {
                     self.write_partial(|s| {
+                        s.project_access.insert(pid.clone(), proj_access);
                         s.instances_by_project.insert(pid, list);
                     });
                 }
-                Ok((pid, Err(e))) => {
+                Ok((pid, proj_access, Err(e))) => {
                     self.write_partial(|s| {
+                        s.project_access.insert(pid.clone(), proj_access);
                         s.project_errors.insert(pid, e);
                     });
                 }
@@ -1036,11 +1335,12 @@ impl GcloudCacheState {
         });
         let snap = self.snapshot();
         log::info!(
-            "gcp-cache: refresh done elapsed={:?} projects={} with_instances={} errors={}",
+            "gcp-cache: refresh done elapsed={:?} projects={} with_instances={} errors={} probed={}",
             refresh_started.elapsed(),
             snap.projects.len(),
             snap.instances_by_project.len(),
-            snap.project_errors.len()
+            snap.project_errors.len(),
+            snap.project_access.len()
         );
         for (pid, msg) in &snap.project_errors {
             let preview: String = msg.chars().take(240).collect();
@@ -1223,9 +1523,7 @@ mod tests {
                    Compute Engine API has not been used in project 1234567890 before \
                    or it is disabled. Enable it by visiting ...";
         let msg = map_list_instances_error(raw, "my-project");
-        assert!(msg.contains("Compute Engine API is not enabled"));
-        assert!(msg.contains("my-project"));
-        assert!(msg.contains("gcloud services enable compute.googleapis.com"));
+        assert_eq!(msg, "Compute Engine API is not enabled.");
     }
 
     #[test]
@@ -1267,11 +1565,14 @@ mod tests {
             name: "vm-web-01".to_string(),
             status: "RUNNING".to_string(),
             zone: Some("us-central1-a".to_string()),
+            access: None,
         };
         let json = serde_json::to_value(&instance).unwrap();
         assert_eq!(json["name"], "vm-web-01");
         assert_eq!(json["status"], "RUNNING");
         assert_eq!(json["zone"], "us-central1-a");
+        // access is omitted when None
+        assert!(json.get("access").is_none());
     }
 
     #[test]
@@ -1280,6 +1581,7 @@ mod tests {
             name: "vm-x".to_string(),
             status: "RUNNING".to_string(),
             zone: None,
+            access: None,
         };
         let json = serde_json::to_value(&instance).unwrap();
         assert!(json.get("zone").is_none());
@@ -1296,6 +1598,7 @@ mod tests {
         assert!(snap.projects.is_empty());
         assert!(snap.instances_by_project.is_empty());
         assert!(snap.project_errors.is_empty());
+        assert!(snap.project_access.is_empty());
         assert!(snap.last_refreshed_ms.is_none());
         assert!(!snap.refresh_in_progress);
     }
@@ -1352,6 +1655,109 @@ mod tests {
         // frontend's life simpler.
         assert!(json.get("instancesByProject").is_some());
         assert!(json.get("projectErrors").is_some());
+        assert!(json.get("projectAccess").is_some());
+    }
+
+    // -- IAM permission probe tests --
+
+    #[test]
+    fn parse_test_iam_permissions_grants_both() {
+        let json = r#"{
+            "permissions": ["iap.tunnelInstances.accessViaIAP", "compute.instances.osLogin"]
+        }"#;
+        let access = parse_test_iam_permissions(json).unwrap();
+        assert_eq!(access.iap_tunnel, AccessState::Granted);
+        assert_eq!(access.os_login, AccessState::Granted);
+    }
+
+    #[test]
+    fn parse_test_iam_permissions_grants_only_iap() {
+        let json = r#"{
+            "permissions": ["iap.tunnelInstances.accessViaIAP"]
+        }"#;
+        let access = parse_test_iam_permissions(json).unwrap();
+        assert_eq!(access.iap_tunnel, AccessState::Granted);
+        assert_eq!(access.os_login, AccessState::Denied);
+    }
+
+    #[test]
+    fn parse_test_iam_permissions_grants_nothing() {
+        // gcloud returns an empty object (no `permissions` key) when none of
+        // the requested permissions are held.
+        let access = parse_test_iam_permissions("{}").unwrap();
+        assert_eq!(access.iap_tunnel, AccessState::Denied);
+        assert_eq!(access.os_login, AccessState::Denied);
+    }
+
+    #[test]
+    fn parse_test_iam_permissions_empty_permissions_array() {
+        let access = parse_test_iam_permissions(r#"{"permissions": []}"#).unwrap();
+        assert_eq!(access.iap_tunnel, AccessState::Denied);
+        assert_eq!(access.os_login, AccessState::Denied);
+    }
+
+    #[test]
+    fn parse_test_iam_permissions_ignores_extra_permissions() {
+        let json = r#"{
+            "permissions": [
+                "compute.instances.osLogin",
+                "compute.instances.list",
+                "unrelated.permission"
+            ]
+        }"#;
+        let access = parse_test_iam_permissions(json).unwrap();
+        assert_eq!(access.iap_tunnel, AccessState::Denied);
+        assert_eq!(access.os_login, AccessState::Granted);
+    }
+
+    #[test]
+    fn parse_test_iam_permissions_bad_json_errors() {
+        assert!(parse_test_iam_permissions("not json").is_err());
+    }
+
+    #[test]
+    fn project_access_unknown_helper() {
+        let pa = ProjectAccess::unknown();
+        assert_eq!(pa.iap_tunnel, AccessState::Unknown);
+        assert_eq!(pa.os_login, AccessState::Unknown);
+    }
+
+    #[test]
+    fn project_access_serializes_camel_case() {
+        let pa = ProjectAccess {
+            iap_tunnel: AccessState::Granted,
+            os_login: AccessState::Denied,
+        };
+        let json = serde_json::to_value(pa).unwrap();
+        assert_eq!(json["iapTunnel"], "granted");
+        assert_eq!(json["osLogin"], "denied");
+    }
+
+    #[test]
+    fn instance_access_serializes_camel_case() {
+        let ia = InstanceAccess {
+            iap_tunnel: AccessState::Granted,
+            os_login: AccessState::Unknown,
+        };
+        let json = serde_json::to_value(ia).unwrap();
+        assert_eq!(json["iapTunnel"], "granted");
+        assert_eq!(json["osLogin"], "unknown");
+    }
+
+    #[test]
+    fn gce_instance_serialize_with_access() {
+        let inst = GceInstance {
+            name: "vm-x".to_string(),
+            status: "RUNNING".to_string(),
+            zone: Some("us-central1-a".to_string()),
+            access: Some(InstanceAccess {
+                iap_tunnel: AccessState::Granted,
+                os_login: AccessState::Denied,
+            }),
+        };
+        let json = serde_json::to_value(&inst).unwrap();
+        assert_eq!(json["access"]["iapTunnel"], "granted");
+        assert_eq!(json["access"]["osLogin"], "denied");
     }
 
     // -- gcloud program discovery --
@@ -1478,6 +1884,7 @@ mod tests {
                     name,
                     status,
                     zone: None,
+                    access: None,
                 })
             })
             .collect();
