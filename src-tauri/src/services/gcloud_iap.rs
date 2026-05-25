@@ -142,27 +142,7 @@ async fn can_tcp_connect_localhost(port: u16) -> bool {
 // and locates its bundled python via PATH.
 // ---------------------------------------------------------------------------
 
-const SENSITIVE_PATTERNS: &[&str] = &[
-    "API_KEY",
-    "SECRET",
-    "TOKEN",
-    "PASSWORD",
-    "PASSWD",
-    "CREDENTIAL",
-    "PRIVATE_KEY",
-    "ACCESS_KEY",
-];
-
-fn is_sensitive_env_var(name: &str) -> bool {
-    let upper = name.to_ascii_uppercase();
-    SENSITIVE_PATTERNS.iter().any(|pat| upper.contains(pat))
-}
-
-fn sanitized_env() -> Vec<(String, String)> {
-    std::env::vars()
-        .filter(|(k, _)| !is_sensitive_env_var(k))
-        .collect()
-}
+use super::sensitive_env::sanitized_env;
 
 // ---------------------------------------------------------------------------
 // Path helpers
@@ -1912,17 +1892,6 @@ mod tests {
             extract_metadata_value(json, "metadata", "enable-oslogin"),
             Some("TRUE".to_string())
         );
-    }
-
-    #[test]
-    fn sensitive_env_detection() {
-        assert!(is_sensitive_env_var("AWS_SECRET_ACCESS_KEY"));
-        assert!(is_sensitive_env_var("MY_API_KEY"));
-        assert!(is_sensitive_env_var("DB_PASSWORD"));
-        assert!(!is_sensitive_env_var("PATH"));
-        assert!(!is_sensitive_env_var("APPDATA"));
-        assert!(!is_sensitive_env_var("LOCALAPPDATA"));
-        assert!(!is_sensitive_env_var("USERPROFILE"));
     }
 
     #[test]

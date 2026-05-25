@@ -292,6 +292,19 @@ describe('App', () => {
     expect(focus).toHaveBeenCalledTimes(1);
   });
 
+  it('normalizes CRLF and LF to CR when pasting (no double-newline echo)', async () => {
+    const focus = vi.fn();
+    mockSessions.set('s-1', { id: 's-1', term: { focus } });
+    // Mixed input: Windows CRLF, bare LF, and a bare CR that must be preserved.
+    await openPasteModalFor('s-1', 'a\r\nb\nc\rd');
+
+    act(() => {
+      pasteModalProps!.onConfirm();
+    });
+
+    expect(tauriService.sendInput).toHaveBeenCalledWith('s-1', 'a\rb\rc\rd');
+  });
+
   it('restores focus to the originating terminal after paste modal cancel', async () => {
     const focus = vi.fn();
     mockSessions.set('s-1', { id: 's-1', term: { focus } });

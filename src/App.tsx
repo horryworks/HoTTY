@@ -920,7 +920,13 @@ function App() {
         <PasteConfirmationModal
           content={pasteReq.content}
           onConfirm={() => {
-            tauriService.sendInput(pasteReq.sessionId, pasteReq.content).catch(() => {});
+            // Normalize CRLF/LF → CR so each pasted line produces one Enter,
+            // not Enter + LF (which the remote shell echoes as a blank line).
+            // Matches xterm.js's prepareTextForTerminal() behavior; we have to
+            // do it ourselves because TerminalXtermHost suppresses xterm's
+            // built-in paste handler to route through this modal.
+            const normalized = pasteReq.content.replace(/\r\n|\n/g, '\r');
+            tauriService.sendInput(pasteReq.sessionId, normalized).catch(() => {});
             const term = sessions.get(pasteReq.sessionId)?.term;
             setPasteReq(null);
             // Microtask: focus after React unmounts the modal so the now-removed

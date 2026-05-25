@@ -69,27 +69,7 @@ impl WslConfig {
 // Environment variable sanitization (shared logic with local.rs)
 // ---------------------------------------------------------------------------
 
-const SENSITIVE_PATTERNS: &[&str] = &[
-    "API_KEY",
-    "SECRET",
-    "TOKEN",
-    "PASSWORD",
-    "PASSWD",
-    "CREDENTIAL",
-    "PRIVATE_KEY",
-    "ACCESS_KEY",
-];
-
-fn is_sensitive_env_var(name: &str) -> bool {
-    let upper = name.to_ascii_uppercase();
-    SENSITIVE_PATTERNS.iter().any(|pat| upper.contains(pat))
-}
-
-fn sanitized_env() -> Vec<(String, String)> {
-    std::env::vars()
-        .filter(|(k, _)| !is_sensitive_env_var(k))
-        .collect()
-}
+use super::sensitive_env::sanitized_env;
 
 // ---------------------------------------------------------------------------
 // Service
@@ -376,10 +356,4 @@ mod tests {
         assert_eq!(cfg.encoding, "utf8");
     }
 
-    #[test]
-    fn sensitive_env_detection() {
-        assert!(is_sensitive_env_var("AWS_SECRET_ACCESS_KEY"));
-        assert!(is_sensitive_env_var("GITHUB_TOKEN"));
-        assert!(!is_sensitive_env_var("PATH"));
-    }
 }

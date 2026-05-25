@@ -18,6 +18,7 @@ use tokio::task::JoinHandle;
 use crate::commands::ssh_algorithms::{load_algorithms_sync, SshAlgorithms};
 
 use super::jumpbox::{establish_tunnel, JumpboxConfig, JumpboxHandler};
+use super::path_safety::is_unc_path;
 use super::known_hosts::{
     append_known_host, check_known_host, default_known_hosts_path, remove_known_host, HostKeyCheck,
 };
@@ -670,6 +671,13 @@ async fn try_authenticate(
 ) -> Result<(), SessionError> {
     // 1. Public key (if path provided)
     if let Some(key_path) = &cfg.private_key_path {
+        // Reject UNC paths to prevent an attacker-controlled key path from
+        // triggering SMB auth (NTLMv2 hash relay on Windows).
+        if is_unc_path(key_path) {
+            return Err(SessionError::AuthFailed(
+                "Private key path cannot be a UNC/network path".to_string(),
+            ));
+        }
         let pk: PrivateKey = load_secret_key(key_path, cfg.private_key_passphrase.as_deref())
             .map_err(|e| SessionError::AuthFailed(humanize_auth_error("load-key", &e.to_string())))?;
         let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(pk), Some(HashAlg::Sha256));

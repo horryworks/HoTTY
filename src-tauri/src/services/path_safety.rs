@@ -91,6 +91,17 @@ pub fn is_sensitive_path(resolved: &Path) -> bool {
     }
 }
 
+/// True if the path is a Windows UNC / verbatim-UNC form that would trigger
+/// SMB authentication (and an NTLMv2 hash leak) when the OS resolves it. Used
+/// to gate renderer-supplied paths before they are opened — e.g. private SSH
+/// keys, where `\\attacker\share\probe` would relay the user's NTLM hash.
+pub fn is_unc_path(path: &str) -> bool {
+    let trimmed = path.trim_start();
+    // Standard UNC: \\server\share or //server/share (Windows accepts both).
+    // Also catches Win32 verbatim-UNC \\?\UNC\server\share.
+    trimmed.starts_with(r"\\") || trimmed.starts_with("//")
+}
+
 pub fn dirs_home() -> Option<String> {
     std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
@@ -216,5 +227,33 @@ mod tests {
     #[test]
     fn dirs_home_returns_some() {
         assert!(dirs_home().is_some());
+    }
+
+    #[test]
+    fn is_unc_path_rejects_backslash_unc() {
+        assert!(is_unc_path(r"\\server\share\file"));
+        assert!(is_unc_path(r"\\attacker\probe"));
+    }
+
+    #[test]
+    fn is_unc_path_rejects_forward_slash_unc() {
+        assert!(is_unc_path("//server/share/file"));
+    }
+
+    #[test]
+    fn is_unc_path_rejects_verbatim_unc() {
+        assert!(is_unc_path(r"\\?\UNC\server\share"));
+    }
+
+    #[test]
+    fn is_unc_path_allows_local_paths() {
+        assert!(!is_unc_path(r"C:\Users\me\.ssh\id_rsa"));
+        assert!(!is_unc_path("/home/me/.ssh/id_rsa"));
+        assert!(!is_unc_path(r"D:\keys\prod"));
+    }
+
+    #[test]
+    fn is_unc_path_handles_leading_whitespace() {
+        assert!(is_unc_path(r"  \\server\share"));
     }
 }

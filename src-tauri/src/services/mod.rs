@@ -8,6 +8,7 @@ pub mod local;
 pub mod log_manager;
 pub mod path_safety;
 pub mod ping_monitor;
+pub mod sensitive_env;
 pub mod serial;
 pub mod session_service;
 pub mod ssh;
