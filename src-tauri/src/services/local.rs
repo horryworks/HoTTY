@@ -7,6 +7,7 @@ use tauri::{AppHandle, Manager};
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 
+use super::path_safety::is_unc_path;
 use super::session_service::{
     emit_session_data, emit_session_error, emit_session_status, encoding_for, SessionError,
     SessionService,
@@ -48,6 +49,13 @@ impl LocalConfig {
     pub fn resolve_shell_path(&self) -> Result<String, SessionError> {
         if let Some(ref explicit) = self.shell_path {
             if !explicit.is_empty() {
+                // Reject UNC paths: spawning from a UNC path triggers SMB auth
+                // and an NTLMv2 hash leak before the binary is fetched.
+                if is_unc_path(explicit) {
+                    return Err(SessionError::InvalidConfig(
+                        "shell_path cannot be a UNC/network path".into(),
+                    ));
+                }
                 return Ok(explicit.clone());
             }
         }
@@ -355,6 +363,23 @@ mod tests {
             encoding: "utf8".into(),
         };
         assert_eq!(cfg.resolve_shell_path().unwrap(), "/custom/shell");
+    }
+
+    #[test]
+    fn resolve_rejects_unc_shell_path() {
+        let cfg = LocalConfig {
+            shell_type: "cmd".into(),
+            shell_path: Some(r"\\attacker\share\evil.exe".into()),
+            encoding: "utf8".into(),
+        };
+        assert!(cfg.resolve_shell_path().is_err());
+
+        let cfg = LocalConfig {
+            shell_type: "cmd".into(),
+            shell_path: Some("//attacker/share/evil.exe".into()),
+            encoding: "utf8".into(),
+        };
+        assert!(cfg.resolve_shell_path().is_err());
     }
 
     #[test]

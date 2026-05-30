@@ -15,6 +15,13 @@ import type {
   LocalConnectionConfig,
 } from '../types/appTypes';
 
+export type AnyConfig =
+  | SshConnectionConfig
+  | TelnetConnectionConfig
+  | SerialConnectionConfig
+  | WslConnectionConfig
+  | LocalConnectionConfig;
+
 export interface SessionRecord {
   id: string;
   displayName: string;
@@ -23,14 +30,8 @@ export interface SessionRecord {
   errorMessage?: string;
   term: Terminal;
   fitAddon: FitAddon;
+  connectionConfig?: AnyConfig;
 }
-
-type AnyConfig =
-  | SshConnectionConfig
-  | TelnetConnectionConfig
-  | SerialConnectionConfig
-  | WslConnectionConfig
-  | LocalConnectionConfig;
 
 export interface OpenRequest {
   displayName: string;
@@ -355,6 +356,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
         status: 'connecting',
         term,
         fitAddon,
+        connectionConfig: req.config,
       };
       setSessions((prev) => {
         const next = new Map(prev);

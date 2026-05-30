@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 
 export type SidebarEdge = 'left' | 'right' | 'top' | 'bottom';
 
-export type SidebarTab = 'hosts' | 'gcp';
+type SidebarTab = 'hosts' | 'gcp';
 
 interface SidebarLayoutState {
   showLeftSidebar: boolean;

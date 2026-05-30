@@ -1474,5 +1474,3 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         </div>
     );
 });
-
-export default AIChatPane;

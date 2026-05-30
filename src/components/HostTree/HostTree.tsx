@@ -23,6 +23,7 @@ interface HostTreeProps {
     tree: HostTreeNode[];
     selectedId: string | null;
     onSelect: (node: HostTreeNode) => void;
+    onNewConnection?: () => void;
     onDoubleClickHost?: (node: HostTreeNode) => void;
     onAddFolder: (parentId: string | null, name: string) => void;
     onAddHost: (parentId: string | null, name: string, entry: HostEntry) => void;
@@ -38,6 +39,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
     tree,
     selectedId,
     onSelect,
+    onNewConnection,
     onDoubleClickHost,
     onAddFolder,
     onAddHost,
@@ -560,6 +562,30 @@ export const HostTree: React.FC<HostTreeProps> = ({
 
             {/* Tree */}
             <div className="host-tree-body">
+                {onNewConnection && (
+                    <div
+                        className={`host-tree-row new-connection ${selectedId === null ? 'selected' : ''}`}
+                        style={{ paddingLeft: '8px' }}
+                        role="button"
+                        tabIndex={0}
+                        title="Start a new connection (clears the form)"
+                        onClick={onNewConnection}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                onNewConnection();
+                            }
+                        }}
+                    >
+                        <span className="tree-icon" style={{ opacity: 0 }} aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </span>
+                        <span className="tree-icon" aria-hidden="true">{'\u{1F195}'}</span>
+                        <span className="tree-label">New Connection</span>
+                    </div>
+                )}
                 {tree.length === 0 && (
                     <div className="host-tree-empty">Right-click or use the + buttons above to add hosts and folders</div>
                 )}

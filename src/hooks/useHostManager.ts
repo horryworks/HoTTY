@@ -120,6 +120,11 @@ async function encryptTree(nodes: HostTreeNode[]): Promise<HostTreeNode[]> {
                     setters.push((val) => entry.password = val);
                 }
 
+                if (entry.privateKeyPassphrase && !isEncrypted(entry.privateKeyPassphrase)) {
+                    secrets.push(entry.privateKeyPassphrase);
+                    setters.push((val) => entry.privateKeyPassphrase = val);
+                }
+
                 return { ...n, entry, children };
             }
             return { ...n, children };
@@ -136,9 +141,29 @@ async function encryptTree(nodes: HostTreeNode[]): Promise<HostTreeNode[]> {
     return newTree;
 }
 
+// ── Cross-Instance Tree Synchronization ──
+//
+// `useHostManager` is called from multiple components (SessionDialog,
+// SaveToHostTreeDialog). Each call produces its own React state, so a mutation
+// in one instance was previously invisible to the other until the next full
+// app restart. To keep them in lockstep, every mutation broadcasts the new
+// tree synchronously via this module-level listener set; each instance's
+// effect-registered listener calls setTree(newTree) to mirror the change.
+type TreeListener = (tree: HostTreeNode[]) => void;
+const treeListeners = new Set<TreeListener>();
+
+function broadcastTreeUpdate(tree: HostTreeNode[]): void {
+    for (const listener of treeListeners) listener(tree);
+}
+
 // ── In-Memory Decryption Cache ──
 
-type DecryptedCredentialInfo = { username?: string; password?: string; decrypted?: boolean };
+type DecryptedCredentialInfo = {
+    username?: string;
+    password?: string;
+    privateKeyPassphrase?: string;
+    decrypted?: boolean;
+};
 const decryptedCache: Record<string, DecryptedCredentialInfo> = {};
 
 export function getCachedCredential(id: string): DecryptedCredentialInfo | undefined {
@@ -149,6 +174,7 @@ function setCachedCredential(id: string, info: DecryptedCredentialInfo) {
     if (!decryptedCache[id]) decryptedCache[id] = {};
     if (info.username !== undefined) decryptedCache[id].username = info.username;
     if (info.password !== undefined) decryptedCache[id].password = info.password;
+    if (info.privateKeyPassphrase !== undefined) decryptedCache[id].privateKeyPassphrase = info.privateKeyPassphrase;
     if (info.decrypted !== undefined) decryptedCache[id].decrypted = info.decrypted;
 }
 
@@ -240,6 +266,10 @@ export function useHostManager() {
     // is still the latest at resolve time.
     const latestEncryptRequestRef = useRef(0);
     const persistEncryptedAsync = useCallback((nodes: HostTreeNode[]) => {
+        // Mirror the change into every other useHostManager instance before
+        // the async encrypt/persist: the SessionDialog tree and any other
+        // consumer must see the new node immediately, not on next app launch.
+        broadcastTreeUpdate(nodes);
         const myId = ++latestEncryptRequestRef.current;
         encryptTree(nodes)
             .then((encrypted) => {
@@ -250,6 +280,19 @@ export function useHostManager() {
             .catch((err) => {
                 logError('HostManager', 'encryptTree failed', err);
             });
+    }, []);
+
+    // Subscribe this instance to cross-instance tree updates. The source
+    // instance also fires its own listener with the same reference, which
+    // React bails out on — so this is safe to register unconditionally.
+    useEffect(() => {
+        const listener: TreeListener = (newTree) => {
+            setTree(newTree);
+        };
+        treeListeners.add(listener);
+        return () => {
+            treeListeners.delete(listener);
+        };
     }, []);
 
     useEffect(() => {
@@ -317,7 +360,7 @@ export function useHostManager() {
 
         const eagerDecryptTree = async (nodes: HostTreeNode[]) => {
             const secrets: (string | undefined)[] = [];
-            const targets: { id: string; type: 'username' | 'password' }[] = [];
+            const targets: { id: string; type: 'username' | 'password' | 'privateKeyPassphrase' }[] = [];
             let hasLegacyDpapi = false;
 
             function traverse(nodeList: HostTreeNode[]) {
@@ -332,6 +375,11 @@ export function useHostManager() {
                             if (n.entry.password.startsWith('[DPAPI]')) hasLegacyDpapi = true;
                             secrets.push(n.entry.password);
                             targets.push({ id: n.id, type: 'password' });
+                        }
+                        if (n.entry.privateKeyPassphrase && isEncrypted(n.entry.privateKeyPassphrase)) {
+                            if (n.entry.privateKeyPassphrase.startsWith('[DPAPI]')) hasLegacyDpapi = true;
+                            secrets.push(n.entry.privateKeyPassphrase);
+                            targets.push({ id: n.id, type: 'privateKeyPassphrase' });
                         }
                     }
                     if (n.children) {
@@ -364,6 +412,9 @@ export function useHostManager() {
                                 }
                                 if (cached?.password !== undefined && entry.password?.startsWith('[DPAPI]')) {
                                     entry.password = cached.password;
+                                }
+                                if (cached?.privateKeyPassphrase !== undefined && entry.privateKeyPassphrase?.startsWith('[DPAPI]')) {
+                                    entry.privateKeyPassphrase = cached.privateKeyPassphrase;
                                 }
                                 return { ...n, entry, children };
                             }
@@ -401,7 +452,10 @@ export function useHostManager() {
         if (latestEncryptRequestRef.current === myId) {
             saveRawTree(encrypted);
         }
-        setTree(decryptedTree);
+        // Broadcast first so every instance (including this one) updates via
+        // the same listener path — keeps source and mirror state-change paths
+        // identical, avoiding subtle drift.
+        broadcastTreeUpdate(decryptedTree);
     }, []);
 
     const addFolder = useCallback((parentId: string | null, name: string) => {

@@ -87,6 +87,14 @@
     color: var(--text-primary);
 }
 
+.host-tree-row.new-connection {
+    margin-bottom: 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border-color);
+    border-radius: 4px 4px 0 0;
+    font-weight: 600;
+}
+
 .tree-icon {
     flex-shrink: 0;
     font-size: calc(var(--font-size-base) - 3px);

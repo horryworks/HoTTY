@@ -1,4 +1,5 @@
 import type { SessionRecord } from '../../hooks/useSessionManager';
+import type { ProtocolId } from '../../types/appTypes';
 import type { FeaturePaneInfo, FeaturePaneType } from '../../utils/paneTypes';
 
 export interface TabItem {
@@ -10,6 +11,7 @@ export interface TabItem {
   featureType?: FeaturePaneType;
   isWatching?: boolean;
   isAiTab?: boolean;
+  protocol?: ProtocolId;
 }
 
 export function buildTabItems(
@@ -32,6 +34,7 @@ export function buildTabItems(
         status: session.status,
         errorMessage: session.errorMessage,
         isWatching: session.id === watchingSessionId,
+        protocol: session.protocol,
       });
       continue;
     }

@@ -123,4 +123,52 @@ describe('HostTree', () => {
     render(<HostTree {...defaultProps} />);
     expect(screen.getByText('10.0.0.2')).toBeTruthy();
   });
+
+  describe('New Connection pseudo-row', () => {
+    it('renders when onNewConnection is provided', () => {
+      const onNewConnection = vi.fn();
+      render(<HostTree {...defaultProps} onNewConnection={onNewConnection} />);
+      expect(screen.getByText('New Connection')).toBeTruthy();
+    });
+
+    it('does not render when onNewConnection is not provided', () => {
+      render(<HostTree {...defaultProps} />);
+      expect(screen.queryByText('New Connection')).toBeNull();
+    });
+
+    it('is highlighted when selectedId is null', () => {
+      const onNewConnection = vi.fn();
+      render(<HostTree {...defaultProps} selectedId={null} onNewConnection={onNewConnection} />);
+      const row = screen.getByText('New Connection').closest('.host-tree-row');
+      expect(row?.classList.contains('selected')).toBe(true);
+    });
+
+    it('is not highlighted when a host is selected', () => {
+      const onNewConnection = vi.fn();
+      render(<HostTree {...defaultProps} selectedId="host-2" onNewConnection={onNewConnection} />);
+      const row = screen.getByText('New Connection').closest('.host-tree-row');
+      expect(row?.classList.contains('selected')).toBe(false);
+    });
+
+    it('calls onNewConnection when clicked', () => {
+      const onNewConnection = vi.fn();
+      render(<HostTree {...defaultProps} onNewConnection={onNewConnection} />);
+      fireEvent.click(screen.getByText('New Connection'));
+      expect(onNewConnection).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls onNewConnection on Enter key', () => {
+      const onNewConnection = vi.fn();
+      render(<HostTree {...defaultProps} onNewConnection={onNewConnection} />);
+      const row = screen.getByText('New Connection').closest('.host-tree-row') as HTMLElement;
+      fireEvent.keyDown(row, { key: 'Enter' });
+      expect(onNewConnection).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders even when the tree is empty', () => {
+      const onNewConnection = vi.fn();
+      render(<HostTree {...defaultProps} tree={[]} onNewConnection={onNewConnection} />);
+      expect(screen.getByText('New Connection')).toBeTruthy();
+    });
+  });
 });

@@ -11,6 +11,7 @@ interface TabBarProps {
   onNew: () => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
   onToggleWatch?: (id: string) => void;
+  onSaveToHostTree?: (id: string) => void;
   onNewLogViewer?: () => void;
   onNewPingMonitor?: () => void;
   onNewTextEditor?: () => void;
@@ -19,6 +20,12 @@ interface TabBarProps {
 }
 
 type DragOverSide = 'left' | 'right' | null;
+
+interface ContextMenuState {
+  sessionId: string;
+  x: number;
+  y: number;
+}
 
 export function TabBar({
   tabItems,
@@ -29,6 +36,7 @@ export function TabBar({
   onNew,
   onReorder,
   onToggleWatch,
+  onSaveToHostTree,
   onNewLogViewer,
   onNewPingMonitor,
   onNewTextEditor,
@@ -39,7 +47,9 @@ export function TabBar({
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [dragOverSide, setDragOverSide] = useState<DragOverSide>(null);
   const [showFeaturesMenu, setShowFeaturesMenu] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
 
   const visibleSet = new Set(visibleTabIds);
 
@@ -57,6 +67,25 @@ export function TabBar({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showFeaturesMenu]);
+
+  // Close tab context menu on outside click or Esc
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [contextMenu]);
 
   const handleDragStart = (index: number, itemId: string) => (e: React.DragEvent) => {
     setDragSourceIndex(index);
@@ -122,6 +151,18 @@ export function TabBar({
                 item.isWatching ? ' gemini-linked-tab' : ''
               }${item.isAiTab ? ' is-ai-tab' : ''}`}
               onClick={() => onSelect(item.id)}
+              onContextMenu={(e) => {
+                if (
+                  item.kind !== 'session' ||
+                  !onSaveToHostTree ||
+                  (item.protocol !== 'ssh' && item.protocol !== 'telnet')
+                ) {
+                  return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                setContextMenu({ sessionId: item.id, x: e.clientX, y: e.clientY });
+              }}
               onDragStart={handleDragStart(i, item.id)}
               onDragOver={handleDragOver(i)}
               onDragLeave={handleDragLeave}
@@ -281,6 +322,26 @@ export function TabBar({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {contextMenu && onSaveToHostTree && (
+        <div
+          ref={contextMenuRef}
+          className="tab-context-menu"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          role="menu"
+        >
+          <div
+            className="tab-context-menu-item"
+            role="menuitem"
+            onClick={() => {
+              onSaveToHostTree(contextMenu.sessionId);
+              setContextMenu(null);
+            }}
+          >
+            Save to Host Tree…
+          </div>
         </div>
       )}
     </div>

@@ -128,6 +128,12 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               <p className="help-text">
                 <strong>Show Password:</strong> Use the password visibility toggle to reveal saved passwords in the host tree when needed.
               </p>
+              <p className="help-text">
+                <strong>🆕 New Connection entry:</strong> The top row of the host tree starts a fresh connection — it clears the protocol form on the right of the dialog so you can dial an ad-hoc host without first deselecting a saved one.
+              </p>
+              <p className="help-text">
+                <strong>Save an ad-hoc session to the Host Tree:</strong> After connecting via <strong>New Connection</strong>, right-click the session&apos;s tab and choose <strong>Save to Host Tree…</strong> to keep the connection for later. SSH and Telnet sessions are supported (private-key path and passphrase are preserved). In the save dialog the host-tree folders are shown as a tree view so you can pick the destination folder directly, and <strong>+ New Folder</strong> creates a folder under the currently-selected one — nestable as deep as you like.
+              </p>
             </div>
           </details>
 

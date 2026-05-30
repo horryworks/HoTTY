@@ -113,6 +113,26 @@ describe('useHostManager', () => {
     expect(result.current.tree[0].entry?.host).toBe('1.2.3.4');
   });
 
+  it('addHost in one instance is reflected in a separate concurrent instance', () => {
+    // Regression: SessionDialog and SaveToHostTreeDialog each call useHostManager
+    // separately. Mutations in one must be visible in the other immediately,
+    // not just after a full app restart.
+    const a = renderHook(() => useHostManager());
+    const b = renderHook(() => useHostManager());
+
+    expect(a.result.current.tree).toHaveLength(0);
+    expect(b.result.current.tree).toHaveLength(0);
+
+    act(() => {
+      b.result.current.addHost(null, 'From B', { protocol: 'ssh', host: '10.0.0.9', port: 22 });
+    });
+
+    expect(b.result.current.tree).toHaveLength(1);
+    expect(a.result.current.tree).toHaveLength(1);
+    expect(a.result.current.tree[0].name).toBe('From B');
+    expect(a.result.current.tree[0].entry?.host).toBe('10.0.0.9');
+  });
+
   it('addFolder adds to a parent folder', () => {
     const { result } = renderHook(() => useHostManager());
     let parentId: string;

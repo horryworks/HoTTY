@@ -388,3 +388,29 @@
 .tab.is-ai-tab.hidden-tab:hover {
   filter: brightness(1.15);
 }
+
+/* ── Tab Context Menu ── */
+.tab-context-menu {
+  position: fixed;
+  background-color: var(--sidebar-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px;
+  min-width: 180px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px var(--modal-shadow);
+  font-family: var(--ui-font-family);
+}
+
+.tab-context-menu-item {
+  padding: 7px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: calc(var(--font-size-base) - 1px);
+  white-space: nowrap;
+}
+
+.tab-context-menu-item:hover {
+  background-color: var(--bg-primary);
+}

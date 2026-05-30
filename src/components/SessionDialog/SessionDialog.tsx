@@ -4,10 +4,12 @@ import { useHostManager, decryptBatch, getCachedCredential, clearDecryptedCache,
 import { isEncrypted } from '../../services/tauriService';
 import { tauriService } from '../../services/tauriService';
 import { HostTree } from '../HostTree/HostTree';
+import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { GcpInstancesPane, type VmSelection } from '../GcpInstancesPane/GcpInstancesPane';
 import { useSidebarLayoutStore } from '../../stores/sidebarLayoutStore';
 import { useResize } from '../../hooks/useResize';
 import { useSettingsStore } from '../../stores/settingsStore';
+import type { SessionRecord } from '../../hooks/useSessionManager';
 import type { HostTreeNode, HostEntry, ProtocolId, Encoding } from '../../types/appTypes';
 import type {
     SshConnectionConfig,
@@ -37,7 +39,20 @@ export interface ConnectSubmitPayload {
 interface SessionDialogProps {
     open: boolean;
     onClose: () => void;
-    onConnect: (payload: ConnectSubmitPayload) => void;
+    /**
+     * Initiates the connection attempt. The returned id (when provided) lets
+     * this dialog watch `sessions` for the resulting session transitioning to
+     * 'connected', so it can clear the New Connection draft only on a
+     * verified success — auth failures must preserve the form for retry.
+     */
+    onConnect: (payload: ConnectSubmitPayload) => string | null | void;
+    /**
+     * Sessions map from the host app. Used to observe the status of sessions
+     * initiated via `onConnect` so the dialog can react to 'connected'
+     * vs 'error'/'disconnected' transitions. Optional — when omitted the
+     * dialog falls back to never clearing on connect.
+     */
+    sessions?: Map<string, SessionRecord>;
 }
 
 const PROTOCOLS: { value: ProtocolId; label: string }[] = [
@@ -56,6 +71,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     open: isOpen,
     onClose,
     onConnect,
+    sessions,
 }) => {
     const hostManager = useHostManager();
     const settings = useSettingsStore();
@@ -201,7 +217,49 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         password: string;
         isJumpbox: boolean;
         jumpboxId: string;
+        privateKeyPath: string;
+        privateKeyPassphrase: string;
     } | null>(null);
+
+    // Per-modal-session draft for unsaved New Connection input. When the user
+    // navigates from New Connection to a saved host, the in-progress form is
+    // stashed here so they can come back to it via the banner × or pseudo-row.
+    // Cleared on a successful connect.
+    type NewConnectionDraft = {
+        displayName: string;
+        host: string;
+        port: string;
+        username: string;
+        password: string;
+        protocol: ProtocolId;
+        isJumpbox: boolean;
+        jumpboxId: string;
+        privateKeyPath: string;
+        privateKeyPassphrase: string;
+        serialPath: string;
+        baudRate: string;
+        dataBits: string;
+        parity: string;
+        stopBits: string;
+        flowControl: string;
+        selectedDistro: string;
+        encoding: Encoding;
+    };
+    const [newConnectionDraft, setNewConnectionDraft] = useState<NewConnectionDraft | null>(null);
+
+    // Session ids initiated from this dialog. The subscription effect below
+    // (placed after resetForm because the success branch uses it) watches the
+    // parent's `sessions` map and clears the form/draft only when one of these
+    // transitions to 'connected' — auth failures must NOT clear, so the user
+    // can fix credentials and retry.
+    const initiatedSessionsRef = useRef<Set<string>>(new Set());
+
+    const dispatchConnect = useCallback((payload: ConnectSubmitPayload) => {
+        const result = onConnect(payload);
+        if (typeof result === 'string' && result.length > 0) {
+            initiatedSessionsRef.current.add(result);
+        }
+    }, [onConnect]);
 
     // Available jumpbox hosts
     const jumpboxHosts = useMemo(() =>
@@ -213,7 +271,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     useEffect(() => {
         if (!isOpen) return;
         const handler = (e: KeyboardEvent) => {
-            if (document.querySelector('.host-edit-modal-overlay')) return;
+            if (document.querySelector('.host-edit-modal-overlay, .confirm-modal-overlay')) return;
             if (e.key === 'Escape') {
                 e.preventDefault();
                 onClose();
@@ -301,7 +359,29 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setPassword('');
         setIsJumpbox(false);
         setJumpboxId('');
+        setPrivateKeyPath('');
+        setPrivateKeyPassphrase('');
     }, []);
+
+    // Subscription effect: watches the parent's sessions map for any session
+    // initiated from this dialog transitioning to 'connected', then clears
+    // the form + draft. Failure paths ('error'/'disconnected') stop tracking
+    // but preserve user input so the next modal open is ready for retry.
+    useEffect(() => {
+        if (!sessions) return;
+        for (const id of Array.from(initiatedSessionsRef.current)) {
+            const status = sessions.get(id)?.status;
+            if (status === 'connected') {
+                /* eslint-disable react-hooks/set-state-in-effect */
+                setNewConnectionDraft(null);
+                resetForm();
+                /* eslint-enable react-hooks/set-state-in-effect */
+                initiatedSessionsRef.current.delete(id);
+            } else if (status === 'error' || status === 'disconnected') {
+                initiatedSessionsRef.current.delete(id);
+            }
+        }
+    }, [sessions, resetForm]);
 
     // --- Select a host from the tree ---
     const handleSelectHost = async (node: HostTreeNode) => {
@@ -315,6 +395,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             setPassword('');
             setIsJumpbox(false);
             setJumpboxId('');
+            setPrivateKeyPath('');
+            setPrivateKeyPassphrase('');
             return;
         }
 
@@ -335,10 +417,11 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
 
         let u = e.username ?? '';
         let p = e.password ?? '';
+        let kpp = e.privateKeyPassphrase ?? '';
 
         const cached = getCachedCredential(node.id);
 
-        const needsDecryption: (string | undefined)[] = [undefined, undefined];
+        const needsDecryption: (string | undefined)[] = [undefined, undefined, undefined];
         if (isEncrypted(u)) {
             if (cached?.username !== undefined) u = cached.username;
             else needsDecryption[0] = u;
@@ -347,12 +430,17 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             if (cached?.password !== undefined) p = cached.password;
             else needsDecryption[1] = p;
         }
+        if (isEncrypted(kpp)) {
+            if (cached?.privateKeyPassphrase !== undefined) kpp = cached.privateKeyPassphrase;
+            else needsDecryption[2] = kpp;
+        }
 
         if (needsDecryption.some(val => val !== undefined)) {
             setIsDecrypting(true);
-            const [decU, decP] = await decryptBatch(needsDecryption);
+            const [decU, decP, decKpp] = await decryptBatch(needsDecryption);
             if (decU !== undefined) u = decU;
             if (decP !== undefined) p = decP;
+            if (decKpp !== undefined) kpp = decKpp;
             setIsDecrypting(false);
         }
 
@@ -360,6 +448,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setPassword(p);
         setIsJumpbox(!!e.isJumpbox);
         setJumpboxId(e.jumpboxId ?? '');
+        setPrivateKeyPath(e.privateKeyPath ?? '');
+        setPrivateKeyPassphrase(kpp);
 
         setDisplayName(node.name);
         setOriginalState({
@@ -371,6 +461,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             password: p,
             isJumpbox: !!e.isJumpbox,
             jumpboxId: e.jumpboxId ?? '',
+            privateKeyPath: e.privateKeyPath ?? '',
+            privateKeyPassphrase: kpp,
         });
     };
 
@@ -388,13 +480,13 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 // would be churn.
                 autoStart: true,
             };
-            onConnect({
+            dispatchConnect({
                 displayName: `IAP ${sel.instance}`,
                 protocol: 'gcloud-iap',
                 config,
             });
         },
-        [onConnect],
+        [dispatchConnect],
     );
 
     // --- Double-click: connect immediately ---
@@ -418,15 +510,16 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             // host-tree "+" modal). An empty tab title is unfriendly.
             const fallbackName = `IAP ${e.iapTunnel.instance}`;
             const displayName = node.name?.trim() || fallbackName;
-            onConnect({ displayName, protocol: 'gcloud-iap', config });
+            dispatchConnect({ displayName, protocol: 'gcloud-iap', config });
             return;
         }
 
         let u = e.username ?? '';
         let p = e.password ?? '';
+        let kpp = e.privateKeyPassphrase ?? '';
 
         const cached = getCachedCredential(node.id);
-        const needsDecryption: (string | undefined)[] = [undefined, undefined];
+        const needsDecryption: (string | undefined)[] = [undefined, undefined, undefined];
         if (isEncrypted(u)) {
             if (cached?.username !== undefined) u = cached.username;
             else needsDecryption[0] = u;
@@ -435,10 +528,15 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             if (cached?.password !== undefined) p = cached.password;
             else needsDecryption[1] = p;
         }
+        if (isEncrypted(kpp)) {
+            if (cached?.privateKeyPassphrase !== undefined) kpp = cached.privateKeyPassphrase;
+            else needsDecryption[2] = kpp;
+        }
         if (needsDecryption.some(val => val !== undefined)) {
-            const [decU, decP] = await decryptBatch(needsDecryption);
+            const [decU, decP, decKpp] = await decryptBatch(needsDecryption);
             if (decU !== undefined) u = decU;
             if (decP !== undefined) p = decP;
+            if (decKpp !== undefined) kpp = decKpp;
         }
 
         const sshKeepAlive = settings.sshKeepAliveEnabled ? settings.sshKeepAliveInterval : 0;
@@ -453,6 +551,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 port: e.port,
                 username: u,
                 password: p || undefined,
+                privateKeyPath: e.privateKeyPath || undefined,
+                privateKeyPassphrase: kpp || undefined,
                 encoding: globalEncoding,
                 keepaliveIntervalSecs: sshKeepAlive,
                 connectTimeoutSecs: sshConnectTimeout,
@@ -470,8 +570,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             };
             payload = { displayName: node.name, protocol: 'telnet', config };
         }
-        onConnect(payload);
-    }, [onConnect, settings.sshKeepAliveEnabled, settings.sshKeepAliveInterval, settings.telnetKeepAliveEnabled, settings.telnetKeepAliveInterval, settings.sshConnectTimeoutSecs, settings.telnetConnectTimeoutSecs]);
+        dispatchConnect(payload);
+    }, [dispatchConnect, settings.sshKeepAliveEnabled, settings.sshKeepAliveInterval, settings.telnetKeepAliveEnabled, settings.telnetKeepAliveInterval, settings.sshConnectTimeoutSecs, settings.telnetConnectTimeoutSecs]);
 
     // --- Dirty check ---
     const isDirty = originalState !== null && (
@@ -482,8 +582,102 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         originalState.username !== username ||
         originalState.password !== password ||
         originalState.isJumpbox !== isJumpbox ||
-        originalState.jumpboxId !== jumpboxId
+        originalState.jumpboxId !== jumpboxId ||
+        originalState.privateKeyPath !== privateKeyPath ||
+        originalState.privateKeyPassphrase !== privateKeyPassphrase
     );
+
+    // When no host is selected, dirty means the user has typed something into
+    // the main connection fields. Used to gate the discard-confirmation when
+    // switching to a different target.
+    const hasUnselectedFieldFilled = !!(
+        displayName.trim() ||
+        host.trim() ||
+        username.trim() ||
+        password ||
+        jumpboxId ||
+        isJumpbox ||
+        privateKeyPath.trim() ||
+        privateKeyPassphrase
+    );
+
+    // --- Switch-target flow (banner ×, tree pseudo-row, other-host click) ---
+    type SwitchTarget = { kind: 'new' } | { kind: 'host'; node: HostTreeNode };
+    const [pendingSwitch, setPendingSwitch] = useState<SwitchTarget | null>(null);
+
+    const captureDraft = (): NewConnectionDraft => ({
+        displayName, host, port, username, password, protocol,
+        isJumpbox, jumpboxId, privateKeyPath, privateKeyPassphrase,
+        serialPath, baudRate, dataBits, parity, stopBits, flowControl,
+        selectedDistro, encoding,
+    });
+
+    const restoreDraft = (draft: NewConnectionDraft) => {
+        setSelectedHostId(null);
+        setOriginalState(null);
+        setDisplayName(draft.displayName);
+        setHost(draft.host);
+        setPort(draft.port);
+        setUsername(draft.username);
+        setPassword(draft.password);
+        setProtocol(draft.protocol);
+        setIsJumpbox(draft.isJumpbox);
+        setJumpboxId(draft.jumpboxId);
+        setPrivateKeyPath(draft.privateKeyPath);
+        setPrivateKeyPassphrase(draft.privateKeyPassphrase);
+        setSerialPath(draft.serialPath);
+        setBaudRate(draft.baudRate);
+        setDataBits(draft.dataBits);
+        setParity(draft.parity);
+        setStopBits(draft.stopBits);
+        setFlowControl(draft.flowControl);
+        setSelectedDistro(draft.selectedDistro);
+        setEncoding(draft.encoding);
+    };
+
+    const applySwitch = (target: SwitchTarget) => {
+        const leavingNew = originalState === null;
+        const goingNew = target.kind === 'new';
+
+        // Stash the unsaved New Connection input before navigating away so the
+        // user can recover it via the banner × / pseudo-row later.
+        if (leavingNew && !goingNew && hasUnselectedFieldFilled) {
+            setNewConnectionDraft(captureDraft());
+        }
+
+        if (target.kind === 'new') {
+            if (newConnectionDraft) {
+                restoreDraft(newConnectionDraft);
+                setNewConnectionDraft(null);
+            } else {
+                resetForm();
+            }
+        } else {
+            void handleSelectHost(target.node);
+        }
+    };
+
+    const requestSwitchTarget = (target: SwitchTarget) => {
+        // Selecting the already-selected host is a no-op; don't prompt.
+        if (target.kind === 'host' && target.node.id === selectedHostId) {
+            applySwitch(target);
+            return;
+        }
+        // Already in New Connection mode and there's no draft to restore — no-op.
+        if (target.kind === 'new' && selectedHostId === null) {
+            return;
+        }
+        // Only confirm when editing a saved host with unsaved changes. New
+        // Connection input is preserved via the draft, so no prompt is needed.
+        if (originalState !== null && isDirty) {
+            setPendingSwitch(target);
+        } else {
+            applySwitch(target);
+        }
+    };
+
+    const handleHostTreeSelect = (node: HostTreeNode) => requestSwitchTarget({ kind: 'host', node });
+    const handleNewConnectionRequest = () => requestSwitchTarget({ kind: 'new' });
 
     // --- Save changes to host entry ---
     const handleSave = async (e: React.MouseEvent) => {
@@ -493,10 +687,11 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
 
         let finalU = username;
         let finalP = password;
+        let finalKpp = privateKeyPassphrase;
 
-        if (isEncrypted(finalU) || isEncrypted(finalP)) {
+        if (isEncrypted(finalU) || isEncrypted(finalP) || isEncrypted(finalKpp)) {
             const cached = getCachedCredential(selectedHostId);
-            const needsDecryption = [undefined, undefined] as (string | undefined)[];
+            const needsDecryption = [undefined, undefined, undefined] as (string | undefined)[];
             if (isEncrypted(finalU)) {
                 if (cached?.username !== undefined) finalU = cached.username;
                 else needsDecryption[0] = finalU;
@@ -505,11 +700,16 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 if (cached?.password !== undefined) finalP = cached.password;
                 else needsDecryption[1] = finalP;
             }
+            if (isEncrypted(finalKpp)) {
+                if (cached?.privateKeyPassphrase !== undefined) finalKpp = cached.privateKeyPassphrase;
+                else needsDecryption[2] = finalKpp;
+            }
             if (needsDecryption.some(val => val !== undefined)) {
                 setIsDecrypting(true);
-                const [decU, decP] = await decryptBatch(needsDecryption);
+                const [decU, decP, decKpp] = await decryptBatch(needsDecryption);
                 if (decU !== undefined) { finalU = decU; setUsername(decU); }
                 if (decP !== undefined) { finalP = decP; setPassword(decP); }
+                if (decKpp !== undefined) { finalKpp = decKpp; setPrivateKeyPassphrase(decKpp); }
                 setIsDecrypting(false);
             }
         }
@@ -523,16 +723,21 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             password: finalP,
             isJumpbox,
             jumpboxId,
+            privateKeyPath,
+            privateKeyPassphrase: finalKpp,
         });
 
+        const isSsh = protocol === 'ssh';
         const entry: HostEntry = {
             protocol: protocol as 'ssh' | 'telnet',
             host,
             port: parseInt(port),
-            username: (protocol === 'ssh' || protocol === 'telnet') ? finalU : undefined,
-            password: (protocol === 'ssh' || protocol === 'telnet') ? finalP : undefined,
-            isJumpbox: protocol === 'ssh' ? (isJumpbox || undefined) : undefined,
+            username: (isSsh || protocol === 'telnet') ? finalU : undefined,
+            password: (isSsh || protocol === 'telnet') ? finalP : undefined,
+            isJumpbox: isSsh ? (isJumpbox || undefined) : undefined,
             jumpboxId: jumpboxId || undefined,
+            privateKeyPath: isSsh ? (privateKeyPath || undefined) : undefined,
+            privateKeyPassphrase: isSsh ? (finalKpp || undefined) : undefined,
         };
 
         hostManager.editNode(selectedHostId, { name: displayName, entry });
@@ -592,14 +797,17 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
 
         // Persist credential changes back to the selected tree node
         if (selectedHostId && (protocol === 'ssh' || protocol === 'telnet')) {
+            const isSsh = protocol === 'ssh';
             const entry: HostEntry = {
                 protocol: protocol as 'ssh' | 'telnet',
                 host,
                 port: parseInt(port),
                 username: finalU,
                 password: finalP,
-                isJumpbox: protocol === 'ssh' ? (isJumpbox || undefined) : undefined,
+                isJumpbox: isSsh ? (isJumpbox || undefined) : undefined,
                 jumpboxId: jumpboxId || undefined,
+                privateKeyPath: isSsh ? (privateKeyPath || undefined) : undefined,
+                privateKeyPassphrase: isSsh ? (privateKeyPassphrase || undefined) : undefined,
             };
             const patchTree = (nodes: HostTreeNode[], id: string): HostTreeNode[] =>
                 nodes.map(n => {
@@ -652,7 +860,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     keepaliveIntervalSecs: sshKeepAlive,
                     connectTimeoutSecs: sshConnectTimeout,
                 };
-                onConnect({ displayName: buildName(), protocol, config });
+                dispatchConnect({ displayName: buildName(), protocol, config });
                 break;
             }
             case 'telnet': {
@@ -665,7 +873,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     keepaliveIntervalSecs: telnetKeepAlive,
                     connectTimeoutSecs: telnetConnectTimeout,
                 };
-                onConnect({ displayName: buildName(), protocol, config });
+                dispatchConnect({ displayName: buildName(), protocol, config });
                 break;
             }
             case 'serial': {
@@ -678,7 +886,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     flowControl,
                     encoding,
                 };
-                onConnect({ displayName: buildName(), protocol, config });
+                dispatchConnect({ displayName: buildName(), protocol, config });
                 break;
             }
             case 'wsl': {
@@ -686,7 +894,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     distribution: selectedDistro,
                     encoding,
                 };
-                onConnect({ displayName: buildName(), protocol, config });
+                dispatchConnect({ displayName: buildName(), protocol, config });
                 break;
             }
             case 'cmd':
@@ -697,10 +905,16 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     shellPath: protocol === 'git-bash' && gitBashPath ? gitBashPath : undefined,
                     encoding,
                 };
-                onConnect({ displayName: buildName(), protocol, config });
+                dispatchConnect({ displayName: buildName(), protocol, config });
                 break;
             }
         }
+
+        // Form values intentionally persist across modal close — auth
+        // success/failure is reported asynchronously by the backend, so the
+        // form stays around for retry. The New Connection draft is cleared
+        // separately by the sessions subscription effect above when a session
+        // initiated here transitions to 'connected'.
     };
 
     const handleBrowseKey = async () => {
@@ -753,8 +967,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 }}
                 onClick={(e) => {
                     const target = e.target as HTMLElement;
-                    if (target.closest('.form-panel, .host-tree-row, .host-tree-toolbar, .context-menu, .host-edit-modal-overlay')) return;
-                    resetForm();
+                    if (target.closest('.form-panel, .host-tree-row, .host-tree-toolbar, .context-menu, .host-edit-modal-overlay, .confirm-modal-overlay')) return;
+                    handleNewConnectionRequest();
                 }}
             >
                 {/* Drag handle */}
@@ -798,7 +1012,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                     <HostTree
                                         tree={hostManager.tree}
                                         selectedId={selectedHostId}
-                                        onSelect={handleSelectHost}
+                                        onSelect={handleHostTreeSelect}
+                                        onNewConnection={handleNewConnectionRequest}
                                         onDoubleClickHost={handleDoubleClickHost}
                                         onAddFolder={hostManager.addFolder}
                                         onAddHost={hostManager.addHost}
@@ -811,6 +1026,27 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 </div>
                                 <div className="panel-divider" onMouseDown={handlePanelDividerMouseDownWrapped} />
                                 <div className="form-panel">
+                        <div className="form-status-banner" aria-live="polite">
+                            {selectedHostId === null ? (
+                                <span className="banner-new">
+                                    <span aria-hidden="true">{'\u{1F195} '}</span>New Connection
+                                </span>
+                            ) : (
+                                <>
+                                    <span className="banner-editing">
+                                        <span aria-hidden="true">{'\u{1F4DD} '}</span>
+                                        Editing: <span className="banner-editing-name">{displayName || '(unnamed)'}</span>
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className="banner-clear-btn"
+                                        onClick={handleNewConnectionRequest}
+                                        title="Start a new connection"
+                                        aria-label="Clear form and start new connection"
+                                    >{'✕'}</button>
+                                </>
+                            )}
+                        </div>
                         <form ref={formRef} onSubmit={handleSubmit}>
                             <fieldset disabled={isDecrypting} style={{ border: 'none', padding: 0, margin: 0 }}>
                                 {/* Display Name (only when a host is selected) */}
@@ -1110,6 +1346,20 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
 
                 {/* Resize handle */}
                 <div className="dialog-resize-handle" onMouseDown={handleDialogResizeMouseDown} />
+
+                {pendingSwitch && (
+                    <ConfirmModal
+                        title="Discard changes?"
+                        message="You have unsaved changes in this form. Switching will discard them."
+                        confirmLabel="Discard"
+                        onConfirm={() => {
+                            const target = pendingSwitch;
+                            setPendingSwitch(null);
+                            applySwitch(target);
+                        }}
+                        onCancel={() => setPendingSwitch(null)}
+                    />
+                )}
             </div>
         </div>
     );

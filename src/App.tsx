@@ -14,6 +14,7 @@ import { PingMonitorPane } from './components/PingMonitorPane/PingMonitorPane';
 import { AIChatPane } from './components/AIChatPane/AIChatPane';
 import { AskAiModal } from './components/AskAiModal/AskAiModal';
 import { SessionDialog, type ConnectSubmitPayload } from './components/SessionDialog/SessionDialog';
+import { SaveToHostTreeDialog } from './components/SaveToHostTreeDialog/SaveToHostTreeDialog';
 import { SettingsModal } from './components/SettingsModal/SettingsModal';
 import { CustomThemeCreator } from './components/CustomThemeCreator/CustomThemeCreator';
 import { HelpModal } from './components/HelpModal/HelpModal';
@@ -387,6 +388,9 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [customThemeOpen, setCustomThemeOpen] = useState(false);
+  const [saveToTreeSessionId, setSaveToTreeSessionId] = useState<string | null>(null);
+
+  const saveToTreeSession = saveToTreeSessionId ? sessions.get(saveToTreeSessionId) : undefined;
 
   const { themesData, deleteTheme } = useThemes();
 
@@ -493,14 +497,17 @@ function App() {
 
   const handleNewConnectionClick = () => setConnectOpen(true);
 
-  const handleConnectSubmit = (payload: ConnectSubmitPayload) => {
+  const handleConnectSubmit = (payload: ConnectSubmitPayload): string => {
     setConnectOpen(false);
     // openSession returns the id synchronously; the connect attempt runs in the
     // background. Adding the tab to the pane store now makes the connecting
     // state visible immediately, so the user gets feedback while the backend
-    // negotiates the connection.
+    // negotiates the connection. The id is returned so SessionDialog can
+    // watch the resulting session and clear the New Connection draft only on
+    // a verified 'connected' status (auth failures preserve the form).
     const id = openSession(payload);
     addSessionToStore(id);
+    return id;
   };
 
   const handleSelectTab = (id: string) => {
@@ -854,6 +861,7 @@ function App() {
             onNew={handleNewConnectionClick}
             onReorder={reorderSessionInStore}
             onToggleWatch={toggleWatch}
+            onSaveToHostTree={(id) => setSaveToTreeSessionId(id)}
             onNewLogViewer={enabledFeatures['log-viewer'] ? () => handleNewFeaturePane('log-viewer') : undefined}
             onNewPingMonitor={enabledFeatures['ping-monitor'] ? () => handleNewFeaturePane('ping-monitor') : undefined}
             onNewTextEditor={enabledFeatures['text-editor'] ? () => handleNewFeaturePane('text-editor') : undefined}
@@ -896,6 +904,14 @@ function App() {
         open={connectOpen}
         onClose={() => setConnectOpen(false)}
         onConnect={handleConnectSubmit}
+        sessions={sessions}
+      />
+      <SaveToHostTreeDialog
+        open={saveToTreeSessionId !== null}
+        initialName={saveToTreeSession?.displayName ?? ''}
+        protocol={saveToTreeSession?.protocol ?? null}
+        config={saveToTreeSession?.connectionConfig}
+        onClose={() => setSaveToTreeSessionId(null)}
       />
       <SettingsModal
         open={settingsOpen}

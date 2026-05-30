@@ -14,6 +14,7 @@ use crate::services::ai::ai_provider::{
 };
 use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
 use crate::services::dpapi;
+use crate::services::path_safety::is_unc_path;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -908,6 +909,11 @@ impl AIProvider for VertexAIProvider {
             }
             "service_account" => {
                 if key_file_path.is_empty() {
+                    emit_auth_result(app, false);
+                    return Ok(false);
+                }
+                if is_unc_path(key_file_path) {
+                    log::warn!("[vertexai] Rejected UNC service account key path");
                     emit_auth_result(app, false);
                     return Ok(false);
                 }

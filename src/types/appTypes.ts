@@ -9,7 +9,7 @@ export type SessionStatus = 'connected' | 'disconnected';
 
 export type SessionRecordStatus = SessionStatus | 'connecting' | 'error';
 
-export interface BaseConnectionConfig {
+interface BaseConnectionConfig {
   host: string;
   port: number;
   username?: string;
@@ -319,6 +319,8 @@ export interface HostEntry {
   isJumpbox?: boolean;
   jumpboxId?: string;
   iapTunnel?: IapTunnelEntry;
+  privateKeyPath?: string;
+  privateKeyPassphrase?: string;
 }
 
 export interface HostTreeNode {

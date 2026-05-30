@@ -734,4 +734,4 @@ export function GcpInstancesPane({
 }
 
 export type { VmSelection };
-export { STATUS_INITIAL_DELAY_MS, STATUS_POLL_INTERVAL_MS, STATUS_POLL_MAX_MS };
+export { STATUS_INITIAL_DELAY_MS, STATUS_POLL_INTERVAL_MS };

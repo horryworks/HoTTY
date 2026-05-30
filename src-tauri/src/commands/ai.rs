@@ -7,7 +7,7 @@ use tauri::{AppHandle, Manager, State};
 use tokio::sync::Mutex;
 
 use crate::services::ai::{AIService, AuthStatus, ModelInfo};
-use crate::services::path_safety::is_sensitive_path;
+use crate::services::path_safety::{is_sensitive_path, is_unc_path};
 
 /// Managed state holding the AI service behind an async-aware mutex.
 pub struct AIServiceState {
@@ -60,6 +60,12 @@ async fn validate_service_account_key(
         .unwrap_or("");
     if key_file_path.is_empty() {
         return Err("service account key file path is required".into());
+    }
+    // Reject UNC paths before canonicalize(): on Windows, canonicalize() on a
+    // UNC path performs SMB resolution (NTLMv2 hash leak) before the approved-
+    // set lookup can reject it.
+    if is_unc_path(key_file_path) {
+        return Err("service account key file path cannot be a UNC/network path".into());
     }
     let resolved = resolve_path(key_file_path)?;
     if is_sensitive_path(&resolved) {
@@ -359,5 +365,27 @@ mod tests {
         assert!(validate_service_account_key(&creds, &approved).await.is_ok());
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn validate_service_account_key_rejects_unc_path() {
+        let approved = ApprovedServiceAccountKeys::new();
+        let creds = serde_json::json!({
+            "authType": "service_account",
+            "keyFilePath": r"\\attacker\share\key.json",
+        });
+        let err = validate_service_account_key(&creds, &approved)
+            .await
+            .unwrap_err();
+        assert!(err.contains("UNC"));
+
+        let creds = serde_json::json!({
+            "authType": "service_account",
+            "keyFilePath": "//attacker/share/key.json",
+        });
+        let err = validate_service_account_key(&creds, &approved)
+            .await
+            .unwrap_err();
+        assert!(err.contains("UNC"));
     }
 }

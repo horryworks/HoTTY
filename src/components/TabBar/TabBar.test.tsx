@@ -293,6 +293,107 @@ describe('TabBar', () => {
     expect(tab?.classList.contains('error')).toBe(true);
     expect(tab?.classList.contains('connecting')).toBe(false);
   });
+
+  // --- Save to Host Tree context menu ---
+
+  it('right-click on SSH session tab opens "Save to Host Tree…" menu', () => {
+    const onSaveToHostTree = vi.fn();
+    const items = [makeTabItem('s-1', { protocol: 'ssh' })];
+    render(
+      <TabBar
+        {...defaultProps}
+        tabItems={items}
+        visibleTabIds={['s-1']}
+        onSaveToHostTree={onSaveToHostTree}
+      />,
+    );
+    fireEvent.contextMenu(screen.getByText('Session s-1'));
+    expect(screen.getByText('Save to Host Tree…')).toBeTruthy();
+  });
+
+  it('right-click on Telnet session tab opens the menu', () => {
+    const items = [makeTabItem('s-1', { protocol: 'telnet' })];
+    render(
+      <TabBar
+        {...defaultProps}
+        tabItems={items}
+        visibleTabIds={['s-1']}
+        onSaveToHostTree={() => {}}
+      />,
+    );
+    fireEvent.contextMenu(screen.getByText('Session s-1'));
+    expect(screen.getByText('Save to Host Tree…')).toBeTruthy();
+  });
+
+  it('right-click on non-SSH/Telnet session tab does NOT open the menu', () => {
+    const items = [makeTabItem('s-1', { protocol: 'serial' })];
+    render(
+      <TabBar
+        {...defaultProps}
+        tabItems={items}
+        visibleTabIds={['s-1']}
+        onSaveToHostTree={() => {}}
+      />,
+    );
+    fireEvent.contextMenu(screen.getByText('Session s-1'));
+    expect(screen.queryByText('Save to Host Tree…')).toBeNull();
+  });
+
+  it('right-click on feature tab does NOT open the menu', () => {
+    const items: TabItem[] = [
+      makeTabItem('lv-1', { kind: 'feature', displayName: 'Log Viewer', featureType: 'log-viewer' }),
+    ];
+    render(
+      <TabBar
+        {...defaultProps}
+        tabItems={items}
+        visibleTabIds={['lv-1']}
+        onSaveToHostTree={() => {}}
+      />,
+    );
+    fireEvent.contextMenu(screen.getByText('Log Viewer'));
+    expect(screen.queryByText('Save to Host Tree…')).toBeNull();
+  });
+
+  it('right-click is a no-op when onSaveToHostTree is not provided', () => {
+    const items = [makeTabItem('s-1', { protocol: 'ssh' })];
+    render(<TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} />);
+    fireEvent.contextMenu(screen.getByText('Session s-1'));
+    expect(screen.queryByText('Save to Host Tree…')).toBeNull();
+  });
+
+  it('clicking the menu item calls onSaveToHostTree and closes the menu', () => {
+    const onSaveToHostTree = vi.fn();
+    const items = [makeTabItem('s-1', { protocol: 'ssh' })];
+    render(
+      <TabBar
+        {...defaultProps}
+        tabItems={items}
+        visibleTabIds={['s-1']}
+        onSaveToHostTree={onSaveToHostTree}
+      />,
+    );
+    fireEvent.contextMenu(screen.getByText('Session s-1'));
+    fireEvent.click(screen.getByText('Save to Host Tree…'));
+    expect(onSaveToHostTree).toHaveBeenCalledWith('s-1');
+    expect(screen.queryByText('Save to Host Tree…')).toBeNull();
+  });
+
+  it('Escape key closes the context menu', () => {
+    const items = [makeTabItem('s-1', { protocol: 'ssh' })];
+    render(
+      <TabBar
+        {...defaultProps}
+        tabItems={items}
+        visibleTabIds={['s-1']}
+        onSaveToHostTree={() => {}}
+      />,
+    );
+    fireEvent.contextMenu(screen.getByText('Session s-1'));
+    expect(screen.getByText('Save to Host Tree…')).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByText('Save to Host Tree…')).toBeNull();
+  });
 });
 
 describe('buildTabItems', () => {
