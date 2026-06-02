@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { flattenHosts, getJumpboxReferences, useHostManager } from './useHostManager';
+import { flattenHosts, getJumpboxReferences, getCachedCredential, useHostManager } from './useHostManager';
 import { tauriService } from '../services/tauriService';
 import type { HostTreeNode } from '../types/appTypes';
 
@@ -155,6 +155,19 @@ describe('useHostManager', () => {
     const hosts = flattenHosts(result.current.tree);
     const renamed = hosts.find(h => h.id === 'host-1');
     expect(renamed?.name).toBe('Renamed Server');
+  });
+
+  it('editNode caches an edited plaintext passphrase', () => {
+    localStorage.setItem('hotty_host_tree', JSON.stringify(sampleTree));
+    const { result } = renderHook(() => useHostManager());
+    act(() => {
+      result.current.editNode('host-1', {
+        entry: { protocol: 'ssh', host: '10.0.0.1', port: 22, privateKeyPassphrase: 'secret-pass' },
+      });
+    });
+    // Regression guard: editNode previously cached username/password but not the
+    // passphrase, so a freshly-edited passphrase could be served stale.
+    expect(getCachedCredential('host-1')?.privateKeyPassphrase).toBe('secret-pass');
   });
 
   it('deleteNode removes a node', () => {

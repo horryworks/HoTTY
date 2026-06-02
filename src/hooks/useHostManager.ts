@@ -34,10 +34,17 @@ function generateId(): string {
 // ── DPAPI batch helpers ──
 
 /**
- * Encrypts an array of credential strings via the Tauri backend (Windows DPAPI).
- * Handles undefined values by filtering them out and mapping results back.
+ * Run a defined-only batch transform over `values` via the given backend RPC:
+ * filter out `undefined` slots, send the rest to `rpc`, and splice the results
+ * back into their original positions. Shared by encrypt/decrypt (which were
+ * byte-identical apart from the RPC and the log label) so the index-mapping
+ * logic and its empty-input guards live in one place.
  */
-async function encryptBatch(values: (string | undefined)[]): Promise<(string | undefined)[]> {
+async function mapDefinedBatch(
+    values: (string | undefined)[],
+    rpc: (defined: string[]) => Promise<string[]>,
+    label: string,
+): Promise<(string | undefined)[]> {
     if (values.length === 0) return values;
 
     const indices: number[] = [];
@@ -52,47 +59,26 @@ async function encryptBatch(values: (string | undefined)[]): Promise<(string | u
     if (filtered.length === 0) return values;
 
     try {
-        const encrypted = await tauriService.dpapiEncryptBatch(filtered);
+        const mapped = await rpc(filtered);
         const result: (string | undefined)[] = [...values];
         for (let i = 0; i < indices.length; i++) {
-            result[indices[i]] = encrypted[i];
+            result[indices[i]] = mapped[i];
         }
         return result;
     } catch (err) {
-        logError('HostManager', 'Failed to batch encrypt credentials', err);
+        logError('HostManager', `Failed to batch ${label} credentials`, err);
         return values;
     }
 }
 
-/**
- * Decrypts an array of credential strings via the Tauri backend (Windows DPAPI).
- * Handles undefined values by filtering them out and mapping results back.
- */
+/** Encrypt credential strings via the Tauri backend (Windows DPAPI). */
+async function encryptBatch(values: (string | undefined)[]): Promise<(string | undefined)[]> {
+    return mapDefinedBatch(values, (v) => tauriService.dpapiEncryptBatch(v), 'encrypt');
+}
+
+/** Decrypt credential strings via the Tauri backend (Windows DPAPI). */
 export async function decryptBatch(values: (string | undefined)[]): Promise<(string | undefined)[]> {
-    if (values.length === 0) return values;
-
-    const indices: number[] = [];
-    const filtered: string[] = [];
-    for (let i = 0; i < values.length; i++) {
-        if (values[i] !== undefined) {
-            indices.push(i);
-            filtered.push(values[i]!);
-        }
-    }
-
-    if (filtered.length === 0) return values;
-
-    try {
-        const decrypted = await tauriService.dpapiDecryptBatch(filtered);
-        const result: (string | undefined)[] = [...values];
-        for (let i = 0; i < indices.length; i++) {
-            result[indices[i]] = decrypted[i];
-        }
-        return result;
-    } catch (err) {
-        logError('HostManager', 'Failed to batch decrypt credentials', err);
-        return values;
-    }
+    return mapDefinedBatch(values, (v) => tauriService.dpapiDecryptBatch(v), 'decrypt');
 }
 
 // ── Serialization / Deserialization ──
@@ -509,6 +495,12 @@ export function useHostManager() {
             }
             if (patch.entry?.password && !isEncrypted(patch.entry.password)) {
                 setCachedCredential(id, { password: patch.entry.password });
+            }
+            // Cache an edited passphrase too — the cache treats all three
+            // credentials symmetrically elsewhere, so omitting it here meant a
+            // freshly-edited passphrase could be served stale on reconnect.
+            if (patch.entry?.privateKeyPassphrase && !isEncrypted(patch.entry.privateKeyPassphrase)) {
+                setCachedCredential(id, { privateKeyPassphrase: patch.entry.privateKeyPassphrase });
             }
         }
         persistEncryptedAsync(next);
