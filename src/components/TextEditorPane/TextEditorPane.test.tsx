@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { TextEditorPane } from './TextEditorPane';
+import { TextEditorPane, normalizeLineEnding } from './TextEditorPane';
 import { tauriService } from '../../services/tauriService';
 import { useSettingsStore } from '../../stores/settingsStore';
 
@@ -20,6 +20,26 @@ const mockWriteFile = vi.mocked(tauriService.textEditorWriteFile);
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe('normalizeLineEnding', () => {
+  it('converts LF content to CRLF', () => {
+    expect(normalizeLineEnding('a\nb\nc', 'CRLF')).toBe('a\r\nb\r\nc');
+  });
+
+  it('converts CRLF content to LF', () => {
+    expect(normalizeLineEnding('a\r\nb\r\nc', 'LF')).toBe('a\nb\nc');
+  });
+
+  it('does not double \\r on mixed input when targeting CRLF', () => {
+    // Mixed CRLF/LF must collapse to a single CRLF each (no \r\r\n).
+    expect(normalizeLineEnding('a\r\nb\nc', 'CRLF')).toBe('a\r\nb\r\nc');
+  });
+
+  it('is idempotent for already-correct endings', () => {
+    expect(normalizeLineEnding('a\r\nb', 'CRLF')).toBe('a\r\nb');
+    expect(normalizeLineEnding('a\nb', 'LF')).toBe('a\nb');
+  });
 });
 
 describe('TextEditorPane', () => {

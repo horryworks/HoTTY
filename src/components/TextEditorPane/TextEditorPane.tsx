@@ -27,6 +27,13 @@ function filenameFromPath(path: string): string {
   return path.split(sep).pop() || path;
 }
 
+/** Normalize a buffer's line endings to the tab's configured style. Goes via LF
+ *  first so mixed CRLF/LF input collapses cleanly (avoids \r\r\n doubling). */
+export function normalizeLineEnding(content: string, ending: 'CRLF' | 'LF'): string {
+  const lf = content.replace(/\r\n/g, '\n');
+  return ending === 'CRLF' ? lf.replace(/\n/g, '\r\n') : lf;
+}
+
 function makeTab(overrides?: Partial<TextEditorTab>): TextEditorTab {
   return {
     id: crypto.randomUUID(),
@@ -230,6 +237,25 @@ export function TextEditorPane({
 
   // Save a specific tab (used by the unsaved-changes flow where the closing
   // tab may not be the active one). Returns true on success.
+  // Normalize line endings, write to disk, and — only after a successful write —
+  // record the saved content + path. Shared by saveTab / handleSave /
+  // handleSaveAs so the line-ending rule and the "commit filePath only on
+  // success" invariant live in exactly one place. Returns true on success.
+  const writeTabToDisk = useCallback(
+    async (tab: TextEditorTab, savePath: string): Promise<boolean> => {
+      try {
+        const saveContent = normalizeLineEnding(tab.content, tab.lineEnding);
+        await tauriService.textEditorWriteFile(savePath, saveContent, tab.encoding);
+        updateTab(tab.id, { savedContent: tab.content, filePath: savePath });
+        return true;
+      } catch (err) {
+        logError('TextEditor', 'Failed to save file', err);
+        return false;
+      }
+    },
+    [updateTab],
+  );
+
   const saveTab = useCallback(
     async (tabId: string): Promise<boolean> => {
       const tab = tabs.find((t) => t.id === tabId);
@@ -239,25 +265,13 @@ export function TextEditorPane({
         savePath = await tauriService.textEditorSaveFile();
         if (!savePath) return false;
       }
-      try {
-        let saveContent = tab.content;
-        if (tab.lineEnding === 'CRLF') {
-          saveContent = tab.content.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
-        } else {
-          saveContent = tab.content.replace(/\r\n/g, '\n');
-        }
-        await tauriService.textEditorWriteFile(savePath, saveContent, tab.encoding);
-        updateTab(tabId, { savedContent: tab.content, filePath: savePath });
-        if (tabId === activeTabId) {
-          syncDisplayName({ ...tab, filePath: savePath });
-        }
-        return true;
-      } catch (err) {
-        logError('TextEditor', 'Failed to save file', err);
-        return false;
+      const ok = await writeTabToDisk(tab, savePath);
+      if (ok && tabId === activeTabId) {
+        syncDisplayName({ ...tab, filePath: savePath });
       }
+      return ok;
     },
-    [tabs, activeTabId, updateTab, syncDisplayName],
+    [tabs, activeTabId, writeTabToDisk, syncDisplayName],
   );
 
   const handleSaveConfirmSave = useCallback(async () => {
@@ -349,44 +363,18 @@ export function TextEditorPane({
     if (!savePath) {
       savePath = await tauriService.textEditorSaveFile();
       if (!savePath) return;
-      // Do NOT commit filePath here — only after a successful write. Setting it
-      // before the write meant a failed write left the tab pointing at a path
-      // that was never written (and looking "saved as" that file). The
-      // post-write updateTab below records it once the bytes actually land.
     }
-    try {
-      let saveContent = activeTab.content;
-      if (activeTab.lineEnding === 'CRLF') {
-        saveContent = activeTab.content.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
-      } else {
-        saveContent = activeTab.content.replace(/\r\n/g, '\n');
-      }
-      await tauriService.textEditorWriteFile(savePath, saveContent, activeTab.encoding);
-      updateTab(activeTabId, { savedContent: activeTab.content, filePath: savePath });
-      syncDisplayName({ ...activeTab, filePath: savePath });
-    } catch (err) {
-      logError('TextEditor', 'Failed to save file', err);
-    }
-  }, [activeTab, activeTabId, updateTab, syncDisplayName]);
+    const ok = await writeTabToDisk(activeTab, savePath);
+    if (ok) syncDisplayName({ ...activeTab, filePath: savePath });
+  }, [activeTab, writeTabToDisk, syncDisplayName]);
 
   const handleSaveAs = useCallback(async () => {
     setOpenMenu(null);
     const savePath = await tauriService.textEditorSaveFile(activeTab.filePath || undefined);
     if (!savePath) return;
-    try {
-      let saveContent = activeTab.content;
-      if (activeTab.lineEnding === 'CRLF') {
-        saveContent = activeTab.content.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
-      } else {
-        saveContent = activeTab.content.replace(/\r\n/g, '\n');
-      }
-      await tauriService.textEditorWriteFile(savePath, saveContent, activeTab.encoding);
-      updateTab(activeTabId, { savedContent: activeTab.content, filePath: savePath });
-      syncDisplayName({ ...activeTab, filePath: savePath });
-    } catch (err) {
-      logError('TextEditor', 'Failed to save file (Save As)', err);
-    }
-  }, [activeTab, activeTabId, updateTab, syncDisplayName]);
+    const ok = await writeTabToDisk(activeTab, savePath);
+    if (ok) syncDisplayName({ ...activeTab, filePath: savePath });
+  }, [activeTab, writeTabToDisk, syncDisplayName]);
 
   const handleCloseTab = useCallback(() => {
     setOpenMenu(null);
