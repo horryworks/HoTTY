@@ -5,7 +5,7 @@ import { sanitizeHtml } from '../../utils/htmlUtils';
 import { classifyCommand } from '../../utils/commandClassifier';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { calcAICost, formatAICost } from '../../constants/aiPricing';
-import { buildExecutionRules } from '../../constants/aiPrompts';
+import { buildExecutionRules, languageDirective, AUTO_LANGUAGE } from '../../constants/aiPrompts';
 import { AuthenticationPanel } from './AuthenticationPanel';
 import { VertexAIAuthPanel } from './VertexAIAuthPanel';
 import { OpenAIAuthPanel } from './OpenAIAuthPanel';
@@ -254,11 +254,15 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     selectedModelRef.current = selectedModel;
     const [selectedLanguage, setSelectedLanguage] = useState(() => {
         const saved = localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE);
-        if (saved) return saved;
+        // Migrate the legacy '日本語' value (which never matched the 'Japanese'
+        // <option>, leaving the select with no selected option) to the canonical
+        // option value.
+        if (saved) return saved === '日本語' ? 'Japanese' : saved;
         // First run: derive from the OS locale so a Japanese-locale user
         // doesn't have to switch from English manually every time they
-        // install on a new machine.
-        return navigator.language?.toLowerCase().startsWith('ja') ? '日本語' : 'English';
+        // install on a new machine. Must be a real <option> value ('Japanese',
+        // not '日本語') or the select renders with nothing selected.
+        return navigator.language?.toLowerCase().startsWith('ja') ? 'Japanese' : 'English';
     });
     const defaultExpertise = aiPersonas?.[0]?.label || 'General Assistant';
     const [selectedExpertise, setSelectedExpertise] = useState(chatState?.selectedExpertise || defaultExpertise);
@@ -439,7 +443,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         const selectedPersona = aiPersonas?.find(p => p.label === selectedExpertise);
         const basePrompt = selectedPersona?.systemPrompt || aiPersonas?.[0]?.systemPrompt || 'You are a helpful assistant.';
         const extraInstructions = buildExecutionRules();
-        const langInstruction = selectedLanguage !== 'English' ? ` You MUST answer in ${selectedLanguage}.` : '';
+        const langInstruction = languageDirective(selectedLanguage);
         const newInstruction = `${basePrompt}${extraInstructions}${langInstruction}`;
         setLocalSystemInstruction(newInstruction);
         onChatStateChange?.({ systemInstruction: newInstruction });
@@ -1363,7 +1367,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                                 }}
                                                 disabled={isStreaming}
                                             >
-                                                {['Auto', 'English', 'Japanese', 'Chinese', 'Korean', 'Spanish', 'French', 'German', 'Russian'].map(lang => (
+                                                {[AUTO_LANGUAGE, 'English', 'Japanese', 'Chinese', 'Korean', 'Spanish', 'French', 'German', 'Russian'].map(lang => (
                                                     <option key={lang} value={lang}>{lang}</option>
                                                 ))}
                                             </select>

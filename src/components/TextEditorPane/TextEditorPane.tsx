@@ -349,7 +349,10 @@ export function TextEditorPane({
     if (!savePath) {
       savePath = await tauriService.textEditorSaveFile();
       if (!savePath) return;
-      updateTab(activeTabId, { filePath: savePath });
+      // Do NOT commit filePath here — only after a successful write. Setting it
+      // before the write meant a failed write left the tab pointing at a path
+      // that was never written (and looking "saved as" that file). The
+      // post-write updateTab below records it once the bytes actually land.
     }
     try {
       let saveContent = activeTab.content;

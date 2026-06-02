@@ -3,7 +3,7 @@ import type { PersonaDefinition } from '../types/appTypes';
 import type { SessionRecord } from './useSessionManager';
 import type { FeaturePaneInfo } from '../utils/paneTypes';
 import { STORAGE_KEYS } from '../constants/storage';
-import { buildExecutionRules } from '../constants/aiPrompts';
+import { buildExecutionRules, languageDirective } from '../constants/aiPrompts';
 import { tauriService } from '../services/tauriService';
 
 // -- Types --
@@ -417,7 +417,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     let userPrompt = '';
 
     if (type === 'analyze-watch') {
-      systemInstruction = lang !== 'English' ? `${defaultPersona} You MUST answer in ${lang}.` : defaultPersona;
+      systemInstruction = `${defaultPersona}${languageDirective(lang)}`;
       userPrompt = `Please analyze the following terminal output and point out any errors, warnings, or findings of interest:\n\n${finalSelection}`;
     } else if (type === 'free-format') {
       setAskAiFreeFormatData({ selection: finalSelection });
@@ -425,13 +425,13 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     } else {
       const existingCommand = currentCommands.find(c => c.id === type);
       if (existingCommand) {
-        systemInstruction = lang !== 'English' ? `${defaultPersona} You MUST answer in ${lang}.` : defaultPersona;
+        systemInstruction = `${defaultPersona}${languageDirective(lang)}`;
         if (existingCommand.id === 'root-cause') {
-          systemInstruction = `You are an expert troubleshooter. ${defaultPersona} Answer in ${lang}.`;
+          systemInstruction = `You are an expert troubleshooter. ${defaultPersona}${languageDirective(lang)}`;
         }
         userPrompt = existingCommand.promptTemplate.replace('{selection}', finalSelection);
       } else {
-        systemInstruction = `${defaultPersona} Answer in ${lang}.`;
+        systemInstruction = `${defaultPersona}${languageDirective(lang)}`;
         userPrompt = `Please explain the following text:\n\n${finalSelection}`;
       }
     }
@@ -472,7 +472,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     const lang = localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE) || 'English';
     const expertiseLabel = chatState?.selectedExpertise;
     const basePrompt = resolvePersonaPrompt(expertiseLabel);
-    const systemInstruction = lang !== 'English' ? `${basePrompt} You MUST answer in ${lang}.` : basePrompt;
+    const systemInstruction = `${basePrompt}${languageDirective(lang)}`;
     const userPrompt = `${prompt}\n\n\`\`\`\n${selection}\n\`\`\``;
 
     updateAiChatStateRef.current(aiPaneId, { systemInstruction });

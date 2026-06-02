@@ -257,18 +257,25 @@ export const HostTree: React.FC<HostTreeProps> = ({
             return;
         }
 
+        const defaultPort = formProtocol === 'ssh' ? 22 : 23;
+        const port = Number.parseInt(formPort, 10) || defaultPort;
+
         if (existingNode) {
             if (mode === 'folder') {
                 onEditNode(existingNode.id, { name: formName });
             } else {
+                // Spread the existing entry first so fields this add/edit form
+                // does not surface — privateKeyPath, privateKeyPassphrase,
+                // iapTunnel — are preserved rather than silently dropped on
+                // save. The form fields then override only what they own.
                 const entry: HostEntry = {
+                    ...existingNode.entry,
                     protocol: formProtocol,
                     host: formHost,
-                    port: parseInt(formPort),
+                    port,
                     username: formUsername || undefined,
                     password: formPassword || undefined,
                     isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,
-                    jumpboxId: existingNode.entry?.jumpboxId,
                 };
                 onEditNode(existingNode.id, { name: formName, entry });
             }
@@ -279,7 +286,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 const entry: HostEntry = {
                     protocol: formProtocol,
                     host: formHost,
-                    port: parseInt(formPort),
+                    port,
                     username: formUsername || undefined,
                     password: formPassword || undefined,
                     isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,

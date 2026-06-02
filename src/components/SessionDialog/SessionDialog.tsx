@@ -775,9 +775,14 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
 
         let finalU = username;
         let finalP = password;
-        if (isEncrypted(finalU) || isEncrypted(finalP)) {
+        // Resolve the SSH key passphrase too — not just username/password.
+        // Omitting it meant an encrypted passphrase was handed to the backend
+        // verbatim, so key auth failed for any host whose passphrase was stored
+        // encrypted. Mirrors handleSave's three-credential resolution.
+        let finalKpp = privateKeyPassphrase;
+        if (isEncrypted(finalU) || isEncrypted(finalP) || isEncrypted(finalKpp)) {
             const cached = selectedHostId ? getCachedCredential(selectedHostId) : undefined;
-            const needsDecryption = [undefined, undefined] as (string | undefined)[];
+            const needsDecryption = [undefined, undefined, undefined] as (string | undefined)[];
             if (isEncrypted(finalU)) {
                 if (cached?.username !== undefined) finalU = cached.username;
                 else needsDecryption[0] = finalU;
@@ -786,11 +791,16 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 if (cached?.password !== undefined) finalP = cached.password;
                 else needsDecryption[1] = finalP;
             }
+            if (isEncrypted(finalKpp)) {
+                if (cached?.privateKeyPassphrase !== undefined) finalKpp = cached.privateKeyPassphrase;
+                else needsDecryption[2] = finalKpp;
+            }
             if (needsDecryption.some(val => val !== undefined)) {
                 setIsDecrypting(true);
-                const [decU, decP] = await decryptBatch(needsDecryption);
+                const [decU, decP, decKpp] = await decryptBatch(needsDecryption);
                 if (decU !== undefined) { finalU = decU; setUsername(decU); }
                 if (decP !== undefined) { finalP = decP; setPassword(decP); }
+                if (decKpp !== undefined) { finalKpp = decKpp; setPrivateKeyPassphrase(decKpp); }
                 setIsDecrypting(false);
             }
         }
@@ -807,7 +817,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 isJumpbox: isSsh ? (isJumpbox || undefined) : undefined,
                 jumpboxId: jumpboxId || undefined,
                 privateKeyPath: isSsh ? (privateKeyPath || undefined) : undefined,
-                privateKeyPassphrase: isSsh ? (privateKeyPassphrase || undefined) : undefined,
+                privateKeyPassphrase: isSsh ? (finalKpp || undefined) : undefined,
             };
             const patchTree = (nodes: HostTreeNode[], id: string): HostTreeNode[] =>
                 nodes.map(n => {
@@ -855,7 +865,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     username: finalU.trim(),
                     password: finalP || undefined,
                     privateKeyPath: privateKeyPath || undefined,
-                    privateKeyPassphrase: privateKeyPassphrase || undefined,
+                    privateKeyPassphrase: finalKpp || undefined,
                     encoding,
                     keepaliveIntervalSecs: sshKeepAlive,
                     connectTimeoutSecs: sshConnectTimeout,

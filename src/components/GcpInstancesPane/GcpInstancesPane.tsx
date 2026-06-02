@@ -353,7 +353,15 @@ export function GcpInstancesPane({
       await actionPromise;
 
       if (ctrl.aborted) {
-        activeActionsRef.current.delete(key);
+        // Superseded by a newer tracker for this VM (or the pane is unmounting).
+        // The successor re-initializes this key's pending/live/error maps on
+        // start, so we must NOT clear them here — that would wipe the
+        // successor's optimistic status. Only retract our own registration, and
+        // only if a successor hasn't already replaced it (otherwise we'd delete
+        // the successor's ctrl and break its supersede-detection).
+        if (activeActionsRef.current.get(key) === ctrl) {
+          activeActionsRef.current.delete(key);
+        }
         return;
       }
 
@@ -375,21 +383,27 @@ export function GcpInstancesPane({
         }
       }
 
-      if (finalStatus) {
-        updateInstanceStatusInSnapshot(sel, finalStatus);
+      // A tracker can lose ownership during the awaits above (actionPromise /
+      // the error re-probe) if the user re-clicked Start/Stop. Only commit the
+      // snapshot and retract this key's transient state while we're still the
+      // active owner — otherwise we'd clobber the successor's maps and write
+      // state for a VM whose newer action is mid-flight (or after unmount).
+      if (activeActionsRef.current.get(key) === ctrl) {
+        if (finalStatus) {
+          updateInstanceStatusInSnapshot(sel, finalStatus);
+        }
+        setPendingActions((p) => {
+          const n = new Map(p);
+          n.delete(key);
+          return n;
+        });
+        setLiveStatus((p) => {
+          const n = new Map(p);
+          n.delete(key);
+          return n;
+        });
+        activeActionsRef.current.delete(key);
       }
-
-      setPendingActions((p) => {
-        const n = new Map(p);
-        n.delete(key);
-        return n;
-      });
-      setLiveStatus((p) => {
-        const n = new Map(p);
-        n.delete(key);
-        return n;
-      });
-      activeActionsRef.current.delete(key);
     },
     [updateInstanceStatusInSnapshot],
   );
