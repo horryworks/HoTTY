@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use futures::StreamExt;
-use regex_lite::Regex;
 use serde_json::Value;
 use tauri::AppHandle;
 use tokio_util::sync::CancellationToken;
@@ -12,30 +11,17 @@ use crate::services::ai::ai_provider::{
     emit_auth_result, emit_chat_response, AIProvider, AuthStatus, AuthType, ChatResponseData,
     ModelInfo, TokenUsage,
 };
+use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
-use crate::services::dpapi;
+use crate::services::ai::validation::{is_valid_api_key, is_valid_model};
 
 // ---------------------------------------------------------------------------
 // Validation patterns
 // ---------------------------------------------------------------------------
 
-const VALID_API_KEY_PATTERN: &str = r"^[\x21-\x7E]{1,512}$";
-const VALID_MODEL_PATTERN: &str = r"^[a-zA-Z0-9]+([._-][a-zA-Z0-9]+)*$";
 const CONFIG_FILE_NAME: &str = "anthropic_config.json";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 const MAX_TOKENS: u32 = 8192;
-
-fn is_valid_api_key(key: &str) -> bool {
-    Regex::new(VALID_API_KEY_PATTERN)
-        .map(|re| re.is_match(key))
-        .unwrap_or(false)
-}
-
-fn is_valid_model(model: &str) -> bool {
-    Regex::new(VALID_MODEL_PATTERN)
-        .map(|re| re.is_match(model))
-        .unwrap_or(false)
-}
 
 // ---------------------------------------------------------------------------
 // Chat message type
@@ -110,38 +96,24 @@ impl AnthropicProvider {
         }
     }
 
-    fn config_path(&self) -> PathBuf {
-        self.app_data_dir.join(CONFIG_FILE_NAME)
+    fn store(&self) -> EncryptedConfigStore {
+        EncryptedConfigStore::new(&self.app_data_dir, CONFIG_FILE_NAME, "anthropic")
     }
 
     fn save_config(&self) -> Result<(), String> {
         let key = self.api_key.as_deref().ok_or("No API key to save")?;
-        let encrypted = dpapi::encrypt_string(key)?;
-        std::fs::write(self.config_path(), &encrypted)
-            .map_err(|e| format!("Failed to save config: {e}"))?;
-        log::debug!("[anthropic] Config saved");
-        Ok(())
+        self.store().save(key)
     }
 
     fn load_config(&self) -> Result<Option<String>, String> {
-        let path = self.config_path();
-        if !path.exists() {
-            return Ok(None);
+        match self.store().load()? {
+            Some(api_key) if is_valid_api_key(&api_key) => Ok(Some(api_key)),
+            _ => Ok(None),
         }
-        let encrypted = std::fs::read_to_string(&path)
-            .map_err(|e| format!("Failed to read config: {e}"))?;
-        let api_key = dpapi::decrypt_string(&encrypted)?;
-        if api_key.is_empty() || !is_valid_api_key(&api_key) {
-            return Ok(None);
-        }
-        Ok(Some(api_key))
     }
 
     fn delete_config(&self) {
-        let path = self.config_path();
-        if path.exists() {
-            let _ = std::fs::remove_file(&path);
-        }
+        self.store().delete();
     }
 }
 
@@ -198,7 +170,7 @@ impl AIProvider for AnthropicProvider {
         if let Err(e) = self.save_config() {
             log::error!(
                 "[anthropic] Failed to persist API key to {}: {e} — auth succeeded for this session but the key will not survive a restart",
-                self.config_path().display()
+                self.store().path().display()
             );
         }
         log::info!("[anthropic] Auth success");

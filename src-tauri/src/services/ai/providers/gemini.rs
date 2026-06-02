@@ -15,8 +15,8 @@ use crate::services::ai::ai_provider::{
     emit_auth_result, emit_chat_response, AIProvider, AuthStatus, AuthType, ChatResponseData,
     ModelInfo, TokenUsage,
 };
+use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
-use crate::services::dpapi;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -123,8 +123,8 @@ impl GeminiProvider {
         }
     }
 
-    fn config_path(&self) -> PathBuf {
-        self.app_data_dir.join(CONFIG_FILE_NAME)
+    fn store(&self) -> EncryptedConfigStore {
+        EncryptedConfigStore::new(&self.app_data_dir, CONFIG_FILE_NAME, "gemini")
     }
 
     fn save_token(&self) -> Result<(), String> {
@@ -144,25 +144,14 @@ impl GeminiProvider {
             "obtained_at": token_data.obtained_at,
         });
 
-        let encrypted = dpapi::encrypt_string(&payload.to_string())?;
-        std::fs::write(self.config_path(), &encrypted)
-            .map_err(|e| format!("Failed to save token: {e}"))?;
-        log::debug!("[gemini] Token saved");
-        Ok(())
+        self.store().save(&payload.to_string())
     }
 
     fn load_token(&mut self) -> Result<bool, String> {
-        let path = self.config_path();
-        if !path.exists() {
-            return Ok(false);
-        }
-
-        let encrypted =
-            std::fs::read_to_string(&path).map_err(|e| format!("Failed to read token: {e}"))?;
-        let decrypted = dpapi::decrypt_string(&encrypted)?;
-        if decrypted.is_empty() {
-            return Ok(false);
-        }
+        let decrypted = match self.store().load()? {
+            Some(d) => d,
+            None => return Ok(false),
+        };
 
         let raw: Value =
             serde_json::from_str(&decrypted).map_err(|e| format!("Invalid token JSON: {e}"))?;
@@ -265,10 +254,7 @@ impl GeminiProvider {
     }
 
     fn delete_config(&self) {
-        let path = self.config_path();
-        if path.exists() {
-            let _ = std::fs::remove_file(&path);
-        }
+        self.store().delete();
     }
 }
 

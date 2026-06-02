@@ -12,8 +12,8 @@ use crate::services::ai::ai_provider::{
     emit_auth_result, emit_chat_response, AIProvider, AuthStatus, AuthType, ChatResponseData,
     ModelInfo, TokenUsage,
 };
+use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
-use crate::services::dpapi;
 use crate::services::path_safety::is_unc_path;
 
 // ---------------------------------------------------------------------------
@@ -251,8 +251,8 @@ impl VertexAIProvider {
         }
     }
 
-    fn config_path(&self) -> PathBuf {
-        self.app_data_dir.join(CONFIG_FILE_NAME)
+    fn store(&self) -> EncryptedConfigStore {
+        EncryptedConfigStore::new(&self.app_data_dir, CONFIG_FILE_NAME, "vertexai")
     }
 
     fn get_adc_path() -> PathBuf {
@@ -299,31 +299,29 @@ impl VertexAIProvider {
             "refreshData": refresh_json,
         });
 
-        let encrypted = dpapi::encrypt_string(&payload.to_string())?;
-        std::fs::write(self.config_path(), &encrypted)
-            .map_err(|e| format!("Failed to save config: {e}"))?;
-        log::debug!("[vertexai] Config saved");
-        Ok(())
+        self.store().save(&payload.to_string())
     }
 
     fn load_config(&mut self) -> Result<bool, String> {
-        let path = self.config_path();
+        let store = self.store();
+        let path = store.path();
         if !path.exists() {
             return Ok(false);
         }
 
-        let meta = std::fs::metadata(&path).map_err(|e| format!("Failed to stat config: {e}"))?;
+        // Size guard before decrypting: a credential file this large is almost
+        // certainly corrupt/hostile. Kept here (not in the shared store) because
+        // it's specific to the structured Vertex config.
+        let meta = std::fs::metadata(path).map_err(|e| format!("Failed to stat config: {e}"))?;
         if meta.len() > CREDENTIAL_FILE_MAX_SIZE {
             log::warn!("[vertexai] Config file exceeds size limit");
             return Ok(false);
         }
 
-        let encrypted =
-            std::fs::read_to_string(&path).map_err(|e| format!("Failed to read config: {e}"))?;
-        let decrypted = dpapi::decrypt_string(&encrypted)?;
-        if decrypted.is_empty() {
-            return Ok(false);
-        }
+        let decrypted = match store.load()? {
+            Some(d) => d,
+            None => return Ok(false),
+        };
 
         let raw: Value =
             serde_json::from_str(&decrypted).map_err(|e| format!("Invalid config JSON: {e}"))?;
@@ -412,10 +410,7 @@ impl VertexAIProvider {
     }
 
     fn delete_config(&self) {
-        let path = self.config_path();
-        if path.exists() {
-            let _ = std::fs::remove_file(&path);
-        }
+        self.store().delete();
     }
 
     async fn refresh_token(&mut self) -> Option<String> {
@@ -987,7 +982,7 @@ impl AIProvider for VertexAIProvider {
         if let Err(e) = self.save_config() {
             log::error!(
                 "[vertexai] Failed to persist config to {}: {e} — auth succeeded for this session but won't survive a restart",
-                self.config_path().display()
+                self.store().path().display()
             );
         }
         log::info!(
