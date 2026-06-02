@@ -12,6 +12,8 @@ use tokio::process::Command;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
+use super::sensitive_env::sanitized_env;
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -260,6 +262,17 @@ async fn run_gcloud_with_timeout(args: &[&str], timeout_secs: u64) -> Result<Str
     {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    // Inherit a sanitized environment, matching gcloud_iap::build_gcloud_command.
+    // These auxiliary gcloud calls (IAM probe, instances list, status describe)
+    // previously inherited the full parent environment, while the tunnel path
+    // scrubbed credential-bearing vars — an inconsistent, security-relevant
+    // divergence. Keep both gcloud surfaces on one env policy. sanitized_env()
+    // preserves what gcloud needs (PATH, %APPDATA% for auth, its bundled python).
+    cmd.env_clear();
+    for (k, v) in sanitized_env() {
+        cmd.env(k, v);
     }
 
     let started = Instant::now();

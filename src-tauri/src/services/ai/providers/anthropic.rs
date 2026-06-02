@@ -47,6 +47,19 @@ struct ChatMessage {
     content: String,
 }
 
+/// Drop a trailing `user` message from a chat history. Called on hard errors
+/// (HTTP failure or mid-stream error) so the user/assistant alternation that
+/// Anthropic requires stays consistent for the next request — otherwise the
+/// failed turn's user message would linger and the retry would send two
+/// consecutive user messages and be rejected by the API.
+fn pop_trailing_user(history: Option<&mut Vec<ChatMessage>>) {
+    if let Some(h) = history {
+        if matches!(h.last(), Some(m) if m.role == "user") {
+            h.pop();
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Fallback models
 // ---------------------------------------------------------------------------
@@ -329,6 +342,9 @@ impl AIProvider for AnthropicProvider {
                 },
             );
             log::error!("[anthropic] {err_msg}");
+            // Drop the user message pushed before the request so the history
+            // stays consistent for retry (mirror vertexai's pop-on-error).
+            pop_trailing_user(self.chat_histories.get_mut(&sid));
             self.cancel_tokens.remove(&sid);
             return Ok(());
         }
@@ -339,6 +355,7 @@ impl AIProvider for AnthropicProvider {
         let mut current_event = String::new();
         let mut input_tokens: u32 = 0;
         let mut output_tokens: u32 = 0;
+        let mut stream_errored = false;
 
         loop {
             tokio::select! {
@@ -409,6 +426,7 @@ impl AIProvider for AnthropicProvider {
                                 content: "An error occurred while communicating with Anthropic. Please try again.".into(),
                                 usage_metadata: None,
                             });
+                            stream_errored = true;
                             break;
                         }
                         None => break,
@@ -417,12 +435,18 @@ impl AIProvider for AnthropicProvider {
             }
         }
 
-        // Always close out the assistant turn in chat_histories — even on
-        // cancel — to preserve the user/assistant alternation Anthropic
-        // requires. Without this, a cancelled turn would leave only the user
-        // message in history, and the next request would send two consecutive
-        // user messages and be rejected by the API.
-        if let Some(history) = self.chat_histories.get_mut(&sid) {
+        if stream_errored {
+            // Hard error mid-stream: drop the user message rather than commit a
+            // partial assistant turn. Committing a truncated/empty assistant
+            // message would leave the history in a state the API rejects (or
+            // resend a partial reply as context) on the next send.
+            pop_trailing_user(self.chat_histories.get_mut(&sid));
+        } else if let Some(history) = self.chat_histories.get_mut(&sid) {
+            // Normal completion or cancel: close out the assistant turn to
+            // preserve the alternation Anthropic requires. Without this, a
+            // cancelled turn would leave only the user message in history, and
+            // the next request would send two consecutive user messages and be
+            // rejected by the API.
             let content = if cancel_token.is_cancelled() {
                 if full_response.is_empty() {
                     "[cancelled before response]".to_string()
@@ -438,7 +462,7 @@ impl AIProvider for AnthropicProvider {
             });
         }
 
-        if !cancel_token.is_cancelled() {
+        if !cancel_token.is_cancelled() && !stream_errored {
             let usage_metadata = TokenUsage {
                 prompt_token_count: Some(input_tokens),
                 candidates_token_count: Some(output_tokens),
@@ -538,6 +562,25 @@ impl AIProvider for AnthropicProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pop_trailing_user_drops_only_trailing_user() {
+        let mut h = vec![
+            ChatMessage { role: "user".into(), content: "q1".into() },
+            ChatMessage { role: "assistant".into(), content: "a1".into() },
+            ChatMessage { role: "user".into(), content: "q2".into() },
+        ];
+        pop_trailing_user(Some(&mut h));
+        assert_eq!(h.len(), 2);
+        assert_eq!(h.last().unwrap().role, "assistant");
+        // Trailing assistant must NOT be popped.
+        pop_trailing_user(Some(&mut h));
+        assert_eq!(h.len(), 2);
+        let mut empty: Vec<ChatMessage> = Vec::new();
+        pop_trailing_user(Some(&mut empty));
+        assert!(empty.is_empty());
+        pop_trailing_user(None);
+    }
 
     #[test]
     fn valid_api_keys() {

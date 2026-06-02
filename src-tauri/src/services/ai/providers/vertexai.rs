@@ -556,11 +556,15 @@ impl VertexAIProvider {
             .map_err(|e| format!("Vertex AI request failed: {e}"))?;
 
         if !response.status().is_success() {
+            // Capture the status BEFORE consuming the body with .text() — once
+            // the response is consumed the status is gone, so this must be read
+            // first or the user-facing error would show a placeholder code.
+            let status = response.status().as_u16();
             let error_body = response
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".into());
-            return Err(format!("API error {}: {error_body}", 0)); // status already consumed
+            return Err(format!("API error {status}: {error_body}"));
         }
 
         self.stream_google_response(app, sid, response, cancel_token)
@@ -684,11 +688,13 @@ impl VertexAIProvider {
             .map_err(|e| format!("Vertex AI request failed: {e}"))?;
 
         if !response.status().is_success() {
+            // Capture the status BEFORE consuming the body with .text().
+            let status = response.status().as_u16();
             let error_body = response
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".into());
-            return Err(format!("API error: {error_body}"));
+            return Err(format!("API error {status}: {error_body}"));
         }
 
         self.stream_anthropic_response(app, sid, response, cancel_token)
@@ -1679,6 +1685,20 @@ mod tests {
     fn error_message_generic() {
         let msg = format_user_error_message("Something went wrong", "gemini-2.0-flash");
         assert!(msg.contains("An error occurred"));
+    }
+
+    #[test]
+    fn error_message_surfaces_real_status_code() {
+        // Regression guard for the "API error 0" bug: call_google_api /
+        // call_anthropic_api now embed the real HTTP status (e.g. 503) before
+        // consuming the body, so the generic branch must echo that code back —
+        // never a hardcoded placeholder.
+        let msg = format_user_error_message(
+            "API error 503: backend temporarily unavailable",
+            "publishers/google/models/gemini-2.0-flash",
+        );
+        assert!(msg.contains("503"), "expected real status in: {msg}");
+        assert!(!msg.contains("error 0"), "must not show placeholder status: {msg}");
     }
 
     #[test]

@@ -282,13 +282,17 @@ async fn run_gcloud_capture(args: &[String], deadline: Duration) -> Result<Strin
     // Use `--format=json(projection)` and parse with serde_json instead; the
     // projection syntax avoids embedded quotes entirely.
     if args.iter().any(|a| a.contains('"')) {
+        // Hard fail in every build profile. A `debug_assert!` would let release
+        // builds run the mangled invocation anyway and surface the confusing
+        // "'C:\…\Google\Cloud' is not recognized" error downstream — exactly
+        // what this guard exists to prevent. Reject up front with an actionable
+        // message instead. Callers must use --format=json(projection).
         log::error!(
-            "gcloud-iap: run_gcloud_capture called with `\"` in args — cmd.exe will mangle the program path: {args:?}"
+            "gcloud-iap: run_gcloud_capture called with `\"` in args — cmd.exe would mangle the program path: {args:?}"
         );
-        debug_assert!(
-            !args.iter().any(|a| a.contains('"')),
-            "run_gcloud_capture invoked with `\"` in arg(s): {args:?} — use --format=json(projection) instead, see is_oslogin_enabled"
-        );
+        return Err(SessionError::InvalidConfig(
+            "internal: gcloud arg contains '\"' — use --format=json(projection) instead".into(),
+        ));
     }
 
     let started = std::time::Instant::now();
@@ -1786,6 +1790,24 @@ mod tests {
                 "project describe arg contains `\"` — cmd.exe will break gcloud.cmd's path: {a}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn run_gcloud_capture_rejects_quoted_args() {
+        // The `"`-in-args guard must hard-fail in every build profile (not just
+        // debug_assert), returning before any gcloud spawn so the test passes
+        // without gcloud installed.
+        let args = vec![
+            "compute".to_string(),
+            "instances".to_string(),
+            "describe".to_string(),
+            "--format=value(\"metadata\")".to_string(),
+        ];
+        let res = run_gcloud_capture(&args, Duration::from_secs(5)).await;
+        assert!(
+            matches!(res, Err(SessionError::InvalidConfig(_))),
+            "expected InvalidConfig rejection, got {res:?}"
+        );
     }
 
     #[test]

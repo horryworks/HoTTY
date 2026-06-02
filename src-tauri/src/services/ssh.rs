@@ -729,6 +729,14 @@ async fn try_authenticate(
 
 use tauri::Manager;
 
+/// Map the user-configured keepalive interval (seconds) to russh's
+/// `client::Config::keepalive_interval`. A value of `0` disables keepalive
+/// (`None`); any positive value enables russh's native `keepalive@openssh.com`
+/// global-request pings (analogous to OpenSSH's `ServerAliveInterval`).
+fn keepalive_interval(secs: u32) -> Option<Duration> {
+    (secs > 0).then(|| Duration::from_secs(secs as u64))
+}
+
 #[async_trait]
 impl SessionService for SshSession {
     async fn connect(
@@ -744,6 +752,13 @@ impl SessionService for SshSession {
 
         let config = Arc::new(client::Config {
             inactivity_timeout: Some(Duration::from_secs(3600)),
+            // Native SSH keepalive: russh sends keepalive@openssh.com global
+            // requests every interval and (via keepalive_max, default 3) drops
+            // the connection after that many go unanswered. This replaces the
+            // old hand-rolled task that only ticked a timer and never sent
+            // anything, so idle sessions were dropped by NAT/firewalls despite
+            // the keepalive setting being on.
+            keepalive_interval: keepalive_interval(self.config.keepalive_interval_secs),
             preferred,
             ..client::Config::default()
         });
@@ -908,28 +923,8 @@ impl SessionService for SshSession {
         self.shutdown = Some(shutdown.clone());
         self.session_id = Some(session_id.clone());
 
-        // Keepalive task: periodic zero-length window change as a no-op ping.
-        // russh has no public send_keepalive so we emit a 0-size window change.
-        if self.config.keepalive_interval_secs > 0 {
-            let interval = Duration::from_secs(self.config.keepalive_interval_secs as u64);
-            let ka_writer = write_half.clone();
-            let ka_shutdown = shutdown.clone();
-            let ka_join = tokio::spawn(async move {
-                let mut ticker = tokio::time::interval(interval);
-                ticker.tick().await;
-                loop {
-                    tokio::select! {
-                        _ = ticker.tick() => {
-                            if ka_writer.writable_packet_size().await == 0 {
-                                continue;
-                            }
-                        }
-                        _ = ka_shutdown.notified() => break,
-                    }
-                }
-            });
-            self.join.push(ka_join);
-        }
+        // Keepalive is handled natively by russh via `keepalive_interval` in the
+        // client config above — no manual task needed.
 
         self.handle = Some(Arc::new(handle));
         Ok(())
@@ -1026,6 +1021,14 @@ mod tests {
             h.insert((*k).to_string(), v.clone());
         }
         h
+    }
+
+    #[test]
+    fn keepalive_interval_maps_config_to_russh() {
+        // 0 disables keepalive; any positive value enables russh's native pings.
+        assert_eq!(keepalive_interval(0), None);
+        assert_eq!(keepalive_interval(30), Some(Duration::from_secs(30)));
+        assert_eq!(keepalive_interval(1), Some(Duration::from_secs(1)));
     }
 
     #[test]
