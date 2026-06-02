@@ -19,6 +19,7 @@ use super::iap_tunnel::{
     self, decide_preconnect_action, gcloud_program, is_valid_instance, is_valid_project,
     is_valid_zone, InstanceStatus, PreConnectAction, WaitEvent,
 };
+use super::exe_finder::find_executable;
 use super::session_service::{
     abort_all, emit_session_data, emit_session_error, emit_session_status, encoding_for,
     join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
@@ -118,6 +119,76 @@ fn pick_port_regex() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"Picking local unused port \[(\d+)\]").unwrap())
 }
 
+/// Parse the first capture group of `re` against `line` as a u16 port. Returns
+/// `None` if there's no match, no group 1, or it doesn't parse — replacing the
+/// `c.get(1).unwrap().as_str().parse()` idiom that panicked if a regex were ever
+/// edited to drop its capture group.
+fn parse_port_capture(re: &Regex, line: &str) -> Option<u16> {
+    re.captures(line)?.get(1)?.as_str().parse().ok()
+}
+
+/// Read-only context for the tunnel-readiness line processor.
+struct TunnelReadyCtx<'a> {
+    gcloud_pid: u32,
+    phase_start: std::time::Instant,
+    app: &'a AppHandle,
+    session_id: &'a str,
+    pick_re: &'a Regex,
+    regexes: &'a [Regex],
+}
+
+enum LineOutcome {
+    /// Keep waiting for readiness.
+    Continue,
+    /// The "Listening" banner revealed the port — the tunnel is ready.
+    PortReady(u16),
+}
+
+/// Process one line from gcloud's stdout or stderr during tunnel startup:
+/// log it, mirror it to the terminal, capture the picked port, and detect the
+/// "Listening" banner. Extracted so the stdout and stderr `select!` arms share
+/// one implementation (they had drifted; only their stream-close/error handling
+/// legitimately differs).
+fn process_tunnel_line(
+    ctx: &TunnelReadyCtx,
+    source: &str,
+    line: &str,
+    combined_log: &mut String,
+    picked_port: &mut Option<u16>,
+    picked_at: &mut Option<std::time::Instant>,
+) -> LineOutcome {
+    // Promoted to info: release builds filter out debug, but these lines are
+    // the most useful diagnostics when an IAP connect fails.
+    log::info!("gcloud-iap[{}] {source}: {line}", ctx.gcloud_pid);
+    combined_log.push_str(line);
+    combined_log.push('\n');
+    if !line.trim().is_empty() {
+        emit_session_data(ctx.app, ctx.session_id, format!("{line}\r\n"));
+    }
+    if picked_port.is_none() {
+        if let Some(p) = parse_port_capture(ctx.pick_re, line) {
+            *picked_port = Some(p);
+            *picked_at = Some(std::time::Instant::now());
+            log::info!(
+                "gcloud-iap[{}]: picked_port={p} detected at +{:?}",
+                ctx.gcloud_pid,
+                ctx.phase_start.elapsed()
+            );
+        }
+    }
+    for re in ctx.regexes {
+        if let Some(p) = parse_port_capture(re, line) {
+            log::info!(
+                "gcloud-iap[{}]: 'Listening' banner matched port={p} at +{:?}",
+                ctx.gcloud_pid,
+                ctx.phase_start.elapsed()
+            );
+            return LineOutcome::PortReady(p);
+        }
+    }
+    LineOutcome::Continue
+}
+
 /// Best-effort TCP connect to localhost:port with a short deadline. Returns
 /// true iff the connection completes (kernel accepts SYN-ACK). Used to detect
 /// when gcloud's IAP tunnel listener becomes available, independent of
@@ -166,67 +237,33 @@ fn ssh_key_paths() -> Option<(PathBuf, PathBuf)> {
 /// Falls back to anything named `ssh.exe` (or `ssh` on Unix) found on PATH.
 fn find_openssh_path() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
-    {
-        let candidates: [&str; 2] = [
-            r"C:\Windows\System32\OpenSSH\ssh.exe",
-            r"C:\Windows\Sysnative\OpenSSH\ssh.exe",
-        ];
-        for c in &candidates {
-            let p = PathBuf::from(c);
-            if p.exists() {
-                return Some(p);
-            }
-        }
-        // Fallback: search PATH.
-        if let Ok(path_var) = std::env::var("PATH") {
-            for dir in path_var.split(';') {
-                let p = PathBuf::from(dir).join("ssh.exe");
-                if p.exists() {
-                    return Some(p);
-                }
-            }
-        }
-    }
+    let (well_known, exe) = (
+        vec![
+            PathBuf::from(r"C:\Windows\System32\OpenSSH\ssh.exe"),
+            PathBuf::from(r"C:\Windows\Sysnative\OpenSSH\ssh.exe"),
+        ],
+        "ssh.exe",
+    );
     #[cfg(not(target_os = "windows"))]
-    {
-        if let Ok(path_var) = std::env::var("PATH") {
-            for dir in path_var.split(':') {
-                let p = PathBuf::from(dir).join("ssh");
-                if p.exists() {
-                    return Some(p);
-                }
-            }
-        }
-    }
-    None
+    let (well_known, exe) = (Vec::<PathBuf>::new(), "ssh");
+    find_executable(well_known, exe)
 }
 
 fn find_ssh_keygen_path() -> Option<PathBuf> {
+    // Note: previously this skipped the PATH scan on Windows (unlike
+    // find_openssh_path), so a non-default OpenSSH install found ssh.exe but
+    // not ssh-keygen.exe. Sharing find_executable fixes that asymmetry.
     #[cfg(target_os = "windows")]
-    {
-        let candidates: [&str; 2] = [
-            r"C:\Windows\System32\OpenSSH\ssh-keygen.exe",
-            r"C:\Windows\Sysnative\OpenSSH\ssh-keygen.exe",
-        ];
-        for c in &candidates {
-            let p = PathBuf::from(c);
-            if p.exists() {
-                return Some(p);
-            }
-        }
-    }
+    let (well_known, exe) = (
+        vec![
+            PathBuf::from(r"C:\Windows\System32\OpenSSH\ssh-keygen.exe"),
+            PathBuf::from(r"C:\Windows\Sysnative\OpenSSH\ssh-keygen.exe"),
+        ],
+        "ssh-keygen.exe",
+    );
     #[cfg(not(target_os = "windows"))]
-    {
-        if let Ok(path_var) = std::env::var("PATH") {
-            for dir in path_var.split(':') {
-                let p = PathBuf::from(dir).join("ssh-keygen");
-                if p.exists() {
-                    return Some(p);
-                }
-            }
-        }
-    }
-    None
+    let (well_known, exe) = (Vec::<PathBuf>::new(), "ssh-keygen");
+    find_executable(well_known, exe)
 }
 
 // ---------------------------------------------------------------------------
@@ -732,6 +769,15 @@ async fn start_iap_tunnel(
     let mut picked_at: Option<std::time::Instant> = None;
     let mut probe_attempts: u32 = 0;
 
+    let ctx = TunnelReadyCtx {
+        gcloud_pid,
+        phase_start,
+        app,
+        session_id,
+        pick_re,
+        regexes,
+    };
+
     let result: Result<u16, SessionError> = timeout(TUNNEL_READY_TIMEOUT, async {
         // Once we learn the port from "Picking local unused port [N].", probe
         // the local TCP listener every 250ms. gcloud's Python stderr is
@@ -752,37 +798,15 @@ async fn start_iap_tunnel(
                 line = stdout_lines.next_line() => {
                     match line {
                         Ok(Some(line)) => {
-                            // Promoted to info: in release builds debug is filtered
-                            // out, but these are the most useful diagnostic lines
-                            // when an IAP connect fails.
-                            log::info!("gcloud-iap[{gcloud_pid}] stdout: {line}");
-                            combined_log.push_str(&line);
-                            combined_log.push('\n');
-                            if !line.trim().is_empty() {
-                                emit_session_data(app, session_id, format!("{line}\r\n"));
-                            }
-                            if picked_port.is_none() {
-                                if let Some(c) = pick_re.captures(&line) {
-                                    if let Ok(p) = c.get(1).unwrap().as_str().parse::<u16>() {
-                                        picked_port = Some(p);
-                                        picked_at = Some(std::time::Instant::now());
-                                        log::info!(
-                                            "gcloud-iap[{gcloud_pid}]: picked_port={p} detected at +{:?}",
-                                            phase_start.elapsed()
-                                        );
-                                    }
-                                }
-                            }
-                            for re in regexes {
-                                if let Some(c) = re.captures(&line) {
-                                    if let Ok(p) = c.get(1).unwrap().as_str().parse::<u16>() {
-                                        log::info!(
-                                            "gcloud-iap[{gcloud_pid}]: 'Listening' banner matched port={p} at +{:?}",
-                                            phase_start.elapsed()
-                                        );
-                                        return Ok::<u16, SessionError>(p);
-                                    }
-                                }
+                            if let LineOutcome::PortReady(p) = process_tunnel_line(
+                                &ctx,
+                                "stdout",
+                                &line,
+                                &mut combined_log,
+                                &mut picked_port,
+                                &mut picked_at,
+                            ) {
+                                return Ok::<u16, SessionError>(p);
                             }
                         }
                         Ok(None) => {
@@ -803,34 +827,15 @@ async fn start_iap_tunnel(
                 line = stderr_lines.next_line() => {
                     match line {
                         Ok(Some(line)) => {
-                            log::info!("gcloud-iap[{gcloud_pid}] stderr: {line}");
-                            combined_log.push_str(&line);
-                            combined_log.push('\n');
-                            if !line.trim().is_empty() {
-                                emit_session_data(app, session_id, format!("{line}\r\n"));
-                            }
-                            if picked_port.is_none() {
-                                if let Some(c) = pick_re.captures(&line) {
-                                    if let Ok(p) = c.get(1).unwrap().as_str().parse::<u16>() {
-                                        picked_port = Some(p);
-                                        picked_at = Some(std::time::Instant::now());
-                                        log::info!(
-                                            "gcloud-iap[{gcloud_pid}]: picked_port={p} detected at +{:?}",
-                                            phase_start.elapsed()
-                                        );
-                                    }
-                                }
-                            }
-                            for re in regexes {
-                                if let Some(c) = re.captures(&line) {
-                                    if let Ok(p) = c.get(1).unwrap().as_str().parse::<u16>() {
-                                        log::info!(
-                                            "gcloud-iap[{gcloud_pid}]: 'Listening' banner matched port={p} at +{:?}",
-                                            phase_start.elapsed()
-                                        );
-                                        return Ok::<u16, SessionError>(p);
-                                    }
-                                }
+                            if let LineOutcome::PortReady(p) = process_tunnel_line(
+                                &ctx,
+                                "stderr",
+                                &line,
+                                &mut combined_log,
+                                &mut picked_port,
+                                &mut picked_at,
+                            ) {
+                                return Ok::<u16, SessionError>(p);
                             }
                         }
                         Ok(None) => { /* stderr closed; keep looping for stdout */ }

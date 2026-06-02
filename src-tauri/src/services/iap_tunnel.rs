@@ -12,6 +12,7 @@ use tokio::process::Command;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
+use super::exe_finder::find_executable;
 use super::sensitive_env::sanitized_env;
 
 // ---------------------------------------------------------------------------
@@ -164,6 +165,23 @@ pub(crate) fn is_valid_instance(instance: &str) -> bool {
     RE.get_or_init(|| Regex::new(RE_INSTANCE).unwrap()).is_match(instance)
 }
 
+/// Validate a (project, zone, instance) triple in one shot with consistent,
+/// detailed error messages. The instance-lifecycle commands (status/start/stop)
+/// each repeated this check verbatim, some with bare "invalid project" strings
+/// and some with the value included — this unifies both the logic and wording.
+pub(crate) fn validate_target(project: &str, zone: &str, instance: &str) -> Result<(), String> {
+    if !is_valid_project(project) {
+        return Err(format!("invalid project: {project}"));
+    }
+    if !is_valid_zone(zone) {
+        return Err(format!("invalid zone: {zone}"));
+    }
+    if !is_valid_instance(instance) {
+        return Err(format!("invalid instance: {instance}"));
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // gcloud executable discovery (Windows)
 // ---------------------------------------------------------------------------
@@ -176,37 +194,24 @@ fn find_gcloud_path() -> Option<PathBuf> {
         use std::env;
 
         let suffix = r"Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd";
-        let env_dirs: [&str; 4] = ["LOCALAPPDATA", "APPDATA", "ProgramFiles", "ProgramFiles(x86)"];
-
-        // Check well-known install locations
-        for env_name in &env_dirs {
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        for env_name in ["LOCALAPPDATA", "APPDATA", "ProgramFiles", "ProgramFiles(x86)"] {
             if let Ok(dir) = env::var(env_name) {
-                let candidate = PathBuf::from(dir).join(suffix);
-                if candidate.exists() {
-                    return Some(candidate);
-                }
+                candidates.push(PathBuf::from(dir).join(suffix));
             }
         }
-
         // USERPROFILE\google-cloud-sdk\bin\gcloud.cmd
         if let Ok(home) = env::var("USERPROFILE") {
-            let candidate = PathBuf::from(&home)
-                .join("google-cloud-sdk")
-                .join("bin")
-                .join("gcloud.cmd");
-            if candidate.exists() {
-                return Some(candidate);
-            }
+            candidates.push(
+                PathBuf::from(home)
+                    .join("google-cloud-sdk")
+                    .join("bin")
+                    .join("gcloud.cmd"),
+            );
         }
-
-        // Search PATH
-        if let Ok(path_var) = env::var("PATH") {
-            for dir in path_var.split(';') {
-                let candidate = PathBuf::from(dir).join("gcloud.cmd");
-                if candidate.exists() {
-                    return Some(candidate);
-                }
-            }
+        // Well-known locations first, then a PATH scan for gcloud.cmd.
+        if let Some(p) = find_executable(candidates, "gcloud.cmd") {
+            return Some(p);
         }
     }
 
@@ -829,15 +834,7 @@ pub async fn get_instance_status(
     zone: &str,
     instance: &str,
 ) -> Result<InstanceStatus, String> {
-    if !is_valid_project(project) {
-        return Err("invalid project".to_string());
-    }
-    if !is_valid_zone(zone) {
-        return Err("invalid zone".to_string());
-    }
-    if !is_valid_instance(instance) {
-        return Err("invalid instance".to_string());
-    }
+    validate_target(project, zone, instance)?;
 
     let project_flag = format!("--project={project}");
     let zone_flag = format!("--zone={zone}");
@@ -918,15 +915,7 @@ fn map_start_error(stderr: &str) -> String {
 
 /// Start a (stopped) GCE instance via blocking `gcloud compute instances start`.
 pub async fn start_instance(project: &str, zone: &str, instance: &str) -> Result<(), String> {
-    if !is_valid_project(project) {
-        return Err("invalid project".to_string());
-    }
-    if !is_valid_zone(zone) {
-        return Err("invalid zone".to_string());
-    }
-    if !is_valid_instance(instance) {
-        return Err("invalid instance".to_string());
-    }
+    validate_target(project, zone, instance)?;
 
     let project_flag = format!("--project={project}");
     let zone_flag = format!("--zone={zone}");
@@ -946,15 +935,7 @@ pub async fn start_instance(project: &str, zone: &str, instance: &str) -> Result
 
 /// Stop a running GCE instance via blocking `gcloud compute instances stop`.
 pub async fn stop_instance(project: &str, zone: &str, instance: &str) -> Result<(), String> {
-    if !is_valid_project(project) {
-        return Err("invalid project".to_string());
-    }
-    if !is_valid_zone(zone) {
-        return Err("invalid zone".to_string());
-    }
-    if !is_valid_instance(instance) {
-        return Err("invalid instance".to_string());
-    }
+    validate_target(project, zone, instance)?;
 
     let project_flag = format!("--project={project}");
     let zone_flag = format!("--zone={zone}");
@@ -1471,6 +1452,24 @@ mod tests {
     }
 
     // -- Serialization tests --
+
+    #[test]
+    fn validate_target_accepts_valid_and_reports_first_bad_field() {
+        assert!(validate_target("my-project-123", "us-central1-a", "vm-01").is_ok());
+        // Short-circuits on the first invalid field, with the value included.
+        assert_eq!(
+            validate_target("Bad_Project", "us-central1-a", "vm-01"),
+            Err("invalid project: Bad_Project".to_string())
+        );
+        assert_eq!(
+            validate_target("my-project-123", "BADZONE", "vm-01"),
+            Err("invalid zone: BADZONE".to_string())
+        );
+        assert_eq!(
+            validate_target("my-project-123", "us-central1-a", "vm;ls"),
+            Err("invalid instance: vm;ls".to_string())
+        );
+    }
 
     #[test]
     fn gcloud_status_serialize() {
