@@ -10,8 +10,8 @@ use tokio::task::JoinHandle;
 
 use super::jumpbox::{establish_tunnel, JumpboxConfig, JumpboxHandler};
 use super::session_service::{
-    emit_session_data, emit_session_error, emit_session_status, encoding_for, humanize_io_error,
-    SessionError, SessionService,
+    abort_all, emit_session_data, emit_session_error, emit_session_status, encoding_for,
+    humanize_io_error, join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // --- Telnet protocol constants -----------------------------------------
@@ -548,18 +548,9 @@ impl SessionService for TelnetSession {
                 .disconnect(russh::Disconnect::ByApplication, "bye", "en")
                 .await;
         }
-        for h in self.join.drain(..) {
-            // Give each task up to 1.5s to finish before forcing abort.
-            // Note: timing out only drops the JoinHandle (detach) — the task
-            // would keep running (the reader is blocked in rd.read() with no
-            // graceful shutdown path on a manual disconnect), so we must
-            // explicitly abort via the handle or the task + socket leak.
-            let abort_handle = h.abort_handle();
-            if tokio::time::timeout(std::time::Duration::from_millis(1500), h).await.is_err() {
-                log::warn!("Telnet task did not finish within 1.5s, aborting");
-                abort_handle.abort();
-            }
-        }
+        // The reader is blocked in rd.read() with no graceful shutdown path on a
+        // manual disconnect, so it relies on the forced abort inside join_or_abort.
+        join_or_abort(std::mem::take(&mut self.join), "Telnet", DISCONNECT_DRAIN_MS).await;
         Ok(())
     }
 }
@@ -568,9 +559,7 @@ impl Drop for TelnetSession {
     fn drop(&mut self) {
         if self.writer_tx.is_some() {
             log::warn!("TelnetSession dropped without calling disconnect()");
-            for h in self.join.drain(..) {
-                h.abort();
-            }
+            abort_all(std::mem::take(&mut self.join));
         }
     }
 }

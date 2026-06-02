@@ -14,6 +14,7 @@ use russh::{cipher, kex, mac, ChannelMsg, Disconnect, Preferred};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
 use crate::commands::ssh_algorithms::{load_algorithms_sync, SshAlgorithms};
 
@@ -23,7 +24,8 @@ use super::known_hosts::{
     append_known_host, check_known_host, default_known_hosts_path, remove_known_host, HostKeyCheck,
 };
 use super::session_service::{
-    emit_session_data, emit_session_status, encoding_for, SessionError, SessionService,
+    abort_all, emit_session_data, emit_session_status, encoding_for, join_or_abort, SessionError,
+    SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // --- Config ------------------------------------------------------------
@@ -528,7 +530,9 @@ pub struct SshSession {
     jumpbox_handle: Option<Arc<Handle<JumpboxHandler>>>,
     writer_tx: Option<mpsc::Sender<WriterCmd>>,
     join: Vec<JoinHandle<()>>,
-    shutdown: Option<Arc<tokio::sync::Notify>>,
+    /// Cancelled by disconnect() to stop the reader task deterministically,
+    /// rather than leaving it parked in rd.wait() until the drain abort.
+    cancel: CancellationToken,
     session_id: Option<String>,
 }
 
@@ -548,7 +552,7 @@ impl SshSession {
             jumpbox_handle: None,
             writer_tx: None,
             join: Vec::new(),
-            shutdown: None,
+            cancel: CancellationToken::new(),
             session_id: None,
         }
     }
@@ -851,7 +855,6 @@ impl SessionService for SshSession {
         emit_session_status(&app, &session_id, "connected");
 
         let (read_half, write_half) = channel.split();
-        let read_half = Arc::new(Mutex::new(read_half));
         let write_half = Arc::new(write_half);
 
         let (tx, mut rx) = mpsc::channel::<WriterCmd>(64);
@@ -881,46 +884,60 @@ impl SessionService for SshSession {
         });
         self.join.push(writer_join);
 
-        // Reader task
+        // Reader task. read_half has a single owner (this task), so it's moved
+        // in directly — no Arc<Mutex> needed. select! on the cancel token so
+        // disconnect() stops the reader immediately instead of leaving it parked
+        // in rd.wait() until the 1.5s drain abort. CancellationToken is
+        // level-triggered, so there's no lost-wakeup race if cancel fires while
+        // we're mid-iteration processing a data chunk.
         let encoding = self.encoding;
         let app_r = app.clone();
         let sid_r = session_id.clone();
-        let read_half_r = read_half.clone();
+        let reader_cancel = self.cancel.clone();
         let log_mgr: super::log_manager::LogManager = app.state::<super::log_manager::LogManager>().inner().clone();
         let reader_join = tokio::spawn(async move {
+            let mut rd = read_half;
             loop {
-                let mut rd = read_half_r.lock().await;
-                match rd.wait().await {
-                    Some(ChannelMsg::Data { data }) => {
-                        let (decoded, _, _) = encoding.decode(&data);
-                        let text = decoded.into_owned();
-                        emit_session_data(&app_r, &sid_r, text.clone());
-                        log_mgr.write(&sid_r, &text).await;
-                    }
-                    Some(ChannelMsg::ExtendedData { data, .. }) => {
-                        let (decoded, _, _) = encoding.decode(&data);
-                        let text = decoded.into_owned();
-                        emit_session_data(&app_r, &sid_r, text.clone());
-                        log_mgr.write(&sid_r, &text).await;
-                    }
-                    Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) => {
+                tokio::select! {
+                    _ = reader_cancel.cancelled() => {
+                        // disconnect() initiated teardown: stop cleanly without a
+                        // redundant 'disconnected' emit (the close was user-driven
+                        // and the frontend already drove the pane removal).
                         log_mgr.stop_logging(&sid_r).await;
-                        emit_session_status(&app_r, &sid_r, "disconnected");
                         break;
                     }
-                    Some(_) => {}
-                    None => {
-                        log_mgr.stop_logging(&sid_r).await;
-                        emit_session_status(&app_r, &sid_r, "disconnected");
-                        break;
+                    msg = rd.wait() => {
+                        match msg {
+                            Some(ChannelMsg::Data { data }) => {
+                                let (decoded, _, _) = encoding.decode(&data);
+                                let text = decoded.into_owned();
+                                emit_session_data(&app_r, &sid_r, text.clone());
+                                log_mgr.write(&sid_r, &text).await;
+                            }
+                            Some(ChannelMsg::ExtendedData { data, .. }) => {
+                                let (decoded, _, _) = encoding.decode(&data);
+                                let text = decoded.into_owned();
+                                emit_session_data(&app_r, &sid_r, text.clone());
+                                log_mgr.write(&sid_r, &text).await;
+                            }
+                            Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) => {
+                                log_mgr.stop_logging(&sid_r).await;
+                                emit_session_status(&app_r, &sid_r, "disconnected");
+                                break;
+                            }
+                            Some(_) => {}
+                            None => {
+                                log_mgr.stop_logging(&sid_r).await;
+                                emit_session_status(&app_r, &sid_r, "disconnected");
+                                break;
+                            }
+                        }
                     }
                 }
             }
         });
         self.join.push(reader_join);
 
-        let shutdown = Arc::new(tokio::sync::Notify::new());
-        self.shutdown = Some(shutdown.clone());
         self.session_id = Some(session_id.clone());
 
         // Keepalive is handled natively by russh via `keepalive_interval` in the
@@ -958,9 +975,9 @@ impl SessionService for SshSession {
         if let Some(sid) = self.session_id.take() {
             cancel_pending_host_key(&sid).await;
         }
-        if let Some(sd) = self.shutdown.take() {
-            sd.notify_waiters();
-        }
+        // Stop the reader task deterministically. Level-triggered, so there is
+        // no lost-wakeup race even if the reader is mid-iteration.
+        self.cancel.cancel();
         if let Some(tx) = self.writer_tx.take() {
             let _ = tx.send(WriterCmd::Close).await;
         }
@@ -974,16 +991,7 @@ impl SessionService for SshSession {
                 .disconnect(Disconnect::ByApplication, "bye", "en")
                 .await;
         }
-        for h in self.join.drain(..) {
-            // Give each task up to 1.5s to finish before forcing abort.
-            // Note: timing out only drops the JoinHandle (detach) — the task
-            // would keep running, so we must explicitly abort via the handle.
-            let abort_handle = h.abort_handle();
-            if tokio::time::timeout(std::time::Duration::from_millis(1500), h).await.is_err() {
-                log::warn!("SSH task did not finish within 1.5s, aborting");
-                abort_handle.abort();
-            }
-        }
+        join_or_abort(std::mem::take(&mut self.join), "SSH", DISCONNECT_DRAIN_MS).await;
         Ok(())
     }
 }
@@ -992,9 +1000,7 @@ impl Drop for SshSession {
     fn drop(&mut self) {
         if self.writer_tx.is_some() {
             log::warn!("SshSession dropped without calling disconnect()");
-            for h in self.join.drain(..) {
-                h.abort();
-            }
+            abort_all(std::mem::take(&mut self.join));
         }
     }
 }

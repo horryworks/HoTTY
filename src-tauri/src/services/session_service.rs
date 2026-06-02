@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 use serde::Serialize;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use thiserror::Error;
+use tokio::task::JoinHandle;
 
 #[derive(Debug, Error)]
 pub enum SessionError {
@@ -165,6 +167,44 @@ pub fn emit_session_error(app: &AppHandle, session_id: &str, error: String) {
     );
 }
 
+// --- Background task lifecycle helpers ---------------------------------
+//
+// Every protocol service spawns reader/writer/keepalive tasks and must tear
+// them down on disconnect (or as a Drop safety net). Timing out on a
+// `JoinHandle` only *detaches* the task — it keeps running and holds its
+// socket/PTY/channel open — so a forced `.abort()` is what actually prevents
+// leaks. These two helpers centralize that logic so all services share one
+// correct implementation instead of five slightly-divergent copies.
+
+/// Drain background task handles on a graceful disconnect: give each up to
+/// `timeout_ms` to finish on its own, then force-abort any that are still
+/// running (e.g. a reader blocked in `read().await` with no shutdown signal).
+pub async fn join_or_abort(joins: Vec<JoinHandle<()>>, label: &str, timeout_ms: u64) {
+    for h in joins {
+        let abort_handle = h.abort_handle();
+        if tokio::time::timeout(Duration::from_millis(timeout_ms), h)
+            .await
+            .is_err()
+        {
+            log::warn!("{label} task did not finish within {timeout_ms}ms, aborting");
+            abort_handle.abort();
+        }
+    }
+}
+
+/// Standard disconnect drain timeout. Brief enough to keep teardown snappy,
+/// long enough to let a task that *can* finish gracefully (e.g. an SSH reader
+/// receiving Eof/Close) do so before being aborted.
+pub const DISCONNECT_DRAIN_MS: u64 = 1500;
+
+/// Immediately abort background task handles. Used by `Drop` as a last-resort
+/// safety net when a service is dropped without `disconnect()` having run.
+pub fn abort_all(joins: Vec<JoinHandle<()>>) {
+    for h in joins {
+        h.abort();
+    }
+}
+
 pub fn encoding_for(name: &str) -> &'static encoding_rs::Encoding {
     match name.to_ascii_lowercase().replace('-', "_").as_str() {
         "utf8" | "utf_8" => encoding_rs::UTF_8,
@@ -191,6 +231,50 @@ mod tests {
 
         let e = SessionError::InvalidConfig("Host is required".into());
         assert_eq!(String::from(e), "Host is required");
+    }
+
+    #[tokio::test]
+    async fn join_or_abort_aborts_stuck_tasks() {
+        // A task with no shutdown path would hang the drain forever without the
+        // abort. join_or_abort must return shortly after the timeout.
+        let h = tokio::spawn(async {
+            loop {
+                tokio::time::sleep(Duration::from_secs(3600)).await;
+            }
+        });
+        let start = tokio::time::Instant::now();
+        join_or_abort(vec![h], "test", 50).await;
+        assert!(
+            start.elapsed() < Duration::from_secs(1),
+            "stuck task must be aborted, not awaited forever"
+        );
+    }
+
+    #[tokio::test]
+    async fn join_or_abort_joins_finished_tasks_quickly() {
+        let h = tokio::spawn(async {});
+        let start = tokio::time::Instant::now();
+        join_or_abort(vec![h], "test", 1500).await;
+        assert!(
+            start.elapsed() < Duration::from_secs(1),
+            "an already-finished task should join immediately"
+        );
+    }
+
+    #[tokio::test]
+    async fn abort_all_cancels_tasks() {
+        let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let f = flag.clone();
+        let h = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            f.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+        abort_all(vec![h]);
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(
+            !flag.load(std::sync::atomic::Ordering::SeqCst),
+            "aborted task must not run to completion"
+        );
     }
 
     #[test]

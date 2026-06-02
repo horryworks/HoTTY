@@ -20,8 +20,8 @@ use super::iap_tunnel::{
     is_valid_zone, InstanceStatus, PreConnectAction, WaitEvent,
 };
 use super::session_service::{
-    emit_session_data, emit_session_error, emit_session_status, encoding_for, SessionError,
-    SessionService,
+    abort_all, emit_session_data, emit_session_error, emit_session_status, encoding_for,
+    join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -1567,13 +1567,7 @@ impl SessionService for GcloudIapSession {
         if let Some(tx) = self.writer_tx.take() {
             let _ = tx.send(WriterCmd::Close).await;
         }
-        for jh in self.join.drain(..) {
-            let abort_handle = jh.abort_handle();
-            if tokio::time::timeout(Duration::from_millis(1500), jh).await.is_err() {
-                log::warn!("gcloud-iap task did not finish within 1.5s, aborting");
-                abort_handle.abort();
-            }
-        }
+        join_or_abort(std::mem::take(&mut self.join), "gcloud-iap", DISCONNECT_DRAIN_MS).await;
         // Tear down the tunnel after the SSH child is gone so the local TCP
         // listener stays valid until the ssh client closes its end.
         if let Some(mut child) = self.tunnel_child.take() {
@@ -1589,9 +1583,7 @@ impl Drop for GcloudIapSession {
     fn drop(&mut self) {
         if self.writer_tx.is_some() {
             log::warn!("GcloudIapSession dropped without calling disconnect()");
-            for jh in self.join.drain(..) {
-                jh.abort();
-            }
+            abort_all(std::mem::take(&mut self.join));
         }
         if self.tunnel_child.is_some() {
             // `kill_on_drop(true)` on the Child handles SIGKILL automatically.

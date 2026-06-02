@@ -8,8 +8,8 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 
 use super::session_service::{
-    emit_session_data, emit_session_error, emit_session_status, encoding_for, SessionError,
-    SessionService,
+    abort_all, emit_session_data, emit_session_error, emit_session_status, encoding_for,
+    join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -285,13 +285,7 @@ impl SessionService for WslSession {
         if let Some(tx) = self.writer_tx.take() {
             let _ = tx.send(WriterCmd::Close).await;
         }
-        for jh in self.join.drain(..) {
-            let abort_handle = jh.abort_handle();
-            if tokio::time::timeout(std::time::Duration::from_millis(1500), jh).await.is_err() {
-                log::warn!("WSL task did not finish within 1.5s, aborting");
-                abort_handle.abort();
-            }
-        }
+        join_or_abort(std::mem::take(&mut self.join), "WSL", DISCONNECT_DRAIN_MS).await;
         Ok(())
     }
 }
@@ -300,9 +294,7 @@ impl Drop for WslSession {
     fn drop(&mut self) {
         if self.writer_tx.is_some() {
             log::warn!("WslSession dropped without calling disconnect()");
-            for jh in self.join.drain(..) {
-                jh.abort();
-            }
+            abort_all(std::mem::take(&mut self.join));
         }
     }
 }
