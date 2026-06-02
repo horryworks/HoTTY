@@ -5,6 +5,7 @@ import type { TextEditorTab } from '../../types/appTypes';
 import { SaveConfirmModal } from '../SaveConfirmModal/SaveConfirmModal';
 import { setEditorDirtyCount, clearEditorDirty } from '../../utils/dirtyEditors';
 import { logError } from '../../utils/logger';
+import { normalizeLineEnding } from '../../utils/lineEndings';
 import './TextEditorPane.css';
 
 interface TextEditorPaneProps {
@@ -25,13 +26,6 @@ const LINE_ENDINGS = ['CRLF', 'LF'] as const;
 function filenameFromPath(path: string): string {
   const sep = path.includes('\\') ? '\\' : '/';
   return path.split(sep).pop() || path;
-}
-
-/** Normalize a buffer's line endings to the tab's configured style. Goes via LF
- *  first so mixed CRLF/LF input collapses cleanly (avoids \r\r\n doubling). */
-export function normalizeLineEnding(content: string, ending: 'CRLF' | 'LF'): string {
-  const lf = content.replace(/\r\n/g, '\n');
-  return ending === 'CRLF' ? lf.replace(/\n/g, '\r\n') : lf;
 }
 
 function makeTab(overrides?: Partial<TextEditorTab>): TextEditorTab {

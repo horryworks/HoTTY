@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { TextEditorPane, normalizeLineEnding } from './TextEditorPane';
+import { TextEditorPane } from './TextEditorPane';
+import { normalizeLineEnding } from '../../utils/lineEndings';
 import { tauriService } from '../../services/tauriService';
 import { useSettingsStore } from '../../stores/settingsStore';
 
