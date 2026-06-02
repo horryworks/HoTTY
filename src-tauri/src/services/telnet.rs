@@ -205,12 +205,6 @@ pub fn process_iac(data: &[u8]) -> (Vec<u8>, Vec<u8>) {
     (out, resp)
 }
 
-/// Legacy helper kept for existing callers/tests that only care about the
-/// cleaned data half of `process_iac`.
-pub fn strip_iac(data: &[u8]) -> Vec<u8> {
-    process_iac(data).0
-}
-
 // --- Login prompt detection -------------------------------------------
 
 fn is_username_prompt(tail: &str) -> bool {
@@ -569,6 +563,12 @@ impl Drop for TelnetSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Test-only convenience over `process_iac`: returns just the cleaned
+    /// data half, so these cases exercise the production IAC parser directly.
+    fn strip_iac(data: &[u8]) -> Vec<u8> {
+        process_iac(data).0
+    }
 
     #[test]
     fn strip_iac_plain_passthrough() {

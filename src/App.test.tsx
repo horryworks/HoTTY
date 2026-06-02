@@ -40,6 +40,7 @@ vi.mock('./services/tauriService', () => ({
     destroyWindow: vi.fn().mockResolvedValue(undefined),
     confirmDialog: vi.fn().mockResolvedValue(false),
     showContextMenu: vi.fn().mockResolvedValue(null),
+    logDebug: vi.fn().mockResolvedValue(undefined),
   },
 }));
 

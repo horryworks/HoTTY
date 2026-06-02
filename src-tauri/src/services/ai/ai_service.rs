@@ -2,7 +2,7 @@ use serde_json::Value;
 use std::path::Path;
 use tauri::AppHandle;
 
-use super::ai_provider::{AuthStatus, AuthType, ModelInfo, ProviderInfo};
+use super::ai_provider::{AuthStatus, ModelInfo};
 use super::provider_registry::AIProviderRegistry;
 
 /// Centralised AI service that manages an active provider and delegates
@@ -32,10 +32,6 @@ impl AIService {
 
     pub fn active_provider_id(&self) -> &str {
         &self.active_provider_id
-    }
-
-    pub fn list_providers(&self) -> Vec<ProviderInfo> {
-        self.registry.list()
     }
 
     // -- Authentication -------------------------------------------------------
@@ -74,13 +70,6 @@ impl AIService {
                 authenticated: false,
                 account_info: None,
             })
-    }
-
-    pub fn get_auth_type(&self) -> AuthType {
-        self.registry
-            .get(&self.active_provider_id)
-            .map(|p| p.auth_type())
-            .unwrap_or(AuthType::ApiKey)
     }
 
     pub fn logout(&mut self) {
@@ -248,13 +237,6 @@ mod tests {
         let result = svc.set_active_provider("nonexistent");
         assert!(result.is_err());
         assert_eq!(svc.active_provider_id(), "alpha");
-    }
-
-    #[test]
-    fn list_providers_returns_all() {
-        let svc = make_service();
-        let providers = svc.list_providers();
-        assert_eq!(providers.len(), 2);
     }
 
     #[test]
