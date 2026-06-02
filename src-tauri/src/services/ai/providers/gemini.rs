@@ -17,6 +17,7 @@ use crate::services::ai::ai_provider::{
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
+use crate::services::ai::streaming::finalize_assistant_content;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -708,15 +709,7 @@ impl AIProvider for GeminiProvider {
         } else if let Some(history) = self.chat_histories.get_mut(&sid) {
             // Normal completion or cancel: close out the assistant turn so the
             // user/assistant alternation stays consistent for the next request.
-            let content = if cancel_token.is_cancelled() {
-                if full_response.is_empty() {
-                    "[cancelled before response]".to_string()
-                } else {
-                    format!("{full_response}\n\n[cancelled by user]")
-                }
-            } else {
-                full_response.clone()
-            };
+            let content = finalize_assistant_content(&full_response, cancel_token.is_cancelled());
             history.push(ChatMessage {
                 role: "model".into(),
                 content,

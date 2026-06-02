@@ -4,6 +4,7 @@ pub mod config_store;
 pub mod provider_registry;
 pub mod providers;
 pub mod sse;
+pub mod streaming;
 pub mod validation;
 
 // Re-export commonly used types
