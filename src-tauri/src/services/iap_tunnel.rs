@@ -62,29 +62,29 @@ const RE_INSTANCE: &str = r"^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$";
 // Result types (returned to frontend via Tauri commands)
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GcloudStatus {
     pub available: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub version: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GcloudAuthStatus {
     pub authenticated: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub account: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GcpProject {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AccessState {
     Granted,
@@ -99,7 +99,7 @@ pub enum AccessState {
 /// `os_login` (`compute.instances.osLogin`) is informational only: missing
 /// OS Login does not necessarily mean SSH is impossible because the instance
 /// may grant access via metadata SSH keys instead.
-#[derive(Debug, Clone, Copy, serde::Serialize)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectAccess {
     pub iap_tunnel: AccessState,
@@ -119,14 +119,14 @@ impl ProjectAccess {
 /// resolved at the resource level — used as a fallback when project-level
 /// IAP access is denied so we don't hide instances that have resource-level
 /// IAM grants.
-#[derive(Debug, Clone, Copy, serde::Serialize)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstanceAccess {
     pub iap_tunnel: AccessState,
     pub os_login: AccessState,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GceInstance {
     pub name: String,
@@ -134,12 +134,12 @@ pub struct GceInstance {
     /// Zone short name (e.g. "us-central1-a"). Always populated for entries
     /// produced by `list_instances` and `list_instances_across_zones`; the
     /// optionality preserves serialization compatibility for older payloads.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub zone: Option<String>,
     /// Per-instance IAM probe result. Present only when refresh ran a
     /// resource-level fallback test (i.e. project-level IAP was denied).
     /// When absent, the project-level `ProjectAccess` should be consulted.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub access: Option<InstanceAccess>,
 }
 
@@ -478,14 +478,31 @@ fn parse_test_iam_permissions(json_str: &str) -> Result<ProjectAccess, String> {
     })
 }
 
+/// Fetch a single OAuth access token via `gcloud auth print-access-token`.
+///
+/// One token is fetched per refresh and reused across every REST call, which
+/// keeps the number of `gcloud` (Python) subprocess spawns down to a handful
+/// regardless of how many projects/instances are probed. The token is trimmed;
+/// an empty token is treated as an error.
+async fn fetch_access_token() -> Result<String, String> {
+    let token = run_gcloud(&["auth", "print-access-token"]).await?;
+    let token = token.trim().to_string();
+    if token.is_empty() {
+        return Err("gcloud returned an empty access token".to_string());
+    }
+    Ok(token)
+}
+
 /// Probe instance-level IAM permissions via the Compute Engine REST API.
 ///
 /// `gcloud` does not expose a CLI subcommand for compute-instance
-/// `testIamPermissions`, so we shell out to `gcloud auth print-access-token`
-/// for an OAuth bearer and post directly to the REST endpoint. Failure to
-/// obtain a token or any HTTP-level error is returned as `Err` so the caller
-/// can record `Unknown` and default to showing the instance.
+/// `testIamPermissions`, so we post directly to the REST endpoint using a
+/// caller-supplied OAuth bearer (see [`fetch_access_token`]) and shared HTTP
+/// client. Any HTTP-level error is returned as `Err` so the caller can record
+/// `Unknown` and default to showing the instance.
 pub async fn test_instance_iam_permissions(
+    client: &reqwest::Client,
+    token: &str,
     project: &str,
     zone: &str,
     instance: &str,
@@ -500,12 +517,6 @@ pub async fn test_instance_iam_permissions(
         return Err(format!("invalid instance: {instance}"));
     }
 
-    let token = run_gcloud(&["auth", "print-access-token"]).await?;
-    let token = token.trim();
-    if token.is_empty() {
-        return Err("gcloud returned an empty access token".to_string());
-    }
-
     // URL components are all validated by the regexes above; no path traversal
     // or query-string injection is reachable here.
     let url = format!(
@@ -515,7 +526,6 @@ pub async fn test_instance_iam_permissions(
         "permissions": [PERM_IAP_TUNNEL, PERM_OS_LOGIN],
     });
 
-    let client = reqwest::Client::new();
     let resp = client
         .post(&url)
         .bearer_auth(token)
@@ -712,6 +722,309 @@ pub async fn list_instances_across_zones(project: &str) -> Result<Vec<GceInstanc
         })
         .collect();
     Ok(instances)
+}
+
+// ---------------------------------------------------------------------------
+// REST discovery backend
+//
+// The gcloud CLI is a Python program whose interpreter+SDK cold-start costs
+// ~1-2s per invocation on Windows. The full-discovery path (`refresh_all`)
+// otherwise spawns gcloud 3 + 2N times (N = project count), so that startup
+// overhead dominates wall-clock time. These functions hit the same Google APIs
+// directly over HTTP using ONE OAuth token (from `gcloud auth
+// print-access-token`), collapsing the per-project gcloud spawns into fast,
+// highly-parallelizable HTTP calls. The gcloud-CLI functions above are kept as
+// a fallback for when the token lacks the required scopes (see `refresh_all`).
+// ---------------------------------------------------------------------------
+
+/// Parse one page of a Cloud Resource Manager `projects.list` response into
+/// active `GcpProject`s plus the optional `nextPageToken`. Pure (no network);
+/// the caller drives pagination and applies `MAX_PROJECTS` / sorting. Mirrors
+/// the field mapping in `list_projects` (the gcloud CLI path) for parity.
+fn parse_projects_page(json_str: &str) -> Result<(Vec<GcpProject>, Option<String>), String> {
+    let value: serde_json::Value = serde_json::from_str(json_str.trim())
+        .map_err(|e| format!("failed to parse projects.list JSON: {e}"))?;
+    let next = value
+        .get("nextPageToken")
+        .and_then(|t| t.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    let mut out = Vec::new();
+    if let Some(arr) = value.get("projects").and_then(|p| p.as_array()) {
+        for e in arr {
+            // Skip non-ACTIVE projects (DELETE_REQUESTED, etc.). A missing
+            // lifecycleState is treated as ACTIVE for forward-compatibility.
+            let state = e
+                .get("lifecycleState")
+                .and_then(|s| s.as_str())
+                .unwrap_or("ACTIVE");
+            if state != "ACTIVE" {
+                continue;
+            }
+            let id = match e.get("projectId").and_then(|i| i.as_str()) {
+                Some(i) => i.to_string(),
+                None => continue,
+            };
+            let name = e
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or(id.as_str())
+                .to_string();
+            out.push(GcpProject { id, name });
+        }
+    }
+    Ok((out, next))
+}
+
+/// List GCP projects via the Cloud Resource Manager REST API (replaces the
+/// `gcloud projects list` subprocess). Pages through results, keeps only ACTIVE
+/// projects, sorts by `projectId`, and caps at `MAX_PROJECTS`.
+async fn list_projects_rest(
+    client: &reqwest::Client,
+    token: &str,
+) -> Result<Vec<GcpProject>, String> {
+    let mut out: Vec<GcpProject> = Vec::new();
+    let mut page_token: Option<String> = None;
+    loop {
+        let mut query: Vec<(&str, String)> = vec![("pageSize", "200".to_string())];
+        if let Some(tok) = &page_token {
+            query.push(("pageToken", tok.clone()));
+        }
+        let resp = client
+            .get("https://cloudresourcemanager.googleapis.com/v1/projects")
+            .bearer_auth(token)
+            .query(&query)
+            .timeout(Duration::from_secs(GCLOUD_CMD_TIMEOUT_SECS))
+            .send()
+            .await
+            .map_err(|e| format!("projects.list request failed: {e}"))?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            let preview: String = text.chars().take(240).collect();
+            return Err(format!("projects.list HTTP {status}: {preview}"));
+        }
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| format!("failed to read projects.list response: {e}"))?;
+        let (mut page, next) = parse_projects_page(&body)?;
+        out.append(&mut page);
+        match next {
+            Some(t) if out.len() < MAX_PROJECTS => page_token = Some(t),
+            _ => break,
+        }
+    }
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    out.truncate(MAX_PROJECTS);
+    Ok(out)
+}
+
+/// Probe project-level IAM permissions via the Cloud Resource Manager REST API
+/// (replaces `gcloud projects test-iam-permissions`). The response shape is
+/// identical to the gcloud `--format=json` output, so it reuses
+/// `parse_test_iam_permissions`.
+async fn test_project_iam_permissions_rest(
+    client: &reqwest::Client,
+    token: &str,
+    project: &str,
+) -> Result<ProjectAccess, String> {
+    if !is_valid_project(project) {
+        return Err(format!("invalid project: {project}"));
+    }
+    let url = format!(
+        "https://cloudresourcemanager.googleapis.com/v1/projects/{project}:testIamPermissions"
+    );
+    let body = serde_json::json!({ "permissions": [PERM_IAP_TUNNEL, PERM_OS_LOGIN] });
+    let resp = client
+        .post(&url)
+        .bearer_auth(token)
+        .json(&body)
+        .timeout(Duration::from_secs(GCLOUD_CMD_TIMEOUT_SECS))
+        .send()
+        .await
+        .map_err(|e| format!("projects.testIamPermissions request failed: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        let preview: String = text.chars().take(160).collect();
+        return Err(format!("projects.testIamPermissions HTTP {status}: {preview}"));
+    }
+    let payload = resp
+        .text()
+        .await
+        .map_err(|e| format!("failed to read testIamPermissions response: {e}"))?;
+    parse_test_iam_permissions(&payload)
+}
+
+/// Parse one page of a Compute `aggregatedList` instances response into
+/// `GceInstance`s plus the optional `nextPageToken`. Pure (no network); the
+/// caller drives pagination. Field extraction mirrors
+/// `list_instances_across_zones` (the gcloud CLI path) for parity.
+///
+/// Response shape:
+/// `{ "items": { "zones/<zone>": { "instances": [...] | "warning": {...} } },
+///    "nextPageToken": "..." }`
+fn parse_aggregated_instances(
+    json_str: &str,
+) -> Result<(Vec<GceInstance>, Option<String>), String> {
+    let value: serde_json::Value = serde_json::from_str(json_str.trim())
+        .map_err(|e| format!("failed to parse aggregatedList JSON: {e}"))?;
+    let next = value
+        .get("nextPageToken")
+        .and_then(|t| t.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
+    let mut instances: Vec<GceInstance> = Vec::new();
+    if let Some(items) = value.get("items").and_then(|i| i.as_object()) {
+        for (scope_key, scope_val) in items {
+            // scope_key looks like "zones/us-central1-a"; used as a fallback
+            // when an instance entry omits its own `zone` field.
+            let key_zone = scope_key.rsplit('/').next().unwrap_or("").to_string();
+            // Scopes with no instances carry only a `warning` (e.g.
+            // NO_RESULTS_ON_PAGE) — skip them, they are not errors.
+            let arr = match scope_val.get("instances").and_then(|i| i.as_array()) {
+                Some(a) => a,
+                None => continue,
+            };
+            for e in arr {
+                let name = match e.get("name").and_then(|n| n.as_str()) {
+                    Some(n) => n.to_string(),
+                    None => continue,
+                };
+                let status = e
+                    .get("status")
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("UNKNOWN")
+                    .to_string();
+                let zone_raw = e.get("zone").and_then(|z| z.as_str()).unwrap_or("");
+                // Zone may be a full URL or a short name; take the last path
+                // component, falling back to the items map key.
+                let zone_name = zone_raw.rsplit('/').next().unwrap_or(zone_raw).to_string();
+                let zone = if !zone_name.is_empty() {
+                    Some(zone_name)
+                } else if !key_zone.is_empty() {
+                    Some(key_zone.clone())
+                } else {
+                    None
+                };
+                instances.push(GceInstance {
+                    name,
+                    status,
+                    zone,
+                    access: None,
+                });
+            }
+        }
+    }
+    Ok((instances, next))
+}
+
+/// Translate a Compute REST error response (HTTP status + JSON body) into the
+/// same friendly strings the gcloud CLI path produces. It pulls the signal out
+/// of the Google error envelope
+/// (`{"error":{"status":"...","message":"...","errors":[{"reason":"..."}]}}`)
+/// and delegates to `map_list_instances_error`, guaranteeing identical UI
+/// messages between the REST and CLI backends.
+fn map_rest_instances_error(status: u16, body: &str, project: &str) -> String {
+    let parsed: Option<serde_json::Value> = serde_json::from_str(body.trim()).ok();
+    let mut signal = String::new();
+    if let Some(err) = parsed.as_ref().and_then(|v| v.get("error")) {
+        if let Some(msg) = err.get("message").and_then(|m| m.as_str()) {
+            signal.push_str(msg);
+        }
+        if let Some(st) = err.get("status").and_then(|s| s.as_str()) {
+            signal.push(' ');
+            signal.push_str(st);
+        }
+        if let Some(errs) = err.get("errors").and_then(|e| e.as_array()) {
+            for e in errs {
+                if let Some(reason) = e.get("reason").and_then(|r| r.as_str()) {
+                    signal.push(' ');
+                    signal.push_str(reason);
+                }
+            }
+        }
+    }
+    // `SERVICE_DISABLED` is the REST analogue of gcloud's "API has not been
+    // used" wording; normalise it so the existing detector fires even if the
+    // human-readable message differs.
+    if signal.to_ascii_uppercase().contains("SERVICE_DISABLED") {
+        signal.push_str(" compute engine api has not been used");
+    }
+    if signal.trim().is_empty() {
+        // No recognisable envelope — surface the status + raw body so the user
+        // still has something actionable.
+        signal = format!(
+            "HTTP {status}: {}",
+            body.trim().chars().take(200).collect::<String>()
+        );
+    }
+    map_list_instances_error(&signal, project)
+}
+
+/// List all instances across all zones in a project via the Compute
+/// `aggregatedList` REST API (replaces `gcloud compute instances list`). Pages
+/// through results, tolerates per-zone failures via `returnPartialSuccess`, and
+/// sorts by `(zone, name)` to match the gcloud `--sort-by=zone,name` ordering.
+async fn list_instances_across_zones_rest(
+    client: &reqwest::Client,
+    token: &str,
+    project: &str,
+) -> Result<Vec<GceInstance>, String> {
+    if !is_valid_project(project) {
+        return Err(format!("invalid project: {project}"));
+    }
+    let url = format!(
+        "https://compute.googleapis.com/compute/v1/projects/{project}/aggregated/instances"
+    );
+    let mut out: Vec<GceInstance> = Vec::new();
+    let mut page_token: Option<String> = None;
+    let started = Instant::now();
+    loop {
+        let mut query: Vec<(&str, String)> = vec![
+            ("maxResults", "500".to_string()),
+            ("returnPartialSuccess", "true".to_string()),
+        ];
+        if let Some(tok) = &page_token {
+            query.push(("pageToken", tok.clone()));
+        }
+        let resp = client
+            .get(&url)
+            .bearer_auth(token)
+            .query(&query)
+            .timeout(Duration::from_secs(GCP_LIST_INSTANCES_TIMEOUT_SECS))
+            .send()
+            .await
+            .map_err(|e| format!("compute.instances.aggregatedList request failed: {e}"))?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            log::warn!(
+                "gcp-cache: aggregatedList FAILED project={project} status={status} elapsed={:?}",
+                started.elapsed()
+            );
+            return Err(map_rest_instances_error(status.as_u16(), &text, project));
+        }
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| format!("failed to read aggregatedList response: {e}"))?;
+        let (mut page, next) = parse_aggregated_instances(&body)?;
+        out.append(&mut page);
+        match next {
+            Some(t) => page_token = Some(t),
+            None => break,
+        }
+    }
+    out.sort_by(|a, b| a.zone.cmp(&b.zone).then_with(|| a.name.cmp(&b.name)));
+    log::info!(
+        "gcp-cache: aggregatedList ok project={project} elapsed={:?} instances={}",
+        started.elapsed(),
+        out.len()
+    );
+    Ok(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -1028,13 +1341,18 @@ where
 /// at a comprehensible pace.
 const GCP_REFRESH_MAX_CONCURRENCY: usize = 5;
 
+/// Maximum concurrent per-project tasks when the REST backend is active. HTTP
+/// calls are far cheaper than gcloud subprocess spawns, so a higher ceiling is
+/// safe and meaningfully reduces wall-clock time for users with many projects.
+const GCP_REFRESH_REST_CONCURRENCY: usize = 16;
+
 /// Maximum concurrent per-instance `testIamPermissions` REST calls within a
 /// single project's refresh task (only invoked as a fallback when project-
 /// level IAP access is denied). Kept small to avoid swamping the Compute API.
 const GCP_REFRESH_PER_INSTANCE_CONCURRENCY: usize = 3;
 
-#[derive(Debug, Default, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct GcloudCacheSnapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gcloud: Option<GcloudStatus>,
@@ -1065,6 +1383,9 @@ struct GcpRefreshProgressEvent {
 
 pub struct GcloudCacheState {
     inner: RwLock<GcloudCacheSnapshot>,
+    /// Where the snapshot is persisted between app launches. `None` until
+    /// `set_persist_path` is called during startup.
+    persist_path: RwLock<Option<PathBuf>>,
 }
 
 impl Default for GcloudCacheState {
@@ -1077,6 +1398,7 @@ impl GcloudCacheState {
     pub fn new() -> Self {
         Self {
             inner: RwLock::new(GcloudCacheSnapshot::default()),
+            persist_path: RwLock::new(None),
         }
     }
 
@@ -1085,6 +1407,70 @@ impl GcloudCacheState {
             .read()
             .map(|g| g.clone())
             .unwrap_or_default()
+    }
+
+    /// Configure the on-disk location for the persisted snapshot.
+    pub fn set_persist_path(&self, path: PathBuf) {
+        if let Ok(mut p) = self.persist_path.write() {
+            *p = Some(path);
+        }
+    }
+
+    /// Load a previously persisted snapshot from disk (best-effort). A missing
+    /// or corrupt file is ignored. `refresh_in_progress` is always forced to
+    /// `false` so a snapshot persisted mid-flight can't wedge the UI.
+    pub fn load_persisted(&self) {
+        let path = match self.persist_path.read() {
+            Ok(p) => p.clone(),
+            Err(_) => None,
+        };
+        let Some(path) = path else { return };
+        let data = match std::fs::read_to_string(&path) {
+            Ok(d) => d,
+            Err(_) => return, // no cache file yet — first launch
+        };
+        match serde_json::from_str::<GcloudCacheSnapshot>(&data) {
+            Ok(mut snap) => {
+                snap.refresh_in_progress = false;
+                let projects = snap.projects.len();
+                if let Ok(mut g) = self.inner.write() {
+                    *g = snap;
+                }
+                log::info!("gcp-cache: loaded persisted snapshot ({projects} projects)");
+            }
+            Err(e) => {
+                log::warn!("gcp-cache: failed to parse persisted snapshot: {e}");
+            }
+        }
+    }
+
+    /// Persist the current snapshot to disk atomically (temp write + rename).
+    /// Best-effort: failures are logged but never interrupt a refresh. No
+    /// secrets are written (project IDs, instance metadata, access booleans).
+    fn persist_to_disk(&self) {
+        let path = match self.persist_path.read() {
+            Ok(p) => p.clone(),
+            Err(_) => None,
+        };
+        let Some(path) = path else { return };
+        let mut snap = self.snapshot();
+        snap.refresh_in_progress = false;
+        let json = match serde_json::to_string(&snap) {
+            Ok(j) => j,
+            Err(e) => {
+                log::warn!("gcp-cache: serialize for persist failed: {e}");
+                return;
+            }
+        };
+        let tmp = path.with_extension("json.tmp");
+        if let Err(e) = std::fs::write(&tmp, json.as_bytes()) {
+            log::warn!("gcp-cache: write temp persist file failed: {e}");
+            return;
+        }
+        if let Err(e) = std::fs::rename(&tmp, &path) {
+            log::warn!("gcp-cache: rename persist file failed: {e}");
+            let _ = std::fs::remove_file(&tmp);
+        }
     }
 
     /// Begin a refresh; returns `false` if another refresh is already in flight.
@@ -1154,7 +1540,38 @@ impl GcloudCacheState {
         }
 
         emit_progress(&app, "projects", None, 0, 0);
-        let projects = list_projects().await;
+
+        // Prefer the REST backend: fetch ONE OAuth token and reuse it for all
+        // HTTP calls instead of spawning gcloud (a ~1-2s Python cold-start on
+        // Windows) twice per project. Fall back to the gcloud CLI for the whole
+        // refresh if the token can't be obtained or Resource Manager rejects it
+        // (e.g. reduced-scope auth) — the CLI mints its own scoped token, so
+        // behaviour stays identical.
+        let http_client = reqwest::Client::new();
+        let token: Option<String> = match fetch_access_token().await {
+            Ok(t) => Some(t),
+            Err(e) => {
+                log::warn!(
+                    "gcp-cache: access-token fetch failed ({e}); using gcloud CLI backend"
+                );
+                None
+            }
+        };
+        let (projects, use_rest) = match &token {
+            Some(tok) => match list_projects_rest(&http_client, tok).await {
+                Ok(p) => {
+                    log::info!("gcp-cache: REST backend active ({} projects)", p.len());
+                    (p, true)
+                }
+                Err(e) => {
+                    log::warn!(
+                        "gcp-cache: REST projects.list failed ({e}); falling back to gcloud CLI"
+                    );
+                    (list_projects().await, false)
+                }
+            },
+            None => (list_projects().await, false),
+        };
         let total = projects.len() as u32;
         log::info!(
             "gcp-cache: list_projects done — {} projects: {}",
@@ -1175,8 +1592,14 @@ impl GcloudCacheState {
         // Fan out per-project work with bounded concurrency. Each task probes
         // project-level IAM permissions, lists instances, and (if the
         // project-level IAP check was denied) probes per-instance permissions
-        // as a fallback to catch resource-level IAM bindings.
-        let sem = Arc::new(Semaphore::new(GCP_REFRESH_MAX_CONCURRENCY));
+        // as a fallback to catch resource-level IAM bindings. The REST backend
+        // tolerates much higher concurrency than the CLI (HTTP vs. subprocess).
+        let max_concurrency = if use_rest {
+            GCP_REFRESH_REST_CONCURRENCY
+        } else {
+            GCP_REFRESH_MAX_CONCURRENCY
+        };
+        let sem = Arc::new(Semaphore::new(max_concurrency));
         let done_counter = Arc::new(AtomicU32::new(0));
         let mut set: JoinSet<(
             String,
@@ -1190,6 +1613,8 @@ impl GcloudCacheState {
             let counter = Arc::clone(&done_counter);
             let app_for_progress = app.clone();
             let total_for_progress = total;
+            let client = http_client.clone();
+            let token = token.clone();
             set.spawn(async move {
                 let _permit = match sem.acquire().await {
                     Ok(p) => p,
@@ -1202,7 +1627,22 @@ impl GcloudCacheState {
                     }
                 };
 
-                let proj_access = match test_project_iam_permissions(&pid).await {
+                // The IAM probe and the instance list are independent — run
+                // them concurrently rather than back-to-back.
+                let (access_res, list_res) = if use_rest {
+                    let tok = token.as_deref().unwrap_or_default();
+                    tokio::join!(
+                        test_project_iam_permissions_rest(&client, tok, &pid),
+                        list_instances_across_zones_rest(&client, tok, &pid),
+                    )
+                } else {
+                    tokio::join!(
+                        test_project_iam_permissions(&pid),
+                        list_instances_across_zones(&pid),
+                    )
+                };
+
+                let proj_access = match access_res {
                     Ok(a) => a,
                     Err(e) => {
                         log::warn!(
@@ -1217,8 +1657,7 @@ impl GcloudCacheState {
                     proj_access.os_login
                 );
 
-                let list_result = list_instances_across_zones(&pid).await;
-                let mut instances = match list_result {
+                let mut instances = match list_res {
                     Ok(v) => v,
                     Err(e) => {
                         let done = counter.fetch_add(1, Ordering::SeqCst) + 1;
@@ -1245,42 +1684,53 @@ impl GcloudCacheState {
                         }
                     }
                     AccessState::Denied if !instances.is_empty() => {
-                        // Fallback: probe each instance directly via the
-                        // Compute REST API to detect resource-level IAP grants
-                        // that wouldn't show up at the project level.
-                        let inner_sem = Arc::new(Semaphore::new(
-                            GCP_REFRESH_PER_INSTANCE_CONCURRENCY,
-                        ));
-                        let mut inner_set: JoinSet<(usize, Option<InstanceAccess>)> =
-                            JoinSet::new();
-                        for (idx, inst) in instances.iter().enumerate() {
-                            let zone = match inst.zone.clone() {
-                                Some(z) => z,
-                                None => continue,
-                            };
-                            let name = inst.name.clone();
-                            let proj = pid.clone();
-                            let inner_sem = Arc::clone(&inner_sem);
-                            inner_set.spawn(async move {
-                                let _p = match inner_sem.acquire().await {
-                                    Ok(p) => p,
-                                    Err(_) => return (idx, None),
+                        // Fallback: probe each instance directly via the Compute
+                        // REST API to detect resource-level IAP grants that
+                        // wouldn't show up at the project level. Requires an
+                        // OAuth token; if none was obtained (CLI backend with a
+                        // failed token fetch) skip — instances stay Unknown and
+                        // are shown by default.
+                        if let Some(tok) = token.as_ref() {
+                            let inner_sem = Arc::new(Semaphore::new(
+                                GCP_REFRESH_PER_INSTANCE_CONCURRENCY,
+                            ));
+                            let mut inner_set: JoinSet<(usize, Option<InstanceAccess>)> =
+                                JoinSet::new();
+                            for (idx, inst) in instances.iter().enumerate() {
+                                let zone = match inst.zone.clone() {
+                                    Some(z) => z,
+                                    None => continue,
                                 };
-                                match test_instance_iam_permissions(&proj, &zone, &name).await {
-                                    Ok(a) => (idx, Some(a)),
-                                    Err(e) => {
-                                        log::debug!(
-                                            "gcp-cache: instance probe failed {proj}/{zone}/{name}: {e}"
-                                        );
-                                        (idx, None)
+                                let name = inst.name.clone();
+                                let proj = pid.clone();
+                                let inner_sem = Arc::clone(&inner_sem);
+                                let client = client.clone();
+                                let tok = tok.clone();
+                                inner_set.spawn(async move {
+                                    let _p = match inner_sem.acquire().await {
+                                        Ok(p) => p,
+                                        Err(_) => return (idx, None),
+                                    };
+                                    match test_instance_iam_permissions(
+                                        &client, &tok, &proj, &zone, &name,
+                                    )
+                                    .await
+                                    {
+                                        Ok(a) => (idx, Some(a)),
+                                        Err(e) => {
+                                            log::debug!(
+                                                "gcp-cache: instance probe failed {proj}/{zone}/{name}: {e}"
+                                            );
+                                            (idx, None)
+                                        }
                                     }
-                                }
-                            });
-                        }
-                        while let Some(j) = inner_set.join_next().await {
-                            if let Ok((idx, Some(access))) = j {
-                                if let Some(inst) = instances.get_mut(idx) {
-                                    inst.access = Some(access);
+                                });
+                            }
+                            while let Some(j) = inner_set.join_next().await {
+                                if let Ok((idx, Some(access))) = j {
+                                    if let Some(inst) = instances.get_mut(idx) {
+                                        inst.access = Some(access);
+                                    }
                                 }
                             }
                         }
@@ -1327,6 +1777,9 @@ impl GcloudCacheState {
             s.last_refreshed_ms = now_ms();
             s.refresh_in_progress = false;
         });
+        // Persist so the next app launch can show this (stale) snapshot
+        // immediately and revalidate in the background.
+        self.persist_to_disk();
         let snap = self.snapshot();
         log::info!(
             "gcp-cache: refresh done elapsed={:?} projects={} with_instances={} errors={} probed={}",
@@ -2075,5 +2528,304 @@ mod tests {
         assert_eq!(zones.len(), 2);
         assert!(zones.contains("us-central1-a"));
         assert!(zones.contains("us-east1-b"));
+    }
+
+    // -- REST backend parser tests --
+
+    #[test]
+    fn parse_aggregated_instances_extracts_fields_and_strips_zone_url() {
+        let json = r#"{
+            "items": {
+                "zones/us-east1-b": {
+                    "instances": [
+                        {"name": "vm-b", "status": "TERMINATED",
+                         "zone": "https://www.googleapis.com/compute/v1/projects/p/zones/us-east1-b"},
+                        {"name": "vm-a", "status": "RUNNING",
+                         "zone": "https://www.googleapis.com/compute/v1/projects/p/zones/us-east1-b"}
+                    ]
+                },
+                "zones/us-central1-a": {
+                    "instances": [
+                        {"name": "web", "status": "RUNNING", "zone": "us-central1-a"}
+                    ]
+                }
+            }
+        }"#;
+        let (instances, next) = parse_aggregated_instances(json).unwrap();
+        assert!(next.is_none());
+        // The parser does not sort (the caller sorts after accumulating pages),
+        // but verify every instance was parsed with its zone URL stripped to the
+        // short name and status preserved.
+        let mut got: Vec<(String, String, String)> = instances
+            .iter()
+            .map(|i| {
+                (
+                    i.zone.clone().unwrap_or_default(),
+                    i.name.clone(),
+                    i.status.clone(),
+                )
+            })
+            .collect();
+        got.sort();
+        assert_eq!(
+            got,
+            vec![
+                ("us-central1-a".to_string(), "web".to_string(), "RUNNING".to_string()),
+                ("us-east1-b".to_string(), "vm-a".to_string(), "RUNNING".to_string()),
+                ("us-east1-b".to_string(), "vm-b".to_string(), "TERMINATED".to_string()),
+            ]
+        );
+        assert!(instances.iter().all(|i| i.access.is_none()));
+    }
+
+    #[test]
+    fn instances_sort_by_zone_then_name() {
+        // Locks the ordering applied by list_instances_across_zones_rest after
+        // pages are accumulated, matching the gcloud `--sort-by=zone,name`.
+        let mk = |zone: &str, name: &str| GceInstance {
+            name: name.to_string(),
+            status: "RUNNING".to_string(),
+            zone: Some(zone.to_string()),
+            access: None,
+        };
+        let mut v = [
+            mk("us-east1-b", "vm-b"),
+            mk("us-central1-a", "web"),
+            mk("us-east1-b", "vm-a"),
+        ];
+        v.sort_by(|a, b| a.zone.cmp(&b.zone).then_with(|| a.name.cmp(&b.name)));
+        let got: Vec<(&str, &str)> = v
+            .iter()
+            .map(|i| (i.zone.as_deref().unwrap_or(""), i.name.as_str()))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                ("us-central1-a", "web"),
+                ("us-east1-b", "vm-a"),
+                ("us-east1-b", "vm-b"),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_aggregated_instances_skips_warning_only_scopes() {
+        // Scopes with no instances carry only a `warning` (NO_RESULTS_ON_PAGE).
+        let json = r#"{
+            "items": {
+                "zones/us-central1-a": {
+                    "warning": {"code": "NO_RESULTS_ON_PAGE", "message": "none"}
+                },
+                "zones/europe-west1-b": {
+                    "instances": [{"name": "vm1", "status": "RUNNING", "zone": "europe-west1-b"}]
+                }
+            }
+        }"#;
+        let (instances, _) = parse_aggregated_instances(json).unwrap();
+        assert_eq!(instances.len(), 1);
+        assert_eq!(instances[0].name, "vm1");
+    }
+
+    #[test]
+    fn parse_aggregated_instances_defaults_and_fallbacks() {
+        // Missing name → skipped; missing status → UNKNOWN; empty zone → falls
+        // back to the items map key.
+        let json = r#"{
+            "items": {
+                "zones/asia-northeast1-a": {
+                    "instances": [
+                        {"status": "RUNNING", "zone": "asia-northeast1-a"},
+                        {"name": "vm-x", "zone": ""}
+                    ]
+                }
+            }
+        }"#;
+        let (instances, _) = parse_aggregated_instances(json).unwrap();
+        assert_eq!(instances.len(), 1, "entry without a name is skipped");
+        assert_eq!(instances[0].name, "vm-x");
+        assert_eq!(instances[0].status, "UNKNOWN");
+        assert_eq!(instances[0].zone.as_deref(), Some("asia-northeast1-a"));
+    }
+
+    #[test]
+    fn parse_aggregated_instances_empty_items_and_page_token() {
+        let (instances, next) =
+            parse_aggregated_instances(r#"{"items": {}, "nextPageToken": "abc123"}"#).unwrap();
+        assert!(instances.is_empty());
+        assert_eq!(next.as_deref(), Some("abc123"));
+    }
+
+    #[test]
+    fn parse_aggregated_instances_bad_json_errors() {
+        assert!(parse_aggregated_instances("not json").is_err());
+    }
+
+    #[test]
+    fn parse_projects_page_active_filter_and_name_fallback() {
+        let json = r#"{
+            "projects": [
+                {"projectId": "alpha-proj", "name": "Alpha", "lifecycleState": "ACTIVE"},
+                {"projectId": "beta-proj", "lifecycleState": "ACTIVE"},
+                {"projectId": "gone-proj", "name": "Gone", "lifecycleState": "DELETE_REQUESTED"}
+            ],
+            "nextPageToken": "tok"
+        }"#;
+        let (projects, next) = parse_projects_page(json).unwrap();
+        assert_eq!(next.as_deref(), Some("tok"));
+        assert_eq!(projects.len(), 2, "DELETE_REQUESTED is filtered out");
+        assert_eq!(projects[0].id, "alpha-proj");
+        assert_eq!(projects[0].name, "Alpha");
+        // Missing name falls back to the project id.
+        assert_eq!(projects[1].id, "beta-proj");
+        assert_eq!(projects[1].name, "beta-proj");
+    }
+
+    #[test]
+    fn parse_projects_page_no_token_when_absent_or_empty() {
+        let (_, next) = parse_projects_page(r#"{"projects": []}"#).unwrap();
+        assert!(next.is_none());
+        let (_, next_empty) =
+            parse_projects_page(r#"{"projects": [], "nextPageToken": ""}"#).unwrap();
+        assert!(next_empty.is_none(), "empty token is treated as absent");
+    }
+
+    #[test]
+    fn parse_test_iam_permissions_rest_body_parity() {
+        // The REST testIamPermissions body is byte-identical to gcloud's
+        // --format=json output, so the shared parser must agree.
+        let json = r#"{"permissions": ["iap.tunnelInstances.accessViaIAP"]}"#;
+        let access = parse_test_iam_permissions(json).unwrap();
+        assert_eq!(access.iap_tunnel, AccessState::Granted);
+        assert_eq!(access.os_login, AccessState::Denied);
+    }
+
+    // -- map_rest_instances_error parity tests --
+
+    #[test]
+    fn map_rest_instances_error_service_disabled_matches_cli() {
+        let body = r#"{"error":{"code":403,"status":"PERMISSION_DENIED",
+            "message":"Compute Engine API has not been used in project 123 before or it is disabled.",
+            "errors":[{"reason":"SERVICE_DISABLED"}]}}"#;
+        let msg = map_rest_instances_error(403, body, "my-project");
+        assert_eq!(msg, "Compute Engine API is not enabled.");
+    }
+
+    #[test]
+    fn map_rest_instances_error_service_disabled_via_reason_only() {
+        // Even if the human message is generic, the SERVICE_DISABLED reason
+        // alone must trip the detector.
+        let body = r#"{"error":{"code":403,"status":"PERMISSION_DENIED",
+            "message":"The service is currently unavailable for this project.",
+            "errors":[{"reason":"SERVICE_DISABLED"}]}}"#;
+        let msg = map_rest_instances_error(403, body, "p");
+        assert_eq!(msg, "Compute Engine API is not enabled.");
+    }
+
+    #[test]
+    fn map_rest_instances_error_missing_list_permission() {
+        let body = r#"{"error":{"code":403,"status":"PERMISSION_DENIED",
+            "message":"Required 'compute.instances.list' permission for 'projects/foo'"}}"#;
+        let msg = map_rest_instances_error(403, body, "foo");
+        assert!(msg.contains("Permission denied"));
+        assert!(msg.contains("compute.instances.list"));
+        assert!(msg.contains("foo"));
+    }
+
+    #[test]
+    fn map_rest_instances_error_generic_permission_denied() {
+        let body = r#"{"error":{"code":403,"status":"PERMISSION_DENIED",
+            "message":"weird upstream error"}}"#;
+        let msg = map_rest_instances_error(403, body, "p");
+        assert!(msg.contains("Permission denied while listing instances"));
+        assert!(msg.contains("weird upstream error"));
+    }
+
+    #[test]
+    fn map_rest_instances_error_non_json_body_includes_status() {
+        let msg = map_rest_instances_error(401, "Unauthorized", "p");
+        assert!(msg.contains("401"), "status surfaced for opaque bodies");
+        assert!(msg.contains("Unauthorized"));
+    }
+
+    // -- Disk persistence round-trip --
+
+    #[test]
+    fn snapshot_disk_round_trip_preserves_data_and_clears_in_progress() {
+        let mut snap = GcloudCacheSnapshot {
+            gcloud: Some(GcloudStatus {
+                available: true,
+                version: Some("456.0.0".to_string()),
+            }),
+            auth: Some(GcloudAuthStatus {
+                authenticated: true,
+                account: Some("user@example.com".to_string()),
+            }),
+            projects: vec![GcpProject {
+                id: "alpha-proj".to_string(),
+                name: "Alpha".to_string(),
+            }],
+            last_refreshed_ms: Some(1_700_000_000_000),
+            refresh_in_progress: true,
+            ..Default::default()
+        };
+        snap.instances_by_project.insert(
+            "alpha-proj".to_string(),
+            vec![GceInstance {
+                name: "web".to_string(),
+                status: "RUNNING".to_string(),
+                zone: Some("us-central1-a".to_string()),
+                access: Some(InstanceAccess {
+                    iap_tunnel: AccessState::Granted,
+                    os_login: AccessState::Denied,
+                }),
+            }],
+        );
+        snap.project_access.insert(
+            "alpha-proj".to_string(),
+            ProjectAccess {
+                iap_tunnel: AccessState::Granted,
+                os_login: AccessState::Denied,
+            },
+        );
+        snap.project_errors
+            .insert("beta-proj".to_string(), "boom".to_string());
+
+        let json = serde_json::to_string(&snap).unwrap();
+        let mut restored: GcloudCacheSnapshot = serde_json::from_str(&json).unwrap();
+        // load_persisted forces this false; emulate that here.
+        restored.refresh_in_progress = false;
+
+        assert_eq!(restored.last_refreshed_ms, Some(1_700_000_000_000));
+        assert!(!restored.refresh_in_progress);
+        assert_eq!(restored.projects.len(), 1);
+        assert_eq!(restored.projects[0].id, "alpha-proj");
+        let insts = restored.instances_by_project.get("alpha-proj").unwrap();
+        assert_eq!(insts[0].name, "web");
+        assert_eq!(insts[0].zone.as_deref(), Some("us-central1-a"));
+        assert_eq!(
+            insts[0].access.unwrap().iap_tunnel,
+            AccessState::Granted
+        );
+        assert_eq!(
+            restored.project_access.get("alpha-proj").unwrap().iap_tunnel,
+            AccessState::Granted
+        );
+        assert_eq!(
+            restored.project_errors.get("beta-proj").map(|s| s.as_str()),
+            Some("boom")
+        );
+    }
+
+    #[test]
+    fn snapshot_deserializes_with_missing_optional_fields() {
+        // A minimal persisted file (e.g. from an older version) must load with
+        // defaults rather than erroring.
+        let restored: GcloudCacheSnapshot =
+            serde_json::from_str(r#"{"projects": []}"#).unwrap();
+        assert!(restored.gcloud.is_none());
+        assert!(restored.auth.is_none());
+        assert!(restored.instances_by_project.is_empty());
+        assert!(restored.last_refreshed_ms.is_none());
+        assert!(!restored.refresh_in_progress);
     }
 }

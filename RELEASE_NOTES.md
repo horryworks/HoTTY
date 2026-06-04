@@ -1,5 +1,26 @@
 # Release Notes
 
+## v2.0.3-beta8
+
+A GCP-pane release. Browsing your Compute Engine instances is now noticeably faster: discovery has been rebuilt on Google's REST APIs (Cloud Resource Manager + Compute `aggregatedList`) instead of spawning one `gcloud` subprocess per query — it fetches a single OAuth token per refresh and probes many projects concurrently, with an automatic fall back to the `gcloud` CLI if the REST path is unavailable. The pane also gains a **search box** to filter projects and instances as you type, and it now shows the **last-known list instantly on launch** while revalidating in the background. Two security hardening items round out the release: new host-tree (`.htree`) exports use the memory-hard **Argon2id** key-derivation function, and the `gcloud` argument guard now rejects the full set of shell metacharacters.
+
+### New Features
+
+- **Search box in the GCP pane.** A search field at the top of the GCP instances pane filters the list by project or instance name as you type. Matching is case-insensitive and spans both project names and instance names — a project stays visible if its own name matches or any of its instances do. A **×** button clears the query, and your last search text is remembered across sessions. The filter runs after the IAP-access gate, so it only ever surfaces instances you are allowed to connect to.
+
+### Improvements
+
+- **GCP projects and instances load instantly on launch.** The discovery snapshot (projects, instances, and IAP-access flags — no secrets) is now persisted to disk per user and reloaded on startup, so the pane shows your last-known list immediately instead of starting empty. If that snapshot is older than 10 minutes it is revalidated in the background (stale-while-revalidate), so you see data right away while it quietly refreshes. A fresh in-memory snapshot from a recent refresh is reused as-is and still requires an explicit **Refresh** to re-query.
+
+### Performance
+
+- **GCP discovery is substantially faster via Google's REST APIs.** Listing projects and instances and probing IAP / OS Login permissions previously spawned a separate `gcloud` (Python) subprocess for every call, which dominated refresh time for users with many projects. HoTTY now talks to the Cloud Resource Manager and Compute `aggregatedList` REST endpoints directly, fetching one OAuth access token per refresh (via `gcloud auth print-access-token`) and reusing it across every call, with the per-project work running at higher concurrency. Result ordering and the friendly error messages are identical to the old CLI path, and HoTTY automatically falls back to the `gcloud` CLI if the REST backend is unavailable.
+
+### Security
+
+- **New host-tree exports use Argon2id key derivation.** Encrypted `.htree` exports are portable, password-protected files, so their key-derivation strength directly governs offline brute-force resistance. New exports now derive their AES-256-GCM key with **Argon2id** (memory-hard: 64 MiB, 3 passes) instead of PBKDF2-HMAC-SHA256, and carry a format version so the scheme can evolve. Existing `.htree` files written by older builds still import unchanged — the previous PBKDF2 reader is retained solely for backward compatibility.
+- **The `gcloud` argument guard now rejects all shell metacharacters.** The guard protecting the `gcloud.cmd` invocation (spawned via `cmd.exe`) previously rejected only the double-quote character. It now rejects the full BatBadBut set — `"`, `%`, `^`, `&`, `|`, `<`, `>`, and newlines — as defense-in-depth against argument / command injection through a `.cmd` batch file. Every GCP identifier reaching this path is already validated upstream, so this hardens a path with no known exploit. Follow-up to the argument-quoting guard added in beta4 and re-hardened in beta7.
+
 ## v2.0.3-beta7
 
 A backend-and-frontend bug-fix release with two GCP IAP security follow-ups. The fixes span **connection reliability** (an SSH keepalive that never actually pinged, a Telnet socket leaked on disconnect, and GCP IAP key generation that failed for non-default OpenSSH installs), the **AI layer** (mid-stream / HTTP errors that corrupted chat history, Vertex AI failures mislabelled `API error 0`, and a Japanese-first-run language-selector bug), and several **credential / save-path correctness** issues (saved SSH key passphrases, edited passphrases served stale on reconnect, text-editor save ordering, and GCP instance action state). SSH disconnect is now immediate. The two security items extend the existing credential-environment scrubbing to the IAP tunnel's `gcloud` subprocess and harden the `gcloud` argument-quoting guard in release builds.

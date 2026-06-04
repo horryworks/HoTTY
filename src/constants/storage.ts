@@ -14,4 +14,5 @@ export const STORAGE_KEYS = {
   UI_GRID_COL_SIZES: (cols: number) => `hotty_ui_gridColSizes_${cols}`,
   UI_GRID_ROW_SIZES: (rows: number) => `hotty_ui_gridRowSizes_${rows}`,
   GCP_SHOW_INACCESSIBLE: 'hotty_gcp_show_inaccessible',
+  GCP_SEARCH_QUERY: 'hotty_gcp_search_query',
 } as const;

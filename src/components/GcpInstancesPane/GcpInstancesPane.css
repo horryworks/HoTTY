@@ -74,6 +74,52 @@
   white-space: nowrap;
 }
 
+.gcp-pane-search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.gcp-pane-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.gcp-pane-search-input:focus {
+  border-color: var(--accent-color);
+}
+
+.gcp-pane-search-clear {
+  background: var(--btn-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: var(--ui-font-family);
+  flex-shrink: 0;
+}
+
+.gcp-pane-search-clear:hover {
+  background: var(--btn-hover-bg);
+  border-color: var(--accent-color);
+}
+
 .gcp-pane-error {
   padding: 6px 8px;
   background: var(--color-danger);

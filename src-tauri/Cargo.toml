@@ -1,6 +1,6 @@
 [package]
 name = "hotty"
-version = "2.0.3-beta7"
+version = "2.0.3-beta8"
 description = "HoTTY - AI Integrated Advanced Terminal Emulator (Rust/Tauri)"
 authors = ["horryworks"]
 license = "GPL-3.0-or-later"
@@ -51,6 +51,9 @@ reqwest = { version = "0.12", features = ["json", "stream"] }
 
 # Cryptography
 aes-gcm = "0.10"
+# Argon2id KDF for v2 .htree exports (memory-hard); PBKDF2 retained for reading
+# legacy v1 .htree files only.
+argon2 = "0.5"
 pbkdf2 = { version = "0.12", features = ["simple"] }
 sha2 = "0.10"
 rand = "0.8"

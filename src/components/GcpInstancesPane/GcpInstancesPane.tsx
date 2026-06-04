@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import { tauriService } from '../../services/tauriService';
 import type {
   GceInstance,
   GcloudCacheSnapshot,
+  GcpProject,
   GcpRefreshProgress,
 } from '../../types/appTypes';
 import { STORAGE_KEYS } from '../../constants/storage';
@@ -42,6 +44,11 @@ const STATUS_POLL_MAX_MS = 5 * 60 * 1000;
 
 const START_TARGETS = ['RUNNING'];
 const STOP_TARGETS = ['TERMINATED', 'STOPPED', 'SUSPENDED'];
+
+/** How long a persisted (disk-loaded) snapshot is considered fresh enough to
+ *  show without an automatic background refresh. Older than this on first mount
+ *  → revalidate in the background (stale-while-revalidate). 10 minutes. */
+const GCP_CACHE_TTL_MS = 10 * 60 * 1000;
 
 /**
  * While a start/stop is pending, a freshly-polled live status is "acceptable"
@@ -152,6 +159,13 @@ export function GcpInstancesPane({
       return false;
     }
   });
+  const [searchQuery, setSearchQuery] = useState<string>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.GCP_SEARCH_QUERY) ?? '';
+    } catch {
+      return '';
+    }
+  });
   const didInitialFetchRef = useRef(false);
   /** Map of vmKey → abort flag for an in-flight start/stop tracking loop. */
   const activeActionsRef = useRef<Map<string, VmAbortFlag>>(new Map());
@@ -165,9 +179,11 @@ export function GcpInstancesPane({
     }
   }, []);
 
-  // Initial load: read cache; if empty (= first time the pane mounts), kick off
-  // a refresh in the background. Subsequent mounts reuse the cache and require
-  // an explicit Refresh click to re-fetch.
+  // Initial load: read cache. If it's empty (first ever mount) OR the persisted
+  // snapshot is older than the TTL (loaded from disk on a fresh app launch),
+  // kick off a background refresh — showing the stale data immediately while it
+  // revalidates. A fresh in-memory cache (recent refresh) is reused as-is and
+  // requires an explicit Refresh click to re-fetch.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -177,7 +193,9 @@ export function GcpInstancesPane({
         setSnapshot(snap);
         const isEmpty =
           !snap.gcloud && !snap.auth && snap.projects.length === 0 && !snap.lastRefreshedMs;
-        if (isEmpty && !didInitialFetchRef.current) {
+        const isStale =
+          !!snap.lastRefreshedMs && Date.now() - snap.lastRefreshedMs > GCP_CACHE_TTL_MS;
+        if ((isEmpty || isStale) && !snap.refreshInProgress && !didInitialFetchRef.current) {
           didInitialFetchRef.current = true;
           refreshAndStore();
         }
@@ -457,6 +475,26 @@ export function GcpInstancesPane({
     });
   }, []);
 
+  const persistSearchQuery = useCallback((value: string) => {
+    setSearchQuery(value);
+    try {
+      localStorage.setItem(STORAGE_KEYS.GCP_SEARCH_QUERY, value);
+    } catch {
+      /* localStorage may be unavailable in some test envs — ignore. */
+    }
+  }, []);
+
+  const handleSearchChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      persistSearchQuery(e.target.value);
+    },
+    [persistSearchQuery],
+  );
+
+  const clearSearch = useCallback(() => {
+    persistSearchQuery('');
+  }, [persistSearchQuery]);
+
   const projects = snapshot.projects;
   const isUnauthenticated = Boolean(snapshot.auth && !snapshot.auth.authenticated);
   const isGcloudMissing = Boolean(snapshot.gcloud && !snapshot.gcloud.available);
@@ -478,6 +516,60 @@ export function GcpInstancesPane({
     }
     return n;
   }, [projects, snapshot.instancesByProject, snapshot.projectAccess, showInaccessible]);
+
+  /**
+   * Projects to render after applying both the IAP-access gate (`showInaccessible`)
+   * and the text search filter (AND). A project is kept when its name partially
+   * matches the query (then all access-filtered instances are shown) or when at
+   * least one of its instances matches. The IAP gate runs first, so search only
+   * ever sees instances the user is allowed to connect to (unless the gate is off).
+   */
+  const visibleProjects = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const result: Array<{
+      project: GcpProject;
+      instances: GceInstance[];
+      projectError?: string;
+    }> = [];
+    for (const project of projects) {
+      const projectError = snapshot.projectErrors[project.id];
+      const allInstances = snapshot.instancesByProject[project.id] ?? [];
+      const projAccess = snapshot.projectAccess?.[project.id];
+      const accessFiltered = showInaccessible
+        ? allInstances
+        : allInstances.filter((inst) => isInstanceAccessible(inst, projAccess));
+
+      // Suppress a project entirely when every instance was filtered out by the
+      // IAP-tunnel permission gate and there's no project-level error worth
+      // keeping visible. Projects with zero instances total stay visible so the
+      // user can see they exist.
+      const isProjectFullyHidden =
+        !showInaccessible && !projectError && allInstances.length > 0 && accessFiltered.length === 0;
+      if (isProjectFullyHidden) continue;
+
+      const projectMatches = q === '' || (project.name || project.id).toLowerCase().includes(q);
+      const instances =
+        q === '' || projectMatches
+          ? accessFiltered
+          : accessFiltered.filter((inst) => inst.name.toLowerCase().includes(q));
+
+      // Search active and this project neither matches by name nor has any
+      // matching instance → hide it.
+      if (q !== '' && !projectMatches && instances.length === 0) continue;
+
+      result.push({ project, instances, projectError });
+    }
+    return result;
+  }, [
+    projects,
+    snapshot.projectErrors,
+    snapshot.instancesByProject,
+    snapshot.projectAccess,
+    showInaccessible,
+    searchQuery,
+  ]);
+
+  const trimmedQuery = searchQuery.trim();
 
   const headerSubtitle = useMemo(() => {
     if (isRefreshing) {
@@ -543,6 +635,27 @@ export function GcpInstancesPane({
         </div>
       </div>
       <div className="gcp-pane-subtitle">{headerSubtitle}</div>
+      <div className="gcp-pane-search">
+        <input
+          type="text"
+          className="gcp-pane-search-input"
+          placeholder="Search projects / instances…"
+          value={searchQuery}
+          onChange={handleSearchChange}
+          aria-label="Search GCP projects and instances"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            className="gcp-pane-search-clear"
+            onClick={clearSearch}
+            title="Clear search"
+            aria-label="Clear search"
+          >
+            ×
+          </button>
+        )}
+      </div>
       {error && (
         <div className="gcp-pane-error" role="alert">
           {error}
@@ -559,25 +672,12 @@ export function GcpInstancesPane({
                   ? 'Run `gcloud auth login` in a terminal, then click ↻.'
                   : 'No projects found.'}
           </div>
+        ) : visibleProjects.length === 0 && trimmedQuery !== '' ? (
+          <div className="gcp-empty">No matches for “{trimmedQuery}”.</div>
         ) : (
-          projects.map((project) => {
+          visibleProjects.map(({ project, instances, projectError }) => {
             const collapsed = collapsedProjects.has(project.id);
-            const projectError = snapshot.projectErrors[project.id];
-            const allInstances = snapshot.instancesByProject[project.id] ?? [];
             const projAccess = snapshot.projectAccess?.[project.id];
-            const instances = showInaccessible
-              ? allInstances
-              : allInstances.filter((inst) => isInstanceAccessible(inst, projAccess));
-            // Suppress entire project when nothing to show: every instance was
-            // filtered out by the IAP-tunnel permission gate AND there's no
-            // surfaced project-level error worth keeping visible. Projects with
-            // zero instances total stay visible so users can see they exist.
-            const isProjectFullyHidden =
-              !showInaccessible &&
-              !projectError &&
-              allInstances.length > 0 &&
-              instances.length === 0;
-            if (isProjectFullyHidden) return null;
             const grouped = groupByZone(instances);
             return (
               <div key={project.id} className="gcp-project-group">

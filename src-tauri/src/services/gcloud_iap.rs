@@ -310,25 +310,36 @@ fn build_gcloud_command(args: &[String]) -> TokioCommand {
 /// log files — these calls happen BEFORE the tunnel-startup phase, so when an
 /// IAP connect hangs we need to know which of them is responsible.
 async fn run_gcloud_capture(args: &[String], deadline: Duration) -> Result<String, SessionError> {
-    // Regression guard: gcloud is shipped as `gcloud.cmd` and Rust's std spawns
-    // .cmd files via cmd.exe. cmd.exe applies a "if there are 3+ `\"` characters
-    // on the command line, strip the outermost pair" rule which truncates the
-    // program path at the first space when args themselves contain `\"` — see
-    // the 2026-05-22 IAP regression where `--format=value(\"key:enable-oslogin\"...)`
-    // caused gcloud to fail with "'C:\\…\\Google\\Cloud' is not recognized".
-    // Use `--format=json(projection)` and parse with serde_json instead; the
-    // projection syntax avoids embedded quotes entirely.
-    if args.iter().any(|a| a.contains('"')) {
+    // Regression / injection guard: gcloud is shipped as `gcloud.cmd` and Rust's
+    // std spawns .cmd files via cmd.exe. cmd.exe applies a "if there are 3+ `\"`
+    // characters on the command line, strip the outermost pair" rule which
+    // truncates the program path at the first space when args themselves contain
+    // `\"` — see the 2026-05-22 IAP regression where
+    // `--format=value(\"key:enable-oslogin\"...)` caused gcloud to fail with
+    // "'C:\\…\\Google\\Cloud' is not recognized". Use `--format=json(projection)`
+    // and parse with serde_json instead; the projection syntax avoids embedded
+    // quotes entirely.
+    //
+    // Beyond `\"`, the other cmd.exe metacharacters (`% ^ & | < >` and newlines)
+    // are the BatBadBut argument/command-injection class for `.cmd` batch files.
+    // Every GCP identifier reaching this path is already regex-validated upstream
+    // (is_valid_project/zone/instance) and the remaining args are app-constructed,
+    // so this is defense-in-depth — but we reject them with an allowlist mindset
+    // rather than trusting a single-character `\"` check that is easy to regress.
+    const FORBIDDEN: &[char] = &['"', '%', '^', '&', '|', '<', '>', '\n', '\r'];
+    if args
+        .iter()
+        .any(|a| a.chars().any(|c| FORBIDDEN.contains(&c)))
+    {
         // Hard fail in every build profile. A `debug_assert!` would let release
-        // builds run the mangled invocation anyway and surface the confusing
-        // "'C:\…\Google\Cloud' is not recognized" error downstream — exactly
-        // what this guard exists to prevent. Reject up front with an actionable
-        // message instead. Callers must use --format=json(projection).
+        // builds run the mangled/injected invocation anyway — exactly what this
+        // guard exists to prevent. Reject up front with an actionable message.
+        // Callers must use --format=json(projection) and validated identifiers.
         log::error!(
-            "gcloud-iap: run_gcloud_capture called with `\"` in args — cmd.exe would mangle the program path: {args:?}"
+            "gcloud-iap: run_gcloud_capture called with a cmd.exe metacharacter in args — refusing to spawn: {args:?}"
         );
         return Err(SessionError::InvalidConfig(
-            "internal: gcloud arg contains '\"' — use --format=json(projection) instead".into(),
+            "internal: gcloud arg contains a forbidden shell metacharacter (one of \" % ^ & | < >) — use --format=json(projection) and validated identifiers".into(),
         ));
     }
 
@@ -1805,6 +1816,26 @@ mod tests {
             matches!(res, Err(SessionError::InvalidConfig(_))),
             "expected InvalidConfig rejection, got {res:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn run_gcloud_capture_rejects_cmd_metacharacters() {
+        // BatBadBut-class cmd.exe metacharacters must all be rejected before any
+        // spawn, so the test passes without gcloud installed. Each char is tested
+        // independently to prove the guard is not just a `"`-only denylist.
+        for bad in ['%', '^', '&', '|', '<', '>', '\n', '\r'] {
+            let args = vec![
+                "compute".to_string(),
+                "instances".to_string(),
+                "list".to_string(),
+                format!("--filter=name{bad}evil"),
+            ];
+            let res = run_gcloud_capture(&args, Duration::from_secs(5)).await;
+            assert!(
+                matches!(res, Err(SessionError::InvalidConfig(_))),
+                "expected InvalidConfig rejection for metacharacter {bad:?}, got {res:?}"
+            );
+        }
     }
 
     #[test]

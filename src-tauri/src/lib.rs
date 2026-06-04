@@ -99,6 +99,17 @@ pub fn run() {
                 });
             }
 
+            // Load the persisted GCP discovery snapshot so the GCP pane can show
+            // the last-known projects/instances instantly on launch and then
+            // revalidate in the background (stale-while-revalidate). The file is
+            // per-user under app_data_dir and contains no secrets.
+            {
+                let gcp_cache: tauri::State<Arc<GcloudCacheState>> = app.state();
+                let persist_path = app_data_dir.join("gcp_discovery_cache.json");
+                gcp_cache.set_persist_path(persist_path);
+                gcp_cache.load_persisted();
+            }
+
             let mut registry = AIProviderRegistry::new();
             registry.register(Box::new(OpenAIProvider::new(app_data_dir.clone())));
             registry.register(Box::new(AnthropicProvider::new(app_data_dir.clone())));

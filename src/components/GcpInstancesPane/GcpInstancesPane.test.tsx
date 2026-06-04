@@ -68,7 +68,9 @@ function populatedSnapshot(): GcloudCacheSnapshot {
       'proj-b': [],
     },
     projectErrors: {},
-    lastRefreshedMs: 1_700_000_000_000,
+    // Fresh timestamp so the stale-while-revalidate logic treats this as a
+    // recently-refreshed cache that should NOT auto-refresh on mount.
+    lastRefreshedMs: Date.now(),
     refreshInProgress: false,
   };
 }
@@ -97,6 +99,13 @@ describe('GcpInstancesPane', () => {
     gceIapGetInstanceStatus.mockResolvedValue('PROVISIONING');
     emitProgress = null;
     emitUpdated = null;
+    // Clear persisted UI state (e.g. the GCP search query) so one test's input
+    // can't leak into another via localStorage.
+    try {
+      localStorage.clear();
+    } catch {
+      /* ignore in environments without localStorage */
+    }
     // Reset to empty cache between tests.
     setSnapshot({
       projects: [],
@@ -112,13 +121,26 @@ describe('GcpInstancesPane', () => {
     await waitFor(() => expect(gceIapRefreshCache).toHaveBeenCalled());
   });
 
-  it('does NOT auto-refresh when cache already has data', async () => {
+  it('does NOT auto-refresh when cache already has fresh data', async () => {
     setSnapshot(populatedSnapshot());
     render(<GcpInstancesPane />);
     await waitFor(() => expect(gceIapGetCache).toHaveBeenCalled());
     // Give any chained microtasks a chance to run.
     await new Promise((r) => setTimeout(r, 0));
     expect(gceIapRefreshCache).not.toHaveBeenCalled();
+  });
+
+  it('auto-refreshes (stale-while-revalidate) when the persisted cache is stale', async () => {
+    const snap = populatedSnapshot();
+    // Persisted on disk long ago (older than the TTL) — show it immediately but
+    // revalidate in the background.
+    snap.lastRefreshedMs = Date.now() - (11 * 60 * 1000);
+    setSnapshot(snap);
+    render(<GcpInstancesPane />);
+    // Stale data is still shown right away.
+    await waitFor(() => expect(screen.getByText('vm-prod')).toBeTruthy());
+    // …and a background refresh is kicked off.
+    await waitFor(() => expect(gceIapRefreshCache).toHaveBeenCalled());
   });
 
   it('renders projects and instances grouped by zone', async () => {
@@ -215,7 +237,7 @@ describe('GcpInstancesPane', () => {
       projects: [],
       instancesByProject: {},
       projectErrors: {},
-      lastRefreshedMs: 1_700_000_000_000,
+      lastRefreshedMs: Date.now(),
       refreshInProgress: false,
     });
     render(<GcpInstancesPane />);
@@ -531,5 +553,141 @@ describe('GcpInstancesPane', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('GcpInstancesPane — search', () => {
+  /** Snapshot with two projects, each holding distinctly-named instances. */
+  function searchSnapshot(): GcloudCacheSnapshot {
+    return {
+      gcloud: { available: true, version: '456.0.0' },
+      auth: { authenticated: true, account: 'user@example.com' },
+      projects: [
+        { id: 'proj-web', name: 'Web Project' },
+        { id: 'proj-db', name: 'Database Project' },
+      ],
+      instancesByProject: {
+        'proj-web': [
+          { name: 'web-server-01', status: 'RUNNING', zone: 'us-central1-a' },
+          { name: 'web-server-02', status: 'RUNNING', zone: 'us-central1-a' },
+        ],
+        'proj-db': [
+          { name: 'db-primary', status: 'RUNNING', zone: 'us-east1-b' },
+        ],
+      },
+      projectErrors: {},
+      lastRefreshedMs: Date.now(),
+      refreshInProgress: false,
+    };
+  }
+
+  const SEARCH_KEY = 'hotty_gcp_search_query';
+
+  beforeEach(() => {
+    gceIapGetCache.mockClear();
+    gceIapRefreshCache.mockClear();
+    emitProgress = null;
+    emitUpdated = null;
+    try {
+      localStorage.clear();
+    } catch {
+      /* ignore */
+    }
+    setSnapshot(searchSnapshot());
+  });
+
+  function searchInput(): HTMLInputElement {
+    return screen.getByLabelText('Search GCP projects and instances') as HTMLInputElement;
+  }
+
+  it('filters to instances whose name partially matches the query (case-insensitive)', async () => {
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('web-server-01')).toBeTruthy());
+
+    fireEvent.change(searchInput(), { target: { value: 'WEB-server' } });
+
+    await waitFor(() => expect(screen.queryByText('db-primary')).toBeNull());
+    expect(screen.getByText('web-server-01')).toBeTruthy();
+    expect(screen.getByText('web-server-02')).toBeTruthy();
+    // The non-matching project disappears entirely.
+    expect(screen.queryByText('Database Project')).toBeNull();
+  });
+
+  it('shows all instances of a project when the project NAME matches', async () => {
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('db-primary')).toBeTruthy());
+
+    // "database" matches the project name, not any instance name.
+    fireEvent.change(searchInput(), { target: { value: 'database' } });
+
+    await waitFor(() => expect(screen.queryByText('web-server-01')).toBeNull());
+    expect(screen.getByText('Database Project')).toBeTruthy();
+    expect(screen.getByText('db-primary')).toBeTruthy();
+  });
+
+  it('shows a "no matches" message when nothing matches', async () => {
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('web-server-01')).toBeTruthy());
+
+    fireEvent.change(searchInput(), { target: { value: 'zzz-nope' } });
+
+    await waitFor(() => expect(screen.getByText(/No matches for/)).toBeTruthy());
+    expect(screen.queryByText('web-server-01')).toBeNull();
+    expect(screen.queryByText('db-primary')).toBeNull();
+  });
+
+  it('clear button (×) resets the filter and shows everything again', async () => {
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('web-server-01')).toBeTruthy());
+
+    fireEvent.change(searchInput(), { target: { value: 'web' } });
+    await waitFor(() => expect(screen.queryByText('db-primary')).toBeNull());
+
+    fireEvent.click(screen.getByLabelText('Clear search'));
+    await waitFor(() => expect(screen.getByText('db-primary')).toBeTruthy());
+    expect(searchInput().value).toBe('');
+  });
+
+  it('persists the query to localStorage and restores it on remount', async () => {
+    const { unmount } = render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('web-server-01')).toBeTruthy());
+
+    fireEvent.change(searchInput(), { target: { value: 'web-server' } });
+    await waitFor(() => expect(localStorage.getItem(SEARCH_KEY)).toBe('web-server'));
+
+    unmount();
+
+    // Remount: the field is pre-filled and the filter is already applied.
+    render(<GcpInstancesPane />);
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText('Search GCP projects and instances') as HTMLInputElement).value,
+      ).toBe('web-server'),
+    );
+    expect(screen.queryByText('db-primary')).toBeNull();
+  });
+
+  it('ANDs the search filter with the IAP-access gate (denied instance stays hidden even if it matches)', async () => {
+    const snap = searchSnapshot();
+    // Make db-primary explicitly IAP-denied; with the default gate it is hidden.
+    snap.instancesByProject['proj-db'] = [
+      {
+        name: 'db-primary',
+        status: 'RUNNING',
+        zone: 'us-east1-b',
+        access: { iapTunnel: 'denied', osLogin: 'unknown' },
+      },
+    ];
+    setSnapshot(snap);
+
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('web-server-01')).toBeTruthy());
+    // Hidden by the access gate from the start.
+    expect(screen.queryByText('db-primary')).toBeNull();
+
+    // Searching for it must NOT reveal it — the access gate still applies (AND).
+    fireEvent.change(searchInput(), { target: { value: 'db-primary' } });
+    await waitFor(() => expect(screen.getByText(/No matches for/)).toBeTruthy());
+    expect(screen.queryByText('db-primary')).toBeNull();
   });
 });
