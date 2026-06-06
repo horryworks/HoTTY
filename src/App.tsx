@@ -42,6 +42,7 @@ import {
 } from './utils/paneTypes';
 import { stripAnsiCodes } from './utils/ansiUtils';
 import { totalDirtyEditors } from './utils/dirtyEditors';
+import { evaluateWatchPoll } from './utils/aiCommandWatch';
 import './App.css';
 
 // Diagnostic logger for the AI command-execution pipeline.
@@ -774,28 +775,28 @@ function App() {
                       lastChangeAt = Date.now();
                     }
                     const newContent = buf.substring(startLen);
-                    // Wait until all lines are sent + some output received
-                    if (attempts * 200 < sendDuration + 300) return;
-                    // Detect shell prompt: buffer ending with common prompt chars.
-                    //   $ # — bash / sh / Cisco privileged
-                    //   >   — Huawei VRP user view <hostname>, PowerShell, Cisco user mode
-                    //   ]   — Huawei VRP system view [hostname] / sub-views [hostname-mode]
-                    // No /m flag — $ anchors to end-of-string so we only match a real
-                    // trailing prompt, not stray $ / # / > / ] that happen to land at
-                    // end-of-line mid-stream (e.g. Huawei VRP cipher hashes / config
-                    // values that contain those chars).
-                    const promptPattern = /[$#>\]]\s*$/;
-                    const match = newContent.length > 0 ? newContent.match(promptPattern) : null;
-                    if (match) {
-                      const matchIndex = match.index ?? -1;
-                      const matchedAtEnd = matchIndex >= 0
-                        && matchIndex + match[0].length === newContent.length;
+                    const now = Date.now();
+                    // Decide what to do this poll (prompt detection + timeout semantics
+                    // live in the pure, unit-tested helper). Note: the idle timeout
+                    // fires after idleMs of no new data even when newContent is empty —
+                    // a silent/hung device is the "no response" case it exists for.
+                    const result = evaluateWatchPoll({
+                      newContent,
+                      attemptsMs: attempts * 200,
+                      sendWindowMs: sendDuration + 300,
+                      idleMs,
+                      msSinceLastChange: now - lastChangeAt,
+                      msSinceStart: now - startedAt,
+                      safetyCapMs: SAFETY_CAP_MS,
+                    });
+                    if (result.action === 'wait') return;
+                    if (result.action === 'prompt') {
                       aiExecLog('info', 'prompt-match', {
                         cmd: trimCmdForLog(cmd),
                         attempts,
                         bufLen: buf.length,
                         newLen: newContent.length,
-                        matchedAtEnd,
+                        matchedAtEnd: result.matchedAtEnd,
                       });
                       clearInterval(pollInterval);
                       intervalSet.delete(pollInterval);
@@ -803,27 +804,24 @@ function App() {
                       const outputText = `Terminal Output (Command: ${cmd}):\n${newContent.trim()}`;
                       updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
                     } else {
-                      const now = Date.now();
-                      const idleFire = idleMs > 0 && (now - lastChangeAt) >= idleMs && newContent.length > 0;
-                      const safetyFire = (now - startedAt) >= SAFETY_CAP_MS;
-                      if (idleFire || safetyFire) {
-                        aiExecLog('warn', idleFire ? 'idle-timeout' : 'safety-cap', {
-                          cmd: trimCmdForLog(cmd),
-                          attempts,
-                          bufLen: buf.length,
-                          newLen: newContent.length,
-                          idleSecs,
-                        });
-                        clearInterval(pollInterval);
-                        intervalSet.delete(pollInterval);
-                        clearWatchBuffer(targetId);
-                        const reason = idleFire
-                          ? `[no response from device for ${idleSecs} seconds]`
-                          : `[command exceeded safety cap of 30 minutes]`;
-                        const captured = newContent.trim();
-                        const outputText = `Terminal Output (Command: ${cmd}):\n${captured}\n${reason}`;
-                        updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
-                      }
+                      // 'idle' or 'safety'
+                      const isIdle = result.action === 'idle';
+                      aiExecLog('warn', isIdle ? 'idle-timeout' : 'safety-cap', {
+                        cmd: trimCmdForLog(cmd),
+                        attempts,
+                        bufLen: buf.length,
+                        newLen: newContent.length,
+                        idleSecs,
+                      });
+                      clearInterval(pollInterval);
+                      intervalSet.delete(pollInterval);
+                      clearWatchBuffer(targetId);
+                      const reason = isIdle
+                        ? `[no response from device for ${idleSecs} seconds]`
+                        : `[command exceeded safety cap of 30 minutes]`;
+                      const captured = newContent.trim();
+                      const outputText = `Terminal Output (Command: ${cmd}):\n${captured}\n${reason}`;
+                      updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
                     }
                   }, 200);
                   intervalSet.add(pollInterval);
