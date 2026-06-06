@@ -1,5 +1,30 @@
 # Release Notes
 
+## v2.0.3
+
+The v2.0.3 stable release, consolidating the v2.0.3 beta series. Beyond the beta changes it adds **automatic re-linking of AI Chat tabs to a reconnected terminal**, clearer in-UI handling when a watched terminal has dropped, and a round of AI Chat streaming / auto-execute reliability fixes.
+
+### New Features
+
+- **AI Chat tabs re-link automatically to a reconnected terminal.** When a watched terminal disconnects, its AI Chat tab keeps a config-derived identity of the target (protocol + destination), and as soon as a terminal reconnects to that same target — a reconnect mints a brand-new session id — the orphaned tab re-links to it on its own, so the conversation keeps working without pressing **Watch** again. Re-linking happens only on an unambiguous match (exactly one reconnected session and one orphaned tab share the target identity); ambiguous same-target situations are left for you to resolve manually.
+
+### Improvements
+
+- **AI Chat shows when its linked terminal isn't connected.** The linked-terminal chip and each message's **Target:** label now turn amber and read "(disconnected)" while the watched session is dropped, reconnecting, or gone, with a tooltip explaining to reconnect the terminal and press **Watch** to re-link. Previously the link always looked healthy even when commands couldn't reach the terminal.
+- **Pressing Watch after a reconnect relinks the current tab in place.** If the active tab still points at a dead session, toggling **Watch** on the reconnected terminal now relinks that tab (dropping the stale watch buffer) instead of opening a second tab still aimed at the dead session.
+- **A dead or half-open SSH peer is now detected deterministically.** SSH keepalives are bounded by an explicit unanswered-probe limit, so a silently dropped or zombie connection surfaces as *disconnected* within a bounded window after it goes quiet instead of hanging — which is also what lets the UI and the AI Chat auto-rebind react to the drop.
+- **`screen-length` is recognised as a read-only command** in Auto-execute-safe mode, so a paging-control line like `screen-length 0 temporary` on Huawei / H3C devices runs without manual confirmation.
+
+### Bug Fixes
+
+- **Running a command into a disconnected linked terminal no longer silently fails.** After an SSH drop and reconnect where the chat still looked linked, clicking **Run in Terminal** (or an auto-execute) sent the command to a session the backend no longer had and the error was swallowed — nothing ran and the AI waited indefinitely. The send is now guarded on both sides: a stale link suppresses auto-execute (leaving a manual **Run** button), and any attempt posts a clear "the linked terminal is not connected — reconnect and press Watch" result that the model can read.
+
+- **AI Chat code blocks no longer overlap while a response streams.** A CSS rule forced every `<pre>` inside a streaming message to render inline, collapsing multi-line code blocks into overlapping text until the response finished (they self-corrected only once committed). Code blocks now stay block-level throughout streaming.
+- **The execute-command block no longer garbles mid-stream.** While a response was still streaming, the ` ```execute ` block could render with corrupted, misaligned indentation: message parts were keyed by array position, so a given slot flipped between markdown (injected HTML) and execute (React children) content as more tokens arrived, leaving stale injected DOM. Parts now carry stable, kind-discriminated keys so React remounts cleanly on a flip, a trailing unclosed `execute` fence is recognised as a pending block mid-stream, and command lines no longer wrap.
+- **AI Chat no longer hangs with the input locked after a stalled stream.** If a streamed response stalled after a chunk (a dropped completion signal or a hung provider), the 3-minute idle watchdog was being torn down and re-subscribed on every chunk — wiping the idle timer that chunk had just armed — so the timeout never fired and the chat stayed locked (only **Stop** recovered). The watchdog now subscribes once per pane, and a separate hard-cap timer cancels a stream that runs on endlessly without ever completing.
+- **The AI per-command idle timeout now fires on a silent device.** A command whose device returned zero bytes (a dead or hung session, suppressed echo, or dropped connection) never tripped the "no response from device for N seconds" idle timeout and instead waited out the full 30-minute safety cap — exactly the silent-hang case the idle timeout exists for. The idle timeout no longer requires any output, so a silent device now times out promptly.
+- **The first auto-executed command after a New chat is no longer suppressed.** Starting a **New chat** cleared the visible messages but kept the pane's auto-execute dedup guard and badge set. Because message indices restart at 0, the AI's first command in the new conversation regenerated the same key as the previous chat and was silently treated as a duplicate — it never reached the terminal and started no poll or idle timeout, yet a stale "Auto-executed" badge still showed. Both structures are now tracked per tab and reset when you start a New chat.
+
 ## v2.0.3-beta8
 
 A GCP-pane release. Browsing your Compute Engine instances is now noticeably faster: discovery has been rebuilt on Google's REST APIs (Cloud Resource Manager + Compute `aggregatedList`) instead of spawning one `gcloud` subprocess per query — it fetches a single OAuth token per refresh and probes many projects concurrently, with an automatic fall back to the `gcloud` CLI if the REST path is unavailable. The pane also gains a **search box** to filter projects and instances as you type, and it now shows the **last-known list instantly on launch** while revalidating in the background. Two security hardening items round out the release: new host-tree (`.htree`) exports use the memory-hard **Argon2id** key-derivation function, and the `gcloud` argument guard now rejects the full set of shell metacharacters.

@@ -66,6 +66,8 @@ const BUILTIN_SAFE_COMMANDS = new Set([
     'get', 'diagnose',
     // Vendor-common read-only
     'terminal',
+    // Paging control (read-only session setting, e.g. Huawei/H3C "screen-length 0 temporary")
+    'screen-length',
 
     // ── Pipe filter keywords (network device CLI) ──
     'include', 'exclude', 'begin', 'section',

@@ -8,6 +8,7 @@ describe('classifyCommand', () => {
     expect(classifyCommand('ping 8.8.8.8').safe).toBe(true);
     expect(classifyCommand('git status').safe).toBe(true);
     expect(classifyCommand('display interface').safe).toBe(true);
+    expect(classifyCommand('screen-length 0 temporary').safe).toBe(true);
   });
 
   it('rejects unknown commands', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TERMINAL_OUTPUT_RE, parseTerminalOutputMessage } from './terminalOutputUtils';
+import { TERMINAL_OUTPUT_RE, parseTerminalOutputMessage, notConnectedNote } from './terminalOutputUtils';
 
 describe('parseTerminalOutputMessage', () => {
   it('returns null when content does not start with the marker', () => {
@@ -38,5 +38,24 @@ describe('parseTerminalOutputMessage', () => {
   it('exports a regex that matches valid messages', () => {
     expect(TERMINAL_OUTPUT_RE.test('Terminal Output (Command: ls):\noutput')).toBe(true);
     expect(TERMINAL_OUTPUT_RE.test('something else')).toBe(false);
+  });
+});
+
+describe('notConnectedNote', () => {
+  it('produces a parseable Terminal Output envelope with the command', () => {
+    const note = notConnectedNote('display version', 'disconnected');
+    const parsed = parseTerminalOutputMessage(note);
+    expect(parsed?.cmd).toBe('display version');
+    expect(parsed?.output).toContain('not connected (disconnected)');
+    expect(parsed?.output).toContain('press Watch');
+  });
+
+  it('defaults the status to disconnected when the session is gone', () => {
+    const note = notConnectedNote('ls');
+    expect(note).toContain('(disconnected)');
+  });
+
+  it('reflects a connecting status', () => {
+    expect(notConnectedNote('ls', 'connecting')).toContain('(connecting)');
   });
 });

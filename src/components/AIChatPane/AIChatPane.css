@@ -113,6 +113,18 @@
     border-color: var(--accent-color);
 }
 
+/* Stale link: the watched terminal is disconnected / reconnecting / gone. */
+.ai-chat-linked-chip-stale {
+    background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+    color: var(--color-warning);
+    border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+}
+
+.ai-chat-linked-chip-stale:hover {
+    background: color-mix(in srgb, var(--color-warning) 22%, transparent);
+    border-color: var(--color-warning);
+}
+
 .ai-chat-linked-chip-name {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -958,6 +970,11 @@
 
 .ai-run-target.no-target {
     color: var(--color-danger);
+    font-style: italic;
+}
+
+.ai-run-target.ai-run-target-stale {
+    color: var(--color-warning);
     font-style: italic;
 }
 

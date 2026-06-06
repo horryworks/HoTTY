@@ -43,6 +43,10 @@ import {
 import { stripAnsiCodes } from './utils/ansiUtils';
 import { totalDirtyEditors } from './utils/dirtyEditors';
 import { evaluateWatchPoll } from './utils/aiCommandWatch';
+import { sessionBindingKey } from './utils/sessionBindingKey';
+import { selectAutoRebinds, type RebindSession, type RebindOrphanTab } from './utils/autoRebind';
+import { decideWatchRouting } from './utils/watchRouting';
+import { notConnectedNote } from './components/AIChatPane/terminalOutputUtils';
 import './App.css';
 
 // Diagnostic logger for the AI command-execution pipeline.
@@ -88,7 +92,9 @@ function App() {
         if (tab.linkedSessionId !== sessionId) continue;
         if (st.tabs.length <= 1) {
           // Last tab in the pane — unlink only so the pane keeps a usable tab.
-          setTabLinkRef.current?.(aiPaneId, tab.id, undefined);
+          // Retain the binding key so a reconnect to the same target can
+          // auto-rebind this tab (see the reconnect effect below).
+          setTabLinkRef.current?.(aiPaneId, tab.id, undefined, { retainBindingKey: true });
         } else {
           closeTabRef.current?.(aiPaneId, tab.id);
         }
@@ -215,7 +221,7 @@ function App() {
 
   const createAiChatPaneRef = useRef<() => string | undefined>(undefined);
   const aiChatStatesRef = useRef<Map<string, AiChatState>>(new Map());
-  const setTabLinkRef = useRef<(aiSessionId: string, tabId: string, linkedSessionId: string | undefined) => void>(undefined);
+  const setTabLinkRef = useRef<(aiSessionId: string, tabId: string, linkedSessionId: string | undefined, opts?: { retainBindingKey?: boolean }) => void>(undefined);
   const updateAiChatStateRef = useRef<(aiSessionId: string, partial: Partial<AiChatState>) => void>(undefined);
   const addTabRef = useRef<(aiSessionId: string, initialLinkSessionId?: string) => string>(undefined);
   const setActiveTabRef = useRef<(aiSessionId: string, tabId: string) => void>(undefined);
@@ -253,29 +259,29 @@ function App() {
       return;
     }
 
-    // Case 1: a tab is already linked to this session.
-    const matchingTab = state.tabs.find(t => t.linkedSessionId === sessionId);
-    if (matchingTab) {
-      if (matchingTab.id === state.activeTabId) {
-        // Unlink (toggle off).
-        setTabLinkRef.current?.(aiPaneId, matchingTab.id, undefined);
+    // Route the watched session onto a tab. A link to a session that is gone or
+    // not connected (e.g. the watched SSH dropped) is treated like "no link", so
+    // the active tab relinks in place instead of spawning a confusing second tab
+    // still pointed at the dead session (see decideWatchRouting).
+    const isLive = (id: string) => sessions.get(id)?.status === 'connected';
+    const routing = decideWatchRouting(sessionId, state.tabs, state.activeTabId, isLive);
+    switch (routing.action) {
+      case 'unlink':
+        setTabLinkRef.current?.(aiPaneId, routing.tabId, undefined);
         watchBuffers.current.delete(sessionId);
-      } else {
-        // Switch to the existing tab.
-        setActiveTabRef.current?.(aiPaneId, matchingTab.id);
-      }
-      focusPane();
-      return;
-    }
-
-    // No existing tab links to this session — find or create one.
-    const activeTab = getActiveTab(state);
-    if (activeTab && !activeTab.linkedSessionId) {
-      // Case 2: empty active tab → link in place.
-      setTabLinkRef.current?.(aiPaneId, activeTab.id, sessionId);
-    } else {
-      // Case 3: create a new tab linked to this session.
-      addTabRef.current?.(aiPaneId, sessionId);
+        focusPane();
+        return;
+      case 'switch':
+        setActiveTabRef.current?.(aiPaneId, routing.tabId);
+        focusPane();
+        return;
+      case 'relink':
+        if (routing.evictSessionId) watchBuffers.current.delete(routing.evictSessionId);
+        setTabLinkRef.current?.(aiPaneId, routing.tabId, sessionId);
+        break;
+      case 'new-tab':
+        addTabRef.current?.(aiPaneId, sessionId);
+        break;
     }
     watchBuffers.current.set(sessionId, '');
     focusPane();
@@ -384,6 +390,41 @@ function App() {
     watchingSessionIdsRef.current = allLinked;
     setWatchingSessionId((prev) => (prev === activeDerived ? prev : activeDerived));
   }, [aiChatStates]);
+
+  // Auto-rebind orphaned AI Chat tabs to a reconnected terminal. When a watched
+  // session drops, its tab is unlinked but RETAINS its config-derived binding key
+  // (linkBindingKey). When a session with that same key becomes connected again
+  // (a reconnect mints a new session id), re-link the tab so the chat keeps
+  // working without the user having to press Watch again. Keyed on `sessions`
+  // because the connect transition is a sessions-map change. Unique-match gated
+  // (see selectAutoRebinds) so ambiguous same-target cases fall back to manual.
+  useEffect(() => {
+    const connected: RebindSession[] = [];
+    for (const rec of sessions.values()) {
+      if (rec.status === 'connected') connected.push({ id: rec.id, key: sessionBindingKey(rec) });
+    }
+    if (connected.length === 0) return;
+
+    const states = aiChatStatesRef.current;
+    const linkedIds = new Set<string>();
+    const orphanTabs: RebindOrphanTab[] = [];
+    for (const [paneId, st] of states.entries()) {
+      for (const tab of st.tabs) {
+        if (tab.linkedSessionId) linkedIds.add(tab.linkedSessionId);
+        else if (tab.linkBindingKey) orphanTabs.push({ paneId, tabId: tab.id, key: tab.linkBindingKey });
+      }
+    }
+    if (orphanTabs.length === 0) return;
+
+    // Only rebind TO sessions nothing is already watching (avoid double-linking).
+    const candidates = connected.filter((s) => !linkedIds.has(s.id));
+    const rebinds = selectAutoRebinds(candidates, connected, orphanTabs);
+    for (const r of rebinds) {
+      watchBuffers.current.set(r.sessionId, '');
+      setTabLinkRef.current?.(r.paneId, r.tabId, r.sessionId);
+      aiExecLog('info', 'auto-rebind', { paneId: r.paneId, tabId: r.tabId, sessionId: r.sessionId });
+    }
+  }, [sessions]);
 
   const [connectOpen, setConnectOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -700,6 +741,24 @@ function App() {
               onFlashSessionPane={flashSessionPane}
               sessions={sessions}
               onRunCommand={(targetId, cmd, originatingTabId) => {
+                // Backend-truth guard: never send to a target that isn't a live,
+                // connected session. The AIChatPane caller already guards on status,
+                // but this defends any other caller and keeps the failure loud
+                // instead of a swallowed no-op.
+                const targetRec = sessions.get(targetId);
+                if (!targetRec || targetRec.status !== 'connected') {
+                  aiExecLog('warn', 'run-target-not-live', {
+                    cmd: trimCmdForLog(cmd),
+                    targetId,
+                    status: targetRec?.status ?? 'missing',
+                    originatingTabId,
+                  });
+                  updateTabById(featureInfo.id, originatingTabId, {
+                    pendingMessage: notConnectedNote(cmd, targetRec?.status),
+                  });
+                  return;
+                }
+
                 // Record buffer position before sending command
                 const startLen = (watchBuffers.current.get(targetId) || '').length;
 
@@ -712,9 +771,25 @@ function App() {
                   originatingTabId,
                   watching: watchingSessionIdsRef.current.has(targetId),
                 });
+                let sendFailed = false;
                 lines.forEach((line, index) => {
                   setTimeout(() => {
-                    tauriService.sendInput(targetId, line + '\r').catch(() => {});
+                    tauriService.sendInput(targetId, line + '\r').catch((err) => {
+                      // A reject here means the backend session is gone (e.g. it
+                      // died after our status check) — surface it instead of
+                      // letting the command vanish silently.
+                      if (sendFailed) return;
+                      sendFailed = true;
+                      aiExecLog('warn', 'send-input-failed', {
+                        cmd: trimCmdForLog(cmd),
+                        targetId,
+                        error: String(err),
+                        originatingTabId,
+                      });
+                      updateTabById(featureInfo.id, originatingTabId, {
+                        pendingMessage: notConnectedNote(cmd, sessions.get(targetId)?.status),
+                      });
+                    });
                   }, index * 150);
                 });
 

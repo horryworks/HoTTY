@@ -12,7 +12,7 @@ import { OpenAIAuthPanel } from './OpenAIAuthPanel';
 import { AnthropicAuthPanel } from './AnthropicAuthPanel';
 import { ExecutionModeBar } from './ExecutionModeBar';
 import { TerminalOutputBlock } from './TerminalOutputBlock';
-import { parseTerminalOutputMessage } from './terminalOutputUtils';
+import { parseTerminalOutputMessage, notConnectedNote } from './terminalOutputUtils';
 import { segmentMessageContent, extractExecuteCommands } from './executeBlockUtils';
 import { streamTimeoutMessage, STREAM_IDLE_TIMEOUT_MS, STREAM_HARD_CAP_MS } from './streamWatchdog';
 import { SystemPromptModal } from '../SystemPromptModal/SystemPromptModal';
@@ -77,13 +77,16 @@ const MessageContent: React.FC<{
     onHoverTarget?: (hovered: boolean) => void;
     targetTitle?: string;
     targetId?: string;
+    targetLive?: boolean;
     autoExecutedCommands?: Set<string>;
     classificationReason?: string;
     limitReached?: boolean;
-}> = ({ content, onRun, onHoverTarget, targetTitle, targetId, autoExecutedCommands, classificationReason, limitReached }) => {
+}> = ({ content, onRun, onHoverTarget, targetTitle, targetId, targetLive = true, autoExecutedCommands, classificationReason, limitReached }) => {
     const parts = segmentMessageContent(content);
     const targetLabel = targetId
-        ? <span className="ai-run-target">Target: {targetTitle || 'Unnamed Terminal'}</span>
+        ? (targetLive
+            ? <span className="ai-run-target">Target: {targetTitle || 'Unnamed Terminal'}</span>
+            : <span className="ai-run-target ai-run-target-stale">Target: {targetTitle || 'Unnamed Terminal'} (disconnected)</span>)
         : <span className="ai-run-target no-target">No Terminal Targeted</span>;
 
     return (
@@ -276,6 +279,13 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // Target session info derived from the active tab
     const lastTargetSessionId = activeTab?.linkedSessionId;
     const lastTargetSessionTitle = lastTargetSessionId ? (sessions?.get(lastTargetSessionId)?.displayName) : undefined;
+    // Liveness of the linked target. A link can point at a session that is
+    // disconnected / reconnecting / gone (e.g. SSH dropped while watching). The
+    // chip and run-target label reflect this so the UI never looks "connected"
+    // when commands can't actually reach the terminal.
+    const lastTargetStatus = lastTargetSessionId ? sessions?.get(lastTargetSessionId)?.status : undefined;
+    const linkedLive = lastTargetStatus === 'connected';
+    const linkedStale = !!lastTargetSessionId && !linkedLive;
 
     // De-dup guard: tabId → last pendingMessage text we already started processing.
     // Prevents re-firing the same auto-send while the parent state is mid-update.
@@ -701,6 +711,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             const lastMsg = messages[messages.length - 1];
             if (!lastMsg || lastMsg.role !== 'model') return;
             if (!lastTargetSessionId) return;
+            // Don't auto-execute (or mark a command "Auto-executed") when the
+            // linked terminal isn't live — the send would silently no-op. Leave
+            // the block as a manual "Run in Terminal" button; clicking it posts a
+            // clear not-connected note via handleRunCommand.
+            if (!linkedLive) return;
 
             if (maxConsecutiveAutoExecutions > 0 && consecutiveAutoExecCount >= maxConsecutiveAutoExecutions) return;
 
@@ -722,7 +737,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             handleRunCommandRef.current(command);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isStreaming, messages, commandExecutionMode, lastTargetSessionId, customSafeCommands, maxConsecutiveAutoExecutions, consecutiveAutoExecCount, autoExecPaused, activeTabId]);
+    }, [isStreaming, messages, commandExecutionMode, lastTargetSessionId, linkedLive, customSafeCommands, maxConsecutiveAutoExecutions, consecutiveAutoExecCount, autoExecPaused, activeTabId]);
 
     useEffect(() => {
         if (commandExecutionMode === 'ask-before-execute') {
@@ -880,6 +895,17 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const handleRunCommand = (command: string) => {
         if (!lastTargetSessionId || !activeTabId) return;
         const cleanCmd = command.trim();
+        // Fail loudly when the linked terminal isn't live. Without this, sending to
+        // a dead/stale session is a silent no-op (the backend has no such session,
+        // and the send error is swallowed) — the exact symptom after an SSH drop +
+        // reconnect where the chat still looks linked. Post a result the model can
+        // read so it stops and tells the user to re-link.
+        if (!linkedLive) {
+            onUpdateTabById?.(activeTabId, {
+                pendingMessage: notConnectedNote(cleanCmd, lastTargetStatus),
+            });
+            return;
+        }
         // Pass the originating tab id so the result is delivered back to the same tab,
         // even if the user switches tabs while the command is executing.
         onRunCommand?.(lastTargetSessionId, cleanCmd, activeTabId);
@@ -1081,7 +1107,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     {isAuthenticated && lastTargetSessionId && (
                         <button
                             type="button"
-                            className="ai-chat-linked-chip"
+                            className={`ai-chat-linked-chip${linkedStale ? ' ai-chat-linked-chip-stale' : ''}`}
                             onClick={() => {
                                 tauriService.focusWindow().catch(() => {});
                                 window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: lastTargetSessionId } }));
@@ -1092,14 +1118,20 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             onMouseLeave={() => {
                                 window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: lastTargetSessionId, highlighted: false } }));
                             }}
-                            title={`Linked to ${lastTargetSessionTitle || 'terminal'}. Click to focus.`}
-                            aria-label={`Linked terminal: ${lastTargetSessionTitle || 'unknown'}`}
+                            title={linkedStale
+                                ? `Link to ${lastTargetSessionTitle || 'terminal'} is ${lastTargetStatus ?? 'disconnected'}. Reconnect the terminal and press Watch to re-link.`
+                                : `Linked to ${lastTargetSessionTitle || 'terminal'}. Click to focus.`}
+                            aria-label={linkedStale
+                                ? `Linked terminal ${lastTargetSessionTitle || 'unknown'} is ${lastTargetStatus ?? 'disconnected'}`
+                                : `Linked terminal: ${lastTargetSessionTitle || 'unknown'}`}
                         >
                             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
                                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                             </svg>
-                            <span className="ai-chat-linked-chip-name">{lastTargetSessionTitle || 'terminal'}</span>
+                            <span className="ai-chat-linked-chip-name">
+                                {lastTargetSessionTitle || 'terminal'}{linkedStale ? ' (disconnected)' : ''}
+                            </span>
                         </button>
                     )}
                 </div>
@@ -1249,6 +1281,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                             onHoverTarget={handleHoverTarget}
                                             targetTitle={lastTargetSessionTitle}
                                             targetId={lastTargetSessionId}
+                                            targetLive={linkedLive}
                                             autoExecutedCommands={autoExecutedCommands}
                                             classificationReason={commandExecutionMode === 'auto-execute-safe' ? (() => {
                                                 const cmds = extractExecuteCommands(msg.content);
@@ -1277,6 +1310,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         onHoverTarget={handleHoverTarget}
                                         targetTitle={lastTargetSessionTitle}
                                         targetId={lastTargetSessionId}
+                                        targetLive={linkedLive}
                                     />
                                 </div>
                             </div>

@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
     onAiChatResponseCb: { current: null as null | ((d: unknown) => void) },
     onAiAuthResultCb: { current: null as null | ((r: { success: boolean }) => void) },
     onRunCommand: vi.fn(),
+    onUpdateTabById: vi.fn(),
     settings: {
         activeAiProvider: 'gemini',
         commandExecutionMode: 'auto-execute-safe',
@@ -84,7 +85,7 @@ const baseProps = {
         activeTabId: 't1',
         tabs: [{ id: 't1', title: 'Local USG', ordinal: 1, linkedSessionId: 'sess-1' }],
     },
-    sessions: new Map([['sess-1', { id: 'sess-1', displayName: 'Local USG' }]]),
+    sessions: new Map([['sess-1', { id: 'sess-1', displayName: 'Local USG', status: 'connected' }]]),
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -141,5 +142,112 @@ describe('AIChatPane auto-execute after New chat', () => {
         await sendAndComplete('check quic again');
         expect(h.onRunCommand).toHaveBeenCalledTimes(2);
         expect(h.onRunCommand).toHaveBeenLastCalledWith('sess-1', 'display version', 't1');
+    });
+});
+
+describe('AIChatPane auto-execute when the linked terminal is not live', () => {
+    beforeEach(() => {
+        h.onRunCommand.mockClear();
+        h.onUpdateTabById.mockClear();
+        h.onAiChatResponseCb.current = null;
+        h.onAiAuthResultCb.current = null;
+        localStorage.clear();
+    });
+
+    it('does NOT auto-execute and posts a not-connected note when the linked session is disconnected', async () => {
+        const disconnectedSessions = new Map([
+            ['sess-1', { id: 'sess-1', displayName: 'Local USG', status: 'disconnected' }],
+        ]);
+        renderPane({ onRunCommand: h.onRunCommand, onUpdateTabById: h.onUpdateTabById, sessions: disconnectedSessions });
+        await authenticate();
+
+        await sendAndComplete('check quic');
+
+        // The command must not be sent to a dead terminal…
+        expect(h.onRunCommand).not.toHaveBeenCalled();
+        // …and the auto-exec effect should not mark it executed (no badge / no send).
+        // (No assertion on a note here: auto-exec stays silent and leaves a manual
+        // Run button; clicking Run is what surfaces the note — covered below.)
+    });
+
+    it('posts a not-connected note (and does not send) when Run is clicked on a disconnected target', async () => {
+        const disconnectedSessions = new Map([
+            ['sess-1', { id: 'sess-1', displayName: 'Local USG', status: 'disconnected' }],
+        ]);
+        // ask-before-execute so the command renders a manual "Run in Terminal" button.
+        h.settings.commandExecutionMode = 'ask-before-execute';
+        try {
+            renderPane({ onRunCommand: h.onRunCommand, onUpdateTabById: h.onUpdateTabById, sessions: disconnectedSessions });
+            await authenticate();
+            await sendAndComplete('check quic');
+
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /Run in Terminal/i }));
+            });
+
+            expect(h.onRunCommand).not.toHaveBeenCalled();
+            expect(h.onUpdateTabById).toHaveBeenCalledWith(
+                't1',
+                expect.objectContaining({
+                    pendingMessage: expect.stringContaining('not connected (disconnected)'),
+                }),
+            );
+        } finally {
+            h.settings.commandExecutionMode = 'auto-execute-safe';
+        }
+    });
+
+    it('still auto-executes when the linked session is connected (regression)', async () => {
+        renderPane({ onRunCommand: h.onRunCommand, onUpdateTabById: h.onUpdateTabById });
+        await authenticate();
+        await sendAndComplete('check quic');
+        expect(h.onRunCommand).toHaveBeenCalledTimes(1);
+        expect(h.onRunCommand).toHaveBeenLastCalledWith('sess-1', 'display version', 't1');
+    });
+});
+
+describe('AIChatPane linked-chip / Target liveness visuals', () => {
+    beforeEach(() => {
+        h.onAiAuthResultCb.current = null;
+        localStorage.clear();
+    });
+
+    it('shows a live chip (no stale marker) when the linked session is connected', async () => {
+        renderPane({});
+        await authenticate();
+        const chip = document.querySelector('.ai-chat-linked-chip');
+        expect(chip).toBeTruthy();
+        expect(chip?.classList.contains('ai-chat-linked-chip-stale')).toBe(false);
+        expect(chip?.textContent).toContain('Local USG');
+        expect(chip?.textContent).not.toContain('(disconnected)');
+    });
+
+    it('shows a stale chip with (disconnected) when the linked session is not connected', async () => {
+        const disconnectedSessions = new Map([
+            ['sess-1', { id: 'sess-1', displayName: 'Local USG', status: 'disconnected' }],
+        ]);
+        renderPane({ sessions: disconnectedSessions });
+        await authenticate();
+        const chip = document.querySelector('.ai-chat-linked-chip');
+        expect(chip).toBeTruthy();
+        expect(chip?.classList.contains('ai-chat-linked-chip-stale')).toBe(true);
+        expect(chip?.textContent).toContain('(disconnected)');
+    });
+
+    it('renders the Target label as (disconnected) on a command block when the link is stale', async () => {
+        const disconnectedSessions = new Map([
+            ['sess-1', { id: 'sess-1', displayName: 'Local USG', status: 'disconnected' }],
+        ]);
+        h.settings.commandExecutionMode = 'ask-before-execute';
+        try {
+            renderPane({ onRunCommand: h.onRunCommand, sessions: disconnectedSessions });
+            await authenticate();
+            await sendAndComplete('check quic');
+            const target = document.querySelector('.ai-run-target.ai-run-target-stale');
+            expect(target).toBeTruthy();
+            expect(target?.textContent).toContain('(disconnected)');
+        } finally {
+            h.settings.commandExecutionMode = 'auto-execute-safe';
+        }
     });
 });

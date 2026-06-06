@@ -757,12 +757,17 @@ impl SessionService for SshSession {
         let config = Arc::new(client::Config {
             inactivity_timeout: Some(Duration::from_secs(3600)),
             // Native SSH keepalive: russh sends keepalive@openssh.com global
-            // requests every interval and (via keepalive_max, default 3) drops
-            // the connection after that many go unanswered. This replaces the
-            // old hand-rolled task that only ticked a timer and never sent
-            // anything, so idle sessions were dropped by NAT/firewalls despite
-            // the keepalive setting being on.
+            // requests every interval and drops the connection after
+            // keepalive_max go unanswered. This replaces the old hand-rolled task
+            // that only ticked a timer and never sent anything, so idle sessions
+            // were dropped by NAT/firewalls despite the keepalive setting being on.
+            // keepalive_max is set explicitly (rather than relying on russh's
+            // default) so a half-open/dead peer is detected deterministically —
+            // ~keepalive_interval * keepalive_max seconds after it goes silent —
+            // which is what surfaces the `disconnected` status that lets the UI
+            // (and AI Chat watch links) react instead of hanging on a zombie.
             keepalive_interval: keepalive_interval(self.config.keepalive_interval_secs),
+            keepalive_max: 3,
             preferred,
             ..client::Config::default()
         });

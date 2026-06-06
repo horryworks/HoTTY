@@ -5,6 +5,7 @@ import type { FeaturePaneInfo } from '../utils/paneTypes';
 import { STORAGE_KEYS } from '../constants/storage';
 import { buildExecutionRules, languageDirective } from '../constants/aiPrompts';
 import { tauriService } from '../services/tauriService';
+import { sessionBindingKey } from '../utils/sessionBindingKey';
 
 // -- Types --
 
@@ -19,6 +20,14 @@ export interface ChatTab {
   /** Stable counter used for "Tab N" titles when no link is set. */
   ordinal: number;
   linkedSessionId?: string;
+  /**
+   * Config-derived identity of the linked terminal (see `sessionBindingKey`),
+   * stable across disconnect+reconnect. Set whenever the tab links to a session
+   * and RETAINED when the session is removed so the tab can auto-rebind to a
+   * reconnected session with the same target. Cleared on explicit unlink
+   * (Watch toggle-off).
+   */
+  linkBindingKey?: string;
   pendingMessage?: string;
 }
 
@@ -51,7 +60,7 @@ interface UseAiChatReturn {
   addTab: (aiSessionId: string, initialLinkSessionId?: string) => string;
   closeTab: (aiSessionId: string, tabId: string) => void;
   setActiveTab: (aiSessionId: string, tabId: string) => void;
-  setTabLink: (aiSessionId: string, tabId: string, linkedSessionId: string | undefined) => void;
+  setTabLink: (aiSessionId: string, tabId: string, linkedSessionId: string | undefined, opts?: { retainBindingKey?: boolean }) => void;
   sendMessage: (aiSessionId: string, text: string) => void;
   askAi: (selection: string, type: string, targetSessionId?: string) => void;
   showPromptMenu: (aiSessionId: string) => void;
@@ -88,6 +97,7 @@ function makeTabId(): string {
 export function createDefaultAiChatState(
   initialLinkSessionId?: string,
   initialTitle?: string,
+  initialBindingKey?: string,
 ): AiChatState {
   const tabId = makeTabId();
   return {
@@ -99,6 +109,7 @@ export function createDefaultAiChatState(
       ordinal: 1,
       title: initialTitle ?? (initialLinkSessionId ? 'Linked' : 'Tab 1'),
       linkedSessionId: initialLinkSessionId,
+      linkBindingKey: initialLinkSessionId ? initialBindingKey : undefined,
     }],
   };
 }
@@ -212,11 +223,13 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       const ordinals = existing.tabs.map(t => t.ordinal);
       const newOrdinal = ordinals.length > 0 ? Math.max(...ordinals) + 1 : 1;
       const title = deriveTabTitle(initialLinkSessionId, sessionsRef.current, newOrdinal);
+      const linkedRec = initialLinkSessionId ? sessionsRef.current.get(initialLinkSessionId) : undefined;
       const newTab: ChatTab = {
         id: newTabId,
         ordinal: newOrdinal,
         title,
         linkedSessionId: initialLinkSessionId,
+        linkBindingKey: linkedRec ? sessionBindingKey(linkedRec) : undefined,
       };
       next.set(aiSessionId, {
         ...existing,
@@ -248,7 +261,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     });
   }, []);
 
-  const setTabLink = useCallback((aiSessionId: string, tabId: string, linkedSessionId: string | undefined) => {
+  const setTabLink = useCallback((aiSessionId: string, tabId: string, linkedSessionId: string | undefined, opts?: { retainBindingKey?: boolean }) => {
     setAiChatStates((prev) => {
       const next = new Map(prev);
       const existing = prev.get(aiSessionId);
@@ -256,7 +269,19 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       const updatedTabs = existing.tabs.map(t => {
         if (t.id !== tabId) return t;
         const newTitle = deriveTabTitle(linkedSessionId, sessionsRef.current, t.ordinal);
-        return { ...t, linkedSessionId, title: newTitle };
+        // Track a config-derived binding key so the tab can auto-rebind after a
+        // reconnect (which mints a new session id). On link: derive from the
+        // session. On unlink: clear it, UNLESS the caller asks to retain it
+        // (session removed out from under a still-watching tab → keep the key
+        // so a reconnect can re-link automatically).
+        let linkBindingKey = t.linkBindingKey;
+        if (linkedSessionId) {
+          const rec = sessionsRef.current.get(linkedSessionId);
+          if (rec) linkBindingKey = sessionBindingKey(rec);
+        } else if (!opts?.retainBindingKey) {
+          linkBindingKey = undefined;
+        }
+        return { ...t, linkedSessionId, title: newTitle, linkBindingKey };
       });
       next.set(aiSessionId, { ...existing, tabs: updatedTabs });
       return next;
