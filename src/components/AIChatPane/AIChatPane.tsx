@@ -14,6 +14,7 @@ import { ExecutionModeBar } from './ExecutionModeBar';
 import { TerminalOutputBlock } from './TerminalOutputBlock';
 import { parseTerminalOutputMessage } from './terminalOutputUtils';
 import { segmentMessageContent, extractExecuteCommands } from './executeBlockUtils';
+import { streamTimeoutMessage, STREAM_IDLE_TIMEOUT_MS, STREAM_HARD_CAP_MS } from './streamWatchdog';
 import { SystemPromptModal } from '../SystemPromptModal/SystemPromptModal';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -221,6 +222,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const [messagesByTab, setMessagesByTab] = useState<Map<string, ChatMessage[]>>(() => new Map());
     const [streamingByTab, setStreamingByTab] = useState<Map<string, string>>(() => new Map());
     const [streamingTabIds, setStreamingTabIds] = useState<Set<string>>(() => new Set());
+    // Render-phase mirror so the watchdog timeout callback can read the latest partial
+    // content WITHOUT closing over `streamingByTab` state. Keeping streamingByTab out of
+    // armStreamWatchdog's deps is what lets the response listener subscribe once for the
+    // pane's lifetime instead of tearing down and re-arming on every chunk.
+    const streamingByTabRef = useRef(streamingByTab);
+    streamingByTabRef.current = streamingByTab;
     const messages = useMemo<ChatMessage[]>(
         () => (activeTabId ? (messagesByTab.get(activeTabId) ?? []) : []),
         [activeTabId, messagesByTab],
@@ -537,40 +544,61 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatState, isAuthenticated, streamingTabIds, paneId, selectedModel]);
 
-    // Watchdog: if no chunk arrives for STREAM_IDLE_TIMEOUT_MS while a stream
-    // is in flight, cancel the request and surface an error. Backstop against
-    // hung HTTP connections / unresponsive providers; complements the backend
-    // request timeout.
-    const STREAM_IDLE_TIMEOUT_MS = 180_000;
-    const streamWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Watchdog: guard an in-flight stream with two timers (see streamWatchdog.ts).
+    //   - idle timer: re-armed on every chunk; fires after STREAM_IDLE_TIMEOUT_MS of
+    //     silence (hung connection, unresponsive provider, dropped `done`).
+    //   - hard cap: armed once per stream and NOT reset by chunks; fires after
+    //     STREAM_HARD_CAP_MS so a runaway provider that streams endlessly (which keeps
+    //     re-arming the idle timer forever) is still cancelled.
+    // Both finalize via finalizeStuckStream, which reads the partial from a ref so this
+    // logic never depends on streamingByTab state — keeping armStreamWatchdog stable so
+    // the response listener subscribes once instead of resubscribing (and clearing the
+    // just-armed timer) on every chunk.
+    const streamIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const streamHardCapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const clearStreamWatchdog = useCallback(() => {
-        if (streamWatchdogRef.current) {
-            clearTimeout(streamWatchdogRef.current);
-            streamWatchdogRef.current = null;
+        if (streamIdleTimerRef.current) {
+            clearTimeout(streamIdleTimerRef.current);
+            streamIdleTimerRef.current = null;
+        }
+        if (streamHardCapTimerRef.current) {
+            clearTimeout(streamHardCapTimerRef.current);
+            streamHardCapTimerRef.current = null;
         }
     }, []);
-    const armStreamWatchdog = useCallback(() => {
+    const finalizeStuckStream = useCallback((ms: number, kind: 'idle' | 'hardcap') => {
+        const targetTabId = streamingForTabIdRef.current;
+        if (!targetTabId) return;
+        tauriService.aiChatCancel(paneId).catch(() => {});
+        const partial = streamingByTabRef.current.get(targetTabId) ?? '';
+        const body = streamTimeoutMessage(partial, ms, kind);
+        setMessagesByTab(prev => {
+            const next = new Map(prev);
+            const cur = prev.get(targetTabId) ?? [];
+            next.set(targetTabId, [...cur, { role: 'model', content: body }]);
+            return next;
+        });
+        setStreamingForTab(targetTabId, '');
+        markStreaming(targetTabId, false);
+        streamingForTabIdRef.current = null;
         clearStreamWatchdog();
-        streamWatchdogRef.current = setTimeout(() => {
-            const targetTabId = streamingForTabIdRef.current;
-            if (!targetTabId) return;
-            tauriService.aiChatCancel(paneId).catch(() => {});
-            setMessagesByTab(prev => {
-                const next = new Map(prev);
-                const cur = prev.get(targetTabId) ?? [];
-                const partial = streamingByTab.get(targetTabId) ?? '';
-                const body = partial
-                    ? `${partial}\n\n[Error: AI stream idle for ${Math.round(STREAM_IDLE_TIMEOUT_MS / 1000)}s — request cancelled]`
-                    : `Error: AI stream idle for ${Math.round(STREAM_IDLE_TIMEOUT_MS / 1000)}s — request cancelled`;
-                next.set(targetTabId, [...cur, { role: 'model', content: body }]);
-                return next;
-            });
-            setStreamingForTab(targetTabId, '');
-            markStreaming(targetTabId, false);
-            streamingForTabIdRef.current = null;
-            streamWatchdogRef.current = null;
+    }, [paneId, setStreamingForTab, markStreaming, clearStreamWatchdog]);
+    const armStreamWatchdog = useCallback(() => {
+        // Idle timer resets on every call (stream start + each chunk).
+        if (streamIdleTimerRef.current) clearTimeout(streamIdleTimerRef.current);
+        streamIdleTimerRef.current = setTimeout(() => {
+            streamIdleTimerRef.current = null;
+            finalizeStuckStream(STREAM_IDLE_TIMEOUT_MS, 'idle');
         }, STREAM_IDLE_TIMEOUT_MS);
-    }, [clearStreamWatchdog, paneId, setStreamingForTab, markStreaming, streamingByTab]);
+        // Hard cap armed once per stream; left running across chunks. A finalize/done/
+        // error/cancel clears it, so it is null again before the next stream starts.
+        if (!streamHardCapTimerRef.current) {
+            streamHardCapTimerRef.current = setTimeout(() => {
+                streamHardCapTimerRef.current = null;
+                finalizeStuckStream(STREAM_HARD_CAP_MS, 'hardcap');
+            }, STREAM_HARD_CAP_MS);
+        }
+    }, [finalizeStuckStream]);
 
     // ��─ Listen for chat response events ──
     useEffect(() => {

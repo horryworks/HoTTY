@@ -419,10 +419,6 @@
     color: var(--chat-msg-user-text);
 }
 
-.ai-chat-message-content.streaming pre {
-    display: inline;
-}
-
 /* ── Input Area ── */
 .ai-chat-resize-handle {
     height: 6px;
