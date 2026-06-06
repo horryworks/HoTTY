@@ -906,6 +906,8 @@
     border: none !important;
     border-bottom: 1px solid var(--border-color) !important;
     border-radius: 0 !important;
+    white-space: pre !important;   /* command lines must not wrap (overrides inherited pre-wrap) */
+    overflow-x: auto !important;   /* scroll long lines instead of wrapping */
 }
 
 .ai-execute-actions {
@@ -934,9 +936,14 @@
     line-height: 1;
 }
 
-.ai-run-btn:hover {
+.ai-run-btn:hover:not(:disabled) {
     background-color: var(--accent-hover);
     box-shadow: 0 2px 4px var(--modal-shadow, rgba(0, 0, 0, 0.2));
+}
+
+.ai-run-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .ai-run-btn svg {

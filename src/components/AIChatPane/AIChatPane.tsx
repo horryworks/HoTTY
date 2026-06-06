@@ -13,6 +13,7 @@ import { AnthropicAuthPanel } from './AnthropicAuthPanel';
 import { ExecutionModeBar } from './ExecutionModeBar';
 import { TerminalOutputBlock } from './TerminalOutputBlock';
 import { parseTerminalOutputMessage } from './terminalOutputUtils';
+import { segmentMessageContent, extractExecuteCommands } from './executeBlockUtils';
 import { SystemPromptModal } from '../SystemPromptModal/SystemPromptModal';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -68,28 +69,6 @@ const AIIcon: React.FC<{ size?: number; className?: string }> = ({ size = 24, cl
     </svg>
 );
 
-// ── Extract execute commands from message content ──
-function extractExecuteCommands(content: string): string[] {
-    const parts = content.split(/(^```+[\s\S]*?^```+)/gm);
-    const commands: string[] = [];
-    for (const part of parts) {
-        const match = part.match(/^```+(\w*)\s*\n?([\s\S]*?)\n?```+$/);
-        if (match) {
-            const lang = match[1].toLowerCase();
-            let command = match[2].trim();
-            const startsWithExecute = command.startsWith('execute\n') || command.startsWith('execute ');
-            const isExecute = lang === 'execute' || (lang === '' && startsWithExecute) || ((lang === 'bash' || lang === 'sh' || lang === 'shell') && startsWithExecute);
-            if (isExecute) {
-                if (startsWithExecute) {
-                    command = command.replace(/^execute\s+/, '').trim();
-                }
-                commands.push(command);
-            }
-        }
-    }
-    return commands;
-}
-
 // ── Message Content Component with Execution Support ──
 const MessageContent: React.FC<{
     content: string;
@@ -101,68 +80,75 @@ const MessageContent: React.FC<{
     classificationReason?: string;
     limitReached?: boolean;
 }> = ({ content, onRun, onHoverTarget, targetTitle, targetId, autoExecutedCommands, classificationReason, limitReached }) => {
-    const parts = content.split(/(^```+[\s\S]*?^```+)/gm);
+    const parts = segmentMessageContent(content);
+    const targetLabel = targetId
+        ? <span className="ai-run-target">Target: {targetTitle || 'Unnamed Terminal'}</span>
+        : <span className="ai-run-target no-target">No Terminal Targeted</span>;
 
     return (
         <>
-            {parts.map((part, i) => {
-                const match = part.match(/^```+(\w*)\s*\n?([\s\S]*?)\n?```+$/);
-                if (match) {
-                    const lang = match[1].toLowerCase();
-                    let command = match[2].trim();
-                    const startsWithExecute = command.startsWith('execute\n') || command.startsWith('execute ');
-                    const isExecute = lang === 'execute' || (lang === '' && startsWithExecute) || ((lang === 'bash' || lang === 'sh' || lang === 'shell') && startsWithExecute);
-
-                    if (isExecute) {
-                        if (startsWithExecute) {
-                            command = command.replace(/^execute\s+/, '').trim();
-                        }
-                        const wasAutoExecuted = autoExecutedCommands?.has(command);
-                        return (
-                            <div key={i} className={`ai-execute-block${wasAutoExecuted ? ' ai-execute-auto' : ''}`}>
-                                <pre><code>{command}</code></pre>
-                                <div className="ai-execute-actions">
-                                    {wasAutoExecuted ? (
-                                        <span className="ai-execute-auto-badge">
-                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                                                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-                                            </svg>
-                                            Auto-executed
-                                        </span>
-                                    ) : (
-                                        <button
-                                            className="ai-run-btn"
-                                            onClick={() => onRun?.(command)}
-                                            onMouseEnter={() => onHoverTarget?.(true)}
-                                            onMouseLeave={() => onHoverTarget?.(false)}
-                                        >
-                                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                                                <path d="M8 5v14l11-7z" />
-                                            </svg>
-                                            Run in Terminal
-                                        </button>
-                                    )}
-                                    {targetId ? (
-                                        <span className="ai-run-target">Target: {targetTitle || 'Unnamed Terminal'}</span>
-                                    ) : (
-                                        <span className="ai-run-target no-target">No Terminal Targeted</span>
-                                    )}
-                                </div>
-                                {!wasAutoExecuted && classificationReason && (
-                                    <div className="ai-execute-unsafe-note">Manual: {classificationReason}</div>
-                                )}
-                                {!wasAutoExecuted && limitReached && (
-                                    <div className="ai-execute-paused-banner">Auto-execution paused (limit reached). Click Run to continue.</div>
-                                )}
+            {parts.map((part) => {
+                if (part.kind === 'execute-pending') {
+                    // Streaming tail: render the styled block immediately with a disabled
+                    // button so it updates in place (no jump) when the closing fence arrives.
+                    return (
+                        <div key={part.key} className="ai-execute-block">
+                            <pre><code>{part.command}</code></pre>
+                            <div className="ai-execute-actions">
+                                <button className="ai-run-btn" disabled>
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                        <path d="M8 5v14l11-7z" />
+                                    </svg>
+                                    Run in Terminal
+                                </button>
+                                {targetLabel}
                             </div>
-                        );
-                    }
+                        </div>
+                    );
+                }
+                if (part.kind === 'execute') {
+                    const command = part.command;
+                    const wasAutoExecuted = autoExecutedCommands?.has(command);
+                    return (
+                        <div key={part.key} className={`ai-execute-block${wasAutoExecuted ? ' ai-execute-auto' : ''}`}>
+                            <pre><code>{command}</code></pre>
+                            <div className="ai-execute-actions">
+                                {wasAutoExecuted ? (
+                                    <span className="ai-execute-auto-badge">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                                        </svg>
+                                        Auto-executed
+                                    </span>
+                                ) : (
+                                    <button
+                                        className="ai-run-btn"
+                                        onClick={() => onRun?.(command)}
+                                        onMouseEnter={() => onHoverTarget?.(true)}
+                                        onMouseLeave={() => onHoverTarget?.(false)}
+                                    >
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                            <path d="M8 5v14l11-7z" />
+                                        </svg>
+                                        Run in Terminal
+                                    </button>
+                                )}
+                                {targetLabel}
+                            </div>
+                            {!wasAutoExecuted && classificationReason && (
+                                <div className="ai-execute-unsafe-note">Manual: {classificationReason}</div>
+                            )}
+                            {!wasAutoExecuted && limitReached && (
+                                <div className="ai-execute-paused-banner">Auto-execution paused (limit reached). Click Run to continue.</div>
+                            )}
+                        </div>
+                    );
                 }
                 return (
                     <div
-                        key={i}
+                        key={part.key}
                         className="ai-chat-markdown-inline"
-                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(marked.parse(part, { async: false }) as string) }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(marked.parse(part.text, { async: false }) as string) }}
                     />
                 );
             })}
