@@ -206,11 +206,21 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const customSafeCommands = useSettingsStore(s => s.customSafeCommands);
     const maxConsecutiveAutoExecutions = useSettingsStore(s => s.maxConsecutiveAutoExecutions);
 
-    // Auto-execute state
+    // Auto-execute state. The de-dup guard and the executed-command badge set are
+    // tracked PER TAB: their keys (blockKey = messageIndex:command, and command text)
+    // are only unique within a single conversation. Clearing a tab's messages on
+    // "New chat" resets the message indices to 0,1,2…, so a pane-global set would
+    // mistake the new chat's first command for one already processed and suppress it.
     const [consecutiveAutoExecCount, setConsecutiveAutoExecCount] = useState(0);
-    const [autoExecutedCommands] = useState(() => new Set<string>());
-    const autoExecProcessedRef = useRef(new Set<string>());
+    const autoExecutedByTabRef = useRef(new Map<string, Set<string>>());
+    const autoExecProcessedByTabRef = useRef(new Map<string, Set<string>>());
+    const getTabSet = useCallback((map: Map<string, Set<string>>, tabId: string) => {
+        let set = map.get(tabId);
+        if (!set) { set = new Set<string>(); map.set(tabId, set); }
+        return set;
+    }, []);
     const [autoExecPaused, setAutoExecPaused] = useState(false);
+    const autoExecutedCommands = activeTabId ? autoExecutedByTabRef.current.get(activeTabId) : undefined;
 
     // OpenAI auth state
     const [openaiApiKey, setOpenaiApiKey] = useState('');
@@ -694,23 +704,25 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
 
             if (maxConsecutiveAutoExecutions > 0 && consecutiveAutoExecCount >= maxConsecutiveAutoExecutions) return;
 
+            if (!activeTabId) return;
             const commands = extractExecuteCommands(lastMsg.content);
             if (commands.length === 0) return;
 
             const command = commands[commands.length - 1];
             const blockKey = `${messages.length - 1}:${command}`;
-            if (autoExecProcessedRef.current.has(blockKey)) return;
+            const processedSet = getTabSet(autoExecProcessedByTabRef.current, activeTabId);
+            if (processedSet.has(blockKey)) return;
 
             const classification = classifyCommand(command, customSafeCommands);
             if (!classification.safe) return;
 
-            autoExecProcessedRef.current.add(blockKey);
-            autoExecutedCommands.add(command);
+            processedSet.add(blockKey);
+            getTabSet(autoExecutedByTabRef.current, activeTabId).add(command);
             setConsecutiveAutoExecCount(prev => prev + 1);
             handleRunCommandRef.current(command);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isStreaming, messages, commandExecutionMode, lastTargetSessionId, customSafeCommands, maxConsecutiveAutoExecutions, consecutiveAutoExecCount, autoExecPaused]);
+    }, [isStreaming, messages, commandExecutionMode, lastTargetSessionId, customSafeCommands, maxConsecutiveAutoExecutions, consecutiveAutoExecCount, autoExecPaused, activeTabId]);
 
     useEffect(() => {
         if (commandExecutionMode === 'ask-before-execute') {
@@ -935,6 +947,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 return next;
             });
             if (streamingForTabIdRef.current === activeTabId) streamingForTabIdRef.current = null;
+            // Reset this tab's auto-exec tracking so the new conversation's first
+            // command isn't suppressed by a stale blockKey (message indices restart
+            // at 0) and the "Auto-executed" badge doesn't linger from the old chat.
+            autoExecProcessedByTabRef.current.delete(activeTabId);
+            autoExecutedByTabRef.current.delete(activeTabId);
+            setConsecutiveAutoExecCount(0);
         }
         setTotalInputTokens(0);
         setTotalOutputTokens(0);
