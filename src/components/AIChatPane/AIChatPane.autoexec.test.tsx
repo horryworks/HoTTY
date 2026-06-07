@@ -68,6 +68,7 @@ vi.mock('../../stores/settingsStore', () => ({
 Element.prototype.scrollIntoView = vi.fn();
 
 const { AIChatPane } = await import('./AIChatPane');
+const { NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP } = await import('../../constants/aiPrompts');
 
 // A safe Huawei command (`display` is in the builtin safe list) wrapped in an
 // execute fence — the canonical "identify the device first" opener.
@@ -89,7 +90,8 @@ const baseProps = {
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const renderPane = (extra: Record<string, unknown>) => render(<AIChatPane {...(baseProps as any)} {...(extra as any)} />);
+const makePane = (extra: Record<string, unknown>) => <AIChatPane {...(baseProps as any)} {...(extra as any)} />;
+const renderPane = (extra: Record<string, unknown>) => render(makePane(extra));
 
 async function authenticate() {
     await act(async () => {
@@ -203,6 +205,188 @@ describe('AIChatPane auto-execute when the linked terminal is not live', () => {
         await sendAndComplete('check quic');
         expect(h.onRunCommand).toHaveBeenCalledTimes(1);
         expect(h.onRunCommand).toHaveBeenLastCalledWith('sess-1', 'display version', 't1');
+    });
+});
+
+describe('AIChatPane Network Expert auto-kickoff', () => {
+    // A Network Expert persona keyed by the stable id the kickoff matches on.
+    const networkExpertPersonas = [
+        { id: 'network-expert', label: 'Network Expert', systemPrompt: 'You are a network expert.', askAiCommands: [] },
+    ];
+
+    beforeEach(() => {
+        h.onUpdateTabById.mockClear();
+        h.onRunCommand.mockClear();
+        h.onAiChatResponseCb.current = null;
+        h.onAiAuthResultCb.current = null;
+        localStorage.clear();
+    });
+
+    it('injects the kickoff pending message when a Network Expert chat links to a live terminal', async () => {
+        renderPane({ aiPersonas: networkExpertPersonas, onUpdateTabById: h.onUpdateTabById });
+        // Before auth nothing should fire (the auto-send loop can't dispatch yet).
+        expect(h.onUpdateTabById).not.toHaveBeenCalled();
+
+        await authenticate();
+
+        expect(h.onUpdateTabById).toHaveBeenCalledWith(
+            't1',
+            { pendingMessage: NETWORK_EXPERT_KICKOFF },
+        );
+    });
+
+    it('re-runs the kickoff when the chat is re-linked to a DIFFERENT device', async () => {
+        const twoSessions = new Map([
+            ['sess-1', { id: 'sess-1', displayName: 'Device A', status: 'connected' }],
+            ['sess-2', { id: 'sess-2', displayName: 'Device B', status: 'connected' }],
+        ]);
+        const stateA = {
+            ...baseProps.chatState,
+            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessionId: 'sess-1', linkBindingKey: 'ssh:@dev-a:22' }],
+        };
+        const { rerender } = render(makePane({
+            aiPersonas: networkExpertPersonas,
+            onUpdateTabById: h.onUpdateTabById,
+            sessions: twoSessions,
+            chatState: stateA,
+        }));
+        await authenticate();
+        expect(h.onUpdateTabById).toHaveBeenCalledTimes(1); // kicked for device A
+
+        // Re-link the active tab to a different device (different binding key).
+        const stateB = {
+            ...baseProps.chatState,
+            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessionId: 'sess-2', title: 'Device B', linkBindingKey: 'ssh:@dev-b:22' }],
+        };
+        await act(async () => {
+            rerender(makePane({
+                aiPersonas: networkExpertPersonas,
+                onUpdateTabById: h.onUpdateTabById,
+                sessions: twoSessions,
+                chatState: stateB,
+            }));
+        });
+        // Different device → re-kicked.
+        expect(h.onUpdateTabById).toHaveBeenCalledTimes(2);
+        expect(h.onUpdateTabById).toHaveBeenLastCalledWith('t1', { pendingMessage: NETWORK_EXPERT_KICKOFF });
+    });
+
+    it('does NOT re-prep on reconnect to the SAME device when the conversation is empty', async () => {
+        const stateA = {
+            ...baseProps.chatState,
+            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessionId: 'sess-1', linkBindingKey: 'ssh:@dev-a:22' }],
+        };
+        const { rerender } = render(makePane({
+            aiPersonas: networkExpertPersonas,
+            onUpdateTabById: h.onUpdateTabById,
+            sessions: new Map([['sess-1', { id: 'sess-1', displayName: 'Device A', status: 'connected' }]]),
+            chatState: stateA,
+        }));
+        await authenticate();
+        expect(h.onUpdateTabById).toHaveBeenCalledTimes(1); // initial full kickoff
+
+        // Reconnect: a NEW session id for the SAME device (same binding key), but the
+        // conversation is still empty (the mock never fed the kickoff back), so there
+        // is nothing to preserve and no re-prep should fire.
+        const stateReconnected = {
+            ...baseProps.chatState,
+            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessionId: 'sess-9', linkBindingKey: 'ssh:@dev-a:22' }],
+        };
+        await act(async () => {
+            rerender(makePane({
+                aiPersonas: networkExpertPersonas,
+                onUpdateTabById: h.onUpdateTabById,
+                sessions: new Map([['sess-9', { id: 'sess-9', displayName: 'Device A', status: 'connected' }]]),
+                chatState: stateReconnected,
+            }));
+        });
+        expect(h.onUpdateTabById).toHaveBeenCalledTimes(1); // no New chat, no re-prep
+    });
+
+    it('re-disables paging (no New chat) on reconnect to the SAME device mid-conversation', async () => {
+        const stateA = {
+            ...baseProps.chatState,
+            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessionId: 'sess-1', linkBindingKey: 'ssh:@dev-a:22' }],
+        };
+        const { rerender } = render(makePane({
+            aiPersonas: networkExpertPersonas,
+            onUpdateTabById: h.onUpdateTabById,
+            onRunCommand: h.onRunCommand,
+            sessions: new Map([['sess-1', { id: 'sess-1', displayName: 'Device A', status: 'connected' }]]),
+            chatState: stateA,
+        }));
+        await authenticate();
+        // Build an ongoing conversation so there is something to preserve.
+        await sendAndComplete('check something');
+        h.onUpdateTabById.mockClear();
+
+        // Reconnect: same device (same binding key), new session id.
+        const stateReconnected = {
+            ...baseProps.chatState,
+            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessionId: 'sess-9', linkBindingKey: 'ssh:@dev-a:22' }],
+        };
+        await act(async () => {
+            rerender(makePane({
+                aiPersonas: networkExpertPersonas,
+                onUpdateTabById: h.onUpdateTabById,
+                onRunCommand: h.onRunCommand,
+                sessions: new Map([['sess-9', { id: 'sess-9', displayName: 'Device A', status: 'connected' }]]),
+                chatState: stateReconnected,
+            }));
+        });
+        // Conversation preserved; only the lightweight paging re-prep is injected.
+        expect(h.onUpdateTabById).toHaveBeenCalledWith('t1', { pendingMessage: NETWORK_EXPERT_RECONNECT_PREP });
+        expect(h.onUpdateTabById).not.toHaveBeenCalledWith('t1', { pendingMessage: NETWORK_EXPERT_KICKOFF });
+    });
+
+    it('does NOT re-kick when the same link is re-rendered (id unchanged)', async () => {
+        const { rerender } = renderPane({ aiPersonas: networkExpertPersonas, onUpdateTabById: h.onUpdateTabById });
+        await authenticate();
+        expect(h.onUpdateTabById).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            rerender(makePane({ aiPersonas: networkExpertPersonas, onUpdateTabById: h.onUpdateTabById }));
+        });
+        expect(h.onUpdateTabById).toHaveBeenCalledTimes(1); // unchanged link → no re-kick
+    });
+
+    it('does NOT kick off for a non-Network-Expert persona', async () => {
+        // baseProps persona has id 'default' (label "Network Expert" but not the id).
+        renderPane({ onUpdateTabById: h.onUpdateTabById });
+        await authenticate();
+        expect(h.onUpdateTabById).not.toHaveBeenCalledWith(
+            't1',
+            expect.objectContaining({ pendingMessage: NETWORK_EXPERT_KICKOFF }),
+        );
+    });
+
+    it('does NOT kick off when the linked terminal is disconnected', async () => {
+        const disconnectedSessions = new Map([
+            ['sess-1', { id: 'sess-1', displayName: 'Local USG', status: 'disconnected' }],
+        ]);
+        renderPane({
+            aiPersonas: networkExpertPersonas,
+            onUpdateTabById: h.onUpdateTabById,
+            sessions: disconnectedSessions,
+        });
+        await authenticate();
+        expect(h.onUpdateTabById).not.toHaveBeenCalledWith(
+            't1',
+            expect.objectContaining({ pendingMessage: NETWORK_EXPERT_KICKOFF }),
+        );
+    });
+
+    it('does NOT kick off when no model is selected', async () => {
+        renderPane({
+            aiPersonas: networkExpertPersonas,
+            onUpdateTabById: h.onUpdateTabById,
+            chatState: { ...baseProps.chatState, selectedModel: 'Unspecified' },
+        });
+        await authenticate();
+        expect(h.onUpdateTabById).not.toHaveBeenCalledWith(
+            't1',
+            expect.objectContaining({ pendingMessage: NETWORK_EXPERT_KICKOFF }),
+        );
     });
 });
 

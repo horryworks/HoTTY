@@ -308,6 +308,9 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               <p className="help-text">
                 Switch between AI roles (General Helper, Network Expert, Security Analyst, etc.) using the persona selector at the top of the chat. Each persona has a system prompt tailored for that domain. Click the <strong>system prompt</strong> indicator to inspect the exact instruction sent to the model and copy it to the clipboard.
               </p>
+              <p className="help-text">
+                The <strong>Network Expert</strong> persona auto-preps a linked terminal: when its chat is linked to a live session, it automatically identifies the device and disables paging before you ask anything. Switching the linked terminal to a different device starts a fresh chat first, while reconnecting to the same device just re-disables paging and keeps your conversation.
+              </p>
             </div>
           </details>
 

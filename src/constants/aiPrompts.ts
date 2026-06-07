@@ -10,6 +10,28 @@ export function buildExecutionRules(): string {
 export const AUTO_LANGUAGE = 'Auto';
 
 /**
+ * Auto-kickoff message injected into a Network Expert chat the moment it links to
+ * a live terminal with an empty conversation. It plays the role of the user's
+ * "first message" so the persona's mandatory start-of-session protocol (device
+ * identification + paging disable) runs WITHOUT the user having to type anything.
+ * Kept terse — the protocol detail lives in the persona's system prompt; this only
+ * needs to (a) trigger a turn and (b) signal there is no real question yet so the
+ * model stops after the prep instead of inventing a request to answer.
+ */
+export const NETWORK_EXPERT_KICKOFF =
+    'Session started. Run the start-of-session protocol now (identify the device, then disable paging). I have no question yet — after the prep, briefly state the detected device/OS and then wait for my question.';
+
+/**
+ * Lightweight re-prep injected when a Network Expert chat's linked terminal
+ * RECONNECTS to the SAME device (a new SSH session ⇒ paging is re-enabled) while a
+ * conversation is already in progress. Unlike the full kickoff it does NOT clear
+ * the chat or re-identify the device — the model still knows the vendor/OS from the
+ * preserved context, so it only needs to re-disable paging. One command, then wait.
+ */
+export const NETWORK_EXPERT_RECONNECT_PREP =
+    'The terminal session was just reconnected, so paging is likely re-enabled. Re-run ONLY the paging-disable command for this device (the equivalent of Cisco `terminal length 0`). Do NOT run show version again and do NOT answer anything else — just that one command, then wait for my question.';
+
+/**
  * Build the language directive appended to an AI system instruction.
  *
  * Returns an empty string for `English` (the model's default) and for `Auto`

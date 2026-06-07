@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.4
+
+A focused AI Chat release: the **Network Expert** persona now preps the device on its own. When such a chat is linked to a live terminal, HoTTY runs the persona's mandatory start-of-session protocol (identify the device, then disable paging) automatically — you no longer have to send a throwaway first message to get the session ready.
+
+### New Features
+
+- **Network Expert chats run their start-of-session protocol automatically.** When an AI Chat using the Network Expert persona is linked to a live terminal, HoTTY now kicks off the persona's mandatory prep — identify the device, then disable paging — on its own, so the response loop is ready before you ask anything (previously the protocol only ran once you sent a first message). The behavior is reconnect- and device-aware: switching the linked terminal to a *different* device first starts a fresh chat — clearing the old conversation and its backend history so the previous device's output can't bleed into the new context — and then re-runs the full prep, while a *reconnect to the same device* mid-conversation injects only a lightweight paging re-disable and keeps your conversation intact. A chat you have already typed into on a device HoTTY never managed is never hijacked.
+
 ## v2.0.3
 
 The v2.0.3 stable release, consolidating the v2.0.3 beta series. Beyond the beta changes it adds **automatic re-linking of AI Chat tabs to a reconnected terminal**, clearer in-UI handling when a watched terminal has dropped, and a round of AI Chat streaming / auto-execute reliability fixes.
