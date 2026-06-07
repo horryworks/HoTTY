@@ -32,6 +32,7 @@ import { useSettingsStore } from './stores/settingsStore';
 import { applyTheme } from './utils/applyTheme';
 import { DEFAULT_THEMES, isBuiltInThemeId } from './themes/defaults';
 import { useThemes } from './hooks/useThemes';
+import { usePaneKeyboardNav } from './hooks/usePaneKeyboardNav';
 import {
   makeFeaturePaneId,
   getPaneContentType,
@@ -128,6 +129,9 @@ function App() {
   const removeSessionFromStore = usePaneStore((s) => s.removeSession);
   const reorderSessionInStore = usePaneStore((s) => s.reorderSession);
   const moveSessionToPane = usePaneStore((s) => s.moveSessionToPane);
+
+  // Ctrl+Tab / Ctrl+Shift+Tab cycle keyboard focus between visible panes.
+  usePaneKeyboardNav();
 
   const themeId = useSettingsStore((s) => s.theme);
   const fontSize = useSettingsStore((s) => s.fontSize);

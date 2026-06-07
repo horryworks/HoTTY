@@ -44,6 +44,8 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
             <div className="help-section-body">
               <ul className="shortcuts-list">
                 <li><code>Ctrl + N</code> New Session Dialog</li>
+                <li><code>Ctrl + Tab</code> Focus next pane</li>
+                <li><code>Ctrl + Shift + Tab</code> Focus previous pane</li>
                 <li><code>Ctrl + W</code> Close current tab</li>
                 <li><code>Ctrl + C</code> Clear selection / Send SIGINT</li>
                 <li><code>Ctrl + V</code> Paste to terminal (with security check)</li>

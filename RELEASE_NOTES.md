@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.5
+
+A small quality-of-life release: you can now move keyboard focus between panes without reaching for the mouse.
+
+### New Features
+
+- **Switch focus between panes from the keyboard.** `Ctrl+Tab` moves focus to the next pane and `Ctrl+Shift+Tab` to the previous one, cycling through every visible pane — grid cells first (in row-major order), then any visible sidebar panes. Previously the active pane could only be changed by clicking it. Because `Ctrl+Tab` cannot be encoded into the terminal byte stream, the shortcut never steals a keybinding from the shell, vim, tmux, or anything else running inside the pane.
+
 ## v2.0.4
 
 A focused AI Chat release: the **Network Expert** persona now preps the device on its own. When such a chat is linked to a live terminal, HoTTY runs the persona's mandatory start-of-session protocol (identify the device, then disable paging) automatically — you no longer have to send a throwaway first message to get the session ready.

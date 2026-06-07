@@ -18,6 +18,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 ### Multi-Pane Layout
 - Flexible grid layouts: 1x1, 1x2, 2x1, 2x2, 2x3, 3x2
 - Collapsible sidebars on all four edges (left, right, top, bottom)
+- Keyboard pane focus navigation (`Ctrl+Tab` / `Ctrl+Shift+Tab`)
 - Drag-and-drop tab reordering and pane assignment
 - Tab bar with session and feature pane management
 

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   usePaneStore,
   gridPaneIds,
+  visiblePaneIdsInOrder,
 } from './paneStore';
 import { useSidebarLayoutStore } from './sidebarLayoutStore';
 
@@ -273,5 +274,69 @@ describe('paneStore', () => {
     const s = usePaneStore.getState();
     expect(s.sessionOrder).toEqual([]);
     expect(s.paneAllocations['bar-top']).toBeNull();
+  });
+
+  describe('visiblePaneIdsInOrder', () => {
+    it('returns only grid panes when no sidebars are visible', () => {
+      expect(visiblePaneIdsInOrder('2x2')).toEqual(['0', '1', '2', '3']);
+    });
+
+    it('appends visible sidebars after grid panes in left/right/top/bottom order', () => {
+      useSidebarLayoutStore.setState({
+        showLeftSidebar: true,
+        showRightSidebar: false,
+        showTopBar: true,
+        showBottomBar: false,
+      });
+      expect(visiblePaneIdsInOrder('1x2')).toEqual(['0', '1', 'bar-left', 'bar-top']);
+    });
+  });
+
+  describe('cycleActivePane', () => {
+    it('moves forward through visible panes', () => {
+      usePaneStore.setState({ layoutMode: '2x2', activePaneId: '0' });
+      usePaneStore.getState().cycleActivePane(1);
+      expect(usePaneStore.getState().activePaneId).toBe('1');
+    });
+
+    it('moves backward through visible panes', () => {
+      usePaneStore.setState({ layoutMode: '2x2', activePaneId: '2' });
+      usePaneStore.getState().cycleActivePane(-1);
+      expect(usePaneStore.getState().activePaneId).toBe('1');
+    });
+
+    it('wraps from the last pane to the first when going forward', () => {
+      usePaneStore.setState({ layoutMode: '2x2', activePaneId: '3' });
+      usePaneStore.getState().cycleActivePane(1);
+      expect(usePaneStore.getState().activePaneId).toBe('0');
+    });
+
+    it('wraps from the first pane to the last when going backward', () => {
+      usePaneStore.setState({ layoutMode: '2x2', activePaneId: '0' });
+      usePaneStore.getState().cycleActivePane(-1);
+      expect(usePaneStore.getState().activePaneId).toBe('3');
+    });
+
+    it('cycles through grid panes and then visible sidebars', () => {
+      useSidebarLayoutStore.setState({ showLeftSidebar: true });
+      usePaneStore.setState({ layoutMode: '1x1', activePaneId: '0' });
+      usePaneStore.getState().cycleActivePane(1);
+      expect(usePaneStore.getState().activePaneId).toBe('bar-left');
+      usePaneStore.getState().cycleActivePane(1);
+      expect(usePaneStore.getState().activePaneId).toBe('0');
+    });
+
+    it('is a no-op when only one pane is visible', () => {
+      usePaneStore.setState({ layoutMode: '1x1', activePaneId: '0' });
+      usePaneStore.getState().cycleActivePane(1);
+      expect(usePaneStore.getState().activePaneId).toBe('0');
+    });
+
+    it('jumps to the first pane when the active pane is no longer visible', () => {
+      // active pane is a hidden sidebar that is not in the visible list
+      usePaneStore.setState({ layoutMode: '2x2', activePaneId: 'bar-bottom' });
+      usePaneStore.getState().cycleActivePane(1);
+      expect(usePaneStore.getState().activePaneId).toBe('0');
+    });
   });
 });

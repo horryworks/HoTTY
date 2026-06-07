@@ -35,6 +35,7 @@ interface PaneState {
 interface PaneActions {
   setLayoutMode: (mode: LayoutMode) => void;
   setActivePaneId: (id: string) => void;
+  cycleActivePane: (direction: 1 | -1) => void;
   addSession: (sessionId: string, options?: { preferSidebar?: boolean }) => void;
   removeSession: (sessionId: string) => void;
   reorderSession: (fromIndex: number, toIndex: number) => void;
@@ -61,6 +62,16 @@ function visibleSidebarPaneIdsInOrder(): SidebarPaneId[] {
     ['bar-bottom', s.showBottomBar],
   ];
   return order.filter(([, v]) => v).map(([id]) => id);
+}
+
+/**
+ * All currently-visible panes in a stable visual order: grid cells first
+ * (row-major, matching the layout), then visible sidebar panes (left, right,
+ * top, bottom). Used by Ctrl+Tab / Ctrl+Shift+Tab pane cycling. Includes empty
+ * panes — cycling targets every visible cell, not only the occupied ones.
+ */
+export function visiblePaneIdsInOrder(mode: LayoutMode): string[] {
+  return [...gridPaneIds(mode), ...visibleSidebarPaneIdsInOrder()];
 }
 
 function findEmptyPane(
@@ -129,6 +140,18 @@ export const usePaneStore = create<PaneState & PaneActions>()(
         }),
 
       setActivePaneId: (id) => set({ activePaneId: id }),
+
+      cycleActivePane: (direction) =>
+        set((s) => {
+          const panes = visiblePaneIdsInOrder(s.layoutMode);
+          if (panes.length <= 1) return s;
+          const idx = panes.indexOf(s.activePaneId);
+          // Active pane no longer visible (e.g. its sidebar was hidden):
+          // jump to the first cell rather than guessing a neighbor.
+          if (idx === -1) return { activePaneId: panes[0] };
+          const next = (idx + direction + panes.length) % panes.length;
+          return { activePaneId: panes[next] };
+        }),
 
       addSession: (sessionId, options) =>
         set((s) => {
