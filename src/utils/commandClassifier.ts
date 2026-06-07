@@ -1,79 +1,21 @@
 /**
- * Command safety classifier for AI auto-execution.
+ * Command safety classifier for AI auto-execution (Whitelist layer).
  *
- * Uses a whitelist + danger-pattern approach:
+ * Determines whether a command is "whitelist-safe" — i.e. safe to auto-execute:
  *   1. Reject commands with dangerous shell patterns (redirections, substitutions, chaining, sudo)
  *   2. Split by pipe and evaluate each segment independently
- *   3. Check each segment's base command against the whitelist
- *   4. Check for dangerous flags on whitelisted commands
+ *   3. Each segment must be covered by the (caller-supplied) whitelist —
+ *      a base-command token match, or a multi-token phrase substring match
+ *   4. Check for dangerous flags on whitelisted base commands
  *
- * When in doubt, classify as unsafe (manual confirmation fallback).
+ * The whitelist is injected by the caller (managed in Settings; defaults live in
+ * `commandLists.ts` as DEFAULT_WHITELIST). When in doubt, classify as unsafe.
  */
 
 interface CommandClassification {
     safe: boolean;
     reason: string;
 }
-
-// ── Built-in safe commands whitelist ─────────────────────────────────────────
-
-const BUILTIN_SAFE_COMMANDS = new Set([
-    // File / directory inspection (read-only)
-    'ls', 'dir', 'll', 'la',
-    'cat', 'head', 'tail', 'less', 'more',
-    'file', 'stat', 'wc', 'md5sum', 'sha256sum',
-    'find', 'locate', 'which', 'whereis', 'type', 'tree',
-
-    // Text search / processing (redirections are blocked separately)
-    'grep', 'egrep', 'fgrep', 'rg',
-    'awk', 'sed',
-    'sort', 'uniq', 'cut', 'tr', 'diff', 'comm', 'strings',
-
-    // System information
-    'uname', 'hostname', 'whoami', 'id', 'groups',
-    'date', 'uptime', 'w', 'who', 'last',
-    'df', 'du', 'free', 'vmstat', 'iostat', 'mpstat',
-    'top', 'htop', 'ps', 'pgrep',
-    'lsblk', 'lscpu', 'lspci', 'lsusb', 'lsmod', 'dmesg',
-    'printenv', 'env', 'echo', 'printf', 'sysctl',
-
-    // Network diagnostics
-    'ping', 'ping6', 'traceroute', 'tracert', 'tracepath', 'mtr',
-    'dig', 'nslookup', 'host', 'whois',
-    'ip', 'ifconfig', 'route',
-    'netstat', 'ss', 'arp',
-    'curl', 'wget', 'nmap',
-
-    // Version control (dangerous subcommands blocked in flag check)
-    'git',
-
-    // Path / misc
-    'pwd', 'realpath', 'basename', 'dirname',
-    'man', 'help', 'info', 'history', 'test',
-
-    // Windows
-    'get-process', 'get-service', 'get-content', 'get-childitem',
-    'get-netadapter', 'get-netipaddress', 'get-netroute',
-    'ipconfig', 'systeminfo', 'tasklist', 'netsh', 'ver', 'set',
-
-    // ── Network device CLI ──
-
-    // Cisco IOS / IOS-XE / NX-OS
-    'show',
-    // Huawei VRP
-    'display',
-    // Palo Alto / FortiGate
-    'get', 'diagnose',
-    // Vendor-common read-only
-    'terminal',
-    // Paging control (read-only session setting, e.g. Huawei/H3C "screen-length 0 temporary")
-    'screen-length',
-
-    // ── Pipe filter keywords (network device CLI) ──
-    'include', 'exclude', 'begin', 'section',
-    'match', 'except', 'find-regexp',
-    'no-more', 'count', 'last', 'utility',
-]);
 
 // ── Danger patterns (applied before pipe splitting) ─────────────────────────
 
@@ -131,15 +73,16 @@ const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
 // ── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * Classify a command as safe or unsafe for auto-execution.
+ * Classify a command as safe (auto-executable) or not, against a whitelist.
  *
- * @param command       Raw command string from AI
- * @param customSafe    User-defined additional safe commands (lowercase)
- * @returns             Classification result with reason
+ * @param command   Raw command string from AI
+ * @param whitelist Caller-supplied whitelist entries (base-command tokens and/or
+ *                  multi-token phrases). Defaults live in `commandLists.ts`.
+ * @returns         Classification result with reason
  */
 export function classifyCommand(
     command: string,
-    customSafe: string[] = [],
+    whitelist: string[] = [],
 ): CommandClassification {
     const trimmed = command.trim();
 
@@ -148,49 +91,54 @@ export function classifyCommand(
         return { safe: false, reason: 'Empty command' };
     }
 
+    // Split the whitelist into base-command tokens (no whitespace) and phrases.
+    const tokenSet = new Set<string>();
+    const phrases: string[] = [];
+    for (const raw of whitelist) {
+        const e = raw.trim().toLowerCase();
+        if (!e) continue;
+        if (/\s/.test(e)) phrases.push(e);
+        else tokenSet.add(e);
+    }
+
     // Step 1.5: multi-line handling — classify each line independently
     const lines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     if (lines.length > 1) {
         for (const line of lines) {
-            const result = classifyCommand(line, customSafe);
+            const result = classifyCommand(line, whitelist);
             if (!result.safe) {
                 return result;
             }
         }
-        return { safe: true, reason: 'All commands are in the safe list' };
+        return { safe: true, reason: 'All commands are whitelisted' };
     }
 
-    // Step 2: danger patterns (before pipe splitting)
+    // Step 2: danger patterns (before pipe splitting) — structural integrity floor
     for (const { pattern, reason } of DANGER_PATTERNS) {
         if (pattern.test(trimmed)) {
             return { safe: false, reason };
         }
     }
 
-    // Build effective whitelist (built-in + custom)
-    const whitelist = new Set(BUILTIN_SAFE_COMMANDS);
-    for (const cmd of customSafe) {
-        whitelist.add(cmd.toLowerCase());
-    }
-
     // Step 3: split by pipe and evaluate each segment
     const segments = trimmed.split('|').map(s => s.trim()).filter(Boolean);
 
     for (const segment of segments) {
-        const result = classifySegment(segment, whitelist);
+        const result = classifySegment(segment, tokenSet, phrases);
         if (!result.safe) {
             return result;
         }
     }
 
-    return { safe: true, reason: 'All commands are in the safe list' };
+    return { safe: true, reason: 'All commands are whitelisted' };
 }
 
 // ── Internal helpers ────────────────────────────────────────────────────────
 
 function classifySegment(
     segment: string,
-    whitelist: Set<string>,
+    tokenSet: Set<string>,
+    phrases: string[],
 ): CommandClassification {
     const baseCommand = extractBaseCommand(segment);
     if (!baseCommand) {
@@ -198,26 +146,32 @@ function classifySegment(
     }
 
     const baseLower = baseCommand.toLowerCase();
+    const segLower = segment.toLowerCase();
 
-    if (!whitelist.has(baseLower)) {
-        return { safe: false, reason: `Unknown command: ${baseCommand}` };
-    }
-
-    const flagRules = DANGEROUS_FLAGS[baseLower];
-    if (flagRules) {
-        for (const rule of flagRules) {
-            for (const pat of rule.patterns) {
-                if (pat.test(segment)) {
-                    return { safe: false, reason: rule.reason };
+    // Whitelisted if the base command is a whitelist token …
+    if (tokenSet.has(baseLower)) {
+        const flagRules = DANGEROUS_FLAGS[baseLower];
+        if (flagRules) {
+            for (const rule of flagRules) {
+                for (const pat of rule.patterns) {
+                    if (pat.test(segment)) {
+                        return { safe: false, reason: rule.reason };
+                    }
                 }
             }
         }
+        return { safe: true, reason: '' };
     }
 
-    return { safe: true, reason: '' };
+    // … or a whitelist phrase is a substring of the segment.
+    if (phrases.some((p) => segLower.includes(p))) {
+        return { safe: true, reason: '' };
+    }
+
+    return { safe: false, reason: `Unknown command: ${baseCommand}` };
 }
 
-function extractBaseCommand(segment: string): string | null {
+export function extractBaseCommand(segment: string): string | null {
     const trimmed = segment.trim();
     if (!trimmed) return null;
 

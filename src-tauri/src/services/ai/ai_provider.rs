@@ -113,6 +113,22 @@ pub trait AIProvider: Send + Sync {
         system_instruction: Option<&str>,
     ) -> Result<(), String>;
 
+    /// One-shot, history-less command-safety classification.
+    ///
+    /// Sends the command (as untrusted data) to the provider with a neutral
+    /// classifier system prompt and structured-JSON output, returning a parsed
+    /// [`CommandVerdict`]. This MUST NOT touch the conversation history used by
+    /// `send_message`. The default implementation returns an error so providers
+    /// that don't implement it degrade gracefully (the frontend falls back to
+    /// requiring manual execution).
+    async fn classify_command(
+        &mut self,
+        _command: &str,
+        _model: &str,
+    ) -> Result<crate::services::ai::classifier::CommandVerdict, String> {
+        Err("command classification is not supported by this provider".into())
+    }
+
     /// Cancel an in-flight message for the given session.
     fn cancel_message(&mut self, session_id: &str);
 

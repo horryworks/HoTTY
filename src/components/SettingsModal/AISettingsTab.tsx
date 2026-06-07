@@ -6,6 +6,7 @@ import HelpTooltip from '../HelpTooltip/HelpTooltip';
 import { STORAGE_KEYS } from '../../constants/storage';
 import type { PersonaDefinition, AskAiCommand } from '../../types/appTypes';
 import { DEFAULT_AI_COMMANDS, DEFAULT_PERSONAS } from '../../stores/settingsStore';
+import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from '../../utils/commandLists';
 
 export function AISettingsTab() {
   const settings = useSettingsStore();
@@ -15,7 +16,8 @@ export function AISettingsTab() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activePersonaId, setActivePersonaId] = useState(settings.aiPersonas[0]?.id ?? '');
-  const [newSafeCommand, setNewSafeCommand] = useState('');
+  const [newWhitelistEntry, setNewWhitelistEntry] = useState('');
+  const [newBlacklistEntry, setNewBlacklistEntry] = useState('');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
@@ -335,6 +337,40 @@ export function AISettingsTab() {
         Execution mode and the auto-run limit are configured in the AI Chat pane (below the message input).
       </p>
 
+      {/* Command safety classifier */}
+      <div className="settings-group">
+        <label>
+          Command Safety Classifier
+          <HelpTooltip text="How HoTTY decides whether an AI-suggested command is auto-executed. The Blacklist is always checked first (a match asks before executing). Static: Whitelist auto-runs, everything else asks. AI: the AI judges anything not blacklisted. Hybrid (recommended): Whitelist auto-runs, the AI judges the rest, otherwise ask." />
+        </label>
+        <select
+          value={settings.classifierStrategy}
+          onChange={(e) => update('classifierStrategy', e.target.value as typeof settings.classifierStrategy)}
+        >
+          <option value="static">Static whitelist</option>
+          <option value="ai">AI judgment</option>
+          <option value="hybrid">Hybrid (recommended)</option>
+        </select>
+      </div>
+
+      {/* AI confidence threshold (only relevant when AI judges commands) */}
+      {settings.classifierStrategy !== 'static' && (
+        <div className="settings-group">
+          <label>
+            AI Confidence Threshold: {Math.round(settings.aiClassifyConfidenceThreshold * 100)}%
+            <HelpTooltip text="Minimum AI confidence required to auto-execute a command judged read-only. Below this, the command waits for a manual Run. Higher = more cautious. Default: 70%." />
+          </label>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={settings.aiClassifyConfidenceThreshold}
+            onChange={(e) => update('aiClassifyConfidenceThreshold', parseFloat(e.target.value))}
+          />
+        </div>
+      )}
+
       {/* Device Response Timeout */}
       <div className="settings-group">
         <label>
@@ -353,50 +389,118 @@ export function AISettingsTab() {
         />
       </div>
 
-      {/* Custom Safe Commands */}
+      {/* Whitelist — auto-execute */}
       <div className="settings-group">
         <label>
-          Custom Safe Commands
-          <HelpTooltip text="Add custom command names to the auto-execute whitelist. Built-in safe commands are always included." />
+          Whitelist (auto-execute)
+          <HelpTooltip text="Commands matched here auto-execute. A single word matches as a base command (e.g. 'docker' matches any docker command); an entry with spaces matches as a substring (e.g. 'git log'). Seeded with safe defaults; fully editable." />
         </label>
         <div style={{ display: 'flex', gap: '8px' }}>
           <input
             type="text"
-            value={newSafeCommand}
-            onChange={(e) => setNewSafeCommand(e.target.value)}
+            value={newWhitelistEntry}
+            onChange={(e) => setNewWhitelistEntry(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && newSafeCommand.trim()) {
-                const cmd = newSafeCommand.trim().toLowerCase();
-                if (!settings.customSafeCommands.includes(cmd)) {
-                  update('customSafeCommands', [...settings.customSafeCommands, cmd]);
+              if (e.key === 'Enter' && newWhitelistEntry.trim()) {
+                const cmd = newWhitelistEntry.trim().toLowerCase();
+                if (!settings.whitelistCommands.includes(cmd)) {
+                  update('whitelistCommands', [...settings.whitelistCommands, cmd]);
                 }
-                setNewSafeCommand('');
+                setNewWhitelistEntry('');
               }
             }}
-            placeholder="Command name (e.g., mycheck)"
+            placeholder="e.g., docker, kubectl get"
             style={{ flex: 1 }}
           />
           <button
             className="settings-button"
             onClick={() => {
-              const cmd = newSafeCommand.trim().toLowerCase();
-              if (cmd && !settings.customSafeCommands.includes(cmd)) {
-                update('customSafeCommands', [...settings.customSafeCommands, cmd]);
+              const cmd = newWhitelistEntry.trim().toLowerCase();
+              if (cmd && !settings.whitelistCommands.includes(cmd)) {
+                update('whitelistCommands', [...settings.whitelistCommands, cmd]);
               }
-              setNewSafeCommand('');
+              setNewWhitelistEntry('');
             }}
-            disabled={!newSafeCommand.trim()}
+            disabled={!newWhitelistEntry.trim()}
           >
             Add
           </button>
+          <button
+            className="settings-button"
+            onClick={() => update('whitelistCommands', [...DEFAULT_WHITELIST])}
+            title="Reset the whitelist to the built-in defaults"
+          >
+            Reset to defaults
+          </button>
         </div>
-        {settings.customSafeCommands.length > 0 && (
+        {settings.whitelistCommands.length > 0 && (
           <div className="ai-settings-tag-list">
-            {settings.customSafeCommands.map((cmd) => (
+            {settings.whitelistCommands.map((cmd) => (
               <span key={cmd} className="ai-settings-tag">
                 {cmd}
                 <button
-                  onClick={() => update('customSafeCommands', settings.customSafeCommands.filter(c => c !== cmd))}
+                  onClick={() => update('whitelistCommands', settings.whitelistCommands.filter(c => c !== cmd))}
+                  title={`Remove ${cmd}`}
+                >
+                  &#10005;
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Blacklist — ask before execute */}
+      <div className="settings-group">
+        <label>
+          Blacklist (ask before execute)
+          <HelpTooltip text="Commands matched here are never auto-executed — a manual Run is still allowed, with a warning. A single word matches as a base command; an entry with spaces matches as a substring (e.g. 'rm -rf', 'git push'). Seeded with destructive defaults; fully editable." />
+        </label>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <input
+            type="text"
+            value={newBlacklistEntry}
+            onChange={(e) => setNewBlacklistEntry(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && newBlacklistEntry.trim()) {
+                const cmd = newBlacklistEntry.trim().toLowerCase();
+                if (!settings.blacklistCommands.includes(cmd)) {
+                  update('blacklistCommands', [...settings.blacklistCommands, cmd]);
+                }
+                setNewBlacklistEntry('');
+              }
+            }}
+            placeholder="e.g., rm -rf, git push"
+            style={{ flex: 1 }}
+          />
+          <button
+            className="settings-button"
+            onClick={() => {
+              const cmd = newBlacklistEntry.trim().toLowerCase();
+              if (cmd && !settings.blacklistCommands.includes(cmd)) {
+                update('blacklistCommands', [...settings.blacklistCommands, cmd]);
+              }
+              setNewBlacklistEntry('');
+            }}
+            disabled={!newBlacklistEntry.trim()}
+          >
+            Add
+          </button>
+          <button
+            className="settings-button"
+            onClick={() => update('blacklistCommands', [...DEFAULT_BLACKLIST])}
+            title="Reset the blacklist to the built-in defaults"
+          >
+            Reset to defaults
+          </button>
+        </div>
+        {settings.blacklistCommands.length > 0 && (
+          <div className="ai-settings-tag-list">
+            {settings.blacklistCommands.map((cmd) => (
+              <span key={cmd} className="ai-settings-tag">
+                {cmd}
+                <button
+                  onClick={() => update('blacklistCommands', settings.blacklistCommands.filter(c => c !== cmd))}
                   title={`Remove ${cmd}`}
                 >
                   &#10005;

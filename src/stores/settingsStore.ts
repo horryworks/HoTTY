@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Encoding, FeatureId, PromptPattern, ThemeId, CommandExecutionMode, PersonaDefinition, AskAiCommand } from '../types/appTypes';
+import type { Encoding, FeatureId, PromptPattern, ThemeId, CommandExecutionMode, ClassifierStrategy, PersonaDefinition, AskAiCommand } from '../types/appTypes';
 import { DEFAULT_THEMES } from '../themes/defaults';
+import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from '../utils/commandLists';
 
 const DEFAULT_PROMPT_HIGHLIGHT_COLOR = 'rgba(255, 255, 255, 0.15)';
 
@@ -156,8 +157,15 @@ interface SettingsState {
   // AI
   activeAiProvider: string;
   commandExecutionMode: CommandExecutionMode;
-  customSafeCommands: string[];
+  /** User-managed whitelist (auto-execute). Seeded from DEFAULT_WHITELIST. */
+  whitelistCommands: string[];
+  /** User-managed blacklist (ask before execute). Seeded from DEFAULT_BLACKLIST. */
+  blacklistCommands: string[];
   maxConsecutiveAutoExecutions: number;
+  /** How auto-execution safety is decided (whitelist vs AI vs hybrid). */
+  classifierStrategy: ClassifierStrategy;
+  /** Minimum AI confidence required to auto-execute a command judged read-only. */
+  aiClassifyConfidenceThreshold: number;
   aiPersonas: PersonaDefinition[];
   watchBufferLimit: number;
   aiCommandIdleTimeoutSecs: number;
@@ -204,8 +212,13 @@ const DEFAULTS: SettingsState = {
   },
   activeAiProvider: 'gemini',
   commandExecutionMode: 'ask-before-execute',
-  customSafeCommands: [],
+  whitelistCommands: [...DEFAULT_WHITELIST],
+  blacklistCommands: [...DEFAULT_BLACKLIST],
   maxConsecutiveAutoExecutions: 5,
+  // Hybrid (managed whitelist/blacklist + AI for the gray zone) is the default
+  // for all users; the v15 migration switches existing users to it too.
+  classifierStrategy: 'hybrid',
+  aiClassifyConfidenceThreshold: 0.7,
   aiPersonas: DEFAULT_PERSONAS,
   watchBufferLimit: 500000,
   aiCommandIdleTimeoutSecs: 10,
@@ -220,7 +233,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 13,
+      version: 15,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -238,7 +251,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
         if (version < 5) {
           state.activeAiProvider ??= DEFAULTS.activeAiProvider;
           state.commandExecutionMode ??= DEFAULTS.commandExecutionMode;
-          state.customSafeCommands ??= DEFAULTS.customSafeCommands;
+          // `customSafeCommands` (legacy) is migrated into `whitelistCommands` in v15.
           state.maxConsecutiveAutoExecutions ??= DEFAULTS.maxConsecutiveAutoExecutions;
           state.aiPersonas ??= DEFAULTS.aiPersonas;
         }
@@ -272,6 +285,20 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
         }
         if (version < 13) {
           state.aiPersonas = mergeDefaultPersonas(state.aiPersonas);
+        }
+        if (version < 14) {
+          state.classifierStrategy ??= 'static';
+          state.aiClassifyConfidenceThreshold ??= DEFAULTS.aiClassifyConfidenceThreshold;
+        }
+        if (version < 15) {
+          // Seed the now user-managed lists. Fold any legacy customSafeCommands
+          // into the whitelist; switch everyone (incl. static users) to hybrid.
+          const legacy = (state as Record<string, unknown>).customSafeCommands;
+          const legacyCustom = Array.isArray(legacy) ? (legacy as string[]) : [];
+          state.whitelistCommands ??= [...DEFAULT_WHITELIST, ...legacyCustom];
+          state.blacklistCommands ??= [...DEFAULT_BLACKLIST];
+          state.classifierStrategy = 'hybrid';
+          delete (state as Record<string, unknown>).customSafeCommands;
         }
         return state as SettingsState;
       },

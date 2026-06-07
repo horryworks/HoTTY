@@ -15,6 +15,10 @@ use crate::services::ai::ai_provider::{
     emit_auth_result, emit_chat_response, AIProvider, AuthStatus, AuthType, ChatResponseData,
     ModelInfo, TokenUsage,
 };
+use crate::services::ai::classifier::{
+    build_user_prompt, gemini_response_schema, parse_verdict, CommandVerdict,
+    CLASSIFIER_SYSTEM_PROMPT,
+};
 use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
 use crate::services::ai::streaming::finalize_assistant_content;
@@ -92,6 +96,13 @@ fn pop_trailing_user(history: Option<&mut Vec<ChatMessage>>) {
             h.pop();
         }
     }
+}
+
+/// Extract the first text part from a non-streaming `generateContent` response
+/// body. Pulled out so the classification parsing path is unit-testable.
+fn extract_first_text(data: &Value) -> Option<&str> {
+    data.pointer("/candidates/0/content/parts/0/text")
+        .and_then(|v| v.as_str())
 }
 
 // ---------------------------------------------------------------------------
@@ -732,6 +743,63 @@ impl AIProvider for GeminiProvider {
         Ok(())
     }
 
+    async fn classify_command(
+        &mut self,
+        command: &str,
+        model: &str,
+    ) -> Result<CommandVerdict, String> {
+        if !is_valid_model(model) {
+            return Err("Invalid model name.".into());
+        }
+        let token = self
+            .get_valid_token()
+            .await
+            .ok_or("Authentication expired.")?;
+
+        let body = serde_json::json!({
+            "contents": [{
+                "role": "user",
+                "parts": [{"text": build_user_prompt(command)}]
+            }],
+            "system_instruction": {"parts": [{"text": CLASSIFIER_SYSTEM_PROMPT}]},
+            "generationConfig": {
+                "temperature": 0,
+                "response_mime_type": "application/json",
+                "response_schema": gemini_response_schema(),
+            }
+        });
+
+        let url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        );
+
+        let response = self
+            .http_client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {token}"))
+            .timeout(std::time::Duration::from_secs(20))
+            .body(body.to_string())
+            .send()
+            .await
+            .map_err(|e| format!("Gemini classification request failed: {e}"))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            log::warn!("[gemini] classify_command failed: {status}");
+            return Err(format!("classification request failed: {status}"));
+        }
+
+        let data: Value = response
+            .json()
+            .await
+            .map_err(|e| format!("failed to read classification response: {e}"))?;
+
+        let content =
+            extract_first_text(&data).ok_or("classification response had no content")?;
+        parse_verdict(content)
+    }
+
     fn cancel_message(&mut self, session_id: &str) {
         if let Some(token) = self.cancel_tokens.remove(session_id) {
             token.cancel();
@@ -911,5 +979,28 @@ mod tests {
         assert!(!verifier.is_empty());
         assert!(!challenge.is_empty());
         assert_ne!(verifier, challenge);
+    }
+
+    #[test]
+    fn extract_and_parse_classification_response() {
+        let body = serde_json::json!({
+            "candidates": [{
+                "content": {
+                    "parts": [{
+                        "text": "{\"modifiesState\": false, \"confidence\": 0.92, \"reason\": \"read-only show command\"}"
+                    }]
+                }
+            }]
+        });
+        let content = extract_first_text(&body).unwrap();
+        let verdict = parse_verdict(content).unwrap();
+        assert!(!verdict.modifies_state);
+        assert_eq!(verdict.reason, "read-only show command");
+    }
+
+    #[test]
+    fn extract_first_text_missing() {
+        let body = serde_json::json!({ "candidates": [] });
+        assert!(extract_first_text(&body).is_none());
     }
 }

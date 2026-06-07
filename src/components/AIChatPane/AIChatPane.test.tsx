@@ -35,7 +35,10 @@ vi.mock('../../stores/settingsStore', () => ({
     (selector: (s: Record<string, unknown>) => unknown) => selector({
       activeAiProvider: 'gemini',
       commandExecutionMode: 'ask-before-execute',
-      customSafeCommands: [],
+      whitelistCommands: [],
+      blacklistCommands: [],
+      classifierStrategy: 'hybrid',
+      aiClassifyConfidenceThreshold: 0.7,
       maxConsecutiveAutoExecutions: 5,
       aiPersonas: [],
       watchBufferLimit: 500000,

@@ -6,7 +6,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::Mutex;
 
-use crate::services::ai::{AIService, AuthStatus, ModelInfo};
+use crate::services::ai::{AIService, AuthStatus, CommandVerdict, ModelInfo};
 use crate::services::path_safety::{is_sensitive_path, is_unc_path};
 
 /// Managed state holding the AI service behind an async-aware mutex.
@@ -83,10 +83,29 @@ async fn validate_service_account_key(
 // ---------------------------------------------------------------------------
 
 const MAX_MESSAGE_LENGTH: usize = 1_000_000;
+/// A single command to classify is bounded well below the chat message limit —
+/// execute blocks are short. Keeps a hostile/runaway input from reaching the API.
+const MAX_COMMAND_LENGTH: usize = 8_192;
+/// Hard ceiling on a classification round-trip so a hung provider can't hold the
+/// service lock (and block auto-exec) indefinitely.
+const CLASSIFY_TIMEOUT_SECS: u64 = 12;
 
 fn validate_session_id(session_id: &str) -> Result<(), String> {
     if session_id.is_empty() {
         return Err("session_id must not be empty".into());
+    }
+    Ok(())
+}
+
+fn validate_command(command: &str) -> Result<(), String> {
+    if command.trim().is_empty() {
+        return Err("command must not be empty".into());
+    }
+    if command.len() > MAX_COMMAND_LENGTH {
+        return Err(format!(
+            "command exceeds maximum length of {} characters",
+            MAX_COMMAND_LENGTH
+        ));
     }
     Ok(())
 }
@@ -205,6 +224,28 @@ pub async fn ai_chat_clear(
     Ok(())
 }
 
+/// One-shot command-safety classification. History-less and non-streaming:
+/// returns a structured verdict the frontend uses to decide auto-execution.
+/// Bounded by `CLASSIFY_TIMEOUT_SECS` so a hung provider can't stall the gate.
+#[tauri::command]
+pub async fn ai_classify_command(
+    state: State<'_, AIServiceState>,
+    command: String,
+    model: String,
+) -> Result<CommandVerdict, String> {
+    validate_command(&command)?;
+    let mut service = state.service.lock().await;
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(CLASSIFY_TIMEOUT_SECS),
+        service.classify_command(&command, &model),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => Err("classification timed out".into()),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Model & location commands
 // ---------------------------------------------------------------------------
@@ -313,6 +354,29 @@ mod tests {
     fn validate_message_at_limit() {
         let msg = "a".repeat(MAX_MESSAGE_LENGTH);
         assert!(validate_message(&msg).is_ok());
+    }
+
+    #[test]
+    fn validate_command_empty() {
+        assert!(validate_command("").is_err());
+        assert!(validate_command("   ").is_err());
+    }
+
+    #[test]
+    fn validate_command_valid() {
+        assert!(validate_command("ls -la").is_ok());
+    }
+
+    #[test]
+    fn validate_command_too_long() {
+        let cmd = "a".repeat(MAX_COMMAND_LENGTH + 1);
+        assert!(validate_command(&cmd).is_err());
+    }
+
+    #[test]
+    fn validate_command_at_limit() {
+        let cmd = "a".repeat(MAX_COMMAND_LENGTH);
+        assert!(validate_command(&cmd).is_ok());
     }
 
     #[tokio::test]

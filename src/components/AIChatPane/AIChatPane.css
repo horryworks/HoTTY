@@ -1018,6 +1018,35 @@
     font-weight: 500;
 }
 
+/* Per-command safety verdict note (auto-execute-safe mode). Always shown so the
+   user can see how each command was judged. */
+.ai-execute-verdict {
+    padding: 4px 12px 6px;
+    font-size: calc(var(--font-size-base) - 2px);
+    line-height: 1.4;
+}
+
+.ai-execute-verdict strong {
+    font-weight: 600;
+}
+
+.ai-execute-verdict-checking {
+    color: var(--text-tertiary);
+    font-style: italic;
+}
+
+.ai-execute-verdict-safe {
+    color: var(--success-color);
+}
+
+.ai-execute-verdict-warn {
+    color: var(--color-warning);
+}
+
+.ai-execute-verdict-danger {
+    color: var(--color-danger);
+}
+
 .ai-chat-markdown ul,
 .ai-chat-markdown ol {
     margin: 2px 0;

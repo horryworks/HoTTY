@@ -12,6 +12,10 @@ use crate::services::ai::ai_provider::{
     emit_auth_result, emit_chat_response, AIProvider, AuthStatus, AuthType, ChatResponseData,
     ModelInfo, TokenUsage,
 };
+use crate::services::ai::classifier::{
+    build_user_prompt, openai_response_format, parse_verdict, CommandVerdict,
+    CLASSIFIER_SYSTEM_PROMPT,
+};
 use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
 use crate::services::ai::streaming::finalize_assistant_content;
@@ -44,6 +48,13 @@ fn pop_trailing_user(history: Option<&mut Vec<ChatMessage>>) {
             h.pop();
         }
     }
+}
+
+/// Extract the assistant message content from a non-streaming chat-completions
+/// response body. Pulled out so the classification parsing path is unit-testable.
+fn extract_message_content(data: &Value) -> Option<&str> {
+    data.pointer("/choices/0/message/content")
+        .and_then(|v| v.as_str())
 }
 
 // ---------------------------------------------------------------------------
@@ -415,6 +426,60 @@ impl AIProvider for OpenAIProvider {
         Ok(())
     }
 
+    async fn classify_command(
+        &mut self,
+        command: &str,
+        model: &str,
+    ) -> Result<CommandVerdict, String> {
+        if !is_valid_model(model) {
+            return Err("Invalid model name.".into());
+        }
+        let api_key = self
+            .api_key
+            .as_ref()
+            .ok_or("Not authenticated.")?
+            .clone();
+
+        // Note: `temperature` is intentionally omitted — some reasoning models
+        // (o-series) reject a non-default temperature. The json_schema response
+        // format keeps the output well-formed without it.
+        let body = serde_json::json!({
+            "model": model,
+            "messages": [
+                {"role": "system", "content": CLASSIFIER_SYSTEM_PROMPT},
+                {"role": "user", "content": build_user_prompt(command)},
+            ],
+            "stream": false,
+            "response_format": openai_response_format(),
+        });
+
+        let response = self
+            .http_client
+            .post("https://api.openai.com/v1/chat/completions")
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {api_key}"))
+            .timeout(std::time::Duration::from_secs(20))
+            .body(body.to_string())
+            .send()
+            .await
+            .map_err(|e| format!("OpenAI classification request failed: {e}"))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            log::warn!("[openai] classify_command failed: {status}");
+            return Err(format!("classification request failed: {status}"));
+        }
+
+        let data: Value = response
+            .json()
+            .await
+            .map_err(|e| format!("failed to read classification response: {e}"))?;
+
+        let content =
+            extract_message_content(&data).ok_or("classification response had no content")?;
+        parse_verdict(content)
+    }
+
     fn cancel_message(&mut self, session_id: &str) {
         if let Some(token) = self.cancel_tokens.remove(session_id) {
             token.cancel();
@@ -556,5 +621,27 @@ mod tests {
         let models = fallback_models();
         assert!(!models.is_empty());
         assert!(models.iter().any(|m| m.name == "gpt-4o"));
+    }
+
+    #[test]
+    fn extract_and_parse_classification_response() {
+        let body = serde_json::json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "{\"modifiesState\": true, \"confidence\": 0.95, \"reason\": \"installs a package\"}"
+                }
+            }]
+        });
+        let content = extract_message_content(&body).unwrap();
+        let verdict = parse_verdict(content).unwrap();
+        assert!(verdict.modifies_state);
+        assert_eq!(verdict.reason, "installs a package");
+    }
+
+    #[test]
+    fn extract_message_content_missing() {
+        let body = serde_json::json!({ "choices": [] });
+        assert!(extract_message_content(&body).is_none());
     }
 }

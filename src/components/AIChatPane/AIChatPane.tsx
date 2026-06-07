@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { marked } from 'marked';
 import { getTransparentColor } from '../../utils/colorUtils';
 import { sanitizeHtml } from '../../utils/htmlUtils';
-import { classifyCommand } from '../../utils/commandClassifier';
+import { decideAutoExec, type AutoExecDecision } from '../../utils/aiCommandClassifier';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { calcAICost, formatAICost } from '../../constants/aiPricing';
 import { buildExecutionRules, languageDirective, AUTO_LANGUAGE, NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP } from '../../constants/aiPrompts';
@@ -70,6 +70,43 @@ const AIIcon: React.FC<{ size?: number; className?: string }> = ({ size = 24, cl
     </svg>
 );
 
+// ── Per-command safety verdict note ──
+// Always rendered under an execute block (in auto-execute-safe mode) so the user
+// can see HOW each command was judged: blocked by the deny guard, allow-listed,
+// AI-judged read-only/modifying, or unverified (fallback). Required by design —
+// no command's verdict is hidden.
+const VERDICT_LABEL: Record<AutoExecDecision['source'], string> = {
+    'blacklist': '🛑 Blacklisted',
+    'whitelist': '✅ Whitelisted',
+    'ai': '🤖 AI verdict',
+    'ask': '❔ Needs confirmation',
+    'fallback': '❔ Unverified',
+};
+
+const VerdictNote: React.FC<{ classifying?: boolean; verdict?: AutoExecDecision }> = ({ classifying, verdict }) => {
+    if (classifying) {
+        return <div className="ai-execute-verdict ai-execute-verdict-checking">🔍 Checking safety…</div>;
+    }
+    if (!verdict) return null;
+
+    // Tone: red for blocked, warning for "modifies / uncertain / unverified",
+    // success for "will/ did auto-run".
+    let tone: 'safe' | 'warn' | 'danger' = 'warn';
+    if (verdict.source === 'blacklist') tone = 'danger';
+    else if (verdict.autoExec) tone = 'safe';
+
+    const label = VERDICT_LABEL[verdict.source];
+    const confidence = verdict.source === 'ai' && typeof verdict.confidence === 'number'
+        ? ` (confidence ${Math.round(verdict.confidence * 100)}%)`
+        : '';
+
+    return (
+        <div className={`ai-execute-verdict ai-execute-verdict-${tone}`}>
+            <strong>{label}{confidence}:</strong> {verdict.reason || (verdict.autoExec ? 'read-only' : 'run manually')}
+        </div>
+    );
+};
+
 // ── Message Content Component with Execution Support ──
 const MessageContent: React.FC<{
     content: string;
@@ -79,9 +116,10 @@ const MessageContent: React.FC<{
     targetId?: string;
     targetLive?: boolean;
     autoExecutedCommands?: Set<string>;
-    classificationReason?: string;
+    verdictByCommand?: Map<string, AutoExecDecision>;
+    classifyingCommands?: Set<string>;
     limitReached?: boolean;
-}> = ({ content, onRun, onHoverTarget, targetTitle, targetId, targetLive = true, autoExecutedCommands, classificationReason, limitReached }) => {
+}> = ({ content, onRun, onHoverTarget, targetTitle, targetId, targetLive = true, autoExecutedCommands, verdictByCommand, classifyingCommands, limitReached }) => {
     const parts = segmentMessageContent(content);
     const targetLabel = targetId
         ? (targetLive
@@ -139,9 +177,10 @@ const MessageContent: React.FC<{
                                 )}
                                 {targetLabel}
                             </div>
-                            {!wasAutoExecuted && classificationReason && (
-                                <div className="ai-execute-unsafe-note">Manual: {classificationReason}</div>
-                            )}
+                            <VerdictNote
+                                classifying={classifyingCommands?.has(command)}
+                                verdict={verdictByCommand?.get(command)}
+                            />
                             {!wasAutoExecuted && limitReached && (
                                 <div className="ai-execute-paused-banner">Auto-execution paused (limit reached). Click Run to continue.</div>
                             )}
@@ -206,8 +245,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
 
     const activeAiProvider = useSettingsStore(s => s.activeAiProvider);
     const commandExecutionMode = useSettingsStore(s => s.commandExecutionMode);
-    const customSafeCommands = useSettingsStore(s => s.customSafeCommands);
+    const whitelistCommands = useSettingsStore(s => s.whitelistCommands);
+    const blacklistCommands = useSettingsStore(s => s.blacklistCommands);
     const maxConsecutiveAutoExecutions = useSettingsStore(s => s.maxConsecutiveAutoExecutions);
+    const classifierStrategy = useSettingsStore(s => s.classifierStrategy);
+    const aiClassifyConfidenceThreshold = useSettingsStore(s => s.aiClassifyConfidenceThreshold);
 
     // Auto-execute state. The de-dup guard and the executed-command badge set are
     // tracked PER TAB: their keys (blockKey = messageIndex:command, and command text)
@@ -224,6 +266,20 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     }, []);
     const [autoExecPaused, setAutoExecPaused] = useState(false);
     const autoExecutedCommands = activeTabId ? autoExecutedByTabRef.current.get(activeTabId) : undefined;
+
+    // Per-command safety verdicts (and in-flight "classifying" markers), tracked
+    // per tab and keyed by `${messageIndex}:${command}` so the UI can show WHY
+    // each command was (or wasn't) auto-executed. `decisionsVersion` bumps to
+    // force a re-render when these refs mutate (refs alone don't trigger one).
+    const decisionsByTabRef = useRef(new Map<string, Map<string, AutoExecDecision>>());
+    const classifyingByTabRef = useRef(new Map<string, Set<string>>());
+    const [decisionsVersion, setDecisionsVersion] = useState(0);
+    const bumpDecisions = useCallback(() => setDecisionsVersion(v => v + 1), []);
+    const getTabMap = useCallback((map: Map<string, Map<string, AutoExecDecision>>, tabId: string) => {
+        let m = map.get(tabId);
+        if (!m) { m = new Map<string, AutoExecDecision>(); map.set(tabId, m); }
+        return m;
+    }, []);
 
     // OpenAI auth state
     const [openaiApiKey, setOpenaiApiKey] = useState('');
@@ -294,6 +350,16 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const lastTargetStatus = lastTargetSessionId ? sessions?.get(lastTargetSessionId)?.status : undefined;
     const linkedLive = lastTargetStatus === 'connected';
     const linkedStale = !!lastTargetSessionId && !linkedLive;
+
+    // Mirrors of values the async auto-exec effect must re-check AFTER its await
+    // (state captured at effect-run time may be stale by the time classification
+    // resolves). Updated every render.
+    const linkedLiveRef = useRef(linkedLive);
+    linkedLiveRef.current = linkedLive;
+    const autoExecPausedRef = useRef(autoExecPaused);
+    autoExecPausedRef.current = autoExecPaused;
+    const consecutiveAutoExecCountRef = useRef(consecutiveAutoExecCount);
+    consecutiveAutoExecCountRef.current = consecutiveAutoExecCount;
 
     // De-dup guard: tabId → last pendingMessage text we already started processing.
     // Prevents re-firing the same auto-send while the parent state is mid-update.
@@ -780,38 +846,64 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         const wasStreaming = prevIsStreamingRef.current;
         prevIsStreamingRef.current = isStreaming;
 
-        if (wasStreaming && !isStreaming && commandExecutionMode === 'auto-execute-safe') {
-            if (autoExecPaused) return;
-            const lastMsg = messages[messages.length - 1];
-            if (!lastMsg || lastMsg.role !== 'model') return;
-            if (!lastTargetSessionId) return;
-            // Don't auto-execute (or mark a command "Auto-executed") when the
-            // linked terminal isn't live — the send would silently no-op. Leave
-            // the block as a manual "Run in Terminal" button; clicking it posts a
-            // clear not-connected note via handleRunCommand.
-            if (!linkedLive) return;
+        if (!(wasStreaming && !isStreaming && commandExecutionMode === 'auto-execute-safe')) return;
+        if (!activeTabId) return;
+        const lastMsg = messages[messages.length - 1];
+        if (!lastMsg || lastMsg.role !== 'model') return;
+        const commands = extractExecuteCommands(lastMsg.content);
+        if (commands.length === 0) return;
 
-            if (maxConsecutiveAutoExecutions > 0 && consecutiveAutoExecCount >= maxConsecutiveAutoExecutions) return;
+        const command = commands[commands.length - 1];
+        const blockKey = `${messages.length - 1}:${command}`;
+        const processedSet = getTabSet(autoExecProcessedByTabRef.current, activeTabId);
+        // Reserve the block BEFORE the await so a re-render during classification
+        // can't fire a second, duplicate classification/run for the same command.
+        if (processedSet.has(blockKey)) return;
+        processedSet.add(blockKey);
 
-            if (!activeTabId) return;
-            const commands = extractExecuteCommands(lastMsg.content);
-            if (commands.length === 0) return;
+        const tabId = activeTabId;
+        let aborted = false;
+        const classifyingSet = getTabSet(classifyingByTabRef.current, tabId);
+        classifyingSet.add(blockKey);
+        bumpDecisions();
 
-            const command = commands[commands.length - 1];
-            const blockKey = `${messages.length - 1}:${command}`;
-            const processedSet = getTabSet(autoExecProcessedByTabRef.current, activeTabId);
-            if (processedSet.has(blockKey)) return;
+        (async () => {
+            let decision: AutoExecDecision;
+            try {
+                decision = await decideAutoExec(command, {
+                    strategy: classifierStrategy,
+                    whitelist: whitelistCommands,
+                    blacklist: blacklistCommands,
+                    model: selectedModelRef.current,
+                    providerId: activeAiProvider,
+                    confidenceThreshold: aiClassifyConfidenceThreshold,
+                });
+            } catch {
+                decision = { autoExec: false, reason: 'classification error', source: 'fallback' };
+            }
+            if (aborted) return;
 
-            const classification = classifyCommand(command, customSafeCommands);
-            if (!classification.safe) return;
+            classifyingSet.delete(blockKey);
+            getTabMap(decisionsByTabRef.current, tabId).set(blockKey, decision);
+            bumpDecisions();
 
-            processedSet.add(blockKey);
-            getTabSet(autoExecutedByTabRef.current, activeTabId).add(command);
+            if (!decision.autoExec) return;
+            // Re-validate run preconditions against the LATEST state (they may have
+            // changed while classification was in flight). The verdict is still
+            // recorded above, so the UI shows the reason even when we don't run.
+            if (autoExecPausedRef.current) return;
+            if (!linkedLiveRef.current) return;
+            if (maxConsecutiveAutoExecutions > 0
+                && consecutiveAutoExecCountRef.current >= maxConsecutiveAutoExecutions) return;
+
+            getTabSet(autoExecutedByTabRef.current, tabId).add(command);
             setConsecutiveAutoExecCount(prev => prev + 1);
             handleRunCommandRef.current(command);
-        }
+        })();
+
+        return () => { aborted = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isStreaming, messages, commandExecutionMode, lastTargetSessionId, linkedLive, customSafeCommands, maxConsecutiveAutoExecutions, consecutiveAutoExecCount, autoExecPaused, activeTabId]);
+    }, [isStreaming, messages, commandExecutionMode, whitelistCommands, blacklistCommands, classifierStrategy, activeAiProvider, aiClassifyConfidenceThreshold, maxConsecutiveAutoExecutions, activeTabId]);
 
     useEffect(() => {
         if (commandExecutionMode === 'ask-before-execute') {
@@ -1052,6 +1144,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // at 0) and the "Auto-executed" badge doesn't linger from the old chat.
             autoExecProcessedByTabRef.current.delete(activeTabId);
             autoExecutedByTabRef.current.delete(activeTabId);
+            // Drop stale per-command verdicts so they don't reappear against the
+            // new conversation's commands (which restart at message index 0).
+            decisionsByTabRef.current.delete(activeTabId);
+            classifyingByTabRef.current.delete(activeTabId);
+            bumpDecisions();
             setConsecutiveAutoExecCount(0);
         }
         setTotalInputTokens(0);
@@ -1345,7 +1442,27 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                 </p>
                             </div>
                         )}
-                        {messages.map((msg, idx) => (
+                        {messages.map((msg, idx) => {
+                            // Build the per-command verdict/classifying lookups for this
+                            // model message from the tab-scoped decision refs. Reading
+                            // `decisionsVersion` here keeps the lookups fresh as the async
+                            // classifier resolves. Only meaningful in auto-execute-safe mode.
+                            void decisionsVersion;
+                            let verdictByCommand: Map<string, AutoExecDecision> | undefined;
+                            let classifyingCommands: Set<string> | undefined;
+                            if (msg.role === 'model' && commandExecutionMode === 'auto-execute-safe' && activeTabId) {
+                                const decMap = decisionsByTabRef.current.get(activeTabId);
+                                const clsSet = classifyingByTabRef.current.get(activeTabId);
+                                verdictByCommand = new Map<string, AutoExecDecision>();
+                                classifyingCommands = new Set<string>();
+                                for (const cmd of extractExecuteCommands(msg.content)) {
+                                    const bk = `${idx}:${cmd}`;
+                                    const d = decMap?.get(bk);
+                                    if (d) verdictByCommand.set(cmd, d);
+                                    if (clsSet?.has(bk)) classifyingCommands.add(cmd);
+                                }
+                            }
+                            return (
                             <div key={idx} className={`ai-chat-message ai-chat-message-${msg.role}`}>
                                 <div className="ai-chat-message-avatar">
                                     {msg.role === 'user' ? '\u{1F464}' : <AIIcon size={18} />}
@@ -1360,12 +1477,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                             targetId={lastTargetSessionId}
                                             targetLive={linkedLive}
                                             autoExecutedCommands={autoExecutedCommands}
-                                            classificationReason={commandExecutionMode === 'auto-execute-safe' ? (() => {
-                                                const cmds = extractExecuteCommands(msg.content);
-                                                if (cmds.length === 0) return undefined;
-                                                const c = classifyCommand(cmds[cmds.length - 1], customSafeCommands);
-                                                return c.safe ? undefined : c.reason;
-                                            })() : undefined}
+                                            verdictByCommand={verdictByCommand}
+                                            classifyingCommands={classifyingCommands}
                                             limitReached={commandExecutionMode === 'auto-execute-safe' && maxConsecutiveAutoExecutions > 0 && consecutiveAutoExecCount >= maxConsecutiveAutoExecutions}
                                         />
                                     ) : (() => {
@@ -1376,7 +1489,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     })()}
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                         {streamingContent && (
                             <div className="ai-chat-message ai-chat-message-model">
                                 <div className="ai-chat-message-avatar"><AIIcon size={18} /></div>

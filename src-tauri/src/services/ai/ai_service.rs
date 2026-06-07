@@ -99,6 +99,20 @@ impl AIService {
             .await
     }
 
+    /// One-shot command-safety classification via the active provider.
+    pub async fn classify_command(
+        &mut self,
+        command: &str,
+        model: &str,
+    ) -> Result<crate::services::ai::classifier::CommandVerdict, String> {
+        let id = self.active_provider_id.clone();
+        let provider = self
+            .registry
+            .get_mut(&id)
+            .ok_or_else(|| format!("AI provider '{}' not found", id))?;
+        provider.classify_command(command, model).await
+    }
+
     pub fn cancel_message(&mut self, session_id: &str) {
         let id = self.active_provider_id.clone();
         if let Some(provider) = self.registry.get_mut(&id) {

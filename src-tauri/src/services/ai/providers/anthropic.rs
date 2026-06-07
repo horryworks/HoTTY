@@ -11,6 +11,9 @@ use crate::services::ai::ai_provider::{
     emit_auth_result, emit_chat_response, AIProvider, AuthStatus, AuthType, ChatResponseData,
     ModelInfo, TokenUsage,
 };
+use crate::services::ai::classifier::{
+    build_user_prompt, parse_verdict, CommandVerdict, CLASSIFIER_SYSTEM_PROMPT,
+};
 use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
 use crate::services::ai::streaming::finalize_assistant_content;
@@ -45,6 +48,18 @@ fn pop_trailing_user(history: Option<&mut Vec<ChatMessage>>) {
             h.pop();
         }
     }
+}
+
+/// Extract the forced-tool input object from a Messages API response. The
+/// classifier forces `tool_choice` to `report_verdict`, so the verdict arrives
+/// as the `input` of the first `tool_use` content block. Pulled out so the
+/// parsing path is unit-testable.
+fn extract_tool_input(data: &Value) -> Option<&Value> {
+    data.get("content")?
+        .as_array()?
+        .iter()
+        .find(|b| b.get("type").and_then(|v| v.as_str()) == Some("tool_use"))
+        .and_then(|b| b.get("input"))
 }
 
 // ---------------------------------------------------------------------------
@@ -449,6 +464,71 @@ impl AIProvider for AnthropicProvider {
         Ok(())
     }
 
+    async fn classify_command(
+        &mut self,
+        command: &str,
+        model: &str,
+    ) -> Result<CommandVerdict, String> {
+        if !is_valid_model(model) {
+            return Err("Invalid model name.".into());
+        }
+        let api_key = self
+            .api_key
+            .as_ref()
+            .ok_or("Not authenticated.")?
+            .clone();
+
+        // Force the model to emit the verdict through a single tool, which is
+        // Anthropic's mechanism for guaranteed-structured output.
+        let body = serde_json::json!({
+            "model": model,
+            "max_tokens": 256,
+            "system": CLASSIFIER_SYSTEM_PROMPT,
+            "messages": [{"role": "user", "content": build_user_prompt(command)}],
+            "tools": [{
+                "name": "report_verdict",
+                "description": "Report the command-safety verdict.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "modifiesState": {"type": "boolean"},
+                        "confidence": {"type": "number"},
+                        "reason": {"type": "string"}
+                    },
+                    "required": ["modifiesState", "confidence", "reason"]
+                }
+            }],
+            "tool_choice": {"type": "tool", "name": "report_verdict"}
+        });
+
+        let response = self
+            .http_client
+            .post("https://api.anthropic.com/v1/messages")
+            .header("Content-Type", "application/json")
+            .header("x-api-key", &api_key)
+            .header("anthropic-version", ANTHROPIC_VERSION)
+            .timeout(std::time::Duration::from_secs(20))
+            .body(body.to_string())
+            .send()
+            .await
+            .map_err(|e| format!("Anthropic classification request failed: {e}"))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            log::warn!("[anthropic] classify_command failed: {status}");
+            return Err(format!("classification request failed: {status}"));
+        }
+
+        let data: Value = response
+            .json()
+            .await
+            .map_err(|e| format!("failed to read classification response: {e}"))?;
+
+        let input =
+            extract_tool_input(&data).ok_or("classification response had no tool output")?;
+        parse_verdict(&input.to_string())
+    }
+
     fn cancel_message(&mut self, session_id: &str) {
         if let Some(token) = self.cancel_tokens.remove(session_id) {
             token.cancel();
@@ -576,5 +656,37 @@ mod tests {
         let models = fallback_models();
         assert!(!models.is_empty());
         assert!(models.iter().any(|m| m.name.contains("claude")));
+    }
+
+    #[test]
+    fn extract_and_parse_tool_verdict() {
+        let body = serde_json::json!({
+            "content": [{
+                "type": "tool_use",
+                "name": "report_verdict",
+                "input": { "modifiesState": true, "confidence": 0.88, "reason": "enters config mode" }
+            }]
+        });
+        let input = extract_tool_input(&body).unwrap();
+        let verdict = parse_verdict(&input.to_string()).unwrap();
+        assert!(verdict.modifies_state);
+        assert_eq!(verdict.reason, "enters config mode");
+    }
+
+    #[test]
+    fn extract_tool_input_skips_text_blocks() {
+        let body = serde_json::json!({
+            "content": [
+                { "type": "text", "text": "thinking..." },
+                { "type": "tool_use", "name": "report_verdict", "input": { "modifiesState": false, "confidence": 0.5, "reason": "x" } }
+            ]
+        });
+        assert!(extract_tool_input(&body).is_some());
+    }
+
+    #[test]
+    fn extract_tool_input_missing() {
+        let body = serde_json::json!({ "content": [{ "type": "text", "text": "no tool" }] });
+        assert!(extract_tool_input(&body).is_none());
     }
 }

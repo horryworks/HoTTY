@@ -12,13 +12,18 @@ const h = vi.hoisted(() => ({
     settings: {
         activeAiProvider: 'gemini',
         commandExecutionMode: 'auto-execute-safe',
-        customSafeCommands: [] as string[],
+        whitelistCommands: ['display', 'show', 'ls', 'cat', 'ping', 'git'] as string[],
+        blacklistCommands: ['sudo', 'rm -rf', 'reboot', 'shutdown', 'mkfs'] as string[],
         maxConsecutiveAutoExecutions: 5,
+        classifierStrategy: 'hybrid',
+        aiClassifyConfidenceThreshold: 0.7,
         watchBufferLimit: 500000,
         terminalBackground: '#000',
         theme: 'dark',
         update: vi.fn(),
     },
+    // Default AI verdict for gray-zone commands; individual tests override.
+    aiClassifyCommand: vi.fn().mockResolvedValue({ modifiesState: false, confidence: 0.95, reason: 'read-only' }),
 }));
 
 vi.mock('../../services/tauriService', () => ({
@@ -29,6 +34,7 @@ vi.mock('../../services/tauriService', () => ({
         aiChatSend: vi.fn().mockResolvedValue(undefined),
         aiChatCancel: vi.fn().mockResolvedValue(undefined),
         aiChatClear: vi.fn().mockResolvedValue(undefined),
+        aiClassifyCommand: h.aiClassifyCommand,
         aiListModels: vi.fn().mockResolvedValue([]),
         aiListLocations: vi.fn().mockResolvedValue([]),
         aiSetLocation: vi.fn().mockResolvedValue(undefined),
@@ -69,6 +75,7 @@ Element.prototype.scrollIntoView = vi.fn();
 
 const { AIChatPane } = await import('./AIChatPane');
 const { NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP } = await import('../../constants/aiPrompts');
+const { _clearVerdictCache } = await import('../../utils/aiCommandClassifier');
 
 // A safe Huawei command (`display` is in the builtin safe list) wrapped in an
 // execute fence — the canonical "identify the device first" opener.
@@ -99,7 +106,7 @@ async function authenticate() {
     });
 }
 
-async function sendAndComplete(text: string) {
+async function sendAndComplete(text: string, content: string = MODEL_CONTENT) {
     const textarea = screen.getByPlaceholderText('Type a message...');
     await act(async () => {
         fireEvent.change(textarea, { target: { value: text } });
@@ -108,9 +115,12 @@ async function sendAndComplete(text: string) {
         fireEvent.keyDown(textarea, { key: 'Enter' });
     });
     // Drive the streamed response to completion so the auto-execute effect fires.
+    // The classifier runs asynchronously after `done`; awaiting the act flushes
+    // the microtask so the auto-exec (or its verdict) settles before assertions.
     await act(async () => {
-        h.onAiChatResponseCb.current?.({ sessionId: 'ai-1', responseType: 'done', content: MODEL_CONTENT });
+        h.onAiChatResponseCb.current?.({ sessionId: 'ai-1', responseType: 'done', content });
     });
+    await act(async () => { await Promise.resolve(); });
 }
 
 describe('AIChatPane auto-execute after New chat', () => {
@@ -387,6 +397,58 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
             't1',
             expect.objectContaining({ pendingMessage: NETWORK_EXPERT_KICKOFF }),
         );
+    });
+});
+
+describe('AIChatPane AI classifier gray-zone verdicts', () => {
+    // A non-whitelisted command so the hybrid fast-path is skipped and the AI
+    // classifier (mocked) is consulted.
+    const GRAY_CONTENT = 'Running it.\n\n```execute\nfrobnicate --apply\n```';
+
+    beforeEach(() => {
+        h.onRunCommand.mockClear();
+        h.aiClassifyCommand.mockReset();
+        _clearVerdictCache();
+        h.onAiChatResponseCb.current = null;
+        h.onAiAuthResultCb.current = null;
+        localStorage.clear();
+    });
+
+    it('auto-executes a gray-zone command when the AI judges it read-only', async () => {
+        h.aiClassifyCommand.mockResolvedValue({ modifiesState: false, confidence: 0.95, reason: 'just reads' });
+        renderPane({ onRunCommand: h.onRunCommand });
+        await authenticate();
+        await sendAndComplete('do the thing', GRAY_CONTENT);
+        expect(h.aiClassifyCommand).toHaveBeenCalledWith('frobnicate --apply', expect.any(String));
+        expect(h.onRunCommand).toHaveBeenCalledWith('sess-1', 'frobnicate --apply', 't1');
+        expect(screen.getByText(/AI verdict/)).toBeTruthy();
+    });
+
+    it('does NOT auto-execute when the AI judges it modifies state, but shows the verdict', async () => {
+        h.aiClassifyCommand.mockResolvedValue({ modifiesState: true, confidence: 0.9, reason: 'changes config' });
+        renderPane({ onRunCommand: h.onRunCommand });
+        await authenticate();
+        await sendAndComplete('do the thing', GRAY_CONTENT);
+        expect(h.onRunCommand).not.toHaveBeenCalled();
+        expect(screen.getByText(/changes config/)).toBeTruthy();
+    });
+
+    it('falls back to manual (no run) when classification fails', async () => {
+        h.aiClassifyCommand.mockRejectedValue(new Error('classification timed out'));
+        renderPane({ onRunCommand: h.onRunCommand });
+        await authenticate();
+        await sendAndComplete('do the thing', GRAY_CONTENT);
+        expect(h.onRunCommand).not.toHaveBeenCalled();
+        expect(screen.getByText(/Unverified/)).toBeTruthy();
+    });
+
+    it('does not double-classify the same command on re-render (dedup before await)', async () => {
+        h.aiClassifyCommand.mockResolvedValue({ modifiesState: false, confidence: 0.95, reason: 'reads' });
+        const { rerender } = renderPane({ onRunCommand: h.onRunCommand });
+        await authenticate();
+        await sendAndComplete('do the thing', GRAY_CONTENT);
+        await act(async () => { rerender(makePane({ onRunCommand: h.onRunCommand })); });
+        expect(h.aiClassifyCommand).toHaveBeenCalledTimes(1);
     });
 });
 

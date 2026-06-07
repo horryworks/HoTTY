@@ -45,6 +45,7 @@ import type {
   AIModelInfo,
   AIChatResponseData,
   AIAuthResultPayload,
+  CommandVerdict,
   UpdateInfo,
 } from '../types/appTypes';
 
@@ -539,6 +540,16 @@ export const tauriService = {
 
   async aiChatClear(sessionId: string): Promise<void> {
     await invoke('ai_chat_clear', { sessionId });
+  },
+
+  /**
+   * One-shot command-safety classification (history-less). Used by the hybrid
+   * auto-execution gate to judge whether a command modifies state. Rejects (and
+   * the caller falls back to manual) when the provider is unauthenticated, the
+   * call times out, or the provider doesn't support classification.
+   */
+  async aiClassifyCommand(command: string, model: string): Promise<CommandVerdict> {
+    return invoke<CommandVerdict>('ai_classify_command', { command, model });
   },
 
   async aiListModels(): Promise<AIModelInfo[]> {

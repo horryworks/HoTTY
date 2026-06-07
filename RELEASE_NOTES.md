@@ -1,5 +1,18 @@
 # Release Notes
 
+## v2.0.6-beta1
+
+An AI Chat safety release: auto-execution of AI-suggested commands is now decided by an explicit, fully user-managed **Whitelist / Blacklist + AI** model, and every command shows how it was judged.
+
+### New Features
+
+- **Command safety is decided by a Whitelist, a Blacklist, and the AI — all configurable.** When Auto-execute is on, each AI-suggested command runs through three layers: the **Blacklist** is checked first (a match never auto-runs — a manual Run is still offered), the **Whitelist** auto-runs obvious read-only commands, and anything in between is sent to the AI, which judges whether the command changes configuration/state — only commands it judges read-only with enough confidence auto-run; everything else waits for confirmation. Both lists are fully editable in **Settings → AI → Command Execution**: a single word matches a base command (e.g. `docker` matches any docker command), and an entry with spaces matches as a substring (e.g. `rm -rf`, `git push`); each list has a **Reset to defaults** button. You can pick the strategy (Static / AI / **Hybrid**, the default) and the AI confidence threshold there too. This replaces the previous fixed safe-command list.
+- **Every command shows how it was judged.** Each execute block now displays a per-command verdict — Whitelisted, AI verdict (with confidence), Blacklisted, or "needs confirmation" — with the reason, so an auto-run (or a withheld one) is never a mystery.
+
+### Improvements
+
+- **Existing installs are migrated to the Hybrid classifier.** On upgrade, your previous custom safe commands are folded into the editable Whitelist, the Blacklist is seeded with sensible destructive-command defaults, and the strategy is set to Hybrid so AI judgment is available out of the box. You can change any of this in Settings.
+
 ## v2.0.5
 
 A small quality-of-life release: you can now move keyboard focus between panes without reaching for the mouse.

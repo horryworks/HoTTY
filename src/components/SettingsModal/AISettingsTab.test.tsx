@@ -74,18 +74,34 @@ describe('AISettingsTab', () => {
     expect(screen.queryByText('Max Consecutive Auto-Executions')).toBeNull();
   });
 
-  it('always shows custom safe commands input regardless of execution mode', () => {
-    // Default mode is 'ask-before-execute' — input should still be visible.
+  it('shows the whitelist and blacklist inputs', () => {
     render(<AISettingsTab />);
-    expect(screen.getByPlaceholderText('Command name (e.g., mycheck)')).toBeTruthy();
+    expect(screen.getByPlaceholderText('e.g., docker, kubectl get')).toBeTruthy();
+    expect(screen.getByPlaceholderText('e.g., rm -rf, git push')).toBeTruthy();
   });
 
-  it('adds a custom safe command', () => {
+  it('adds a whitelist entry', () => {
     render(<AISettingsTab />);
-    const input = screen.getByPlaceholderText('Command name (e.g., mycheck)');
+    const input = screen.getByPlaceholderText('e.g., docker, kubectl get');
     fireEvent.change(input, { target: { value: 'mytool' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(useSettingsStore.getState().customSafeCommands).toContain('mytool');
+    expect(useSettingsStore.getState().whitelistCommands).toContain('mytool');
+  });
+
+  it('adds a blacklist entry', () => {
+    render(<AISettingsTab />);
+    const input = screen.getByPlaceholderText('e.g., rm -rf, git push');
+    fireEvent.change(input, { target: { value: 'danger-cmd' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(useSettingsStore.getState().blacklistCommands).toContain('danger-cmd');
+  });
+
+  it('resets the whitelist to defaults', () => {
+    useSettingsStore.getState().update('whitelistCommands', ['only-this']);
+    render(<AISettingsTab />);
+    fireEvent.click(screen.getAllByTitle(/Reset the whitelist/i)[0]);
+    expect(useSettingsStore.getState().whitelistCommands).toContain('ls');
+    expect(useSettingsStore.getState().whitelistCommands).not.toContain('only-this');
   });
 
   it('shows authentication status', () => {

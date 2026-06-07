@@ -7,8 +7,8 @@ use tauri::Manager;
 
 use commands::ai::{
     ai_auth_auto, ai_auth_logout, ai_auth_start, ai_auth_status, ai_chat_cancel, ai_chat_clear,
-    ai_chat_send, ai_list_locations, ai_list_models, ai_set_location, ai_set_provider,
-    select_service_account_key_file, AIServiceState, ApprovedServiceAccountKeys,
+    ai_chat_send, ai_classify_command, ai_list_locations, ai_list_models, ai_set_location,
+    ai_set_provider, select_service_account_key_file, AIServiceState, ApprovedServiceAccountKeys,
 };
 use commands::dpapi::{dpapi_decrypt, dpapi_decrypt_batch, dpapi_encrypt, dpapi_encrypt_batch};
 use commands::file_explorer::{file_explorer_get_drives, file_explorer_list_directory};
@@ -198,6 +198,7 @@ pub fn run() {
             ai_chat_send,
             ai_chat_cancel,
             ai_chat_clear,
+            ai_classify_command,
             ai_list_models,
             ai_list_locations,
             ai_set_provider,

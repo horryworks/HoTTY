@@ -380,6 +380,25 @@ export interface AIAuthResultPayload {
 
 export type CommandExecutionMode = 'ask-before-execute' | 'auto-execute-safe';
 
+/**
+ * How auto-execution safety is decided for AI-suggested commands. The
+ * user-managed Blacklist is always checked first (a match → ask before execute).
+ * - `static`  — Whitelist auto-runs; everything else asks. No AI.
+ * - `ai`      — the AI judges anything not blacklisted (no whitelist fast-path).
+ * - `hybrid`  — Whitelist auto-runs, AI judges the rest, else ask (recommended).
+ */
+export type ClassifierStrategy = 'static' | 'ai' | 'hybrid';
+
+/**
+ * Structured verdict from a one-shot AI command-safety classification.
+ * Mirrors the Rust `CommandVerdict` struct in `services/ai/classifier.rs`.
+ */
+export interface CommandVerdict {
+  modifiesState: boolean;
+  confidence: number;
+  reason: string;
+}
+
 export interface AskAiCommand {
   id: string;
   label: string;
