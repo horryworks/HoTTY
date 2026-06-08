@@ -91,6 +91,17 @@ fn extract_candidate_text(data: &Value) -> Option<&str> {
         .and_then(|v| v.as_str())
 }
 
+/// Extract the `input` object of the first `tool_use` content block from an
+/// Anthropic Messages response. Used for Claude-on-Vertex classification, where
+/// the structured verdict is returned as a forced tool call rather than text.
+fn extract_tool_input(data: &Value) -> Option<&Value> {
+    data.get("content")?
+        .as_array()?
+        .iter()
+        .find(|b| b.get("type").and_then(|v| v.as_str()) == Some("tool_use"))
+        .and_then(|b| b.get("input"))
+}
+
 fn now_millis() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -793,6 +804,75 @@ impl VertexAIProvider {
 
         Ok((full_response, Some(usage)))
     }
+
+    /// Classify a command using a Claude-on-Vertex model via the Anthropic
+    /// Messages API (non-streaming `rawPredict`), forcing a single structured
+    /// tool call. Mirrors `AnthropicProvider::classify_command` but routes
+    /// through Vertex authentication and endpoints. As with the chat path, the
+    /// model id lives in the URL and the body carries `anthropic_version`
+    /// instead of `model`.
+    async fn classify_command_anthropic(
+        &self,
+        command: &str,
+        model_path: &str,
+        token: &str,
+    ) -> Result<CommandVerdict, String> {
+        let config = self.config.as_ref().unwrap();
+        let url = format!(
+            "{}/{}/{}:rawPredict",
+            vertex_base_url(&config.location, "v1"),
+            vertex_resource_prefix(&config.project_id, &config.location),
+            model_path,
+        );
+
+        let body = serde_json::json!({
+            "anthropic_version": ANTHROPIC_VERSION_VERTEX,
+            "max_tokens": 256,
+            "system": CLASSIFIER_SYSTEM_PROMPT,
+            "messages": [{"role": "user", "content": build_user_prompt(command)}],
+            "tools": [{
+                "name": "report_verdict",
+                "description": "Report the command-safety verdict.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "modifiesState": {"type": "boolean"},
+                        "confidence": {"type": "number"},
+                        "reason": {"type": "string"}
+                    },
+                    "required": ["modifiesState", "confidence", "reason"]
+                }
+            }],
+            "tool_choice": {"type": "tool", "name": "report_verdict"}
+        });
+
+        let response = self
+            .http_client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {token}"))
+            .header("X-Goog-User-Project", &config.project_id)
+            .timeout(std::time::Duration::from_secs(20))
+            .body(body.to_string())
+            .send()
+            .await
+            .map_err(|e| format!("Vertex AI classification request failed: {e}"))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            log::warn!("[vertexai] classify_command (anthropic) failed: {status}");
+            return Err(format!("classification request failed: {status}"));
+        }
+
+        let data: Value = response
+            .json()
+            .await
+            .map_err(|e| format!("failed to read classification response: {e}"))?;
+
+        let input =
+            extract_tool_input(&data).ok_or("classification response had no tool output")?;
+        parse_verdict(&input.to_string())
+    }
 }
 
 #[async_trait]
@@ -1247,12 +1327,21 @@ impl AIProvider for VertexAIProvider {
             format!("publishers/google/models/{model}")
         };
         let publisher = model_path.split('/').nth(1).unwrap_or("google");
-        // Only the Google (Gemini) generateContent shape supports the structured
-        // responseSchema used here. For Anthropic-on-Vertex models, degrade
-        // gracefully — the frontend falls back to manual execution.
+        // Claude-on-Vertex models don't support the Gemini generateContent /
+        // responseSchema structured-output shape used below. Route them through
+        // the Anthropic Messages API (rawPredict + forced tool call) instead.
+        if publisher == "anthropic" {
+            return self
+                .classify_command_anthropic(command, &model_path, &token)
+                .await;
+        }
+        // Any other publisher (meta, mistral-ai, cohere, …) has no structured
+        // classification path; degrade gracefully so the frontend falls back to
+        // manual execution.
         if publisher != "google" {
             return Err(
-                "classification is only supported for Google-published Vertex models".into(),
+                "classification is only supported for Google- and Anthropic-published Vertex models"
+                    .into(),
             );
         }
 
@@ -1754,6 +1843,27 @@ mod tests {
     fn extract_candidate_text_missing() {
         let body = serde_json::json!({ "candidates": [] });
         assert!(extract_candidate_text(&body).is_none());
+    }
+
+    #[test]
+    fn extract_tool_input_skips_text_blocks() {
+        let body = serde_json::json!({
+            "content": [
+                { "type": "text", "text": "thinking..." },
+                { "type": "tool_use", "name": "report_verdict",
+                  "input": { "modifiesState": true, "confidence": 0.9, "reason": "x" } }
+            ]
+        });
+        let input = extract_tool_input(&body).expect("tool input present");
+        assert_eq!(input["modifiesState"], true);
+        let verdict = parse_verdict(&input.to_string()).unwrap();
+        assert!(verdict.modifies_state);
+    }
+
+    #[test]
+    fn extract_tool_input_missing() {
+        let body = serde_json::json!({ "content": [{ "type": "text", "text": "no tool" }] });
+        assert!(extract_tool_input(&body).is_none());
     }
 
     #[test]

@@ -44,6 +44,7 @@ import {
 import { stripAnsiCodes } from './utils/ansiUtils';
 import { totalDirtyEditors } from './utils/dirtyEditors';
 import { evaluateWatchPoll } from './utils/aiCommandWatch';
+import { parseLeadingSleep, clampDelay, syntheticDelayMessage, type SleepDelayParse } from './utils/aiCommandDelay';
 import { sessionBindingKey } from './utils/sessionBindingKey';
 import { selectAutoRebinds, type RebindSession, type RebindOrphanTab } from './utils/autoRebind';
 import { decideWatchRouting } from './utils/watchRouting';
@@ -119,6 +120,10 @@ function App() {
     onPasteRequest: handlePasteRequest,
     onSessionRemoved: handleSessionRemoved,
   });
+  // Fresh mirror of `sessions` for callbacks that fire after a delay (the render-
+  // closed `sessions` Map is stale by the time a sleep-delay timer fires).
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
 
   const layoutMode = usePaneStore((s) => s.layoutMode);
   const activePaneId = usePaneStore((s) => s.activePaneId);
@@ -209,19 +214,33 @@ function App() {
   // Track active poll intervals from onRunCommand so they can be cleared when
   // the AI chat pane closes or the watched session disconnects.
   const runCommandIntervalsRef = useRef<Map<string, Set<ReturnType<typeof setInterval>>>>(new Map());
+  // Track pending client-side sleep-delay timers (see scheduleSleepDelay), cleared
+  // alongside the poll intervals when the pane closes or the app unmounts.
+  const runCommandDelaysRef = useRef<Map<string, Set<ReturnType<typeof setTimeout>>>>(new Map());
   const clearRunCommandIntervals = useCallback((paneId: string) => {
     const set = runCommandIntervalsRef.current.get(paneId);
-    if (!set) return;
-    set.forEach((id) => clearInterval(id));
-    runCommandIntervalsRef.current.delete(paneId);
+    if (set) {
+      set.forEach((id) => clearInterval(id));
+      runCommandIntervalsRef.current.delete(paneId);
+    }
+    const delays = runCommandDelaysRef.current.get(paneId);
+    if (delays) {
+      delays.forEach((id) => clearTimeout(id));
+      runCommandDelaysRef.current.delete(paneId);
+    }
   }, []);
   useEffect(() => {
-    const ref = runCommandIntervalsRef;
+    const intervals = runCommandIntervalsRef;
+    const delays = runCommandDelaysRef;
     return () => {
-      ref.current.forEach((set) => set.forEach((id) => clearInterval(id)));
-      ref.current.clear();
+      intervals.current.forEach((set) => set.forEach((id) => clearInterval(id)));
+      intervals.current.clear();
+      delays.current.forEach((set) => set.forEach((id) => clearTimeout(id)));
+      delays.current.clear();
     };
   }, []);
+  // Monotonic token to abort a stale sleep delay (New chat / newer command).
+  const delayTokenRef = useRef(0);
 
   const createAiChatPaneRef = useRef<() => string | undefined>(undefined);
   const aiChatStatesRef = useRef<Map<string, AiChatState>>(new Map());
@@ -665,6 +684,281 @@ function App() {
     moveSessionToPane(sessionId, targetPaneId);
   };
 
+  // Send an AI-issued command to the device and poll its captured output for
+  // completion (shell-prompt detection / idle / safety cap). Extracted from the
+  // onRunCommand prop verbatim so a client-side sleep delay can invoke it either
+  // immediately or after the wait. `paneId` was previously `featureInfo.id`.
+  const sendAndWatch = (
+    targetId: string,
+    cmd: string,
+    originatingTabId: string,
+    paneId: string,
+  ) => {
+    // Record buffer position before sending command
+    const startLen = (watchBuffers.current.get(targetId) || '').length;
+
+    // Send command lines to terminal
+    const lines = cmd.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    aiExecLog('info', 'command-start', {
+      cmd: trimCmdForLog(cmd),
+      startLen,
+      lines: lines.length,
+      originatingTabId,
+      watching: watchingSessionIdsRef.current.has(targetId),
+    });
+    let sendFailed = false;
+    lines.forEach((line, index) => {
+      setTimeout(() => {
+        tauriService.sendInput(targetId, line + '\r').catch((err) => {
+          // A reject here means the backend session is gone (e.g. it
+          // died after our status check) — surface it instead of
+          // letting the command vanish silently.
+          if (sendFailed) return;
+          sendFailed = true;
+          aiExecLog('warn', 'send-input-failed', {
+            cmd: trimCmdForLog(cmd),
+            targetId,
+            error: String(err),
+            originatingTabId,
+          });
+          updateTabById(paneId, originatingTabId, {
+            pendingMessage: notConnectedNote(cmd, sessionsRef.current.get(targetId)?.status),
+          });
+        });
+      }, index * 150);
+    });
+
+    // Poll watch buffer for command completion (shell prompt detection).
+    // Only polls if some tab is linked to this session, ie. its output
+    // is being captured. Tab switches are fine — the originating tab id
+    // is captured here so the result is delivered back to the right tab.
+    if (watchingSessionIdsRef.current.has(targetId)) {
+      const sendDuration = lines.length * 150;
+      const idleSecs = useSettingsStore.getState().aiCommandIdleTimeoutSecs;
+      const idleMs = idleSecs > 0 ? idleSecs * 1000 : 0;
+      const SAFETY_CAP_MS = 30 * 60 * 1000; // 30 min hard ceiling
+      let attempts = 0;
+      let lastBufLen = startLen;
+      let lastChangeAt = Date.now();
+      const startedAt = Date.now();
+      let set = runCommandIntervalsRef.current.get(paneId);
+      if (!set) {
+        set = new Set();
+        runCommandIntervalsRef.current.set(paneId, set);
+      }
+      const intervalSet = set;
+      let startLenWarned = false;
+      aiExecLog('info', 'poll-begin', {
+        cmd: trimCmdForLog(cmd),
+        startLen,
+        idleSecs,
+        sendDuration,
+        originatingTabId,
+      });
+      const pollInterval = setInterval(() => {
+        attempts++;
+        // Bail out if the originating tab no longer exists (user closed it).
+        const paneState = aiChatStatesRef.current.get(paneId);
+        const originatingTab = paneState?.tabs.find(t => t.id === originatingTabId);
+        if (!originatingTab) {
+          aiExecLog('warn', 'originating-tab-gone', {
+            cmd: trimCmdForLog(cmd),
+            attempts,
+            originatingTabId,
+          });
+          clearInterval(pollInterval);
+          intervalSet.delete(pollInterval);
+          return;
+        }
+        const buf = watchBuffers.current.get(targetId) || '';
+        if (!startLenWarned && startLen > buf.length) {
+          startLenWarned = true;
+          aiExecLog('warn', 'startlen-out-of-range', {
+            cmd: trimCmdForLog(cmd),
+            startLen,
+            bufLen: buf.length,
+          });
+        }
+        if (buf.length > lastBufLen) {
+          lastBufLen = buf.length;
+          lastChangeAt = Date.now();
+        }
+        const newContent = buf.substring(startLen);
+        const now = Date.now();
+        // Decide what to do this poll (prompt detection + timeout semantics
+        // live in the pure, unit-tested helper). Note: the idle timeout
+        // fires after idleMs of no new data even when newContent is empty —
+        // a silent/hung device is the "no response" case it exists for.
+        const result = evaluateWatchPoll({
+          newContent,
+          attemptsMs: attempts * 200,
+          sendWindowMs: sendDuration + 300,
+          idleMs,
+          msSinceLastChange: now - lastChangeAt,
+          msSinceStart: now - startedAt,
+          safetyCapMs: SAFETY_CAP_MS,
+        });
+        if (result.action === 'wait') return;
+        if (result.action === 'prompt') {
+          aiExecLog('info', 'prompt-match', {
+            cmd: trimCmdForLog(cmd),
+            attempts,
+            bufLen: buf.length,
+            newLen: newContent.length,
+            matchedAtEnd: result.matchedAtEnd,
+          });
+          clearInterval(pollInterval);
+          intervalSet.delete(pollInterval);
+          clearWatchBuffer(targetId);
+          const outputText = `Terminal Output (Command: ${cmd}):\n${newContent.trim()}`;
+          updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
+        } else {
+          // 'idle' or 'safety'
+          const isIdle = result.action === 'idle';
+          aiExecLog('warn', isIdle ? 'idle-timeout' : 'safety-cap', {
+            cmd: trimCmdForLog(cmd),
+            attempts,
+            bufLen: buf.length,
+            newLen: newContent.length,
+            idleSecs,
+          });
+          clearInterval(pollInterval);
+          intervalSet.delete(pollInterval);
+          clearWatchBuffer(targetId);
+          const reason = isIdle
+            ? `[no response from device for ${idleSecs} seconds]`
+            : `[command exceeded safety cap of 30 minutes]`;
+          const captured = newContent.trim();
+          const outputText = `Terminal Output (Command: ${cmd}):\n${captured}\n${reason}`;
+          updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
+        }
+      }, 200);
+      intervalSet.add(pollInterval);
+    }
+  };
+
+  // Run a leading `sleep N` as a CLIENT-SIDE delay instead of sending it to the
+  // device. Avoids the watch idle-timeout mis-firing during a sleep. After the
+  // wait: run any chained remainder via onRunCommandImpl (re-entry handles a
+  // chained leading sleep too), or post a synthetic result so the AI continues.
+  const scheduleSleepDelay = (
+    targetId: string,
+    cmd: string,
+    parsed: SleepDelayParse,
+    originatingTabId: string,
+    paneId: string,
+  ) => {
+    const maxSecs = useSettingsStore.getState().aiSleepMaxDelaySecs;
+    const { delayMs: clamped, wasClamped } = clampDelay(parsed.delayMs, maxSecs);
+    const token = ++delayTokenRef.current;
+
+    aiExecLog('info', 'sleep-delay-begin', {
+      cmd: trimCmdForLog(cmd),
+      delayMs: clamped,
+      requestedMs: parsed.delayMs,
+      wasClamped,
+      hasRest: parsed.rest.length > 0,
+      originatingTabId,
+    });
+
+    updateTabById(paneId, originatingTabId, {
+      sleepDelay: { command: cmd, untilTs: Date.now() + clamped, wasClamped, token },
+    });
+
+    let delaySet = runCommandDelaysRef.current.get(paneId);
+    if (!delaySet) {
+      delaySet = new Set();
+      runCommandDelaysRef.current.set(paneId, delaySet);
+    }
+    const set = delaySet;
+
+    const timer = setTimeout(() => {
+      set.delete(timer);
+      // Abort if this delay was superseded (New chat / a newer command on the
+      // same tab bumped the token) or the originating tab is gone.
+      const paneState = aiChatStatesRef.current.get(paneId);
+      const tab = paneState?.tabs.find(t => t.id === originatingTabId);
+      if (!tab || tab.sleepDelay?.token !== token) {
+        aiExecLog('warn', 'sleep-delay-aborted', {
+          cmd: trimCmdForLog(cmd),
+          originatingTabId,
+          reason: !tab ? 'tab-gone' : 'superseded',
+        });
+        return;
+      }
+      // We own this fire — clear the waiting indicator.
+      updateTabById(paneId, originatingTabId, { sleepDelay: null });
+
+      // Re-validate the link/connection after the wait (state may have changed).
+      const rec = sessionsRef.current.get(targetId);
+      const stillLinked = watchingSessionIdsRef.current.has(targetId);
+      if (!rec || rec.status !== 'connected' || !stillLinked) {
+        aiExecLog('warn', 'sleep-delay-target-not-live', {
+          cmd: trimCmdForLog(cmd),
+          targetId,
+          status: rec?.status ?? 'missing',
+          stillLinked,
+          originatingTabId,
+        });
+        updateTabById(paneId, originatingTabId, {
+          pendingMessage: notConnectedNote(parsed.rest || cmd, rec?.status),
+        });
+        return;
+      }
+
+      if (parsed.rest.length > 0) {
+        aiExecLog('info', 'sleep-delay-fire-rest', {
+          rest: trimCmdForLog(parsed.rest),
+          clampedMs: clamped,
+          wasClamped,
+        });
+        // Re-enter the decision so a chained leading sleep in `rest` is delayed too.
+        onRunCommandImpl(targetId, parsed.rest, originatingTabId, paneId);
+      } else {
+        updateTabById(paneId, originatingTabId, {
+          pendingMessage: syntheticDelayMessage(cmd, clamped, parsed.delayMs, wasClamped),
+        });
+      }
+    }, clamped);
+    set.add(timer);
+  };
+
+  // Single funnel for running an AI-issued command. Guards on a live session,
+  // then either delays a leading `sleep` client-side or sends + watches.
+  const onRunCommandImpl = (
+    targetId: string,
+    cmd: string,
+    originatingTabId: string,
+    paneId: string,
+  ) => {
+    // Backend-truth guard: never send to a target that isn't a live,
+    // connected session. The AIChatPane caller already guards on status,
+    // but this defends any other caller and keeps the failure loud
+    // instead of a swallowed no-op.
+    const targetRec = sessions.get(targetId);
+    if (!targetRec || targetRec.status !== 'connected') {
+      aiExecLog('warn', 'run-target-not-live', {
+        cmd: trimCmdForLog(cmd),
+        targetId,
+        status: targetRec?.status ?? 'missing',
+        originatingTabId,
+      });
+      updateTabById(paneId, originatingTabId, {
+        pendingMessage: notConnectedNote(cmd, targetRec?.status),
+      });
+      return;
+    }
+
+    // Convert a leading `sleep N` into a client-side delay (when enabled).
+    const asDelay = useSettingsStore.getState().aiSleepAsClientDelay;
+    const parsed = asDelay ? parseLeadingSleep(cmd) : null;
+    if (!parsed) {
+      sendAndWatch(targetId, cmd, originatingTabId, paneId);
+      return;
+    }
+    scheduleSleepDelay(targetId, cmd, parsed, originatingTabId, paneId);
+  };
+
   const renderPane = (paneId: string) => {
     const sid = paneAllocations[paneId] ?? null;
     const contentType = sid ? getPaneContentType(sid) : null;
@@ -744,168 +1038,9 @@ function App() {
               onSelectTab={(tabId) => setActiveTab(featureInfo.id, tabId)}
               onFlashSessionPane={flashSessionPane}
               sessions={sessions}
-              onRunCommand={(targetId, cmd, originatingTabId) => {
-                // Backend-truth guard: never send to a target that isn't a live,
-                // connected session. The AIChatPane caller already guards on status,
-                // but this defends any other caller and keeps the failure loud
-                // instead of a swallowed no-op.
-                const targetRec = sessions.get(targetId);
-                if (!targetRec || targetRec.status !== 'connected') {
-                  aiExecLog('warn', 'run-target-not-live', {
-                    cmd: trimCmdForLog(cmd),
-                    targetId,
-                    status: targetRec?.status ?? 'missing',
-                    originatingTabId,
-                  });
-                  updateTabById(featureInfo.id, originatingTabId, {
-                    pendingMessage: notConnectedNote(cmd, targetRec?.status),
-                  });
-                  return;
-                }
-
-                // Record buffer position before sending command
-                const startLen = (watchBuffers.current.get(targetId) || '').length;
-
-                // Send command lines to terminal
-                const lines = cmd.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-                aiExecLog('info', 'command-start', {
-                  cmd: trimCmdForLog(cmd),
-                  startLen,
-                  lines: lines.length,
-                  originatingTabId,
-                  watching: watchingSessionIdsRef.current.has(targetId),
-                });
-                let sendFailed = false;
-                lines.forEach((line, index) => {
-                  setTimeout(() => {
-                    tauriService.sendInput(targetId, line + '\r').catch((err) => {
-                      // A reject here means the backend session is gone (e.g. it
-                      // died after our status check) — surface it instead of
-                      // letting the command vanish silently.
-                      if (sendFailed) return;
-                      sendFailed = true;
-                      aiExecLog('warn', 'send-input-failed', {
-                        cmd: trimCmdForLog(cmd),
-                        targetId,
-                        error: String(err),
-                        originatingTabId,
-                      });
-                      updateTabById(featureInfo.id, originatingTabId, {
-                        pendingMessage: notConnectedNote(cmd, sessions.get(targetId)?.status),
-                      });
-                    });
-                  }, index * 150);
-                });
-
-                // Poll watch buffer for command completion (shell prompt detection).
-                // Only polls if some tab is linked to this session, ie. its output
-                // is being captured. Tab switches are fine — the originating tab id
-                // is captured here so the result is delivered back to the right tab.
-                if (watchingSessionIdsRef.current.has(targetId)) {
-                  const sendDuration = lines.length * 150;
-                  const idleSecs = useSettingsStore.getState().aiCommandIdleTimeoutSecs;
-                  const idleMs = idleSecs > 0 ? idleSecs * 1000 : 0;
-                  const SAFETY_CAP_MS = 30 * 60 * 1000; // 30 min hard ceiling
-                  let attempts = 0;
-                  let lastBufLen = startLen;
-                  let lastChangeAt = Date.now();
-                  const startedAt = Date.now();
-                  const paneId = featureInfo.id;
-                  let set = runCommandIntervalsRef.current.get(paneId);
-                  if (!set) {
-                    set = new Set();
-                    runCommandIntervalsRef.current.set(paneId, set);
-                  }
-                  const intervalSet = set;
-                  let startLenWarned = false;
-                  aiExecLog('info', 'poll-begin', {
-                    cmd: trimCmdForLog(cmd),
-                    startLen,
-                    idleSecs,
-                    sendDuration,
-                    originatingTabId,
-                  });
-                  const pollInterval = setInterval(() => {
-                    attempts++;
-                    // Bail out if the originating tab no longer exists (user closed it).
-                    const paneState = aiChatStatesRef.current.get(paneId);
-                    const originatingTab = paneState?.tabs.find(t => t.id === originatingTabId);
-                    if (!originatingTab) {
-                      aiExecLog('warn', 'originating-tab-gone', {
-                        cmd: trimCmdForLog(cmd),
-                        attempts,
-                        originatingTabId,
-                      });
-                      clearInterval(pollInterval);
-                      intervalSet.delete(pollInterval);
-                      return;
-                    }
-                    const buf = watchBuffers.current.get(targetId) || '';
-                    if (!startLenWarned && startLen > buf.length) {
-                      startLenWarned = true;
-                      aiExecLog('warn', 'startlen-out-of-range', {
-                        cmd: trimCmdForLog(cmd),
-                        startLen,
-                        bufLen: buf.length,
-                      });
-                    }
-                    if (buf.length > lastBufLen) {
-                      lastBufLen = buf.length;
-                      lastChangeAt = Date.now();
-                    }
-                    const newContent = buf.substring(startLen);
-                    const now = Date.now();
-                    // Decide what to do this poll (prompt detection + timeout semantics
-                    // live in the pure, unit-tested helper). Note: the idle timeout
-                    // fires after idleMs of no new data even when newContent is empty —
-                    // a silent/hung device is the "no response" case it exists for.
-                    const result = evaluateWatchPoll({
-                      newContent,
-                      attemptsMs: attempts * 200,
-                      sendWindowMs: sendDuration + 300,
-                      idleMs,
-                      msSinceLastChange: now - lastChangeAt,
-                      msSinceStart: now - startedAt,
-                      safetyCapMs: SAFETY_CAP_MS,
-                    });
-                    if (result.action === 'wait') return;
-                    if (result.action === 'prompt') {
-                      aiExecLog('info', 'prompt-match', {
-                        cmd: trimCmdForLog(cmd),
-                        attempts,
-                        bufLen: buf.length,
-                        newLen: newContent.length,
-                        matchedAtEnd: result.matchedAtEnd,
-                      });
-                      clearInterval(pollInterval);
-                      intervalSet.delete(pollInterval);
-                      clearWatchBuffer(targetId);
-                      const outputText = `Terminal Output (Command: ${cmd}):\n${newContent.trim()}`;
-                      updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
-                    } else {
-                      // 'idle' or 'safety'
-                      const isIdle = result.action === 'idle';
-                      aiExecLog('warn', isIdle ? 'idle-timeout' : 'safety-cap', {
-                        cmd: trimCmdForLog(cmd),
-                        attempts,
-                        bufLen: buf.length,
-                        newLen: newContent.length,
-                        idleSecs,
-                      });
-                      clearInterval(pollInterval);
-                      intervalSet.delete(pollInterval);
-                      clearWatchBuffer(targetId);
-                      const reason = isIdle
-                        ? `[no response from device for ${idleSecs} seconds]`
-                        : `[command exceeded safety cap of 30 minutes]`;
-                      const captured = newContent.trim();
-                      const outputText = `Terminal Output (Command: ${cmd}):\n${captured}\n${reason}`;
-                      updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
-                    }
-                  }, 200);
-                  intervalSet.add(pollInterval);
-                }
-              }}
+              onRunCommand={(targetId, cmd, originatingTabId) =>
+                onRunCommandImpl(targetId, cmd, originatingTabId, featureInfo.id)
+              }
               onSendMessage={(text) => aiSendMessage(featureInfo.id, text)}
               aiPersonas={aiPersonas}
               terminalBackground={useSettingsStore.getState().terminalBackground}

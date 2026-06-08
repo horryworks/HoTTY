@@ -146,4 +146,32 @@ describe('AISettingsTab', () => {
     fireEvent.change(input, { target: { value: 'abc' } });
     expect(useSettingsStore.getState().aiCommandIdleTimeoutSecs).toBe(0);
   });
+
+  it('toggles the client-side sleep delay setting (default on)', () => {
+    render(<AISettingsTab />);
+    const checkbox = screen.getByText(/Run leading .*sleep.* as a client-side delay/)
+      .querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    fireEvent.click(checkbox);
+    expect(useSettingsStore.getState().aiSleepAsClientDelay).toBe(false);
+  });
+
+  it('updates the max client-side delay', () => {
+    render(<AISettingsTab />);
+    const input = screen.getByText('Max client-side delay (seconds)')
+      .closest('.settings-group')!
+      .querySelector('input[type="number"][max="86400"]') as HTMLInputElement;
+    expect(input.value).toBe('900');
+    fireEvent.change(input, { target: { value: '300' } });
+    expect(useSettingsStore.getState().aiSleepMaxDelaySecs).toBe(300);
+  });
+
+  it('disables the max-delay input when the toggle is off', () => {
+    useSettingsStore.getState().update('aiSleepAsClientDelay', false);
+    render(<AISettingsTab />);
+    const input = screen.getByText('Max client-side delay (seconds)')
+      .closest('.settings-group')!
+      .querySelector('input[type="number"][max="86400"]') as HTMLInputElement;
+    expect(input.disabled).toBe(true);
+  });
 });

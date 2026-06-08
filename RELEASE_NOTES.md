@@ -1,5 +1,17 @@
 # Release Notes
 
+## v2.0.6-beta2
+
+A follow-up to beta1 that fixes how AI-issued `sleep` commands interact with the device-response timeout, and extends command-safety classification to Claude models on Vertex AI.
+
+### New Features
+
+- **A leading `sleep` in an AI command now waits client-side instead of on the device.** When the AI issues a command that begins with `sleep N` (e.g. `sleep 120 && validate`), HoTTY now waits those N seconds locally and runs any chained command afterward, rather than sending the `sleep` to the terminal. Because a `sleep` on the device produces no output, the per-command **device-response idle timeout** would otherwise mis-fire during the wait and the AI would proceed prematurely; running the wait in HoTTY keeps the timing honest. The execute block shows a live **"⏳ Waiting Ns…"** countdown while the delay runs. Two new options live in **Settings → AI**: a toggle (on by default) and a **maximum delay** cap (default 900 s / 15 min — longer sleeps are clamped and noted; 0 = no cap).
+
+### Improvements
+
+- **Command-safety classification now works with Claude models on Vertex AI.** When the Hybrid / AI classifier sends a command to the model for an auto-execute verdict, Anthropic (Claude) models hosted on Vertex AI are now supported — previously only Google (Gemini) Vertex models could classify, and selecting a Claude-on-Vertex model made the classifier fall back to manual execution. Auto-execute-safe now behaves the same regardless of which Vertex model family you use.
+
 ## v2.0.6-beta1
 
 An AI Chat safety release: auto-execution of AI-suggested commands is now decided by an explicit, fully user-managed **Whitelist / Blacklist + AI** model, and every command shows how it was judged.

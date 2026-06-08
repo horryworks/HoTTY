@@ -389,6 +389,34 @@ export function AISettingsTab() {
         />
       </div>
 
+      {/* Client-side sleep delay */}
+      <div className="settings-group">
+        <label className="settings-checkbox">
+          <input
+            type="checkbox"
+            checked={settings.aiSleepAsClientDelay}
+            onChange={(e) => update('aiSleepAsClientDelay', e.target.checked)}
+          />
+          Run leading `sleep` as a client-side delay
+          <HelpTooltip text="When the AI issues a command starting with `sleep N` (e.g. `sleep 120 && validate`), wait N seconds in HoTTY instead of running sleep on the device. This stops the Device Response Timeout above from mis-firing during the sleep. Any chained command runs after the wait. Default: on." />
+        </label>
+        <label>
+          Max client-side delay (seconds)
+          <HelpTooltip text="Upper bound for a client-side sleep delay; longer sleeps are clamped to this and noted. 0 = no cap. Default: 900 (15 min)." />
+        </label>
+        <input
+          type="number"
+          min={0}
+          max={86400}
+          value={settings.aiSleepMaxDelaySecs}
+          disabled={!settings.aiSleepAsClientDelay}
+          onChange={(e) => {
+            const parsed = parseInt(e.target.value, 10);
+            update('aiSleepMaxDelaySecs', Number.isFinite(parsed) && parsed > 0 ? parsed : 0);
+          }}
+        />
+      </div>
+
       {/* Whitelist — auto-execute */}
       <div className="settings-group">
         <label>

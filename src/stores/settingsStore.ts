@@ -169,6 +169,11 @@ interface SettingsState {
   aiPersonas: PersonaDefinition[];
   watchBufferLimit: number;
   aiCommandIdleTimeoutSecs: number;
+  /** When true, a leading `sleep N` on an AI-issued command runs as a client-side
+   *  delay instead of being sent to the device (so the idle timeout doesn't mis-fire). */
+  aiSleepAsClientDelay: boolean;
+  /** Cap (seconds) for a client-side sleep delay; over-cap waits are clamped. 0 = no cap. */
+  aiSleepMaxDelaySecs: number;
 }
 
 interface SettingsActions {
@@ -222,6 +227,8 @@ const DEFAULTS: SettingsState = {
   aiPersonas: DEFAULT_PERSONAS,
   watchBufferLimit: 500000,
   aiCommandIdleTimeoutSecs: 10,
+  aiSleepAsClientDelay: true,
+  aiSleepMaxDelaySecs: 900,
 };
 
 export const useSettingsStore = create<SettingsState & SettingsActions>()(
@@ -233,7 +240,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 15,
+      version: 16,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -299,6 +306,10 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           state.blacklistCommands ??= [...DEFAULT_BLACKLIST];
           state.classifierStrategy = 'hybrid';
           delete (state as Record<string, unknown>).customSafeCommands;
+        }
+        if (version < 16) {
+          state.aiSleepAsClientDelay ??= DEFAULTS.aiSleepAsClientDelay;
+          state.aiSleepMaxDelaySecs ??= DEFAULTS.aiSleepMaxDelaySecs;
         }
         return state as SettingsState;
       },

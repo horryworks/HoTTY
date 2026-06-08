@@ -29,6 +29,19 @@ export interface ChatTab {
    */
   linkBindingKey?: string;
   pendingMessage?: string;
+  /**
+   * Active client-side sleep delay for an AI-issued command (see App.tsx
+   * scheduleSleepDelay). Drives the "⏳ Waiting Ns…" indicator on the matching
+   * execute block. `token` is a monotonic id used to abort a stale delay if the
+   * tab starts a new chat or issues a newer command. Cleared (null) when the
+   * delay fires or is cancelled.
+   */
+  sleepDelay?: {
+    command: string;
+    untilTs: number;
+    wasClamped: boolean;
+    token: number;
+  } | null;
 }
 
 export interface AiChatState {

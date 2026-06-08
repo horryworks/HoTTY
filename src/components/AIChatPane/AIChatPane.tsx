@@ -107,6 +107,25 @@ const VerdictNote: React.FC<{ classifying?: boolean; verdict?: AutoExecDecision 
     );
 };
 
+// Live "⏳ Waiting Ns…" indicator shown on an execute block whose leading `sleep`
+// is being run as a client-side delay (see App.tsx scheduleSleepDelay).
+const SleepCountdown: React.FC<{ delay: NonNullable<ChatTab['sleepDelay']> }> = ({ delay }) => {
+    const compute = () => Math.max(0, Math.ceil((delay.untilTs - Date.now()) / 1000));
+    const [remaining, setRemaining] = useState(compute);
+    useEffect(() => {
+        setRemaining(compute());
+        const id = setInterval(() => setRemaining(compute()), 1000);
+        return () => clearInterval(id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [delay.untilTs]);
+    if (remaining <= 0) return null;
+    return (
+        <div className="ai-execute-sleep-wait">
+            ⏳ Waiting {remaining}s…{delay.wasClamped ? ' (capped)' : ''}
+        </div>
+    );
+};
+
 // ── Message Content Component with Execution Support ──
 const MessageContent: React.FC<{
     content: string;
@@ -119,7 +138,8 @@ const MessageContent: React.FC<{
     verdictByCommand?: Map<string, AutoExecDecision>;
     classifyingCommands?: Set<string>;
     limitReached?: boolean;
-}> = ({ content, onRun, onHoverTarget, targetTitle, targetId, targetLive = true, autoExecutedCommands, verdictByCommand, classifyingCommands, limitReached }) => {
+    sleepDelay?: ChatTab['sleepDelay'];
+}> = ({ content, onRun, onHoverTarget, targetTitle, targetId, targetLive = true, autoExecutedCommands, verdictByCommand, classifyingCommands, limitReached, sleepDelay }) => {
     const parts = segmentMessageContent(content);
     const targetLabel = targetId
         ? (targetLive
@@ -177,10 +197,14 @@ const MessageContent: React.FC<{
                                 )}
                                 {targetLabel}
                             </div>
-                            <VerdictNote
-                                classifying={classifyingCommands?.has(command)}
-                                verdict={verdictByCommand?.get(command)}
-                            />
+                            {sleepDelay && sleepDelay.command === command ? (
+                                <SleepCountdown delay={sleepDelay} />
+                            ) : (
+                                <VerdictNote
+                                    classifying={classifyingCommands?.has(command)}
+                                    verdict={verdictByCommand?.get(command)}
+                                />
+                            )}
                             {!wasAutoExecuted && limitReached && (
                                 <div className="ai-execute-paused-banner">Auto-execution paused (limit reached). Click Run to continue.</div>
                             )}
@@ -1150,6 +1174,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             classifyingByTabRef.current.delete(activeTabId);
             bumpDecisions();
             setConsecutiveAutoExecCount(0);
+            // Cancel any in-flight client-side sleep delay for this tab: clearing
+            // sleepDelay invalidates the token its timer checks, so it no-ops.
+            onUpdateTabById?.(activeTabId, { sleepDelay: null });
         }
         setTotalInputTokens(0);
         setTotalOutputTokens(0);
@@ -1480,6 +1507,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                             verdictByCommand={verdictByCommand}
                                             classifyingCommands={classifyingCommands}
                                             limitReached={commandExecutionMode === 'auto-execute-safe' && maxConsecutiveAutoExecutions > 0 && consecutiveAutoExecCount >= maxConsecutiveAutoExecutions}
+                                            sleepDelay={activeTab?.sleepDelay}
                                         />
                                     ) : (() => {
                                         const parsed = parseTerminalOutputMessage(msg.content);
