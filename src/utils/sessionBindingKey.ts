@@ -4,7 +4,7 @@ import type { ProtocolId } from '../types/appTypes';
  * Minimal structural view of a session used to compute its binding key.
  * Kept narrow (no Terminal/FitAddon) so it is trivial to construct in tests.
  */
-export interface BindingKeyInput {
+interface BindingKeyInput {
     protocol: ProtocolId;
     displayName: string;
     // `object` (not Record<string, unknown>) so the concrete *ConnectionConfig

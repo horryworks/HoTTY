@@ -21,7 +21,7 @@ import { matchBlacklist } from './commandLists';
 import { classifyCommand } from './commandClassifier';
 import { tauriService } from '../services/tauriService';
 
-export type DecisionSource = 'blacklist' | 'whitelist' | 'ai' | 'ask' | 'fallback';
+type DecisionSource = 'blacklist' | 'whitelist' | 'ai' | 'ask' | 'fallback';
 
 export interface AutoExecDecision {
     /** Whether the command may be auto-executed. */

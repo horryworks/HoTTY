@@ -1,7 +1,7 @@
 .ask-ai-modal-overlay {
     position: fixed;
     inset: 0;
-    background-color: var(--modal-overlay-bg);
+    background: var(--modal-overlay-bg);
     display: flex;
     justify-content: center;
     align-items: center;

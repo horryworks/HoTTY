@@ -14,7 +14,7 @@
 
 import { extractBaseCommand } from './commandClassifier';
 
-export interface ListMatch {
+interface ListMatch {
     matched: boolean;
     entry?: string;
 }

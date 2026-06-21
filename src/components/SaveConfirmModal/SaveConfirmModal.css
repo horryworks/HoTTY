@@ -1,7 +1,7 @@
 .save-confirm-modal-overlay {
   position: fixed;
   inset: 0;
-  background-color: var(--modal-overlay-bg);
+  background: var(--modal-overlay-bg);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -20,6 +20,7 @@
   animation: fadeIn 0.1s ease-out;
   border: 1px solid var(--modal-border-warning);
   font-family: var(--ui-font-family);
+  overflow: hidden;
 }
 
 .save-confirm-modal h3 {
@@ -30,8 +31,6 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  border-top-left-radius: 6px;
-  border-top-right-radius: 6px;
   background-color: var(--modal-header-warning-bg);
   border-bottom: 1px solid var(--modal-border-warning);
   color: var(--modal-header-warning-text);
@@ -57,8 +56,6 @@
   padding: 12px 16px;
   background-color: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
-  border-bottom-left-radius: 6px;
-  border-bottom-right-radius: 6px;
   gap: 8px;
 }
 

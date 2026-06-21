@@ -5,14 +5,14 @@
 // previously duplicated in AIChatPane.tsx (extractExecuteCommands + MessageContent).
 
 // Splits on PAIRED (closed) fences; the captured group keeps the fenced block intact.
-export const FENCE_SPLIT_RE = /(^```+[\s\S]*?^```+)/gm;
+const FENCE_SPLIT_RE = /(^```+[\s\S]*?^```+)/gm;
 // Matches a single closed fence: language tag + body.
-export const FENCE_MATCH_RE = /^```+(\w*)\s*\n?([\s\S]*?)\n?```+$/;
+const FENCE_MATCH_RE = /^```+(\w*)\s*\n?([\s\S]*?)\n?```+$/;
 // Matches a trailing UNCLOSED opener (streaming tail). By construction closed pairs
 // are already consumed by FENCE_SPLIT_RE, so a tail segment holds at most one
 // unclosed opener — a single non-greedy `before` capture is sufficient. The opener
 // must start a line.
-export const OPEN_FENCE_RE = /^([\s\S]*?)(?:^|\n)```+(\w*)[ \t]*\n([\s\S]*)$/;
+const OPEN_FENCE_RE = /^([\s\S]*?)(?:^|\n)```+(\w*)[ \t]*\n([\s\S]*)$/;
 
 export type ContentPart =
     | { kind: 'markdown'; key: string; text: string }

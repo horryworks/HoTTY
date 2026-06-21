@@ -19,12 +19,12 @@
  * instead of spawning a confusing second tab still pointed at the dead one.
  */
 
-export interface WatchTabLike {
+interface WatchTabLike {
     id: string;
     linkedSessionId?: string;
 }
 
-export type WatchRouting =
+type WatchRouting =
     | { action: 'unlink'; tabId: string }
     | { action: 'switch'; tabId: string }
     | { action: 'relink'; tabId: string; evictSessionId?: string }

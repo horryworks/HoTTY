@@ -14,7 +14,7 @@
 // '[Y/N]:'); a command left at such a prompt falls through to the idle timeout.
 export const PROMPT_PATTERN = /[$#>\]]\s*$/;
 
-export type WatchPollResult =
+type WatchPollResult =
     | { action: 'wait' }
     | { action: 'prompt'; matchedAtEnd: boolean }
     | { action: 'idle' }

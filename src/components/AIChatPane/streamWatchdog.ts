@@ -15,7 +15,7 @@ export const STREAM_IDLE_TIMEOUT_MS = 180_000;
 /** Absolute ceiling for a single stream regardless of chunk activity. */
 export const STREAM_HARD_CAP_MS = 600_000;
 
-export type StreamTimeoutKind = 'idle' | 'hardcap';
+type StreamTimeoutKind = 'idle' | 'hardcap';
 
 /**
  * Build the model-message body shown when a stream is force-cancelled by a timeout.
