@@ -1,0 +1,38 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "baseBranches": ["v2"],
+  "rangeStrategy": "bump",
+  "minimumReleaseAge": "7 days",
+  "internalChecksFilter": "strict",
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 5,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 5am on monday"]
+  },
+  "packageRules": [
+    {
+      "description": "Soak dev-dependency patch/minor bumps for 7 days (supply-chain cooldown).",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Extra-long soak for crypto/SSH crates; never automerge.",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["russh", "rustls", "rsa", "aws-lc-sys", "aes-gcm", "argon2", "pbkdf2"],
+      "minimumReleaseAge": "14 days",
+      "automerge": false
+    },
+    {
+      "description": "Security fixes may move sooner, but still soak 2 days.",
+      "matchDepTypes": ["dependencies"],
+      "isVulnerabilityAlert": true,
+      "minimumReleaseAge": "2 days"
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "minimumReleaseAge": "2 days"
+  }
+}

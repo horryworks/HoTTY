@@ -1,0 +1,6 @@
+# Pins the actual build compiler for reproducible builds.
+# Distinct from Cargo.toml's `rust-version = "1.77.2"` (that is the MSRV floor).
+[toolchain]
+channel = "1.95.0"
+components = ["clippy", "rustfmt"]
+profile = "minimal"

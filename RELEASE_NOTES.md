@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.7-beta1
+
+A security-focused beta that hardens HoTTY's dependency supply chain against the recent wave of compromised-package attacks. There are no changes to in-app behavior — this release strengthens the integrity of the build and dependency pipeline that produces the installer.
+
+### Security
+
+- **Dependency supply-chain hardening.** Builds now install strictly from verified lockfiles with cryptographic integrity checking, the public package registries are pinned (guarding against dependency-confusion swaps), and dependency updates are held for a multi-day cooldown before adoption — so a maliciously published version is not pulled in before it is detected and removed. Every release, and every push via CI, is now gated on npm registry-signature verification (`npm audit signatures`) plus a `cargo-deny` audit covering security advisories, crate sources, and licenses.
+
 ## v2.0.6
 
 The v2.0.6 stable release, consolidating the v2.0.6 beta series. The headline is a new AI Chat command-safety model: auto-execution of AI-suggested commands is now gated by an explicit, fully user-managed **Whitelist / Blacklist + AI** classifier, and every command shows how it was judged. It also makes a leading `sleep` in an AI command wait client-side instead of on the device, and extends command-safety classification to Claude models on Vertex AI.
