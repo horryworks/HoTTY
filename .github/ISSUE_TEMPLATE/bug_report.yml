@@ -1,0 +1,80 @@
+name: バグ報告 / Bug report
+description: 不具合を報告する / Report a problem with HoTTY
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ご報告ありがとうございます。再現に必要な情報を埋めてください。
+        Thanks for the report. Please fill in the details needed to reproduce.
+
+  - type: input
+    id: version
+    attributes:
+      label: HoTTY version
+      description: Help → About、またはタイトルバーで確認できます / See Help → About
+      placeholder: v2.0.6
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - Windows 11
+        - Windows 10
+        - その他 / Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: protocol
+    attributes:
+      label: 接続方式 / Connection type
+      description: 該当する場合 / If relevant
+      options:
+        - 該当なし / N/A
+        - SSH
+        - Telnet
+        - Serial
+        - WSL
+        - ローカルシェル / Local shell
+        - GCP IAP
+    validations:
+      required: false
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順 / Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待する動作 / Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の動作 / Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログ / スクリーンショット / Logs or screenshots
+      description: Log Viewer のログやエラーメッセージがあれば貼り付けてください / Paste logs or error messages if available
+      render: text
+    validations:
+      required: false

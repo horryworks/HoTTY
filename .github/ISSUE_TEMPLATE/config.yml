@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 質問・相談 / Questions & discussion
+    url: https://github.com/horryworks/HoTTY/discussions
+    about: バグ報告や機能要望ではない質問は Discussions へ / For questions that aren't bugs or feature requests, use Discussions.
