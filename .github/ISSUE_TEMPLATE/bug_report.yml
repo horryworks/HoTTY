@@ -1,19 +1,19 @@
-name: バグ報告 / Bug report
-description: 不具合を報告する / Report a problem with HoTTY
+name: Bug report / バグ報告
+description: Report a problem with HoTTY / 不具合を報告する
 title: "[Bug]: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        ご報告ありがとうございます。再現に必要な情報を埋めてください。
         Thanks for the report. Please fill in the details needed to reproduce.
+        ご報告ありがとうございます。再現に必要な情報を埋めてください。
 
   - type: input
     id: version
     attributes:
       label: HoTTY version
-      description: Help → About、またはタイトルバーで確認できます / See Help → About
+      description: See Help → About / Help → About、またはタイトルバーで確認できます
       placeholder: v2.0.6
     validations:
       required: true
@@ -25,22 +25,22 @@ body:
       options:
         - Windows 11
         - Windows 10
-        - その他 / Other
+        - Other / その他
     validations:
       required: true
 
   - type: dropdown
     id: protocol
     attributes:
-      label: 接続方式 / Connection type
-      description: 該当する場合 / If relevant
+      label: Connection type / 接続方式
+      description: If relevant / 該当する場合
       options:
-        - 該当なし / N/A
+        - N/A / 該当なし
         - SSH
         - Telnet
         - Serial
         - WSL
-        - ローカルシェル / Local shell
+        - Local shell / ローカルシェル
         - GCP IAP
     validations:
       required: false
@@ -48,7 +48,7 @@ body:
   - type: textarea
     id: steps
     attributes:
-      label: 再現手順 / Steps to reproduce
+      label: Steps to reproduce / 再現手順
       placeholder: |
         1. ...
         2. ...
@@ -59,22 +59,22 @@ body:
   - type: textarea
     id: expected
     attributes:
-      label: 期待する動作 / Expected behavior
+      label: Expected behavior / 期待する動作
     validations:
       required: true
 
   - type: textarea
     id: actual
     attributes:
-      label: 実際の動作 / Actual behavior
+      label: Actual behavior / 実際の動作
     validations:
       required: true
 
   - type: textarea
     id: logs
     attributes:
-      label: ログ / スクリーンショット / Logs or screenshots
-      description: Log Viewer のログやエラーメッセージがあれば貼り付けてください / Paste logs or error messages if available
+      label: Logs or screenshots / ログ・スクリーンショット
+      description: Paste logs or error messages if available / Log Viewer のログやエラーメッセージがあれば貼り付けてください
       render: text
     validations:
       required: false
