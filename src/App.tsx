@@ -600,6 +600,12 @@ function App() {
       if (type === 'ping-monitor') {
         tauriService.pingMonitorStop(id).catch(() => {});
       }
+      if (type === 'file-server') {
+        // Policy: the File Server runs only while its tab is open. Closing the
+        // tab tears down both servers and frees their ports.
+        tauriService.fileServerTftpStop(id).catch(() => {});
+        tauriService.fileServerSftpStop(id).catch(() => {});
+      }
       if (type === 'ai-chat') {
         clearRunCommandIntervals(id);
         if (watchingSessionId) {

@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.7-beta4
+
+A fix for the File Server added in beta3: it now stops when you close its tab.
+
+### Bug Fixes
+
+- **The File Server now stops when its tab is closed.** Previously, closing a File Server tab left the TFTP and SFTP servers running in the background with their ports still bound (so a later restart on the same port could fail). The servers now shut down and release their ports as soon as the tab is closed — the File Server runs only while its tab is open.
+
 ## v2.0.7-beta3
 
 A built-in **File Server** for pushing firmware and config images to network gear over the LAN — start a TFTP and/or SFTP server pointed at a folder you choose, and a Cisco-style device can `copy tftp:` / `copy scp:` straight from your machine.
