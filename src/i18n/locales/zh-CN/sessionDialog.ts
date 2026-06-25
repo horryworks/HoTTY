@@ -1,0 +1,72 @@
+// New Session dialog (connection flow). Covers the dialog chrome, the host/GCP
+// tabs, the status banner, the connection form fields/labels/placeholders, the
+// protocol-specific field groups (SSH / Serial / WSL / Git Bash), validation
+// messages, and the discard-changes confirmation.
+export const sessionDialog = {
+  title: '新建会话',
+  tabs: {
+    sourceAriaLabel: '连接来源',
+    hosts: '主机',
+    gcp: 'GCP',
+  },
+  banner: {
+    newConnection: '新建连接',
+    // {{name}} is the host display name (or the unnamed fallback).
+    editing: '正在编辑：',
+    unnamed: '（未命名）',
+    startNewTitle: '开始新的连接',
+    clearAriaLabel: '清空表单并开始新连接',
+  },
+  decrypting: '正在解密...',
+  nameLabel: '名称',
+  namePlaceholder: '显示名称',
+  protocolLabel: '协议',
+  useAsJumpbox: '用作跳板机',
+  hostLabel: '主机/IP',
+  hostPlaceholder: 'example.com',
+  portLabel: '端口',
+  usernameLabel: '用户名',
+  passwordLabel: '密码',
+  jumpboxLabel: '跳板机（堡垒机）',
+  directConnection: '直接连接',
+  privateKeyPathLabel: '私钥路径（可选）',
+  privateKeyPathPlaceholder: '~/.ssh/id_rsa',
+  privateKeyPassphraseLabel: '私钥密码短语',
+  serialPortLabel: '串口',
+  serialPortPlaceholder: 'COM3',
+  baudRateLabel: '波特率',
+  dataBitsLabel: '数据位',
+  parityLabel: '校验位',
+  parity: {
+    none: '无',
+    odd: '奇校验',
+    even: '偶校验',
+    mark: '标记',
+    space: '空格',
+  },
+  stopBitsLabel: '停止位',
+  flowControlLabel: '流控制',
+  flowControl: {
+    none: '无',
+  },
+  distributionLabel: '发行版',
+  noWslDistros: '未找到 WSL 发行版。',
+  gitBashNotInstalled: '未安装 Git Bash。',
+  encodingLabel: '编码',
+  saveTitleDirty: '保存对此主机的更改',
+  saveTitleClean: '没有需要保存的更改',
+  connect: '连接',
+  browseKeyTitle: '选择私钥文件',
+  validation: {
+    hostRequired: '主机为必填项。',
+    hostInvalidWhitespace: '主机包含无效的空白字符或换行符。',
+    portRange: '端口必须是 1 到 65535 之间的整数。',
+    usernameRequiredSsh: 'SSH 需要填写用户名。',
+    usernameInvalidNewline: '用户名包含无效的换行符。',
+  },
+  discard: {
+    title: '放弃更改？',
+    message: '此表单中有未保存的更改。切换将会放弃这些更改。',
+    confirmLabel: '放弃',
+  },
+};

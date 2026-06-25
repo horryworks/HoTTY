@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useHostManager, decryptBatch, getCachedCredential, clearDecryptedCache, flattenHosts } from '../../hooks/useHostManager';
 import { isEncrypted } from '../../services/tauriService';
@@ -73,6 +74,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     onConnect,
     sessions,
 }) => {
+    const { t } = useTranslation();
     const hostManager = useHostManager();
     const settings = useSettingsStore();
     const activeSidebarTab = useSidebarLayoutStore((s) => s.activeSidebarTab);
@@ -752,17 +754,17 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         const validationError = ((): string | null => {
             if (protocol === 'ssh' || protocol === 'telnet') {
                 const h = host.trim();
-                if (!h) return 'Host is required.';
-                if (/[\s\r\n\0]/.test(h)) return 'Host contains invalid whitespace or newline characters.';
+                if (!h) return t('sessionDialog.validation.hostRequired');
+                if (/[\s\r\n\0]/.test(h)) return t('sessionDialog.validation.hostInvalidWhitespace');
                 const p = parseInt(port, 10);
                 if (!Number.isInteger(p) || p < 1 || p > 65535) {
-                    return 'Port must be an integer between 1 and 65535.';
+                    return t('sessionDialog.validation.portRange');
                 }
                 if (protocol === 'ssh' && !username.trim()) {
-                    return 'Username is required for SSH.';
+                    return t('sessionDialog.validation.usernameRequiredSsh');
                 }
                 if (/[\r\n\0]/.test(username)) {
-                    return 'Username contains invalid newline characters.';
+                    return t('sessionDialog.validation.usernameInvalidNewline');
                 }
             }
             return null;
@@ -931,7 +933,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         const selected = await open({
             multiple: false,
             directory: false,
-            title: 'Select private key file',
+            title: t('sessionDialog.browseKeyTitle'),
         });
         if (typeof selected === 'string') {
             setPrivateKeyPath(selected);
@@ -991,12 +993,12 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     onClick={onClose}
                 >{'\u2715'}</button>
 
-                <h2 style={{ marginTop: 0, paddingRight: '20px', marginBottom: '10px' }}>New Session</h2>
+                <h2 style={{ marginTop: 0, paddingRight: '20px', marginBottom: '10px' }}>{t('sessionDialog.title')}</h2>
 
                 <div className={`dialog-body tab-${activeSidebarTab}`}>
                     {/* Left: Host tree / GCP discovery tabs */}
                     <div className="host-panel" style={{ flex: 1, minWidth: 0 }}>
-                        <div className="host-panel-tabs" role="tablist" aria-label="Connection source">
+                        <div className="host-panel-tabs" role="tablist" aria-label={t('sessionDialog.tabs.sourceAriaLabel')}>
                             <button
                                 type="button"
                                 role="tab"
@@ -1004,7 +1006,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 className={`host-panel-tab${activeSidebarTab === 'hosts' ? ' active' : ''}`}
                                 onClick={() => setActiveSidebarTab('hosts')}
                             >
-                                <span aria-hidden="true">📡 </span>Hosts
+                                <span aria-hidden="true">📡 </span>{t('sessionDialog.tabs.hosts')}
                             </button>
                             <button
                                 type="button"
@@ -1013,7 +1015,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 className={`host-panel-tab${activeSidebarTab === 'gcp' ? ' active' : ''}`}
                                 onClick={() => setActiveSidebarTab('gcp')}
                             >
-                                <span aria-hidden="true">☁ </span>GCP
+                                <span aria-hidden="true">☁ </span>{t('sessionDialog.tabs.gcp')}
                             </button>
                         </div>
                         {activeSidebarTab === 'hosts' ? (
@@ -1039,20 +1041,20 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                         <div className="form-status-banner" aria-live="polite">
                             {selectedHostId === null ? (
                                 <span className="banner-new">
-                                    <span aria-hidden="true">{'\u{1F195} '}</span>New Connection
+                                    <span aria-hidden="true">{'\u{1F195} '}</span>{t('sessionDialog.banner.newConnection')}
                                 </span>
                             ) : (
                                 <>
                                     <span className="banner-editing">
                                         <span aria-hidden="true">{'\u{1F4DD} '}</span>
-                                        Editing: <span className="banner-editing-name">{displayName || '(unnamed)'}</span>
+                                        {t('sessionDialog.banner.editing')} <span className="banner-editing-name">{displayName || t('sessionDialog.banner.unnamed')}</span>
                                     </span>
                                     <button
                                         type="button"
                                         className="banner-clear-btn"
                                         onClick={handleNewConnectionRequest}
-                                        title="Start a new connection"
-                                        aria-label="Clear form and start new connection"
+                                        title={t('sessionDialog.banner.startNewTitle')}
+                                        aria-label={t('sessionDialog.banner.clearAriaLabel')}
                                     >{'✕'}</button>
                                 </>
                             )}
@@ -1062,19 +1064,19 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 {/* Display Name (only when a host is selected) */}
                                 {originalState !== null && (
                                     <div className="form-group">
-                                        <label>Name</label>
+                                        <label>{t('sessionDialog.nameLabel')}</label>
                                         <input
                                             type="text"
                                             value={displayName}
                                             onChange={e => setDisplayName(e.target.value)}
-                                            placeholder="Display Name"
+                                            placeholder={t('sessionDialog.namePlaceholder')}
                                         />
                                     </div>
                                 )}
 
                                 {/* Protocol */}
                                 <div className="form-group">
-                                    <label>Protocol</label>
+                                    <label>{t('sessionDialog.protocolLabel')}</label>
                                     <select
                                         value={protocol}
                                         onChange={(e) => {
@@ -1102,7 +1104,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                                 onChange={e => setIsJumpbox(e.target.checked)}
                                                 disabled={protocol !== 'ssh'}
                                             />
-                                            Use as Jumpbox
+                                            {t('sessionDialog.useAsJumpbox')}
                                         </label>
                                     </div>
                                 )}
@@ -1112,18 +1114,18 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                     <>
                                         <div className="form-row">
                                             <div className="form-group" style={{ flex: 3 }}>
-                                                <label>Host/IP</label>
+                                                <label>{t('sessionDialog.hostLabel')}</label>
                                                 <input
                                                     type="text"
                                                     value={host}
                                                     onChange={e => setHost(e.target.value)}
-                                                    placeholder="example.com"
+                                                    placeholder={t('sessionDialog.hostPlaceholder')}
                                                     required
                                                     autoFocus
                                                 />
                                             </div>
                                             <div className="form-group" style={{ flex: 1 }}>
-                                                <label>Port</label>
+                                                <label>{t('sessionDialog.portLabel')}</label>
                                                 <input
                                                     type="number"
                                                     value={port}
@@ -1133,10 +1135,10 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                             </div>
                                         </div>
                                         <div className="form-group">
-                                            <label>Username</label>
+                                            <label>{t('sessionDialog.usernameLabel')}</label>
                                             <input
                                                 type="text"
-                                                value={isDecrypting ? 'Decrypting...' : username}
+                                                value={isDecrypting ? t('sessionDialog.decrypting') : username}
                                                 onChange={e => setUsername(e.target.value)}
                                                 className={isDecrypting ? 'decrypting-placeholder' : ''}
                                                 disabled={isDecrypting}
@@ -1145,10 +1147,10 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                             />
                                         </div>
                                         <div className="form-group">
-                                            <label>Password</label>
+                                            <label>{t('sessionDialog.passwordLabel')}</label>
                                             <input
                                                 type="password"
-                                                value={isDecrypting ? 'Decrypting...' : password}
+                                                value={isDecrypting ? t('sessionDialog.decrypting') : password}
                                                 onChange={e => setPassword(e.target.value)}
                                                 className={isDecrypting ? 'decrypting-placeholder' : ''}
                                                 disabled={isDecrypting}
@@ -1157,12 +1159,12 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                         </div>
                                         {jumpboxHosts.length > 0 && (
                                             <div className="form-group">
-                                                <label>Jumpbox (Bastion)</label>
+                                                <label>{t('sessionDialog.jumpboxLabel')}</label>
                                                 <select
                                                     value={jumpboxId}
                                                     onChange={e => setJumpboxId(e.target.value)}
                                                 >
-                                                    <option value="">Direct Connection</option>
+                                                    <option value="">{t('sessionDialog.directConnection')}</option>
                                                     {jumpboxHosts
                                                         .filter(jb => jb.id !== selectedHostId)
                                                         .map(jb => (
@@ -1181,25 +1183,25 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 {protocol === 'ssh' && (
                                     <>
                                         <div className="form-group">
-                                            <label>Private Key Path (optional)</label>
+                                            <label>{t('sessionDialog.privateKeyPathLabel')}</label>
                                             <div className="connect-form-inline">
                                                 <input
                                                     type="text"
                                                     value={privateKeyPath}
                                                     onChange={(e) => setPrivateKeyPath(e.target.value)}
-                                                    placeholder="~/.ssh/id_rsa"
+                                                    placeholder={t('sessionDialog.privateKeyPathPlaceholder')}
                                                 />
                                                 <button
                                                     type="button"
                                                     className="btn-secondary"
                                                     onClick={handleBrowseKey}
                                                 >
-                                                    Browse...
+                                                    {t('common.browse')}
                                                 </button>
                                             </div>
                                         </div>
                                         <div className="form-group">
-                                            <label>Private Key Passphrase</label>
+                                            <label>{t('sessionDialog.privateKeyPassphraseLabel')}</label>
                                             <input
                                                 type="password"
                                                 value={privateKeyPassphrase}
@@ -1213,7 +1215,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 {protocol === 'serial' && (
                                     <>
                                         <div className="form-group">
-                                            <label>Serial Port</label>
+                                            <label>{t('sessionDialog.serialPortLabel')}</label>
                                             {serialPorts.length > 0 ? (
                                                 <select value={serialPath} onChange={(e) => setSerialPath(e.target.value)}>
                                                     {serialPorts.map((p) => (
@@ -1227,14 +1229,14 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                                     type="text"
                                                     value={serialPath}
                                                     onChange={(e) => setSerialPath(e.target.value)}
-                                                    placeholder="COM3"
+                                                    placeholder={t('sessionDialog.serialPortPlaceholder')}
                                                     autoFocus
                                                 />
                                             )}
                                         </div>
                                         <div className="form-row">
                                             <div className="form-group form-group-half">
-                                                <label>Baud Rate</label>
+                                                <label>{t('sessionDialog.baudRateLabel')}</label>
                                                 <select value={baudRate} onChange={(e) => setBaudRate(e.target.value)}>
                                                     <option value="9600">9600</option>
                                                     <option value="19200">19200</option>
@@ -1244,7 +1246,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                                 </select>
                                             </div>
                                             <div className="form-group form-group-half">
-                                                <label>Data Bits</label>
+                                                <label>{t('sessionDialog.dataBitsLabel')}</label>
                                                 <select value={dataBits} onChange={(e) => setDataBits(e.target.value)}>
                                                     <option value="8">8</option>
                                                     <option value="7">7</option>
@@ -1255,17 +1257,17 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                         </div>
                                         <div className="form-row">
                                             <div className="form-group form-group-half">
-                                                <label>Parity</label>
+                                                <label>{t('sessionDialog.parityLabel')}</label>
                                                 <select value={parity} onChange={(e) => setParity(e.target.value)}>
-                                                    <option value="none">None</option>
-                                                    <option value="odd">Odd</option>
-                                                    <option value="even">Even</option>
-                                                    <option value="mark">Mark</option>
-                                                    <option value="space">Space</option>
+                                                    <option value="none">{t('sessionDialog.parity.none')}</option>
+                                                    <option value="odd">{t('sessionDialog.parity.odd')}</option>
+                                                    <option value="even">{t('sessionDialog.parity.even')}</option>
+                                                    <option value="mark">{t('sessionDialog.parity.mark')}</option>
+                                                    <option value="space">{t('sessionDialog.parity.space')}</option>
                                                 </select>
                                             </div>
                                             <div className="form-group form-group-half">
-                                                <label>Stop Bits</label>
+                                                <label>{t('sessionDialog.stopBitsLabel')}</label>
                                                 <select value={stopBits} onChange={(e) => setStopBits(e.target.value)}>
                                                     <option value="1">1</option>
                                                     <option value="1.5">1.5</option>
@@ -1274,9 +1276,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                             </div>
                                         </div>
                                         <div className="form-group">
-                                            <label>Flow Control</label>
+                                            <label>{t('sessionDialog.flowControlLabel')}</label>
                                             <select value={flowControl} onChange={(e) => setFlowControl(e.target.value)}>
-                                                <option value="none">None</option>
+                                                <option value="none">{t('sessionDialog.flowControl.none')}</option>
                                                 <option value="xon/xoff">XON/XOFF</option>
                                                 <option value="rts/cts">RTS/CTS</option>
                                             </select>
@@ -1287,14 +1289,14 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 {/* WSL fields */}
                                 {protocol === 'wsl' && (
                                     <div className="form-group">
-                                        <label>Distribution</label>
+                                        <label>{t('sessionDialog.distributionLabel')}</label>
                                         {wslDistros.length > 0 ? (
                                             <select value={selectedDistro} onChange={e => setSelectedDistro(e.target.value)}>
                                                 {wslDistros.map(d => <option key={d} value={d}>{d}</option>)}
                                             </select>
                                         ) : (
                                             <div style={{ color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) - 1px)', fontStyle: 'italic' }}>
-                                                No WSL distributions found.
+                                                {t('sessionDialog.noWslDistros')}
                                             </div>
                                         )}
                                     </div>
@@ -1304,14 +1306,14 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 {protocol === 'git-bash' && gitBashPath === '' && (
                                     <div className="form-group">
                                         <div style={{ color: 'var(--color-warning)', fontSize: 'calc(var(--font-size-base) - 1px)', fontStyle: 'italic' }}>
-                                            Git Bash is not installed.
+                                            {t('sessionDialog.gitBashNotInstalled')}
                                         </div>
                                     </div>
                                 )}
 
                                 {/* Encoding */}
                                 <div className="form-group">
-                                    <label>Encoding</label>
+                                    <label>{t('sessionDialog.encodingLabel')}</label>
                                     <select
                                         value={encoding}
                                         onChange={(e) => setEncoding(e.target.value as Encoding)}
@@ -1330,9 +1332,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                         className="btn-secondary"
                                         onClick={handleSave}
                                         disabled={!isDirty || isDecrypting}
-                                        title={isDirty ? 'Save changes to this host' : 'No changes to save'}
+                                        title={isDirty ? t('sessionDialog.saveTitleDirty') : t('sessionDialog.saveTitleClean')}
                                     >
-                                        Save
+                                        {t('common.save')}
                                     </button>
                                 )}
                                 <button
@@ -1340,7 +1342,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                     className="btn-primary"
                                     disabled={!canSubmit || isDecrypting || (protocol === 'git-bash' && gitBashPath === '')}
                                 >
-                                    Connect
+                                    {t('sessionDialog.connect')}
                                 </button>
                             </div>
                         </form>
@@ -1359,9 +1361,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
 
                 {pendingSwitch && (
                     <ConfirmModal
-                        title="Discard changes?"
-                        message="You have unsaved changes in this form. Switching will discard them."
-                        confirmLabel="Discard"
+                        title={t('sessionDialog.discard.title')}
+                        message={t('sessionDialog.discard.message')}
+                        confirmLabel={t('sessionDialog.discard.confirmLabel')}
                         onConfirm={() => {
                             const target = pendingSwitch;
                             setPendingSwitch(null);

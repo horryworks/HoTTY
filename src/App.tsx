@@ -28,7 +28,9 @@ import { tauriService } from './services/tauriService';
 import { useSessionManager, type SessionRecord } from './hooks/useSessionManager';
 import { useAiChat, getActiveTab, createDefaultAiChatState, type AiChatState } from './hooks/useAiChat';
 import { usePaneStore, gridPaneIds, SIDEBAR_PANE_IDS } from './stores/paneStore';
+import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from './stores/settingsStore';
+import i18n from './i18n';
 import { applyTheme } from './utils/applyTheme';
 import { DEFAULT_THEMES, isBuiltInThemeId } from './themes/defaults';
 import { useThemes } from './hooks/useThemes';
@@ -138,6 +140,8 @@ function App() {
   // Ctrl+Tab / Ctrl+Shift+Tab cycle keyboard focus between visible panes.
   usePaneKeyboardNav();
 
+  const { t } = useTranslation();
+  const language = useSettingsStore((s) => s.language);
   const themeId = useSettingsStore((s) => s.theme);
   const fontSize = useSettingsStore((s) => s.fontSize);
   const fontFamily = useSettingsStore((s) => s.fontFamily);
@@ -524,6 +528,13 @@ function App() {
       .catch(() => {});
     return () => { unlisten?.(); };
   }, []);
+
+  // Apply the selected UI language app-wide. react-i18next re-renders every
+  // useTranslation()/<Trans> consumer on changeLanguage — live, no reload.
+  useEffect(() => {
+    i18n.changeLanguage(language);
+    document.documentElement.lang = language;
+  }, [language]);
 
   useEffect(() => {
     const theme = themesData[themeId] ?? DEFAULT_THEMES.dark;
@@ -975,9 +986,9 @@ function App() {
           <ErrorBoundary
             fallback={(error, reset) => (
               <div className="pane-error" role="alert">
-                <h3>Pane crashed</h3>
+                <h3>{t('chrome.pane.crashed')}</h3>
                 <p>{error.message || String(error)}</p>
-                <button type="button" onClick={reset}>Retry</button>
+                <button type="button" onClick={reset}>{t('common.retry')}</button>
               </div>
             )}
           >
@@ -1048,9 +1059,9 @@ function App() {
           ) : (
             <div className="pane-empty">
               {/^\d+$/.test(paneId) && (
-                <span className="pane-label">Pane {Number(paneId) + 1}</span>
+                <span className="pane-label">{t('chrome.pane.label', { number: Number(paneId) + 1 })}</span>
               )}
-              <span className="drop-hint">Drop Tab Here</span>
+              <span className="drop-hint">{t('chrome.pane.dropTabHere')}</span>
             </div>
           )}
           </ErrorBoundary>

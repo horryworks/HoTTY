@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { tauriService } from '../../services/tauriService';
 import type { DirEntry } from '../../types/appTypes';
@@ -42,6 +43,7 @@ function getPathSegments(path: string): { name: string; path: string }[] {
 }
 
 export function FileExplorerPane({ paneId, active, onOpenFileInEditor }: FileExplorerPaneProps) {
+  const { t } = useTranslation();
   const [drives, setDrives] = useState<string[]>([]);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [dirContents, setDirContents] = useState<Map<string, DirEntry[]>>(new Map());
@@ -249,7 +251,7 @@ export function FileExplorerPane({ paneId, active, onOpenFileInEditor }: FileExp
         <button
           type="button"
           className="file-explorer-toolbar-btn"
-          title="Refresh"
+          title={t('panes.fileExplorer.refresh')}
           onClick={handleRefresh}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -261,7 +263,7 @@ export function FileExplorerPane({ paneId, active, onOpenFileInEditor }: FileExp
         <button
           type="button"
           className={`file-explorer-toolbar-btn${showHidden ? ' active' : ''}`}
-          title={showHidden ? 'Hide hidden files' : 'Show hidden files'}
+          title={showHidden ? t('panes.fileExplorer.hideHidden') : t('panes.fileExplorer.showHidden')}
           onClick={() => setShowHidden((v) => !v)}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -300,7 +302,7 @@ export function FileExplorerPane({ paneId, active, onOpenFileInEditor }: FileExp
         <div ref={listRef} className="file-explorer-list-content">
           {flatNodes.length === 0 ? (
             <div className="file-explorer-empty">
-              {drives.length === 0 ? 'Loading drives...' : 'No files to display'}
+              {drives.length === 0 ? t('panes.fileExplorer.loadingDrives') : t('panes.fileExplorer.noFiles')}
             </div>
           ) : (
             <div

@@ -33,6 +33,10 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 - Custom theme support with full CSS variable control
 - Configurable font family and font size
 
+### Localization
+- Multilingual UI with an in-app **Display language** selector (Settings → General)
+- 8 languages: English, 日本語, 简体中文, 繁體中文, 한국어, Русский, Español, Français — switches instantly, no restart
+
 ### Security & Credentials
 - Windows DPAPI encryption for stored credentials
 - SSH host key verification with fingerprint display

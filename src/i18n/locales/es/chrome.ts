@@ -1,0 +1,44 @@
+// Marco de la aplicación — barra de pestañas, barras laterales y la barra lateral
+// a nivel de aplicación (botones de diseño / borde / utilidades).
+export const chrome = {
+  tabBar: {
+    newSession: 'Nueva sesión',
+    closeTab: 'Cerrar pestaña',
+    features: 'Funciones',
+    aiMonitorActive: 'Monitor de IA (activo)',
+    aiMonitorStart: 'Monitorear con IA',
+    aiMonitorStopAria: 'Detener monitoreo de IA',
+    aiMonitorStartAria: 'Iniciar monitoreo de IA',
+    logViewer: 'Visor de registros',
+    pingMonitor: 'Monitor de Ping',
+    textEditor: 'Editor de texto',
+    fileExplorer: 'Explorador de archivos',
+    aiChat: 'Chat de IA',
+    saveToHostTree: 'Guardar en el árbol de hosts…',
+  },
+  appSidebar: {
+    layout: {
+      single: 'Único (1x1)',
+      splitVertical: 'División vertical (1x2)',
+      splitHorizontal: 'División horizontal (2x1)',
+      grid2x2: 'Cuadrícula (2x2)',
+      grid2x3: 'Cuadrícula (2x3)',
+      grid3x2: 'Cuadrícula (3x2)',
+    },
+    edge: {
+      left: 'Alternar barra lateral izquierda',
+      right: 'Alternar barra lateral derecha',
+      top: 'Alternar barra superior',
+      bottom: 'Alternar barra inferior',
+    },
+    disableLineWrap: 'Desactivar ajuste de línea',
+    enableLineWrap: 'Activar ajuste de línea',
+    help: 'Ayuda / Documentación',
+    settings: 'Configuración',
+  },
+  pane: {
+    crashed: 'El panel falló',
+    label: 'Panel {{number}}',
+    dropTabHere: 'Soltar pestaña aquí',
+  },
+};

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { marked } from 'marked';
 import { getTransparentColor } from '../../utils/colorUtils';
 import { sanitizeHtml } from '../../utils/htmlUtils';
@@ -75,17 +76,19 @@ const AIIcon: React.FC<{ size?: number; className?: string }> = ({ size = 24, cl
 // can see HOW each command was judged: blocked by the deny guard, allow-listed,
 // AI-judged read-only/modifying, or unverified (fallback). Required by design —
 // no command's verdict is hidden.
-const VERDICT_LABEL: Record<AutoExecDecision['source'], string> = {
-    'blacklist': '🛑 Blacklisted',
-    'whitelist': '✅ Whitelisted',
-    'ai': '🤖 AI verdict',
-    'ask': '❔ Needs confirmation',
-    'fallback': '❔ Unverified',
+// i18n keys for each verdict source; resolved to display text at render via t().
+const VERDICT_LABEL_KEY: Record<AutoExecDecision['source'], string> = {
+    'blacklist': 'aiChat.message.verdictBlacklist',
+    'whitelist': 'aiChat.message.verdictWhitelist',
+    'ai': 'aiChat.message.verdictAi',
+    'ask': 'aiChat.message.verdictAsk',
+    'fallback': 'aiChat.message.verdictFallback',
 };
 
 const VerdictNote: React.FC<{ classifying?: boolean; verdict?: AutoExecDecision }> = ({ classifying, verdict }) => {
+    const { t } = useTranslation();
     if (classifying) {
-        return <div className="ai-execute-verdict ai-execute-verdict-checking">🔍 Checking safety…</div>;
+        return <div className="ai-execute-verdict ai-execute-verdict-checking">{t('aiChat.message.checkingSafety')}</div>;
     }
     if (!verdict) return null;
 
@@ -95,14 +98,14 @@ const VerdictNote: React.FC<{ classifying?: boolean; verdict?: AutoExecDecision 
     if (verdict.source === 'blacklist') tone = 'danger';
     else if (verdict.autoExec) tone = 'safe';
 
-    const label = VERDICT_LABEL[verdict.source];
+    const label = t(VERDICT_LABEL_KEY[verdict.source]);
     const confidence = verdict.source === 'ai' && typeof verdict.confidence === 'number'
-        ? ` (confidence ${Math.round(verdict.confidence * 100)}%)`
+        ? t('aiChat.message.verdictConfidence', { percent: Math.round(verdict.confidence * 100) })
         : '';
 
     return (
         <div className={`ai-execute-verdict ai-execute-verdict-${tone}`}>
-            <strong>{label}{confidence}:</strong> {verdict.reason || (verdict.autoExec ? 'read-only' : 'run manually')}
+            <strong>{label}{confidence}:</strong> {verdict.reason || (verdict.autoExec ? t('aiChat.message.verdictReasonReadOnly') : t('aiChat.message.verdictReasonRunManually'))}
         </div>
     );
 };
@@ -110,6 +113,7 @@ const VerdictNote: React.FC<{ classifying?: boolean; verdict?: AutoExecDecision 
 // Live "⏳ Waiting Ns…" indicator shown on an execute block whose leading `sleep`
 // is being run as a client-side delay (see App.tsx scheduleSleepDelay).
 const SleepCountdown: React.FC<{ delay: NonNullable<ChatTab['sleepDelay']> }> = ({ delay }) => {
+    const { t } = useTranslation();
     const compute = () => Math.max(0, Math.ceil((delay.untilTs - Date.now()) / 1000));
     const [remaining, setRemaining] = useState(compute);
     useEffect(() => {
@@ -121,7 +125,9 @@ const SleepCountdown: React.FC<{ delay: NonNullable<ChatTab['sleepDelay']> }> = 
     if (remaining <= 0) return null;
     return (
         <div className="ai-execute-sleep-wait">
-            ⏳ Waiting {remaining}s…{delay.wasClamped ? ' (capped)' : ''}
+            {delay.wasClamped
+                ? t('aiChat.message.sleepWaitingCapped', { seconds: remaining })
+                : t('aiChat.message.sleepWaiting', { seconds: remaining })}
         </div>
     );
 };
@@ -140,12 +146,13 @@ const MessageContent: React.FC<{
     limitReached?: boolean;
     sleepDelay?: ChatTab['sleepDelay'];
 }> = ({ content, onRun, onHoverTarget, targetTitle, targetId, targetLive = true, autoExecutedCommands, verdictByCommand, classifyingCommands, limitReached, sleepDelay }) => {
+    const { t } = useTranslation();
     const parts = segmentMessageContent(content);
     const targetLabel = targetId
         ? (targetLive
-            ? <span className="ai-run-target">Target: {targetTitle || 'Unnamed Terminal'}</span>
-            : <span className="ai-run-target ai-run-target-stale">Target: {targetTitle || 'Unnamed Terminal'} (disconnected)</span>)
-        : <span className="ai-run-target no-target">No Terminal Targeted</span>;
+            ? <span className="ai-run-target">{t('aiChat.message.target', { title: targetTitle || t('aiChat.message.unnamedTerminal') })}</span>
+            : <span className="ai-run-target ai-run-target-stale">{t('aiChat.message.targetStale', { title: targetTitle || t('aiChat.message.unnamedTerminal') })}</span>)
+        : <span className="ai-run-target no-target">{t('aiChat.message.noTarget')}</span>;
 
     return (
         <>
@@ -161,7 +168,7 @@ const MessageContent: React.FC<{
                                     <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                                         <path d="M8 5v14l11-7z" />
                                     </svg>
-                                    Run in Terminal
+                                    {t('aiChat.message.runInTerminal')}
                                 </button>
                                 {targetLabel}
                             </div>
@@ -180,7 +187,7 @@ const MessageContent: React.FC<{
                                         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
                                             <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
                                         </svg>
-                                        Auto-executed
+                                        {t('aiChat.message.autoExecuted')}
                                     </span>
                                 ) : (
                                     <button
@@ -192,7 +199,7 @@ const MessageContent: React.FC<{
                                         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                                             <path d="M8 5v14l11-7z" />
                                         </svg>
-                                        Run in Terminal
+                                        {t('aiChat.message.runInTerminal')}
                                     </button>
                                 )}
                                 {targetLabel}
@@ -206,7 +213,7 @@ const MessageContent: React.FC<{
                                 />
                             )}
                             {!wasAutoExecuted && limitReached && (
-                                <div className="ai-execute-paused-banner">Auto-execution paused (limit reached). Click Run to continue.</div>
+                                <div className="ai-execute-paused-banner">{t('aiChat.message.autoExecPaused')}</div>
                             )}
                         </div>
                     );
@@ -239,6 +246,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     aiPersonas,
     terminalBackground,
 }) => {
+    const { t } = useTranslation();
     // Derive active tab from chatState (Phase 1: tabs[] + activeTabId, single linkedSessionId per tab)
     const activeTab = chatState ? getActiveTab(chatState) : undefined;
     const activeTabId = activeTab?.id;
@@ -633,7 +641,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     next.set(tab.id, [
                         ...cur,
                         { role: 'user', content: pm },
-                        { role: 'model', content: 'AI model not selected. Please select a model from the dropdown at the top right of the screen.' },
+                        { role: 'model', content: t('aiChat.pane.modelNotSelected') },
                     ]);
                     return next;
                 });
@@ -854,14 +862,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             setIsAuthLoading(false);
             setIsAuthenticated(result.success);
             if (!result.success) {
-                setAuthError('Authentication failed. Please try again.');
+                setAuthError(t('aiChat.pane.authFailed'));
             }
         }).then(fn => {
             if (cancelled) { fn(); } else { unlisten = fn; }
         }).catch(e => logError('AI', 'Auth result listener setup failed', e));
 
         return () => { cancelled = true; unlisten?.(); };
-    }, []);
+    }, [t]);
 
     // ── Auto-execute safe commands ──
     const handleRunCommandRef = useRef<(cmd: string) => void>(() => {});
@@ -1010,7 +1018,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         setAuthError(null);
         authTimeoutRef.current = setTimeout(() => {
             setIsAuthLoading(false);
-            setAuthError('Authentication timed out. Please try again.');
+            setAuthError(t('aiChat.pane.authTimedOut'));
             authTimeoutRef.current = null;
         }, 30000);
 
@@ -1281,8 +1289,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             )}
             {modelLoadError && (
                 <div className="ai-chat-auth-error" style={{ margin: '8px 12px' }}>
-                    Failed to retrieve the AI model list. Please check your authentication and network connection.
-                    <button onClick={() => setModelLoadError(false)} style={{ marginLeft: 8, cursor: 'pointer', background: 'none', border: 'none', color: 'inherit', textDecoration: 'underline' }}>Dismiss</button>
+                    {t('aiChat.pane.modelListError')}
+                    <button onClick={() => setModelLoadError(false)} style={{ marginLeft: 8, cursor: 'pointer', background: 'none', border: 'none', color: 'inherit', textDecoration: 'underline' }}>{t('aiChat.pane.dismiss')}</button>
                 </div>
             )}
             <div className="ai-chat-header">
@@ -1295,14 +1303,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             type="button"
                             className="ai-chat-new-chat-btn"
                             onClick={handleNewChatClick}
-                            title="Start a new chat"
-                            aria-label="Start a new chat"
+                            title={t('aiChat.pane.newChatTitle')}
+                            aria-label={t('aiChat.pane.newChatTitle')}
                         >
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <line x1="12" y1="5" x2="12" y2="19" />
                                 <line x1="5" y1="12" x2="19" y2="12" />
                             </svg>
-                            <span>New chat</span>
+                            <span>{t('aiChat.pane.newChat')}</span>
                         </button>
                     )}
                     {isAuthenticated && lastTargetSessionId && (
@@ -1320,18 +1328,18 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                 window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: lastTargetSessionId, highlighted: false } }));
                             }}
                             title={linkedStale
-                                ? `Link to ${lastTargetSessionTitle || 'terminal'} is ${lastTargetStatus ?? 'disconnected'}. Reconnect the terminal and press Watch to re-link.`
-                                : `Linked to ${lastTargetSessionTitle || 'terminal'}. Click to focus.`}
+                                ? t('aiChat.pane.linkedChipTitleStale', { name: lastTargetSessionTitle || t('aiChat.pane.terminalFallback'), status: lastTargetStatus ?? t('aiChat.pane.statusDisconnected') })
+                                : t('aiChat.pane.linkedChipTitle', { name: lastTargetSessionTitle || t('aiChat.pane.terminalFallback') })}
                             aria-label={linkedStale
-                                ? `Linked terminal ${lastTargetSessionTitle || 'unknown'} is ${lastTargetStatus ?? 'disconnected'}`
-                                : `Linked terminal: ${lastTargetSessionTitle || 'unknown'}`}
+                                ? t('aiChat.pane.linkedChipAriaStale', { name: lastTargetSessionTitle || t('aiChat.pane.unknownTerminal'), status: lastTargetStatus ?? t('aiChat.pane.statusDisconnected') })
+                                : t('aiChat.pane.linkedChipAria', { name: lastTargetSessionTitle || t('aiChat.pane.unknownTerminal') })}
                         >
                             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
                                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                             </svg>
                             <span className="ai-chat-linked-chip-name">
-                                {lastTargetSessionTitle || 'terminal'}{linkedStale ? ' (disconnected)' : ''}
+                                {lastTargetSessionTitle || t('aiChat.pane.terminalFallback')}{linkedStale ? t('aiChat.pane.disconnectedSuffix') : ''}
                             </span>
                         </button>
                     )}
@@ -1345,8 +1353,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     type="button"
                                     className="ai-chat-header-btn ai-chat-overflow-btn"
                                     onClick={() => setOverflowMenuOpen(o => !o)}
-                                    title="More options"
-                                    aria-label="More options"
+                                    title={t('aiChat.pane.moreOptions')}
+                                    aria-label={t('aiChat.pane.moreOptions')}
                                     aria-haspopup="menu"
                                     aria-expanded={overflowMenuOpen}
                                 >
@@ -1370,7 +1378,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
                                                 <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
                                             </svg>
-                                            <span>Logout</span>
+                                            <span>{t('aiChat.pane.logout')}</span>
                                         </button>
                                     </div>
                                 )}
@@ -1430,28 +1438,36 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                 <div className="ai-chat-empty-icon">
                                     <AIIcon size={56} />
                                 </div>
-                                <h2 className="ai-chat-empty-title">How can I help?</h2>
+                                <h2 className="ai-chat-empty-title">{t('aiChat.pane.emptyTitle')}</h2>
                                 {lastTargetSessionId ? (
                                     <div className="ai-chat-empty-target">
                                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
                                             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                                         </svg>
-                                        <span>Linked to <strong>{lastTargetSessionTitle || 'terminal'}</strong></span>
+                                        <span>
+                                            <Trans
+                                                i18nKey="aiChat.pane.emptyLinkedTo"
+                                                values={{ name: lastTargetSessionTitle || t('aiChat.pane.terminalFallback') }}
+                                                components={[<strong key="name" />]}
+                                            />
+                                        </span>
                                     </div>
                                 ) : (
                                     <div className="ai-chat-empty-target ai-chat-empty-target--none">
-                                        <span>No terminal linked yet — open a session to enable command execution</span>
+                                        <span>{t('aiChat.pane.emptyNoTerminal')}</span>
                                     </div>
                                 )}
                                 <div className="ai-chat-empty-suggestions">
                                     {[
-                                        'What does this terminal output mean?',
-                                        'Find any issues in the recent output',
-                                        "Explain the last command's result",
-                                    ].map((prompt) => (
+                                        'aiChat.pane.suggestionOutputMeaning',
+                                        'aiChat.pane.suggestionFindIssues',
+                                        'aiChat.pane.suggestionExplainLast',
+                                    ].map((promptKey) => {
+                                        const prompt = t(promptKey);
+                                        return (
                                         <button
-                                            key={prompt}
+                                            key={promptKey}
                                             type="button"
                                             className="ai-chat-empty-suggestion"
                                             onClick={() => {
@@ -1462,10 +1478,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         >
                                             {prompt}
                                         </button>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                                 <p className="ai-chat-empty-tip">
-                                    Tip: right-click on terminal text to use <strong>Ask AI</strong> with the selection.
+                                    <Trans i18nKey="aiChat.pane.emptyTip" components={[<strong key="askai" />]} />
                                 </p>
                             </div>
                         )}
@@ -1539,7 +1556,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                 <div className="ai-chat-message-avatar"><AIIcon size={18} /></div>
                                 <div className="ai-chat-message-content">
                                     <span className="ai-chat-thinking">
-                                        Thinking
+                                        {t('aiChat.pane.thinking')}
                                         <span className="ai-chat-thinking-dots" aria-hidden="true">
                                             <span>.</span><span>.</span><span>.</span>
                                         </span>
@@ -1575,7 +1592,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             value={inputText}
                             onChange={(e) => setInputText(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder={selectedModel === 'Unspecified' ? 'Select a model to start...' : 'Type a message...'}
+                            placeholder={selectedModel === 'Unspecified' ? t('aiChat.pane.inputPlaceholderSelectModel') : t('aiChat.pane.inputPlaceholder')}
                             disabled={isStreaming}
                         />
                         <div className="ai-chat-input-toolbar">
@@ -1585,8 +1602,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     type="button"
                                     className={`ai-chat-settings-btn${settingsOpen ? ' open' : ''}`}
                                     onClick={() => setSettingsOpen(o => !o)}
-                                    title="AI settings"
-                                    aria-label="AI settings"
+                                    title={t('aiChat.pane.aiSettings')}
+                                    aria-label={t('aiChat.pane.aiSettings')}
                                     aria-haspopup="dialog"
                                     aria-expanded={settingsOpen}
                                 >
@@ -1594,12 +1611,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         <circle cx="12" cy="12" r="3" />
                                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                                     </svg>
-                                    <span className="ai-chat-settings-btn-label">{selectedModel === 'Unspecified' ? 'Select model' : (availableModels.find(m => m.name === selectedModel)?.displayName || selectedModel)}</span>
+                                    <span className="ai-chat-settings-btn-label">{selectedModel === 'Unspecified' ? t('aiChat.pane.settingsButtonSelectModel') : (availableModels.find(m => m.name === selectedModel)?.displayName || selectedModel)}</span>
                                 </button>
                                 {settingsOpen && (
-                                    <div ref={settingsPopoverRef} className="ai-chat-settings-popover" role="dialog" aria-label="AI settings">
+                                    <div ref={settingsPopoverRef} className="ai-chat-settings-popover" role="dialog" aria-label={t('aiChat.pane.settingsPopoverAriaLabel')}>
                                         <div className="ai-chat-settings-popover-section">
-                                            <label className="ai-chat-settings-popover-label">Model</label>
+                                            <label className="ai-chat-settings-popover-label">{t('aiChat.pane.labelModel')}</label>
                                             <select
                                                 className="ai-chat-settings-popover-select"
                                                 value={selectedModel}
@@ -1612,14 +1629,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                                 }}
                                                 disabled={isStreaming || isLoadingModels}
                                             >
-                                                {selectedModel === 'Unspecified' && <option value="Unspecified">{isLoadingModels ? 'Loading...' : 'Select a model...'}</option>}
+                                                {selectedModel === 'Unspecified' && <option value="Unspecified">{isLoadingModels ? t('aiChat.pane.modelLoading') : t('aiChat.pane.modelSelectPlaceholder')}</option>}
                                                 {availableModels.map(m => (
                                                     <option key={m.name} value={m.name}>{m.displayName}</option>
                                                 ))}
                                             </select>
                                         </div>
                                         <div className="ai-chat-settings-popover-section">
-                                            <label className="ai-chat-settings-popover-label">Persona</label>
+                                            <label className="ai-chat-settings-popover-label">{t('aiChat.pane.labelPersona')}</label>
                                             <div className="ai-chat-settings-popover-persona-row">
                                                 <select
                                                     className="ai-chat-settings-popover-select"
@@ -1636,12 +1653,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                                     className="ai-chat-settings-popover-link-btn"
                                                     onClick={() => { setSettingsOpen(false); setShowPromptModal(true); }}
                                                 >
-                                                    View prompt
+                                                    {t('aiChat.pane.viewPrompt')}
                                                 </button>
                                             </div>
                                         </div>
                                         <div className="ai-chat-settings-popover-section">
-                                            <label className="ai-chat-settings-popover-label">Language</label>
+                                            <label className="ai-chat-settings-popover-label">{t('aiChat.pane.labelLanguage')}</label>
                                             <select
                                                 className="ai-chat-settings-popover-select"
                                                 value={selectedLanguage}
@@ -1659,7 +1676,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         </div>
                                         {activeAiProvider === 'vertexai' && (
                                             <div className="ai-chat-settings-popover-section">
-                                                <label className="ai-chat-settings-popover-label">Region</label>
+                                                <label className="ai-chat-settings-popover-label">{t('aiChat.pane.labelRegion')}</label>
                                                 <select
                                                     className="ai-chat-settings-popover-select"
                                                     value={selectedRegion}
@@ -1692,12 +1709,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                 disabled={!inputText.trim() || isStreaming || selectedModel === 'Unspecified'}
                                 title={
                                     selectedModel === 'Unspecified'
-                                        ? 'Select a model first'
+                                        ? t('aiChat.pane.sendTitleSelectModel')
                                         : !inputText.trim()
-                                        ? 'Type a message first'
+                                        ? t('aiChat.pane.sendTitleEmpty')
                                         : isStreaming
-                                        ? 'Streaming…'
-                                        : 'Send'
+                                        ? t('aiChat.pane.sendTitleStreaming')
+                                        : t('aiChat.pane.sendTitle')
                                 }
                             >&#x27A4;</button>
                         </div>
@@ -1707,32 +1724,32 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
                                 <path d="M12 2L1 21h22L12 2zm0 4l8.53 14.5H3.47L12 6zm-1 5v5h2v-5h-2zm0 7v2h2v-2h-2z" />
                             </svg>
-                            <span>Select a model in the header to send messages</span>
+                            <span>{t('aiChat.pane.selectModelHint')}</span>
                         </div>
                     )}
                     {(inputText.length > 0 || isStreaming || totalInputTokens > 0 || totalOutputTokens > 0) && (
                         <div className="ai-token-status">
                             {isStreaming ? (
                                 streamingContent.length > 0 ? (
-                                    <span>Receiving &middot; {Math.ceil(streamingContent.length / 4).toLocaleString()} tokens</span>
+                                    <span>{t('aiChat.pane.tokenReceiving', { tokens: Math.ceil(streamingContent.length / 4).toLocaleString() })}</span>
                                 ) : (
-                                    <span>Waiting for response&hellip;</span>
+                                    <span>{t('aiChat.pane.tokenWaiting')}</span>
                                 )
                             ) : (
                                 <>
                                     {(totalInputTokens > 0 || totalOutputTokens > 0) && (
-                                        <span>{totalInputTokens.toLocaleString()} in / {totalOutputTokens.toLocaleString()} out tokens</span>
+                                        <span>{t('aiChat.pane.tokenInOut', { in: totalInputTokens.toLocaleString(), out: totalOutputTokens.toLocaleString() })}</span>
                                     )}
                                     {totalCost !== null && (
                                         <>
                                             <span className="ai-token-status-sep">&middot;</span>
-                                            <span>~{formatAICost(totalCost)}</span>
+                                            <span>{t('aiChat.pane.tokenCost', { cost: formatAICost(totalCost) })}</span>
                                         </>
                                     )}
                                     {inputText.length > 0 && (
                                         <>
                                             {(totalInputTokens > 0 || totalOutputTokens > 0) && <span className="ai-token-status-sep">&middot;</span>}
-                                            <span>~{Math.ceil(inputText.length / 4).toLocaleString()} tokens to send</span>
+                                            <span>{t('aiChat.pane.tokenToSend', { tokens: Math.ceil(inputText.length / 4).toLocaleString() })}</span>
                                         </>
                                     )}
                                 </>
@@ -1750,9 +1767,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             )}
             {showNewChatConfirm && (
                 <ConfirmModal
-                    title="Start a new chat?"
-                    message="The current conversation will be cleared. This cannot be undone."
-                    confirmLabel="Start new chat"
+                    title={t('aiChat.pane.newChatConfirmTitle')}
+                    message={t('aiChat.pane.newChatConfirmMessage')}
+                    confirmLabel={t('aiChat.pane.newChatConfirmButton')}
                     onConfirm={() => {
                         setShowNewChatConfirm(false);
                         performNewChat();

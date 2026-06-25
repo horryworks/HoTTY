@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
 import type { UpdateInfo } from '../../types/appTypes';
 import './UpdateNotification.css';
@@ -6,6 +7,7 @@ import './UpdateNotification.css';
 const DISMISSED_KEY = 'hotty:update-dismissed-version';
 
 export function UpdateNotification(): React.JSX.Element | null {
+  const { t } = useTranslation();
   const [info, setInfo] = useState<UpdateInfo | null>(null);
 
   useEffect(() => {
@@ -41,11 +43,11 @@ export function UpdateNotification(): React.JSX.Element | null {
     <div className="update-notification" role="status">
       <div className="update-notification-body">
         <span className="update-notification-title">
-          New version available: v{info.latestVersion}
-          {info.prerelease ? ' (pre-release)' : ''}
+          {t('notifications.update.titleAvailable', { version: info.latestVersion })}
+          {info.prerelease ? t('notifications.update.prereleaseSuffix') : ''}
         </span>
         <span className="update-notification-sub">
-          You are running v{info.currentVersion}
+          {t('notifications.update.running', { version: info.currentVersion })}
         </span>
       </div>
       <div className="update-notification-actions">
@@ -54,15 +56,15 @@ export function UpdateNotification(): React.JSX.Element | null {
           className="update-notification-btn update-notification-btn-primary"
           onClick={handleOpen}
         >
-          View release
+          {t('notifications.update.viewRelease')}
         </button>
         <button
           type="button"
           className="update-notification-btn"
           onClick={handleDismiss}
-          aria-label="Dismiss update notification"
+          aria-label={t('notifications.update.dismissAria')}
         >
-          Dismiss
+          {t('notifications.update.dismiss')}
         </button>
       </div>
     </div>

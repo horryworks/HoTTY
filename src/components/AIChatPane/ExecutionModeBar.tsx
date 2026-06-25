@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../stores/settingsStore';
 import './ExecutionModeBar.css';
 
@@ -10,6 +11,7 @@ interface ExecutionModeBarProps {
 const DEFAULT_MAX_WHEN_LIMITED = 5;
 
 export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPausedChange }) => {
+    const { t } = useTranslation();
     const commandExecutionMode = useSettingsStore(s => s.commandExecutionMode);
     const maxConsecutiveAutoExecutions = useSettingsStore(s => s.maxConsecutiveAutoExecutions);
 
@@ -57,8 +59,8 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
     };
 
     const chipLabel = isAuto
-        ? `Auto · Max ${isUnlimited ? '∞' : maxConsecutiveAutoExecutions}`
-        : 'Ask before execute';
+        ? t('aiChat.executionMode.chipAuto', { max: isUnlimited ? '∞' : maxConsecutiveAutoExecutions })
+        : t('aiChat.executionMode.chipAskBeforeExecute');
 
     const chipClass = [
         'execution-mode-chip',
@@ -75,8 +77,10 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
                 onClick={() => setPopoverOpen(o => !o)}
                 aria-haspopup="dialog"
                 aria-expanded={popoverOpen}
-                aria-label={`Execution mode: ${chipLabel}${paused ? ' (paused)' : ''}`}
-                title="Execution mode"
+                aria-label={paused
+                    ? t('aiChat.executionMode.chipAriaLabelPaused', { label: chipLabel })
+                    : t('aiChat.executionMode.chipAriaLabel', { label: chipLabel })}
+                title={t('aiChat.executionMode.chipTitle')}
             >
                 {isAuto ? (
                     <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
@@ -90,7 +94,7 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
                     </svg>
                 )}
                 <span className="execution-mode-chip-label">{chipLabel}</span>
-                {paused && <span className="execution-mode-chip-paused-tag">Paused</span>}
+                {paused && <span className="execution-mode-chip-paused-tag">{t('aiChat.executionMode.chipPausedTag')}</span>}
             </button>
 
             {popoverOpen && (
@@ -98,9 +102,9 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
                     ref={popoverRef}
                     className="execution-mode-popover"
                     role="dialog"
-                    aria-label="Execution mode settings"
+                    aria-label={t('aiChat.executionMode.popoverAriaLabel')}
                 >
-                    <div className="execution-mode-popover-title">Execution Mode</div>
+                    <div className="execution-mode-popover-title">{t('aiChat.executionMode.popoverTitle')}</div>
 
                     <button
                         type="button"
@@ -111,8 +115,8 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
                     >
                         <span className={`execution-mode-popover-radio${!isAuto ? ' selected' : ''}`} />
                         <span className="execution-mode-popover-option-text">
-                            <span className="execution-mode-popover-option-title">Ask before execute</span>
-                            <span className="execution-mode-popover-option-desc">Confirm each command manually before it runs.</span>
+                            <span className="execution-mode-popover-option-title">{t('aiChat.executionMode.askOptionTitle')}</span>
+                            <span className="execution-mode-popover-option-desc">{t('aiChat.executionMode.askOptionDesc')}</span>
                         </span>
                     </button>
 
@@ -125,8 +129,8 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
                     >
                         <span className={`execution-mode-popover-radio${isAuto ? ' selected' : ''}`} />
                         <span className="execution-mode-popover-option-text">
-                            <span className="execution-mode-popover-option-title">Auto-execute safe commands</span>
-                            <span className="execution-mode-popover-option-desc">Read-only commands run automatically; destructive ones still ask.</span>
+                            <span className="execution-mode-popover-option-title">{t('aiChat.executionMode.autoOptionTitle')}</span>
+                            <span className="execution-mode-popover-option-desc">{t('aiChat.executionMode.autoOptionDesc')}</span>
                         </span>
                     </button>
 
@@ -134,7 +138,7 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
                         <>
                             <div className="execution-mode-popover-divider" />
                             <label className="execution-mode-popover-label">
-                                <span>Max consecutive runs</span>
+                                <span>{t('aiChat.executionMode.maxConsecutiveRuns')}</span>
                                 <span className="execution-mode-popover-max-row">
                                     <input
                                         type="number"
@@ -144,7 +148,7 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
                                         value={maxConsecutiveAutoExecutions}
                                         onChange={(e) => setMax(parseInt(e.target.value, 10))}
                                         disabled={isUnlimited}
-                                        aria-label="Max consecutive runs"
+                                        aria-label={t('aiChat.executionMode.maxConsecutiveRuns')}
                                     />
                                     <label className="execution-mode-popover-checkbox">
                                         <input
@@ -157,7 +161,7 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
                                 </span>
                             </label>
                             <p className="execution-mode-popover-hint">
-                                After this many auto-runs in a row, commands require manual confirmation.
+                                {t('aiChat.executionMode.maxConsecutiveRunsHint')}
                             </p>
                             <div className="execution-mode-popover-divider" />
                             <button
@@ -170,14 +174,14 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
                                         <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
                                             <path d="M8 5v14l11-7z" />
                                         </svg>
-                                        <span>Resume auto-execution</span>
+                                        <span>{t('aiChat.executionMode.resumeAutoExecution')}</span>
                                     </>
                                 ) : (
                                     <>
                                         <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
                                             <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
                                         </svg>
-                                        <span>Pause auto-execution</span>
+                                        <span>{t('aiChat.executionMode.pauseAutoExecution')}</span>
                                     </>
                                 )}
                             </button>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface AnthropicAuthPanelProps {
     apiKey: string;
@@ -15,6 +16,7 @@ export const AnthropicAuthPanel: React.FC<AnthropicAuthPanelProps> = ({
     onLogin,
     authError,
 }) => {
+    const { t } = useTranslation();
     return (
         <div className="ai-chat-auth-container">
             <div className="ai-chat-auth-card">
@@ -24,15 +26,15 @@ export const AnthropicAuthPanel: React.FC<AnthropicAuthPanelProps> = ({
                         <text x="12" y="16" textAnchor="middle" fill="white" fontSize="12" fontWeight="bold" fontFamily="serif">A</text>
                     </svg>
                 </div>
-                <h2>Connect to Anthropic</h2>
+                <h2>{t('aiChat.auth.anthropicTitle')}</h2>
                 <div className="ai-chat-auth-form">
-                    <label>API Key</label>
+                    <label>{t('aiChat.auth.apiKey')}</label>
                     <input
                         type="password"
                         value={apiKey}
                         onChange={(e) => setApiKey(e.target.value)}
                         className="ai-chat-input"
-                        placeholder="sk-ant-..."
+                        placeholder={t('aiChat.auth.anthropicKeyPlaceholder')}
                         autoComplete="off"
                     />
                     <button
@@ -40,7 +42,7 @@ export const AnthropicAuthPanel: React.FC<AnthropicAuthPanelProps> = ({
                         onClick={onLogin}
                         disabled={!apiKey || isAuthLoading}
                     >
-                        {isAuthLoading ? 'Connecting...' : 'Connect to Anthropic'}
+                        {isAuthLoading ? t('aiChat.auth.connecting') : t('aiChat.auth.connectAnthropic')}
                     </button>
                     {authError && <div className="ai-chat-auth-error">{authError}</div>}
                 </div>

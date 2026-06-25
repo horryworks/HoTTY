@@ -77,6 +77,9 @@ export interface PromptPattern {
 export type ThemeId = string;
 export type BuiltInThemeId = 'dark' | 'medium' | 'light';
 
+/** UI display language (i18n). Distinct from the AI response language. */
+export type LanguageId = 'en' | 'ja' | 'zh-CN' | 'zh-TW' | 'ko' | 'ru' | 'es' | 'fr';
+
 export interface ThemeTerminalColors {
   foreground: string;
   background: string;

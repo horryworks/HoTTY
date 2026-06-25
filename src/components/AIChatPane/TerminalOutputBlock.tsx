@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export const TerminalOutputBlock: React.FC<{ cmd: string; output: string }> = ({ cmd, output }) => {
+    const { t } = useTranslation();
     const [expanded, setExpanded] = useState(false);
     const firstLine = cmd.split('\n')[0];
     const cmdHasMoreLines = cmd.includes('\n');
@@ -27,9 +29,9 @@ export const TerminalOutputBlock: React.FC<{ cmd: string; output: string }> = ({
                 <svg className="ai-terminal-output-chevron" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
                     <path d="M9 6l6 6-6 6z" />
                 </svg>
-                <span className="ai-terminal-output-label">Terminal output</span>
+                <span className="ai-terminal-output-label">{t('aiChat.outputBlock.label')}</span>
                 <span className="ai-terminal-output-cmd">{firstLine}</span>
-                <span className="ai-terminal-output-meta">{lineCount} lines · {charCount} chars</span>
+                <span className="ai-terminal-output-meta">{t('aiChat.outputBlock.meta', { lines: lineCount, chars: charCount })}</span>
             </div>
             {expanded && (
                 <div className="ai-terminal-output-body">
@@ -37,7 +39,7 @@ export const TerminalOutputBlock: React.FC<{ cmd: string; output: string }> = ({
                         <pre className="ai-terminal-output-cmd-full"><code>{cmd}</code></pre>
                     )}
                     {trimmedOutput.length === 0 ? (
-                        <span className="ai-terminal-output-empty">(no output)</span>
+                        <span className="ai-terminal-output-empty">{t('aiChat.outputBlock.empty')}</span>
                     ) : (
                         <pre><code>{trimmedOutput}</code></pre>
                     )}

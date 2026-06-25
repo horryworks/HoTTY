@@ -1,0 +1,72 @@
+// 新規セッションダイアログ（接続フロー）。ダイアログ枠・ホスト/GCP タブ・
+// ステータスバナー・接続フォームの項目/ラベル/プレースホルダー・
+// プロトコル別フィールド（SSH / シリアル / WSL / Git Bash）・
+// 入力検証メッセージ・変更破棄の確認をまとめています。
+export const sessionDialog = {
+  title: '新規セッション',
+  tabs: {
+    sourceAriaLabel: '接続元',
+    hosts: 'ホスト',
+    gcp: 'GCP',
+  },
+  banner: {
+    newConnection: '新規接続',
+    // {{name}} はホストの表示名（または無名時のフォールバック）です。
+    editing: '編集中:',
+    unnamed: '(無名)',
+    startNewTitle: '新しい接続を開始',
+    clearAriaLabel: 'フォームをクリアして新しい接続を開始',
+  },
+  decrypting: '復号中...',
+  nameLabel: '名前',
+  namePlaceholder: '表示名',
+  protocolLabel: 'プロトコル',
+  useAsJumpbox: 'ジャンプボックスとして使用',
+  hostLabel: 'ホスト/IP',
+  hostPlaceholder: 'example.com',
+  portLabel: 'ポート',
+  usernameLabel: 'ユーザー名',
+  passwordLabel: 'パスワード',
+  jumpboxLabel: 'ジャンプボックス（踏み台）',
+  directConnection: '直接接続',
+  privateKeyPathLabel: '秘密鍵のパス（任意）',
+  privateKeyPathPlaceholder: '~/.ssh/id_rsa',
+  privateKeyPassphraseLabel: '秘密鍵のパスフレーズ',
+  serialPortLabel: 'シリアルポート',
+  serialPortPlaceholder: 'COM3',
+  baudRateLabel: 'ボーレート',
+  dataBitsLabel: 'データビット',
+  parityLabel: 'パリティ',
+  parity: {
+    none: 'なし',
+    odd: '奇数',
+    even: '偶数',
+    mark: 'マーク',
+    space: 'スペース',
+  },
+  stopBitsLabel: 'ストップビット',
+  flowControlLabel: 'フロー制御',
+  flowControl: {
+    none: 'なし',
+  },
+  distributionLabel: 'ディストリビューション',
+  noWslDistros: 'WSL ディストリビューションが見つかりません。',
+  gitBashNotInstalled: 'Git Bash がインストールされていません。',
+  encodingLabel: 'エンコーディング',
+  saveTitleDirty: 'このホストへの変更を保存',
+  saveTitleClean: '保存する変更はありません',
+  connect: '接続',
+  browseKeyTitle: '秘密鍵ファイルを選択',
+  validation: {
+    hostRequired: 'ホストは必須です。',
+    hostInvalidWhitespace: 'ホストに無効な空白文字または改行文字が含まれています。',
+    portRange: 'ポートは 1 から 65535 までの整数で指定してください。',
+    usernameRequiredSsh: 'SSH にはユーザー名が必要です。',
+    usernameInvalidNewline: 'ユーザー名に無効な改行文字が含まれています。',
+  },
+  discard: {
+    title: '変更を破棄しますか？',
+    message: 'このフォームに未保存の変更があります。切り替えると破棄されます。',
+    confirmLabel: '破棄',
+  },
+};

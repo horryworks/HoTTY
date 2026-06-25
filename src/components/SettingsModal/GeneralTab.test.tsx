@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { GeneralTab } from './GeneralTab';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { SUPPORTED_LANGUAGES } from '../../i18n';
 
 vi.mock('../../services/tauriService', () => ({
   tauriService: {
@@ -72,5 +73,22 @@ describe('GeneralTab', () => {
   it('renders debug log folder button', () => {
     render(<GeneralTab />);
     expect(screen.getByText('Open Debug Log Folder')).toBeTruthy();
+  });
+
+  it('renders the language selector with all supported languages', () => {
+    render(<GeneralTab />);
+    const select = screen.getByDisplayValue('English') as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    const values = Array.from(select.options).map((o) => o.value);
+    expect(values).toEqual(SUPPORTED_LANGUAGES.map((l) => l.id));
+    expect(values).toContain('en');
+    expect(values).toContain('ja');
+  });
+
+  it('switches the UI language via the selector', () => {
+    render(<GeneralTab />);
+    const select = screen.getByDisplayValue('English') as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'ja' } });
+    expect(useSettingsStore.getState().language).toBe('ja');
   });
 });

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useModalEscape } from '../../hooks/useModalEscape';
 import './AskAiModal.css';
 
@@ -15,6 +16,7 @@ const AskAiModalInner: React.FC<Omit<AskAiModalProps, 'isOpen'>> = ({
     onClose,
     onSubmit,
 }) => {
+    const { t } = useTranslation();
     const [prompt, setPrompt] = useState('');
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -42,17 +44,17 @@ const AskAiModalInner: React.FC<Omit<AskAiModalProps, 'isOpen'>> = ({
         <div className="ask-ai-modal-overlay">
             <div className="ask-ai-modal-content">
                 <div className="ask-ai-modal-header">
-                    <h3>Ask AI</h3>
-                    <button className="ask-ai-modal-close-btn" onClick={onClose} title="Close">&times;</button>
+                    <h3>{t('dialogs.askAi.title')}</h3>
+                    <button className="ask-ai-modal-close-btn" onClick={onClose} title={t('common.close')}>&times;</button>
                 </div>
 
                 <div className="ask-ai-modal-body">
                     <div className="ask-ai-modal-section">
-                        <label>Your Question:</label>
+                        <label>{t('dialogs.askAi.questionLabel')}</label>
                         <textarea
                             ref={textareaRef}
                             className="ask-ai-modal-prompt-input"
-                            placeholder="What would you like to ask about the selection? (Ctrl+Enter to Ask)"
+                            placeholder={t('dialogs.askAi.promptPlaceholder')}
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             onKeyDown={handleKeyDown}
@@ -61,7 +63,7 @@ const AskAiModalInner: React.FC<Omit<AskAiModalProps, 'isOpen'>> = ({
                     </div>
 
                     <div className="ask-ai-modal-section">
-                        <label>Selected Text:</label>
+                        <label>{t('dialogs.askAi.selectedTextLabel')}</label>
                         <textarea
                             className="ask-ai-modal-selection-preview"
                             value={selection}
@@ -72,13 +74,13 @@ const AskAiModalInner: React.FC<Omit<AskAiModalProps, 'isOpen'>> = ({
                 </div>
 
                 <div className="ask-ai-modal-footer">
-                    <button className="btn-secondary" onClick={onClose}>Cancel</button>
+                    <button className="btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
                     <button
                         className="btn-primary"
                         onClick={handleSubmit}
                         disabled={!prompt.trim()}
                     >
-                        Ask
+                        {t('dialogs.askAi.ask')}
                     </button>
                 </div>
             </div>

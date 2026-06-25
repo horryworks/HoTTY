@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
 import type { Theme, ThemeTerminalColors } from '../../types/appTypes';
 import { nameToKey } from './nameToKey';
@@ -14,64 +15,66 @@ interface CustomThemeCreatorProps {
 
 const PROTECTED_THEMES = ['dark', 'medium', 'light'];
 
-const THEME_SECTIONS: { title: string; description: string; keys: string[] }[] = [
+// Section title/description are referenced by translation key and resolved via
+// t() inside the component; the CSS-variable `keys` list is data, not display text.
+const THEME_SECTIONS: { titleKey: string; descKey: string; keys: string[] }[] = [
     {
-        title: 'Backgrounds & Text',
-        description: 'Main background and text colors',
+        titleKey: 'settings.customTheme.sectionBackgroundsTitle',
+        descKey: 'settings.customTheme.sectionBackgroundsDesc',
         keys: ['bg-primary', 'bg-secondary', 'bg-tertiary', 'text-primary', 'text-secondary', 'text-tertiary', 'text-on-accent'],
     },
     {
-        title: 'Borders & Accents',
-        description: 'Border colors and accent/highlight colors',
+        titleKey: 'settings.customTheme.sectionBordersTitle',
+        descKey: 'settings.customTheme.sectionBordersDesc',
         keys: ['border-color', 'accent-color', 'accent-hover', 'accent-light', 'accent-secondary', 'link-color'],
     },
     {
-        title: 'Inputs, Buttons & Hovers',
-        description: 'Input fields, buttons, and hover state colors',
+        titleKey: 'settings.customTheme.sectionInputsTitle',
+        descKey: 'settings.customTheme.sectionInputsDesc',
         keys: ['input-bg', 'btn-bg', 'btn-hover-bg', 'btn-secondary-bg', 'btn-secondary-hover-bg', 'btn-danger-bg', 'btn-danger-hover-bg', 'hover-bg', 'placeholder-color'],
     },
     {
-        title: 'Status & Signals',
-        description: 'Success, error, warning, and danger indicator colors',
+        titleKey: 'settings.customTheme.sectionStatusTitle',
+        descKey: 'settings.customTheme.sectionStatusDesc',
         keys: ['success-color', 'status-success', 'status-error', 'color-danger', 'color-danger-shade', 'color-danger-bg', 'color-danger-bg-hover', 'color-danger-border', 'color-warning'],
     },
     {
-        title: 'AI Chat',
-        description: 'Colors for AI chat messages and code blocks',
+        titleKey: 'settings.customTheme.sectionAiChatTitle',
+        descKey: 'settings.customTheme.sectionAiChatDesc',
         keys: ['chat-msg-user-bg', 'chat-msg-user-text', 'chat-msg-model-text', 'code-bg', 'code-text', 'ai-header-bg', 'ai-welcome-text', 'ai-welcome-subtext', 'ai-chat-content-font-size', 'ai-token-font-size', 'ai-markdown-h1-font-size', 'ai-markdown-h2-font-size', 'ai-markdown-h3-font-size', 'ai-markdown-table-font-size'],
     },
     {
-        title: 'UI Specific Components',
-        description: 'Sidebar, tabs, context menus, icons, and other UI elements',
+        titleKey: 'settings.customTheme.sectionUiTitle',
+        descKey: 'settings.customTheme.sectionUiDesc',
         keys: ['sidebar-bg', 'sidebar-btn-color', 'sidebar-btn-hover-bg', 'sidebar-btn-hover-color', 'sidebar-btn-active-bg', 'tab-bg', 'tab-text', 'tab-active-text', 'tab-close-bg', 'tab-close-hover-bg', 'tab-watching-text', 'tab-watching-bg', 'tab-watching-icon', 'tab-watching-icon-glow', 'tab-connecting-bg', 'tab-connecting-text', 'pane-connecting-bg', 'context-menu-bg', 'context-menu-border', 'context-menu-text', 'context-menu-hover-bg', 'hidden-item-bg', 'hidden-item-bg-hover', 'tree-meta-color', 'icon-folder', 'icon-host', 'terminal-prompt-default', 'terminal-prompt-active', 'pane-color-1', 'pane-color-2', 'pane-color-3', 'pane-color-4', 'pane-color-5', 'pane-color-6', 'resize-grip-shadow'],
     },
     {
-        title: 'AI Providers',
-        description: 'Brand colors used for AI provider icons (Gemini, OpenAI, Anthropic, Vertex AI)',
+        titleKey: 'settings.customTheme.sectionProvidersTitle',
+        descKey: 'settings.customTheme.sectionProvidersDesc',
         keys: ['provider-gemini-1', 'provider-gemini-2', 'provider-gemini-3', 'provider-openai', 'provider-anthropic', 'provider-vertex-ai'],
     },
     {
-        title: 'Search & Highlight',
-        description: 'Search result highlight colors',
+        titleKey: 'settings.customTheme.sectionSearchTitle',
+        descKey: 'settings.customTheme.sectionSearchDesc',
         keys: ['search-highlight-bg', 'search-highlight-current-bg', 'search-highlight-current-border', 'search-highlight-mark-bg', 'search-highlight-mark-solid', 'search-highlight-mark-text'],
     },
     {
-        title: 'Overlays & Modals',
-        description: 'Modal dialogs, overlays, and notification banners',
+        titleKey: 'settings.customTheme.sectionOverlaysTitle',
+        descKey: 'settings.customTheme.sectionOverlaysDesc',
         keys: ['modal-overlay-bg', 'modal-shadow', 'modal-border-warning', 'modal-header-warning-bg', 'modal-header-warning-text', 'modal-border-error', 'modal-header-error-bg', 'modal-header-error-text', 'modal-border-success', 'modal-header-success-bg', 'modal-header-success-text', 'modal-header-info-bg', 'modal-header-info-border', 'modal-header-info-text', 'update-notification-bg', 'update-notification-border', 'update-notification-text', 'update-notification-accent', 'update-notification-btn-bg', 'update-notification-btn-text', 'update-notification-btn-border', 'update-notification-btn-hover'],
     },
     {
-        title: 'Futuristic Effects',
-        description: 'Neon glow and glassmorphism effects applied to active panes, sidebars, and modals',
+        titleKey: 'settings.customTheme.sectionEffectsTitle',
+        descKey: 'settings.customTheme.sectionEffectsDesc',
         keys: ['glow-accent', 'glow-accent-strong', 'glow-blur', 'glass-bg', 'glass-blur', 'glass-border', 'icon-stroke-width'],
     },
 ];
 
-const TERMINAL_KEYS: { key: keyof ThemeTerminalColors; label: string; description: string }[] = [
-    { key: 'foreground', label: 'Foreground', description: 'Default text color inside the terminal' },
-    { key: 'background', label: 'Background (Active)', description: 'Background for the active/focused terminal' },
-    { key: 'backgroundInactive', label: 'Background (Inactive)', description: 'Background for inactive/unfocused terminals' },
-    { key: 'paneBackground', label: 'Pane Background', description: 'Color of the space surrounding the terminal' },
+const TERMINAL_KEYS: { key: keyof ThemeTerminalColors; labelKey: string; descKey: string }[] = [
+    { key: 'foreground', labelKey: 'settings.customTheme.terminalForeground', descKey: 'settings.customTheme.terminalForegroundDesc' },
+    { key: 'background', labelKey: 'settings.customTheme.terminalBackground', descKey: 'settings.customTheme.terminalBackgroundDesc' },
+    { key: 'backgroundInactive', labelKey: 'settings.customTheme.terminalBackgroundInactive', descKey: 'settings.customTheme.terminalBackgroundInactiveDesc' },
+    { key: 'paneBackground', labelKey: 'settings.customTheme.terminalPaneBackground', descKey: 'settings.customTheme.terminalPaneBackgroundDesc' },
 ];
 
 const VAR_DESCRIPTIONS: Record<string, string> = {
@@ -222,6 +225,7 @@ export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
     onSave,
     onCancel,
 }) => {
+    const { t } = useTranslation();
     const [displayName, setDisplayName] = useState('');
     const [baseTheme, setBaseTheme] = useState(currentTheme);
     const [variables, setVariables] = useState<Record<string, string>>({});
@@ -283,16 +287,16 @@ export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
     const handleSave = async () => {
         const name = displayName.trim();
         if (!name) {
-            setError('Please enter a theme name.');
+            setError(t('settings.customTheme.errorEmptyName'));
             return;
         }
         const key = nameToKey(name);
         if (!key) {
-            setError('Theme name must contain at least one alphanumeric character.');
+            setError(t('settings.customTheme.errorNoAlphanumeric'));
             return;
         }
         if (PROTECTED_THEMES.includes(key)) {
-            setError('Cannot use "dark", "medium", or "light" as a theme name.');
+            setError(t('settings.customTheme.errorProtectedName'));
             return;
         }
 
@@ -313,7 +317,7 @@ export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
             if (result.success) {
                 onSave(key);
             } else {
-                setError(result.error || 'Failed to save theme.');
+                setError(result.error || t('settings.customTheme.errorSaveFailed'));
             }
         } catch (err) {
             setError(String(err));
@@ -330,23 +334,23 @@ export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
         <div className="ctc-overlay">
             <div className="ctc-modal">
                 <div className="ctc-header">
-                    <h2>Custom Theme Creator</h2>
-                    <button className="ctc-close-btn" onClick={handleCancel} title="Cancel">✕</button>
+                    <h2>{t('settings.customTheme.title')}</h2>
+                    <button className="ctc-close-btn" onClick={handleCancel} title={t('settings.customTheme.cancel')}>✕</button>
                 </div>
 
                 <div className="ctc-toolbar">
                     <div className="ctc-toolbar-row">
-                        <label className="ctc-label">Theme Name</label>
+                        <label className="ctc-label">{t('settings.customTheme.themeName')}</label>
                         <input
                             type="text"
                             className="ctc-name-input"
                             value={displayName}
                             onChange={e => { setDisplayName(e.target.value); setError(''); }}
-                            placeholder="e.g. My Dark Blue"
+                            placeholder={t('settings.customTheme.themeNamePlaceholder')}
                         />
                     </div>
                     <div className="ctc-toolbar-row">
-                        <label className="ctc-label">Base Theme</label>
+                        <label className="ctc-label">{t('settings.customTheme.baseTheme')}</label>
                         <select
                             className="ctc-select"
                             value={baseTheme}
@@ -364,10 +368,10 @@ export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
 
                 <div className="ctc-body">
                     {THEME_SECTIONS.map(section => (
-                        <div key={section.title} className="ctc-section">
+                        <div key={section.titleKey} className="ctc-section">
                             <div className="ctc-section-header">
-                                <span className="ctc-section-title">{section.title}</span>
-                                <span className="ctc-section-desc">{section.description}</span>
+                                <span className="ctc-section-title">{t(section.titleKey)}</span>
+                                <span className="ctc-section-desc">{t(section.descKey)}</span>
                             </div>
                             {section.keys.filter(k => k in variables).map(key => (
                                 <VariableRow
@@ -383,14 +387,14 @@ export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
 
                     <div className="ctc-section">
                         <div className="ctc-section-header">
-                            <span className="ctc-section-title">Terminal</span>
-                            <span className="ctc-section-desc">xterm.js terminal colors</span>
+                            <span className="ctc-section-title">{t('settings.customTheme.terminalSectionTitle')}</span>
+                            <span className="ctc-section-desc">{t('settings.customTheme.terminalSectionDesc')}</span>
                         </div>
-                        {TERMINAL_KEYS.map(({ key, label, description }) => (
+                        {TERMINAL_KEYS.map(({ key, labelKey, descKey }) => (
                             <div key={key} className="ctc-row">
                                 <div className="ctc-row-info">
-                                    <span className="ctc-var-key">{label}</span>
-                                    <span className="ctc-var-desc">{description}</span>
+                                    <span className="ctc-var-key">{t(labelKey)}</span>
+                                    <span className="ctc-var-desc">{t(descKey)}</span>
                                 </div>
                                 <div className="ctc-row-controls">
                                     {isSimpleHexColor(terminal[key] ?? '') && (
@@ -415,10 +419,10 @@ export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
 
                 <div className="ctc-footer">
                     <button className="ctc-btn-cancel" onClick={handleCancel} disabled={saving}>
-                        Cancel
+                        {t('settings.customTheme.cancel')}
                     </button>
                     <button className="ctc-btn-save" onClick={handleSave} disabled={saving}>
-                        {saving ? 'Saving...' : 'Save Theme'}
+                        {saving ? t('settings.customTheme.saving') : t('settings.customTheme.saveTheme')}
                     </button>
                 </div>
             </div>

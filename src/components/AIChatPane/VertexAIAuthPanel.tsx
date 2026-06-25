@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
 
 interface VertexAIAuthPanelProps {
@@ -28,6 +29,7 @@ export const VertexAIAuthPanel: React.FC<VertexAIAuthPanelProps> = ({
     onLogin,
     authError,
 }) => {
+    const { t } = useTranslation();
     const handleBrowse = async () => {
         const selectedPath = await tauriService.selectServiceAccountKeyFile();
         if (selectedPath) {
@@ -46,44 +48,44 @@ export const VertexAIAuthPanel: React.FC<VertexAIAuthPanelProps> = ({
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" fill="var(--provider-vertex-ai)" />
                     </svg>
                 </div>
-                <h2>Connect to Vertex AI</h2>
+                <h2>{t('aiChat.auth.vertexTitle')}</h2>
                 <div className="ai-chat-auth-form">
-                    <label>GCP Project ID</label>
+                    <label>{t('aiChat.auth.gcpProjectId')}</label>
                     <input
                         type="text"
                         value={projectId}
                         onChange={(e) => setProjectId(e.target.value)}
                         className="ai-chat-input"
-                        placeholder="my-project-id"
+                        placeholder={t('aiChat.auth.gcpProjectIdPlaceholder')}
                     />
-                    <label>Location</label>
+                    <label>{t('aiChat.auth.location')}</label>
                     <input
                         type="text"
                         value={location}
                         onChange={(e) => setLocation(e.target.value)}
                         className="ai-chat-input"
-                        placeholder="us-central1"
+                        placeholder={t('aiChat.auth.locationPlaceholder')}
                     />
-                    <label>Authentication Method</label>
+                    <label>{t('aiChat.auth.authMethod')}</label>
                     <select
                         value={authType}
                         onChange={(e) => setAuthType(e.target.value as 'adc' | 'service_account')}
                         className="ai-chat-input"
                         style={{ cursor: 'pointer' }}
                     >
-                        <option value="adc">Application Default Credentials (ADC)</option>
-                        <option value="service_account">Service Account Key File</option>
+                        <option value="adc">{t('aiChat.auth.authMethodAdc')}</option>
+                        <option value="service_account">{t('aiChat.auth.authMethodServiceAccount')}</option>
                     </select>
                     {authType === 'service_account' && (
                         <>
-                            <label>Service Account Key File</label>
+                            <label>{t('aiChat.auth.serviceAccountKeyFile')}</label>
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                 <input
                                     type="text"
                                     value={keyFilePath}
                                     onChange={(e) => setKeyFilePath(e.target.value)}
                                     className="ai-chat-input"
-                                    placeholder="/path/to/service-account-key.json"
+                                    placeholder={t('aiChat.auth.serviceAccountKeyFilePlaceholder')}
                                     style={{ flex: 1 }}
                                     readOnly
                                 />
@@ -99,7 +101,7 @@ export const VertexAIAuthPanel: React.FC<VertexAIAuthPanelProps> = ({
                                         whiteSpace: 'nowrap',
                                     }}
                                 >
-                                    Browse...
+                                    {t('aiChat.auth.browse')}
                                 </button>
                             </div>
                         </>
@@ -109,7 +111,7 @@ export const VertexAIAuthPanel: React.FC<VertexAIAuthPanelProps> = ({
                         onClick={onLogin}
                         disabled={isLoginDisabled}
                     >
-                        {isAuthLoading ? 'Connecting...' : 'Connect to Vertex AI'}
+                        {isAuthLoading ? t('aiChat.auth.connecting') : t('aiChat.auth.connectVertex')}
                     </button>
                     {authError && <div className="ai-chat-auth-error">{authError}</div>}
                 </div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ChatTab } from '../../hooks/useAiChat';
 import './TabStrip.css';
 
@@ -11,9 +12,10 @@ interface TabStripProps {
 }
 
 export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect, onClose, onAdd }) => {
+    const { t } = useTranslation();
     const canClose = tabs.length > 1;
     return (
-        <div className="ai-chat-tab-strip" role="tablist" aria-label="AI Chat tabs">
+        <div className="ai-chat-tab-strip" role="tablist" aria-label={t('aiChat.tabStrip.ariaLabel')}>
             <div className="ai-chat-tab-strip-list">
                 {tabs.map((tab) => {
                     const active = tab.id === activeTabId;
@@ -38,7 +40,7 @@ export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect,
                                 <button
                                     type="button"
                                     className="ai-chat-tab-close"
-                                    aria-label={`Close ${tab.title}`}
+                                    aria-label={t('aiChat.tabStrip.closeTab', { title: tab.title })}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onClose(tab.id);
@@ -54,8 +56,8 @@ export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect,
             <button
                 type="button"
                 className="ai-chat-tab-add"
-                aria-label="Add tab"
-                title="Add tab"
+                aria-label={t('aiChat.tabStrip.addTab')}
+                title={t('aiChat.tabStrip.addTab')}
                 onClick={onAdd}
             >
                 +

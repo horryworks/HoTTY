@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { tauriService } from '../../services/tauriService';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import HelpTooltip from '../HelpTooltip/HelpTooltip';
 import type { SshAlgorithms } from '../../types/appTypes';
 
-const CATEGORY_LABELS: Record<string, string> = {
-  serverHostKey: 'Server Host Key',
-  kex: 'Key Exchange',
-  cipher: 'Cipher',
-  mac: 'MAC',
+// Maps backend algorithm category ids to their translation keys. The displayed
+// label is resolved via t() inside the component so it reacts to language.
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  serverHostKey: 'settings.protocols.categoryServerHostKey',
+  kex: 'settings.protocols.categoryKex',
+  cipher: 'settings.protocols.categoryCipher',
+  mac: 'settings.protocols.categoryMac',
 };
 
 // diffie-hellman-group-exchange-sha1 is a deprecated KEX (SHA-1 collisions,
@@ -18,17 +21,10 @@ const DH_GEX_NAMES = new Set<string>([
   'diffie-hellman-group-exchange-sha1',
 ]);
 
-const DH_GEX_WARNING =
-  'diffie-hellman-group-exchange-sha1 relies on SHA-1, which is considered ' +
-  'broken and was removed from OpenSSH defaults in 8.2. Enable it only if ' +
-  'you must talk to legacy devices that offer no stronger key exchange.\n\n' +
-  'Prefer diffie-hellman-group-exchange-sha256, diffie-hellman-group14-sha256, ' +
-  'or curve25519-sha256 whenever the remote device supports them.\n\n' +
-  'Enable diffie-hellman-group-exchange-sha1 anyway?';
-
 export function ProtocolsTab() {
   const settings = useSettingsStore();
   const update = settings.update;
+  const { t } = useTranslation();
 
   const [sshAlgorithms, setSshAlgorithms] = useState<SshAlgorithms | null>(null);
   const [pendingDhGex, setPendingDhGex] = useState<{ category: string; name: string } | null>(null);
@@ -72,11 +68,11 @@ export function ProtocolsTab() {
     <>
       {/* ── SSH ── */}
       <div className="settings-card">
-        <h3 className="settings-section-title settings-section-title--first">SSH</h3>
+        <h3 className="settings-section-title settings-section-title--first">{t('settings.protocols.sshSection')}</h3>
 
-        <div className="settings-subsection-title">Connect Timeout</div>
+        <div className="settings-subsection-title">{t('settings.protocols.connectTimeout')}</div>
         <div className="settings-group">
-          <label>Timeout (seconds)</label>
+          <label>{t('settings.protocols.timeoutSeconds')}</label>
           <input
             type="number"
             min={1}
@@ -86,21 +82,21 @@ export function ProtocolsTab() {
               update('sshConnectTimeoutSecs', parseInt(e.target.value, 10) || 5)
             }
           />
-          <HelpTooltip text="Maximum time to wait for the initial TCP and SSH handshake before giving up. Default: 5 seconds." />
+          <HelpTooltip text={t('settings.protocols.sshTimeoutHelp')} />
         </div>
 
-        <div className="settings-subsection-title">KeepAlive</div>
+        <div className="settings-subsection-title">{t('settings.protocols.keepAlive')}</div>
         <label className="settings-checkbox">
           <input
             type="checkbox"
             checked={settings.sshKeepAliveEnabled}
             onChange={(e) => update('sshKeepAliveEnabled', e.target.checked)}
           />
-          Enable
-          <HelpTooltip text="Sends dummy packets to prevent timeouts." />
+          {t('settings.protocols.enable')}
+          <HelpTooltip text={t('settings.protocols.sshKeepAliveHelp')} />
         </label>
         <div className="settings-group">
-          <label>Interval (seconds)</label>
+          <label>{t('settings.protocols.intervalSeconds')}</label>
           <input
             type="number"
             min={1}
@@ -117,14 +113,14 @@ export function ProtocolsTab() {
         {sshAlgorithms && (
           <details className="settings-algorithms-details">
             <summary className="settings-algorithms-summary">
-              Algorithms
-              <HelpTooltip text="Choose which algorithms to enable. Changes apply to new sessions." />
+              {t('settings.protocols.algorithms')}
+              <HelpTooltip text={t('settings.protocols.algorithmsHelp')} />
             </summary>
             <div className="settings-algorithms-container">
               {Object.keys(sshAlgorithms).map((category) => (
                 <div key={category} className="settings-algorithms-category">
                   <h4 className="settings-algorithms-category-title">
-                    {CATEGORY_LABELS[category] || category}
+                    {CATEGORY_LABEL_KEYS[category] ? t(CATEGORY_LABEL_KEYS[category]) : category}
                   </h4>
                   <div className="settings-algorithms-grid">
                     {sshAlgorithms[category].map((algo) => (
@@ -147,11 +143,11 @@ export function ProtocolsTab() {
 
       {/* ── Telnet ── */}
       <div className="settings-card">
-        <h3 className="settings-section-title">Telnet</h3>
+        <h3 className="settings-section-title">{t('settings.protocols.telnetSection')}</h3>
 
-        <div className="settings-subsection-title">Connect Timeout</div>
+        <div className="settings-subsection-title">{t('settings.protocols.connectTimeout')}</div>
         <div className="settings-group">
-          <label>Timeout (seconds)</label>
+          <label>{t('settings.protocols.timeoutSeconds')}</label>
           <input
             type="number"
             min={1}
@@ -161,21 +157,21 @@ export function ProtocolsTab() {
               update('telnetConnectTimeoutSecs', parseInt(e.target.value, 10) || 5)
             }
           />
-          <HelpTooltip text="Maximum time to wait for the initial TCP connection before giving up. Default: 5 seconds." />
+          <HelpTooltip text={t('settings.protocols.telnetTimeoutHelp')} />
         </div>
 
-        <div className="settings-subsection-title">KeepAlive</div>
+        <div className="settings-subsection-title">{t('settings.protocols.keepAlive')}</div>
         <label className="settings-checkbox">
           <input
             type="checkbox"
             checked={settings.telnetKeepAliveEnabled}
             onChange={(e) => update('telnetKeepAliveEnabled', e.target.checked)}
           />
-          Enable
-          <HelpTooltip text="Sends Telnet NOP commands to prevent idle timeouts." />
+          {t('settings.protocols.enable')}
+          <HelpTooltip text={t('settings.protocols.telnetKeepAliveHelp')} />
         </label>
         <div className="settings-group">
-          <label>Interval (seconds)</label>
+          <label>{t('settings.protocols.intervalSeconds')}</label>
           <input
             type="number"
             min={1}
@@ -191,9 +187,9 @@ export function ProtocolsTab() {
 
       {pendingDhGex && (
         <ConfirmModal
-          title="Enable diffie-hellman-group-exchange-sha1?"
-          message={DH_GEX_WARNING}
-          confirmLabel="Enable"
+          title={t('settings.protocols.dhGexTitle')}
+          message={t('settings.protocols.dhGexWarning')}
+          confirmLabel={t('settings.protocols.dhGexConfirm')}
           onConfirm={() => {
             const p = pendingDhGex;
             setPendingDhGex(null);

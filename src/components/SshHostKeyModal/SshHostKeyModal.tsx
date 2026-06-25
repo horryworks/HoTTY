@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
 import { logError } from '../../utils/logger';
 import type { SshHostKeyPromptPayload } from '../../types/appTypes';
 import './SshHostKeyModal.css';
 
 export function SshHostKeyModal() {
+  const { t } = useTranslation();
   const [prompt, setPrompt] = useState<SshHostKeyPromptPayload | null>(null);
 
   useEffect(() => {
@@ -32,27 +34,26 @@ export function SshHostKeyModal() {
     <div className="ssh-host-key-overlay">
       <div className="ssh-host-key-modal">
         <div className="ssh-host-key-header">
-          <span>{isChanged ? 'Host key CHANGED' : 'Unknown host key'}</span>
+          <span>{isChanged ? t('dialogs.sshHostKey.titleChanged') : t('dialogs.sshHostKey.titleUnknown')}</span>
         </div>
         <div className="ssh-host-key-body">
           {isChanged && (
             <p className="ssh-host-key-warning">
-              WARNING: The host key for this server has changed since last
-              connection. This could indicate a man-in-the-middle attack.
+              {t('dialogs.sshHostKey.warning')}
             </p>
           )}
           <div className="ssh-host-key-row">
-            <span className="ssh-host-key-label">Host:</span>
+            <span className="ssh-host-key-label">{t('dialogs.sshHostKey.host')}</span>
             <span className="ssh-host-key-value">
               {prompt.host}:{prompt.port}
             </span>
           </div>
           <div className="ssh-host-key-row">
-            <span className="ssh-host-key-label">Key type:</span>
+            <span className="ssh-host-key-label">{t('dialogs.sshHostKey.keyType')}</span>
             <span className="ssh-host-key-value">{prompt.keyType}</span>
           </div>
           <div className="ssh-host-key-row">
-            <span className="ssh-host-key-label">Fingerprint:</span>
+            <span className="ssh-host-key-label">{t('dialogs.sshHostKey.fingerprint')}</span>
             <span className="ssh-host-key-fingerprint">{prompt.fingerprint}</span>
           </div>
         </div>
@@ -62,21 +63,21 @@ export function SshHostKeyModal() {
             className="ssh-host-key-btn-danger"
             onClick={() => respond(false, false)}
           >
-            Reject
+            {t('dialogs.sshHostKey.reject')}
           </button>
           <button
             type="button"
             className="ssh-host-key-btn-secondary"
             onClick={() => respond(true, false)}
           >
-            Accept once
+            {t('dialogs.sshHostKey.acceptOnce')}
           </button>
           <button
             type="button"
             className="ssh-host-key-btn-primary"
             onClick={() => respond(true, true)}
           >
-            Accept &amp; remember
+            {t('dialogs.sshHostKey.acceptRemember')}
           </button>
         </div>
       </div>

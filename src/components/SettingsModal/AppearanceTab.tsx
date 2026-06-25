@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useSettingsStore, DEFAULT_PROMPT_PATTERNS } from '../../stores/settingsStore';
 import { DEFAULT_THEMES, DEFAULT_THEME_IDS, isBuiltInThemeId } from '../../themes/defaults';
@@ -26,6 +27,7 @@ function isMonospace(fontName: string): boolean {
 export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTheme }: AppearanceTabProps) {
   const settings = useSettingsStore();
   const update = settings.update;
+  const { t } = useTranslation();
 
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
   const [fontScanning, setFontScanning] = useState(false);
@@ -70,9 +72,9 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
     <>
       {/* ── Layout ── */}
       <div className="settings-card">
-        <h3 className="settings-section-title settings-section-title--first">Layout</h3>
+        <h3 className="settings-section-title settings-section-title--first">{t('settings.appearance.layoutSection')}</h3>
         <div className="settings-group">
-          <label>Sidebar position</label>
+          <label>{t('settings.appearance.sidebarPosition')}</label>
           <div className="settings-radio-row">
             {(['left', 'right'] as const).map((pos) => (
               <label key={pos}>
@@ -81,7 +83,9 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
                   checked={settings.sidebarPosition === pos}
                   onChange={() => update('sidebarPosition', pos)}
                 />
-                {pos}
+                {pos === 'left'
+                  ? t('settings.appearance.sidebarLeft')
+                  : t('settings.appearance.sidebarRight')}
               </label>
             ))}
           </div>
@@ -90,9 +94,9 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
 
       {/* ── Theme ── */}
       <div className="settings-card">
-        <h3 className="settings-section-title">Theme</h3>
+        <h3 className="settings-section-title">{t('settings.appearance.themeSection')}</h3>
         <div className="settings-group">
-        <label>Theme</label>
+        <label>{t('settings.appearance.themeLabel')}</label>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <select
             value={settings.theme}
@@ -122,7 +126,7 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
                 cursor: 'pointer',
               }}
             >
-              Delete
+              {t('settings.appearance.deleteTheme')}
             </button>
           )}
         </div>
@@ -131,13 +135,13 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
           className="settings-button"
           onClick={onOpenCustomThemeCreator}
         >
-          Create Custom Theme
+          {t('settings.appearance.createCustomTheme')}
         </button>
         </div>
 
         {/* ── Unused Pane Background ── */}
         <div className="settings-group">
-          <label>Unused pane background</label>
+          <label>{t('settings.appearance.unusedPaneBackground')}</label>
         <div className="settings-radio-row">
           {(['color', 'image'] as const).map((mode) => (
             <label key={mode}>
@@ -146,7 +150,9 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
                 checked={settings.paneBackgroundMode === mode}
                 onChange={() => update('paneBackgroundMode', mode)}
               />
-              {mode}
+              {mode === 'color'
+                ? t('settings.appearance.paneBackgroundColor')
+                : t('settings.appearance.paneBackgroundImage')}
             </label>
           ))}
         </div>
@@ -190,7 +196,7 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
               type="text"
               value={settings.paneBackgroundImage}
               onChange={(e) => update('paneBackgroundImage', e.target.value)}
-              placeholder="e.g. http://asset.localhost/..."
+              placeholder={t('settings.appearance.paneBackgroundImagePlaceholder')}
               className="settings-input"
               style={{
                 flex: 1,
@@ -211,15 +217,15 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
                 if (path) update('paneBackgroundImage', convertFileSrc(path));
               }}
             >
-              Browse…
+              {t('settings.appearance.browse')}
             </button>
             {settings.paneBackgroundImage && (
               <button
                 type="button"
                 onClick={() => update('paneBackgroundImage', '')}
-                title="Clear image"
+                title={t('settings.appearance.clearImage')}
               >
-                Clear
+                {t('settings.appearance.clear')}
               </button>
             )}
           </div>
@@ -228,9 +234,11 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
       </div>
       {pendingDelete && (
         <ConfirmModal
-          title="Delete Theme"
-          message={`Delete custom theme "${themesData[pendingDelete]?.name ?? pendingDelete}"? This cannot be undone.`}
-          confirmLabel="Delete"
+          title={t('settings.appearance.deleteThemeTitle')}
+          message={t('settings.appearance.deleteThemeMessage', {
+            name: themesData[pendingDelete]?.name ?? pendingDelete,
+          })}
+          confirmLabel={t('settings.appearance.deleteTheme')}
           onConfirm={async () => {
             const key = pendingDelete;
             setPendingDelete(null);
@@ -242,16 +250,16 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
 
       {/* ── Font ── */}
       <div className="settings-card">
-        <h3 className="settings-section-title">Font</h3>
+        <h3 className="settings-section-title">{t('settings.appearance.fontSection')}</h3>
         <div className="settings-group">
-        <label>Font family</label>
+        <label>{t('settings.appearance.fontFamily')}</label>
         <div className="settings-font-row">
           <select
             value={settings.fontFamily}
             onChange={(e) => update('fontFamily', e.target.value)}
             disabled={fontScanning}
           >
-            <option value="monospace">System Monospace (default)</option>
+            <option value="monospace">{t('settings.appearance.systemMonospaceDefault')}</option>
             {systemFonts.map((font) => (
               <option key={font} value={`"${font}", monospace`}>
                 {font}
@@ -266,14 +274,14 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
             }}
             disabled={fontScanning}
           >
-            {fontScanning ? 'Scanning...' : 'Rescan'}
+            {fontScanning ? t('settings.appearance.scanning') : t('settings.appearance.rescan')}
           </button>
         </div>
         </div>
 
         {/* ── Font Size ── */}
         <div className="settings-group">
-          <label>Font size (px)</label>
+          <label>{t('settings.appearance.fontSize')}</label>
           <input
             type="number"
             min={8}
@@ -286,13 +294,13 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
 
       {/* ── Terminal Display ── */}
       <div className="settings-card">
-        <h3 className="settings-section-title">Terminal Display</h3>
+        <h3 className="settings-section-title">{t('settings.appearance.terminalDisplaySection')}</h3>
 
         {/* ── Default Encoding ── */}
         <div className="settings-group">
           <label>
-            Default encoding
-            <HelpTooltip text="Applies to new connections." />
+            {t('settings.appearance.defaultEncoding')}
+            <HelpTooltip text={t('settings.appearance.defaultEncodingHelp')} />
           </label>
         <div className="settings-radio-row">
           {(['utf8', 'shift_jis', 'euc-jp'] as Encoding[]).map((enc) => (
@@ -310,20 +318,20 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
 
         {/* ── Prompt Highlight ── */}
         <div className="settings-group">
-          <label>Prompt Highlight</label>
+          <label>{t('settings.appearance.promptHighlight')}</label>
         <label className="settings-checkbox">
           <input
             type="checkbox"
             checked={settings.enablePromptHighlight}
             onChange={(e) => update('enablePromptHighlight', e.target.checked)}
           />
-          Enable User Input Highlight
+          {t('settings.appearance.enableUserInputHighlight')}
         </label>
         {settings.enablePromptHighlight && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
               <span style={{ color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) - 1px)' }}>
-                Highlight Color
+                {t('settings.appearance.highlightColor')}
               </span>
               <input
                 type="color"
@@ -364,7 +372,7 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
                 color: 'var(--text-secondary)',
               }}
             >
-              Prompt Patterns (Regex)
+              {t('settings.appearance.promptPatternsRegex')}
             </label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
               {settings.promptPatterns?.map((p: PromptPattern, index: number) => (
@@ -388,7 +396,7 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
                       newPatterns[index] = { ...p, name: e.target.value };
                       update('promptPatterns', newPatterns);
                     }}
-                    placeholder="Name"
+                    placeholder={t('settings.appearance.namePlaceholder')}
                     style={{
                       width: '140px',
                       padding: '5px 8px',
@@ -410,7 +418,7 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
                       newPatterns[index] = { ...p, pattern: e.target.value };
                       update('promptPatterns', newPatterns);
                     }}
-                    placeholder="Regex"
+                    placeholder={t('settings.appearance.regexPlaceholder')}
                     style={{
                       flex: 1,
                       padding: '5px 8px',
@@ -454,7 +462,7 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
                   update('promptPatterns', [...(settings.promptPatterns || []), newPattern]);
                 }}
               >
-                + Add Pattern
+                {t('settings.appearance.addPattern')}
               </button>
               <button
                 type="button"
@@ -463,7 +471,7 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
                   update('promptPatterns', DEFAULT_PROMPT_PATTERNS);
                 }}
               >
-                Reset to Default
+                {t('settings.appearance.resetToDefault')}
               </button>
             </div>
           </>

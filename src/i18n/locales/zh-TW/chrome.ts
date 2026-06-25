@@ -1,0 +1,44 @@
+// 應用程式外框 — 分頁列、側邊欄，以及應用程式層級側邊欄（版面配置／邊緣／
+// 工具按鈕）。每個外框區域對應一個鍵區塊。
+export const chrome = {
+  tabBar: {
+    newSession: '新工作階段',
+    closeTab: '關閉分頁',
+    features: '功能',
+    aiMonitorActive: 'AI 監控（運作中）',
+    aiMonitorStart: '使用 AI 監控',
+    aiMonitorStopAria: '停止 AI 監控',
+    aiMonitorStartAria: '開始 AI 監控',
+    logViewer: '記錄檢視器',
+    pingMonitor: 'Ping 監控',
+    textEditor: '文字編輯器',
+    fileExplorer: '檔案總管',
+    aiChat: 'AI 聊天',
+    saveToHostTree: '儲存至主機樹狀清單…',
+  },
+  appSidebar: {
+    layout: {
+      single: '單一（1x1）',
+      splitVertical: '垂直分割（1x2）',
+      splitHorizontal: '水平分割（2x1）',
+      grid2x2: '格狀（2x2）',
+      grid2x3: '格狀（2x3）',
+      grid3x2: '格狀（3x2）',
+    },
+    edge: {
+      left: '切換左側邊欄',
+      right: '切換右側邊欄',
+      top: '切換頂端列',
+      bottom: '切換底端列',
+    },
+    disableLineWrap: '停用自動換行',
+    enableLineWrap: '啟用自動換行',
+    help: '說明／文件',
+    settings: '設定',
+  },
+  pane: {
+    crashed: '窗格已當機',
+    label: '窗格 {{number}}',
+    dropTabHere: '將分頁拖放至此',
+  },
+};

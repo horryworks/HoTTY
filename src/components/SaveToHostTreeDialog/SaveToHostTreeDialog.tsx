@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useHostManager } from '../../hooks/useHostManager';
 import { buildHostEntryFromConfig } from './buildHostEntry';
 import type { HostTreeNode, ProtocolId } from '../../types/appTypes';
@@ -39,6 +40,7 @@ export const SaveToHostTreeDialog: React.FC<SaveToHostTreeDialogProps> = ({
     config,
     onClose,
 }) => {
+    const { t } = useTranslation();
     const hostManager = useHostManager();
     const [name, setName] = useState(initialName);
     const [parentId, setParentId] = useState<string | null>(null);
@@ -65,8 +67,8 @@ export const SaveToHostTreeDialog: React.FC<SaveToHostTreeDialogProps> = ({
     }, [creatingFolder]);
 
     const folderRows = useMemo<FolderRow[]>(
-        () => [{ id: null, name: '(Root)', depth: 0 }, ...flattenFolders(hostManager.tree)],
-        [hostManager.tree],
+        () => [{ id: null, name: t('dialogs.saveToHostTree.rootFolder'), depth: 0 }, ...flattenFolders(hostManager.tree)],
+        [hostManager.tree, t],
     );
 
     const entry = useMemo(() => buildHostEntryFromConfig(protocol, config), [protocol, config]);
@@ -115,15 +117,15 @@ export const SaveToHostTreeDialog: React.FC<SaveToHostTreeDialogProps> = ({
                     }
                 }}
             >
-                <h3>Save to Host Tree</h3>
+                <h3>{t('dialogs.saveToHostTree.title')}</h3>
                 {entry === null ? (
                     <p className="save-to-tree-error">
-                        This session cannot be saved (only SSH and Telnet sessions are supported).
+                        {t('dialogs.saveToHostTree.unsupported')}
                     </p>
                 ) : (
                     <>
                         <div className="modal-form-group">
-                            <label>Name</label>
+                            <label>{t('dialogs.saveToHostTree.nameLabel')}</label>
                             <input
                                 ref={nameInputRef}
                                 autoFocus
@@ -139,7 +141,7 @@ export const SaveToHostTreeDialog: React.FC<SaveToHostTreeDialogProps> = ({
                             />
                         </div>
                         <div className="modal-form-group">
-                            <label>Folder</label>
+                            <label>{t('dialogs.saveToHostTree.folderLabel')}</label>
                             <div className="save-to-tree-folder-list" role="listbox">
                                 {folderRows.map((row) => {
                                     const isSelected = row.id === parentId;
@@ -164,7 +166,7 @@ export const SaveToHostTreeDialog: React.FC<SaveToHostTreeDialogProps> = ({
                                                     <input
                                                         ref={newFolderInputRef}
                                                         type="text"
-                                                        placeholder="New folder name"
+                                                        placeholder={t('dialogs.saveToHostTree.newFolderPlaceholder')}
                                                         value={newFolderName}
                                                         onChange={(e) => setNewFolderName(e.target.value)}
                                                         onKeyDown={(e) => {
@@ -183,13 +185,13 @@ export const SaveToHostTreeDialog: React.FC<SaveToHostTreeDialogProps> = ({
                                                         onClick={handleCreateFolder}
                                                         disabled={!canCreateFolder}
                                                     >
-                                                        Create
+                                                        {t('dialogs.saveToHostTree.create')}
                                                     </button>
                                                     <button
                                                         className="btn-secondary"
                                                         onClick={handleCancelCreateFolder}
                                                     >
-                                                        Cancel
+                                                        {t('common.cancel')}
                                                     </button>
                                                 </div>
                                             )}
@@ -202,18 +204,18 @@ export const SaveToHostTreeDialog: React.FC<SaveToHostTreeDialogProps> = ({
                                 onClick={handleNewFolderClick}
                                 disabled={creatingFolder}
                             >
-                                + New Folder
+                                {t('dialogs.saveToHostTree.newFolder')}
                             </button>
                         </div>
                     </>
                 )}
                 <div className="modal-actions">
                     <button className="btn-secondary" onClick={onClose}>
-                        Cancel
+                        {t('common.cancel')}
                     </button>
                     {entry !== null && (
                         <button className="btn-primary" onClick={handleSave} disabled={!canSave}>
-                            Save
+                            {t('common.save')}
                         </button>
                     )}
                 </div>

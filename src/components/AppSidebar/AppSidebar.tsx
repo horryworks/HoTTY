@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { usePaneStore } from '../../stores/paneStore';
 import { useSidebarLayoutStore, type SidebarEdge } from '../../stores/sidebarLayoutStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -11,25 +12,25 @@ interface AppSidebarProps {
 
 interface LayoutDef {
   mode: LayoutMode;
-  title: string;
+  titleKey: string;
   lines: Array<{ x1: number; y1: number; x2: number; y2: number }>;
 }
 
 const LAYOUT_DEFS: LayoutDef[] = [
-  { mode: '1x1', title: 'Single (1x1)', lines: [] },
+  { mode: '1x1', titleKey: 'chrome.appSidebar.layout.single', lines: [] },
   {
     mode: '1x2',
-    title: 'Split Vertical (1x2)',
+    titleKey: 'chrome.appSidebar.layout.splitVertical',
     lines: [{ x1: 12, y1: 2, x2: 12, y2: 22 }],
   },
   {
     mode: '2x1',
-    title: 'Split Horizontal (2x1)',
+    titleKey: 'chrome.appSidebar.layout.splitHorizontal',
     lines: [{ x1: 2, y1: 12, x2: 22, y2: 12 }],
   },
   {
     mode: '2x2',
-    title: 'Grid (2x2)',
+    titleKey: 'chrome.appSidebar.layout.grid2x2',
     lines: [
       { x1: 12, y1: 2, x2: 12, y2: 22 },
       { x1: 2, y1: 12, x2: 22, y2: 12 },
@@ -37,7 +38,7 @@ const LAYOUT_DEFS: LayoutDef[] = [
   },
   {
     mode: '2x3',
-    title: 'Grid (2x3)',
+    titleKey: 'chrome.appSidebar.layout.grid2x3',
     lines: [
       { x1: 8.6, y1: 2, x2: 8.6, y2: 22 },
       { x1: 15.3, y1: 2, x2: 15.3, y2: 22 },
@@ -46,7 +47,7 @@ const LAYOUT_DEFS: LayoutDef[] = [
   },
   {
     mode: '3x2',
-    title: 'Grid (3x2)',
+    titleKey: 'chrome.appSidebar.layout.grid3x2',
     lines: [
       { x1: 12, y1: 2, x2: 12, y2: 22 },
       { x1: 2, y1: 8.6, x2: 22, y2: 8.6 },
@@ -66,11 +67,11 @@ function LayoutIcon({ lines }: { lines: LayoutDef['lines'] }) {
   );
 }
 
-const EDGE_ICONS: Record<SidebarEdge, { title: string; line: { x1: number; y1: number; x2: number; y2: number } }> = {
-  left: { title: 'Toggle Left Sidebar', line: { x1: 8, y1: 2, x2: 8, y2: 22 } },
-  right: { title: 'Toggle Right Sidebar', line: { x1: 16, y1: 2, x2: 16, y2: 22 } },
-  top: { title: 'Toggle Top Bar', line: { x1: 2, y1: 8, x2: 22, y2: 8 } },
-  bottom: { title: 'Toggle Bottom Bar', line: { x1: 2, y1: 16, x2: 22, y2: 16 } },
+const EDGE_ICONS: Record<SidebarEdge, { titleKey: string; line: { x1: number; y1: number; x2: number; y2: number } }> = {
+  left: { titleKey: 'chrome.appSidebar.edge.left', line: { x1: 8, y1: 2, x2: 8, y2: 22 } },
+  right: { titleKey: 'chrome.appSidebar.edge.right', line: { x1: 16, y1: 2, x2: 16, y2: 22 } },
+  top: { titleKey: 'chrome.appSidebar.edge.top', line: { x1: 2, y1: 8, x2: 22, y2: 8 } },
+  bottom: { titleKey: 'chrome.appSidebar.edge.bottom', line: { x1: 2, y1: 16, x2: 22, y2: 16 } },
 };
 
 function EdgeIcon({ edge }: { edge: SidebarEdge }) {
@@ -102,6 +103,7 @@ function SettingsIcon() {
 }
 
 export function AppSidebar({ onOpenSettings, onOpenHelp }: AppSidebarProps) {
+  const { t } = useTranslation();
   const layoutMode = usePaneStore((s) => s.layoutMode);
   const setLayoutMode = usePaneStore((s) => s.setLayoutMode);
   const sidebar = useSidebarLayoutStore();
@@ -126,7 +128,7 @@ export function AppSidebar({ onOpenSettings, onOpenHelp }: AppSidebarProps) {
             key={def.mode}
             className={`app-sidebar-btn${def.mode === layoutMode ? ' app-sidebar-btn-active' : ''}`}
             onClick={() => setLayoutMode(def.mode)}
-            title={def.title}
+            title={t(def.titleKey)}
             role="button"
             tabIndex={0}
           >
@@ -139,7 +141,7 @@ export function AppSidebar({ onOpenSettings, onOpenHelp }: AppSidebarProps) {
             key={edge}
             className={`app-sidebar-btn${edgeVisible(edge) ? ' app-sidebar-btn-active' : ''}`}
             onClick={() => sidebar.toggle(edge)}
-            title={EDGE_ICONS[edge].title}
+            title={t(EDGE_ICONS[edge].titleKey)}
             role="button"
             tabIndex={0}
           >
@@ -152,7 +154,7 @@ export function AppSidebar({ onOpenSettings, onOpenHelp }: AppSidebarProps) {
           type="button"
           className={`app-sidebar-btn${lineWrapEnabled ? ' app-sidebar-btn-active' : ''}`}
           onClick={() => updateSetting('lineWrapEnabled', !lineWrapEnabled)}
-          title={lineWrapEnabled ? 'Disable Line Wrap' : 'Enable Line Wrap'}
+          title={lineWrapEnabled ? t('chrome.appSidebar.disableLineWrap') : t('chrome.appSidebar.enableLineWrap')}
         >
           {lineWrapEnabled ? (
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -170,7 +172,7 @@ export function AppSidebar({ onOpenSettings, onOpenHelp }: AppSidebarProps) {
           type="button"
           className="app-sidebar-btn"
           onClick={onOpenHelp}
-          title="Help / Documentation"
+          title={t('chrome.appSidebar.help')}
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
@@ -182,7 +184,7 @@ export function AppSidebar({ onOpenSettings, onOpenHelp }: AppSidebarProps) {
           type="button"
           className="app-sidebar-btn"
           onClick={onOpenSettings}
-          title="Settings"
+          title={t('chrome.appSidebar.settings')}
         >
           <SettingsIcon />
         </button>

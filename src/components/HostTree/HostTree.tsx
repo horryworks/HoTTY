@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { HostTreeNode, HostEntry } from '../../types/appTypes';
 import { flattenHosts, getJumpboxReferences } from '../../hooks/useHostManager';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -50,6 +51,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
     onImportData,
     onShowMessage,
 }) => {
+    const { t } = useTranslation();
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
     const [exportNode, setExportNode] = useState<HostTreeNode | null>(null);
@@ -193,7 +195,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
             openEditModal({ mode: 'import', parentId });
             setContextMenu(null);
         } catch (err: unknown) {
-            onShowMessage?.('error', 'Import Error', 'Failed to open file: ' + (err instanceof Error ? err.message : String(err)));
+            onShowMessage?.('error', t('hostTree.messages.importErrorTitle'), t('hostTree.messages.importErrorBody', { error: err instanceof Error ? err.message : String(err) }));
         }
     };
 
@@ -213,14 +215,14 @@ export const HostTree: React.FC<HostTreeProps> = ({
 
                 if (result.success) {
                     setTimeout(() => {
-                        onShowMessage?.('success', 'Export Successful', 'Host tree has been exported successfully.');
+                        onShowMessage?.('success', t('hostTree.messages.exportSuccessTitle'), t('hostTree.messages.exportSuccessBody'));
                         focusModal();
                     }, 50);
                 } else if (result.error) {
-                    onShowMessage?.('error', 'Export Failed', result.error);
+                    onShowMessage?.('error', t('hostTree.messages.exportFailedTitle'), result.error);
                 }
             } catch (err: unknown) {
-                onShowMessage?.('error', 'Export Failed', err instanceof Error ? err.message : String(err));
+                onShowMessage?.('error', t('hostTree.messages.exportFailedTitle'), err instanceof Error ? err.message : String(err));
             }
             return;
         }
@@ -247,12 +249,12 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     setFormPassword('');
 
                     setTimeout(() => {
-                        onShowMessage?.('success', 'Import Successful', currentParentId ? 'Hosts imported successfully.' : `Hosts imported and added to "Imported_${fileName}" folder.`);
+                        onShowMessage?.('success', t('hostTree.messages.importSuccessTitle'), currentParentId ? t('hostTree.messages.importSuccessBody') : t('hostTree.messages.importSuccessIntoFolder', { folderName: `Imported_${fileName}` }));
                         focusModal();
                     }, 50);
                 }
             } catch (err: unknown) {
-                onShowMessage?.('error', 'Import Failed', err instanceof Error ? err.message : String(err));
+                onShowMessage?.('error', t('hostTree.messages.importFailedTitle'), err instanceof Error ? err.message : String(err));
             }
             return;
         }
@@ -513,7 +515,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 <div
                     className="tree-toolbar-btn"
                     role="button"
-                    title="Add Folder"
+                    title={t('hostTree.toolbar.addFolder')}
                     onClick={() => openAddFolder(getTargetParentId())}
                     style={{ cursor: 'pointer' }}
                 >
@@ -526,7 +528,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 <div
                     className="tree-toolbar-btn"
                     role="button"
-                    title="Add Host"
+                    title={t('hostTree.toolbar.addHost')}
                     onClick={() => openAddHost(getTargetParentId())}
                     style={{ cursor: 'pointer' }}
                 >
@@ -542,7 +544,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 <div
                     className="tree-toolbar-btn"
                     role="button"
-                    title="Export Tree"
+                    title={t('hostTree.toolbar.exportTree')}
                     onClick={() => handleExport(null)}
                     style={{ cursor: 'pointer' }}
                 >
@@ -555,7 +557,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 <div
                     className="tree-toolbar-btn"
                     role="button"
-                    title="Import Tree"
+                    title={t('hostTree.toolbar.importTree')}
                     onClick={() => handleImport(null)}
                     style={{ cursor: 'pointer' }}
                 >
@@ -575,7 +577,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         style={{ paddingLeft: '8px' }}
                         role="button"
                         tabIndex={0}
-                        title="Start a new connection (clears the form)"
+                        title={t('hostTree.newConnectionTitle')}
                         onClick={onNewConnection}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
@@ -590,11 +592,11 @@ export const HostTree: React.FC<HostTreeProps> = ({
                             </svg>
                         </span>
                         <span className="tree-icon" aria-hidden="true">{'\u{1F195}'}</span>
-                        <span className="tree-label">New Connection</span>
+                        <span className="tree-label">{t('hostTree.newConnection')}</span>
                     </div>
                 )}
                 {tree.length === 0 && (
-                    <div className="host-tree-empty">Right-click or use the + buttons above to add hosts and folders</div>
+                    <div className="host-tree-empty">{t('hostTree.empty')}</div>
                 )}
                 {tree.map(node => renderNode(node, 0))}
             </div>
@@ -617,7 +619,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                         <line x1="9" y1="14" x2="15" y2="14"></line>
                                     </svg>
                                 </span>
-                                Add Folder
+                                {t('hostTree.contextMenu.addFolder')}
                             </button>
                             <button onClick={() => openAddHost(contextMenu.node?.id ?? null)}>
                                 <span className="menu-icon-wrapper">
@@ -629,7 +631,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                         <line x1="12" y1="17" x2="12" y2="21"></line>
                                     </svg>
                                 </span>
-                                Add Host
+                                {t('hostTree.contextMenu.addHost')}
                             </button>
                         </>
                     )}
@@ -649,7 +651,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                             <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
                                         </svg>
                                     </span>
-                                    Rename (F2)
+                                    {t('hostTree.contextMenu.rename')}
                                 </button>
                             )}
                             <button
@@ -662,7 +664,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                         <line x1="12" y1="3" x2="12" y2="15"></line>
                                     </svg>
                                 </span>
-                                Export
+                                {t('hostTree.contextMenu.export')}
                             </button>
                             {contextMenu.node?.type === 'folder' && (
                                 <button
@@ -675,7 +677,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                             <line x1="12" y1="15" x2="12" y2="3"></line>
                                         </svg>
                                     </span>
-                                    Import
+                                    {t('hostTree.contextMenu.import')}
                                 </button>
                             )}
                             {contextMenu.node.type === 'folder' && onSortFolder && (
@@ -690,7 +692,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                             <path d="M18 15l-6-6-6 6"></path>
                                         </svg>
                                     </span>
-                                    Sort Ascending
+                                    {t('hostTree.contextMenu.sortAscending')}
                                 </button>
                             )}
                             <button
@@ -708,7 +710,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                         <line x1="14" y1="11" x2="14" y2="17"></line>
                                     </svg>
                                 </span>
-                                Delete
+                                {t('common.delete')}
                             </button>
                         </>
                     )}
@@ -732,14 +734,14 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         }}
                     >
                         <h3>
-                            {editModal.mode === 'folder' ? (editModal.existingNode ? 'Rename Folder' : 'Add Folder') :
-                                editModal.mode === 'host' ? (editModal.existingNode ? 'Edit Host' : 'Add Host') :
-                                    editModal.mode === 'export' ? 'Export Host Tree' : 'Import Host Tree'}
+                            {editModal.mode === 'folder' ? (editModal.existingNode ? t('hostTree.modal.renameFolder') : t('hostTree.modal.addFolder')) :
+                                editModal.mode === 'host' ? (editModal.existingNode ? t('hostTree.modal.editHost') : t('hostTree.modal.addHost')) :
+                                    editModal.mode === 'export' ? t('hostTree.modal.exportTitle') : t('hostTree.modal.importTitle')}
                         </h3>
 
                         {editModal.mode !== 'export' && editModal.mode !== 'import' && (
                             <div className="modal-form-group">
-                                <label>Display Name</label>
+                                <label>{t('hostTree.modal.displayName')}</label>
                                 <input
                                     ref={modalInputRef}
                                     autoFocus
@@ -754,7 +756,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         {(editModal.mode === 'export' || editModal.mode === 'import') && (
                             <div className="modal-form-group">
                                 <label>
-                                    {editModal.mode === 'export' ? 'Set encryption password:' : 'Enter decryption password:'}
+                                    {editModal.mode === 'export' ? t('hostTree.modal.setEncryptionPassword') : t('hostTree.modal.enterDecryptionPassword')}
                                 </label>
                                 <input
                                     ref={modalInputRef}
@@ -767,8 +769,8 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                 />
                                 <p style={{ fontSize: 'calc(var(--font-size-base) - 4px)', color: 'var(--text-secondary)', marginTop: '4px' }}>
                                     {editModal.mode === 'export'
-                                        ? 'This password will be required to import the file later.'
-                                        : 'Enter the password that was used to export this file.'}
+                                        ? t('hostTree.modal.exportPasswordHint')
+                                        : t('hostTree.modal.importPasswordHint')}
                                 </p>
                             </div>
                         )}
@@ -776,7 +778,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         {editModal.mode === 'host' && (
                             <>
                                 <div className="modal-form-group">
-                                    <label>Protocol</label>
+                                    <label>{t('hostTree.modal.protocol')}</label>
                                     <select
                                         value={formProtocol}
                                         onChange={e => {
@@ -799,7 +801,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                                 checked={formIsJumpbox}
                                                 onChange={e => setFormIsJumpbox(e.target.checked)}
                                             />
-                                            Use as Jumpbox
+                                            {t('hostTree.modal.useAsJumpbox')}
                                         </label>
                                     </div>
                                 )}
@@ -807,17 +809,17 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                     <>
                                         <div className="modal-form-row">
                                             <div className="modal-form-group flex-3">
-                                                <label>Host/IP</label>
+                                                <label>{t('hostTree.modal.hostLabel')}</label>
                                                 <input
                                                     type="text"
                                                     value={formHost}
                                                     onChange={e => setFormHost(e.target.value)}
                                                     onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
-                                                    placeholder="192.168.1.1"
+                                                    placeholder={t('hostTree.modal.hostPlaceholder')}
                                                 />
                                             </div>
                                             <div className="modal-form-group flex-1">
-                                                <label>Port</label>
+                                                <label>{t('hostTree.modal.portLabel')}</label>
                                                 <input
                                                     type="number"
                                                     value={formPort}
@@ -827,7 +829,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                             </div>
                                         </div>
                                         <div className="modal-form-group">
-                                            <label>Username</label>
+                                            <label>{t('hostTree.modal.usernameLabel')}</label>
                                             <input
                                                 type="text"
                                                 value={formUsername}
@@ -837,7 +839,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                             />
                                         </div>
                                         <div className="modal-form-group">
-                                            <label>Password</label>
+                                            <label>{t('hostTree.modal.passwordLabel')}</label>
                                             <input
                                                 type="password"
                                                 value={formPassword}
@@ -852,10 +854,10 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         )}
 
                         <div className="modal-actions">
-                            <button className="btn-secondary" onClick={closeEditModal}>Cancel</button>
+                            <button className="btn-secondary" onClick={closeEditModal}>{t('common.cancel')}</button>
                             <button className="btn-primary" onClick={handleModalSubmit}>
-                                {editModal.mode === 'export' ? 'Export' :
-                                    editModal.mode === 'import' ? 'Import' : 'Save'}
+                                {editModal.mode === 'export' ? t('hostTree.modal.export') :
+                                    editModal.mode === 'import' ? t('hostTree.modal.import') : t('common.save')}
                             </button>
                         </div>
                     </div>
@@ -867,12 +869,12 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     ? getJumpboxReferences(tree, nodeToDelete.id)
                     : [];
                 const refWarning = jumpboxRefs.length > 0
-                    ? `\n\nThis host is used as a jumpbox by ${jumpboxRefs.length} host(s): ${jumpboxRefs.map(r => r.name).join(', ')}. Their jumpbox setting will be cleared.`
+                    ? t('hostTree.delete.jumpboxWarning', { count: jumpboxRefs.length, names: jumpboxRefs.map(r => r.name).join(', ') })
                     : '';
                 return (
                 <ConfirmModal
-                    title={`Delete ${nodeToDelete.type === 'folder' ? 'Folder' : 'Host'}`}
-                    message={`Are you sure you want to delete "${nodeToDelete.name}"?\nThis action cannot be undone.${refWarning}`}
+                    title={nodeToDelete.type === 'folder' ? t('hostTree.delete.titleFolder') : t('hostTree.delete.titleHost')}
+                    message={t('hostTree.delete.message', { name: nodeToDelete.name, warning: refWarning })}
                     onConfirm={() => {
                         for (const ref of jumpboxRefs) {
                             onEditNode(ref.id, { entry: { ...ref.entry!, jumpboxId: undefined } });

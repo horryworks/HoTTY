@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   useErrorNotificationStore,
   type ErrorNotification as ErrorNotificationItem,
@@ -13,6 +14,7 @@ interface ItemProps {
 }
 
 function Item({ item, onDismiss }: ItemProps): React.JSX.Element {
+  const { t } = useTranslation();
   useEffect(() => {
     const timer = setTimeout(() => onDismiss(item.id), AUTO_DISMISS_MS);
     return () => clearTimeout(timer);
@@ -28,7 +30,7 @@ function Item({ item, onDismiss }: ItemProps): React.JSX.Element {
         type="button"
         className="error-notification-close"
         onClick={() => onDismiss(item.id)}
-        aria-label="Dismiss error notification"
+        aria-label={t('notifications.error.dismiss')}
       >
         ✕
       </button>

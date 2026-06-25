@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface OpenAIAuthPanelProps {
     apiKey: string;
@@ -15,6 +16,7 @@ export const OpenAIAuthPanel: React.FC<OpenAIAuthPanelProps> = ({
     onLogin,
     authError,
 }) => {
+    const { t } = useTranslation();
     return (
         <div className="ai-chat-auth-container">
             <div className="ai-chat-auth-card">
@@ -25,15 +27,15 @@ export const OpenAIAuthPanel: React.FC<OpenAIAuthPanelProps> = ({
                         <rect x="9" y="17" width="5" height="1.5" rx="0.75" fill="white" />
                     </svg>
                 </div>
-                <h2>Connect to OpenAI</h2>
+                <h2>{t('aiChat.auth.openaiTitle')}</h2>
                 <div className="ai-chat-auth-form">
-                    <label>API Key</label>
+                    <label>{t('aiChat.auth.apiKey')}</label>
                     <input
                         type="password"
                         value={apiKey}
                         onChange={(e) => setApiKey(e.target.value)}
                         className="ai-chat-input"
-                        placeholder="sk-..."
+                        placeholder={t('aiChat.auth.openaiKeyPlaceholder')}
                         autoComplete="off"
                     />
                     <button
@@ -41,7 +43,7 @@ export const OpenAIAuthPanel: React.FC<OpenAIAuthPanelProps> = ({
                         onClick={onLogin}
                         disabled={!apiKey || isAuthLoading}
                     >
-                        {isAuthLoading ? 'Connecting...' : 'Connect to OpenAI'}
+                        {isAuthLoading ? t('aiChat.auth.connecting') : t('aiChat.auth.connectOpenai')}
                     </button>
                     {authError && <div className="ai-chat-auth-error">{authError}</div>}
                 </div>

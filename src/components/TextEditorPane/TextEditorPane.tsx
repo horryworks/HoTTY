@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { TextEditorTab } from '../../types/appTypes';
@@ -46,6 +47,7 @@ export function TextEditorPane({
   initialFilePath,
   onDisplayNameChange,
 }: TextEditorPaneProps) {
+  const { t } = useTranslation();
   const [tabs, setTabs] = useState<TextEditorTab[]>(() => [makeTab()]);
   const [activeTabId, setActiveTabId] = useState(tabs[0].id);
   const [cursorLine, setCursorLine] = useState(1);
@@ -99,10 +101,10 @@ export function TextEditorPane({
   // Update display name based on active tab
   const syncDisplayName = useCallback(
     (tab: TextEditorTab) => {
-      const name = tab.filePath ? filenameFromPath(tab.filePath) : 'Text Editor';
+      const name = tab.filePath ? filenameFromPath(tab.filePath) : t('panes.textEditor.displayName');
       onDisplayNameChange?.(name);
     },
-    [onDisplayNameChange],
+    [onDisplayNameChange, t],
   );
 
   // Load a file into a tab
@@ -753,7 +755,7 @@ export function TextEditorPane({
           onDrop={handleSubtabListDrop}
         >
           {tabs.map((tab, tabIndex) => {
-            const fileName = tab.filePath ? filenameFromPath(tab.filePath) : 'Untitled';
+            const fileName = tab.filePath ? filenameFromPath(tab.filePath) : t('panes.textEditor.untitled');
             const dirty = isTabDirty(tab);
             const isLastTab = tabIndex === tabs.length - 1;
             return (
@@ -762,7 +764,7 @@ export function TextEditorPane({
                 className={`text-editor-subtab${tab.id === activeTabId ? ' active' : ''}${dragTabId === tab.id ? ' dragging' : ''}${dropTargetId === tab.id ? ' drop-target' : ''}${dropAtEnd && isLastTab ? ' drop-target-right' : ''}`}
                 onClick={() => switchTab(tab.id)}
                 onMouseDown={(e) => handleSubTabMouseDown(e, tab.id)}
-                title={tab.filePath || 'Untitled'}
+                title={tab.filePath || t('panes.textEditor.untitled')}
                 draggable
                 onDragStart={(e) => handleTabDragStart(e, tab.id)}
                 onDragOver={(e) => handleTabDragOver(e, tab.id)}
@@ -798,7 +800,7 @@ export function TextEditorPane({
             );
           })}
         </div>
-        <div className="text-editor-subtab-new" onClick={addNewTab} title="New Tab">
+        <div className="text-editor-subtab-new" onClick={addNewTab} title={t('panes.textEditor.newTab')}>
           <svg
             width="12"
             height="12"
@@ -824,30 +826,30 @@ export function TextEditorPane({
               className={`text-editor-menu-btn${openMenu === 'file' ? ' active' : ''}`}
               onClick={() => setOpenMenu(openMenu === 'file' ? null : 'file')}
             >
-              File
+              {t('panes.textEditor.menuFile')}
             </button>
             {openMenu === 'file' && (
               <div className="text-editor-menu-dropdown">
                 <div className="text-editor-menu-item" onClick={handleNew}>
-                  <span>New Tab</span>
+                  <span>{t('panes.textEditor.fileNewTab')}</span>
                   <span className="text-editor-menu-shortcut">Ctrl+N</span>
                 </div>
                 <div className="text-editor-menu-item" onClick={handleOpen}>
-                  <span>Open...</span>
+                  <span>{t('panes.textEditor.fileOpen')}</span>
                   <span className="text-editor-menu-shortcut">Ctrl+O</span>
                 </div>
                 <div className="text-editor-menu-separator" />
                 <div className="text-editor-menu-item" onClick={handleSave}>
-                  <span>Save</span>
+                  <span>{t('panes.textEditor.fileSave')}</span>
                   <span className="text-editor-menu-shortcut">Ctrl+S</span>
                 </div>
                 <div className="text-editor-menu-item" onClick={handleSaveAs}>
-                  <span>Save As...</span>
+                  <span>{t('panes.textEditor.fileSaveAs')}</span>
                   <span className="text-editor-menu-shortcut">Ctrl+Shift+S</span>
                 </div>
                 <div className="text-editor-menu-separator" />
                 <div className="text-editor-menu-item" onClick={handleCloseTab}>
-                  <span>Close Tab</span>
+                  <span>{t('panes.textEditor.fileCloseTab')}</span>
                   <span className="text-editor-menu-shortcut">Ctrl+W</span>
                 </div>
               </div>
@@ -860,7 +862,7 @@ export function TextEditorPane({
               className={`text-editor-menu-btn${openMenu === 'edit' ? ' active' : ''}`}
               onClick={() => setOpenMenu(openMenu === 'edit' ? null : 'edit')}
             >
-              Edit
+              {t('panes.textEditor.menuEdit')}
             </button>
             {openMenu === 'edit' && (
               <div className="text-editor-menu-dropdown">
@@ -871,7 +873,7 @@ export function TextEditorPane({
                     setOpenMenu(null);
                   }}
                 >
-                  <span>Undo</span>
+                  <span>{t('panes.textEditor.editUndo')}</span>
                   <span className="text-editor-menu-shortcut">Ctrl+Z</span>
                 </div>
                 <div
@@ -881,7 +883,7 @@ export function TextEditorPane({
                     setOpenMenu(null);
                   }}
                 >
-                  <span>Redo</span>
+                  <span>{t('panes.textEditor.editRedo')}</span>
                   <span className="text-editor-menu-shortcut">Ctrl+Y</span>
                 </div>
                 <div className="text-editor-menu-separator" />
@@ -893,7 +895,7 @@ export function TextEditorPane({
                     setOpenMenu(null);
                   }}
                 >
-                  <span>Find</span>
+                  <span>{t('panes.textEditor.editFind')}</span>
                   <span className="text-editor-menu-shortcut">Ctrl+F</span>
                 </div>
                 <div
@@ -904,7 +906,7 @@ export function TextEditorPane({
                     setOpenMenu(null);
                   }}
                 >
-                  <span>Replace</span>
+                  <span>{t('panes.textEditor.editReplace')}</span>
                   <span className="text-editor-menu-shortcut">Ctrl+H</span>
                 </div>
                 <div className="text-editor-menu-separator" />
@@ -915,7 +917,7 @@ export function TextEditorPane({
                     setOpenMenu(null);
                   }}
                 >
-                  <span>Go to Line...</span>
+                  <span>{t('panes.textEditor.editGotoLine')}</span>
                   <span className="text-editor-menu-shortcut">Ctrl+G</span>
                 </div>
               </div>
@@ -928,7 +930,7 @@ export function TextEditorPane({
               className={`text-editor-menu-btn${openMenu === 'view' ? ' active' : ''}`}
               onClick={() => setOpenMenu(openMenu === 'view' ? null : 'view')}
             >
-              View
+              {t('panes.textEditor.menuView')}
             </button>
             {openMenu === 'view' && (
               <div className="text-editor-menu-dropdown">
@@ -939,7 +941,7 @@ export function TextEditorPane({
                     setOpenMenu(null);
                   }}
                 >
-                  <span>{lineWrapEnabled ? '\u2713 ' : '\u2003 '}Line Wrap</span>
+                  <span>{lineWrapEnabled ? '\u2713 ' : '\u2003 '}{t('panes.textEditor.viewLineWrap')}</span>
                 </div>
                 <div
                   className="text-editor-menu-item"
@@ -948,7 +950,7 @@ export function TextEditorPane({
                     setOpenMenu(null);
                   }}
                 >
-                  <span>{showReturnCodes ? '\u2713 ' : '\u2003 '}Show Return Codes</span>
+                  <span>{showReturnCodes ? '\u2713 ' : '\u2003 '}{t('panes.textEditor.viewShowReturnCodes')}</span>
                 </div>
               </div>
             )}
@@ -956,9 +958,9 @@ export function TextEditorPane({
         </div>
 
         <div className="text-editor-status">
-          {isTabDirty(activeTab) && <span title="Unsaved changes">Modified</span>}
+          {isTabDirty(activeTab) && <span title={t('panes.textEditor.unsavedChanges')}>{t('panes.textEditor.modified')}</span>}
           <span>
-            Ln {cursorLine}, Col {cursorCol}
+            {t('panes.textEditor.cursorPosition', { line: cursorLine, col: cursorCol })}
           </span>
 
           <div style={{ position: 'relative' }}>
@@ -1016,7 +1018,7 @@ export function TextEditorPane({
       {/* Find/Replace Bar */}
       {showFind && (
         <div className="text-editor-find-bar">
-          <span className="text-editor-find-label">Find:</span>
+          <span className="text-editor-find-label">{t('panes.textEditor.findLabel')}</span>
           <input
             ref={findInputRef}
             className="text-editor-find-input"
@@ -1029,14 +1031,14 @@ export function TextEditorPane({
                 setShowReplace(false);
               }
             }}
-            placeholder="Search..."
+            placeholder={t('panes.textEditor.searchPlaceholder')}
           />
           <button type="button" className="text-editor-find-btn" onClick={handleFindNext}>
-            Next
+            {t('panes.textEditor.findNext')}
           </button>
           {showReplace && (
             <>
-              <span className="text-editor-find-label">Replace:</span>
+              <span className="text-editor-find-label">{t('panes.textEditor.replaceLabel')}</span>
               <input
                 className="text-editor-find-input"
                 value={replaceText}
@@ -1048,13 +1050,13 @@ export function TextEditorPane({
                     setShowReplace(false);
                   }
                 }}
-                placeholder="Replace..."
+                placeholder={t('panes.textEditor.replacePlaceholder')}
               />
               <button type="button" className="text-editor-find-btn" onClick={handleReplaceCurrent}>
-                Replace
+                {t('panes.textEditor.replace')}
               </button>
               <button type="button" className="text-editor-find-btn" onClick={handleReplaceAll}>
-                All
+                {t('panes.textEditor.replaceAll')}
               </button>
             </>
           )}
@@ -1122,7 +1124,7 @@ export function TextEditorPane({
       {showGoto && (
         <div className="text-editor-goto-overlay" onClick={() => setShowGoto(false)}>
           <div className="text-editor-goto-dialog" onClick={(e) => e.stopPropagation()}>
-            <label>Go to Line (1-{activeTab.content.split('\n').length}):</label>
+            <label>{t('panes.textEditor.gotoLine', { max: activeTab.content.split('\n').length })}</label>
             <input
               ref={gotoInputRef}
               type="number"
@@ -1144,7 +1146,7 @@ export function TextEditorPane({
           filename={
             pendingCloseTab.filePath
               ? filenameFromPath(pendingCloseTab.filePath)
-              : 'Untitled'
+              : t('panes.textEditor.untitled')
           }
           onSave={handleSaveConfirmSave}
           onDiscard={handleSaveConfirmDiscard}

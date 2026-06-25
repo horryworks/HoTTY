@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { useModalEscape } from '../../hooks/useModalEscape';
 import './SaveConfirmModal.css';
 
@@ -15,6 +16,7 @@ export const SaveConfirmModal: React.FC<SaveConfirmModalProps> = ({
   onDiscard,
   onCancel,
 }) => {
+  const { t } = useTranslation();
   const saveButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -27,31 +29,34 @@ export const SaveConfirmModal: React.FC<SaveConfirmModalProps> = ({
     <div className="save-confirm-modal-overlay" role="dialog" aria-modal="true">
       <div className="save-confirm-modal">
         <h3>
-          <span>&#9888;</span> Unsaved changes
+          <span>&#9888;</span> {t('dialogs.saveConfirm.heading')}
         </h3>
         <div className="save-confirm-content">
-          <span className="save-confirm-filename">{filename}</span> has unsaved
-          changes. Do you want to save before closing?
+          <Trans
+            i18nKey="dialogs.saveConfirm.body"
+            values={{ filename }}
+            components={[<span className="save-confirm-filename" key="filename" />]}
+          />
         </div>
         <div className="save-confirm-modal-actions">
           <button
             className="save-confirm-btn secondary"
             onClick={onCancel}
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             className="save-confirm-btn danger"
             onClick={onDiscard}
           >
-            Don&apos;t save
+            {t('dialogs.saveConfirm.dontSave')}
           </button>
           <button
             className="save-confirm-btn primary"
             onClick={onSave}
             ref={saveButtonRef}
           >
-            Save
+            {t('common.save')}
           </button>
         </div>
       </div>

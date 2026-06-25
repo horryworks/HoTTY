@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Encoding, FeatureId, PromptPattern, ThemeId, CommandExecutionMode, ClassifierStrategy, PersonaDefinition, AskAiCommand } from '../types/appTypes';
+import type { Encoding, FeatureId, PromptPattern, ThemeId, LanguageId, CommandExecutionMode, ClassifierStrategy, PersonaDefinition, AskAiCommand } from '../types/appTypes';
 import { DEFAULT_THEMES } from '../themes/defaults';
 import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from '../utils/commandLists';
 
@@ -109,6 +109,9 @@ function mergeDefaultPersonas(
 }
 
 interface SettingsState {
+  // UI language (i18n) — distinct from the AI response language.
+  language: LanguageId;
+
   // Appearance
   theme: ThemeId;
   fontSize: number;
@@ -182,6 +185,7 @@ interface SettingsActions {
 }
 
 const DEFAULTS: SettingsState = {
+  language: 'en',
   theme: 'dark',
   fontSize: 14,
   fontFamily: 'Consolas, "Courier New", monospace',
@@ -240,7 +244,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 16,
+      version: 17,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -310,6 +314,9 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
         if (version < 16) {
           state.aiSleepAsClientDelay ??= DEFAULTS.aiSleepAsClientDelay;
           state.aiSleepMaxDelaySecs ??= DEFAULTS.aiSleepMaxDelaySecs;
+        }
+        if (version < 17) {
+          state.language ??= DEFAULTS.language;
         }
         return state as SettingsState;
       },

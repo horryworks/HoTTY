@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
 import { usePingMonitorEvents } from '../../hooks/usePingMonitorEvents';
 import { useResize } from '../../hooks/useResize';
@@ -35,6 +36,7 @@ function formatIntervalLabel(ms: number): string {
 }
 
 export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
+  const { t } = useTranslation();
   const [targetInput, setTargetInput] = useState('');
   const [intervalMs, setIntervalMs] = useState(5000);
   const [running, setRunning] = useState(false);
@@ -73,7 +75,7 @@ export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
   const handleStart = useCallback(async () => {
     const targets = parseTargets(targetInput);
     if (targets.length === 0) {
-      setError('Enter at least one target');
+      setError(t('panes.pingMonitor.errorNoTargets'));
       return;
     }
     setError(null);
@@ -83,7 +85,7 @@ export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
     } catch (e) {
       setError(String(e));
     }
-  }, [paneId, targetInput, intervalMs, loggingEnabled, loggingPath]);
+  }, [paneId, targetInput, intervalMs, loggingEnabled, loggingPath, t]);
 
   const handleStop = useCallback(async () => {
     try {
@@ -121,19 +123,19 @@ export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
   return (
     <div className={`ping-monitor-pane${active ? ' active' : ''}`} data-pane-id={paneId}>
       <div className="ping-monitor-toolbar">
-        <span className="ping-monitor-toolbar-title">Ping Monitor</span>
+        <span className="ping-monitor-toolbar-title">{t('panes.pingMonitor.title')}</span>
         {logFileName && (
           <span className="ping-monitor-log-indicator" title={logFileName}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
             </svg>
-            Logging
+            {t('panes.pingMonitor.logging')}
           </span>
         )}
         <span className="ping-monitor-toolbar-spacer" />
         <label className="ping-monitor-interval-label">
-          Interval:
+          {t('panes.pingMonitor.intervalLabel')}
           <select
             className="ping-monitor-interval-select"
             value={intervalMs}
@@ -147,12 +149,12 @@ export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
         {running ? (
           <button type="button" className="ping-monitor-toolbar-btn ping-monitor-btn-stop" onClick={handleStop}>
             <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><rect width="10" height="10" rx="1" /></svg>
-            Stop
+            {t('panes.pingMonitor.stop')}
           </button>
         ) : (
           <button type="button" className="ping-monitor-toolbar-btn ping-monitor-btn-start" onClick={handleStart}>
             <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><polygon points="0,0 10,5 0,10" /></svg>
-            Start
+            {t('panes.pingMonitor.start')}
           </button>
         )}
       </div>
@@ -163,8 +165,8 @@ export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
         {!panelCollapsed && (
           <div className="ping-monitor-targets-panel" style={{ width: `${panelRatio * 100}%` }}>
             <div className="ping-monitor-targets-header">
-              <span className="ping-monitor-targets-title">Targets</span>
-              <span className="ping-monitor-targets-count">{targetCount} target{targetCount !== 1 ? 's' : ''}</span>
+              <span className="ping-monitor-targets-title">{t('panes.pingMonitor.targets')}</span>
+              <span className="ping-monitor-targets-count">{t('panes.pingMonitor.targetCount', { count: targetCount })}</span>
             </div>
             <textarea
               className="ping-monitor-target-input"
@@ -181,7 +183,7 @@ export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
                   onChange={(e) => setLoggingEnabled(e.target.checked)}
                   disabled={running}
                 />
-                CSV Logging
+                {t('panes.pingMonitor.csvLogging')}
               </label>
               {loggingEnabled && (
                 <input
@@ -189,7 +191,7 @@ export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
                   className="ping-monitor-logging-path"
                   value={loggingPath}
                   onChange={(e) => setLoggingPath(e.target.value)}
-                  placeholder="Log folder path..."
+                  placeholder={t('panes.pingMonitor.loggingPathPlaceholder')}
                   disabled={running}
                 />
               )}
@@ -203,7 +205,7 @@ export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
             type="button"
             className={`ping-monitor-divider-toggle${panelCollapsed ? ' collapsed' : ''}`}
             onClick={toggleCollapse}
-            title={panelCollapsed ? 'Show targets panel' : 'Hide targets panel'}
+            title={panelCollapsed ? t('panes.pingMonitor.showTargetsPanel') : t('panes.pingMonitor.hideTargetsPanel')}
           >
             <svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor">
               <path d={panelCollapsed ? 'M2 0l6 6-6 6z' : 'M6 0L0 6l6 6z'} />
@@ -218,11 +220,11 @@ export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
                 <thead>
                   <tr>
                     <th className="ping-monitor-th-num">#</th>
-                    <th>Target</th>
-                    <th>Status</th>
-                    <th>RTT</th>
-                    <th>TTL</th>
-                    <th>Last Check</th>
+                    <th>{t('panes.pingMonitor.thTarget')}</th>
+                    <th>{t('panes.pingMonitor.thStatus')}</th>
+                    <th>{t('panes.pingMonitor.thRtt')}</th>
+                    <th>{t('panes.pingMonitor.thTtl')}</th>
+                    <th>{t('panes.pingMonitor.thLastCheck')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -241,7 +243,7 @@ export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
             </div>
           ) : (
             <div className="ping-monitor-placeholder">
-              {running ? 'Waiting for results...' : 'Enter targets in the editor and click Start'}
+              {running ? t('panes.pingMonitor.waitingResults') : t('panes.pingMonitor.enterTargets')}
             </div>
           )}
         </div>
@@ -249,10 +251,10 @@ export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
 
       <div className="ping-monitor-statusbar">
         <span className={`ping-monitor-status-dot ${running ? 'running' : 'stopped'}`} />
-        <span className="ping-monitor-status-label">{running ? 'Running' : 'Stopped'}</span>
-        <span className="ping-monitor-status-info">{targetCount} target{targetCount !== 1 ? 's' : ''}</span>
-        <span className="ping-monitor-status-info">Interval: {formatIntervalLabel(intervalMs)}</span>
-        {logFileName && <span className="ping-monitor-status-info">Log: {logFileName}</span>}
+        <span className="ping-monitor-status-label">{running ? t('panes.pingMonitor.statusRunning') : t('panes.pingMonitor.statusStopped')}</span>
+        <span className="ping-monitor-status-info">{t('panes.pingMonitor.targetCount', { count: targetCount })}</span>
+        <span className="ping-monitor-status-info">{t('panes.pingMonitor.statusInterval', { interval: formatIntervalLabel(intervalMs) })}</span>
+        {logFileName && <span className="ping-monitor-status-info">{t('panes.pingMonitor.statusLog', { filename: logFileName })}</span>}
       </div>
     </div>
   );

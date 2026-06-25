@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useModalEscape } from '../../hooks/useModalEscape';
 import './ConfirmModal.css';
 
@@ -10,8 +11,11 @@ interface ConfirmModalProps {
     onCancel: () => void;
 }
 
-export const ConfirmModal: React.FC<ConfirmModalProps> = ({ title = 'Confirm', message, confirmLabel = 'Delete', onConfirm, onCancel }) => {
+export const ConfirmModal: React.FC<ConfirmModalProps> = ({ title, message, confirmLabel, onConfirm, onCancel }) => {
+    const { t } = useTranslation();
     const cancelButtonRef = useRef<HTMLButtonElement>(null);
+    const resolvedTitle = title ?? t('dialogs.confirm.title');
+    const resolvedConfirmLabel = confirmLabel ?? t('dialogs.confirm.confirmLabel');
 
     useEffect(() => {
         if (cancelButtonRef.current) {
@@ -25,7 +29,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({ title = 'Confirm', m
         <div className="confirm-modal-overlay">
             <div className="confirm-modal">
                 <h3>
-                    <span>&#10067;</span> {title}
+                    <span>&#10067;</span> {resolvedTitle}
                 </h3>
                 <div className="confirm-content">
                     {message}
@@ -36,13 +40,13 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({ title = 'Confirm', m
                         onClick={onCancel}
                         ref={cancelButtonRef}
                     >
-                        Cancel
+                        {t('common.cancel')}
                     </button>
                     <button
                         className="confirm-btn danger"
                         onClick={onConfirm}
                     >
-                        {confirmLabel}
+                        {resolvedConfirmLabel}
                     </button>
                 </div>
             </div>

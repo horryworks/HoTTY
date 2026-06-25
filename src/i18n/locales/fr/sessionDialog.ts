@@ -1,0 +1,72 @@
+// New Session dialog (connection flow). Covers the dialog chrome, the host/GCP
+// tabs, the status banner, the connection form fields/labels/placeholders, the
+// protocol-specific field groups (SSH / Serial / WSL / Git Bash), validation
+// messages, and the discard-changes confirmation.
+export const sessionDialog = {
+  title: 'Nouvelle session',
+  tabs: {
+    sourceAriaLabel: 'Source de connexion',
+    hosts: 'Hôtes',
+    gcp: 'GCP',
+  },
+  banner: {
+    newConnection: 'Nouvelle connexion',
+    // {{name}} is the host display name (or the unnamed fallback).
+    editing: 'Modification :',
+    unnamed: '(sans nom)',
+    startNewTitle: 'Démarrer une nouvelle connexion',
+    clearAriaLabel: 'Effacer le formulaire et démarrer une nouvelle connexion',
+  },
+  decrypting: 'Déchiffrement...',
+  nameLabel: 'Nom',
+  namePlaceholder: "Nom d'affichage",
+  protocolLabel: 'Protocole',
+  useAsJumpbox: 'Utiliser comme jumpbox',
+  hostLabel: 'Hôte/IP',
+  hostPlaceholder: 'exemple.com',
+  portLabel: 'Port',
+  usernameLabel: "Nom d'utilisateur",
+  passwordLabel: 'Mot de passe',
+  jumpboxLabel: 'Jumpbox (bastion)',
+  directConnection: 'Connexion directe',
+  privateKeyPathLabel: 'Chemin de la clé privée (facultatif)',
+  privateKeyPathPlaceholder: '~/.ssh/id_rsa',
+  privateKeyPassphraseLabel: 'Phrase secrète de la clé privée',
+  serialPortLabel: 'Port série',
+  serialPortPlaceholder: 'COM3',
+  baudRateLabel: 'Débit en bauds',
+  dataBitsLabel: 'Bits de données',
+  parityLabel: 'Parité',
+  parity: {
+    none: 'Aucune',
+    odd: 'Impaire',
+    even: 'Paire',
+    mark: 'Marque',
+    space: 'Espace',
+  },
+  stopBitsLabel: "Bits d'arrêt",
+  flowControlLabel: 'Contrôle de flux',
+  flowControl: {
+    none: 'Aucun',
+  },
+  distributionLabel: 'Distribution',
+  noWslDistros: 'Aucune distribution WSL trouvée.',
+  gitBashNotInstalled: "Git Bash n'est pas installé.",
+  encodingLabel: 'Encodage',
+  saveTitleDirty: 'Enregistrer les modifications de cet hôte',
+  saveTitleClean: 'Aucune modification à enregistrer',
+  connect: 'Se connecter',
+  browseKeyTitle: 'Sélectionner le fichier de clé privée',
+  validation: {
+    hostRequired: "L'hôte est requis.",
+    hostInvalidWhitespace: "L'hôte contient des espaces ou des sauts de ligne non valides.",
+    portRange: 'Le port doit être un entier entre 1 et 65535.',
+    usernameRequiredSsh: "Le nom d'utilisateur est requis pour SSH.",
+    usernameInvalidNewline: "Le nom d'utilisateur contient des sauts de ligne non valides.",
+  },
+  discard: {
+    title: 'Abandonner les modifications ?',
+    message: 'Ce formulaire contient des modifications non enregistrées. Changer les abandonnera.',
+    confirmLabel: 'Abandonner',
+  },
+};

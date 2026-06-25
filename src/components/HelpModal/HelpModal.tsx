@@ -1,4 +1,5 @@
 import type React from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import './HelpModal.css';
 
 const FeaturesIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
@@ -23,13 +24,15 @@ interface HelpModalProps {
 }
 
 export function HelpModal({ open, onClose }: HelpModalProps) {
+  const { t } = useTranslation();
+
   if (!open) return null;
 
   return (
     <div className="settings-modal-overlay" onClick={onClose}>
       <div className="settings-modal help-modal" onClick={(e) => e.stopPropagation()}>
         <div className="settings-modal-header">
-          <span>Help & Documentation</span>
+          <span>{t('help.title')}</span>
           <button className="help-modal-close" onClick={onClose}>
             <svg viewBox="0 0 24 24" width="20" height="20">
               <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor" />
@@ -40,73 +43,115 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
         <div className="settings-modal-body help-content">
 
           <details className="help-section" open>
-            <summary>Shortcuts</summary>
+            <summary>{t('help.shortcuts.summary')}</summary>
             <div className="help-section-body">
               <ul className="shortcuts-list">
-                <li><code>Ctrl + N</code> New Session Dialog</li>
-                <li><code>Ctrl + Tab</code> Focus next pane</li>
-                <li><code>Ctrl + Shift + Tab</code> Focus previous pane</li>
-                <li><code>Ctrl + W</code> Close current tab</li>
-                <li><code>Ctrl + C</code> Clear selection / Send SIGINT</li>
-                <li><code>Ctrl + V</code> Paste to terminal (with security check)</li>
-                <li><code>Ctrl + Enter</code> Send message in Ask AI dialog</li>
-                <li><code>Escape</code> Close modal / dialog</li>
+                <li><code>Ctrl + N</code> {t('help.shortcuts.newSession')}</li>
+                <li><code>Ctrl + Tab</code> {t('help.shortcuts.focusNext')}</li>
+                <li><code>Ctrl + Shift + Tab</code> {t('help.shortcuts.focusPrev')}</li>
+                <li><code>Ctrl + W</code> {t('help.shortcuts.closeTab')}</li>
+                <li><code>Ctrl + C</code> {t('help.shortcuts.clearOrSigint')}</li>
+                <li><code>Ctrl + V</code> {t('help.shortcuts.paste')}</li>
+                <li><code>Ctrl + Enter</code> {t('help.shortcuts.sendMessage')}</li>
+                <li><code>Escape</code> {t('help.shortcuts.closeModal')}</li>
               </ul>
             </div>
           </details>
 
           <details className="help-section" open>
-            <summary>Getting Started</summary>
+            <summary>{t('help.gettingStarted.summary')}</summary>
             <div className="help-section-body">
               <p className="help-text">
-                Open the connection dialog via <code>Ctrl + N</code> or the <strong>&quot;New&quot;</strong> button in the sidebar. You can manage your hosts and folders in the host tree.
+                <Trans i18nKey="help.gettingStarted.openDialog" components={[<code key="0" />, <strong key="1" />]} />
               </p>
               <p className="help-text">
-                <strong>Double-click:</strong> Double-click a host in the tree to connect immediately.
+                <Trans i18nKey="help.gettingStarted.doubleClick" components={[<strong key="0" />]} />
               </p>
               <p className="help-text">
-                <strong>Supported connection types:</strong>
+                <Trans i18nKey="help.gettingStarted.supportedTypes" components={[<strong key="0" />]} />
               </p>
               <ul className="shortcuts-list">
-                <li><strong>SSH</strong> — Encrypted remote shell (password or key authentication)</li>
-                <li><strong>Telnet</strong> — Unencrypted remote shell for legacy devices</li>
-                <li><strong>Serial</strong> — Direct COM port connection (routers, embedded devices, etc.)</li>
-                <li><strong>WSL</strong> — Windows Subsystem for Linux distributions</li>
-                <li><strong>Local</strong> — Local shell (CMD or PowerShell)</li>
-                <li><strong>Git Bash</strong> — Git Bash interactive login shell (auto-detected)</li>
+                <li><Trans i18nKey="help.gettingStarted.typeSsh" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.gettingStarted.typeTelnet" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.gettingStarted.typeSerial" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.gettingStarted.typeWsl" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.gettingStarted.typeLocal" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.gettingStarted.typeGitBash" components={[<strong key="0" />]} /></li>
               </ul>
               <p className="help-text">
-                <strong>Jumpbox (Bastion Host):</strong> SSH and Telnet connections can be routed through a jumpbox. Mark any SSH host as a jumpbox in the host tree, then select it as the &quot;via&quot; host when editing a target host.
+                <Trans i18nKey="help.gettingStarted.jumpbox" components={[<strong key="0" />]} />
               </p>
               <p className="help-text">
-                <strong>Google Cloud IAP:</strong> Connect to Google Compute Engine VMs via Identity-Aware Proxy without exposing VMs to the public internet. Open the <strong>GCP</strong> tab in the New Session dialog to browse all your GCE instances across every project you have access to — grouped by project, with live status (🟢 RUNNING / 🔴 stopped / 🟡 transitioning) — then double-click an instance to connect. The pane also has buttons to <strong>start</strong> or <strong>stop</strong> an instance directly, and a <strong>Refresh</strong> action to re-query your projects and instances. A <strong>search box</strong> filters the list by project or instance name as you type. The last-known list is shown <strong>instantly on launch</strong> and revalidated in the background, so you don't wait for a full query every time the pane opens. If you double-click a stopped VM, HoTTY prompts before starting it (or auto-starts when configured on a saved IAP host). <strong>No SSH username, password, or private key is required</strong> — HoTTY delegates the connection to <code>gcloud compute ssh --tunnel-through-iap</code>, which handles IAP tunneling, OS Login mapping, automatic SSH key generation (<code>~/.ssh/google_compute_engine</code>), key registration, and authentication on your behalf. Requires the Google Cloud SDK and a completed <code>gcloud auth login</code>.
+                <Trans
+                  i18nKey="help.gettingStarted.gcpIap"
+                  components={[
+                    <strong key="0" />,
+                    <strong key="1" />,
+                    <strong key="2" />,
+                    <strong key="3" />,
+                    <strong key="4" />,
+                    <strong key="5" />,
+                    <strong key="6" />,
+                    <strong key="7" />,
+                    <code key="8" />,
+                    <code key="9" />,
+                    <code key="10" />,
+                  ]}
+                />
               </p>
               <p className="help-text">
-                <strong>GCP access-aware filtering:</strong> The GCP pane probes <code>iap.tunnelInstances.accessViaIAP</code> at the project and instance level (via <code>gcloud projects test-iam-permissions</code>) and hides VMs you have no IAP tunnel permission for. A 🔒 counter button in the pane header lets you toggle the hidden instances back on; instances without OS Login permission still show but display a 🔑 warning glyph because SSH may still work via a metadata key. When the IAM probe itself fails (network blip, deleted project), the instances stay visible so accessible VMs are never hidden by accident.
+                <Trans
+                  i18nKey="help.gettingStarted.gcpFiltering"
+                  components={[<strong key="0" />, <code key="1" />, <code key="2" />]}
+                />
               </p>
               <p className="help-text">
-                <strong>Update Notifications:</strong> On startup HoTTY checks the GitHub releases feed and shows a dismissible notification when a newer version is available, linking directly to the release page.
+                <Trans i18nKey="help.gettingStarted.updateNotifications" components={[<strong key="0" />]} />
               </p>
               <p className="help-text">
-                <strong>Connection Status:</strong> A Connecting overlay is shown while the transport is being established. SSH and Telnet sessions time out after a configurable interval (default 5 seconds) — see <strong>Settings &rarr; Protocols</strong>. Connection failures appear as dismissible toast notifications with short, plain-English labels — <em>Connection refused</em>, <em>Host not found</em>, <em>Connection timed out (15s)</em>, <em>No common kex algorithm with server</em>, <em>Wrong passphrase for private key</em>, etc. — instead of the raw library error text. Failures on a jumpbox hop are clearly tagged <em>Jumpbox: …</em> so you can tell which hop failed.
+                <Trans
+                  i18nKey="help.gettingStarted.connectionStatus"
+                  components={[
+                    <strong key="0" />,
+                    <strong key="1" />,
+                    <em key="2" />,
+                    <em key="3" />,
+                    <em key="4" />,
+                    <em key="5" />,
+                    <em key="6" />,
+                    <em key="7" />,
+                  ]}
+                />
               </p>
               <p className="help-text">
-                <strong>SSH Algorithms:</strong> Toggle which key-exchange, cipher, MAC, and host-key algorithms are offered during the SSH handshake under <strong>Settings &rarr; Protocols &rarr; SSH Algorithms</strong>. Modern defaults such as <code>curve25519-sha256</code> and <code>diffie-hellman-group14-sha256</code> are enabled out of the box. Legacy SHA-1 options (<code>diffie-hellman-group14-sha1</code>, <code>3des-cbc</code>, <code>ssh-dss</code>, etc.) remain available for older devices (e.g. Cisco Catalyst 3650 / older IOS) that do not negotiate modern algorithms. Enabling <code>diffie-hellman-group-exchange-sha1</code> shows a confirmation prompt because SHA-1 is considered broken — use a stronger KEX whenever possible.
+                <Trans
+                  i18nKey="help.gettingStarted.sshAlgorithms"
+                  components={[
+                    <strong key="0" />,
+                    <strong key="1" />,
+                    <code key="2" />,
+                    <code key="3" />,
+                    <code key="4" />,
+                    <code key="5" />,
+                    <code key="6" />,
+                    <code key="7" />,
+                  ]}
+                />
               </p>
               <p className="help-text">
-                When upgrading, any algorithms newly added in a release are merged into your saved configuration so you don&apos;t need to manually opt in to security improvements.
+                {t('help.gettingStarted.algorithmsMerge')}
               </p>
             </div>
           </details>
 
           <details className="help-section">
-            <summary>Organizing the Host Tree</summary>
+            <summary>{t('help.hostTree.summary')}</summary>
             <div className="help-section-body">
               <p className="help-text">
-                <strong>Drag & Drop:</strong> You can reorder hosts and folders by dragging them in the &quot;New Session&quot; dialog.
+                <Trans i18nKey="help.hostTree.dragDrop" components={[<strong key="0" />]} />
               </p>
               <p className="help-text" style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                <strong>Export & Import:</strong> Use the
+                <Trans i18nKey="help.hostTree.exportImportPrefix" components={[<strong key="0" />]} />
                 <span style={{ color: 'var(--color-danger)' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -114,7 +159,8 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                     <line x1="12" y1="3" x2="12" y2="15" />
                   </svg>
                 </span>
-                <strong>Export</strong> and
+                <Trans i18nKey="help.hostTree.exportLabel" components={[<strong key="0" />]} />
+                {' '}
                 <span style={{ color: 'var(--success-color)' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -122,349 +168,362 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                     <line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
                 </span>
-                <strong>Import</strong> icons at the top-right of the host panel to backup or load your configurations.
+                <Trans i18nKey="help.hostTree.importLabel" components={[<strong key="0" />]} />
+                {' '}
+                {t('help.hostTree.exportImportSuffix')}
               </p>
               <p className="help-text">
-                <strong>Management:</strong> Use the action icons next to items to add folders, add new hosts, edit settings, or delete entries.
+                <Trans i18nKey="help.hostTree.management" components={[<strong key="0" />]} />
               </p>
               <p className="help-text">
-                <strong>Show Password:</strong> Use the password visibility toggle to reveal saved passwords in the host tree when needed.
+                <Trans i18nKey="help.hostTree.showPassword" components={[<strong key="0" />]} />
               </p>
               <p className="help-text">
-                <strong>🆕 New Connection entry:</strong> The top row of the host tree starts a fresh connection — it clears the protocol form on the right of the dialog so you can dial an ad-hoc host without first deselecting a saved one.
+                <Trans i18nKey="help.hostTree.newConnection" components={[<strong key="0" />]} />
               </p>
               <p className="help-text">
-                <strong>Save an ad-hoc session to the Host Tree:</strong> After connecting via <strong>New Connection</strong>, right-click the session&apos;s tab and choose <strong>Save to Host Tree…</strong> to keep the connection for later. SSH and Telnet sessions are supported (private-key path and passphrase are preserved). In the save dialog the host-tree folders are shown as a tree view so you can pick the destination folder directly, and <strong>+ New Folder</strong> creates a folder under the currently-selected one — nestable as deep as you like.
+                <Trans
+                  i18nKey="help.hostTree.saveAdHoc"
+                  components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />]}
+                />
               </p>
             </div>
           </details>
 
           <details className="help-section">
-            <summary>Layout Mastery</summary>
+            <summary>{t('help.layout.summary')}</summary>
             <div className="help-section-body">
               <p className="help-text">
-                <strong>Flexible Tabs:</strong> Drag and drop tabs not just to reorder them, but to move them between grid panes, sidebars, or top/bottom bars.
+                <Trans i18nKey="help.layout.flexibleTabs" components={[<strong key="0" />]} />
               </p>
               <p className="help-text">
-                <strong>Resizing:</strong> Resize everything by dragging the dividers or the <strong>2D intersection point</strong> (where 4 panes meet).
+                <Trans i18nKey="help.layout.resizing" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
               <p className="help-text">
-                <strong>Empty pane hints:</strong> Empty grid cells show their pane number and a &quot;Drop Tab Here&quot; prompt so you know where to drop a tab.
+                <Trans i18nKey="help.layout.emptyPaneHints" components={[<strong key="0" />]} />
               </p>
               <p className="help-text">
-                <strong>Line Wrap toggle:</strong> Disable <strong>Settings &rarr; Appearance &rarr; Line Wrap</strong> to enable a horizontal scrollbar on terminal panes. The view auto-scrolls to keep the cursor in sight as you type past the right edge, and snaps back to column 0 on Enter. The vertical scrollbar and prompt marker stay anchored to the pane&apos;s right edge regardless of horizontal scroll position.
+                <Trans i18nKey="help.layout.lineWrap" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
             </div>
           </details>
 
           <details className="help-section">
-            <summary>Copy & Paste</summary>
+            <summary>{t('help.copyPaste.summary')}</summary>
             <div className="help-section-body">
               <p className="help-text">
-                <strong>Copy:</strong> Simply select text in the terminal or click a <strong>Terminal Marker</strong> to select an entire block. Content is automatically copied to your clipboard upon selection.
+                <Trans i18nKey="help.copyPaste.copy" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
               <p className="help-text">
-                <strong>Paste:</strong> Right-click anywhere in the terminal or use <code>Ctrl + V</code>.
+                <Trans i18nKey="help.copyPaste.paste" components={[<strong key="0" />, <code key="1" />]} />
               </p>
               <p className="help-text">
-                <strong>Safety Check:</strong> A <strong>Paste Confirmation</strong> dialog will appear if you try to paste multiple lines. This prevents accidental execution of dangerous commands.
+                <Trans i18nKey="help.copyPaste.safety" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
             </div>
           </details>
 
           <details className="help-section">
-            <summary>Terminal Markers</summary>
+            <summary>{t('help.markers.summary')}</summary>
             <div className="help-section-body">
               <div className="help-visual-guide">
                 <div className="marker-expl">
                   <span className="marker-line marker-red" />
                   <div className="marker-desc">
-                    <strong>Red/Orange line: Prompt</strong>
-                    <br />Indicates where you typed a command.
+                    <strong>{t('help.markers.redTitle')}</strong>
+                    <br />{t('help.markers.redDesc')}
                   </div>
                 </div>
                 <div className="marker-expl">
                   <span className="marker-line marker-blue" />
                   <div className="marker-desc">
-                    <strong>Blue line: Output</strong>
-                    <br />Indicates the result/output of a command.
+                    <strong>{t('help.markers.blueTitle')}</strong>
+                    <br />{t('help.markers.blueDesc')}
                   </div>
                 </div>
               </div>
               <p className="help-text">
-                <strong>Tip:</strong> Click a marker to select the entire block. Right-click it to quickly ask AI about that specific output.
+                <Trans i18nKey="help.markers.tip" components={[<strong key="0" />]} />
               </p>
             </div>
           </details>
 
           <details className="help-section">
-            <summary>Session Logging & Log Viewer</summary>
+            <summary>{t('help.logging.summary')}</summary>
             <div className="help-section-body">
               <p className="help-text">
-                <strong>Session Logging:</strong> Enable automatic logging in <strong>Settings &rarr; General</strong>. All terminal output is saved as timestamped <code>.log</code> files to the folder you specify.
+                <Trans i18nKey="help.logging.sessionLogging" components={[<strong key="0" />, <strong key="1" />, <code key="2" />]} />
               </p>
               <p className="help-text">
-                <strong>Folder approval:</strong> The first time HoTTY uses a logging folder — whether you start a session, toggle logging on, or open the Log Viewer — a native confirm dialog asks you to approve that folder. Picking a folder via the <strong>Browse...</strong> button approves it automatically. Approvals persist across app launches (saved under <code>%APPDATA%\com.hotty.terminal\approved_log_dirs.json</code>), so you only see the dialog once per folder. The mechanism exists so a typed or imported path can&apos;t silently grant log access.
+                <Trans i18nKey="help.logging.folderApproval" components={[<strong key="0" />, <strong key="1" />, <code key="2" />]} />
               </p>
               <p className="help-text">
-                <strong>Log Viewer:</strong> Click the <strong>Log Viewer</strong> button in the tab bar to open a dedicated log-browsing pane. It lists all saved log files and lets you open and search them without leaving HoTTY.
+                <Trans i18nKey="help.logging.logViewer" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
               <p className="help-text">
-                <strong>Search:</strong> Use the search bar inside Log Viewer to filter lines. Toggle the <strong>.*</strong> button to switch between plain-text and regular expression search.
+                <Trans i18nKey="help.logging.search" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
             </div>
           </details>
 
           <details className="help-section">
-            <summary>Text Editor</summary>
+            <summary>{t('help.textEditor.summary')}</summary>
             <div className="help-section-body">
               <p className="help-text">
-                Open a built-in text editor pane via <strong><FeaturesIcon /></strong> (Features) &rarr; <strong>&quot;Text Editor&quot;</strong>. You can open multiple editor panes and edit multiple files simultaneously using sub-tabs.
+                <Trans i18nKey="help.textEditor.intro" components={[<strong key="0" />, <FeaturesIcon key="1" />, <strong key="2" />]} />
               </p>
               <ul className="shortcuts-list">
-                <li><strong>File menu:</strong> New, Open, Save, Save As, and Close actions for individual sub-tabs.</li>
-                <li><strong>View menu:</strong> Toggle <strong>Show Return Codes</strong> to display newline characters as visible symbols in the editor.</li>
-                <li><strong>Find & Replace:</strong> Press <code>Ctrl + F</code> to open the search bar. Use <code>Ctrl + H</code> for find-and-replace. Matches are highlighted and the total count is shown.</li>
-                <li><strong>Go to Line:</strong> Press <code>Ctrl + G</code> to jump to a specific line number.</li>
-                <li><strong>Encoding & Line Endings:</strong> Click the encoding or line ending indicator in the status bar to change them for the current file.</li>
-                <li><strong>Line Wrap:</strong> Controlled by the global <strong>Settings &rarr; Appearance &rarr; Line Wrap</strong> toggle. Visual line numbers update automatically to reflect wrapped lines.</li>
-                <li><strong>File Association:</strong> Files opened from Windows Explorer (double-click or &quot;Open with&quot;) launch directly in the Text Editor.</li>
+                <li><Trans i18nKey="help.textEditor.fileMenu" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.textEditor.viewMenu" components={[<strong key="0" />, <strong key="1" />]} /></li>
+                <li><Trans i18nKey="help.textEditor.findReplace" components={[<strong key="0" />, <code key="1" />, <code key="2" />]} /></li>
+                <li><Trans i18nKey="help.textEditor.gotoLine" components={[<strong key="0" />, <code key="1" />]} /></li>
+                <li><Trans i18nKey="help.textEditor.encoding" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.textEditor.lineWrap" components={[<strong key="0" />, <strong key="1" />]} /></li>
+                <li><Trans i18nKey="help.textEditor.fileAssociation" components={[<strong key="0" />]} /></li>
               </ul>
               <p className="help-text">
-                <strong>Tip:</strong> An unsaved file shows a <code>&bull;</code> dot on its sub-tab title. Save with <code>Ctrl + S</code>.
+                <Trans i18nKey="help.textEditor.tip" components={[<strong key="0" />, <code key="1" />, <code key="2" />]} />
               </p>
               <p className="help-text">
-                <strong>Unsaved changes prompt:</strong> Closing a sub-tab or exiting with dirty editors opens a <strong>Save / Discard / Cancel</strong> dialog so you never lose work by accident.
+                <Trans i18nKey="help.textEditor.unsavedPrompt" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
             </div>
           </details>
 
           <details className="help-section">
-            <summary>File Explorer</summary>
+            <summary>{t('help.fileExplorer.summary')}</summary>
             <div className="help-section-body">
               <p className="help-text">
-                Open a built-in file browser pane via <strong><FeaturesIcon /></strong> (Features) &rarr; <strong>&quot;File Explorer&quot;</strong>. Browse your drives and directories in a collapsible tree structure.
+                <Trans i18nKey="help.fileExplorer.intro" components={[<strong key="0" />, <FeaturesIcon key="1" />, <strong key="2" />]} />
               </p>
               <ul className="shortcuts-list">
-                <li><strong>Navigate:</strong> Click folders to expand/collapse. Use the breadcrumb path at the top for quick navigation.</li>
-                <li><strong>Open files:</strong> Double-click a file to open it in the Text Editor.</li>
-                <li><strong>Hidden files:</strong> Toggle hidden file visibility with the eye icon in the toolbar.</li>
-                <li><strong>Refresh:</strong> Click the refresh button to reload the current directory.</li>
+                <li><Trans i18nKey="help.fileExplorer.navigate" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.fileExplorer.openFiles" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.fileExplorer.hiddenFiles" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.fileExplorer.refresh" components={[<strong key="0" />]} /></li>
               </ul>
             </div>
           </details>
 
           <details className="help-section" open>
-            <summary>AI Quick Start Guide</summary>
+            <summary>{t('help.aiQuickStart.summary')}</summary>
             <div className="help-section-body">
               <p className="help-text">
-                HoTTY has built-in AI that can analyze terminal output, explain errors, suggest fixes, and even execute commands for you. Here&apos;s how to get started in 3 steps:
+                {t('help.aiQuickStart.intro')}
               </p>
               <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: 0 }}>
                 <li>
-                  <strong>Choose a provider:</strong> Go to <strong>Settings &rarr; AI &rarr; AI Provider</strong> and select one. <strong>Google AI Studio (Gemini)</strong> or <strong>Vertex AI</strong> are recommended — see the comparison table below.
+                  <Trans i18nKey="help.aiQuickStart.step1" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />]} />
                 </li>
                 <li>
-                  <strong>Authenticate:</strong> Open an AI Chat tab (<strong><FeaturesIcon /></strong> &rarr; AI Chat) and follow the on-screen prompts to sign in or enter your credentials.
+                  <Trans i18nKey="help.aiQuickStart.step2" components={[<strong key="0" />, <strong key="1" />, <FeaturesIcon key="2" />]} />
                 </li>
                 <li>
-                  <strong>Start chatting:</strong> Type a question, or right-click on terminal text and choose <strong>&quot;Ask AI&quot;</strong> to get instant analysis.
+                  <Trans i18nKey="help.aiQuickStart.step3" components={[<strong key="0" />, <strong key="1" />]} />
                 </li>
               </ol>
               <p className="help-text" style={{ marginTop: '6px' }}>
-                That&apos;s it! You can start asking questions right away — no complex configuration needed.
+                {t('help.aiQuickStart.outro')}
               </p>
             </div>
           </details>
 
           <details className="help-section">
-            <summary>AI Features Overview</summary>
+            <summary>{t('help.aiFeatures.summary')}</summary>
             <div className="help-section-body">
-              <p className="help-text" style={{ marginBottom: '4px' }}><strong>AI Chat</strong></p>
+              <p className="help-text" style={{ marginBottom: '4px' }}><strong>{t('help.aiFeatures.aiChatHeading')}</strong></p>
               <p className="help-text">
-                Click <strong><FeaturesIcon /></strong> (Features) in the tab bar &rarr; <strong>&quot;AI Chat&quot;</strong> to open the AI Chat pane. Inside it, the tab strip at the top lets you keep multiple parallel conversations — use <strong>+ New chat</strong> to start a fresh tab. Type your question and press <code>Ctrl + Enter</code> to send.
+                <Trans i18nKey="help.aiFeatures.aiChatIntro" components={[<strong key="0" />, <FeaturesIcon key="1" />, <strong key="2" />, <strong key="3" />, <code key="4" />]} />
               </p>
               <p className="help-text">
-                <strong>Linked terminal:</strong> When you start AI Monitor on a terminal, the AI Chat pane links a tab to that terminal automatically — toggling AI Monitor on additional terminals creates a new tab per terminal so output streams stay separated. The currently linked terminal is shown as a chip next to the input. Clicking a tab also briefly highlights its linked terminal pane so you can see which session it belongs to at a glance.
+                <Trans i18nKey="help.aiFeatures.linkedTerminal" components={[<strong key="0" />]} />
               </p>
               <p className="help-text">
-                <strong>Stream watchdog:</strong> If an AI provider stops sending data mid-response (network drop, hung backend), the in-flight request is automatically cancelled after 3 minutes of silence and an error message appears in the chat — no more stuck &quot;streaming&quot; states.
-              </p>
-
-              <p className="help-text" style={{ marginBottom: '4px' }}><strong>Ask AI (Right-Click)</strong></p>
-              <p className="help-text">
-                Select text in the terminal or click a <strong>Terminal Marker</strong>, then right-click &rarr; <strong>&quot;Ask AI&quot;</strong>. Choose from built-in commands like &quot;What is this?&quot;, &quot;Research root cause&quot;, or &quot;Fix this&quot; — or add your own custom commands in Settings.
+                <Trans i18nKey="help.aiFeatures.streamWatchdog" components={[<strong key="0" />]} />
               </p>
 
-              <p className="help-text" style={{ marginBottom: '4px' }}><strong>Interactive Mode (Command Execution)</strong></p>
+              <p className="help-text" style={{ marginBottom: '4px' }}><strong>{t('help.aiFeatures.askAiHeading')}</strong></p>
               <p className="help-text">
-                When the AI suggests a command, it can send it directly to your terminal session for execution. You&apos;ll see the command before it runs, so you stay in control.
+                <Trans i18nKey="help.aiFeatures.askAiBody" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
 
-              <p className="help-text" style={{ marginBottom: '4px' }}><strong>Execution Mode &amp; Auto-Execute</strong></p>
+              <p className="help-text" style={{ marginBottom: '4px' }}><strong>{t('help.aiFeatures.interactiveHeading')}</strong></p>
               <p className="help-text">
-                The <strong>Execution Mode chip</strong> at the bottom of the AI Chat pane controls how AI-suggested commands run — choose between Ask, Auto-execute safe, or Pause. When Auto-execute is on, each command is judged and either runs automatically or waits for a manual confirmation; Pause halts the auto-run loop without changing the mode, and the chip&apos;s controls let you resume. Configure the consecutive execution limit and the <strong>device-response idle timeout</strong> (default 10 seconds; 0 disables) in <strong>Settings &rarr; AI &rarr; Command Execution</strong>. When a command begins with <code>sleep N</code> (e.g. <code>sleep 120 &amp;&amp; validate</code>), HoTTY waits those seconds locally instead of sending the sleep to the device — so the idle timeout doesn&apos;t mis-fire during the wait — then runs any chained command afterward; toggle this and its maximum delay in <strong>Settings &rarr; AI</strong>.
+                {t('help.aiFeatures.interactiveBody')}
               </p>
 
-              <p className="help-text" style={{ marginBottom: '4px' }}><strong>Command Safety Classifier (Whitelist / Blacklist / AI)</strong></p>
+              <p className="help-text" style={{ marginBottom: '4px' }}><strong>{t('help.aiFeatures.executionHeading')}</strong></p>
               <p className="help-text">
-                How each command is judged for auto-execution is decided by three layers, configurable in <strong>Settings &rarr; AI &rarr; Command Execution</strong>. The <strong>Blacklist</strong> is checked first — a match never auto-runs (a manual Run is still offered). The <strong>Whitelist</strong> auto-runs obvious read-only commands. Anything in between is sent to the <strong>AI</strong>, which judges whether it changes configuration; only commands judged read-only with enough confidence auto-run, everything else asks. Both lists are fully editable: a single word matches a base command (e.g. <code>docker</code>), and an entry with spaces matches as a substring (e.g. <code>rm -rf</code>, <code>git push</code>); each list has a <strong>Reset to defaults</strong> button. Pick the strategy (Static / AI / <strong>Hybrid</strong>, the default) and the AI confidence threshold in the same place. Every execute block shows how it was judged — Whitelisted, AI verdict, Blacklisted, or needs confirmation — so the decision is never hidden.
+                <Trans
+                  i18nKey="help.aiFeatures.executionBody"
+                  components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <code key="3" />, <code key="4" />, <strong key="5" />]}
+                />
               </p>
 
-              <p className="help-text" style={{ marginBottom: '4px' }}><strong>Personas</strong></p>
+              <p className="help-text" style={{ marginBottom: '4px' }}><strong>{t('help.aiFeatures.safetyHeading')}</strong></p>
               <p className="help-text">
-                Switch between AI roles (General Helper, Network Expert, Security Analyst, etc.) using the persona selector at the top of the chat. Each persona has a system prompt tailored for that domain. Click the <strong>system prompt</strong> indicator to inspect the exact instruction sent to the model and copy it to the clipboard.
+                <Trans
+                  i18nKey="help.aiFeatures.safetyBody"
+                  components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />, <code key="4" />, <code key="5" />, <code key="6" />, <strong key="7" />, <strong key="8" />]}
+                />
+              </p>
+
+              <p className="help-text" style={{ marginBottom: '4px' }}><strong>{t('help.aiFeatures.personasHeading')}</strong></p>
+              <p className="help-text">
+                <Trans i18nKey="help.aiFeatures.personasBody" components={[<strong key="0" />]} />
               </p>
               <p className="help-text">
-                The <strong>Network Expert</strong> persona auto-preps a linked terminal: when its chat is linked to a live session, it automatically identifies the device and disables paging before you ask anything. Switching the linked terminal to a different device starts a fresh chat first, while reconnecting to the same device just re-disables paging and keeps your conversation.
+                <Trans i18nKey="help.aiFeatures.personasNetworkExpert" components={[<strong key="0" />]} />
               </p>
             </div>
           </details>
 
           <details className="help-section">
-            <summary><WatchIcon /> Watch Mode (AI Monitoring)</summary>
+            <summary><WatchIcon /> {t('help.watchMode.summary')}</summary>
             <div className="help-section-body">
               <p className="help-text">
-                Watch Mode lets AI monitor a terminal session&apos;s output and analyze it on demand — ideal for long-running commands or log tailing.
+                {t('help.watchMode.intro')}
               </p>
               <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: 0 }}>
-                <li>Click the <strong><WatchIcon /></strong> icon on any terminal tab to start watching. The icon turns blue and the tab gets a rainbow highlight.</li>
-                <li>Run commands as usual. All output is captured into a buffer.</li>
-                <li>In your <strong>AI chat tab</strong>, click <strong>&quot;Ask AI&quot;</strong> and select the watched session to send the entire captured log to AI for analysis.</li>
+                <li><Trans i18nKey="help.watchMode.step1" components={[<strong key="0" />, <WatchIcon key="1" />]} /></li>
+                <li>{t('help.watchMode.step2')}</li>
+                <li><Trans i18nKey="help.watchMode.step3" components={[<strong key="0" />, <strong key="1" />]} /></li>
               </ol>
               <p className="help-text">
-                <strong>Tip:</strong> Let it collect output and ask AI to summarize or find errors when you&apos;re ready.
-                The buffer size limit can be adjusted in <strong>Settings &rarr; AI &rarr; AI Monitor Buffer Limit</strong>.
+                <Trans i18nKey="help.watchMode.tip" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
             </div>
           </details>
 
           <details className="help-section">
-            <summary>Choosing an AI Provider</summary>
+            <summary>{t('help.chooseProvider.summary')}</summary>
             <div className="help-section-body">
               <p className="help-text">
-                HoTTY supports four AI providers. Choose the one that best fits your needs:
+                {t('help.chooseProvider.intro')}
               </p>
               <table className="help-auth-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'calc(var(--font-size-base) - 1px)', marginBottom: '8px' }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)', paddingRight: '8px' }}>Provider</th>
-                    <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)', paddingRight: '8px' }}>Best For</th>
-                    <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)', paddingRight: '8px' }}>Auth</th>
-                    <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)' }}>Status</th>
+                    <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)', paddingRight: '8px' }}>{t('help.chooseProvider.thProvider')}</th>
+                    <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)', paddingRight: '8px' }}>{t('help.chooseProvider.thBestFor')}</th>
+                    <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)', paddingRight: '8px' }}>{t('help.chooseProvider.thAuth')}</th>
+                    <th style={{ textAlign: 'left', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)' }}>{t('help.chooseProvider.thStatus')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}><strong>Google AI Studio<br />(Gemini)</strong></td>
-                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>Personal use, free tier available</td>
-                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>OAuth2</td>
-                    <td style={{ padding: '6px 0', verticalAlign: 'top' }}>Fully tested</td>
+                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}><strong><Trans i18nKey="help.chooseProvider.geminiName" components={[<br key="0" />]} /></strong></td>
+                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>{t('help.chooseProvider.geminiBestFor')}</td>
+                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>{t('help.chooseProvider.geminiAuth')}</td>
+                    <td style={{ padding: '6px 0', verticalAlign: 'top' }}>{t('help.chooseProvider.geminiStatus')}</td>
                   </tr>
                   <tr>
-                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}><strong>Google Cloud<br />Vertex AI</strong></td>
-                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>Enterprise / production use</td>
-                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>ADC / Service Account</td>
-                    <td style={{ padding: '6px 0', verticalAlign: 'top' }}>Fully tested</td>
+                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}><strong><Trans i18nKey="help.chooseProvider.vertexName" components={[<br key="0" />]} /></strong></td>
+                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>{t('help.chooseProvider.vertexBestFor')}</td>
+                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>{t('help.chooseProvider.vertexAuth')}</td>
+                    <td style={{ padding: '6px 0', verticalAlign: 'top' }}>{t('help.chooseProvider.vertexStatus')}</td>
                   </tr>
                   <tr>
-                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}><strong>Anthropic<br />(Claude)</strong></td>
-                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>Claude models via API key</td>
-                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>API Key</td>
-                    <td style={{ padding: '6px 0', verticalAlign: 'top' }}>Experimental<br /><span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', opacity: 0.8 }}>(untested — may not work as expected)</span></td>
+                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}><strong><Trans i18nKey="help.chooseProvider.anthropicName" components={[<br key="0" />]} /></strong></td>
+                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>{t('help.chooseProvider.anthropicBestFor')}</td>
+                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>{t('help.chooseProvider.anthropicAuth')}</td>
+                    <td style={{ padding: '6px 0', verticalAlign: 'top' }}>{t('help.chooseProvider.experimental')}<br /><span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', opacity: 0.8 }}>{t('help.chooseProvider.experimentalNote')}</span></td>
                   </tr>
                   <tr>
-                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}><strong>OpenAI</strong></td>
-                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>GPT models via API key</td>
-                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>API Key</td>
-                    <td style={{ padding: '6px 0', verticalAlign: 'top' }}>Experimental<br /><span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', opacity: 0.8 }}>(untested — may not work as expected)</span></td>
+                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}><strong>{t('help.chooseProvider.openaiName')}</strong></td>
+                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>{t('help.chooseProvider.openaiBestFor')}</td>
+                    <td style={{ padding: '6px 8px 6px 0', verticalAlign: 'top' }}>{t('help.chooseProvider.openaiAuth')}</td>
+                    <td style={{ padding: '6px 0', verticalAlign: 'top' }}>{t('help.chooseProvider.experimental')}<br /><span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', opacity: 0.8 }}>{t('help.chooseProvider.experimentalNote')}</span></td>
                   </tr>
                 </tbody>
               </table>
               <p className="help-text">
-                <strong>Recommendation:</strong> If you&apos;re unsure, start with <strong>Google AI Studio (Gemini)</strong> — it has a free tier and is the most thoroughly tested provider.
+                <Trans i18nKey="help.chooseProvider.recommendation" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
             </div>
           </details>
 
           <details className="help-section">
-            <summary>AI Setup & Authentication</summary>
+            <summary>{t('help.aiSetup.summary')}</summary>
             <div className="help-section-body">
 
-              <p className="help-text" style={{ marginBottom: '2px' }}><strong>Google AI Studio (Gemini) — OAuth2 Setup</strong></p>
+              <p className="help-text" style={{ marginBottom: '2px' }}><strong>{t('help.aiSetup.geminiHeading')}</strong></p>
               <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 10px 0' }}>
-                <li>Go to Google Cloud Console &rarr; APIs & Services &rarr; Credentials.</li>
-                <li>Create an <strong>OAuth 2.0 Client ID</strong> (Desktop application type).</li>
-                <li>In HoTTY, select <strong>Google AI Studio</strong> as your provider, open an AI Chat tab, and enter your Client ID and Client Secret.</li>
-                <li>Click <strong>&quot;Sign in with Google&quot;</strong> — a browser window will open for authorization.</li>
+                <li>{t('help.aiSetup.geminiStep1')}</li>
+                <li><Trans i18nKey="help.aiSetup.geminiStep2" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.geminiStep3" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.geminiStep4" components={[<strong key="0" />]} /></li>
               </ol>
               <p className="help-text" style={{ marginBottom: '10px' }}>
-                Free-tier accounts may have data used for model training. Enable billing on your Google Cloud project to opt out.
+                {t('help.aiSetup.geminiNote')}
               </p>
 
-              <p className="help-text" style={{ marginBottom: '2px' }}><strong>Google Cloud Vertex AI — ADC or Service Account</strong></p>
+              <p className="help-text" style={{ marginBottom: '2px' }}><strong>{t('help.aiSetup.vertexHeading')}</strong></p>
               <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 10px 0' }}>
-                <li><strong>ADC (easiest):</strong> Install the Google Cloud CLI, then run:<br /><code>gcloud auth application-default login</code><br />HoTTY detects these credentials automatically.</li>
-                <li><strong>Service Account:</strong> Download a JSON key file from Google Cloud Console &rarr; IAM &rarr; Service Accounts, then provide the file path in Settings.</li>
-                <li>Enter your <strong>Google Cloud Project ID</strong> and select a <strong>Region</strong> in the AI Chat tab.</li>
+                <li><Trans i18nKey="help.aiSetup.vertexStep1" components={[<strong key="0" />, <br key="1" />, <code key="2" />, <br key="3" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.vertexStep2" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.vertexStep3" components={[<strong key="0" />, <strong key="1" />]} /></li>
               </ol>
 
-              <p className="help-text" style={{ marginBottom: '2px' }}><strong>Anthropic (Claude) — API Key</strong> <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', opacity: 0.7 }}>( Experimental)</span></p>
+              <p className="help-text" style={{ marginBottom: '2px' }}><strong>{t('help.aiSetup.anthropicHeading')}</strong> <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', opacity: 0.7 }}>{t('help.aiSetup.anthropicExperimental')}</span></p>
               <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 4px 0' }}>
-                <li>Obtain an API key from the Anthropic Console &rarr; API Keys.</li>
-                <li>In HoTTY, select <strong>Anthropic</strong> as your provider, open an AI Chat tab, and enter your API key.</li>
+                <li>{t('help.aiSetup.anthropicStep1')}</li>
+                <li><Trans i18nKey="help.aiSetup.anthropicStep2" components={[<strong key="0" />]} /></li>
               </ol>
               <p className="help-text" style={{ marginBottom: '10px' }}>
-                This provider is experimental and has not been fully tested. Some features (Watch Mode, Interactive Mode, etc.) may not work as expected. Please report any issues you encounter.
+                {t('help.aiSetup.anthropicNote')}
               </p>
 
-              <p className="help-text" style={{ marginBottom: '2px' }}><strong>OpenAI — API Key</strong> <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', opacity: 0.7 }}>( Experimental)</span></p>
+              <p className="help-text" style={{ marginBottom: '2px' }}><strong>{t('help.aiSetup.openaiHeading')}</strong> <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', opacity: 0.7 }}>{t('help.aiSetup.openaiExperimental')}</span></p>
               <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 4px 0' }}>
-                <li>Obtain an API key from the OpenAI Platform &rarr; API Keys.</li>
-                <li>In HoTTY, select <strong>OpenAI</strong> as your provider, open an AI Chat tab, and enter your API key.</li>
+                <li>{t('help.aiSetup.openaiStep1')}</li>
+                <li><Trans i18nKey="help.aiSetup.openaiStep2" components={[<strong key="0" />]} /></li>
               </ol>
               <p className="help-text" style={{ marginBottom: '10px' }}>
-                This provider is experimental and has not been fully tested. Some features (Watch Mode, Interactive Mode, etc.) may not work as expected. Please report any issues you encounter.
+                {t('help.aiSetup.openaiNote')}
               </p>
 
               <p className="help-text">
-                All credentials are encrypted with Windows DPAPI and stored locally — they are never transmitted outside your machine except to the respective AI provider.
+                {t('help.aiSetup.credentialsNote')}
               </p>
             </div>
           </details>
 
           <details className="help-section">
-            <summary>Customizing AI Commands & Personas</summary>
+            <summary>{t('help.customizing.summary')}</summary>
             <div className="help-section-body">
               <p className="help-text">
-                <strong>Custom Ask AI Commands:</strong> In <strong>Settings &rarr; AI &rarr; Ask AI Commands</strong>, add, edit, reorder, or delete the commands that appear in the right-click context menu. Use the <code>{'{selection}'}</code> placeholder to inject the selected text into your prompt template.
+                <Trans i18nKey="help.customizing.customCommands" components={[<strong key="0" />, <strong key="1" />, <code key="2" />]} />
               </p>
               <p className="help-text">
-                <strong>Custom Personas:</strong> In <strong>Settings &rarr; AI &rarr; Personas</strong>, create personas with custom system prompts. The chosen persona is applied as the initial system instruction for every new AI chat session.
+                <Trans i18nKey="help.customizing.customPersonas" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
               <p className="help-text">
-                <strong>Proactive Investigation:</strong> The AI automatically suggests terminal commands when it needs more information to fulfill your request, and can capture results for continued analysis in Watch Mode.
+                <Trans i18nKey="help.customizing.proactiveInvestigation" components={[<strong key="0" />]} />
               </p>
             </div>
           </details>
 
           <details className="help-section">
-            <summary>Themes & Appearance</summary>
+            <summary>{t('help.themes.summary')}</summary>
             <div className="help-section-body">
               <p className="help-text">
-                Switch between built-in themes (<strong>Dark</strong>, <strong>Medium</strong>, <strong>Light</strong>) in <strong>Settings &rarr; Appearance &rarr; Theme</strong>.
+                <Trans i18nKey="help.themes.builtIn" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />]} />
               </p>
               <p className="help-text">
-                <strong>Custom Themes:</strong> Click <strong>&quot;+ Create Custom Theme&quot;</strong> to open the theme editor. Adjust any color variable and save under a custom name. Custom themes can be edited or deleted at any time.
+                <Trans i18nKey="help.themes.customThemes" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
               <p className="help-text">
-                <strong>AI Provider Colors:</strong> The theme editor includes an <strong>AI Providers</strong> section for customizing the brand colors used by the Gemini, OpenAI, Anthropic, and Vertex AI icons.
+                <Trans i18nKey="help.themes.providerColors" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
               <p className="help-text">
-                <strong>Futuristic Effects:</strong> The theme editor&apos;s <strong>Futuristic Effects</strong> section adds optional neon glow on active panes and sidebar icons, glassmorphism backdrop blur on modals, and configurable icon stroke width.
+                <Trans i18nKey="help.themes.futuristic" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
               <p className="help-text">
-                <strong>Unused Pane Background:</strong> In <strong>Settings &rarr; Appearance</strong>, choose a solid color or custom image to show in empty grid panes.
+                <Trans i18nKey="help.themes.unusedPane" components={[<strong key="0" />, <strong key="1" />]} />
+              </p>
+              <p className="help-text">
+                <Trans i18nKey="help.themes.language" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
             </div>
           </details>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface AuthenticationPanelProps {
     clientId: string;
@@ -19,6 +20,7 @@ export const AuthenticationPanel: React.FC<AuthenticationPanelProps> = ({
     onLogin,
     authError,
 }) => {
+    const { t } = useTranslation();
     return (
         <div className="ai-chat-auth-container">
             <div className="ai-chat-auth-card">
@@ -34,14 +36,14 @@ export const AuthenticationPanel: React.FC<AuthenticationPanelProps> = ({
                         </defs>
                     </svg>
                 </div>
-                <h2>Connect to Gemini</h2>
+                <h2>{t('aiChat.auth.geminiTitle')}</h2>
                 <div className="ai-chat-auth-form">
-                    <label>Client ID</label>
+                    <label>{t('aiChat.auth.clientId')}</label>
                     <input type="text" value={clientId} onChange={(e) => setClientId(e.target.value)} className="ai-chat-input" />
-                    <label>Client Secret</label>
+                    <label>{t('aiChat.auth.clientSecret')}</label>
                     <input type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} className="ai-chat-input" />
                     <button className="ai-chat-login-btn" onClick={onLogin} disabled={!clientId || !clientSecret || isAuthLoading}>
-                        {isAuthLoading ? 'Connecting...' : 'Sign in with Google'}
+                        {isAuthLoading ? t('aiChat.auth.connecting') : t('aiChat.auth.signInWithGoogle')}
                     </button>
                     {authError && <div className="ai-chat-auth-error">{authError}</div>}
                 </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { type TabItem } from './tabBarHelpers';
 import './TabBar.css';
 
@@ -43,6 +44,7 @@ export function TabBar({
   onNewFileExplorer,
   onNewAiChat,
 }: TabBarProps) {
+  const { t } = useTranslation();
   const [dragSourceIndex, setDragSourceIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [dragOverSide, setDragOverSide] = useState<DragOverSide>(null);
@@ -175,12 +177,12 @@ export function TabBar({
                 <button
                   type="button"
                   className={`tab-watch-btn${item.isWatching ? ' watching' : ''}`}
-                  title={item.isWatching ? 'AI Monitor (Active)' : 'Monitor with AI'}
+                  title={item.isWatching ? t('chrome.tabBar.aiMonitorActive') : t('chrome.tabBar.aiMonitorStart')}
                   onClick={(e) => {
                     e.stopPropagation();
                     onToggleWatch(item.id);
                   }}
-                  aria-label={item.isWatching ? 'Stop AI monitoring' : 'Start AI monitoring'}
+                  aria-label={item.isWatching ? t('chrome.tabBar.aiMonitorStopAria') : t('chrome.tabBar.aiMonitorStartAria')}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10"
@@ -205,7 +207,7 @@ export function TabBar({
                   e.stopPropagation();
                   onClose(item.id);
                 }}
-                aria-label="Close tab"
+                aria-label={t('chrome.tabBar.closeTab')}
               >
                 ×
               </button>
@@ -213,7 +215,7 @@ export function TabBar({
           );
         })}
       </div>
-      <div className="new-tab-btn" onClick={onNew} title="New Session" role="button" tabIndex={0}>
+      <div className="new-tab-btn" onClick={onNew} title={t('chrome.tabBar.newSession')} role="button" tabIndex={0}>
         <svg
           width="20"
           height="20"
@@ -238,7 +240,7 @@ export function TabBar({
           <div
             className={`features-btn-icon${showFeaturesMenu ? ' active' : ''}`}
             onClick={() => setShowFeaturesMenu((v) => !v)}
-            title="Features"
+            title={t('chrome.tabBar.features')}
             role="button"
             tabIndex={0}
           >
@@ -271,7 +273,7 @@ export function TabBar({
                     <line x1="8" y1="13" x2="16" y2="13" />
                     <line x1="8" y1="17" x2="14" y2="17" />
                   </svg>
-                  Log Viewer
+                  {t('chrome.tabBar.logViewer')}
                 </div>
               )}
               {onNewPingMonitor && (
@@ -283,7 +285,7 @@ export function TabBar({
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="12 6 12 12 16 14" />
                   </svg>
-                  Ping Monitor
+                  {t('chrome.tabBar.pingMonitor')}
                 </div>
               )}
               {onNewTextEditor && (
@@ -295,7 +297,7 @@ export function TabBar({
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                   </svg>
-                  Text Editor
+                  {t('chrome.tabBar.textEditor')}
                 </div>
               )}
               {onNewFileExplorer && (
@@ -306,7 +308,7 @@ export function TabBar({
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
                   </svg>
-                  File Explorer
+                  {t('chrome.tabBar.fileExplorer')}
                 </div>
               )}
               {onNewAiChat && (
@@ -317,7 +319,7 @@ export function TabBar({
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 2L14.8 9.2L22 12L14.8 14.8L12 22L9.2 14.8L2 12L9.2 9.2L12 2Z" />
                   </svg>
-                  AI Chat
+                  {t('chrome.tabBar.aiChat')}
                 </div>
               )}
             </div>
@@ -340,7 +342,7 @@ export function TabBar({
               setContextMenu(null);
             }}
           >
-            Save to Host Tree…
+            {t('chrome.tabBar.saveToHostTree')}
           </div>
         </div>
       )}

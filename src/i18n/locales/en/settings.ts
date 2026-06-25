@@ -1,0 +1,270 @@
+// Settings modal — shell, tab labels, and all tab content.
+export const settings = {
+  title: 'Settings',
+  tabs: {
+    general: 'General',
+    appearance: 'Appearance',
+    protocols: 'Protocols',
+    features: 'Features',
+    ai: 'AI',
+    about: 'About',
+  },
+  general: {
+    // Language selector (this step)
+    languageSection: 'Language',
+    languageLabel: 'Display language',
+    languageHelp:
+      'Changes the language of the app interface. (The AI response language is set separately in the AI chat panel.)',
+    // Logging
+    loggingSection: 'Logging',
+    enableLogging: 'Enable Logging',
+    logFolderPath: 'Log Folder Path',
+    logFolderPathHelp: 'Logs are saved as YYYYMMDDHHMMSS-(Protocol)-(IP).txt',
+    logFolderPathPlaceholder: 'Select a folder or type path...',
+    // Terminal
+    terminalSection: 'Terminal',
+    scrollbackBuffer: 'Scrollback Buffer',
+    scrollbackHelp: 'Max lines to keep in memory per terminal (Default: 10000).',
+    enableLineWrap: 'Enable line wrap',
+    // Input
+    inputSection: 'Input',
+    backspaceSendsDel: 'Backspace sends DEL (0x7F)',
+    backspaceSendsDelHelp:
+      'If disabled, Backspace sends 0x08 (BS). Enable if your server expects 0x7F.',
+    rightClickPaste: 'Right-click to paste',
+    rightClickPasteHelp: 'Right-clicking the terminal shows the paste confirmation dialog.',
+    // Diagnostics
+    diagnosticsSection: 'Diagnostics',
+    debugLog: 'Debug Log',
+    debugLogHelp: 'Share the latest log file when reporting a bug.',
+    openDebugLogFolder: 'Open Debug Log Folder',
+  },
+  appearance: {
+    // Layout
+    layoutSection: 'Layout',
+    sidebarPosition: 'Sidebar position',
+    sidebarLeft: 'left',
+    sidebarRight: 'right',
+    // Theme
+    themeSection: 'Theme',
+    themeLabel: 'Theme',
+    deleteTheme: 'Delete',
+    createCustomTheme: 'Create Custom Theme',
+    deleteThemeTitle: 'Delete Theme',
+    deleteThemeMessage:
+      'Delete custom theme "{{name}}"? This cannot be undone.',
+    // Unused pane background
+    unusedPaneBackground: 'Unused pane background',
+    paneBackgroundColor: 'color',
+    paneBackgroundImage: 'image',
+    paneBackgroundImagePlaceholder: 'e.g. http://asset.localhost/...',
+    browse: 'Browse…',
+    clearImage: 'Clear image',
+    clear: 'Clear',
+    // Font
+    fontSection: 'Font',
+    fontFamily: 'Font family',
+    systemMonospaceDefault: 'System Monospace (default)',
+    scanning: 'Scanning...',
+    rescan: 'Rescan',
+    fontSize: 'Font size (px)',
+    // Terminal Display
+    terminalDisplaySection: 'Terminal Display',
+    defaultEncoding: 'Default encoding',
+    defaultEncodingHelp: 'Applies to new connections.',
+    promptHighlight: 'Prompt Highlight',
+    enableUserInputHighlight: 'Enable User Input Highlight',
+    highlightColor: 'Highlight Color',
+    promptPatternsRegex: 'Prompt Patterns (Regex)',
+    namePlaceholder: 'Name',
+    regexPlaceholder: 'Regex',
+    addPattern: '+ Add Pattern',
+    resetToDefault: 'Reset to Default',
+  },
+  protocols: {
+    // SSH
+    sshSection: 'SSH',
+    connectTimeout: 'Connect Timeout',
+    timeoutSeconds: 'Timeout (seconds)',
+    sshTimeoutHelp:
+      'Maximum time to wait for the initial TCP and SSH handshake before giving up. Default: 5 seconds.',
+    keepAlive: 'KeepAlive',
+    enable: 'Enable',
+    sshKeepAliveHelp: 'Sends dummy packets to prevent timeouts.',
+    intervalSeconds: 'Interval (seconds)',
+    // Algorithms
+    algorithms: 'Algorithms',
+    algorithmsHelp: 'Choose which algorithms to enable. Changes apply to new sessions.',
+    categoryServerHostKey: 'Server Host Key',
+    categoryKex: 'Key Exchange',
+    categoryCipher: 'Cipher',
+    categoryMac: 'MAC',
+    // Telnet
+    telnetSection: 'Telnet',
+    telnetTimeoutHelp:
+      'Maximum time to wait for the initial TCP connection before giving up. Default: 5 seconds.',
+    telnetKeepAliveHelp: 'Sends Telnet NOP commands to prevent idle timeouts.',
+    // DH-GEX SHA-1 warning
+    dhGexTitle: 'Enable diffie-hellman-group-exchange-sha1?',
+    dhGexConfirm: 'Enable',
+    dhGexWarning:
+      'diffie-hellman-group-exchange-sha1 relies on SHA-1, which is considered ' +
+      'broken and was removed from OpenSSH defaults in 8.2. Enable it only if ' +
+      'you must talk to legacy devices that offer no stronger key exchange.\n\n' +
+      'Prefer diffie-hellman-group-exchange-sha256, diffie-hellman-group14-sha256, ' +
+      'or curve25519-sha256 whenever the remote device supports them.\n\n' +
+      'Enable diffie-hellman-group-exchange-sha1 anyway?',
+  },
+  features: {
+    section: 'Features',
+    sectionHelp: 'Enable or disable feature panes. Existing open panes are not affected.',
+    aiChatLabel: 'AI Chat',
+    aiChatDescription: 'AI-powered chat panel for terminal assistance',
+    logViewerLabel: 'Log Viewer',
+    logViewerDescription: 'View and analyze session logs',
+    pingMonitorLabel: 'Ping Monitor',
+    pingMonitorDescription: 'Continuous ICMP ping monitoring',
+    textEditorLabel: 'Text Editor',
+    textEditorDescription: 'Built-in text file editor',
+    fileExplorerLabel: 'File Explorer',
+    fileExplorerDescription: 'Browse and manage files',
+  },
+  ai: {
+    // Provider
+    providerSection: 'Provider',
+    aiProvider: 'AI Provider',
+    aiProviderHelp:
+      'Vertex AI and Gemini use Google OAuth. Anthropic and OpenAI require API keys.',
+    providerVertexAi: 'Google Cloud Vertex AI',
+    providerGemini: 'Google AI Studio (Gemini)',
+    providerAnthropic: 'Anthropic (Claude)',
+    providerOpenai: 'OpenAI',
+    // Authentication
+    authentication: 'Authentication',
+    authenticated: 'Authenticated',
+    notAuthenticated: 'Not Authenticated',
+    logout: 'Logout',
+    // Personas
+    personasSection: 'Personas',
+    addPersona: 'Add Persona',
+    personaName: 'Persona Name',
+    displayNamePlaceholder: 'Display Name',
+    systemPrompt: 'System Prompt',
+    systemPromptPlaceholder: 'System Prompt',
+    askAiCommands: 'Ask AI Commands',
+    dragToReorder: 'Drag to reorder',
+    labelPlaceholder: 'Label',
+    promptTemplatePlaceholder: 'Prompt Template ({selection} will be replaced)',
+    promptTemplateHelp: 'Use {selection} placeholder for the selected text.',
+    addCommand: '+ Add Command',
+    resetCommands: 'Reset Commands',
+    deletePersona: 'Delete Persona',
+    atLeastOnePersona: 'At least one persona is required',
+    deletePersonaTitle: 'Delete "{{label}}"',
+    resetAllPersonas: 'Reset All Personas',
+    newPersonaLabel: 'New Persona',
+    newCommandLabel: 'New Command',
+    // Command Execution
+    commandExecutionSection: 'Command Execution',
+    commandExecutionHelp:
+      'Execution mode and the auto-run limit are configured in the AI Chat pane (below the message input).',
+    commandSafetyClassifier: 'Command Safety Classifier',
+    commandSafetyClassifierHelp:
+      'How HoTTY decides whether an AI-suggested command is auto-executed. The Blacklist is always checked first (a match asks before executing). Static: Whitelist auto-runs, everything else asks. AI: the AI judges anything not blacklisted. Hybrid (recommended): Whitelist auto-runs, the AI judges the rest, otherwise ask.',
+    classifierStatic: 'Static whitelist',
+    classifierAi: 'AI judgment',
+    classifierHybrid: 'Hybrid (recommended)',
+    aiConfidenceThreshold: 'AI Confidence Threshold: {{percent}}%',
+    aiConfidenceThresholdHelp:
+      'Minimum AI confidence required to auto-execute a command judged read-only. Below this, the command waits for a manual Run. Higher = more cautious. Default: 70%.',
+    deviceResponseTimeout: 'Device Response Timeout (seconds)',
+    deviceResponseTimeoutHelp:
+      'If the device produces no new output for this many seconds after a command, the AI is told the device stopped responding so the loop can continue. 0 disables idle detection. Default: 10.',
+    sleepAsClientDelay: 'Run leading `sleep` as a client-side delay',
+    sleepAsClientDelayHelp:
+      'When the AI issues a command starting with `sleep N` (e.g. `sleep 120 && validate`), wait N seconds in HoTTY instead of running sleep on the device. This stops the Device Response Timeout above from mis-firing during the sleep. Any chained command runs after the wait. Default: on.',
+    maxClientDelay: 'Max client-side delay (seconds)',
+    maxClientDelayHelp:
+      'Upper bound for a client-side sleep delay; longer sleeps are clamped to this and noted. 0 = no cap. Default: 900 (15 min).',
+    whitelist: 'Whitelist (auto-execute)',
+    whitelistHelp:
+      "Commands matched here auto-execute. A single word matches as a base command (e.g. 'docker' matches any docker command); an entry with spaces matches as a substring (e.g. 'git log'). Seeded with safe defaults; fully editable.",
+    whitelistPlaceholder: 'e.g., docker, kubectl get',
+    add: 'Add',
+    resetToDefaults: 'Reset to defaults',
+    resetWhitelistTitle: 'Reset the whitelist to the built-in defaults',
+    removeEntry: 'Remove {{cmd}}',
+    blacklist: 'Blacklist (ask before execute)',
+    blacklistHelp:
+      "Commands matched here are never auto-executed — a manual Run is still allowed, with a warning. A single word matches as a base command; an entry with spaces matches as a substring (e.g. 'rm -rf', 'git push'). Seeded with destructive defaults; fully editable.",
+    blacklistPlaceholder: 'e.g., rm -rf, git push',
+    resetBlacklistTitle: 'Reset the blacklist to the built-in defaults',
+    // Modals
+    privacyNoticeTitle: 'Privacy Notice',
+    privacyNoticeMessage:
+      'Google AI Studio (Gemini) may use your data for AI training on the free tier. Enable billing on your Google Cloud project to opt out.',
+    privacyNoticeConfirm: 'OK',
+    logoutTitle: 'Logout',
+    logoutMessage:
+      'Are you sure you want to logout? You will need to re-authenticate to use the AI provider.',
+    logoutConfirm: 'Logout',
+  },
+  about: {
+    version: 'v{{version}}',
+    author: 'Katsumasa "Horry" Horiuchi',
+    descriptionLine1: 'SSH/Telnet/Serial Terminal Emulator',
+    descriptionLine2: 'Built with Tauri, React, & TypeScript',
+    licenseLine1: 'This program is free software released under the',
+    licenseLine2: 'GNU General Public License v3.0 or later.',
+    viewLicense: 'View GNU General Public License v3.0',
+    logoAlt: 'HoTTY Logo',
+  },
+  customTheme: {
+    title: 'Custom Theme Creator',
+    cancel: 'Cancel',
+    themeName: 'Theme Name',
+    themeNamePlaceholder: 'e.g. My Dark Blue',
+    baseTheme: 'Base Theme',
+    saveTheme: 'Save Theme',
+    saving: 'Saving...',
+    terminalSectionTitle: 'Terminal',
+    terminalSectionDesc: 'xterm.js terminal colors',
+    // Validation
+    errorEmptyName: 'Please enter a theme name.',
+    errorNoAlphanumeric: 'Theme name must contain at least one alphanumeric character.',
+    errorProtectedName: 'Cannot use "dark", "medium", or "light" as a theme name.',
+    errorSaveFailed: 'Failed to save theme.',
+    // Section titles & descriptions
+    sectionBackgroundsTitle: 'Backgrounds & Text',
+    sectionBackgroundsDesc: 'Main background and text colors',
+    sectionBordersTitle: 'Borders & Accents',
+    sectionBordersDesc: 'Border colors and accent/highlight colors',
+    sectionInputsTitle: 'Inputs, Buttons & Hovers',
+    sectionInputsDesc: 'Input fields, buttons, and hover state colors',
+    sectionStatusTitle: 'Status & Signals',
+    sectionStatusDesc: 'Success, error, warning, and danger indicator colors',
+    sectionAiChatTitle: 'AI Chat',
+    sectionAiChatDesc: 'Colors for AI chat messages and code blocks',
+    sectionUiTitle: 'UI Specific Components',
+    sectionUiDesc: 'Sidebar, tabs, context menus, icons, and other UI elements',
+    sectionProvidersTitle: 'AI Providers',
+    sectionProvidersDesc:
+      'Brand colors used for AI provider icons (Gemini, OpenAI, Anthropic, Vertex AI)',
+    sectionSearchTitle: 'Search & Highlight',
+    sectionSearchDesc: 'Search result highlight colors',
+    sectionOverlaysTitle: 'Overlays & Modals',
+    sectionOverlaysDesc: 'Modal dialogs, overlays, and notification banners',
+    sectionEffectsTitle: 'Futuristic Effects',
+    sectionEffectsDesc:
+      'Neon glow and glassmorphism effects applied to active panes, sidebars, and modals',
+    // Terminal color rows
+    terminalForeground: 'Foreground',
+    terminalForegroundDesc: 'Default text color inside the terminal',
+    terminalBackground: 'Background (Active)',
+    terminalBackgroundDesc: 'Background for the active/focused terminal',
+    terminalBackgroundInactive: 'Background (Inactive)',
+    terminalBackgroundInactiveDesc: 'Background for inactive/unfocused terminals',
+    terminalPaneBackground: 'Pane Background',
+    terminalPaneBackgroundDesc: 'Color of the space surrounding the terminal',
+  },
+} as const;

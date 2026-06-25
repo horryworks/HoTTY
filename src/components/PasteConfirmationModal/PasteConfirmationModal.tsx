@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useModalEscape } from '../../hooks/useModalEscape';
 import './PasteConfirmationModal.css';
 
@@ -9,6 +10,7 @@ interface PasteConfirmationModalProps {
 }
 
 export function PasteConfirmationModal({ content, onConfirm, onCancel }: PasteConfirmationModalProps) {
+  const { t } = useTranslation();
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -30,10 +32,10 @@ export function PasteConfirmationModal({ content, onConfirm, onCancel }: PasteCo
   return (
     <div className="paste-modal-overlay">
       <div className={`paste-modal${hasNewlines ? ' has-newlines' : ''}`}>
-        <div className="paste-modal-header">Paste Confirmation</div>
+        <div className="paste-modal-header">{t('dialogs.paste.header')}</div>
         {hasNewlines && (
           <div className="paste-warning" role="alert">
-            ⚠️ Warning: Contains newline characters
+            {t('dialogs.paste.newlineWarning')}
           </div>
         )}
         <div className="paste-modal-body">
@@ -53,14 +55,14 @@ export function PasteConfirmationModal({ content, onConfirm, onCancel }: PasteCo
         </div>
         <div className="paste-modal-footer">
           <button className="paste-btn paste-btn-secondary" onClick={onCancel}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             className="paste-btn paste-btn-primary"
             onClick={onConfirm}
             ref={confirmButtonRef}
           >
-            Paste
+            {t('dialogs.paste.paste')}
           </button>
         </div>
       </div>

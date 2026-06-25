@@ -1,16 +1,20 @@
+import { useTranslation } from 'react-i18next';
 import type { FeatureId } from '../../types/appTypes';
 import { useSettingsStore } from '../../stores/settingsStore';
 import HelpTooltip from '../HelpTooltip/HelpTooltip';
 
-const FEATURE_LABELS: { id: FeatureId; label: string; description: string }[] = [
-  { id: 'ai-chat', label: 'AI Chat', description: 'AI-powered chat panel for terminal assistance' },
-  { id: 'log-viewer', label: 'Log Viewer', description: 'View and analyze session logs' },
-  { id: 'ping-monitor', label: 'Ping Monitor', description: 'Continuous ICMP ping monitoring' },
-  { id: 'text-editor', label: 'Text Editor', description: 'Built-in text file editor' },
-  { id: 'file-explorer', label: 'File Explorer', description: 'Browse and manage files' },
+// Stable translation key references per feature. Labels/descriptions are
+// resolved via t() inside the component so they react to language changes.
+const FEATURE_KEYS: { id: FeatureId; labelKey: string; descriptionKey: string }[] = [
+  { id: 'ai-chat', labelKey: 'settings.features.aiChatLabel', descriptionKey: 'settings.features.aiChatDescription' },
+  { id: 'log-viewer', labelKey: 'settings.features.logViewerLabel', descriptionKey: 'settings.features.logViewerDescription' },
+  { id: 'ping-monitor', labelKey: 'settings.features.pingMonitorLabel', descriptionKey: 'settings.features.pingMonitorDescription' },
+  { id: 'text-editor', labelKey: 'settings.features.textEditorLabel', descriptionKey: 'settings.features.textEditorDescription' },
+  { id: 'file-explorer', labelKey: 'settings.features.fileExplorerLabel', descriptionKey: 'settings.features.fileExplorerDescription' },
 ];
 
 export function FeaturesTab() {
+  const { t } = useTranslation();
   const enabledFeatures = useSettingsStore((s) => s.enabledFeatures);
   const update = useSettingsStore((s) => s.update);
 
@@ -22,17 +26,17 @@ export function FeaturesTab() {
     <>
       <div className="settings-card">
         <h3 className="settings-section-title">
-          Features
-          <HelpTooltip text="Enable or disable feature panes. Existing open panes are not affected." />
+          {t('settings.features.section')}
+          <HelpTooltip text={t('settings.features.sectionHelp')} />
         </h3>
-        {FEATURE_LABELS.map(({ id, label, description }) => (
-          <label key={id} className="settings-checkbox" title={description}>
+        {FEATURE_KEYS.map(({ id, labelKey, descriptionKey }) => (
+          <label key={id} className="settings-checkbox" title={t(descriptionKey)}>
             <input
               type="checkbox"
               checked={enabledFeatures[id]}
               onChange={(e) => handleToggle(id, e.target.checked)}
             />
-            {label}
+            {t(labelKey)}
           </label>
         ))}
       </div>

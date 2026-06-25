@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
 
 // Logo is fully baked into a single PNG: white background, rounded corners,
@@ -11,6 +12,7 @@ const HOTTY_LOGO_DATA_URL =
 
 export function AboutTab() {
   const [version, setVersion] = useState('');
+  const { t } = useTranslation();
 
   useEffect(() => {
     tauriService.getAppVersion().then(setVersion);
@@ -25,18 +27,18 @@ export function AboutTab() {
     <div className="about-content">
       <img
         src={HOTTY_LOGO_DATA_URL}
-        alt="HoTTY Logo"
+        alt={t('settings.about.logoAlt')}
         width="64"
         height="64"
         style={{ marginBottom: '16px' }}
       />
       <h2 style={{ margin: '0 0 8px 0' }}>HoTTY</h2>
       <p style={{ color: 'var(--text-secondary)', margin: '0 0 16px 0' }}>
-        v{version}
+        {t('settings.about.version', { version })}
       </p>
 
       <p style={{ fontWeight: 'bold', margin: '0 0 8px 0' }}>
-        Katsumasa &quot;Horry&quot; Horiuchi
+        {t('settings.about.author')}
       </p>
 
       <p style={{ margin: '0 0 16px 0' }}>
@@ -52,9 +54,9 @@ export function AboutTab() {
       </p>
 
       <p style={{ color: 'var(--text-secondary)', margin: '0 0 24px 0' }}>
-        SSH/Telnet/Serial Terminal Emulator
+        {t('settings.about.descriptionLine1')}
         <br />
-        Built with Tauri, React, &amp; TypeScript
+        {t('settings.about.descriptionLine2')}
       </p>
 
       <p
@@ -64,9 +66,9 @@ export function AboutTab() {
           lineHeight: '1.4',
         }}
       >
-        This program is free software released under the
+        {t('settings.about.licenseLine1')}
         <br />
-        GNU General Public License v3.0 or later.
+        {t('settings.about.licenseLine2')}
       </p>
 
       <p style={{ margin: '16px 0 0 0' }}>
@@ -77,7 +79,7 @@ export function AboutTab() {
             handleLink(e, 'https://www.gnu.org/licenses/gpl-3.0.html')
           }
         >
-          View GNU General Public License v3.0
+          {t('settings.about.viewLicense')}
         </a>
       </p>
     </div>

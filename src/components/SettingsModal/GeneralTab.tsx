@@ -1,36 +1,61 @@
+import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { tauriService } from '../../services/tauriService';
+import { SUPPORTED_LANGUAGES } from '../../i18n';
+import type { LanguageId } from '../../types/appTypes';
 import HelpTooltip from '../HelpTooltip/HelpTooltip';
 
 export function GeneralTab() {
   const settings = useSettingsStore();
   const update = settings.update;
+  const { t } = useTranslation();
 
   return (
     <>
+      {/* ── Language ── */}
+      <div className="settings-card">
+        <h3 className="settings-section-title">{t('settings.general.languageSection')}</h3>
+        <div className="settings-group">
+          <label>
+            {t('settings.general.languageLabel')}
+            <HelpTooltip text={t('settings.general.languageHelp')} />
+          </label>
+          <select
+            value={settings.language}
+            onChange={(e) => update('language', e.target.value as LanguageId)}
+          >
+            {SUPPORTED_LANGUAGES.map(({ id, label }) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       {/* ── Logging ── */}
       <div className="settings-card">
-        <h3 className="settings-section-title">Logging</h3>
+        <h3 className="settings-section-title">{t('settings.general.loggingSection')}</h3>
         <label className="settings-checkbox">
           <input
             type="checkbox"
             checked={settings.loggingEnabled}
             onChange={(e) => update('loggingEnabled', e.target.checked)}
           />
-          Enable Logging
+          {t('settings.general.enableLogging')}
         </label>
         {settings.loggingEnabled && (
           <div className="settings-group">
             <label>
-              Log Folder Path
-              <HelpTooltip text="Logs are saved as YYYYMMDDHHMMSS-(Protocol)-(IP).txt" />
+              {t('settings.general.logFolderPath')}
+              <HelpTooltip text={t('settings.general.logFolderPathHelp')} />
             </label>
             <div className="settings-logging-path-row">
               <input
                 type="text"
                 value={settings.loggingPath}
                 onChange={(e) => update('loggingPath', e.target.value)}
-                placeholder="Select a folder or type path..."
+                placeholder={t('settings.general.logFolderPathPlaceholder')}
               />
               <button
                 type="button"
@@ -39,7 +64,7 @@ export function GeneralTab() {
                   if (path) update('loggingPath', path);
                 }}
               >
-                Browse...
+                {t('common.browse')}
               </button>
             </div>
           </div>
@@ -48,11 +73,11 @@ export function GeneralTab() {
 
       {/* ── Terminal ── */}
       <div className="settings-card">
-        <h3 className="settings-section-title">Terminal</h3>
+        <h3 className="settings-section-title">{t('settings.general.terminalSection')}</h3>
         <div className="settings-group">
           <label>
-            Scrollback Buffer
-            <HelpTooltip text="Max lines to keep in memory per terminal (Default: 10000)." />
+            {t('settings.general.scrollbackBuffer')}
+            <HelpTooltip text={t('settings.general.scrollbackHelp')} />
           </label>
           <input
             type="number"
@@ -68,21 +93,21 @@ export function GeneralTab() {
             checked={settings.lineWrapEnabled}
             onChange={(e) => update('lineWrapEnabled', e.target.checked)}
           />
-          Enable line wrap
+          {t('settings.general.enableLineWrap')}
         </label>
       </div>
 
       {/* ── Input ── */}
       <div className="settings-card">
-      <h3 className="settings-section-title">Input</h3>
+      <h3 className="settings-section-title">{t('settings.general.inputSection')}</h3>
       <label className="settings-checkbox">
         <input
           type="checkbox"
           checked={settings.backspaceSendsDel}
           onChange={(e) => update('backspaceSendsDel', e.target.checked)}
         />
-        Backspace sends DEL (0x7F)
-        <HelpTooltip text="If disabled, Backspace sends 0x08 (BS). Enable if your server expects 0x7F." />
+        {t('settings.general.backspaceSendsDel')}
+        <HelpTooltip text={t('settings.general.backspaceSendsDelHelp')} />
       </label>
       <label className="settings-checkbox">
         <input
@@ -90,18 +115,18 @@ export function GeneralTab() {
           checked={settings.rightClickPaste}
           onChange={(e) => update('rightClickPaste', e.target.checked)}
         />
-        Right-click to paste
-        <HelpTooltip text="Right-clicking the terminal shows the paste confirmation dialog." />
+        {t('settings.general.rightClickPaste')}
+        <HelpTooltip text={t('settings.general.rightClickPasteHelp')} />
       </label>
       </div>
 
       {/* ── Diagnostics ── */}
       <div className="settings-card">
-      <h3 className="settings-section-title">Diagnostics</h3>
+      <h3 className="settings-section-title">{t('settings.general.diagnosticsSection')}</h3>
       <div className="settings-group">
         <label>
-          Debug Log
-          <HelpTooltip text="Share the latest log file when reporting a bug." />
+          {t('settings.general.debugLog')}
+          <HelpTooltip text={t('settings.general.debugLogHelp')} />
         </label>
         <div>
           <button
@@ -109,7 +134,7 @@ export function GeneralTab() {
             className="settings-button"
             onClick={() => tauriService.openDebugLogFolder()}
           >
-            Open Debug Log Folder
+            {t('settings.general.openDebugLogFolder')}
           </button>
         </div>
       </div>

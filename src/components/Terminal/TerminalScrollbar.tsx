@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Terminal } from '@xterm/xterm';
 
 interface TerminalScrollbarProps {
@@ -23,6 +24,7 @@ interface TerminalScrollbarProps {
  * visible area until further input forces another scroll.
  */
 export function TerminalScrollbar({ term }: TerminalScrollbarProps) {
+  const { t } = useTranslation();
   const railRef = useRef<HTMLDivElement | null>(null);
   const spacerRef = useRef<HTMLDivElement | null>(null);
   const isSyncingRef = useRef(false);
@@ -78,7 +80,12 @@ export function TerminalScrollbar({ term }: TerminalScrollbarProps) {
   };
 
   return (
-    <div className="terminal-scrollbar-rail" ref={railRef} onScroll={handleScroll}>
+    <div
+      className="terminal-scrollbar-rail"
+      ref={railRef}
+      onScroll={handleScroll}
+      aria-label={t('terminal.scrollbar')}
+    >
       <div className="terminal-scrollbar-spacer" ref={spacerRef} />
     </div>
   );

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Terminal } from '@xterm/xterm';
 import type { DetectedMarker } from '../../hooks/usePromptDetection';
 
@@ -23,6 +24,7 @@ interface ViewportInfo {
  * (port of the v1 / current usePromptHighlight click behaviour).
  */
 export function TerminalMarkerRail({ term, markers, highlightColor }: TerminalMarkerRailProps) {
+  const { t } = useTranslation();
   const [viewport, setViewport] = useState<ViewportInfo>({ viewportY: 0, cellHeight: 17 });
   const lastClickedRef = useRef<number | null>(null);
 
@@ -127,7 +129,7 @@ export function TerminalMarkerRail({ term, markers, highlightColor }: TerminalMa
   const nonPromptColor = 'var(--terminal-prompt-active, #2196f3)';
 
   return (
-    <div className="terminal-marker-rail">
+    <div className="terminal-marker-rail" aria-label={t('terminal.markerRail')}>
       {markers.map((m) => {
         // (m.line - viewport.viewportY) is the visual row offset within the
         // viewport. Negative or beyond rows means off-screen; we still render
@@ -136,12 +138,16 @@ export function TerminalMarkerRail({ term, markers, highlightColor }: TerminalMa
         const top = (m.line - viewport.viewportY) * viewport.cellHeight;
         const height = m.lineCount * viewport.cellHeight;
         const color = m.isPrompt ? promptColor : nonPromptColor;
+        const label = m.isPrompt ? t('terminal.promptMarker') : t('terminal.outputMarker');
         return (
           <div
             key={m.line}
             className={`terminal-marker${m.isPrompt ? ' prompt' : ' output'}`}
             style={{ top, height, backgroundColor: color }}
             onClick={(e) => handleClick(e, m)}
+            role="button"
+            aria-label={label}
+            title={label}
           />
         );
       })}

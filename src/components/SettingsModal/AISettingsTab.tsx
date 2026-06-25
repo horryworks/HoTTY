@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { tauriService } from '../../services/tauriService';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
@@ -11,6 +12,7 @@ import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from '../../utils/commandLists';
 export function AISettingsTab() {
   const settings = useSettingsStore();
   const update = settings.update;
+  const { t } = useTranslation();
 
   const [showGeminiWarning, setShowGeminiWarning] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -91,11 +93,11 @@ export function AISettingsTab() {
     <>
       {/* -- AI Provider -- */}
       <div className="settings-card">
-      <h3 className="settings-section-title settings-section-title--first">Provider</h3>
+      <h3 className="settings-section-title settings-section-title--first">{t('settings.ai.providerSection')}</h3>
       <div className="settings-group">
         <label>
-          AI Provider
-          <HelpTooltip text="Vertex AI and Gemini use Google OAuth. Anthropic and OpenAI require API keys." />
+          {t('settings.ai.aiProvider')}
+          <HelpTooltip text={t('settings.ai.aiProviderHelp')} />
         </label>
         <select
           value={settings.activeAiProvider}
@@ -113,16 +115,16 @@ export function AISettingsTab() {
           }}
           style={{ width: '220px' }}
         >
-          <option value="vertexai">Google Cloud Vertex AI</option>
-          <option value="gemini">Google AI Studio (Gemini)</option>
-          <option value="anthropic">Anthropic (Claude)</option>
-          <option value="openai">OpenAI</option>
+          <option value="vertexai">{t('settings.ai.providerVertexAi')}</option>
+          <option value="gemini">{t('settings.ai.providerGemini')}</option>
+          <option value="anthropic">{t('settings.ai.providerAnthropic')}</option>
+          <option value="openai">{t('settings.ai.providerOpenai')}</option>
         </select>
       </div>
 
       {/* -- Authentication -- */}
       <div className="settings-group" style={{ marginBottom: '15px' }}>
-        <label>Authentication</label>
+        <label>{t('settings.ai.authentication')}</label>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{
@@ -131,14 +133,14 @@ export function AISettingsTab() {
               borderRadius: '50%',
               backgroundColor: isAuthenticated ? 'var(--success-color)' : 'var(--color-danger)'
             }} />
-            <span>{isAuthenticated ? 'Authenticated' : 'Not Authenticated'}</span>
+            <span>{isAuthenticated ? t('settings.ai.authenticated') : t('settings.ai.notAuthenticated')}</span>
           </div>
           {isAuthenticated && (
             <button
               className="settings-button"
               onClick={() => setShowLogoutConfirm(true)}
             >
-              Logout
+              {t('settings.ai.logout')}
             </button>
           )}
         </div>
@@ -148,7 +150,7 @@ export function AISettingsTab() {
 
       {/* -- Personas -- */}
       <div className="settings-card">
-      <h3 className="settings-section-title">Personas</h3>
+      <h3 className="settings-section-title">{t('settings.ai.personasSection')}</h3>
       <div
         className="settings-modal-tabs"
         ref={tabsRef}
@@ -175,14 +177,14 @@ export function AISettingsTab() {
             const id = crypto.randomUUID();
             const newPersona: PersonaDefinition = {
               id,
-              label: 'New Persona',
+              label: t('settings.ai.newPersonaLabel'),
               systemPrompt: 'You are a helpful assistant.',
               askAiCommands: [...DEFAULT_AI_COMMANDS],
             };
             update('aiPersonas', [...personas, newPersona]);
             setActivePersonaId(id);
           }}
-          title="Add Persona"
+          title={t('settings.ai.addPersona')}
         >
           +
         </button>
@@ -193,22 +195,22 @@ export function AISettingsTab() {
         <div className="ai-settings-persona-content">
           {/* Persona Name */}
           <div className="settings-group">
-            <label>Persona Name</label>
+            <label>{t('settings.ai.personaName')}</label>
             <input
               type="text"
               value={activePersona.label}
               onChange={(e) => updatePersona(activeTabId, { label: e.target.value })}
-              placeholder="Display Name"
+              placeholder={t('settings.ai.displayNamePlaceholder')}
             />
           </div>
 
           {/* System Prompt */}
           <div className="settings-group">
-            <label>System Prompt</label>
+            <label>{t('settings.ai.systemPrompt')}</label>
             <textarea
               value={activePersona.systemPrompt}
               onChange={(e) => updatePersona(activeTabId, { systemPrompt: e.target.value })}
-              placeholder="System Prompt"
+              placeholder={t('settings.ai.systemPromptPlaceholder')}
               className="ai-settings-textarea"
               rows={3}
             />
@@ -216,7 +218,7 @@ export function AISettingsTab() {
 
           {/* Ask AI Commands */}
           <div className="settings-group">
-            <label>Ask AI Commands</label>
+            <label>{t('settings.ai.askAiCommands')}</label>
             <div className="ai-settings-command-list">
               {activePersona.askAiCommands?.map((cmd, index) => (
                 <div
@@ -234,7 +236,7 @@ export function AISettingsTab() {
                   }}
                 >
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span className="ai-settings-drag-handle" title="Drag to reorder">&#9776;</span>
+                    <span className="ai-settings-drag-handle" title={t('settings.ai.dragToReorder')}>&#9776;</span>
                     <input
                       type="text"
                       value={cmd.label}
@@ -243,7 +245,7 @@ export function AISettingsTab() {
                         newCommands[index] = { ...cmd, label: e.target.value };
                         updatePersonaCommands(activeTabId, newCommands);
                       }}
-                      placeholder="Label"
+                      placeholder={t('settings.ai.labelPlaceholder')}
                       style={{ flex: 1 }}
                     />
                     <button
@@ -263,11 +265,11 @@ export function AISettingsTab() {
                       newCommands[index] = { ...cmd, promptTemplate: e.target.value };
                       updatePersonaCommands(activeTabId, newCommands);
                     }}
-                    placeholder="Prompt Template ({selection} will be replaced)"
+                    placeholder={t('settings.ai.promptTemplatePlaceholder')}
                     className="ai-settings-textarea"
                     rows={2}
                   />
-                  <HelpTooltip text={`Use {selection} placeholder for the selected text.`} />
+                  <HelpTooltip text={t('settings.ai.promptTemplateHelp')} />
                 </div>
               ))}
             </div>
@@ -277,11 +279,11 @@ export function AISettingsTab() {
                 className="settings-button"
                 onClick={() => {
                   const id = crypto.randomUUID();
-                  const newCommand: AskAiCommand = { id, label: 'New Command', promptTemplate: '{selection}' };
+                  const newCommand: AskAiCommand = { id, label: t('settings.ai.newCommandLabel'), promptTemplate: '{selection}' };
                   updatePersonaCommands(activeTabId, [...(activePersona.askAiCommands || []), newCommand]);
                 }}
               >
-                + Add Command
+                {t('settings.ai.addCommand')}
               </button>
               <button
                 className="settings-button"
@@ -289,7 +291,7 @@ export function AISettingsTab() {
                   updatePersonaCommands(activeTabId, [...DEFAULT_AI_COMMANDS]);
                 }}
               >
-                Reset Commands
+                {t('settings.ai.resetCommands')}
               </button>
             </div>
           </div>
@@ -306,9 +308,9 @@ export function AISettingsTab() {
                 setActivePersonaId(newPersonas[0].id);
               }}
               disabled={personas.length <= 1}
-              title={personas.length <= 1 ? 'At least one persona is required' : `Delete "${activePersona.label}"`}
+              title={personas.length <= 1 ? t('settings.ai.atLeastOnePersona') : t('settings.ai.deletePersonaTitle', { label: activePersona.label })}
             >
-              Delete Persona
+              {t('settings.ai.deletePersona')}
             </button>
           </div>
         </div>
@@ -324,7 +326,7 @@ export function AISettingsTab() {
             setActivePersonaId(DEFAULT_PERSONAS[0].id);
           }}
         >
-          Reset All Personas
+          {t('settings.ai.resetAllPersonas')}
         </button>
       </div>
 
@@ -332,24 +334,24 @@ export function AISettingsTab() {
 
       {/* -- Command Execution -- */}
       <div className="settings-card">
-      <h3 className="settings-section-title">Command Execution</h3>
+      <h3 className="settings-section-title">{t('settings.ai.commandExecutionSection')}</h3>
       <p className="settings-help-text" style={{ marginBottom: '10px' }}>
-        Execution mode and the auto-run limit are configured in the AI Chat pane (below the message input).
+        {t('settings.ai.commandExecutionHelp')}
       </p>
 
       {/* Command safety classifier */}
       <div className="settings-group">
         <label>
-          Command Safety Classifier
-          <HelpTooltip text="How HoTTY decides whether an AI-suggested command is auto-executed. The Blacklist is always checked first (a match asks before executing). Static: Whitelist auto-runs, everything else asks. AI: the AI judges anything not blacklisted. Hybrid (recommended): Whitelist auto-runs, the AI judges the rest, otherwise ask." />
+          {t('settings.ai.commandSafetyClassifier')}
+          <HelpTooltip text={t('settings.ai.commandSafetyClassifierHelp')} />
         </label>
         <select
           value={settings.classifierStrategy}
           onChange={(e) => update('classifierStrategy', e.target.value as typeof settings.classifierStrategy)}
         >
-          <option value="static">Static whitelist</option>
-          <option value="ai">AI judgment</option>
-          <option value="hybrid">Hybrid (recommended)</option>
+          <option value="static">{t('settings.ai.classifierStatic')}</option>
+          <option value="ai">{t('settings.ai.classifierAi')}</option>
+          <option value="hybrid">{t('settings.ai.classifierHybrid')}</option>
         </select>
       </div>
 
@@ -357,8 +359,8 @@ export function AISettingsTab() {
       {settings.classifierStrategy !== 'static' && (
         <div className="settings-group">
           <label>
-            AI Confidence Threshold: {Math.round(settings.aiClassifyConfidenceThreshold * 100)}%
-            <HelpTooltip text="Minimum AI confidence required to auto-execute a command judged read-only. Below this, the command waits for a manual Run. Higher = more cautious. Default: 70%." />
+            {t('settings.ai.aiConfidenceThreshold', { percent: Math.round(settings.aiClassifyConfidenceThreshold * 100) })}
+            <HelpTooltip text={t('settings.ai.aiConfidenceThresholdHelp')} />
           </label>
           <input
             type="range"
@@ -374,8 +376,8 @@ export function AISettingsTab() {
       {/* Device Response Timeout */}
       <div className="settings-group">
         <label>
-          Device Response Timeout (seconds)
-          <HelpTooltip text="If the device produces no new output for this many seconds after a command, the AI is told the device stopped responding so the loop can continue. 0 disables idle detection. Default: 10." />
+          {t('settings.ai.deviceResponseTimeout')}
+          <HelpTooltip text={t('settings.ai.deviceResponseTimeoutHelp')} />
         </label>
         <input
           type="number"
@@ -397,12 +399,12 @@ export function AISettingsTab() {
             checked={settings.aiSleepAsClientDelay}
             onChange={(e) => update('aiSleepAsClientDelay', e.target.checked)}
           />
-          Run leading `sleep` as a client-side delay
-          <HelpTooltip text="When the AI issues a command starting with `sleep N` (e.g. `sleep 120 && validate`), wait N seconds in HoTTY instead of running sleep on the device. This stops the Device Response Timeout above from mis-firing during the sleep. Any chained command runs after the wait. Default: on." />
+          {t('settings.ai.sleepAsClientDelay')}
+          <HelpTooltip text={t('settings.ai.sleepAsClientDelayHelp')} />
         </label>
         <label>
-          Max client-side delay (seconds)
-          <HelpTooltip text="Upper bound for a client-side sleep delay; longer sleeps are clamped to this and noted. 0 = no cap. Default: 900 (15 min)." />
+          {t('settings.ai.maxClientDelay')}
+          <HelpTooltip text={t('settings.ai.maxClientDelayHelp')} />
         </label>
         <input
           type="number"
@@ -420,8 +422,8 @@ export function AISettingsTab() {
       {/* Whitelist — auto-execute */}
       <div className="settings-group">
         <label>
-          Whitelist (auto-execute)
-          <HelpTooltip text="Commands matched here auto-execute. A single word matches as a base command (e.g. 'docker' matches any docker command); an entry with spaces matches as a substring (e.g. 'git log'). Seeded with safe defaults; fully editable." />
+          {t('settings.ai.whitelist')}
+          <HelpTooltip text={t('settings.ai.whitelistHelp')} />
         </label>
         <div style={{ display: 'flex', gap: '8px' }}>
           <input
@@ -437,7 +439,7 @@ export function AISettingsTab() {
                 setNewWhitelistEntry('');
               }
             }}
-            placeholder="e.g., docker, kubectl get"
+            placeholder={t('settings.ai.whitelistPlaceholder')}
             style={{ flex: 1 }}
           />
           <button
@@ -451,14 +453,14 @@ export function AISettingsTab() {
             }}
             disabled={!newWhitelistEntry.trim()}
           >
-            Add
+            {t('settings.ai.add')}
           </button>
           <button
             className="settings-button"
             onClick={() => update('whitelistCommands', [...DEFAULT_WHITELIST])}
-            title="Reset the whitelist to the built-in defaults"
+            title={t('settings.ai.resetWhitelistTitle')}
           >
-            Reset to defaults
+            {t('settings.ai.resetToDefaults')}
           </button>
         </div>
         {settings.whitelistCommands.length > 0 && (
@@ -468,7 +470,7 @@ export function AISettingsTab() {
                 {cmd}
                 <button
                   onClick={() => update('whitelistCommands', settings.whitelistCommands.filter(c => c !== cmd))}
-                  title={`Remove ${cmd}`}
+                  title={t('settings.ai.removeEntry', { cmd })}
                 >
                   &#10005;
                 </button>
@@ -481,8 +483,8 @@ export function AISettingsTab() {
       {/* Blacklist — ask before execute */}
       <div className="settings-group">
         <label>
-          Blacklist (ask before execute)
-          <HelpTooltip text="Commands matched here are never auto-executed — a manual Run is still allowed, with a warning. A single word matches as a base command; an entry with spaces matches as a substring (e.g. 'rm -rf', 'git push'). Seeded with destructive defaults; fully editable." />
+          {t('settings.ai.blacklist')}
+          <HelpTooltip text={t('settings.ai.blacklistHelp')} />
         </label>
         <div style={{ display: 'flex', gap: '8px' }}>
           <input
@@ -498,7 +500,7 @@ export function AISettingsTab() {
                 setNewBlacklistEntry('');
               }
             }}
-            placeholder="e.g., rm -rf, git push"
+            placeholder={t('settings.ai.blacklistPlaceholder')}
             style={{ flex: 1 }}
           />
           <button
@@ -512,14 +514,14 @@ export function AISettingsTab() {
             }}
             disabled={!newBlacklistEntry.trim()}
           >
-            Add
+            {t('settings.ai.add')}
           </button>
           <button
             className="settings-button"
             onClick={() => update('blacklistCommands', [...DEFAULT_BLACKLIST])}
-            title="Reset the blacklist to the built-in defaults"
+            title={t('settings.ai.resetBlacklistTitle')}
           >
-            Reset to defaults
+            {t('settings.ai.resetToDefaults')}
           </button>
         </div>
         {settings.blacklistCommands.length > 0 && (
@@ -529,7 +531,7 @@ export function AISettingsTab() {
                 {cmd}
                 <button
                   onClick={() => update('blacklistCommands', settings.blacklistCommands.filter(c => c !== cmd))}
-                  title={`Remove ${cmd}`}
+                  title={t('settings.ai.removeEntry', { cmd })}
                 >
                   &#10005;
                 </button>
@@ -543,18 +545,18 @@ export function AISettingsTab() {
       {/* -- Modals -- */}
       {showGeminiWarning && (
         <ConfirmModal
-          title="Privacy Notice"
-          message="Google AI Studio (Gemini) may use your data for AI training on the free tier. Enable billing on your Google Cloud project to opt out."
-          confirmLabel="OK"
+          title={t('settings.ai.privacyNoticeTitle')}
+          message={t('settings.ai.privacyNoticeMessage')}
+          confirmLabel={t('settings.ai.privacyNoticeConfirm')}
           onConfirm={() => setShowGeminiWarning(false)}
           onCancel={() => setShowGeminiWarning(false)}
         />
       )}
       {showLogoutConfirm && (
         <ConfirmModal
-          title="Logout"
-          message="Are you sure you want to logout? You will need to re-authenticate to use the AI provider."
-          confirmLabel="Logout"
+          title={t('settings.ai.logoutTitle')}
+          message={t('settings.ai.logoutMessage')}
+          confirmLabel={t('settings.ai.logoutConfirm')}
           onConfirm={async () => {
             setShowLogoutConfirm(false);
             localStorage.setItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT, '1');

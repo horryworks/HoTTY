@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
 import { logError } from '../../utils/logger';
 import type { IapVmStartPromptPayload } from '../../types/appTypes';
 import './IapVmStartModal.css';
 
 export function IapVmStartModal() {
+  const { t } = useTranslation();
   const [prompt, setPrompt] = useState<IapVmStartPromptPayload | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -42,23 +44,26 @@ export function IapVmStartModal() {
     <div className="iap-vm-start-overlay">
       <div className="iap-vm-start-modal">
         <div className="iap-vm-start-header">
-          <span>Start GCE VM?</span>
+          <span>{t('dialogs.iapVmStart.title')}</span>
         </div>
         <div className="iap-vm-start-body">
           <p className="iap-vm-start-message">
-            The target VM is currently <strong>{prompt.currentStatus}</strong>.
-            Start it now to continue the IAP connection?
+            <Trans
+              i18nKey="dialogs.iapVmStart.message"
+              values={{ status: prompt.currentStatus }}
+              components={[<strong key="status" />]}
+            />
           </p>
           <div className="iap-vm-start-row">
-            <span className="iap-vm-start-label">Instance:</span>
+            <span className="iap-vm-start-label">{t('dialogs.iapVmStart.instance')}</span>
             <span className="iap-vm-start-value">{prompt.instance}</span>
           </div>
           <div className="iap-vm-start-row">
-            <span className="iap-vm-start-label">Project:</span>
+            <span className="iap-vm-start-label">{t('dialogs.iapVmStart.project')}</span>
             <span className="iap-vm-start-value">{prompt.project}</span>
           </div>
           <div className="iap-vm-start-row">
-            <span className="iap-vm-start-label">Zone:</span>
+            <span className="iap-vm-start-label">{t('dialogs.iapVmStart.zone')}</span>
             <span className="iap-vm-start-value">{prompt.zone}</span>
           </div>
         </div>
@@ -69,7 +74,7 @@ export function IapVmStartModal() {
             disabled={busy}
             onClick={() => respond(false)}
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -77,7 +82,7 @@ export function IapVmStartModal() {
             disabled={busy}
             onClick={() => respond(true)}
           >
-            Start VM
+            {t('dialogs.iapVmStart.startVm')}
           </button>
         </div>
       </div>

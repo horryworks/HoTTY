@@ -1,0 +1,72 @@
+// New Session dialog (connection flow). Covers the dialog chrome, the host/GCP
+// tabs, the status banner, the connection form fields/labels/placeholders, the
+// protocol-specific field groups (SSH / Serial / WSL / Git Bash), validation
+// messages, and the discard-changes confirmation.
+export const sessionDialog = {
+  title: 'New Session',
+  tabs: {
+    sourceAriaLabel: 'Connection source',
+    hosts: 'Hosts',
+    gcp: 'GCP',
+  },
+  banner: {
+    newConnection: 'New Connection',
+    // {{name}} is the host display name (or the unnamed fallback).
+    editing: 'Editing:',
+    unnamed: '(unnamed)',
+    startNewTitle: 'Start a new connection',
+    clearAriaLabel: 'Clear form and start new connection',
+  },
+  decrypting: 'Decrypting...',
+  nameLabel: 'Name',
+  namePlaceholder: 'Display Name',
+  protocolLabel: 'Protocol',
+  useAsJumpbox: 'Use as Jumpbox',
+  hostLabel: 'Host/IP',
+  hostPlaceholder: 'example.com',
+  portLabel: 'Port',
+  usernameLabel: 'Username',
+  passwordLabel: 'Password',
+  jumpboxLabel: 'Jumpbox (Bastion)',
+  directConnection: 'Direct Connection',
+  privateKeyPathLabel: 'Private Key Path (optional)',
+  privateKeyPathPlaceholder: '~/.ssh/id_rsa',
+  privateKeyPassphraseLabel: 'Private Key Passphrase',
+  serialPortLabel: 'Serial Port',
+  serialPortPlaceholder: 'COM3',
+  baudRateLabel: 'Baud Rate',
+  dataBitsLabel: 'Data Bits',
+  parityLabel: 'Parity',
+  parity: {
+    none: 'None',
+    odd: 'Odd',
+    even: 'Even',
+    mark: 'Mark',
+    space: 'Space',
+  },
+  stopBitsLabel: 'Stop Bits',
+  flowControlLabel: 'Flow Control',
+  flowControl: {
+    none: 'None',
+  },
+  distributionLabel: 'Distribution',
+  noWslDistros: 'No WSL distributions found.',
+  gitBashNotInstalled: 'Git Bash is not installed.',
+  encodingLabel: 'Encoding',
+  saveTitleDirty: 'Save changes to this host',
+  saveTitleClean: 'No changes to save',
+  connect: 'Connect',
+  browseKeyTitle: 'Select private key file',
+  validation: {
+    hostRequired: 'Host is required.',
+    hostInvalidWhitespace: 'Host contains invalid whitespace or newline characters.',
+    portRange: 'Port must be an integer between 1 and 65535.',
+    usernameRequiredSsh: 'Username is required for SSH.',
+    usernameInvalidNewline: 'Username contains invalid newline characters.',
+  },
+  discard: {
+    title: 'Discard changes?',
+    message: 'You have unsaved changes in this form. Switching will discard them.',
+    confirmLabel: 'Discard',
+  },
+} as const;

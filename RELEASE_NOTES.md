@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.7-beta2
+
+HoTTY's interface is now multilingual. A new **Display language** selector in **Settings → General** switches the entire UI between eight languages, instantly and without a restart.
+
+### New Features
+
+- **The HoTTY interface is now available in 8 languages.** A new **Display language** selector in **Settings → General** switches the entire UI — menus, tabs, dialogs, settings, the AI chat panel, and in-app help — between **English, 日本語 (Japanese), 简体中文 (Simplified Chinese), 繁體中文 (Traditional Chinese), 한국어 (Korean), Русский (Russian), Español (Spanish), and Français (French)**. The change applies instantly with no restart, and your choice is remembered across launches. English remains the default, so existing installs are unaffected until you choose another language. (The AI's response language is configured separately in the AI chat panel and is unchanged by this setting.)
+
 ## v2.0.7-beta1
 
 A security-focused beta that hardens HoTTY's dependency supply chain against the recent wave of compromised-package attacks. There are no changes to in-app behavior — this release strengthens the integrity of the build and dependency pipeline that produces the installer.

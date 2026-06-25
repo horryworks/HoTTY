@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AboutTab } from './AboutTab';
 import { AISettingsTab } from './AISettingsTab';
 import { AppearanceTab } from './AppearanceTab';
@@ -18,14 +19,7 @@ interface SettingsModalProps {
 
 type Tab = 'general' | 'appearance' | 'protocols' | 'features' | 'ai' | 'about';
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'general', label: 'General' },
-  { id: 'appearance', label: 'Appearance' },
-  { id: 'protocols', label: 'Protocols' },
-  { id: 'features', label: 'Features' },
-  { id: 'ai', label: 'AI' },
-  { id: 'about', label: 'About' },
-];
+const TAB_IDS: Tab[] = ['general', 'appearance', 'protocols', 'features', 'ai', 'about'];
 
 export function SettingsModal({
   open,
@@ -35,6 +29,7 @@ export function SettingsModal({
   onDeleteTheme,
 }: SettingsModalProps) {
   const [tab, setTab] = useState<Tab>('general');
+  const { t } = useTranslation();
 
   if (!open) return null;
 
@@ -42,17 +37,17 @@ export function SettingsModal({
     <div className="settings-modal-overlay" onClick={onClose}>
       <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="settings-modal-header">
-          <span>Settings</span>
+          <span>{t('settings.title')}</span>
         </div>
         <div className="settings-modal-tabs">
-          {TABS.map((t) => (
+          {TAB_IDS.map((id) => (
             <button
-              key={t.id}
+              key={id}
               type="button"
-              className={`settings-modal-tab${tab === t.id ? ' active' : ''}`}
-              onClick={() => setTab(t.id)}
+              className={`settings-modal-tab${tab === id ? ' active' : ''}`}
+              onClick={() => setTab(id)}
             >
-              {t.label}
+              {t(`settings.tabs.${id}`)}
             </button>
           ))}
         </div>

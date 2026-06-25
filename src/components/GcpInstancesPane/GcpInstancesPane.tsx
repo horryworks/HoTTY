@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { tauriService } from '../../services/tauriService';
 import type {
   GceInstance,
@@ -108,12 +110,12 @@ function isTransitional(status: string): boolean {
   );
 }
 
-function formatLastRefreshed(ms?: number): string {
-  if (!ms) return 'never';
+function formatLastRefreshed(t: TFunction, ms?: number): string {
+  if (!ms) return t('panes.gcpInstances.lastRefreshNever');
   try {
     return new Date(ms).toLocaleString();
   } catch {
-    return 'unknown';
+    return t('panes.gcpInstances.lastRefreshUnknown');
   }
 }
 
@@ -142,6 +144,7 @@ export function GcpInstancesPane({
   onSelectInstance,
   onActivateInstance,
 }: GcpInstancesPaneProps) {
+  const { t } = useTranslation();
   const [snapshot, setSnapshot] = useState<GcloudCacheSnapshot>(EMPTY_SNAPSHOT);
   const [progress, setProgress] = useState<GcpRefreshProgress | null>(null);
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
@@ -384,8 +387,11 @@ export function GcpInstancesPane({
       }
 
       if (actionError) {
-        const verb = action === 'starting' ? 'Start' : 'Stop';
-        setError(`${verb} failed: ${actionError}`);
+        setError(
+          action === 'starting'
+            ? t('panes.gcpInstances.startFailed', { message: actionError })
+            : t('panes.gcpInstances.stopFailed', { message: actionError }),
+        );
         setVmErrors((p) => new Map(p).set(key, actionError as string));
         // Probe once more so the row doesn't keep showing the optimistic
         // STARTING/STOPPING when the action was rejected.
@@ -423,7 +429,7 @@ export function GcpInstancesPane({
         activeActionsRef.current.delete(key);
       }
     },
-    [updateInstanceStatusInSnapshot],
+    [updateInstanceStatusInSnapshot, t],
   );
 
   // Cleanup: abort any in-flight tracker loops on unmount so they stop
@@ -573,22 +579,31 @@ export function GcpInstancesPane({
 
   const headerSubtitle = useMemo(() => {
     if (isRefreshing) {
-      if (!progress) return 'Refreshing…';
-      if (progress.stage === 'gcloud') return 'Checking gcloud CLI…';
-      if (progress.stage === 'auth') return 'Checking authentication…';
-      if (progress.stage === 'projects') return 'Listing projects…';
+      if (!progress) return t('panes.gcpInstances.refreshing');
+      if (progress.stage === 'gcloud') return t('panes.gcpInstances.checkingGcloud');
+      if (progress.stage === 'auth') return t('panes.gcpInstances.checkingAuth');
+      if (progress.stage === 'projects') return t('panes.gcpInstances.listingProjects');
       if (progress.stage === 'instances') {
         const pid = progress.currentProject ?? '';
-        return `Listing instances (${progress.done}/${progress.total}) — ${pid}`;
+        return t('panes.gcpInstances.listingInstances', {
+          done: progress.done,
+          total: progress.total,
+          project: pid,
+        });
       }
-      return 'Finalising…';
+      return t('panes.gcpInstances.finalising');
     }
-    if (isGcloudMissing) return 'gcloud CLI not found';
-    if (isUnauthenticated) return 'Not authenticated (run `gcloud auth login`)';
+    if (isGcloudMissing) return t('panes.gcpInstances.gcloudMissing');
+    if (isUnauthenticated) return t('panes.gcpInstances.notAuthenticated');
     if (snapshot.auth?.authenticated && snapshot.auth.account)
-      return `${snapshot.auth.account} • Last refresh: ${formatLastRefreshed(snapshot.lastRefreshedMs)}`;
-    if (!hasCacheData) return 'Click ↻ to load projects';
-    return `Last refresh: ${formatLastRefreshed(snapshot.lastRefreshedMs)}`;
+      return t('panes.gcpInstances.accountAndRefresh', {
+        account: snapshot.auth.account,
+        time: formatLastRefreshed(t, snapshot.lastRefreshedMs),
+      });
+    if (!hasCacheData) return t('panes.gcpInstances.clickToLoad');
+    return t('panes.gcpInstances.lastRefresh', {
+      time: formatLastRefreshed(t, snapshot.lastRefreshedMs),
+    });
   }, [
     isRefreshing,
     snapshot.auth,
@@ -597,13 +612,14 @@ export function GcpInstancesPane({
     isGcloudMissing,
     isUnauthenticated,
     hasCacheData,
+    t,
   ]);
 
   return (
     <div className="gcp-instances-pane">
       <div className="gcp-pane-header">
         <div className="gcp-pane-title">
-          <span aria-hidden="true">☁ </span>Google Cloud GCE
+          <span aria-hidden="true">☁ </span>{t('panes.gcpInstances.paneTitle')}
         </div>
         <div className="gcp-pane-header-actions">
           {(hiddenCount > 0 || showInaccessible) && (
@@ -613,10 +629,10 @@ export function GcpInstancesPane({
               onClick={toggleShowInaccessible}
               title={
                 showInaccessible
-                  ? 'Hide instances without IAP tunnel permission'
-                  : `Show ${hiddenCount} hidden instance${hiddenCount === 1 ? '' : 's'} (no IAP tunnel permission)`
+                  ? t('panes.gcpInstances.hideInaccessible')
+                  : t('panes.gcpInstances.showHidden', { count: hiddenCount })
               }
-              aria-label={showInaccessible ? 'Hide inaccessible instances' : 'Show inaccessible instances'}
+              aria-label={showInaccessible ? t('panes.gcpInstances.hideInaccessibleAria') : t('panes.gcpInstances.showInaccessibleAria')}
               aria-pressed={showInaccessible}
             >
               {showInaccessible ? '👁' : `🔒 ${hiddenCount}`}
@@ -627,8 +643,8 @@ export function GcpInstancesPane({
             className="gcp-refresh-btn"
             onClick={handleRefresh}
             disabled={isRefreshing}
-            title="Refresh GCP discovery"
-            aria-label="Refresh"
+            title={t('panes.gcpInstances.refreshTitle')}
+            aria-label={t('panes.gcpInstances.refresh')}
           >
             {isRefreshing ? '⟳' : '↻'}
           </button>
@@ -639,18 +655,18 @@ export function GcpInstancesPane({
         <input
           type="text"
           className="gcp-pane-search-input"
-          placeholder="Search projects / instances…"
+          placeholder={t('panes.gcpInstances.searchPlaceholder')}
           value={searchQuery}
           onChange={handleSearchChange}
-          aria-label="Search GCP projects and instances"
+          aria-label={t('panes.gcpInstances.searchAria')}
         />
         {searchQuery && (
           <button
             type="button"
             className="gcp-pane-search-clear"
             onClick={clearSearch}
-            title="Clear search"
-            aria-label="Clear search"
+            title={t('panes.gcpInstances.clearSearch')}
+            aria-label={t('panes.gcpInstances.clearSearch')}
           >
             ×
           </button>
@@ -665,15 +681,15 @@ export function GcpInstancesPane({
         {projects.length === 0 ? (
           <div className="gcp-empty">
             {snapshot.refreshInProgress
-              ? 'Loading…'
+              ? t('panes.gcpInstances.loading')
               : isGcloudMissing
-                ? 'Install the gcloud CLI to use this tab.'
+                ? t('panes.gcpInstances.installGcloud')
                 : isUnauthenticated
-                  ? 'Run `gcloud auth login` in a terminal, then click ↻.'
-                  : 'No projects found.'}
+                  ? t('panes.gcpInstances.runAuthLogin')
+                  : t('panes.gcpInstances.noProjects')}
           </div>
         ) : visibleProjects.length === 0 && trimmedQuery !== '' ? (
-          <div className="gcp-empty">No matches for “{trimmedQuery}”.</div>
+          <div className="gcp-empty">{t('panes.gcpInstances.noMatches', { query: trimmedQuery })}</div>
         ) : (
           visibleProjects.map(({ project, instances, projectError }) => {
             const collapsed = collapsedProjects.has(project.id);
@@ -701,7 +717,7 @@ export function GcpInstancesPane({
                     {projectError ? (
                       <div className="gcp-project-error">{projectError}</div>
                     ) : grouped.length === 0 ? (
-                      <div className="gcp-zone-empty">No instances.</div>
+                      <div className="gcp-zone-empty">{t('panes.gcpInstances.noInstances')}</div>
                     ) : (
                       grouped.map(({ zone, instances }) => (
                         <div key={zone} className="gcp-zone-group">
@@ -753,9 +769,9 @@ export function GcpInstancesPane({
                               `gcp-instance-row${isSelected ? ' selected' : ''}` +
                               (isAccessDenied ? ' gcp-access-denied' : '');
                             const rowTitle = isAccessDenied
-                              ? 'No IAP tunnel permission on this instance — cannot connect.'
+                              ? t('panes.gcpInstances.iapDeniedHint')
                               : osLoginMissing
-                                ? 'No OS Login permission — SSH may require a metadata SSH key.'
+                                ? t('panes.gcpInstances.osLoginHint')
                                 : undefined;
                             return (
                               <div
@@ -766,7 +782,7 @@ export function GcpInstancesPane({
                                 role="button"
                                 tabIndex={isAccessDenied ? -1 : 0}
                                 aria-disabled={isAccessDenied || undefined}
-                                aria-label={`${inst.name} (${displayStatus})`}
+                                aria-label={t('panes.gcpInstances.instanceAria', { name: inst.name, status: displayStatus })}
                                 title={rowTitle}
                               >
                                 <span className="gcp-status-glyph" aria-hidden="true">
@@ -776,7 +792,7 @@ export function GcpInstancesPane({
                                 {isAccessDenied && (
                                   <span
                                     className="gcp-instance-locked"
-                                    aria-label="No IAP tunnel permission"
+                                    aria-label={t('panes.gcpInstances.noIapPermission')}
                                   >
                                     🔒
                                   </span>
@@ -784,8 +800,8 @@ export function GcpInstancesPane({
                                 {!isAccessDenied && osLoginMissing && (
                                   <span
                                     className="gcp-instance-warning"
-                                    aria-label="No OS Login permission"
-                                    title="No OS Login permission — SSH may require a metadata SSH key."
+                                    aria-label={t('panes.gcpInstances.noOsLoginPermission')}
+                                    title={t('panes.gcpInstances.osLoginHint')}
                                   >
                                     🔑
                                   </span>
@@ -795,7 +811,7 @@ export function GcpInstancesPane({
                                   <span
                                     className="gcp-instance-error"
                                     title={vmError}
-                                    aria-label={`Error: ${vmError}`}
+                                    aria-label={t('panes.gcpInstances.instanceError', { message: vmError })}
                                   >
                                     ⚠
                                   </span>
@@ -809,8 +825,8 @@ export function GcpInstancesPane({
                                         e.stopPropagation();
                                         handleStart(sel);
                                       }}
-                                      title="Start VM"
-                                      aria-label={`Start ${inst.name}`}
+                                      title={t('panes.gcpInstances.startVm')}
+                                      aria-label={t('panes.gcpInstances.startInstanceAria', { name: inst.name })}
                                     >
                                       ▶
                                     </button>
@@ -823,8 +839,8 @@ export function GcpInstancesPane({
                                         e.stopPropagation();
                                         handleStop(sel);
                                       }}
-                                      title="Stop VM"
-                                      aria-label={`Stop ${inst.name}`}
+                                      title={t('panes.gcpInstances.stopVm')}
+                                      aria-label={t('panes.gcpInstances.stopInstanceAria', { name: inst.name })}
                                     >
                                       ⏹
                                     </button>

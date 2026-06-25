@@ -35,6 +35,15 @@ describe('settingsStore', () => {
     expect(useSettingsStore.getState().theme).toBe('dark');
   });
 
+  it('defaults the UI language to English', () => {
+    expect(useSettingsStore.getState().language).toBe('en');
+  });
+
+  it('updates the language field', () => {
+    useSettingsStore.getState().update('language', 'ja');
+    expect(useSettingsStore.getState().language).toBe('ja');
+  });
+
   it('defaults pane background to color mode with no image', () => {
     const s = useSettingsStore.getState();
     expect(s.paneBackgroundMode).toBe('color');

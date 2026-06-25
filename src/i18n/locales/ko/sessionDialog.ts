@@ -1,0 +1,72 @@
+// New Session dialog (connection flow). Covers the dialog chrome, the host/GCP
+// tabs, the status banner, the connection form fields/labels/placeholders, the
+// protocol-specific field groups (SSH / Serial / WSL / Git Bash), validation
+// messages, and the discard-changes confirmation.
+export const sessionDialog = {
+  title: '새 세션',
+  tabs: {
+    sourceAriaLabel: '연결 소스',
+    hosts: '호스트',
+    gcp: 'GCP',
+  },
+  banner: {
+    newConnection: '새 연결',
+    // {{name}} is the host display name (or the unnamed fallback).
+    editing: '편집 중:',
+    unnamed: '(이름 없음)',
+    startNewTitle: '새 연결 시작',
+    clearAriaLabel: '양식을 지우고 새 연결 시작',
+  },
+  decrypting: '복호화 중...',
+  nameLabel: '이름',
+  namePlaceholder: '표시 이름',
+  protocolLabel: '프로토콜',
+  useAsJumpbox: '점프박스로 사용',
+  hostLabel: '호스트/IP',
+  hostPlaceholder: 'example.com',
+  portLabel: '포트',
+  usernameLabel: '사용자 이름',
+  passwordLabel: '비밀번호',
+  jumpboxLabel: '점프박스 (배스천)',
+  directConnection: '직접 연결',
+  privateKeyPathLabel: '개인 키 경로 (선택 사항)',
+  privateKeyPathPlaceholder: '~/.ssh/id_rsa',
+  privateKeyPassphraseLabel: '개인 키 암호 구문',
+  serialPortLabel: '시리얼 포트',
+  serialPortPlaceholder: 'COM3',
+  baudRateLabel: '보드레이트',
+  dataBitsLabel: '데이터 비트',
+  parityLabel: '패리티',
+  parity: {
+    none: '없음',
+    odd: '홀수',
+    even: '짝수',
+    mark: '마크',
+    space: '스페이스',
+  },
+  stopBitsLabel: '정지 비트',
+  flowControlLabel: '흐름 제어',
+  flowControl: {
+    none: '없음',
+  },
+  distributionLabel: '배포판',
+  noWslDistros: 'WSL 배포판을 찾을 수 없습니다.',
+  gitBashNotInstalled: 'Git Bash가 설치되어 있지 않습니다.',
+  encodingLabel: '인코딩',
+  saveTitleDirty: '이 호스트에 변경 사항 저장',
+  saveTitleClean: '저장할 변경 사항 없음',
+  connect: '연결',
+  browseKeyTitle: '개인 키 파일 선택',
+  validation: {
+    hostRequired: '호스트는 필수입니다.',
+    hostInvalidWhitespace: '호스트에 잘못된 공백 또는 줄 바꿈 문자가 포함되어 있습니다.',
+    portRange: '포트는 1에서 65535 사이의 정수여야 합니다.',
+    usernameRequiredSsh: 'SSH에는 사용자 이름이 필요합니다.',
+    usernameInvalidNewline: '사용자 이름에 잘못된 줄 바꿈 문자가 포함되어 있습니다.',
+  },
+  discard: {
+    title: '변경 사항을 취소하시겠습니까?',
+    message: '이 양식에 저장되지 않은 변경 사항이 있습니다. 전환하면 변경 사항이 취소됩니다.',
+    confirmLabel: '취소',
+  },
+};
