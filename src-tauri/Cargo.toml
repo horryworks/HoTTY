@@ -1,6 +1,6 @@
 [package]
 name = "hotty"
-version = "2.0.7-beta2"
+version = "2.0.7-beta3"
 description = "HoTTY - AI Integrated Advanced Terminal Emulator (Rust/Tauri)"
 authors = ["horryworks"]
 license = "GPL-3.0-or-later"
@@ -43,11 +43,26 @@ portable-pty = "0.8"
 #   - "dsa" enables ssh-dss host keys
 russh = { version = "0.60", features = ["des", "dsa"] }
 
+# SFTP subsystem (server + client) layered on top of russh's SSH transport.
+# Transport-agnostic — operates on any AsyncRead+AsyncWrite stream, so it is not
+# version-coupled to russh. Powers the built-in SFTP server (File Server feature).
+russh-sftp = "2.1"
+
 # Serial Port
 serialport = "4.7"
 
 # Networking
 reqwest = { version = "0.12", features = ["json", "stream"] }
+
+# TFTP server (RFC 1350 + option negotiation) for the File Server feature —
+# lets network devices (e.g. Cisco) pull/push firmware images over UDP.
+# Executor-agnostic (async-io reactor); runs inside the existing tokio app.
+async-tftp = "0.4.2"
+
+# Off-thread file I/O adapter (futures AsyncRead/AsyncWrite over std::fs::File);
+# required to serve files through async-tftp's Handler trait. Already in the tree
+# transitively via async-tftp.
+blocking = "1.6"
 
 # Cryptography
 aes-gcm = "0.10"

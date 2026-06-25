@@ -1,5 +1,5 @@
 export type ProtocolId = 'ssh' | 'telnet' | 'serial' | 'wsl' | 'cmd' | 'powershell' | 'git-bash' | 'gcloud-iap';
-export type FeatureId = 'ai-chat' | 'log-viewer' | 'ping-monitor' | 'text-editor' | 'file-explorer';
+export type FeatureId = 'ai-chat' | 'log-viewer' | 'ping-monitor' | 'text-editor' | 'file-explorer' | 'file-server';
 
 export type Encoding = 'utf8' | 'shift_jis' | 'euc-jp';
 
@@ -223,6 +223,42 @@ export interface PingDataPayload {
 export interface PingLogFilePayload {
   sessionId: string;
   fileName: string;
+}
+
+// ---------------------------------------------------------------------------
+// File Server (TFTP / SFTP)
+// ---------------------------------------------------------------------------
+
+export type FileServerProtocol = 'tftp' | 'sftp';
+
+/** Mirrors the Rust `FirewallStatus` enum (serde camelCase). */
+export type FirewallStatus = 'allowed' | 'blocked' | 'unknown' | 'notApplicable';
+
+/** Persisted File Server pane configuration (password is never persisted). */
+export interface FileServerConfig {
+  rootDir: string;
+  bindAddr: string;
+  tftpPort: number;
+  tftpAllowWrite: boolean;
+  sftpPort: number;
+  sftpUsername: string;
+  sftpAllowWrite: boolean;
+}
+
+/** Mirrors the Rust `FileServerEvent` payload (`file-server-event`). */
+export interface FileServerEvent {
+  serverId: string;
+  protocol: FileServerProtocol;
+  kind: 'status' | 'transfer' | 'error';
+  /** For kind=status: running | stopped | client-connected. */
+  status?: string;
+  message?: string;
+  client?: string;
+  filename?: string;
+  direction?: 'download' | 'upload';
+  bytes?: number;
+  /** ms since the Unix epoch. */
+  timestamp: number;
 }
 
 // ---------------------------------------------------------------------------

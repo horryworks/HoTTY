@@ -139,6 +139,23 @@ export const help = {
       '<0>Invite de modifications non enregistrées :</0> fermer un sous-onglet ou quitter avec des éditeurs modifiés ouvre une boîte de dialogue <1>Enregistrer / Abandonner / Annuler</1> afin que vous ne perdiez jamais votre travail par accident.',
   },
 
+  fileServer: {
+    summary:
+      'Serveur de fichiers (TFTP / SFTP)',
+    intro:
+      'Ouvrez le panneau Serveur de fichiers via <0><1></1></0> (Features) → <2>« File Server »</2>. Choisissez un dossier à partager et démarrez un serveur TFTP ou SFTP pour que les équipements réseau (p. ex. Cisco) téléchargent ou envoient le firmware via le LAN.',
+    serve:
+      '<0>Dossier partagé :</0> Choisissez le dossier avec Parcourir. Seuls les fichiers qu\'il contient sont accessibles ; la traversée de chemin et les liens symboliques sont bloqués.',
+    tftp:
+      '<0>TFTP :</0> UDP (port 69 par défaut). La méthode classique pour charger le firmware Cisco IOS avec <1>copy tftp: flash:</1>. Lecture seule par défaut ; activez <2>Allow uploads</2> pour les transferts équipement→PC.',
+    sftp:
+      '<0>SFTP :</0> Basé sur SSH (port 2222 par défaut) avec authentification par identifiant/mot de passe. La clé d\'hôte est générée automatiquement et stockée chiffrée.',
+    firewall:
+      '<0>Pare-feu Windows :</0> Si le trafic entrant est bloqué, le panneau l\'indique et propose <1>Allow through firewall</1> (un clic, administrateur requis).',
+    security:
+      '<0>Sécurité :</0> Démarrer un serveur expose le dossier choisi à votre réseau local. Ne partagez que des fichiers de confiance et laissez les envois désactivés sauf si nécessaire.',
+  },
+
   fileExplorer: {
     summary: 'Explorateur de fichiers',
     intro:

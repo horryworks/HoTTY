@@ -3,6 +3,7 @@
 // truth; values are byte-identical to the in-component literals they replace.
 export const chrome = {
   tabBar: {
+    fileServer: 'File Server',
     newSession: 'New Session',
     closeTab: 'Close tab',
     features: 'Features',

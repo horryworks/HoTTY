@@ -116,6 +116,8 @@ export const settings = {
       '¿Activar diffie-hellman-group-exchange-sha1 de todos modos?',
   },
   features: {
+    fileServerLabel: 'Servidor de archivos',
+    fileServerDescription: 'Servidor TFTP / SFTP para subir firmware a dispositivos de red',
     section: 'Funciones',
     sectionHelp: 'Active o desactive los paneles de funciones. Los paneles ya abiertos no se ven afectados.',
     aiChatLabel: 'Chat de IA',

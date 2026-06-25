@@ -139,6 +139,23 @@ export const help = {
       '<0>Aviso de cambios sin guardar:</0> al cerrar una subpestaña o salir con editores con cambios pendientes se abre un diálogo de <1>Guardar / Descartar / Cancelar</1> para que nunca pierda trabajo por accidente.',
   },
 
+  fileServer: {
+    summary:
+      'Servidor de archivos (TFTP / SFTP)',
+    intro:
+      'Abre el panel Servidor de archivos con <0><1></1></0> (Features) → <2>"File Server"</2>. Elige una carpeta para compartir e inicia un servidor TFTP o SFTP para que los dispositivos de red (p. ej. Cisco) descarguen o suban firmware por la LAN.',
+    serve:
+      '<0>Carpeta compartida:</0> Elige la carpeta con Examinar. Solo se puede acceder a los archivos que contiene; se bloquean el path traversal y los enlaces simbólicos.',
+    tftp:
+      '<0>TFTP:</0> UDP (puerto 69 por defecto). El método clásico para cargar firmware en Cisco IOS con <1>copy tftp: flash:</1>. Solo lectura por defecto; activa <2>Allow uploads</2> para transferencias dispositivo→PC.',
+    sftp:
+      '<0>SFTP:</0> Basado en SSH (puerto 2222 por defecto) con autenticación por usuario/contraseña. La clave de host se genera automáticamente y se guarda cifrada.',
+    firewall:
+      '<0>Firewall de Windows:</0> Si el tráfico entrante está bloqueado, el panel lo indica y ofrece <1>Allow through firewall</1> (un clic, requiere administrador).',
+    security:
+      '<0>Seguridad:</0> Iniciar un servidor expone la carpeta elegida a tu red local. Comparte solo archivos de confianza y mantén las subidas desactivadas salvo que las necesites.',
+  },
+
   fileExplorer: {
     summary: 'Explorador de archivos',
     intro:

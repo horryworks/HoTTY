@@ -2,6 +2,7 @@
 // 工具按鈕）。每個外框區域對應一個鍵區塊。
 export const chrome = {
   tabBar: {
+    fileServer: '檔案伺服器',
     newSession: '新工作階段',
     closeTab: '關閉分頁',
     features: '功能',

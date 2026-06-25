@@ -139,6 +139,23 @@ export const help = {
       '<0>Unsaved changes prompt:</0> Closing a sub-tab or exiting with dirty editors opens a <1>Save / Discard / Cancel</1> dialog so you never lose work by accident.',
   },
 
+  fileServer: {
+    summary:
+      'File Server (TFTP / SFTP)',
+    intro:
+      'Open the File Server pane via <0><1></1></0> (Features) → <2>"File Server"</2>. Choose a folder to share, then start a TFTP and/or SFTP server so network devices (e.g. Cisco) can pull or push firmware over the LAN.',
+    serve:
+      '<0>Served folder:</0> Pick the folder with Browse. Only files inside it are accessible — path traversal and symlink escapes are blocked.',
+    tftp:
+      '<0>TFTP:</0> UDP (default port 69). The classic method for Cisco IOS <1>copy tftp: flash:</1> firmware loads. Read-only by default; enable <2>Allow uploads</2> for device→PC transfers.',
+    sftp:
+      '<0>SFTP:</0> SSH-based (default port 2222) with username/password auth. The host key is generated automatically and stored encrypted.',
+    firewall:
+      '<0>Windows Firewall:</0> If inbound is blocked, the pane shows it and offers <1>Allow through firewall</1> (one click, requires administrator).',
+    security:
+      '<0>Security:</0> Starting a server exposes the chosen folder to your local network. Serve only trusted files and keep uploads off unless you need them.',
+  },
+
   fileExplorer: {
     summary: 'File Explorer',
     intro:

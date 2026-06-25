@@ -116,6 +116,8 @@ export const settings = {
       '그래도 diffie-hellman-group-exchange-sha1을 사용하시겠습니까?',
   },
   features: {
+    fileServerLabel: '파일 서버',
+    fileServerDescription: '네트워크 장비에 펌웨어를 업로드하기 위한 TFTP / SFTP 서버',
     section: '기능',
     sectionHelp: '기능 창을 사용하거나 사용 안 함으로 설정합니다. 이미 열려 있는 창에는 영향을 미치지 않습니다.',
     aiChatLabel: 'AI 채팅',

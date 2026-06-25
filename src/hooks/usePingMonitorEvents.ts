@@ -22,18 +22,26 @@ export function usePingMonitorEvents(sessionId: string): PingMonitorEventData {
     const setup = async () => {
       dataUnlisten = await tauriService.onPingMonitorData((payload) => {
         if (payload.sessionId !== sessionId) return;
-        setLatestResults((prev) => {
-          const next = new Map(prev);
-          for (const result of payload.results) {
-            next.set(result.target, result);
-            // Update history
-            const history = historyRef.current.get(result.target) ?? [];
-            history.push(result);
-            if (history.length > MAX_HISTORY) history.shift();
-            historyRef.current.set(result.target, history);
-          }
-          return next;
-        });
+        // The backend emits a complete snapshot of the current targets every
+        // cycle, so rebuild the map from the payload rather than merging into
+        // the previous state. This drops rows for targets that were removed —
+        // otherwise their stale results would linger forever.
+        const next = new Map<string, PingResult>();
+        const seen = new Set<string>();
+        for (const result of payload.results) {
+          next.set(result.target, result);
+          seen.add(result.target);
+          // Update history
+          const history = historyRef.current.get(result.target) ?? [];
+          history.push(result);
+          if (history.length > MAX_HISTORY) history.shift();
+          historyRef.current.set(result.target, history);
+        }
+        // Prune history for targets no longer present in the snapshot.
+        for (const key of Array.from(historyRef.current.keys())) {
+          if (!seen.has(key)) historyRef.current.delete(key);
+        }
+        setLatestResults(next);
       });
 
       logUnlisten = await tauriService.onPingMonitorLogFile((payload) => {

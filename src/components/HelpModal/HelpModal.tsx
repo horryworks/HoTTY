@@ -305,6 +305,22 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
             </div>
           </details>
 
+          <details className="help-section">
+            <summary>{t('help.fileServer.summary')}</summary>
+            <div className="help-section-body">
+              <p className="help-text">
+                <Trans i18nKey="help.fileServer.intro" components={[<strong key="0" />, <FeaturesIcon key="1" />, <strong key="2" />]} />
+              </p>
+              <ul className="shortcuts-list">
+                <li><Trans i18nKey="help.fileServer.serve" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.fileServer.tftp" components={[<strong key="0" />, <code key="1" />, <strong key="2" />]} /></li>
+                <li><Trans i18nKey="help.fileServer.sftp" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.fileServer.firewall" components={[<strong key="0" />, <strong key="1" />]} /></li>
+                <li><Trans i18nKey="help.fileServer.security" components={[<strong key="0" />]} /></li>
+              </ul>
+            </div>
+          </details>
+
           <details className="help-section" open>
             <summary>{t('help.aiQuickStart.summary')}</summary>
             <div className="help-section-body">

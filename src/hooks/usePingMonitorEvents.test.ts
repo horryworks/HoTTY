@@ -77,6 +77,49 @@ describe('usePingMonitorEvents', () => {
     expect(result.current.latestResults.get('8.8.8.8')?.rtt).toBe(15);
   });
 
+  it('drops targets that disappear from a later snapshot', async () => {
+    let dataCallback: ((p: PingDataPayload) => void) | null = null;
+    mockOnData.mockImplementation(async (cb) => {
+      dataCallback = cb;
+      return () => {};
+    });
+    mockOnLogFile.mockResolvedValue(() => {});
+
+    const { result } = renderHook(() => usePingMonitorEvents('pm-1'));
+
+    await vi.waitFor(() => {
+      expect(dataCallback).toBeTruthy();
+    });
+
+    // First snapshot: two targets
+    act(() => {
+      dataCallback!({
+        sessionId: 'pm-1',
+        results: [
+          { target: '8.8.8.8', status: 'ok', rtt: 10, ttl: 115, timestamp: '2024-01-01' },
+          { target: '10.0.0.1', status: 'fail', rtt: null, ttl: null, timestamp: '2024-01-01' },
+        ],
+      });
+    });
+
+    expect(result.current.latestResults.size).toBe(2);
+    expect(result.current.latestResults.has('10.0.0.1')).toBe(true);
+
+    // Second snapshot after removing 10.0.0.1 — it must disappear, not linger.
+    act(() => {
+      dataCallback!({
+        sessionId: 'pm-1',
+        results: [
+          { target: '8.8.8.8', status: 'ok', rtt: 12, ttl: 115, timestamp: '2024-01-02' },
+        ],
+      });
+    });
+
+    expect(result.current.latestResults.size).toBe(1);
+    expect(result.current.latestResults.has('10.0.0.1')).toBe(false);
+    expect(result.current.latestResults.get('8.8.8.8')?.rtt).toBe(12);
+  });
+
   it('updates logFileName when log file event arrives', async () => {
     let logCallback: ((p: PingLogFilePayload) => void) | null = null;
     mockOnData.mockResolvedValue(() => {});

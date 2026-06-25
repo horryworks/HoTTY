@@ -3,6 +3,7 @@
 // каркаса. Источник истины — английский.
 export const chrome = {
   tabBar: {
+    fileServer: 'Файловый сервер',
     newSession: 'Новая сессия',
     closeTab: 'Закрыть вкладку',
     features: 'Функции',

@@ -12,6 +12,10 @@ use commands::ai::{
 };
 use commands::dpapi::{dpapi_decrypt, dpapi_decrypt_batch, dpapi_encrypt, dpapi_encrypt_batch};
 use commands::file_explorer::{file_explorer_get_drives, file_explorer_list_directory};
+use commands::file_server::{
+    file_server_firewall_allow, file_server_firewall_status, file_server_sftp_start,
+    file_server_sftp_stop, file_server_tftp_start, file_server_tftp_stop,
+};
 use commands::host_tree::{
     decrypt_import_file, export_htree, migrate_host_tree_credentials, select_import_file,
     ImportPathState,
@@ -48,6 +52,7 @@ use services::ai::providers::openai::OpenAIProvider;
 use services::ai::providers::vertexai::VertexAIProvider;
 use services::ai::{AIProviderRegistry, AIService};
 use services::iap_tunnel::GcloudCacheState;
+use services::file_server::FileServerState;
 use services::log_manager::LogManager;
 use services::ping_monitor::PingMonitorState;
 
@@ -73,6 +78,7 @@ pub fn run() {
         .manage(ApprovedEditorPaths::new())
         .manage(ApprovedServiceAccountKeys::new())
         .manage(PingMonitorState::new())
+        .manage(FileServerState::new())
         .manage(Arc::new(GcloudCacheState::new()))
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
@@ -174,6 +180,13 @@ pub fn run() {
             ping_monitor_stop,
             ping_monitor_update_targets,
             ping_monitor_update_interval,
+            // File server (TFTP / SFTP)
+            file_server_tftp_start,
+            file_server_tftp_stop,
+            file_server_sftp_start,
+            file_server_sftp_stop,
+            file_server_firewall_status,
+            file_server_firewall_allow,
             // GCE IAP tunnel
             gce_iap_check_gcloud,
             gce_iap_check_auth,

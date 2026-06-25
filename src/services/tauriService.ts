@@ -34,6 +34,9 @@ import type {
   GetDrivesResult,
   PingDataPayload,
   PingLogFilePayload,
+  FileServerEvent,
+  FileServerProtocol,
+  FirewallStatus,
   GcloudStatus,
   GcloudAuthStatus,
   GcpProject,
@@ -328,6 +331,63 @@ export const tauriService = {
 
   onPingMonitorLogFile(cb: (p: PingLogFilePayload) => void): Promise<UnlistenFn> {
     return listen<PingLogFilePayload>('ping-monitor-log-file', (e) => cb(e.payload));
+  },
+
+  // -----------------------------------------------------------------------
+  // File server (TFTP / SFTP)
+  // -----------------------------------------------------------------------
+
+  async fileServerTftpStart(
+    serverId: string,
+    bindAddr: string,
+    port: number,
+    rootDir: string,
+    allowWrite: boolean
+  ): Promise<void> {
+    await invoke('file_server_tftp_start', { serverId, bindAddr, port, rootDir, allowWrite });
+  },
+
+  async fileServerTftpStop(serverId: string): Promise<void> {
+    await invoke('file_server_tftp_stop', { serverId });
+  },
+
+  async fileServerSftpStart(
+    serverId: string,
+    bindAddr: string,
+    port: number,
+    rootDir: string,
+    username: string,
+    password: string,
+    allowWrite: boolean
+  ): Promise<void> {
+    await invoke('file_server_sftp_start', {
+      serverId,
+      bindAddr,
+      port,
+      rootDir,
+      username,
+      password,
+      allowWrite,
+    });
+  },
+
+  async fileServerSftpStop(serverId: string): Promise<void> {
+    await invoke('file_server_sftp_stop', { serverId });
+  },
+
+  async fileServerFirewallStatus(
+    protocol: FileServerProtocol,
+    port: number
+  ): Promise<FirewallStatus> {
+    return invoke<FirewallStatus>('file_server_firewall_status', { protocol, port });
+  },
+
+  async fileServerFirewallAllow(protocol: FileServerProtocol, port: number): Promise<void> {
+    await invoke('file_server_firewall_allow', { protocol, port });
+  },
+
+  onFileServerEvent(cb: (p: FileServerEvent) => void): Promise<UnlistenFn> {
+    return listen<FileServerEvent>('file-server-event', (e) => cb(e.payload));
   },
 
   // -----------------------------------------------------------------------

@@ -16,7 +16,7 @@ describe('FeaturesTab', () => {
   it('all checkboxes are checked and enabled by default', () => {
     render(<FeaturesTab />);
     const checkboxes = screen.getAllByRole('checkbox');
-    expect(checkboxes.length).toBe(5);
+    expect(checkboxes.length).toBe(6);
     for (const cb of checkboxes) {
       expect(cb).toHaveProperty('checked', true);
       expect(cb).toHaveProperty('disabled', false);
@@ -38,6 +38,7 @@ describe('FeaturesTab', () => {
       'ping-monitor': true,
       'text-editor': true,
       'file-explorer': true,
+      'file-server': true,
     });
     render(<FeaturesTab />);
     const aiChatCheckbox = screen.getByRole('checkbox', { name: 'AI Chat' });

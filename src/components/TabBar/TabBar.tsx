@@ -17,6 +17,7 @@ interface TabBarProps {
   onNewPingMonitor?: () => void;
   onNewTextEditor?: () => void;
   onNewFileExplorer?: () => void;
+  onNewFileServer?: () => void;
   onNewAiChat?: () => void;
 }
 
@@ -42,6 +43,7 @@ export function TabBar({
   onNewPingMonitor,
   onNewTextEditor,
   onNewFileExplorer,
+  onNewFileServer,
   onNewAiChat,
 }: TabBarProps) {
   const { t } = useTranslation();
@@ -56,7 +58,7 @@ export function TabBar({
   const visibleSet = new Set(visibleTabIds);
 
   const hasAnyFeatureCallback =
-    onNewLogViewer || onNewPingMonitor || onNewTextEditor || onNewFileExplorer || onNewAiChat;
+    onNewLogViewer || onNewPingMonitor || onNewTextEditor || onNewFileExplorer || onNewFileServer || onNewAiChat;
 
   // Close features menu on click outside
   useEffect(() => {
@@ -309,6 +311,20 @@ export function TabBar({
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
                   </svg>
                   {t('chrome.tabBar.fileExplorer')}
+                </div>
+              )}
+              {onNewFileServer && (
+                <div
+                  className="features-dropdown-item"
+                  onClick={() => { onNewFileServer(); setShowFeaturesMenu(false); }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="3" width="20" height="6" rx="1" />
+                    <rect x="2" y="15" width="20" height="6" rx="1" />
+                    <line x1="6" y1="6" x2="6.01" y2="6" />
+                    <line x1="6" y1="18" x2="6.01" y2="18" />
+                  </svg>
+                  {t('chrome.tabBar.fileServer')}
                 </div>
               )}
               {onNewAiChat && (

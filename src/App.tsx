@@ -11,6 +11,7 @@ import { LogViewerPane } from './components/LogViewerPane/LogViewerPane';
 import { TextEditorPane } from './components/TextEditorPane/TextEditorPane';
 import { FileExplorerPane } from './components/FileExplorerPane/FileExplorerPane';
 import { PingMonitorPane } from './components/PingMonitorPane/PingMonitorPane';
+import { FileServerPane } from './components/FileServerPane/FileServerPane';
 import { AIChatPane } from './components/AIChatPane/AIChatPane';
 import { AskAiModal } from './components/AskAiModal/AskAiModal';
 import { SessionDialog, type ConnectSubmitPayload } from './components/SessionDialog/SessionDialog';
@@ -1033,6 +1034,12 @@ function App() {
               paneId={featureInfo.id}
               active={paneId === activePaneId}
             />
+          ) : featureInfo?.type === 'file-server' ? (
+            <FileServerPane
+              key={featureInfo.id}
+              paneId={featureInfo.id}
+              active={paneId === activePaneId}
+            />
           ) : featureInfo?.type === 'ai-chat' ? (
             <AIChatPane
               key={featureInfo.id}
@@ -1089,6 +1096,7 @@ function App() {
             onNewPingMonitor={enabledFeatures['ping-monitor'] ? () => handleNewFeaturePane('ping-monitor') : undefined}
             onNewTextEditor={enabledFeatures['text-editor'] ? () => handleNewFeaturePane('text-editor') : undefined}
             onNewFileExplorer={enabledFeatures['file-explorer'] ? () => handleNewFeaturePane('file-explorer') : undefined}
+            onNewFileServer={enabledFeatures['file-server'] ? () => handleNewFeaturePane('file-server') : undefined}
             onNewAiChat={enabledFeatures['ai-chat'] ? () => handleNewFeaturePane('ai-chat') : undefined}
           />
           <div className="content-area">

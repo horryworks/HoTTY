@@ -116,6 +116,8 @@ export const settings = {
       'Всё равно включить diffie-hellman-group-exchange-sha1?',
   },
   features: {
+    fileServerLabel: 'Файловый сервер',
+    fileServerDescription: 'TFTP / SFTP-сервер для загрузки прошивки на сетевые устройства',
     section: 'Функции',
     sectionHelp: 'Включайте или отключайте функциональные панели. Уже открытые панели не затрагиваются.',
     aiChatLabel: 'ИИ-чат',

@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.7-beta3
+
+A built-in **File Server** for pushing firmware and config images to network gear over the LAN — start a TFTP and/or SFTP server pointed at a folder you choose, and a Cisco-style device can `copy tftp:` / `copy scp:` straight from your machine.
+
+### New Features
+
+- **Built-in File Server (TFTP + SFTP) for firmware uploads.** A new **File Server** pane (tab bar → Features → "File Server") runs an in-app **TFTP** server (UDP, default port 69 — the classic Cisco IOS `copy tftp: flash:` method) and an **SFTP** server (SSH-based, default port 2222, username/password authentication) over a folder you select, so routers, switches and other LAN devices can download or upload firmware/config images directly. Serving is read-only by default (toggle **Allow uploads** per protocol for device→PC transfers); every request is confined to the chosen folder (path traversal, symlink escapes and sensitive system-path access are blocked); the SFTP host key is generated automatically and stored encrypted; and a live transfer log shows each client, file and direction. If **Windows Firewall** is blocking inbound connections, the pane says so and offers a one-click **Allow through firewall** (requires administrator). The feature can be turned off in **Settings → Features**.
+
 ## v2.0.7-beta2
 
 HoTTY's interface is now multilingual. A new **Display language** selector in **Settings → General** switches the entire UI between eight languages, instantly and without a restart.

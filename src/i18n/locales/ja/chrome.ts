@@ -2,6 +2,7 @@
 // ユーティリティボタン）。リージョンごとにキーブロックを分けています。
 export const chrome = {
   tabBar: {
+    fileServer: 'ファイルサーバー',
     newSession: '新規セッション',
     closeTab: 'タブを閉じる',
     features: 'その他',

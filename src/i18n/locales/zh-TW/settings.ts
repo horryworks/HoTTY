@@ -116,6 +116,8 @@ export const settings = {
       '仍要啟用 diffie-hellman-group-exchange-sha1 嗎？',
   },
   features: {
+    fileServerLabel: '檔案伺服器',
+    fileServerDescription: '用於向網路裝置上傳韌體的 TFTP / SFTP 伺服器',
     section: '功能',
     sectionHelp: '啟用或停用功能窗格。已開啟的窗格不受影響。',
     aiChatLabel: 'AI 聊天',

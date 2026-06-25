@@ -116,6 +116,8 @@ export const settings = {
       'それでも diffie-hellman-group-exchange-sha1 を有効にしますか？',
   },
   features: {
+    fileServerLabel: 'ファイルサーバー',
+    fileServerDescription: 'ネットワーク機器へのファームウェアアップロード用 TFTP / SFTP サーバー',
     section: '機能',
     sectionHelp: '機能ペインを有効または無効にします。既に開いているペインには影響しません。',
     aiChatLabel: 'AIチャット',

@@ -2,6 +2,7 @@
 // a nivel de aplicación (botones de diseño / borde / utilidades).
 export const chrome = {
   tabBar: {
+    fileServer: 'Servidor de archivos',
     newSession: 'Nueva sesión',
     closeTab: 'Cerrar pestaña',
     features: 'Funciones',

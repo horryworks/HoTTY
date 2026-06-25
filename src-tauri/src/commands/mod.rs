@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod dpapi;
 pub mod file_explorer;
+pub mod file_server;
 pub mod host_tree;
 pub mod iap_tunnel;
 pub mod log_viewer;

@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod dpapi;
 pub mod exe_finder;
+pub mod file_server;
 pub mod gcloud_iap;
 pub mod iap_tunnel;
 pub mod jumpbox;
@@ -12,6 +13,8 @@ pub mod ping_monitor;
 pub mod sensitive_env;
 pub mod serial;
 pub mod session_service;
+pub mod sftp_server;
 pub mod ssh;
 pub mod telnet;
+pub mod tftp_server;
 pub mod wsl;

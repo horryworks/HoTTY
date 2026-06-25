@@ -116,6 +116,8 @@ export const settings = {
       'Enable diffie-hellman-group-exchange-sha1 anyway?',
   },
   features: {
+    fileServerLabel: 'File Server',
+    fileServerDescription: 'TFTP / SFTP server for firmware uploads to network devices',
     section: 'Features',
     sectionHelp: 'Enable or disable feature panes. Existing open panes are not affected.',
     aiChatLabel: 'AI Chat',
