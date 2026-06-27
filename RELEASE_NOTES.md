@@ -1,5 +1,14 @@
 # Release Notes
 
+## v2.0.7-beta6
+
+A built-in **Web Browser** for opening network-device web admin UIs (and any site) right inside HoTTY — launched from the New Session dialog, with folder-organized bookmarks and saved logins.
+
+### New Features
+
+- **Web Browser pane.** Open web pages inside HoTTY in an embedded browser (Microsoft Edge WebView2) — ideal for the web admin UIs of routers, switches, iLO/iDRAC and other network gear, side by side with your terminals. Launch it from the **New Session** dialog's new **🌐 Web** tab: choose **🆕 New Web Browser** for a blank tab, or double-click a saved bookmark. The pane has Back / Forward / Reload / Stop and an address bar (only `http://` and `https://` are allowed; an address typed without a scheme defaults to `http://`). Login sessions persist across restarts, and the browser can **save and autofill passwords** — kept in HoTTY's own encrypted browser profile, separate from your system Edge/Chrome. The browsed page is sandboxed and cannot reach HoTTY's internals. The whole feature can be turned off in **Settings → Features**.
+- **Web bookmarks.** Organize sites in a folder tree under the New Session **Web** tab — add, rename, delete, and drag to reorder — then click a bookmark to open it in a new browser pane. While browsing, the **★** button in the toolbar saves the current page into a folder you choose. Bookmarks are stored locally and contain no credentials.
+
 ## v2.0.7-beta5
 
 A maintenance release of bug fixes found in a codebase-wide review — most noticeably, serial connections now echo your typing without the occasional lag.

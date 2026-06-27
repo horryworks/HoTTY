@@ -118,6 +118,8 @@ export const settings = {
   features: {
     fileServerLabel: '文件服务器',
     fileServerDescription: '用于向网络设备上传固件的 TFTP / SFTP 服务器',
+    webBrowserLabel: '网页浏览器',
+    webBrowserDescription: '用于网络设备网页管理界面的内嵌浏览器窗格',
     section: '功能',
     sectionHelp: '启用或禁用功能窗格。已打开的窗格不受影响。',
     aiChatLabel: 'AI 聊天',

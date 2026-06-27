@@ -46,6 +46,11 @@ use commands::text_editor::{
 use commands::themes::{delete_custom_theme, get_themes, save_custom_theme};
 use commands::updater::check_for_updates;
 use commands::utilities::{log_debug, select_folder, select_image};
+use commands::web_browser::{
+    web_browser_back, web_browser_create, web_browser_current_url, web_browser_destroy,
+    web_browser_forward, web_browser_navigate, web_browser_reload, web_browser_set_bounds,
+    web_browser_set_visible, web_browser_stop,
+};
 use services::ai::providers::anthropic::AnthropicProvider;
 use services::ai::providers::gemini::GeminiProvider;
 use services::ai::providers::openai::OpenAIProvider;
@@ -55,6 +60,7 @@ use services::file_server::FileServerState;
 use services::iap_tunnel::GcloudCacheState;
 use services::log_manager::LogManager;
 use services::ping_monitor::PingMonitorState;
+use services::web_browser::WebBrowserState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -79,6 +85,7 @@ pub fn run() {
         .manage(ApprovedServiceAccountKeys::new())
         .manage(PingMonitorState::new())
         .manage(FileServerState::new())
+        .manage(WebBrowserState::new())
         .manage(Arc::new(GcloudCacheState::new()))
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
@@ -187,6 +194,17 @@ pub fn run() {
             file_server_sftp_stop,
             file_server_firewall_status,
             file_server_firewall_allow,
+            // Web browser pane (embedded native webview)
+            web_browser_create,
+            web_browser_navigate,
+            web_browser_current_url,
+            web_browser_back,
+            web_browser_forward,
+            web_browser_reload,
+            web_browser_stop,
+            web_browser_set_bounds,
+            web_browser_set_visible,
+            web_browser_destroy,
             // GCE IAP tunnel
             gce_iap_check_gcloud,
             gce_iap_check_auth,

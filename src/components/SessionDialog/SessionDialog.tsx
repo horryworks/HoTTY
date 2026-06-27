@@ -7,6 +7,7 @@ import { tauriService } from '../../services/tauriService';
 import { HostTree } from '../HostTree/HostTree';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { GcpInstancesPane, type VmSelection } from '../GcpInstancesPane/GcpInstancesPane';
+import { BookmarkTree } from '../BookmarkTree/BookmarkTree';
 import { useSidebarLayoutStore } from '../../stores/sidebarLayoutStore';
 import { useResize } from '../../hooks/useResize';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -54,6 +55,9 @@ interface SessionDialogProps {
      * dialog falls back to never clearing on connect.
      */
     sessions?: Map<string, SessionRecord>;
+    /** Open a Web Browser pane from the Web tab and close the dialog. With a URL
+     *  (a bookmark) it loads that site; without one it opens a blank tab. */
+    onOpenBookmark?: (url?: string) => void;
 }
 
 const PROTOCOLS: { value: ProtocolId; label: string }[] = [
@@ -73,12 +77,15 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     onClose,
     onConnect,
     sessions,
+    onOpenBookmark,
 }) => {
     const { t } = useTranslation();
     const hostManager = useHostManager();
     const settings = useSettingsStore();
     const activeSidebarTab = useSidebarLayoutStore((s) => s.activeSidebarTab);
     const setActiveSidebarTab = useSidebarLayoutStore((s) => s.setActiveSidebarTab);
+    // The Web (bookmarks) tab follows the Settings → Features "Web Browser" toggle.
+    const webEnabled = settings.enabledFeatures['web-browser'];
 
     const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
     const [isDecrypting, setIsDecrypting] = useState(false);
@@ -489,6 +496,15 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             });
         },
         [dispatchConnect],
+    );
+
+    // --- Web tab: open a Web Browser pane (bookmark URL or blank), then close ---
+    const handleOpenBookmarkFromDialog = useCallback(
+        (url?: string) => {
+            onOpenBookmark?.(url);
+            onClose();
+        },
+        [onOpenBookmark, onClose],
     );
 
     // --- Double-click: connect immediately ---
@@ -1017,8 +1033,19 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                             >
                                 <span aria-hidden="true">☁ </span>{t('sessionDialog.tabs.gcp')}
                             </button>
+                            {webEnabled && (
+                                <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={activeSidebarTab === 'web'}
+                                    className={`host-panel-tab${activeSidebarTab === 'web' ? ' active' : ''}`}
+                                    onClick={() => setActiveSidebarTab('web')}
+                                >
+                                    <span aria-hidden="true">🌐 </span>{t('sessionDialog.tabs.web')}
+                                </button>
+                            )}
                         </div>
-                        {activeSidebarTab === 'hosts' ? (
+                        {activeSidebarTab === 'hosts' || (activeSidebarTab === 'web' && !webEnabled) ? (
                             <div className="hosts-tab-content">
                                 <div className="hosts-tab-tree" style={{ width: treePanelWidth, flexShrink: 0 }}>
                                     <HostTree
@@ -1348,9 +1375,14 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                         </form>
                     </div>
                             </div>
-                        ) : (
+                        ) : activeSidebarTab === 'gcp' ? (
                             <GcpInstancesPane
                                 onActivateInstance={handleActivateGcpInstance}
+                            />
+                        ) : (
+                            <BookmarkTree
+                                onOpenBookmark={handleOpenBookmarkFromDialog}
+                                onNewBlank={() => handleOpenBookmarkFromDialog()}
                             />
                         )}
                     </div>

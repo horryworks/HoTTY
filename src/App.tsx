@@ -12,6 +12,7 @@ import { TextEditorPane } from './components/TextEditorPane/TextEditorPane';
 import { FileExplorerPane } from './components/FileExplorerPane/FileExplorerPane';
 import { PingMonitorPane } from './components/PingMonitorPane/PingMonitorPane';
 import { FileServerPane } from './components/FileServerPane/FileServerPane';
+import { WebBrowserPane } from './components/WebBrowserPane/WebBrowserPane';
 import { AIChatPane } from './components/AIChatPane/AIChatPane';
 import { AskAiModal } from './components/AskAiModal/AskAiModal';
 import { SessionDialog, type ConnectSubmitPayload } from './components/SessionDialog/SessionDialog';
@@ -29,6 +30,7 @@ import { tauriService } from './services/tauriService';
 import { useSessionManager, type SessionRecord } from './hooks/useSessionManager';
 import { useAiChat, getActiveTab, createDefaultAiChatState, type AiChatState } from './hooks/useAiChat';
 import { usePaneStore, gridPaneIds, SIDEBAR_PANE_IDS } from './stores/paneStore';
+import { initOverlayWatcher } from './stores/uiOverlayStore';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from './stores/settingsStore';
 import i18n from './i18n';
@@ -175,6 +177,12 @@ function App() {
     return () => {
       if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
     };
+  }, []);
+
+  // Watch the DOM for modal/dropdown overlays so the Web Browser pane can hide
+  // its native (OS-composited) webview when something must render over it.
+  useEffect(() => {
+    initOverlayWatcher();
   }, []);
 
   const activePaneAllocation = paneAllocations[activePaneId];
@@ -606,6 +614,17 @@ function App() {
         tauriService.fileServerTftpStop(id).catch(() => {});
         tauriService.fileServerSftpStop(id).catch(() => {});
       }
+      if (type === 'web-browser') {
+        // Destroy the embedded child webview so it doesn't leak (it is kept
+        // alive across mere remounts, so closing the tab is the teardown point).
+        tauriService.webBrowserDestroy(id).catch(() => {});
+        setWebBrowserInitialUrls((prev) => {
+          if (!prev.has(id)) return prev;
+          const next = new Map(prev);
+          next.delete(id);
+          return next;
+        });
+      }
       if (type === 'ai-chat') {
         clearRunCommandIntervals(id);
         if (watchingSessionId) {
@@ -654,6 +673,34 @@ function App() {
 
   // Track initial file paths for text editors opened from file explorer
   const [editorInitialFiles, setEditorInitialFiles] = useState<Map<string, string>>(new Map());
+
+  // Track initial URLs for web browser panes opened from a Web bookmark.
+  const [webBrowserInitialUrls, setWebBrowserInitialUrls] = useState<Map<string, string>>(new Map());
+
+  // Open a Web Browser pane from the New Session "Web" tab. With a URL (bookmark)
+  // it loads that site; without one (the "New Web Browser" entry) it opens blank.
+  const handleOpenBookmark = useCallback((url?: string) => {
+    if (!useSettingsStore.getState().enabledFeatures['web-browser']) return;
+    const id = makeFeaturePaneId('web-browser');
+    let displayName = getFeatureDisplayName('web-browser');
+    if (url) {
+      try { displayName = new URL(url).hostname || displayName; } catch { /* keep default */ }
+    }
+    setFeaturePanes((prev) => {
+      const next = new Map(prev);
+      next.set(id, { id, type: 'web-browser', displayName });
+      return next;
+    });
+    if (url) {
+      setWebBrowserInitialUrls((prev) => {
+        const next = new Map(prev);
+        next.set(id, url);
+        return next;
+      });
+    }
+    addSessionToStore(id);
+    setActivePaneId(id);
+  }, [addSessionToStore, setActivePaneId]);
 
   const handleOpenFileInEditor = useCallback(async (filePath: string) => {
     if (!useSettingsStore.getState().enabledFeatures['text-editor']) return;
@@ -1046,6 +1093,13 @@ function App() {
               paneId={featureInfo.id}
               active={paneId === activePaneId}
             />
+          ) : featureInfo?.type === 'web-browser' ? (
+            <WebBrowserPane
+              key={featureInfo.id}
+              paneId={featureInfo.id}
+              active={paneId === activePaneId}
+              initialUrl={webBrowserInitialUrls.get(featureInfo.id)}
+            />
           ) : featureInfo?.type === 'ai-chat' ? (
             <AIChatPane
               key={featureInfo.id}
@@ -1142,6 +1196,7 @@ function App() {
         onClose={() => setConnectOpen(false)}
         onConnect={handleConnectSubmit}
         sessions={sessions}
+        onOpenBookmark={handleOpenBookmark}
       />
       <SaveToHostTreeDialog
         open={saveToTreeSessionId !== null}

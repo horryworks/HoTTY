@@ -13,3 +13,4 @@ pub mod text_editor;
 pub mod themes;
 pub mod updater;
 pub mod utilities;
+pub mod web_browser;

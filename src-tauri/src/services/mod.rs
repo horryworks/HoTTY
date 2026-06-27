@@ -17,4 +17,5 @@ pub mod sftp_server;
 pub mod ssh;
 pub mod telnet;
 pub mod tftp_server;
+pub mod web_browser;
 pub mod wsl;

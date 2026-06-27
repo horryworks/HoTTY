@@ -118,6 +118,8 @@ export const settings = {
   features: {
     fileServerLabel: '檔案伺服器',
     fileServerDescription: '用於向網路裝置上傳韌體的 TFTP / SFTP 伺服器',
+    webBrowserLabel: '網頁瀏覽器',
+    webBrowserDescription: '用於網路裝置網頁管理介面的內嵌瀏覽器窗格',
     section: '功能',
     sectionHelp: '啟用或停用功能窗格。已開啟的窗格不受影響。',
     aiChatLabel: 'AI 聊天',

@@ -118,6 +118,8 @@ export const settings = {
   features: {
     fileServerLabel: 'File Server',
     fileServerDescription: 'TFTP / SFTP server for firmware uploads to network devices',
+    webBrowserLabel: 'Web Browser',
+    webBrowserDescription: 'Embedded browser pane for network-device web admin UIs',
     section: 'Features',
     sectionHelp: 'Enable or disable feature panes. Existing open panes are not affected.',
     aiChatLabel: 'AI Chat',

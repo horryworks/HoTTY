@@ -118,6 +118,8 @@ export const settings = {
   features: {
     fileServerLabel: 'Файловый сервер',
     fileServerDescription: 'TFTP / SFTP-сервер для загрузки прошивки на сетевые устройства',
+    webBrowserLabel: 'Веб-браузер',
+    webBrowserDescription: 'Встроенная панель браузера для веб-интерфейсов управления сетевыми устройствами',
     section: 'Функции',
     sectionHelp: 'Включайте или отключайте функциональные панели. Уже открытые панели не затрагиваются.',
     aiChatLabel: 'ИИ-чат',

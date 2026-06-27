@@ -12,6 +12,7 @@ const FEATURE_KEYS: { id: FeatureId; labelKey: string; descriptionKey: string }[
   { id: 'text-editor', labelKey: 'settings.features.textEditorLabel', descriptionKey: 'settings.features.textEditorDescription' },
   { id: 'file-explorer', labelKey: 'settings.features.fileExplorerLabel', descriptionKey: 'settings.features.fileExplorerDescription' },
   { id: 'file-server', labelKey: 'settings.features.fileServerLabel', descriptionKey: 'settings.features.fileServerDescription' },
+  { id: 'web-browser', labelKey: 'settings.features.webBrowserLabel', descriptionKey: 'settings.features.webBrowserDescription' },
 ];
 
 export function FeaturesTab() {

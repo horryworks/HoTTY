@@ -1,6 +1,6 @@
 [package]
 name = "hotty"
-version = "2.0.7-beta5"
+version = "2.0.7-beta6"
 description = "HoTTY - AI Integrated Advanced Terminal Emulator (Rust/Tauri)"
 authors = ["horryworks"]
 license = "GPL-3.0-or-later"
@@ -14,6 +14,25 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.5.6", features = [] }
+
+[features]
+# `embedded-webview` enables tauri's multiwebview (`Window::add_child` /
+# `WebviewBuilder`) used by the Web Browser pane to embed a native WebView2 child
+# at a pane's rectangle.
+#
+# It is intentionally NON-DEFAULT. Tauri's `unstable` linkage makes the bare
+# `cargo test` harness binary fail to LOAD on Windows with 0xC0000139
+# (STATUS_ENTRYPOINT_NOT_FOUND) — the test exe lacks the application manifest
+# that `tauri-build` embeds in the real app binary (which resolves the comctl32
+# v6 imports the unstable webview code pulls in). The shipped app enables this
+# feature via the tauri build (`tauri build --features embedded-webview`, wired
+# in package.json), so the app works; keeping it off the default set lets
+# `cargo test` / `cargo check` / `cargo clippy` run unmodified.
+#
+# NOTE: the `unstable` API may change across tauri minor/patch releases — the
+# crate is version-pinned; re-verify `add_child`/`WebviewBuilder` on every bump.
+# To check the gated code: `cargo clippy --features embedded-webview`.
+embedded-webview = ["tauri/unstable"]
 
 [dependencies]
 # Tauri
@@ -84,6 +103,12 @@ windows = { version = "0.58", features = [
     "Win32_Security_Credentials",
     "Win32_System_Memory",
 ] }
+# WebView2 COM access for the Web Browser pane (enable password autosave /
+# autofill). Versions MUST match what wry/tauri pull (see Cargo.lock):
+# webview2-com 0.38.2 → windows-core 0.61.2. Used only by the feature-gated
+# `embedded-webview` code; already present transitively via tauri (no lock delta).
+webview2-com = "0.38"
+windows-core = "0.61"
 
 # Error handling
 thiserror = "2"

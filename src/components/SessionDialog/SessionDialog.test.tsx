@@ -4,6 +4,8 @@ import { SessionDialog } from './SessionDialog';
 import type { SessionRecord } from '../../hooks/useSessionManager';
 import type { SessionRecordStatus } from '../../types/appTypes';
 import { STORAGE_KEYS } from '../../constants/storage';
+import { useSidebarLayoutStore } from '../../stores/sidebarLayoutStore';
+import { useBookmarkStore } from '../../stores/bookmarkStore';
 
 const makeSessions = (entries: Array<[string, SessionRecordStatus]>): Map<string, SessionRecord> => {
   const m = new Map<string, SessionRecord>();
@@ -52,6 +54,10 @@ describe('SessionDialog', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
+    // Tests assume the dialog opens on the Hosts tab; reset the persisted store
+    // (which other tests / cases may have switched) and the bookmark tree.
+    useSidebarLayoutStore.setState({ activeSidebarTab: 'hosts' });
+    useBookmarkStore.setState({ tree: [] });
   });
 
   it('renders nothing when not open', () => {
@@ -462,6 +468,35 @@ describe('SessionDialog', () => {
       // "Instance" appears in several other contexts; scope to the legacy
       // form's label that we removed.
       expect(screen.queryByText(/handled automatically by gcloud/i)).toBeNull();
+    });
+  });
+
+  describe('Web bookmarks tab', () => {
+    it('switches to the Web tab and shows the bookmark tree', () => {
+      render(<SessionDialog {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: 'Web' }));
+      expect(screen.getByText(/No bookmarks yet/)).toBeTruthy();
+    });
+
+    it('double-clicking a bookmark opens it and closes the dialog', () => {
+      useBookmarkStore.getState().addBookmark(null, 'Docs', 'http://docs.test');
+      const onOpenBookmark = vi.fn();
+      const onClose = vi.fn();
+      render(<SessionDialog {...defaultProps} onOpenBookmark={onOpenBookmark} onClose={onClose} />);
+      fireEvent.click(screen.getByRole('tab', { name: 'Web' }));
+      fireEvent.doubleClick(screen.getByText('Docs'));
+      expect(onOpenBookmark).toHaveBeenCalledWith('http://docs.test');
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it('the "New Web Browser" entry opens a blank pane and closes the dialog', () => {
+      const onOpenBookmark = vi.fn();
+      const onClose = vi.fn();
+      render(<SessionDialog {...defaultProps} onOpenBookmark={onOpenBookmark} onClose={onClose} />);
+      fireEvent.click(screen.getByRole('tab', { name: 'Web' }));
+      fireEvent.click(screen.getByText('New Web Browser'));
+      expect(onOpenBookmark).toHaveBeenCalledWith(undefined);
+      expect(onClose).toHaveBeenCalled();
     });
   });
 });

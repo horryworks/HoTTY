@@ -118,6 +118,8 @@ export const settings = {
   features: {
     fileServerLabel: 'Servidor de archivos',
     fileServerDescription: 'Servidor TFTP / SFTP para subir firmware a dispositivos de red',
+    webBrowserLabel: 'Navegador web',
+    webBrowserDescription: 'Panel de navegador integrado para las interfaces web de administración de dispositivos de red',
     section: 'Funciones',
     sectionHelp: 'Active o desactive los paneles de funciones. Los paneles ya abiertos no se ven afectados.',
     aiChatLabel: 'Chat de IA',

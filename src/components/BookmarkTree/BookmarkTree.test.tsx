@@ -1,0 +1,63 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { BookmarkTree } from './BookmarkTree';
+import { useBookmarkStore } from '../../stores/bookmarkStore';
+
+beforeEach(() => {
+  useBookmarkStore.setState({ tree: [] });
+});
+
+describe('BookmarkTree', () => {
+  it('renders folders and bookmarks from the store', () => {
+    const fid = useBookmarkStore.getState().addFolder(null, 'Tools');
+    useBookmarkStore.getState().addBookmark(fid, 'Grafana', 'http://graf');
+    render(<BookmarkTree onOpenBookmark={() => {}} />);
+    expect(screen.getByText('Tools')).toBeTruthy();
+    expect(screen.getByText('Grafana')).toBeTruthy();
+  });
+
+  it('shows the empty hint when there are no bookmarks', () => {
+    render(<BookmarkTree onOpenBookmark={() => {}} />);
+    expect(screen.getByText(/No bookmarks yet/)).toBeTruthy();
+  });
+
+  it('double-clicking a bookmark calls onOpenBookmark with its URL', () => {
+    useBookmarkStore.getState().addBookmark(null, 'Docs', 'http://docs.test');
+    const onOpen = vi.fn();
+    render(<BookmarkTree onOpenBookmark={onOpen} />);
+    fireEvent.doubleClick(screen.getByText('Docs'));
+    expect(onOpen).toHaveBeenCalledWith('http://docs.test');
+  });
+
+  it('renders the "New Web Browser" entry and invokes onNewBlank', () => {
+    const onNewBlank = vi.fn();
+    render(<BookmarkTree onOpenBookmark={() => {}} onNewBlank={onNewBlank} />);
+    fireEvent.click(screen.getByText('New Web Browser'));
+    expect(onNewBlank).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits the "New Web Browser" entry when onNewBlank is not provided', () => {
+    render(<BookmarkTree onOpenBookmark={() => {}} />);
+    expect(screen.queryByText('New Web Browser')).toBeNull();
+  });
+
+  it('adds a folder via the toolbar + modal', () => {
+    render(<BookmarkTree onOpenBookmark={() => {}} />);
+    fireEvent.click(screen.getByTitle('Add Folder'));
+    const nameInput = document.querySelector('.host-edit-modal input[type="text"]') as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: 'New Folder' } });
+    fireEvent.click(screen.getByText('Save'));
+    expect(useBookmarkStore.getState().tree.some((n) => n.name === 'New Folder' && n.type === 'folder')).toBe(true);
+  });
+
+  it('adds a bookmark via the toolbar + modal (name + url)', () => {
+    render(<BookmarkTree onOpenBookmark={() => {}} />);
+    fireEvent.click(screen.getByTitle('Add Bookmark'));
+    const inputs = document.querySelectorAll('.host-edit-modal input[type="text"]');
+    fireEvent.change(inputs[0], { target: { value: 'Router' } });
+    fireEvent.change(inputs[1], { target: { value: 'http://192.168.1.1' } });
+    fireEvent.click(screen.getByText('Save'));
+    const added = useBookmarkStore.getState().tree.find((n) => n.name === 'Router');
+    expect(added?.url).toBe('http://192.168.1.1');
+  });
+});

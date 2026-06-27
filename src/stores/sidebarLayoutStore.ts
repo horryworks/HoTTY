@@ -3,7 +3,9 @@ import { persist } from 'zustand/middleware';
 
 export type SidebarEdge = 'left' | 'right' | 'top' | 'bottom';
 
-type SidebarTab = 'hosts' | 'gcp';
+type SidebarTab = 'hosts' | 'gcp' | 'web';
+
+const SIDEBAR_TABS: readonly SidebarTab[] = ['hosts', 'gcp', 'web'];
 
 interface SidebarLayoutState {
   showLeftSidebar: boolean;
@@ -65,7 +67,15 @@ export const useSidebarLayoutStore = create<SidebarLayoutState>()(
     }),
     {
       name: 'hotty-sidebar-layout',
-      version: 1,
+      version: 2,
+      migrate: (persistedState) => {
+        const state = (persistedState ?? {}) as Partial<SidebarLayoutState>;
+        // Normalize any unknown/corrupt tab value to 'hosts'.
+        if (!state.activeSidebarTab || !SIDEBAR_TABS.includes(state.activeSidebarTab)) {
+          state.activeSidebarTab = 'hosts';
+        }
+        return state as SidebarLayoutState;
+      },
     }
   )
 );

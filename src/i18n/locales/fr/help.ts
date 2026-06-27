@@ -156,6 +156,22 @@ export const help = {
       '<0>Sécurité :</0> Démarrer un serveur expose le dossier choisi à votre réseau local. Ne partagez que des fichiers de confiance et laissez les envois désactivés sauf si nécessaire.',
   },
 
+  webBrowser: {
+    summary: 'Navigateur web et favoris',
+    intro:
+      'Ouvrez des pages web dans HoTTY grâce à un navigateur intégré — pratique pour les interfaces web d’administration des équipements réseau (routeurs, commutateurs, iLO/iDRAC) à côté de vos terminaux. Ouvrez-le depuis l’onglet <1>🌐 Web</1> de la boîte de dialogue <0>Nouvelle session</0> : cliquez sur <2>🆕 Nouveau navigateur web</2> pour un onglet vierge, ou double-cliquez sur un favori enregistré pour ouvrir ce site.',
+    bookmarks:
+      '<0>Favoris :</0> Organisez les sites dans une arborescence de dossiers sous l’onglet <1>Web</1> : ajoutez, renommez, supprimez et glissez pour réorganiser. Double-cliquez sur un favori pour l’ouvrir dans un nouveau volet de navigateur.',
+    star:
+      '<0>★ Ajouter cette page aux favoris :</0> Pendant la navigation, cliquez sur le bouton <1>★</1> de la barre d’outils pour enregistrer la page actuelle dans le dossier de votre choix.',
+    toolbar:
+      '<0>Barre d’outils :</0> Précédent, Suivant, Recharger/Arrêter et une barre d’adresse. Seules les adresses <1>http://</1> et <2>https://</2> sont autorisées ; une adresse saisie sans schéma utilise <3>http://</3> par défaut.',
+    passwords:
+      '<0>Connexions et mots de passe :</0> Le navigateur conserve vos sessions de connexion et peut enregistrer et remplir automatiquement les mots de passe, stockés dans le profil de navigateur chiffré propre à HoTTY (distinct de votre Edge/Chrome système).',
+    enable:
+      '<0>Activer / désactiver :</0> L’onglet Web peut être désactivé dans <1>Paramètres → Fonctionnalités</1>.',
+  },
+
   fileExplorer: {
     summary: 'Explorateur de fichiers',
     intro:

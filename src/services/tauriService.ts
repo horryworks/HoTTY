@@ -37,6 +37,8 @@ import type {
   FileServerEvent,
   FileServerProtocol,
   FirewallStatus,
+  WebBrowserRect,
+  WebBrowserNavState,
   GcloudStatus,
   GcloudAuthStatus,
   GcpProject,
@@ -388,6 +390,54 @@ export const tauriService = {
 
   onFileServerEvent(cb: (p: FileServerEvent) => void): Promise<UnlistenFn> {
     return listen<FileServerEvent>('file-server-event', (e) => cb(e.payload));
+  },
+
+  // -----------------------------------------------------------------------
+  // Web browser pane (embedded native webview)
+  // -----------------------------------------------------------------------
+
+  async webBrowserCreate(paneId: string, url: string, rect: WebBrowserRect): Promise<void> {
+    await invoke('web_browser_create', { paneId, url, rect });
+  },
+
+  async webBrowserNavigate(paneId: string, url: string): Promise<void> {
+    await invoke('web_browser_navigate', { paneId, url });
+  },
+
+  async webBrowserCurrentUrl(paneId: string): Promise<string | null> {
+    return invoke<string | null>('web_browser_current_url', { paneId });
+  },
+
+  async webBrowserBack(paneId: string): Promise<void> {
+    await invoke('web_browser_back', { paneId });
+  },
+
+  async webBrowserForward(paneId: string): Promise<void> {
+    await invoke('web_browser_forward', { paneId });
+  },
+
+  async webBrowserReload(paneId: string): Promise<void> {
+    await invoke('web_browser_reload', { paneId });
+  },
+
+  async webBrowserStop(paneId: string): Promise<void> {
+    await invoke('web_browser_stop', { paneId });
+  },
+
+  async webBrowserSetBounds(paneId: string, rect: WebBrowserRect): Promise<void> {
+    await invoke('web_browser_set_bounds', { paneId, rect });
+  },
+
+  async webBrowserSetVisible(paneId: string, visible: boolean): Promise<void> {
+    await invoke('web_browser_set_visible', { paneId, visible });
+  },
+
+  async webBrowserDestroy(paneId: string): Promise<void> {
+    await invoke('web_browser_destroy', { paneId });
+  },
+
+  onWebBrowserNavState(cb: (p: WebBrowserNavState) => void): Promise<UnlistenFn> {
+    return listen<WebBrowserNavState>('web-browser-nav-state', (e) => cb(e.payload));
   },
 
   // -----------------------------------------------------------------------

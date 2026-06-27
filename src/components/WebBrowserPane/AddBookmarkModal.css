@@ -1,0 +1,12 @@
+/* Overlay for the ★ "add bookmark" modal. Mirrors .host-edit-modal-overlay but
+   uses its own class so uiOverlayStore can detect it and hide the native webview
+   while it is open. The inner container reuses .host-edit-modal styling. */
+.add-bookmark-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--modal-overlay-bg);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

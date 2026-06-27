@@ -1,5 +1,5 @@
 export type ProtocolId = 'ssh' | 'telnet' | 'serial' | 'wsl' | 'cmd' | 'powershell' | 'git-bash' | 'gcloud-iap';
-export type FeatureId = 'ai-chat' | 'log-viewer' | 'ping-monitor' | 'text-editor' | 'file-explorer' | 'file-server';
+export type FeatureId = 'ai-chat' | 'log-viewer' | 'ping-monitor' | 'text-editor' | 'file-explorer' | 'file-server' | 'web-browser';
 
 export type Encoding = 'utf8' | 'shift_jis' | 'euc-jp';
 
@@ -57,6 +57,21 @@ export interface SessionStatusPayload {
 export interface SessionErrorPayload {
   sessionId: string;
   error: string;
+}
+
+/** Pane body rectangle reported to the backend (physical pixels, window-relative). */
+export interface WebBrowserRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Navigation state pushed from the embedded webview (address-bar sync). */
+export interface WebBrowserNavState {
+  paneId: string;
+  url: string;
+  loading: boolean;
 }
 
 export interface SshHostKeyPromptPayload {
@@ -368,6 +383,17 @@ export interface HostTreeNode {
   name: string;
   entry?: HostEntry;
   children?: HostTreeNode[];
+}
+
+/** A node in the Web bookmarks tree (SessionDialog "Web" tab). Mirrors
+ *  HostTreeNode but holds only a name + URL — no secrets, so it persists in a
+ *  plain Zustand store (no DPAPI). */
+export interface BookmarkNode {
+  id: string;
+  type: 'folder' | 'bookmark';
+  name: string;
+  url?: string; // only when type === 'bookmark'
+  children?: BookmarkNode[];
 }
 
 // ---------------------------------------------------------------------------

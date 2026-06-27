@@ -222,6 +222,7 @@ const DEFAULTS: SettingsState = {
     'text-editor': true,
     'file-explorer': true,
     'file-server': true,
+    'web-browser': true,
   },
   fileServerConfig: {
     rootDir: '',
@@ -257,7 +258,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 18,
+      version: 19,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -340,6 +341,15 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
             'file-server': state.enabledFeatures?.['file-server'] ?? true,
           };
           state.fileServerConfig ??= DEFAULTS.fileServerConfig;
+        }
+        if (version < 19) {
+          // New Web Browser feature — enable it for existing users by merging
+          // the key into their persisted feature map (don't clobber other flags).
+          state.enabledFeatures = {
+            ...DEFAULTS.enabledFeatures,
+            ...(state.enabledFeatures ?? {}),
+            'web-browser': state.enabledFeatures?.['web-browser'] ?? true,
+          };
         }
         return state as SettingsState;
       },

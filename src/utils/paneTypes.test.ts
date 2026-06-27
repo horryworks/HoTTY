@@ -15,6 +15,7 @@ describe('paneTypes', () => {
         ['ping-monitor', 'pm-'],
         ['text-editor', 'te-'],
         ['file-explorer', 'fe-'],
+        ['web-browser', 'wb-'],
       ];
       for (const [type, prefix] of cases) {
         const id = makeFeaturePaneId(type);
@@ -35,6 +36,7 @@ describe('paneTypes', () => {
       expect(getPaneContentType('pm-xyz789')).toBe('ping-monitor');
       expect(getPaneContentType('te-def456')).toBe('text-editor');
       expect(getPaneContentType('fe-ghi012')).toBe('file-explorer');
+      expect(getPaneContentType('wb-jkl345')).toBe('web-browser');
     });
 
     it('returns session for session IDs', () => {
@@ -52,6 +54,7 @@ describe('paneTypes', () => {
       expect(isFeaturePane('pm-abc')).toBe(true);
       expect(isFeaturePane('te-abc')).toBe(true);
       expect(isFeaturePane('fe-abc')).toBe(true);
+      expect(isFeaturePane('wb-abc')).toBe(true);
     });
 
     it('returns false for session IDs', () => {
@@ -65,6 +68,7 @@ describe('paneTypes', () => {
       expect(getFeatureDisplayName('ping-monitor')).toBe('Ping Monitor');
       expect(getFeatureDisplayName('text-editor')).toBe('Text Editor');
       expect(getFeatureDisplayName('file-explorer')).toBe('File Explorer');
+      expect(getFeatureDisplayName('web-browser')).toBe('Web Browser');
     });
   });
 });

@@ -118,6 +118,8 @@ export const settings = {
   features: {
     fileServerLabel: 'ファイルサーバー',
     fileServerDescription: 'ネットワーク機器へのファームウェアアップロード用 TFTP / SFTP サーバー',
+    webBrowserLabel: 'Web ブラウザー',
+    webBrowserDescription: 'ネットワーク機器の Web 管理画面を開く組み込みブラウザーペイン',
     section: '機能',
     sectionHelp: '機能ペインを有効または無効にします。既に開いているペインには影響しません。',
     aiChatLabel: 'AIチャット',

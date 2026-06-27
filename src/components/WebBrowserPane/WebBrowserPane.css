@@ -1,0 +1,88 @@
+.web-browser-pane {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  box-sizing: border-box;
+}
+
+/* Toolbar */
+.web-browser-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 10px;
+  background: var(--ai-header-bg);
+  border-bottom: 1px solid var(--border-color);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.web-browser-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  transition: background-color 0.1s;
+}
+
+.web-browser-toolbar-btn:hover:not(:disabled) {
+  background: var(--accent-color);
+  color: var(--text-on-accent);
+}
+
+.web-browser-toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.web-browser-go {
+  font-size: calc(var(--font-size-base) - 1px);
+  font-weight: 600;
+}
+
+/* Address bar */
+.web-browser-address {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.web-browser-address:focus {
+  border-color: var(--accent-color);
+}
+
+/* Error bar (sits above the embedded webview region) */
+.web-browser-error {
+  padding: 4px 10px;
+  background: var(--color-danger);
+  color: var(--text-on-accent);
+  font-size: calc(var(--font-size-base) - 2px);
+  flex-shrink: 0;
+}
+
+/* Body — the native webview floats over this rect. Kept as a measured slot. */
+.web-browser-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: var(--bg-secondary);
+}

@@ -321,6 +321,22 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
             </div>
           </details>
 
+          <details className="help-section">
+            <summary>{t('help.webBrowser.summary')}</summary>
+            <div className="help-section-body">
+              <p className="help-text">
+                <Trans i18nKey="help.webBrowser.intro" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />]} />
+              </p>
+              <ul className="shortcuts-list">
+                <li><Trans i18nKey="help.webBrowser.bookmarks" components={[<strong key="0" />, <strong key="1" />]} /></li>
+                <li><Trans i18nKey="help.webBrowser.star" components={[<strong key="0" />, <strong key="1" />]} /></li>
+                <li><Trans i18nKey="help.webBrowser.toolbar" components={[<strong key="0" />, <code key="1" />, <code key="2" />, <code key="3" />]} /></li>
+                <li><Trans i18nKey="help.webBrowser.passwords" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.webBrowser.enable" components={[<strong key="0" />, <strong key="1" />]} /></li>
+              </ul>
+            </div>
+          </details>
+
           <details className="help-section" open>
             <summary>{t('help.aiQuickStart.summary')}</summary>
             <div className="help-section-body">
