@@ -16,12 +16,13 @@ export function usePingMonitorEvents(sessionId: string): PingMonitorEventData {
   const historyRef = useRef<Map<string, PingResult[]>>(new Map());
 
   useEffect(() => {
+    let cancelled = false;
     let dataUnlisten: (() => void) | null = null;
     let logUnlisten: (() => void) | null = null;
 
     const setup = async () => {
-      dataUnlisten = await tauriService.onPingMonitorData((payload) => {
-        if (payload.sessionId !== sessionId) return;
+      const data = await tauriService.onPingMonitorData((payload) => {
+        if (cancelled || payload.sessionId !== sessionId) return;
         // The backend emits a complete snapshot of the current targets every
         // cycle, so rebuild the map from the payload rather than merging into
         // the previous state. This drops rows for targets that were removed —
@@ -43,11 +44,17 @@ export function usePingMonitorEvents(sessionId: string): PingMonitorEventData {
         }
         setLatestResults(next);
       });
+      // If the effect was already torn down while this subscribe was in flight,
+      // unlisten immediately instead of leaking the listener.
+      if (cancelled) data();
+      else dataUnlisten = data;
 
-      logUnlisten = await tauriService.onPingMonitorLogFile((payload) => {
-        if (payload.sessionId !== sessionId) return;
+      const logFile = await tauriService.onPingMonitorLogFile((payload) => {
+        if (cancelled || payload.sessionId !== sessionId) return;
         setLogFileName(payload.fileName);
       });
+      if (cancelled) logFile();
+      else logUnlisten = logFile;
     };
 
     setup().catch((e) => {
@@ -55,6 +62,7 @@ export function usePingMonitorEvents(sessionId: string): PingMonitorEventData {
     });
 
     return () => {
+      cancelled = true;
       dataUnlisten?.();
       logUnlisten?.();
     };

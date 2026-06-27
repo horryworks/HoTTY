@@ -190,6 +190,22 @@ impl SessionService for SerialSession {
                 SessionError::ConnectionFailed(format!("{}: {e}", self.config.path))
             })?;
 
+        // Give the reader its own independent handle so its blocking 100ms read
+        // never holds a lock the writer needs — otherwise every keystroke could
+        // wait up to one read-timeout (~100ms) for the reader to release the
+        // port. `try_clone` works on Windows COM and Linux tty; if it ever fails
+        // we fall back to the shared-lock path so behaviour never regresses.
+        let read_handle: Option<Box<dyn serialport::SerialPort>> = match port.try_clone() {
+            Ok(h) => Some(h),
+            Err(e) => {
+                log::warn!(
+                    "serial: try_clone failed for {} ({e}); falling back to shared read/write lock",
+                    self.config.path
+                );
+                None
+            }
+        };
+
         let port = Arc::new(Mutex::new(port));
 
         let (tx, mut rx) = mpsc::channel::<WriterCmd>(64);
@@ -225,8 +241,13 @@ impl SessionService for SerialSession {
         let reader_join = tokio::spawn(async move {
             log::info!("serial reader task started for {sid}");
             let mut buf = [0u8; 1024];
+            let mut read_handle = read_handle;
             loop {
-                let result = {
+                // Prefer the independent clone (no lock); only fall back to the
+                // shared port under a lock when try_clone was unavailable.
+                let result = if let Some(rp) = read_handle.as_mut() {
+                    rp.read(&mut buf)
+                } else {
                     let mut p = read_port.lock().await;
                     p.read(&mut buf)
                 };

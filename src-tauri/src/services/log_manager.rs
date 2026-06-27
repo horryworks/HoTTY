@@ -246,11 +246,19 @@ fn build_log_path(dir: &Path, protocol: &str, host: &str) -> PathBuf {
     let mut path = dir.join(format!("{base}.txt"));
     let mut counter = 1u32;
     while path.exists() {
-        path = dir.join(format!("{base}-{counter}.txt"));
-        counter += 1;
         if counter > 9999 {
+            // Pathological collision count: rather than returning an existing
+            // path (which File::create would truncate, clobbering a prior log),
+            // fall back to a high-entropy name that won't collide.
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            path = dir.join(format!("{base}-{}-{nanos}.txt", std::process::id()));
             break;
         }
+        path = dir.join(format!("{base}-{counter}.txt"));
+        counter += 1;
     }
     path
 }
@@ -439,8 +447,17 @@ impl LogManager {
             return;
         }
 
-        // Write processed text to .txt file
-        let _ = log.file.write_all(processed.as_bytes());
+        // Write processed text to .txt file. A write failure (disk full,
+        // permission change, removed media) was previously swallowed, silently
+        // truncating the transcript. Surface it once and stop logging this
+        // session so the user isn't misled into thinking the log is complete.
+        if let Err(e) = log.file.write_all(processed.as_bytes()) {
+            log::error!(
+                "session log write failed for {session_id}: {e}; stopping logging for this session"
+            );
+            inner.logs.remove(session_id);
+            return;
+        }
 
         // Write timestamps to .tslog file (one per line start)
         for ch in processed.chars() {

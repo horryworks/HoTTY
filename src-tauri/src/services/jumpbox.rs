@@ -24,7 +24,7 @@ use tokio::sync::{oneshot, Mutex};
 
 use super::path_safety::is_unc_path;
 use super::known_hosts::{
-    append_known_host, check_known_host, default_known_hosts_path, remove_known_host, HostKeyCheck,
+    check_known_host, default_known_hosts_path, upsert_known_host, HostKeyCheck,
 };
 use super::session_service::SessionError;
 use super::ssh::{humanize_ssh_error, HostKeyDecision};
@@ -197,11 +197,9 @@ impl Handler for JumpboxHandler {
             return Ok(false);
         }
         if decision.remember {
-            if matches!(check, HostKeyCheck::Mismatch { .. }) {
-                let _ =
-                    remove_known_host(&self.known_hosts_path, &self.host, self.port, &key_type);
-            }
-            let _ = append_known_host(
+            // Atomic rewrite (drop superseded key + record new one in one pass)
+            // so a concurrent connection never sees the host briefly absent.
+            let _ = upsert_known_host(
                 &self.known_hosts_path,
                 &self.host,
                 self.port,

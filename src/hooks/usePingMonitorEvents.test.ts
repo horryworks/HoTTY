@@ -41,6 +41,36 @@ describe('usePingMonitorEvents', () => {
     });
   });
 
+  it('unsubscribes even when the subscription resolves after unmount (no leak)', async () => {
+    const dataUnsub = vi.fn();
+    const logUnsub = vi.fn();
+    // Defer the data subscription so it settles AFTER the effect is torn down.
+    let resolveData!: (fn: () => void) => void;
+    mockOnData.mockReturnValue(
+      new Promise<() => void>((res) => {
+        resolveData = res;
+      })
+    );
+    mockOnLogFile.mockResolvedValue(logUnsub);
+
+    const { unmount } = renderHook(() => usePingMonitorEvents('pm-1'));
+
+    // Tear down before the in-flight subscribe resolves.
+    unmount();
+
+    // The subscription now resolves post-unmount: the hook must immediately
+    // unlisten it rather than storing (and leaking) the listener.
+    await act(async () => {
+      resolveData(dataUnsub);
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(dataUnsub).toHaveBeenCalledTimes(1);
+      expect(logUnsub).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('filters events by sessionId', async () => {
     let dataCallback: ((p: PingDataPayload) => void) | null = null;
     mockOnData.mockImplementation(async (cb) => {

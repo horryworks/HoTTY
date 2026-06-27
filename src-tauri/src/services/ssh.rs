@@ -21,7 +21,7 @@ use crate::commands::ssh_algorithms::{load_algorithms_sync, SshAlgorithms};
 use super::jumpbox::{establish_tunnel, JumpboxConfig, JumpboxHandler};
 use super::path_safety::is_unc_path;
 use super::known_hosts::{
-    append_known_host, check_known_host, default_known_hosts_path, remove_known_host, HostKeyCheck,
+    check_known_host, default_known_hosts_path, upsert_known_host, HostKeyCheck,
 };
 use super::session_service::{
     abort_all, emit_session_data, emit_session_status, encoding_for, join_or_abort, SessionError,
@@ -479,25 +479,10 @@ impl Handler for SshHandler {
             return Ok(false);
         }
         if decision.remember {
-            if matches!(check, HostKeyCheck::Mismatch { .. }) {
-                if let Err(e) = remove_known_host(
-                    &self.known_hosts_path,
-                    &self.host,
-                    self.port,
-                    &key_type,
-                ) {
-                    log::warn!(
-                        "ssh: failed to remove old known_hosts entry for {}:{}: {e} — the new key will not be remembered",
-                        self.host,
-                        self.port
-                    );
-                    let _ = self.app.emit(
-                        "ssh-known-hosts-warning",
-                        format!("Could not update known_hosts for {}:{}: {e}", self.host, self.port),
-                    );
-                }
-            }
-            if let Err(e) = append_known_host(
+            // Single atomic rewrite: drops any superseded key and records the new
+            // one in one pass, so a concurrent connection never sees the host as
+            // briefly absent (which would trigger a spurious re-prompt).
+            if let Err(e) = upsert_known_host(
                 &self.known_hosts_path,
                 &self.host,
                 self.port,
@@ -505,7 +490,7 @@ impl Handler for SshHandler {
                 &key_base64,
             ) {
                 log::warn!(
-                    "ssh: failed to append known_hosts entry for {}:{}: {e} — the new key will not be remembered",
+                    "ssh: failed to update known_hosts entry for {}:{}: {e} — the new key will not be remembered",
                     self.host,
                     self.port
                 );

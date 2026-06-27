@@ -355,7 +355,12 @@ impl SessionService for TelnetSession {
                     }
                     WriterCmd::Resize(cols, rows) => {
                         let mut w = writer_half.lock().await;
-                        let _ = w.write_all(&naws_frame(cols, rows)).await;
+                        // Treat a failed NAWS write like a failed data write: the
+                        // connection is going away, so stop the writer rather than
+                        // silently pretending the resize was delivered.
+                        if w.write_all(&naws_frame(cols, rows)).await.is_err() {
+                            break;
+                        }
                     }
                     WriterCmd::Close => break,
                 }

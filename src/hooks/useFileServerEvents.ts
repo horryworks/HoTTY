@@ -38,11 +38,12 @@ export function useFileServerEvents(serverId: string): FileServerEventData {
   const seqRef = useRef(0);
 
   useEffect(() => {
+    let cancelled = false;
     let unlisten: (() => void) | null = null;
 
     const setup = async () => {
-      unlisten = await tauriService.onFileServerEvent((ev) => {
-        if (ev.serverId !== serverId) return;
+      const fn = await tauriService.onFileServerEvent((ev) => {
+        if (cancelled || ev.serverId !== serverId) return;
 
         if (ev.kind === 'status') {
           const apply = ev.protocol === 'tftp' ? setTftpState : setSftpState;
@@ -68,11 +69,16 @@ export function useFileServerEvents(serverId: string): FileServerEventData {
           setLastError(ev.message ?? 'Unknown error');
         }
       });
+      // If the effect was torn down while this subscribe was in flight,
+      // unlisten immediately instead of leaking the listener.
+      if (cancelled) fn();
+      else unlisten = fn;
     };
 
     setup().catch((e) => logError('FileServer', 'Failed to set up listeners', e));
 
     return () => {
+      cancelled = true;
       unlisten?.();
     };
   }, [serverId]);

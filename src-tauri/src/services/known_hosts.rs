@@ -135,6 +135,69 @@ pub fn remove_known_host(
     Ok(())
 }
 
+/// Atomically record `key_base64` as the key for (host, port, key_type).
+///
+/// Drops any existing record for that (host, port, key_type) and writes the new
+/// one in a single rewrite. This replaces the old `remove_known_host()` +
+/// `append_known_host()` sequence, which briefly left the host entirely absent
+/// from the file — a concurrent connection landing in that window would see the
+/// host as `New` and re-prompt. Works for both the new-host case (nothing to
+/// drop) and the changed-key case.
+pub fn upsert_known_host(
+    path: &Path,
+    host: &str,
+    port: u16,
+    key_type: &str,
+    key_base64: &str,
+) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let host_matches: Vec<String> = host_patterns(host, port);
+
+    let mut kept: Vec<String> = Vec::new();
+    if path.exists() {
+        let f = File::open(path)?;
+        let reader = BufReader::new(f);
+        for line in reader.lines() {
+            let line = line?;
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                kept.push(line);
+                continue;
+            }
+            let mut parts = trimmed.split_whitespace();
+            let (Some(pattern), Some(ty), Some(_b64)) =
+                (parts.next(), parts.next(), parts.next())
+            else {
+                kept.push(line);
+                continue;
+            };
+            let pattern_hosts: Vec<&str> = pattern.split(',').collect();
+            let host_match = pattern_hosts
+                .iter()
+                .any(|p| host_matches.iter().any(|h| h == p));
+            if host_match && ty == key_type {
+                continue; // drop the superseded record
+            }
+            kept.push(line);
+        }
+    }
+
+    let pattern = if port == 22 {
+        host.to_string()
+    } else {
+        format!("[{host}]:{port}")
+    };
+
+    let mut f = File::create(path)?;
+    for line in kept {
+        writeln!(f, "{line}")?;
+    }
+    writeln!(f, "{pattern} {key_type} {key_base64}")?;
+    Ok(())
+}
+
 fn host_patterns(host: &str, port: u16) -> Vec<String> {
     if port == 22 {
         vec![host.to_string()]
@@ -216,6 +279,41 @@ mod tests {
         let contents = std::fs::read_to_string(&p).unwrap();
         assert!(contents.contains("other.com"));
         assert!(!contents.contains("KEY1"));
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn upsert_replaces_mismatched_key_in_one_pass() {
+        let p = temp_file();
+        append_known_host(&p, "example.com", 22, "ssh-ed25519", "OLDKEY").unwrap();
+        // Sanity: the old key is currently recorded as a mismatch for NEWKEY.
+        let before = check_known_host(&p, "example.com", 22, "ssh-ed25519", "NEWKEY").unwrap();
+        assert!(matches!(before, HostKeyCheck::Mismatch { .. }));
+
+        upsert_known_host(&p, "example.com", 22, "ssh-ed25519", "NEWKEY").unwrap();
+
+        // The new key matches and the old key is gone — never both, never neither.
+        let after = check_known_host(&p, "example.com", 22, "ssh-ed25519", "NEWKEY").unwrap();
+        assert_eq!(after, HostKeyCheck::Match);
+        let contents = std::fs::read_to_string(&p).unwrap();
+        assert!(contents.contains("NEWKEY"));
+        assert!(!contents.contains("OLDKEY"));
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn upsert_appends_new_host_and_preserves_others() {
+        let p = temp_file();
+        append_known_host(&p, "other.com", 22, "ssh-ed25519", "KEEP").unwrap();
+        upsert_known_host(&p, "example.com", 22, "ssh-rsa", "ADDED").unwrap();
+
+        let contents = std::fs::read_to_string(&p).unwrap();
+        assert!(contents.contains("KEEP"), "unrelated record must be preserved");
+        assert!(contents.contains("ADDED"));
+        assert_eq!(
+            check_known_host(&p, "example.com", 22, "ssh-rsa", "ADDED").unwrap(),
+            HostKeyCheck::Match
+        );
         let _ = std::fs::remove_file(&p);
     }
 

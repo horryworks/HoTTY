@@ -1,5 +1,16 @@
 # Release Notes
 
+## v2.0.7-beta5
+
+A maintenance release of bug fixes found in a codebase-wide review — most noticeably, serial connections now echo your typing without the occasional lag.
+
+### Bug Fixes
+
+- **Serial connections no longer lag while you type.** On a serial session, the read and write paths shared a single internal lock, so a keystroke could be held up waiting for the current read cycle to finish before being sent — adding up to ~100 ms of latency per character on an idle line. Reading and writing now use independent handles, so what you type is echoed without the stall.
+- **Session logging now fails loudly instead of silently truncating.** If writing to a session log file failed mid-session (for example, the disk filled up or the log folder became unavailable), the error was silently ignored and the transcript was quietly cut short. Such a failure is now reported and logging for that session is stopped, so a log file is never left silently incomplete. In the unlikely event of a filename collision that couldn't be resolved, HoTTY now picks a unique name rather than risk overwriting an existing log.
+- **Fixed an event-listener leak in the File Server and Ping Monitor panes.** Repeatedly opening and closing these panes could leave stale background event subscriptions behind; they are now always cleaned up when the pane closes.
+- **Accepting a changed SSH host key is now recorded atomically.** When you accept and remember a host whose key has changed (on a direct or jump-host connection), the old and new entries are written in a single update. Previously there was a brief window in which a second, simultaneous connection to the same host could see the key as missing and prompt you again unnecessarily.
+
 ## v2.0.7-beta4
 
 A fix for the File Server added in beta3: it now stops when you close its tab.
