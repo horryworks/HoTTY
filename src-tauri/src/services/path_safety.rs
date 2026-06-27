@@ -29,27 +29,15 @@ const BLOCKED_HOME_DIRS: &[&str] = &[
 ];
 
 #[cfg(not(windows))]
-const BLOCKED_HOME_DIRS_UNIX: &[&str] = &[
-    ".ssh",
-    ".gnupg",
-    ".aws",
-    ".azure",
-    ".config/gcloud",
-];
+const BLOCKED_HOME_DIRS_UNIX: &[&str] = &[".ssh", ".gnupg", ".aws", ".azure", ".config/gcloud"];
 
 pub fn is_sensitive_path(resolved: &Path) -> bool {
     #[cfg(windows)]
     {
-        let raw = resolved
-            .to_string_lossy()
-            .to_lowercase()
-            .replace('/', "\\");
+        let raw = resolved.to_string_lossy().to_lowercase().replace('/', "\\");
         // canonicalize() on Windows returns `\\?\C:\...` (verbatim prefix);
         // strip it so prefix-based comparisons against ordinary paths match.
-        let lower = raw
-            .strip_prefix(r"\\?\")
-            .map(str::to_string)
-            .unwrap_or(raw);
+        let lower = raw.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(raw);
 
         for suffix in BLOCKED_DIR_SUFFIXES {
             if lower.contains(suffix) {
@@ -126,8 +114,9 @@ mod tests {
         // canonicalize() on Windows returns paths with a \\?\ prefix; the
         // check must still match against an ordinary blocked path.
         if let Some(home) = dirs_home() {
-            let verbatim =
-                PathBuf::from(format!(r"\\?\{}", home)).join(".ssh").join("id_rsa");
+            let verbatim = PathBuf::from(format!(r"\\?\{}", home))
+                .join(".ssh")
+                .join("id_rsa");
             assert!(is_sensitive_path(&verbatim));
         }
     }

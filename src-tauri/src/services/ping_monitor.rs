@@ -112,9 +112,7 @@ fn format_timestamp() -> String {
 
     let (year, month, day) = days_to_ymd(days);
 
-    format!(
-        "{year:04}-{month:02}-{day:02} {hours:02}:{minutes:02}:{seconds:02}.{millis:03}"
-    )
+    format!("{year:04}-{month:02}-{day:02} {hours:02}:{minutes:02}:{seconds:02}.{millis:03}")
 }
 
 fn format_file_timestamp() -> String {
@@ -133,9 +131,7 @@ fn format_file_timestamp() -> String {
 
     let (year, month, day) = days_to_ymd(days);
 
-    format!(
-        "{year:04}{month:02}{day:02}{hours:02}{minutes:02}{seconds:02}"
-    )
+    format!("{year:04}{month:02}{day:02}{hours:02}{minutes:02}{seconds:02}")
 }
 
 fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
@@ -220,7 +216,9 @@ async fn execute_ping(target: &str) -> PingResult {
             } else {
                 let is_dns = combined.to_lowercase().contains("could not find host")
                     || combined.to_lowercase().contains("getaddrinfo failed")
-                    || combined.to_lowercase().contains("name or service not known");
+                    || combined
+                        .to_lowercase()
+                        .contains("name or service not known");
                 PingResult {
                     target: target.to_string(),
                     status: if is_dns { "dns" } else { "fail" }.to_string(),
@@ -266,9 +264,7 @@ fn parse_ttl(output: &str) -> Option<u32> {
 
 /// Set up CSV logging for a ping monitor session.
 /// Returns (file_name, file_handle) if successful.
-fn setup_csv_logging(
-    logging_path: &str,
-) -> Option<(String, std::fs::File)> {
+fn setup_csv_logging(logging_path: &str) -> Option<(String, std::fs::File)> {
     use std::fs;
     use std::io::Write;
     use std::path::Path;
@@ -300,14 +296,8 @@ fn write_csv_row(file: &mut std::fs::File, result: &PingResult) {
     use std::io::Write;
 
     let target = result.target.replace(',', "");
-    let rtt = result
-        .rtt
-        .map(|v| v.to_string())
-        .unwrap_or_default();
-    let ttl = result
-        .ttl
-        .map(|v| v.to_string())
-        .unwrap_or_default();
+    let rtt = result.rtt.map(|v| v.to_string()).unwrap_or_default();
+    let ttl = result.ttl.map(|v| v.to_string()).unwrap_or_default();
 
     let _ = writeln!(
         file,
@@ -335,7 +325,8 @@ pub fn start_monitor(
     monitors: &mut HashMap<String, MonitorHandle>,
     config: StartMonitorConfig,
 ) {
-    let valid_targets: Vec<String> = config.targets
+    let valid_targets: Vec<String> = config
+        .targets
         .into_iter()
         .filter(|t| is_valid_ping_target(t))
         .collect();

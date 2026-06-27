@@ -131,8 +131,13 @@ fn derive_key(password: &str, salt: &[u8]) -> [u8; KEY_LEN] {
 /// Derive a 256-bit key from a password and salt using Argon2id (memory-hard).
 /// Used for all v2 `.htree` exports/imports.
 fn derive_key_argon2(password: &str, salt: &[u8]) -> Result<[u8; KEY_LEN], String> {
-    let params = Params::new(ARGON2_M_COST_KIB, ARGON2_T_COST, ARGON2_P_COST, Some(KEY_LEN))
-        .map_err(|e| format!("argon2 params invalid: {e}"))?;
+    let params = Params::new(
+        ARGON2_M_COST_KIB,
+        ARGON2_T_COST,
+        ARGON2_P_COST,
+        Some(KEY_LEN),
+    )
+    .map_err(|e| format!("argon2 params invalid: {e}"))?;
     let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     let mut key = [0u8; KEY_LEN];
     argon
@@ -440,8 +445,7 @@ pub async fn decrypt_import_file(
     };
 
     // Parse as UTF-8 and validate JSON
-    let json_str =
-        String::from_utf8(plaintext).map_err(|_| "decrypted data is not valid UTF-8")?;
+    let json_str = String::from_utf8(plaintext).map_err(|_| "decrypted data is not valid UTF-8")?;
 
     // Validate it's a JSON array
     let mut tree: Vec<serde_json::Value> =
@@ -603,7 +607,8 @@ mod tests {
         assert_eq!(parsed_ct, ciphertext);
 
         // Decrypt from parsed
-        let decrypted = decrypt_aes256gcm(password, &parsed_salt, &parsed_nonce, &parsed_ct).unwrap();
+        let decrypted =
+            decrypt_aes256gcm(password, &parsed_salt, &parsed_nonce, &parsed_ct).unwrap();
         assert_eq!(decrypted, plaintext);
     }
 
@@ -693,7 +698,9 @@ mod tests {
         payload[MAGIC_V2.len()] = 0xFF; // corrupt version byte
         let result = parse_htree_payload(&payload);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("unsupported .htree v2 format version"));
+        assert!(result
+            .unwrap_err()
+            .contains("unsupported .htree v2 format version"));
     }
 
     #[test]
@@ -811,8 +818,14 @@ mod tests {
         migrate_credentials(&mut node);
 
         let entry = node.get("entry").and_then(|e| e.as_object()).unwrap();
-        assert_eq!(entry.get("username").and_then(|v| v.as_str()).unwrap(), v2_user);
-        assert_eq!(entry.get("password").and_then(|v| v.as_str()).unwrap(), v2_pass);
+        assert_eq!(
+            entry.get("username").and_then(|v| v.as_str()).unwrap(),
+            v2_user
+        );
+        assert_eq!(
+            entry.get("password").and_then(|v| v.as_str()).unwrap(),
+            v2_pass
+        );
     }
 
     #[test]
@@ -914,8 +927,14 @@ mod tests {
         let migrated = migrate_host_tree_credentials(tree_json.clone()).unwrap();
         // Functional equivalence: re-running migration must still decrypt to the same plaintexts.
         let parsed: serde_json::Value = serde_json::from_str(&migrated).unwrap();
-        let u = parsed.pointer("/0/entry/username").and_then(|v| v.as_str()).unwrap();
-        let p = parsed.pointer("/0/entry/password").and_then(|v| v.as_str()).unwrap();
+        let u = parsed
+            .pointer("/0/entry/username")
+            .and_then(|v| v.as_str())
+            .unwrap();
+        let p = parsed
+            .pointer("/0/entry/password")
+            .and_then(|v| v.as_str())
+            .unwrap();
         assert_eq!(decrypt_string(u).unwrap(), "carol");
         assert_eq!(decrypt_string(p).unwrap(), "p@ss");
 

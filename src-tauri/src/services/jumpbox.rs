@@ -22,10 +22,10 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{oneshot, Mutex};
 
-use super::path_safety::is_unc_path;
 use super::known_hosts::{
     check_known_host, default_known_hosts_path, upsert_known_host, HostKeyCheck,
 };
+use super::path_safety::is_unc_path;
 use super::session_service::SessionError;
 use super::ssh::{humanize_ssh_error, HostKeyDecision};
 
@@ -66,7 +66,9 @@ impl std::fmt::Debug for JumpboxConfig {
 impl JumpboxConfig {
     pub fn validate(&self) -> Result<(), SessionError> {
         if self.host.trim().is_empty() {
-            return Err(SessionError::InvalidConfig("Jumpbox host is required".into()));
+            return Err(SessionError::InvalidConfig(
+                "Jumpbox host is required".into(),
+            ));
         }
         if self.port == 0 {
             return Err(SessionError::InvalidConfig(
@@ -172,12 +174,7 @@ impl Handler for JumpboxHandler {
         };
         let _ = self.app.emit("ssh-host-key-prompt", payload);
 
-        let decision = match tokio::time::timeout(
-            super::ssh::HOST_KEY_PROMPT_TIMEOUT,
-            rx,
-        )
-        .await
-        {
+        let decision = match tokio::time::timeout(super::ssh::HOST_KEY_PROMPT_TIMEOUT, rx).await {
             Ok(Ok(d)) => d,
             Ok(Err(_)) => return Err(russh::Error::Disconnect),
             Err(_) => {
@@ -227,10 +224,7 @@ fn jumpbox_pending_map() -> &'static PendingMap {
     MAP.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-async fn register_pending_jumpbox_prompt(
-    session_id: &str,
-    tx: oneshot::Sender<HostKeyDecision>,
-) {
+async fn register_pending_jumpbox_prompt(session_id: &str, tx: oneshot::Sender<HostKeyDecision>) {
     if jumpbox_pending_map()
         .lock()
         .await
@@ -257,7 +251,11 @@ async fn register_with_ssh_map(prompt_session_id: String) {
     // Fan it out to our jumpbox map.
     tokio::spawn(async move {
         if let Ok(decision) = shim_rx.await {
-            if let Some(tx) = jumpbox_pending_map().lock().await.remove(&prompt_session_id) {
+            if let Some(tx) = jumpbox_pending_map()
+                .lock()
+                .await
+                .remove(&prompt_session_id)
+            {
                 let _ = tx.send(decision);
             }
         }
@@ -292,9 +290,7 @@ async fn authenticate_jumpbox(
             ));
         }
         let pk: PrivateKey = load_secret_key(key_path, cfg.private_key_passphrase.as_deref())
-            .map_err(|e| {
-                SessionError::AuthFailed(humanize_jumpbox_load_key(&e.to_string()))
-            })?;
+            .map_err(|e| SessionError::AuthFailed(humanize_jumpbox_load_key(&e.to_string())))?;
         let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(pk), Some(HashAlg::Sha256));
         let res = handle
             .authenticate_publickey(&cfg.username, key_with_hash)
@@ -332,9 +328,7 @@ async fn authenticate_jumpbox(
             match kb {
                 russh::client::KeyboardInteractiveAuthResponse::Success => return Ok(()),
                 russh::client::KeyboardInteractiveAuthResponse::Failure { .. } => break,
-                russh::client::KeyboardInteractiveAuthResponse::InfoRequest {
-                    prompts, ..
-                } => {
+                russh::client::KeyboardInteractiveAuthResponse::InfoRequest { prompts, .. } => {
                     let responses: Vec<String> = prompts.iter().map(|_| pw.clone()).collect();
                     kb = handle
                         .authenticate_keyboard_interactive_respond(responses)
@@ -432,9 +426,11 @@ pub async fn establish_tunnel(
         client::connect(russh_config, addr, handler),
     )
     .await
-    .map_err(|_| SessionError::ConnectionFailed(format!(
-        "Jumpbox: Connection timed out ({connect_timeout_secs}s)"
-    )))?
+    .map_err(|_| {
+        SessionError::ConnectionFailed(format!(
+            "Jumpbox: Connection timed out ({connect_timeout_secs}s)"
+        ))
+    })?
     .map_err(|e| {
         let msg = humanize_ssh_error(&e.to_string());
         SessionError::ConnectionFailed(format!("Jumpbox: {msg}"))
@@ -458,12 +454,8 @@ pub async fn establish_tunnel(
         .channel_open_direct_tcpip(target_host, target_port as u32, "127.0.0.1", 0)
         .await
         .map_err(|e| {
-            log::error!(
-                "jumpbox: direct-tcpip to {target_host}:{target_port} failed: {e}"
-            );
-            SessionError::ConnectionFailed(
-                "Jumpbox refused to forward to target host".into(),
-            )
+            log::error!("jumpbox: direct-tcpip to {target_host}:{target_port} failed: {e}");
+            SessionError::ConnectionFailed("Jumpbox refused to forward to target host".into())
         })?;
 
     // Drain any initial control messages so we reach a data-ready state. We

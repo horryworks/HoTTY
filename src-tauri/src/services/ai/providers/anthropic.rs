@@ -147,11 +147,7 @@ impl AIProvider for AnthropicProvider {
         AuthType::ApiKey
     }
 
-    async fn authenticate(
-        &mut self,
-        app: &AppHandle,
-        credentials: Value,
-    ) -> Result<bool, String> {
+    async fn authenticate(&mut self, app: &AppHandle, credentials: Value) -> Result<bool, String> {
         let api_key = credentials
             .get("apiKey")
             .and_then(|v| v.as_str())
@@ -472,11 +468,7 @@ impl AIProvider for AnthropicProvider {
         if !is_valid_model(model) {
             return Err("Invalid model name.".into());
         }
-        let api_key = self
-            .api_key
-            .as_ref()
-            .ok_or("Not authenticated.")?
-            .clone();
+        let api_key = self.api_key.as_ref().ok_or("Not authenticated.")?.clone();
 
         // Force the model to emit the verdict through a single tool, which is
         // Anthropic's mechanism for guaranteed-structured output.
@@ -579,10 +571,7 @@ impl AIProvider for AnthropicProvider {
                 arr.iter()
                     .filter_map(|m| {
                         let id = m.get("id").and_then(|v| v.as_str())?;
-                        let display = m
-                            .get("display_name")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or(id);
+                        let display = m.get("display_name").and_then(|v| v.as_str()).unwrap_or(id);
                         Some(ModelInfo {
                             name: id.to_string(),
                             display_name: display.to_string(),
@@ -611,9 +600,18 @@ mod tests {
     #[test]
     fn pop_trailing_user_drops_only_trailing_user() {
         let mut h = vec![
-            ChatMessage { role: "user".into(), content: "q1".into() },
-            ChatMessage { role: "assistant".into(), content: "a1".into() },
-            ChatMessage { role: "user".into(), content: "q2".into() },
+            ChatMessage {
+                role: "user".into(),
+                content: "q1".into(),
+            },
+            ChatMessage {
+                role: "assistant".into(),
+                content: "a1".into(),
+            },
+            ChatMessage {
+                role: "user".into(),
+                content: "q2".into(),
+            },
         ];
         pop_trailing_user(Some(&mut h));
         assert_eq!(h.len(), 2);

@@ -87,8 +87,8 @@ pub async fn list_wsl_distributions() -> Result<Vec<String>, String> {
         String::from_utf8_lossy(raw).into_owned()
     };
 
-    let distro_re = regex_lite::Regex::new(r"^[a-zA-Z0-9_][a-zA-Z0-9_.\-]{0,62}$")
-        .expect("valid regex");
+    let distro_re =
+        regex_lite::Regex::new(r"^[a-zA-Z0-9_][a-zA-Z0-9_.\-]{0,62}$").expect("valid regex");
 
     let distros: Vec<String> = text
         .lines()
@@ -159,12 +159,12 @@ pub fn list_system_fonts() -> Result<Vec<FontInfo>, String> {
     #[cfg(windows)]
     {
         use std::collections::BTreeSet;
+        use windows::core::PCWSTR;
         use windows::Win32::Foundation::LPARAM;
         use windows::Win32::Graphics::Gdi::{
-            CreateDCW, DeleteDC, EnumFontFamiliesExW, ENUMLOGFONTEXW, LOGFONTW, DEFAULT_CHARSET,
-            HDC,
+            CreateDCW, DeleteDC, EnumFontFamiliesExW, DEFAULT_CHARSET, ENUMLOGFONTEXW, HDC,
+            LOGFONTW,
         };
-        use windows::core::PCWSTR;
 
         let mut families = BTreeSet::<String>::new();
 
@@ -206,7 +206,10 @@ pub fn list_system_fonts() -> Result<Vec<FontInfo>, String> {
                 let families = &mut *families_ptr;
                 let lf = &*(lpelfe as *const ENUMLOGFONTEXW);
                 let name_u16 = &lf.elfLogFont.lfFaceName;
-                let len = name_u16.iter().position(|&c| c == 0).unwrap_or(name_u16.len());
+                let len = name_u16
+                    .iter()
+                    .position(|&c| c == 0)
+                    .unwrap_or(name_u16.len());
                 let name = String::from_utf16_lossy(&name_u16[..len]);
                 if !name.starts_with('@') {
                     families.insert(name);
@@ -278,10 +281,14 @@ pub async fn show_context_menu(
             .map_err(|e| format!("failed to build menu item: {e}"))?;
         builder = builder.item(&mi);
     }
-    let menu = builder.build().map_err(|e| format!("failed to build context menu: {e}"))?;
+    let menu = builder
+        .build()
+        .map_err(|e| format!("failed to build context menu: {e}"))?;
 
     // Use popup to show menu at cursor position. The popup is blocking.
-    window.popup_menu(&menu).map_err(|e| format!("failed to show context menu: {e}"))?;
+    window
+        .popup_menu(&menu)
+        .map_err(|e| format!("failed to show context menu: {e}"))?;
 
     Ok(None)
 }
@@ -306,9 +313,8 @@ pub async fn open_debug_log_folder(app: AppHandle) -> Result<(), String> {
         .map_err(|e| format!("failed to resolve log directory: {e}"))?;
 
     if !log_dir.exists() {
-        std::fs::create_dir_all(&log_dir).map_err(|e| {
-            format!("failed to create log directory: {e}")
-        })?;
+        std::fs::create_dir_all(&log_dir)
+            .map_err(|e| format!("failed to create log directory: {e}"))?;
     }
 
     #[cfg(windows)]
@@ -367,9 +373,7 @@ fn is_curated_url(url: &str) -> bool {
 /// rejected outright, with no fallback dialog.
 fn is_allowed_scheme(url: &str) -> bool {
     let lower = url.to_ascii_lowercase();
-    lower.starts_with("https://")
-        || lower.starts_with("http://")
-        || lower.starts_with("mailto:")
+    lower.starts_with("https://") || lower.starts_with("http://") || lower.starts_with("mailto:")
 }
 
 /// Open an external URL in the user's default browser / mail client.
@@ -430,7 +434,9 @@ mod tests {
         ));
         assert!(is_curated_url("https://cloud.google.com/sdk/docs/install"));
         assert!(is_curated_url("https://www.gnu.org/licenses/gpl-3.0.html"));
-        assert!(is_curated_url("https://accounts.google.com/o/oauth2/v2/auth"));
+        assert!(is_curated_url(
+            "https://accounts.google.com/o/oauth2/v2/auth"
+        ));
     }
 
     #[test]
@@ -508,8 +514,8 @@ mod tests {
             String::from_utf8_lossy(raw).into_owned()
         };
 
-        let distro_re = regex_lite::Regex::new(r"^[a-zA-Z0-9_][a-zA-Z0-9_.\-]{0,62}$")
-            .expect("valid regex");
+        let distro_re =
+            regex_lite::Regex::new(r"^[a-zA-Z0-9_][a-zA-Z0-9_.\-]{0,62}$").expect("valid regex");
 
         text.lines()
             .map(|l| l.trim().trim_matches('\0'))

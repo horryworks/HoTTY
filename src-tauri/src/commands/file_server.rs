@@ -62,7 +62,15 @@ pub async fn file_server_sftp_start(
 ) -> Result<(), String> {
     validate_port(port)?;
     sftp_server::start_sftp(
-        app, &state, server_id, bind_addr, port, root_dir, username, password, allow_write,
+        app,
+        &state,
+        server_id,
+        bind_addr,
+        port,
+        root_dir,
+        username,
+        password,
+        allow_write,
     )
     .await
 }

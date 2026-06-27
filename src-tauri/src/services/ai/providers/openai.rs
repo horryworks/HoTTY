@@ -143,11 +143,7 @@ impl AIProvider for OpenAIProvider {
         AuthType::ApiKey
     }
 
-    async fn authenticate(
-        &mut self,
-        app: &AppHandle,
-        credentials: Value,
-    ) -> Result<bool, String> {
+    async fn authenticate(&mut self, app: &AppHandle, credentials: Value) -> Result<bool, String> {
         let api_key = credentials
             .get("apiKey")
             .and_then(|v| v.as_str())
@@ -170,10 +166,7 @@ impl AIProvider for OpenAIProvider {
             .map_err(|e| format!("OpenAI auth request failed: {e}"))?;
 
         if !response.status().is_success() {
-            log::warn!(
-                "[openai] API key validation failed: {}",
-                response.status()
-            );
+            log::warn!("[openai] API key validation failed: {}", response.status());
             emit_auth_result(app, false);
             return Ok(false);
         }
@@ -434,11 +427,7 @@ impl AIProvider for OpenAIProvider {
         if !is_valid_model(model) {
             return Err("Invalid model name.".into());
         }
-        let api_key = self
-            .api_key
-            .as_ref()
-            .ok_or("Not authenticated.")?
-            .clone();
+        let api_key = self.api_key.as_ref().ok_or("Not authenticated.")?.clone();
 
         // Note: `temperature` is intentionally omitted — some reasoning models
         // (o-series) reject a non-default temperature. The json_schema response
@@ -569,9 +558,18 @@ mod tests {
     #[test]
     fn pop_trailing_user_drops_only_trailing_user() {
         let mut h = vec![
-            ChatMessage { role: "user".into(), content: "q1".into() },
-            ChatMessage { role: "assistant".into(), content: "a1".into() },
-            ChatMessage { role: "user".into(), content: "q2".into() },
+            ChatMessage {
+                role: "user".into(),
+                content: "q1".into(),
+            },
+            ChatMessage {
+                role: "assistant".into(),
+                content: "a1".into(),
+            },
+            ChatMessage {
+                role: "user".into(),
+                content: "q2".into(),
+            },
         ];
         pop_trailing_user(Some(&mut h));
         assert_eq!(h.len(), 2);

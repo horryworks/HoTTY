@@ -272,11 +272,7 @@ fn naws_frame(cols: u16, rows: u16) -> [u8; 9] {
 
 #[async_trait]
 impl SessionService for TelnetSession {
-    async fn connect(
-        &mut self,
-        app: AppHandle,
-        session_id: String,
-    ) -> Result<(), SessionError> {
+    async fn connect(&mut self, app: AppHandle, session_id: String) -> Result<(), SessionError> {
         self.config.validate()?;
 
         let (read_half, write_half): (
@@ -285,7 +281,10 @@ impl SessionService for TelnetSession {
         ) = if let Some(jumpbox_cfg) = self.config.jumpbox.take() {
             log::info!(
                 "telnet: tunneling through jumpbox {}:{} to {}:{} (session {session_id})",
-                jumpbox_cfg.host, jumpbox_cfg.port, self.config.host, self.config.port
+                jumpbox_cfg.host,
+                jumpbox_cfg.port,
+                self.config.host,
+                self.config.port
             );
             let tunnel = establish_tunnel(
                 app.clone(),
@@ -314,7 +313,9 @@ impl SessionService for TelnetSession {
                     log::error!(
                         "telnet: TcpStream::connect({addr}) timed out after {timeout_secs}s"
                     );
-                    SessionError::ConnectionFailed(format!("Connection timed out ({timeout_secs}s)"))
+                    SessionError::ConnectionFailed(format!(
+                        "Connection timed out ({timeout_secs}s)"
+                    ))
                 })?
                 .map_err(|e| {
                     log::error!("telnet: TcpStream::connect({addr}) failed: {e}");
@@ -394,7 +395,10 @@ impl SessionService for TelnetSession {
         let app_r = app.clone();
         let sid = session_id.clone();
         let writer_tx_for_login = tx.clone();
-        let log_mgr: super::log_manager::LogManager = app.state::<super::log_manager::LogManager>().inner().clone();
+        let log_mgr: super::log_manager::LogManager = app
+            .state::<super::log_manager::LogManager>()
+            .inner()
+            .clone();
 
         let reader_join = tokio::spawn(async move {
             log::info!("telnet reader task started for {sid}");
@@ -432,9 +436,7 @@ impl SessionService for TelnetSession {
                         "telnet {sid}: sending {} bytes of IAC response",
                         response.len()
                     );
-                    let _ = writer_tx_for_login
-                        .send(WriterCmd::Bytes(response))
-                        .await;
+                    let _ = writer_tx_for_login.send(WriterCmd::Bytes(response)).await;
                 }
                 if cleaned.is_empty() {
                     log::debug!("telnet {sid}: {n} bytes all stripped as IAC");
@@ -549,7 +551,12 @@ impl SessionService for TelnetSession {
         }
         // The reader is blocked in rd.read() with no graceful shutdown path on a
         // manual disconnect, so it relies on the forced abort inside join_or_abort.
-        join_or_abort(std::mem::take(&mut self.join), "Telnet", DISCONNECT_DRAIN_MS).await;
+        join_or_abort(
+            std::mem::take(&mut self.join),
+            "Telnet",
+            DISCONNECT_DRAIN_MS,
+        )
+        .await;
         Ok(())
     }
 }
@@ -603,9 +610,7 @@ mod tests {
     #[test]
     fn strip_iac_subnegotiation() {
         // IAC SB NAWS 00 50 00 18 IAC SE then "A"
-        let input = [
-            IAC, SB, NAWS, 0x00, 0x50, 0x00, 0x18, IAC, SE, b'A',
-        ];
+        let input = [IAC, SB, NAWS, 0x00, 0x50, 0x00, 0x18, IAC, SE, b'A'];
         assert_eq!(strip_iac(&input), vec![b'A']);
     }
 

@@ -37,10 +37,14 @@ pub(crate) fn encrypt_string(plaintext: &str) -> Result<String, String> {
 /// prefix is visible.
 pub(crate) fn decrypt_string(ciphertext: &str) -> Result<String, String> {
     if let Some(b64) = ciphertext.strip_prefix(SAFE_PREFIX) {
-        let bytes = BASE64.decode(b64).map_err(|e| format!("base64 decode error: {e}"))?;
+        let bytes = BASE64
+            .decode(b64)
+            .map_err(|e| format!("base64 decode error: {e}"))?;
         crypt_unprotect(&bytes)
     } else if let Some(b64) = ciphertext.strip_prefix(LEGACY_PREFIX) {
-        let bytes = BASE64.decode(b64).map_err(|e| format!("base64 decode error: {e}"))?;
+        let bytes = BASE64
+            .decode(b64)
+            .map_err(|e| format!("base64 decode error: {e}"))?;
         crypt_unprotect(&bytes)
     } else {
         if ciphertext.starts_with('[') {
@@ -62,7 +66,9 @@ pub(crate) fn decrypt_v1_safe_string(ciphertext: &str) -> Result<String, String>
     let b64 = ciphertext
         .strip_prefix(SAFE_PREFIX)
         .ok_or_else(|| "missing [SAFE] prefix".to_string())?;
-    let bytes = BASE64.decode(b64).map_err(|e| format!("base64 decode error: {e}"))?;
+    let bytes = BASE64
+        .decode(b64)
+        .map_err(|e| format!("base64 decode error: {e}"))?;
     let inner = bytes
         .strip_prefix(b"v10")
         .ok_or_else(|| "missing Electron v10 marker".to_string())?;
@@ -126,7 +132,10 @@ fn crypt_unprotect(encrypted: &[u8]) -> Result<String, String> {
 // ---------------------------------------------------------------------------
 
 #[cfg(windows)]
-pub(crate) fn crypt_protect_raw(plaintext: &[u8], entropy: Option<&[u8]>) -> Result<Vec<u8>, String> {
+pub(crate) fn crypt_protect_raw(
+    plaintext: &[u8],
+    entropy: Option<&[u8]>,
+) -> Result<Vec<u8>, String> {
     use windows::Win32::Security::Cryptography::{CryptProtectData, CRYPT_INTEGER_BLOB};
 
     let data_bytes = plaintext.to_vec();
@@ -161,24 +170,16 @@ pub(crate) fn crypt_protect_raw(plaintext: &[u8], entropy: Option<&[u8]>) -> Res
     // - `LocalFree` is always called on the success path to avoid leaking the
     //   Windows-allocated buffer.
     unsafe {
-        let success = CryptProtectData(
-            &data_in,
-            None,
-            entropy_ptr,
-            None,
-            None,
-            0,
-            &mut data_out,
-        );
+        let success = CryptProtectData(&data_in, None, entropy_ptr, None, None, 0, &mut data_out);
         if success.is_err() {
             return Err("DPAPI CryptProtectData failed".into());
         }
 
         let slice = std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize);
         let result = slice.to_vec();
-        let _ = windows::Win32::Foundation::LocalFree(
-            windows::Win32::Foundation::HLOCAL(data_out.pbData as _),
-        );
+        let _ = windows::Win32::Foundation::LocalFree(windows::Win32::Foundation::HLOCAL(
+            data_out.pbData as _,
+        ));
         Ok(result)
     }
 }
@@ -218,24 +219,16 @@ fn crypt_unprotect_raw(encrypted: &[u8], entropy: Option<&[u8]>) -> Result<Vec<u
     // - `LocalFree` is always called on the success path to avoid leaking the
     //   Windows-allocated buffer.
     unsafe {
-        let success = CryptUnprotectData(
-            &data_in,
-            None,
-            entropy_ptr,
-            None,
-            None,
-            0,
-            &mut data_out,
-        );
+        let success = CryptUnprotectData(&data_in, None, entropy_ptr, None, None, 0, &mut data_out);
         if success.is_err() {
             return Err("DPAPI CryptUnprotectData failed".into());
         }
 
         let slice = std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize);
         let result = slice.to_vec();
-        let _ = windows::Win32::Foundation::LocalFree(
-            windows::Win32::Foundation::HLOCAL(data_out.pbData as _),
-        );
+        let _ = windows::Win32::Foundation::LocalFree(windows::Win32::Foundation::HLOCAL(
+            data_out.pbData as _,
+        ));
         Ok(result)
     }
 }
@@ -313,7 +306,10 @@ mod tests {
         let raw = crypt_protect_raw(&framed, None).unwrap();
         let blob = format!("{SAFE_PREFIX}{}", BASE64.encode(&raw));
         let result = decrypt_string(&blob);
-        assert!(result.is_err(), "marker-bearing legacy blob must be rejected");
+        assert!(
+            result.is_err(),
+            "marker-bearing legacy blob must be rejected"
+        );
     }
 
     #[cfg(windows)]

@@ -158,17 +158,13 @@ pub async fn ai_auth_auto(
 }
 
 #[tauri::command]
-pub async fn ai_auth_status(
-    state: State<'_, AIServiceState>,
-) -> Result<AuthStatus, String> {
+pub async fn ai_auth_status(state: State<'_, AIServiceState>) -> Result<AuthStatus, String> {
     let service = state.service.lock().await;
     Ok(service.get_auth_status())
 }
 
 #[tauri::command]
-pub async fn ai_auth_logout(
-    state: State<'_, AIServiceState>,
-) -> Result<(), String> {
+pub async fn ai_auth_logout(state: State<'_, AIServiceState>) -> Result<(), String> {
     let mut service = state.service.lock().await;
     service.logout();
     Ok(())
@@ -251,17 +247,13 @@ pub async fn ai_classify_command(
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub async fn ai_list_models(
-    state: State<'_, AIServiceState>,
-) -> Result<Vec<ModelInfo>, String> {
+pub async fn ai_list_models(state: State<'_, AIServiceState>) -> Result<Vec<ModelInfo>, String> {
     let service = state.service.lock().await;
     service.list_models().await
 }
 
 #[tauri::command]
-pub async fn ai_list_locations(
-    state: State<'_, AIServiceState>,
-) -> Result<Vec<String>, String> {
+pub async fn ai_list_locations(state: State<'_, AIServiceState>) -> Result<Vec<String>, String> {
     let service = state.service.lock().await;
     service.list_locations().await
 }
@@ -383,14 +375,18 @@ mod tests {
     async fn validate_service_account_key_skips_non_service_account() {
         let approved = ApprovedServiceAccountKeys::new();
         let creds = serde_json::json!({"authType": "adc"});
-        assert!(validate_service_account_key(&creds, &approved).await.is_ok());
+        assert!(validate_service_account_key(&creds, &approved)
+            .await
+            .is_ok());
     }
 
     #[tokio::test]
     async fn validate_service_account_key_rejects_missing_path() {
         let approved = ApprovedServiceAccountKeys::new();
         let creds = serde_json::json!({"authType": "service_account"});
-        assert!(validate_service_account_key(&creds, &approved).await.is_err());
+        assert!(validate_service_account_key(&creds, &approved)
+            .await
+            .is_err());
     }
 
     #[tokio::test]
@@ -405,7 +401,9 @@ mod tests {
             "authType": "service_account",
             "keyFilePath": key_file.to_string_lossy(),
         });
-        let err = validate_service_account_key(&creds, &approved).await.unwrap_err();
+        let err = validate_service_account_key(&creds, &approved)
+            .await
+            .unwrap_err();
         assert!(err.contains("not approved"));
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -426,7 +424,9 @@ mod tests {
             "authType": "service_account",
             "keyFilePath": key_file.to_string_lossy(),
         });
-        assert!(validate_service_account_key(&creds, &approved).await.is_ok());
+        assert!(validate_service_account_key(&creds, &approved)
+            .await
+            .is_ok());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

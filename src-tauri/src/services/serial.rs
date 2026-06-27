@@ -67,7 +67,9 @@ fn default_encoding() -> String {
 impl SerialConfig {
     pub fn validate(&self) -> Result<(), SessionError> {
         if self.path.is_empty() {
-            return Err(SessionError::InvalidConfig("serial port path is empty".into()));
+            return Err(SessionError::InvalidConfig(
+                "serial port path is empty".into(),
+            ));
         }
 
         // Validate port path format
@@ -97,7 +99,9 @@ impl SerialConfig {
             "six" | "6" => Ok(serialport::DataBits::Six),
             "seven" | "7" => Ok(serialport::DataBits::Seven),
             "eight" | "8" => Ok(serialport::DataBits::Eight),
-            other => Err(SessionError::InvalidConfig(format!("invalid data bits: {other}"))),
+            other => Err(SessionError::InvalidConfig(format!(
+                "invalid data bits: {other}"
+            ))),
         }
     }
 
@@ -106,7 +110,9 @@ impl SerialConfig {
             "none" => Ok(serialport::Parity::None),
             "even" => Ok(serialport::Parity::Even),
             "odd" => Ok(serialport::Parity::Odd),
-            other => Err(SessionError::InvalidConfig(format!("invalid parity: {other}"))),
+            other => Err(SessionError::InvalidConfig(format!(
+                "invalid parity: {other}"
+            ))),
         }
     }
 
@@ -114,7 +120,9 @@ impl SerialConfig {
         match self.stop_bits.to_lowercase().replace(' ', "_").as_str() {
             "one" | "1" => Ok(serialport::StopBits::One),
             "two" | "2" => Ok(serialport::StopBits::Two),
-            other => Err(SessionError::InvalidConfig(format!("invalid stop bits: {other}"))),
+            other => Err(SessionError::InvalidConfig(format!(
+                "invalid stop bits: {other}"
+            ))),
         }
     }
 
@@ -160,11 +168,7 @@ impl SerialSession {
 
 #[async_trait]
 impl SessionService for SerialSession {
-    async fn connect(
-        &mut self,
-        app: AppHandle,
-        session_id: String,
-    ) -> Result<(), SessionError> {
+    async fn connect(&mut self, app: AppHandle, session_id: String) -> Result<(), SessionError> {
         self.config.validate()?;
 
         let data_bits = self.config.to_data_bits()?;
@@ -236,7 +240,10 @@ impl SessionService for SerialSession {
         let app_r = app.clone();
         let sid = session_id.clone();
         let read_port = port;
-        let log_mgr: super::log_manager::LogManager = app.state::<super::log_manager::LogManager>().inner().clone();
+        let log_mgr: super::log_manager::LogManager = app
+            .state::<super::log_manager::LogManager>()
+            .inner()
+            .clone();
 
         let reader_join = tokio::spawn(async move {
             log::info!("serial reader task started for {sid}");
@@ -307,7 +314,12 @@ impl SessionService for SerialSession {
         if let Some(tx) = self.writer_tx.take() {
             let _ = tx.send(WriterCmd::Close).await;
         }
-        join_or_abort(std::mem::take(&mut self.join), "Serial", DISCONNECT_DRAIN_MS).await;
+        join_or_abort(
+            std::mem::take(&mut self.join),
+            "Serial",
+            DISCONNECT_DRAIN_MS,
+        )
+        .await;
         Ok(())
     }
 }
@@ -370,7 +382,10 @@ mod tests {
             flow_control: "none".into(),
             encoding: "utf8".into(),
         };
-        assert!(matches!(cfg.to_data_bits(), Ok(serialport::DataBits::Seven)));
+        assert!(matches!(
+            cfg.to_data_bits(),
+            Ok(serialport::DataBits::Seven)
+        ));
     }
 
     #[test]
@@ -398,7 +413,10 @@ mod tests {
             flow_control: "rts_cts".into(),
             encoding: "utf8".into(),
         };
-        assert!(matches!(cfg.to_flow_control(), Ok(serialport::FlowControl::Hardware)));
+        assert!(matches!(
+            cfg.to_flow_control(),
+            Ok(serialport::FlowControl::Hardware)
+        ));
     }
 
     #[test]

@@ -48,7 +48,10 @@ pub async fn select_image(app: AppHandle) -> Result<Option<String>, String> {
     let file_path = app
         .dialog()
         .file()
-        .add_filter("Images", &["png", "jpg", "jpeg", "gif", "bmp", "webp", "ico", "svg"])
+        .add_filter(
+            "Images",
+            &["png", "jpg", "jpeg", "gif", "bmp", "webp", "ico", "svg"],
+        )
         .blocking_pick_file();
 
     Ok(file_path.map(|p| p.to_string()))

@@ -82,9 +82,7 @@ pub async fn connect_session(
     logging_enabled: bool,
     logging_path: String,
 ) -> Result<(), String> {
-    log::info!(
-        "connect_session called: session_id={session_id} protocol={protocol}"
-    );
+    log::info!("connect_session called: session_id={session_id} protocol={protocol}");
 
     let (mut service, meta): (Box<dyn SessionService>, SessionMeta) = match protocol.as_str() {
         "telnet" => {
@@ -92,8 +90,15 @@ pub async fn connect_session(
                 log::error!("invalid telnet config: {e}");
                 format!("invalid telnet config: {e}")
             })?;
-            log::info!("building TelnetSession: host={} port={}", cfg.host, cfg.port);
-            let meta = SessionMeta { protocol: ProtocolId::Telnet, host: cfg.host.clone() };
+            log::info!(
+                "building TelnetSession: host={} port={}",
+                cfg.host,
+                cfg.port
+            );
+            let meta = SessionMeta {
+                protocol: ProtocolId::Telnet,
+                host: cfg.host.clone(),
+            };
             (Box::new(TelnetSession::new(cfg)), meta)
         }
         "ssh" => {
@@ -102,7 +107,10 @@ pub async fn connect_session(
                 format!("invalid ssh config: {e}")
             })?;
             log::info!("building SshSession: host={} port={}", cfg.host, cfg.port);
-            let meta = SessionMeta { protocol: ProtocolId::Ssh, host: cfg.host.clone() };
+            let meta = SessionMeta {
+                protocol: ProtocolId::Ssh,
+                host: cfg.host.clone(),
+            };
             (Box::new(SshSession::new(cfg)), meta)
         }
         "serial" => {
@@ -111,7 +119,10 @@ pub async fn connect_session(
                 format!("invalid serial config: {e}")
             })?;
             log::info!("building SerialSession: path={}", cfg.path);
-            let meta = SessionMeta { protocol: ProtocolId::Serial, host: cfg.path.clone() };
+            let meta = SessionMeta {
+                protocol: ProtocolId::Serial,
+                host: cfg.path.clone(),
+            };
             (Box::new(SerialSession::new(cfg)), meta)
         }
         "wsl" => {
@@ -124,7 +135,14 @@ pub async fn connect_session(
                 "building WslSession: distribution={}",
                 if dist.is_empty() { "(default)" } else { &dist }
             );
-            let meta = SessionMeta { protocol: ProtocolId::Wsl, host: if dist.is_empty() { "wsl".to_string() } else { dist } };
+            let meta = SessionMeta {
+                protocol: ProtocolId::Wsl,
+                host: if dist.is_empty() {
+                    "wsl".to_string()
+                } else {
+                    dist
+                },
+            };
             (Box::new(WslSession::new(cfg)), meta)
         }
         "cmd" => {
@@ -133,7 +151,10 @@ pub async fn connect_session(
                 format!("invalid local config: {e}")
             })?;
             log::info!("building LocalSession: type={}", cfg.shell_type);
-            let meta = SessionMeta { protocol: ProtocolId::Cmd, host: cfg.shell_type.clone() };
+            let meta = SessionMeta {
+                protocol: ProtocolId::Cmd,
+                host: cfg.shell_type.clone(),
+            };
             (Box::new(LocalSession::new(cfg)), meta)
         }
         "powershell" => {
@@ -142,7 +163,10 @@ pub async fn connect_session(
                 format!("invalid local config: {e}")
             })?;
             log::info!("building LocalSession: type={}", cfg.shell_type);
-            let meta = SessionMeta { protocol: ProtocolId::PowerShell, host: cfg.shell_type.clone() };
+            let meta = SessionMeta {
+                protocol: ProtocolId::PowerShell,
+                host: cfg.shell_type.clone(),
+            };
             (Box::new(LocalSession::new(cfg)), meta)
         }
         "git-bash" => {
@@ -151,7 +175,10 @@ pub async fn connect_session(
                 format!("invalid local config: {e}")
             })?;
             log::info!("building LocalSession: type={}", cfg.shell_type);
-            let meta = SessionMeta { protocol: ProtocolId::GitBash, host: cfg.shell_type.clone() };
+            let meta = SessionMeta {
+                protocol: ProtocolId::GitBash,
+                host: cfg.shell_type.clone(),
+            };
             (Box::new(LocalSession::new(cfg)), meta)
         }
         "gcloud-iap" => {
@@ -161,11 +188,16 @@ pub async fn connect_session(
             })?;
             log::info!(
                 "building GcloudIapSession: project={} zone={} instance={}",
-                cfg.project, cfg.zone, cfg.instance
+                cfg.project,
+                cfg.zone,
+                cfg.instance
             );
             // '/' is illegal in Windows filenames; '-' keeps log filenames safe.
             let host_label = format!("{}-{}", cfg.project, cfg.instance);
-            let meta = SessionMeta { protocol: ProtocolId::GcloudIap, host: host_label };
+            let meta = SessionMeta {
+                protocol: ProtocolId::GcloudIap,
+                host: host_label,
+            };
             (Box::new(GcloudIapSession::new(cfg)), meta)
         }
         other => return Err(format!("unsupported protocol: {other}")),
@@ -180,7 +212,12 @@ pub async fn connect_session(
     // Start session logging if enabled
     if logging_enabled && !logging_path.is_empty() {
         if let Err(e) = log_manager
-            .start_logging(&session_id, Path::new(&logging_path), meta.protocol.as_str(), &meta.host)
+            .start_logging(
+                &session_id,
+                Path::new(&logging_path),
+                meta.protocol.as_str(),
+                &meta.host,
+            )
             .await
         {
             log::warn!("failed to start logging for {session_id}: {e}");
@@ -255,7 +292,12 @@ pub async fn update_session_logging(
     for (session_id, (_service, meta)) in map.iter() {
         if logging_enabled && !logging_path.is_empty() {
             if let Err(e) = log_manager
-                .start_logging(session_id, Path::new(&logging_path), meta.protocol.as_str(), &meta.host)
+                .start_logging(
+                    session_id,
+                    Path::new(&logging_path),
+                    meta.protocol.as_str(),
+                    &meta.host,
+                )
                 .await
             {
                 log::warn!("failed to start logging for {session_id}: {e}");

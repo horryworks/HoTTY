@@ -65,7 +65,15 @@ impl Handler for JailedDirHandler {
         .await
         .map_err(|_| packet::Error::FileNotFound)?;
 
-        emit_transfer(&self.app, &self.server_id, PROTO, &client_str, &requested, DIR_DOWNLOAD, len);
+        emit_transfer(
+            &self.app,
+            &self.server_id,
+            PROTO,
+            &client_str,
+            &requested,
+            DIR_DOWNLOAD,
+            len,
+        );
         Ok((Unblock::new(file), len))
     }
 
@@ -94,7 +102,15 @@ impl Handler for JailedDirHandler {
         .await
         .map_err(|_| packet::Error::PermissionDenied)?;
 
-        emit_transfer(&self.app, &self.server_id, PROTO, &client_str, &requested, DIR_UPLOAD, size);
+        emit_transfer(
+            &self.app,
+            &self.server_id,
+            PROTO,
+            &client_str,
+            &requested,
+            DIR_UPLOAD,
+            size,
+        );
         Ok(Unblock::new(file))
     }
 }

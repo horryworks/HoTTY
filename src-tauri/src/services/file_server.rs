@@ -89,7 +89,11 @@ pub enum JailError {
 ///   returned path is the parent's canonical path joined with the file name.
 ///
 /// The result is always guaranteed to live under `root`.
-pub fn resolve_in_root(root: &Path, requested: &str, must_exist: bool) -> Result<PathBuf, JailError> {
+pub fn resolve_in_root(
+    root: &Path,
+    requested: &str,
+    must_exist: bool,
+) -> Result<PathBuf, JailError> {
     if requested.is_empty() || is_unc_path(requested) {
         return Err(JailError::Denied);
     }
@@ -202,7 +206,13 @@ fn emit(app: &AppHandle, event: FileServerEvent) {
     let _ = app.emit("file-server-event", event);
 }
 
-pub fn emit_status(app: &AppHandle, server_id: &str, protocol: &str, status: &str, message: Option<String>) {
+pub fn emit_status(
+    app: &AppHandle,
+    server_id: &str,
+    protocol: &str,
+    status: &str,
+    message: Option<String>,
+) {
     emit(
         app,
         FileServerEvent {
@@ -341,7 +351,12 @@ pub async fn firewall_status(protocol: &str, port: u16) -> FirewallStatus {
     let proto = net_proto(protocol);
 
     let output = Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", FIREWALL_DETECT_SCRIPT])
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            FIREWALL_DETECT_SCRIPT,
+        ])
         .env("HOTTY_EXE", &exe)
         .env("HOTTY_PROTO", proto)
         .env("HOTTY_PORT", port.to_string())
@@ -362,9 +377,18 @@ pub async fn firewall_status(protocol: &str, port: u16) -> FirewallStatus {
     if parsed.get("ok").and_then(|v| v.as_bool()) != Some(true) {
         return FirewallStatus::Unknown;
     }
-    let firewall_on = parsed.get("firewall").and_then(|v| v.as_bool()).unwrap_or(true);
-    let default_block = parsed.get("block").and_then(|v| v.as_bool()).unwrap_or(true);
-    let has_allow = parsed.get("allow").and_then(|v| v.as_bool()).unwrap_or(false);
+    let firewall_on = parsed
+        .get("firewall")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    let default_block = parsed
+        .get("block")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    let has_allow = parsed
+        .get("allow")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     log::debug!(
         "file-server: firewall check exe={exe} proto={proto} port={port} -> \
@@ -475,17 +499,32 @@ mod tests {
     #[test]
     fn rejects_parent_traversal() {
         let root = temp_root("traverse");
-        assert_eq!(resolve_in_root(&root, "../secret", true), Err(JailError::Denied));
-        assert_eq!(resolve_in_root(&root, "a/../../b", true), Err(JailError::Denied));
-        assert_eq!(resolve_in_root(&root, "/../x", true), Err(JailError::Denied));
+        assert_eq!(
+            resolve_in_root(&root, "../secret", true),
+            Err(JailError::Denied)
+        );
+        assert_eq!(
+            resolve_in_root(&root, "a/../../b", true),
+            Err(JailError::Denied)
+        );
+        assert_eq!(
+            resolve_in_root(&root, "/../x", true),
+            Err(JailError::Denied)
+        );
     }
 
     #[cfg(windows)]
     #[test]
     fn rejects_windows_absolute_and_unc() {
         let root = temp_root("winabs");
-        assert_eq!(resolve_in_root(&root, r"C:\Windows\System32\cmd.exe", true), Err(JailError::Denied));
-        assert_eq!(resolve_in_root(&root, r"\\server\share\x", true), Err(JailError::Denied));
+        assert_eq!(
+            resolve_in_root(&root, r"C:\Windows\System32\cmd.exe", true),
+            Err(JailError::Denied)
+        );
+        assert_eq!(
+            resolve_in_root(&root, r"\\server\share\x", true),
+            Err(JailError::Denied)
+        );
     }
 
     #[test]
@@ -497,7 +536,10 @@ mod tests {
     #[test]
     fn missing_file_is_not_found() {
         let root = temp_root("missing");
-        assert_eq!(resolve_in_root(&root, "nope.bin", true), Err(JailError::NotFound));
+        assert_eq!(
+            resolve_in_root(&root, "nope.bin", true),
+            Err(JailError::NotFound)
+        );
     }
 
     #[test]
@@ -545,8 +587,14 @@ mod tests {
 
     #[test]
     fn firewall_status_serializes_camel_case() {
-        assert_eq!(serde_json::to_value(FirewallStatus::Blocked).unwrap(), "blocked");
-        assert_eq!(serde_json::to_value(FirewallStatus::NotApplicable).unwrap(), "notApplicable");
+        assert_eq!(
+            serde_json::to_value(FirewallStatus::Blocked).unwrap(),
+            "blocked"
+        );
+        assert_eq!(
+            serde_json::to_value(FirewallStatus::NotApplicable).unwrap(),
+            "notApplicable"
+        );
     }
 
     #[cfg(windows)]

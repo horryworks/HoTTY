@@ -95,11 +95,7 @@ pub trait SessionService: Send + Sync {
     /// Establish the connection and start the read loop.
     /// Implementations should spawn background tasks for I/O and
     /// emit `session-data` / `session-status` / `session-error` events.
-    async fn connect(
-        &mut self,
-        app: AppHandle,
-        session_id: String,
-    ) -> Result<(), SessionError>;
+    async fn connect(&mut self, app: AppHandle, session_id: String) -> Result<(), SessionError>;
 
     /// Send user input to the remote side.
     async fn write(&mut self, data: &[u8]) -> Result<(), SessionError>;
@@ -296,7 +292,10 @@ mod tests {
     #[test]
     fn humanize_io_error_timeout_with_secs() {
         let e = io(std::io::ErrorKind::TimedOut, "operation timed out");
-        assert_eq!(humanize_io_error(&e, Some(15)), "Connection timed out (15s)");
+        assert_eq!(
+            humanize_io_error(&e, Some(15)),
+            "Connection timed out (15s)"
+        );
     }
 
     #[test]
@@ -316,7 +315,10 @@ mod tests {
 
     #[test]
     fn humanize_io_error_not_found() {
-        let e = io(std::io::ErrorKind::NotFound, "failed to lookup address information");
+        let e = io(
+            std::io::ErrorKind::NotFound,
+            "failed to lookup address information",
+        );
         assert_eq!(humanize_io_error(&e, Some(15)), "Host not found");
     }
 

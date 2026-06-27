@@ -38,8 +38,7 @@ pub fn check_known_host(
             continue;
         }
         let mut parts = trimmed.split_whitespace();
-        let (Some(pattern), Some(ty), Some(b64)) =
-            (parts.next(), parts.next(), parts.next())
+        let (Some(pattern), Some(ty), Some(b64)) = (parts.next(), parts.next(), parts.next())
         else {
             continue;
         };
@@ -112,8 +111,7 @@ pub fn remove_known_host(
             continue;
         }
         let mut parts = trimmed.split_whitespace();
-        let (Some(pattern), Some(ty), Some(_b64)) =
-            (parts.next(), parts.next(), parts.next())
+        let (Some(pattern), Some(ty), Some(_b64)) = (parts.next(), parts.next(), parts.next())
         else {
             kept.push(line);
             continue;
@@ -167,8 +165,7 @@ pub fn upsert_known_host(
                 continue;
             }
             let mut parts = trimmed.split_whitespace();
-            let (Some(pattern), Some(ty), Some(_b64)) =
-                (parts.next(), parts.next(), parts.next())
+            let (Some(pattern), Some(ty), Some(_b64)) = (parts.next(), parts.next(), parts.next())
             else {
                 kept.push(line);
                 continue;
@@ -308,7 +305,10 @@ mod tests {
         upsert_known_host(&p, "example.com", 22, "ssh-rsa", "ADDED").unwrap();
 
         let contents = std::fs::read_to_string(&p).unwrap();
-        assert!(contents.contains("KEEP"), "unrelated record must be preserved");
+        assert!(
+            contents.contains("KEEP"),
+            "unrelated record must be preserved"
+        );
         assert!(contents.contains("ADDED"));
         assert_eq!(
             check_known_host(&p, "example.com", 22, "ssh-rsa", "ADDED").unwrap(),

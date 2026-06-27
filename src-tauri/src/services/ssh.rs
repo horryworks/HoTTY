@@ -19,10 +19,10 @@ use tokio_util::sync::CancellationToken;
 use crate::commands::ssh_algorithms::{load_algorithms_sync, SshAlgorithms};
 
 use super::jumpbox::{establish_tunnel, JumpboxConfig, JumpboxHandler};
-use super::path_safety::is_unc_path;
 use super::known_hosts::{
     check_known_host, default_known_hosts_path, upsert_known_host, HostKeyCheck,
 };
+use super::path_safety::is_unc_path;
 use super::session_service::{
     abort_all, emit_session_data, emit_session_status, encoding_for, join_or_abort, SessionError,
     SessionService, DISCONNECT_DRAIN_MS,
@@ -249,9 +249,7 @@ pub(crate) fn load_preferred(app: &AppHandle) -> Result<Preferred, SessionError>
         Ok(Some(algos)) => build_preferred(&algos).map_err(SessionError::InvalidConfig),
         Ok(None) => Ok(Preferred::DEFAULT),
         Err(e) => {
-            log::warn!(
-                "ssh: failed to load ssh_algorithms config ({e}); using library defaults"
-            );
+            log::warn!("ssh: failed to load ssh_algorithms config ({e}); using library defaults");
             Ok(Preferred::DEFAULT)
         }
     }
@@ -360,10 +358,7 @@ pub async fn cancel_pending_host_key(session_id: &str) {
 /// If a prompt is already pending for the same id, the previous sender is
 /// dropped (waking its waiter with a RecvError). This shouldn't happen in
 /// normal flow — log a warning to surface the bug.
-pub async fn register_external_prompt(
-    session_id: String,
-    tx: oneshot::Sender<HostKeyDecision>,
-) {
+pub async fn register_external_prompt(session_id: String, tx: oneshot::Sender<HostKeyDecision>) {
     let mut map = pending_map().lock().await;
     if map.insert(session_id.clone(), tx).is_some() {
         log::warn!(
@@ -496,7 +491,10 @@ impl Handler for SshHandler {
                 );
                 let _ = self.app.emit(
                     "ssh-known-hosts-warning",
-                    format!("Could not save host key for {}:{} to known_hosts: {e}", self.host, self.port),
+                    format!(
+                        "Could not save host key for {}:{} to known_hosts: {e}",
+                        self.host, self.port
+                    ),
                 );
             }
         }
@@ -668,12 +666,16 @@ async fn try_authenticate(
             ));
         }
         let pk: PrivateKey = load_secret_key(key_path, cfg.private_key_passphrase.as_deref())
-            .map_err(|e| SessionError::AuthFailed(humanize_auth_error("load-key", &e.to_string())))?;
+            .map_err(|e| {
+                SessionError::AuthFailed(humanize_auth_error("load-key", &e.to_string()))
+            })?;
         let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(pk), Some(HashAlg::Sha256));
         let res = handle
             .authenticate_publickey(&cfg.username, key_with_hash)
             .await
-            .map_err(|e| SessionError::AuthFailed(humanize_auth_error("publickey", &e.to_string())))?;
+            .map_err(|e| {
+                SessionError::AuthFailed(humanize_auth_error("publickey", &e.to_string()))
+            })?;
         if matches!(res, russh::client::AuthResult::Success) {
             return Ok(());
         }
@@ -683,7 +685,9 @@ async fn try_authenticate(
         let res = handle
             .authenticate_password(&cfg.username, pw.clone())
             .await
-            .map_err(|e| SessionError::AuthFailed(humanize_auth_error("password", &e.to_string())))?;
+            .map_err(|e| {
+                SessionError::AuthFailed(humanize_auth_error("password", &e.to_string()))
+            })?;
         if matches!(res, russh::client::AuthResult::Success) {
             return Ok(());
         }
@@ -692,14 +696,18 @@ async fn try_authenticate(
         let mut kb = handle
             .authenticate_keyboard_interactive_start(&cfg.username, None)
             .await
-            .map_err(|e| SessionError::AuthFailed(humanize_auth_error("keyboard-interactive", &e.to_string())))?;
+            .map_err(|e| {
+                SessionError::AuthFailed(humanize_auth_error(
+                    "keyboard-interactive",
+                    &e.to_string(),
+                ))
+            })?;
         loop {
             match kb {
                 russh::client::KeyboardInteractiveAuthResponse::Success => return Ok(()),
                 russh::client::KeyboardInteractiveAuthResponse::Failure { .. } => break,
                 russh::client::KeyboardInteractiveAuthResponse::InfoRequest { prompts, .. } => {
-                    let responses: Vec<String> =
-                        prompts.iter().map(|_| pw.clone()).collect();
+                    let responses: Vec<String> = prompts.iter().map(|_| pw.clone()).collect();
                     kb = handle
                         .authenticate_keyboard_interactive_respond(responses)
                         .await
@@ -728,11 +736,7 @@ fn keepalive_interval(secs: u32) -> Option<Duration> {
 
 #[async_trait]
 impl SessionService for SshSession {
-    async fn connect(
-        &mut self,
-        app: AppHandle,
-        session_id: String,
-    ) -> Result<(), SessionError> {
+    async fn connect(&mut self, app: AppHandle, session_id: String) -> Result<(), SessionError> {
         self.config.validate()?;
 
         let known_hosts_path = resolve_known_hosts_path(&app);
@@ -770,7 +774,10 @@ impl SessionService for SshSession {
         let mut handle = if let Some(jumpbox_cfg) = self.config.jumpbox.take() {
             log::info!(
                 "ssh: tunneling through jumpbox {}:{} to {}:{}",
-                jumpbox_cfg.host, jumpbox_cfg.port, self.config.host, self.config.port
+                jumpbox_cfg.host,
+                jumpbox_cfg.port,
+                self.config.host,
+                self.config.port
             );
             let tunnel = establish_tunnel(
                 app.clone(),
@@ -784,22 +791,29 @@ impl SessionService for SshSession {
             let (jumpbox_handle, stream) = tunnel.into_stream();
             self.jumpbox_handle = Some(jumpbox_handle);
             let timeout_secs = self.config.connect_timeout_secs;
-            tokio::time::timeout(connect_timeout, client::connect_stream(config, stream, handler))
-                .await
-                .map_err(|_| SessionError::ConnectionFailed(format!(
+            tokio::time::timeout(
+                connect_timeout,
+                client::connect_stream(config, stream, handler),
+            )
+            .await
+            .map_err(|_| {
+                SessionError::ConnectionFailed(format!(
                     "Target connection timed out via jumpbox ({timeout_secs}s)"
-                )))?
-                .map_err(|e| SessionError::ConnectionFailed(
-                    humanize_ssh_handshake_via_jumpbox(&e.to_string()),
-                ))?
+                ))
+            })?
+            .map_err(|e| {
+                SessionError::ConnectionFailed(humanize_ssh_handshake_via_jumpbox(&e.to_string()))
+            })?
         } else {
             let addr = (self.config.host.as_str(), self.config.port);
             let timeout_secs = self.config.connect_timeout_secs;
             tokio::time::timeout(connect_timeout, client::connect(config, addr, handler))
                 .await
-                .map_err(|_| SessionError::ConnectionFailed(format!(
-                    "Connection timed out ({timeout_secs}s)"
-                )))?
+                .map_err(|_| {
+                    SessionError::ConnectionFailed(format!(
+                        "Connection timed out ({timeout_secs}s)"
+                    ))
+                })?
                 .map_err(|e| SessionError::ConnectionFailed(humanize_ssh_error(&e.to_string())))?
         };
 
@@ -819,13 +833,10 @@ impl SessionService for SshSession {
 
         auth_result?;
 
-        let channel = handle
-            .channel_open_session()
-            .await
-            .map_err(|e| {
-                log::error!("ssh: channel_open_session failed: {e}");
-                SessionError::Protocol("Failed to open SSH channel".into())
-            })?;
+        let channel = handle.channel_open_session().await.map_err(|e| {
+            log::error!("ssh: channel_open_session failed: {e}");
+            SessionError::Protocol("Failed to open SSH channel".into())
+        })?;
 
         channel
             .request_pty(true, "xterm-256color", 80, 24, 0, 0, &[])
@@ -834,13 +845,10 @@ impl SessionService for SshSession {
                 log::error!("ssh: request_pty failed: {e}");
                 SessionError::Protocol("Failed to allocate PTY".into())
             })?;
-        channel
-            .request_shell(true)
-            .await
-            .map_err(|e| {
-                log::error!("ssh: request_shell failed: {e}");
-                SessionError::Protocol("Failed to start remote shell".into())
-            })?;
+        channel.request_shell(true).await.map_err(|e| {
+            log::error!("ssh: request_shell failed: {e}");
+            SessionError::Protocol("Failed to start remote shell".into())
+        })?;
 
         emit_session_status(&app, &session_id, "connected");
 
@@ -884,7 +892,10 @@ impl SessionService for SshSession {
         let app_r = app.clone();
         let sid_r = session_id.clone();
         let reader_cancel = self.cancel.clone();
-        let log_mgr: super::log_manager::LogManager = app.state::<super::log_manager::LogManager>().inner().clone();
+        let log_mgr: super::log_manager::LogManager = app
+            .state::<super::log_manager::LogManager>()
+            .inner()
+            .clone();
         let reader_join = tokio::spawn(async move {
             let mut rd = read_half;
             loop {
@@ -972,14 +983,10 @@ impl SessionService for SshSession {
             let _ = tx.send(WriterCmd::Close).await;
         }
         if let Some(h) = self.handle.take() {
-            let _ = h
-                .disconnect(Disconnect::ByApplication, "bye", "en")
-                .await;
+            let _ = h.disconnect(Disconnect::ByApplication, "bye", "en").await;
         }
         if let Some(jh) = self.jumpbox_handle.take() {
-            let _ = jh
-                .disconnect(Disconnect::ByApplication, "bye", "en")
-                .await;
+            let _ = jh.disconnect(Disconnect::ByApplication, "bye", "en").await;
         }
         join_or_abort(std::mem::take(&mut self.join), "SSH", DISCONNECT_DRAIN_MS).await;
         Ok(())
@@ -1052,10 +1059,7 @@ mod tests {
 
     #[test]
     fn map_cipher_aliases_gcm_short_name() {
-        assert_eq!(
-            map_cipher_name("aes128-gcm"),
-            Some(cipher::AES_128_GCM)
-        );
+        assert_eq!(map_cipher_name("aes128-gcm"), Some(cipher::AES_128_GCM));
         assert_eq!(
             map_cipher_name("aes128-gcm@openssh.com"),
             Some(cipher::AES_128_GCM)
@@ -1095,10 +1099,7 @@ mod tests {
 
     #[test]
     fn build_preferred_appends_ext_info_pseudo_kex() {
-        let a = algos(&[(
-            "kex",
-            vec![entry("curve25519-sha256", true)],
-        )]);
+        let a = algos(&[("kex", vec![entry("curve25519-sha256", true)])]);
         let p = build_preferred(&a).expect("should build");
         // Pseudo-KEX names that drive SSH protocol extension negotiation must
         // remain present — losing them would break ext-info handshakes.
@@ -1144,10 +1145,7 @@ mod tests {
     fn build_preferred_errors_when_all_enabled_are_unsupported() {
         let a = algos(&[(
             "cipher",
-            vec![
-                entry("arcfour256", true),
-                entry("blowfish-cbc", true),
-            ],
+            vec![entry("arcfour256", true), entry("blowfish-cbc", true)],
         )]);
         let err = build_preferred(&a).expect_err("must reject");
         assert!(err.contains("cipher"), "unexpected error: {err}");
@@ -1155,17 +1153,11 @@ mod tests {
 
     #[test]
     fn build_preferred_falls_back_to_default_for_missing_category() {
-        let a = algos(&[(
-            "kex",
-            vec![entry("curve25519-sha256", true)],
-        )]);
+        let a = algos(&[("kex", vec![entry("curve25519-sha256", true)])]);
         // No cipher / hmac / serverHostKey entries at all -> use russh defaults.
         let p = build_preferred(&a).expect("should build");
         let default = Preferred::DEFAULT;
-        assert_eq!(
-            p.cipher.as_ref().len(),
-            default.cipher.as_ref().len()
-        );
+        assert_eq!(p.cipher.as_ref().len(), default.cipher.as_ref().len());
         assert_eq!(p.mac.as_ref().len(), default.mac.as_ref().len());
         assert_eq!(p.key.as_ref().len(), default.key.as_ref().len());
     }
@@ -1185,21 +1177,12 @@ mod tests {
             ),
             (
                 "cipher",
-                vec![
-                    entry("aes256-cbc", true),
-                    entry("3des-cbc", true),
-                ],
+                vec![entry("aes256-cbc", true), entry("3des-cbc", true)],
             ),
-            (
-                "hmac",
-                vec![entry("hmac-sha1", true)],
-            ),
+            ("hmac", vec![entry("hmac-sha1", true)]),
             (
                 "serverHostKey",
-                vec![
-                    entry("ssh-rsa", true),
-                    entry("ssh-dss", true),
-                ],
+                vec![entry("ssh-rsa", true), entry("ssh-dss", true)],
             ),
         ]);
         let p = build_preferred(&a).expect("should build legacy preferred");

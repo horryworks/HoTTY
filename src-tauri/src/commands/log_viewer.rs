@@ -107,8 +107,8 @@ pub async fn list_log_files(
         });
     }
 
-    let entries = std::fs::read_dir(folder)
-        .map_err(|e| format!("failed to read directory: {e}"))?;
+    let entries =
+        std::fs::read_dir(folder).map_err(|e| format!("failed to read directory: {e}"))?;
 
     let mut files: Vec<LogFile> = Vec::new();
 
@@ -141,10 +141,7 @@ pub async fn list_log_files(
         files.push(LogFile {
             name,
             path: path.to_string_lossy().to_string(),
-            mtime: meta
-                .modified()
-                .map(system_time_to_millis)
-                .unwrap_or(0),
+            mtime: meta.modified().map(system_time_to_millis).unwrap_or(0),
             size: meta.len(),
         });
     }
@@ -199,8 +196,8 @@ pub async fn read_log_file(
     }
 
     // Check file size
-    let meta = std::fs::metadata(&real_path)
-        .map_err(|e| format!("failed to read file metadata: {e}"))?;
+    let meta =
+        std::fs::metadata(&real_path).map_err(|e| format!("failed to read file metadata: {e}"))?;
     if meta.len() > MAX_READ_SIZE {
         return Ok(ReadLogFileResult {
             content: None,
@@ -231,9 +228,8 @@ pub async fn read_log_file(
     }
 
     // Read file contents using the re-canonicalized path (TOCTOU mitigation).
-    let content = std::fs::read_to_string(&recheck_path).map_err(|e| {
-        format!("failed to read file: {e}")
-    })?;
+    let content =
+        std::fs::read_to_string(&recheck_path).map_err(|e| format!("failed to read file: {e}"))?;
 
     Ok(ReadLogFileResult {
         content: Some(content),
@@ -264,9 +260,7 @@ pub async fn confirm_log_dir(
         return Err(format!("folder does not exist: {path}"));
     }
 
-    let body = format!(
-        "Allow HoTTY to read and write log files in this folder?\n\n{path}"
-    );
+    let body = format!("Allow HoTTY to read and write log files in this folder?\n\n{path}");
     let approved = app
         .dialog()
         .message(body)

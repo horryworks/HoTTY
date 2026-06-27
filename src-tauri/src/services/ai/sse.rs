@@ -49,8 +49,7 @@ impl SseBuffer {
     /// Append raw bytes and return an iterator over complete lines.
     /// Incomplete lines (without a trailing newline) are retained in the buffer.
     pub fn push(&mut self, chunk: &[u8]) -> Vec<String> {
-        self.buffer
-            .push_str(&String::from_utf8_lossy(chunk));
+        self.buffer.push_str(&String::from_utf8_lossy(chunk));
 
         let mut lines = Vec::new();
         while let Some(pos) = self.buffer.find('\n') {

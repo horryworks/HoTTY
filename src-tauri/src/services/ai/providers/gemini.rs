@@ -30,9 +30,8 @@ use crate::services::ai::streaming::finalize_assistant_content;
 const VALID_MODEL_PATTERN: &str = r"^[a-zA-Z0-9]+([._-][a-zA-Z0-9]+)*$";
 const CRED_PATTERN: &str = r"^[\x21-\x7E]{1,512}$";
 const CONFIG_FILE_NAME: &str = "gemini_token.json";
-const NON_TEXT_MODEL_KEYWORDS: &[&str] = &[
-    "tts", "image", "robotics", "computer-use", "nano-banana",
-];
+const NON_TEXT_MODEL_KEYWORDS: &[&str] =
+    &["tts", "image", "robotics", "computer-use", "nano-banana"];
 
 fn is_valid_model(model: &str) -> bool {
     Regex::new(VALID_MODEL_PATTERN)
@@ -140,10 +139,7 @@ impl GeminiProvider {
     }
 
     fn save_token(&self) -> Result<(), String> {
-        let token_data = self
-            .token_data
-            .as_ref()
-            .ok_or("No token data to save")?;
+        let token_data = self.token_data.as_ref().ok_or("No token data to save")?;
         let refresh_token = token_data
             .refresh_token
             .as_deref()
@@ -183,10 +179,7 @@ impl GeminiProvider {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
-        let obtained_at = raw
-            .get("obtained_at")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let obtained_at = raw.get("obtained_at").and_then(|v| v.as_u64()).unwrap_or(0);
 
         if refresh_token.is_empty() || client_id.is_empty() || client_secret.is_empty() {
             return Ok(false);
@@ -205,7 +198,11 @@ impl GeminiProvider {
     }
 
     async fn refresh_access_token(&mut self) -> bool {
-        let refresh_token = match self.token_data.as_ref().and_then(|t| t.refresh_token.as_ref()) {
+        let refresh_token = match self
+            .token_data
+            .as_ref()
+            .and_then(|t| t.refresh_token.as_ref())
+        {
             Some(rt) => rt.clone(),
             None => return false,
         };
@@ -284,11 +281,7 @@ impl AIProvider for GeminiProvider {
         AuthType::OAuth2
     }
 
-    async fn authenticate(
-        &mut self,
-        app: &AppHandle,
-        credentials: Value,
-    ) -> Result<bool, String> {
+    async fn authenticate(&mut self, app: &AppHandle, credentials: Value) -> Result<bool, String> {
         let client_id = credentials
             .get("clientId")
             .and_then(|v| v.as_str())
@@ -612,7 +605,9 @@ impl AIProvider for GeminiProvider {
         let app_clone = app.clone();
         let sid = session_id.to_string();
 
-        log::debug!("[gemini] Sending message, model={model}, system_instruction={system_instruction:?}");
+        log::debug!(
+            "[gemini] Sending message, model={model}, system_instruction={system_instruction:?}"
+        );
 
         let response = self
             .http_client
@@ -795,8 +790,7 @@ impl AIProvider for GeminiProvider {
             .await
             .map_err(|e| format!("failed to read classification response: {e}"))?;
 
-        let content =
-            extract_first_text(&data).ok_or("classification response had no content")?;
+        let content = extract_first_text(&data).ok_or("classification response had no content")?;
         parse_verdict(content)
     }
 
@@ -904,9 +898,18 @@ mod tests {
     #[test]
     fn pop_trailing_user_drops_only_trailing_user() {
         let mut h = vec![
-            ChatMessage { role: "user".into(), content: "q1".into() },
-            ChatMessage { role: "model".into(), content: "a1".into() },
-            ChatMessage { role: "user".into(), content: "q2".into() },
+            ChatMessage {
+                role: "user".into(),
+                content: "q1".into(),
+            },
+            ChatMessage {
+                role: "model".into(),
+                content: "a1".into(),
+            },
+            ChatMessage {
+                role: "user".into(),
+                content: "q2".into(),
+            },
         ];
         // Trailing user (failed turn) is dropped.
         pop_trailing_user(Some(&mut h));

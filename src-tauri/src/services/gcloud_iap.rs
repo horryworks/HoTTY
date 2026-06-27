@@ -15,11 +15,11 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::{timeout, MissedTickBehavior};
 
+use super::exe_finder::find_executable;
 use super::iap_tunnel::{
     self, decide_preconnect_action, gcloud_program, is_valid_instance, is_valid_project,
     is_valid_zone, InstanceStatus, PreConnectAction, WaitEvent,
 };
-use super::exe_finder::find_executable;
 use super::session_service::{
     abort_all, emit_session_data, emit_session_error, emit_session_status, encoding_for,
     join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
@@ -427,7 +427,10 @@ fn extract_metadata_value(json: &str, container_key: &str, item_key: &str) -> Op
     let items = v.get(container_key)?.get("items")?.as_array()?;
     for item in items {
         if item.get("key").and_then(|k| k.as_str()) == Some(item_key) {
-            return item.get("value").and_then(|val| val.as_str()).map(String::from);
+            return item
+                .get("value")
+                .and_then(|val| val.as_str())
+                .map(String::from);
         }
     }
     None
@@ -459,7 +462,10 @@ async fn is_oslogin_enabled(project: &str, zone: &str, instance: &str) -> Option
         // Debug-log the raw JSON so misclassifications (e.g. org-level
         // enforcement vs. per-resource flag) can be diagnosed from logs.
         // The projection limits this to `metadata.items`, so output is small.
-        log::debug!("gcloud-iap: instance describe JSON (metadata.items) = {}", out.trim());
+        log::debug!(
+            "gcloud-iap: instance describe JSON (metadata.items) = {}",
+            out.trim()
+        );
         let val = extract_metadata_value(out, "metadata", "enable-oslogin");
         log::debug!("gcloud-iap: instance enable-oslogin extracted = {val:?}");
         if let Some(val) = val {
@@ -471,7 +477,10 @@ async fn is_oslogin_enabled(project: &str, zone: &str, instance: &str) -> Option
     let proj_args = project_oslogin_describe_args(project);
     match run_gcloud_capture(&proj_args, Duration::from_secs(10)).await {
         Ok(out) => {
-            log::debug!("gcloud-iap: project-info describe JSON (commonInstanceMetadata.items) = {}", out.trim());
+            log::debug!(
+                "gcloud-iap: project-info describe JSON (commonInstanceMetadata.items) = {}",
+                out.trim()
+            );
             let val = extract_metadata_value(&out, "commonInstanceMetadata", "enable-oslogin");
             log::debug!("gcloud-iap: project enable-oslogin extracted = {val:?}");
             // Key found → TRUE/FALSE; key absent → treat as not-enabled at
@@ -482,7 +491,11 @@ async fn is_oslogin_enabled(project: &str, zone: &str, instance: &str) -> Option
         Err(_) => {
             // Both describes failed. If the instance describe also failed (not
             // just empty), we have no signal at all — return None.
-            if inst_result.is_err() { None } else { Some(false) }
+            if inst_result.is_err() {
+                None
+            } else {
+                Some(false)
+            }
         }
     }
 }
@@ -535,9 +548,8 @@ async fn ensure_ssh_key() -> Result<(PathBuf, bool), SessionError> {
         .parent()
         .ok_or_else(|| SessionError::ConnectionFailed("invalid SSH key path".into()))?;
     if !ssh_dir.exists() {
-        std::fs::create_dir_all(ssh_dir).map_err(|e| {
-            SessionError::ConnectionFailed(format!("failed to create ~/.ssh: {e}"))
-        })?;
+        std::fs::create_dir_all(ssh_dir)
+            .map_err(|e| SessionError::ConnectionFailed(format!("failed to create ~/.ssh: {e}")))?;
     }
     let keygen = find_ssh_keygen_path().ok_or_else(|| {
         SessionError::ConnectionFailed(
@@ -594,9 +606,7 @@ async fn ensure_key_permissions(priv_path: &Path) -> Result<(), SessionError> {
         .to_string();
     let user = std::env::var("USERNAME")
         .or_else(|_| std::env::var("USER"))
-        .map_err(|_| {
-            SessionError::ConnectionFailed("USERNAME / USER env var not set".into())
-        })?;
+        .map_err(|_| SessionError::ConnectionFailed("USERNAME / USER env var not set".into()))?;
 
     // `icacls <path> /inheritance:r /grant:r "<user>:F"` removes inherited
     // permissions and replaces any existing ACE for <user> with a single
@@ -739,9 +749,7 @@ async fn start_iap_tunnel(
 ) -> Result<IapTunnel, SessionError> {
     let phase_start = std::time::Instant::now();
     let args = build_tunnel_argv(cfg);
-    log::info!(
-        "gcloud-iap: start_iap_tunnel begin session={session_id} argv={args:?}"
-    );
+    log::info!("gcloud-iap: start_iap_tunnel begin session={session_id} argv={args:?}");
 
     let mut cmd = build_gcloud_command(&args);
     cmd.stdout(Stdio::piped());
@@ -925,7 +933,9 @@ fn vm_start_prompts() -> &'static std::sync::Mutex<HashMap<String, VmStartSender
 
 fn register_vm_start_prompt(session_id: &str) -> oneshot::Receiver<bool> {
     let (tx, rx) = oneshot::channel::<bool>();
-    let mut map = vm_start_prompts().lock().expect("vm_start_prompts poisoned");
+    let mut map = vm_start_prompts()
+        .lock()
+        .expect("vm_start_prompts poisoned");
     // If a stale entry exists (previous attempt timed out), drop it — the
     // sender goes out of scope and the old receiver will see Err(RecvError).
     map.insert(session_id.to_string(), tx);
@@ -943,7 +953,9 @@ fn drop_vm_start_prompt(session_id: &str) {
 /// out or the user clicked twice).
 pub fn respond_vm_start(session_id: &str, approved: bool) -> Result<(), String> {
     let sender = {
-        let mut map = vm_start_prompts().lock().expect("vm_start_prompts poisoned");
+        let mut map = vm_start_prompts()
+            .lock()
+            .expect("vm_start_prompts poisoned");
         map.remove(session_id)
     };
     match sender {
@@ -1055,9 +1067,7 @@ async fn ensure_vm_running(
             emit_session_data(
                 app,
                 session_id,
-                format!(
-                    "VM is {current}. Waiting for user approval to start...\r\n"
-                ),
+                format!("VM is {current}. Waiting for user approval to start...\r\n"),
             );
             let rx = register_vm_start_prompt(session_id);
             let payload = IapVmStartPromptPayload {
@@ -1071,11 +1081,8 @@ async fn ensure_vm_running(
                 drop_vm_start_prompt(session_id);
                 return Err(format!("Failed to emit VM-start prompt: {e}"));
             }
-            let approved = match timeout(
-                Duration::from_secs(VM_START_PROMPT_TIMEOUT_SECS),
-                rx,
-            )
-            .await
+            let approved = match timeout(Duration::from_secs(VM_START_PROMPT_TIMEOUT_SECS), rx)
+                .await
             {
                 Ok(Ok(v)) => v,
                 Ok(Err(_)) => {
@@ -1197,11 +1204,7 @@ impl GcloudIapSession {
 
 #[async_trait]
 impl SessionService for GcloudIapSession {
-    async fn connect(
-        &mut self,
-        app: AppHandle,
-        session_id: String,
-    ) -> Result<(), SessionError> {
+    async fn connect(&mut self, app: AppHandle, session_id: String) -> Result<(), SessionError> {
         self.config.validate()?;
 
         let connect_start = std::time::Instant::now();
@@ -1393,9 +1396,7 @@ impl SessionService for GcloudIapSession {
 
         // --- Build the ssh.exe command for the PTY ---
         let argv = build_ssh_argv(&user, port, &priv_key_str, &self.config.instance);
-        log::info!(
-            "gcloud-iap: ssh.exe argv={argv:?} (ssh_exe={ssh_exe:?})"
-        );
+        log::info!("gcloud-iap: ssh.exe argv={argv:?} (ssh_exe={ssh_exe:?})");
 
         let pty_system = native_pty_system();
         let pty_pair = pty_system
@@ -1433,14 +1434,12 @@ impl SessionService for GcloudIapSession {
         // Drop the slave end — we communicate through the master
         drop(pty_pair.slave);
 
-        let reader = pty_pair
-            .master
-            .try_clone_reader()
-            .map_err(|e| SessionError::ConnectionFailed(format!("failed to clone PTY reader: {e}")))?;
-        let writer = pty_pair
-            .master
-            .take_writer()
-            .map_err(|e| SessionError::ConnectionFailed(format!("failed to take PTY writer: {e}")))?;
+        let reader = pty_pair.master.try_clone_reader().map_err(|e| {
+            SessionError::ConnectionFailed(format!("failed to clone PTY reader: {e}"))
+        })?;
+        let writer = pty_pair.master.take_writer().map_err(|e| {
+            SessionError::ConnectionFailed(format!("failed to take PTY writer: {e}"))
+        })?;
 
         // Keep master alive for resize
         let master = Arc::new(Mutex::new(pty_pair.master));
@@ -1454,8 +1453,10 @@ impl SessionService for GcloudIapSession {
         // On Windows ConPTY, the master reader may not get EOF when the child
         // exits unless we actively wait. Spawn a watcher that blocks on
         // child.wait() and emits disconnected once ssh terminates.
-        let log_mgr: super::log_manager::LogManager =
-            app.state::<super::log_manager::LogManager>().inner().clone();
+        let log_mgr: super::log_manager::LogManager = app
+            .state::<super::log_manager::LogManager>()
+            .inner()
+            .clone();
         let app_w = app.clone();
         let sid_w = session_id.clone();
         let log_mgr_w = log_mgr.clone();
@@ -1467,16 +1468,14 @@ impl SessionService for GcloudIapSession {
             .await;
             match exit_result {
                 Ok(Ok(status)) => {
-                    log::info!(
-                        "gcloud-iap[ssh pid={ssh_pid}] {sid_w}: ssh exited: {status:?}"
-                    )
+                    log::info!("gcloud-iap[ssh pid={ssh_pid}] {sid_w}: ssh exited: {status:?}")
                 }
-                Ok(Err(e)) => log::warn!(
-                    "gcloud-iap[ssh pid={ssh_pid}] {sid_w}: child.wait error: {e}"
-                ),
-                Err(e) => log::warn!(
-                    "gcloud-iap[ssh pid={ssh_pid}] {sid_w}: child wait task error: {e}"
-                ),
+                Ok(Err(e)) => {
+                    log::warn!("gcloud-iap[ssh pid={ssh_pid}] {sid_w}: child.wait error: {e}")
+                }
+                Err(e) => {
+                    log::warn!("gcloud-iap[ssh pid={ssh_pid}] {sid_w}: child wait task error: {e}")
+                }
             }
             log_mgr_w.stop_logging(&sid_w).await;
             emit_session_status(&app_w, &sid_w, "disconnected");
@@ -1516,9 +1515,7 @@ impl SessionService for GcloudIapSession {
         let sid = session_id.clone();
 
         let reader_join = tokio::spawn(async move {
-            log::info!(
-                "gcloud-iap[ssh pid={ssh_pid}] reader task started for {sid}"
-            );
+            log::info!("gcloud-iap[ssh pid={ssh_pid}] reader task started for {sid}");
             let mut reader = reader;
             let mut buf = [0u8; 4096];
             let mut total_bytes: u64 = 0;
@@ -1583,7 +1580,12 @@ impl SessionService for GcloudIapSession {
         if let Some(tx) = self.writer_tx.take() {
             let _ = tx.send(WriterCmd::Close).await;
         }
-        join_or_abort(std::mem::take(&mut self.join), "gcloud-iap", DISCONNECT_DRAIN_MS).await;
+        join_or_abort(
+            std::mem::take(&mut self.join),
+            "gcloud-iap",
+            DISCONNECT_DRAIN_MS,
+        )
+        .await;
         // Tear down the tunnel after the SSH child is gone so the local TCP
         // listener stays valid until the ssh client closes its end.
         if let Some(mut child) = self.tunnel_child.take() {
@@ -1673,7 +1675,9 @@ mod tests {
     fn validate_rejects_empty_fields() {
         assert!(cfg("", "us-central1-a", "vm-01").validate().is_err());
         assert!(cfg("my-project-123", "", "vm-01").validate().is_err());
-        assert!(cfg("my-project-123", "us-central1-a", "").validate().is_err());
+        assert!(cfg("my-project-123", "us-central1-a", "")
+            .validate()
+            .is_err());
     }
 
     #[test]
@@ -1712,7 +1716,12 @@ mod tests {
 
     #[test]
     fn build_ssh_argv_layout() {
-        let argv = build_ssh_argv("alice", 12345, r"C:\Users\alice\.ssh\google_compute_engine", "vm-01");
+        let argv = build_ssh_argv(
+            "alice",
+            12345,
+            r"C:\Users\alice\.ssh\google_compute_engine",
+            "vm-01",
+        );
         assert!(argv.contains(&"-i".to_string()));
         assert!(argv.contains(&r"C:\Users\alice\.ssh\google_compute_engine".to_string()));
         assert!(argv.contains(&"-p".to_string()));
@@ -1897,7 +1906,8 @@ mod tests {
 
     #[test]
     fn extract_metadata_value_handles_project_info_container() {
-        let json = r#"{"commonInstanceMetadata":{"items":[{"key":"enable-oslogin","value":"TRUE"}]}}"#;
+        let json =
+            r#"{"commonInstanceMetadata":{"items":[{"key":"enable-oslogin","value":"TRUE"}]}}"#;
         assert_eq!(
             extract_metadata_value(json, "commonInstanceMetadata", "enable-oslogin"),
             Some("TRUE".to_string())
@@ -1907,37 +1917,56 @@ mod tests {
     #[test]
     fn extract_metadata_value_returns_none_when_key_absent() {
         let json = r#"{"metadata":{"items":[{"key":"ssh-keys","value":"user:key"}]}}"#;
-        assert_eq!(extract_metadata_value(json, "metadata", "enable-oslogin"), None);
+        assert_eq!(
+            extract_metadata_value(json, "metadata", "enable-oslogin"),
+            None
+        );
     }
 
     #[test]
     fn extract_metadata_value_returns_none_for_empty_items() {
         let json = r#"{"metadata":{"items":[]}}"#;
-        assert_eq!(extract_metadata_value(json, "metadata", "enable-oslogin"), None);
+        assert_eq!(
+            extract_metadata_value(json, "metadata", "enable-oslogin"),
+            None
+        );
     }
 
     #[test]
     fn extract_metadata_value_returns_none_for_missing_container() {
         // gcloud emits `{}` when the projected field doesn't exist on the resource.
         let json = "{}";
-        assert_eq!(extract_metadata_value(json, "metadata", "enable-oslogin"), None);
+        assert_eq!(
+            extract_metadata_value(json, "metadata", "enable-oslogin"),
+            None
+        );
     }
 
     #[test]
     fn extract_metadata_value_returns_none_for_missing_items_array() {
         let json = r#"{"metadata":{}}"#;
-        assert_eq!(extract_metadata_value(json, "metadata", "enable-oslogin"), None);
+        assert_eq!(
+            extract_metadata_value(json, "metadata", "enable-oslogin"),
+            None
+        );
     }
 
     #[test]
     fn extract_metadata_value_returns_none_for_invalid_json() {
-        assert_eq!(extract_metadata_value("", "metadata", "enable-oslogin"), None);
-        assert_eq!(extract_metadata_value("not-json", "metadata", "enable-oslogin"), None);
+        assert_eq!(
+            extract_metadata_value("", "metadata", "enable-oslogin"),
+            None
+        );
+        assert_eq!(
+            extract_metadata_value("not-json", "metadata", "enable-oslogin"),
+            None
+        );
     }
 
     #[test]
     fn extract_metadata_value_tolerates_surrounding_whitespace() {
-        let json = "  \n{\"metadata\":{\"items\":[{\"key\":\"enable-oslogin\",\"value\":\"TRUE\"}]}}\n  ";
+        let json =
+            "  \n{\"metadata\":{\"items\":[{\"key\":\"enable-oslogin\",\"value\":\"TRUE\"}]}}\n  ";
         assert_eq!(
             extract_metadata_value(json, "metadata", "enable-oslogin"),
             Some("TRUE".to_string())
@@ -2016,7 +2045,9 @@ mod tests {
     #[tokio::test]
     async fn tcp_probe_detects_listener_state() {
         // Bind to an ephemeral port and detect it.
-        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
         let port = listener.local_addr().unwrap().port();
         assert!(
             can_tcp_connect_localhost(port).await,

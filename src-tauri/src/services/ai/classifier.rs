@@ -126,8 +126,10 @@ mod tests {
 
     #[test]
     fn parses_plain_json() {
-        let v = parse_verdict(r#"{"modifiesState": true, "confidence": 0.9, "reason": "installs a package"}"#)
-            .unwrap();
+        let v = parse_verdict(
+            r#"{"modifiesState": true, "confidence": 0.9, "reason": "installs a package"}"#,
+        )
+        .unwrap();
         assert!(v.modifies_state);
         assert_eq!(v.confidence, 0.9);
         assert_eq!(v.reason, "installs a package");
@@ -150,9 +152,11 @@ mod tests {
 
     #[test]
     fn clamps_confidence() {
-        let v = parse_verdict(r#"{"modifiesState": false, "confidence": 1.7, "reason": "x"}"#).unwrap();
+        let v =
+            parse_verdict(r#"{"modifiesState": false, "confidence": 1.7, "reason": "x"}"#).unwrap();
         assert_eq!(v.confidence, 1.0);
-        let v2 = parse_verdict(r#"{"modifiesState": false, "confidence": -0.5, "reason": "x"}"#).unwrap();
+        let v2 = parse_verdict(r#"{"modifiesState": false, "confidence": -0.5, "reason": "x"}"#)
+            .unwrap();
         assert_eq!(v2.confidence, 0.0);
     }
 
@@ -184,7 +188,10 @@ mod tests {
     fn openai_schema_shape() {
         let f = openai_response_format();
         assert_eq!(f["type"], "json_schema");
-        assert_eq!(f["json_schema"]["schema"]["properties"]["modifiesState"]["type"], "boolean");
+        assert_eq!(
+            f["json_schema"]["schema"]["properties"]["modifiesState"]["type"],
+            "boolean"
+        );
     }
 
     #[test]

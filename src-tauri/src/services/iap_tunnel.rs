@@ -150,19 +150,22 @@ pub struct GceInstance {
 pub(crate) fn is_valid_project(project: &str) -> bool {
     use std::sync::OnceLock;
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(RE_PROJECT).unwrap()).is_match(project)
+    RE.get_or_init(|| Regex::new(RE_PROJECT).unwrap())
+        .is_match(project)
 }
 
 pub(crate) fn is_valid_zone(zone: &str) -> bool {
     use std::sync::OnceLock;
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(RE_ZONE).unwrap()).is_match(zone)
+    RE.get_or_init(|| Regex::new(RE_ZONE).unwrap())
+        .is_match(zone)
 }
 
 pub(crate) fn is_valid_instance(instance: &str) -> bool {
     use std::sync::OnceLock;
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(RE_INSTANCE).unwrap()).is_match(instance)
+    RE.get_or_init(|| Regex::new(RE_INSTANCE).unwrap())
+        .is_match(instance)
 }
 
 /// Validate a (project, zone, instance) triple in one shot with consistent,
@@ -195,7 +198,12 @@ fn find_gcloud_path() -> Option<PathBuf> {
 
         let suffix = r"Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd";
         let mut candidates: Vec<PathBuf> = Vec::new();
-        for env_name in ["LOCALAPPDATA", "APPDATA", "ProgramFiles", "ProgramFiles(x86)"] {
+        for env_name in [
+            "LOCALAPPDATA",
+            "APPDATA",
+            "ProgramFiles",
+            "ProgramFiles(x86)",
+        ] {
             if let Ok(dir) = env::var(env_name) {
                 candidates.push(PathBuf::from(dir).join(suffix));
             }
@@ -386,8 +394,7 @@ pub async fn list_projects() -> Vec<GcpProject> {
     ];
     match run_gcloud(&args).await {
         Ok(output) => {
-            let entries: Vec<serde_json::Value> =
-                serde_json::from_str(&output).unwrap_or_default();
+            let entries: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap_or_default();
             entries
                 .iter()
                 .filter_map(|e| {
@@ -538,9 +545,7 @@ pub async fn test_instance_iam_permissions(
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
         let preview: String = text.chars().take(160).collect();
-        return Err(format!(
-            "testIamPermissions HTTP {status}: {preview}"
-        ));
+        return Err(format!("testIamPermissions HTTP {status}: {preview}"));
     }
     let payload = resp
         .text()
@@ -570,8 +575,7 @@ pub async fn list_zones(project: &str) -> Vec<String> {
     ];
     match run_gcloud(&args).await {
         Ok(output) => {
-            let entries: Vec<serde_json::Value> =
-                serde_json::from_str(&output).unwrap_or_default();
+            let entries: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap_or_default();
             let mut zones = HashSet::new();
             for entry in &entries {
                 if let Some(zone_str) = entry.get("zone").and_then(|z| z.as_str()) {
@@ -618,8 +622,7 @@ pub async fn list_instances(project: &str, zone: &str) -> Vec<GceInstance> {
     ];
     match run_gcloud(&args).await {
         Ok(output) => {
-            let entries: Vec<serde_json::Value> =
-                serde_json::from_str(&output).unwrap_or_default();
+            let entries: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap_or_default();
             entries
                 .iter()
                 .filter_map(|e| {
@@ -848,7 +851,9 @@ async fn test_project_iam_permissions_rest(
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
         let preview: String = text.chars().take(160).collect();
-        return Err(format!("projects.testIamPermissions HTTP {status}: {preview}"));
+        return Err(format!(
+            "projects.testIamPermissions HTTP {status}: {preview}"
+        ));
     }
     let payload = resp
         .text()
@@ -1403,10 +1408,7 @@ impl GcloudCacheState {
     }
 
     pub fn snapshot(&self) -> GcloudCacheSnapshot {
-        self.inner
-            .read()
-            .map(|g| g.clone())
-            .unwrap_or_default()
+        self.inner.read().map(|g| g.clone()).unwrap_or_default()
     }
 
     /// Configure the on-disk location for the persisted snapshot.
@@ -1551,9 +1553,7 @@ impl GcloudCacheState {
         let token: Option<String> = match fetch_access_token().await {
             Ok(t) => Some(t),
             Err(e) => {
-                log::warn!(
-                    "gcp-cache: access-token fetch failed ({e}); using gcloud CLI backend"
-                );
+                log::warn!("gcp-cache: access-token fetch failed ({e}); using gcloud CLI backend");
                 None
             }
         };
@@ -1601,11 +1601,8 @@ impl GcloudCacheState {
         };
         let sem = Arc::new(Semaphore::new(max_concurrency));
         let done_counter = Arc::new(AtomicU32::new(0));
-        let mut set: JoinSet<(
-            String,
-            ProjectAccess,
-            Result<Vec<GceInstance>, String>,
-        )> = JoinSet::new();
+        let mut set: JoinSet<(String, ProjectAccess, Result<Vec<GceInstance>, String>)> =
+            JoinSet::new();
 
         for p in &projects {
             let pid = p.id.clone();
@@ -2294,9 +2291,9 @@ mod tests {
             {"account": "active@example.com", "status": "ACTIVE"}
         ]"#;
         let accounts: Vec<serde_json::Value> = serde_json::from_str(json_str).unwrap();
-        let active = accounts.iter().find(|a| {
-            a.get("status").and_then(|s| s.as_str()) == Some("ACTIVE")
-        });
+        let active = accounts
+            .iter()
+            .find(|a| a.get("status").and_then(|s| s.as_str()) == Some("ACTIVE"));
         assert!(active.is_some());
         assert_eq!(
             active.unwrap().get("account").unwrap().as_str().unwrap(),
@@ -2362,21 +2359,54 @@ mod tests {
 
     #[test]
     fn status_from_known_strings() {
-        assert_eq!(InstanceStatus::from_gcloud_str("RUNNING"), InstanceStatus::Running);
-        assert_eq!(InstanceStatus::from_gcloud_str("TERMINATED"), InstanceStatus::Terminated);
-        assert_eq!(InstanceStatus::from_gcloud_str("STOPPED"), InstanceStatus::Terminated);
-        assert_eq!(InstanceStatus::from_gcloud_str("STAGING"), InstanceStatus::Staging);
-        assert_eq!(InstanceStatus::from_gcloud_str("PROVISIONING"), InstanceStatus::Provisioning);
-        assert_eq!(InstanceStatus::from_gcloud_str("STOPPING"), InstanceStatus::Stopping);
-        assert_eq!(InstanceStatus::from_gcloud_str("SUSPENDED"), InstanceStatus::Suspended);
-        assert_eq!(InstanceStatus::from_gcloud_str("SUSPENDING"), InstanceStatus::Suspending);
-        assert_eq!(InstanceStatus::from_gcloud_str("REPAIRING"), InstanceStatus::Repairing);
+        assert_eq!(
+            InstanceStatus::from_gcloud_str("RUNNING"),
+            InstanceStatus::Running
+        );
+        assert_eq!(
+            InstanceStatus::from_gcloud_str("TERMINATED"),
+            InstanceStatus::Terminated
+        );
+        assert_eq!(
+            InstanceStatus::from_gcloud_str("STOPPED"),
+            InstanceStatus::Terminated
+        );
+        assert_eq!(
+            InstanceStatus::from_gcloud_str("STAGING"),
+            InstanceStatus::Staging
+        );
+        assert_eq!(
+            InstanceStatus::from_gcloud_str("PROVISIONING"),
+            InstanceStatus::Provisioning
+        );
+        assert_eq!(
+            InstanceStatus::from_gcloud_str("STOPPING"),
+            InstanceStatus::Stopping
+        );
+        assert_eq!(
+            InstanceStatus::from_gcloud_str("SUSPENDED"),
+            InstanceStatus::Suspended
+        );
+        assert_eq!(
+            InstanceStatus::from_gcloud_str("SUSPENDING"),
+            InstanceStatus::Suspending
+        );
+        assert_eq!(
+            InstanceStatus::from_gcloud_str("REPAIRING"),
+            InstanceStatus::Repairing
+        );
     }
 
     #[test]
     fn status_trims_whitespace_and_newline() {
-        assert_eq!(InstanceStatus::from_gcloud_str("RUNNING\n"), InstanceStatus::Running);
-        assert_eq!(InstanceStatus::from_gcloud_str("  TERMINATED  "), InstanceStatus::Terminated);
+        assert_eq!(
+            InstanceStatus::from_gcloud_str("RUNNING\n"),
+            InstanceStatus::Running
+        );
+        assert_eq!(
+            InstanceStatus::from_gcloud_str("  TERMINATED  "),
+            InstanceStatus::Terminated
+        );
     }
 
     #[test]
@@ -2398,7 +2428,10 @@ mod tests {
 
     #[test]
     fn classify_running_is_done() {
-        assert_eq!(classify_wait_status(&InstanceStatus::Running), WaitAction::Done);
+        assert_eq!(
+            classify_wait_status(&InstanceStatus::Running),
+            WaitAction::Done
+        );
     }
 
     #[test]
@@ -2481,8 +2514,16 @@ mod tests {
             InstanceStatus::Stopping,
             InstanceStatus::Suspending,
         ] {
-            assert_eq!(decide_preconnect_action(&s, true), PreConnectAction::Wait, "{s:?} true");
-            assert_eq!(decide_preconnect_action(&s, false), PreConnectAction::Wait, "{s:?} false");
+            assert_eq!(
+                decide_preconnect_action(&s, true),
+                PreConnectAction::Wait,
+                "{s:?} true"
+            );
+            assert_eq!(
+                decide_preconnect_action(&s, false),
+                PreConnectAction::Wait,
+                "{s:?} false"
+            );
         }
     }
 
@@ -2570,9 +2611,21 @@ mod tests {
         assert_eq!(
             got,
             vec![
-                ("us-central1-a".to_string(), "web".to_string(), "RUNNING".to_string()),
-                ("us-east1-b".to_string(), "vm-a".to_string(), "RUNNING".to_string()),
-                ("us-east1-b".to_string(), "vm-b".to_string(), "TERMINATED".to_string()),
+                (
+                    "us-central1-a".to_string(),
+                    "web".to_string(),
+                    "RUNNING".to_string()
+                ),
+                (
+                    "us-east1-b".to_string(),
+                    "vm-a".to_string(),
+                    "RUNNING".to_string()
+                ),
+                (
+                    "us-east1-b".to_string(),
+                    "vm-b".to_string(),
+                    "TERMINATED".to_string()
+                ),
             ]
         );
         assert!(instances.iter().all(|i| i.access.is_none()));
@@ -2802,12 +2855,13 @@ mod tests {
         let insts = restored.instances_by_project.get("alpha-proj").unwrap();
         assert_eq!(insts[0].name, "web");
         assert_eq!(insts[0].zone.as_deref(), Some("us-central1-a"));
+        assert_eq!(insts[0].access.unwrap().iap_tunnel, AccessState::Granted);
         assert_eq!(
-            insts[0].access.unwrap().iap_tunnel,
-            AccessState::Granted
-        );
-        assert_eq!(
-            restored.project_access.get("alpha-proj").unwrap().iap_tunnel,
+            restored
+                .project_access
+                .get("alpha-proj")
+                .unwrap()
+                .iap_tunnel,
             AccessState::Granted
         );
         assert_eq!(
@@ -2820,8 +2874,7 @@ mod tests {
     fn snapshot_deserializes_with_missing_optional_fields() {
         // A minimal persisted file (e.g. from an older version) must load with
         // defaults rather than erroring.
-        let restored: GcloudCacheSnapshot =
-            serde_json::from_str(r#"{"projects": []}"#).unwrap();
+        let restored: GcloudCacheSnapshot = serde_json::from_str(r#"{"projects": []}"#).unwrap();
         assert!(restored.gcloud.is_none());
         assert!(restored.auth.is_none());
         assert!(restored.instances_by_project.is_empty());

@@ -24,10 +24,7 @@ pub fn dpapi_decrypt(ciphertext: String) -> Result<String, String> {
 
 #[tauri::command]
 pub fn dpapi_encrypt_batch(values: Vec<String>) -> Result<Vec<String>, String> {
-    values
-        .into_iter()
-        .map(|v| encrypt_string(&v))
-        .collect()
+    values.into_iter().map(|v| encrypt_string(&v)).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -36,10 +33,7 @@ pub fn dpapi_encrypt_batch(values: Vec<String>) -> Result<Vec<String>, String> {
 
 #[tauri::command]
 pub fn dpapi_decrypt_batch(values: Vec<String>) -> Result<Vec<String>, String> {
-    values
-        .into_iter()
-        .map(|v| decrypt_string(&v))
-        .collect()
+    values.into_iter().map(|v| decrypt_string(&v)).collect()
 }
 
 // ---------------------------------------------------------------------------

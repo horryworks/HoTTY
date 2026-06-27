@@ -290,7 +290,10 @@ impl VertexAIProvider {
 
     fn save_config(&self) -> Result<(), String> {
         let config = self.config.as_ref().ok_or("No config to save")?;
-        let refresh = self.refresh_data.as_ref().ok_or("No refresh data to save")?;
+        let refresh = self
+            .refresh_data
+            .as_ref()
+            .ok_or("No refresh data to save")?;
 
         let refresh_json = match refresh {
             RefreshData::AuthorizedUser {
@@ -470,10 +473,7 @@ impl VertexAIProvider {
                     }
                 };
                 let params = [
-                    (
-                        "grant_type",
-                        "urn:ietf:params:oauth:grant-type:jwt-bearer",
-                    ),
+                    ("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer"),
                     ("assertion", &jwt),
                 ];
                 self.http_client
@@ -889,11 +889,7 @@ impl AIProvider for VertexAIProvider {
         AuthType::Adc
     }
 
-    async fn authenticate(
-        &mut self,
-        app: &AppHandle,
-        credentials: Value,
-    ) -> Result<bool, String> {
+    async fn authenticate(&mut self, app: &AppHandle, credentials: Value) -> Result<bool, String> {
         let project_id = credentials
             .get("projectId")
             .and_then(|v| v.as_str())
@@ -939,8 +935,8 @@ impl AIProvider for VertexAIProvider {
                 }
                 let content = std::fs::read_to_string(&adc_path)
                     .map_err(|e| format!("Failed to read ADC file: {e}"))?;
-                let adc: Value = serde_json::from_str(&content)
-                    .map_err(|e| format!("Invalid ADC JSON: {e}"))?;
+                let adc: Value =
+                    serde_json::from_str(&content).map_err(|e| format!("Invalid ADC JSON: {e}"))?;
 
                 let cred_type = adc.get("type").and_then(|v| v.as_str()).unwrap_or("");
                 match cred_type {
@@ -1077,9 +1073,7 @@ impl AIProvider for VertexAIProvider {
                 self.store().path().display()
             );
         }
-        log::info!(
-            "[vertexai] Auth success, project={project_id}, location={location}"
-        );
+        log::info!("[vertexai] Auth success, project={project_id}, location={location}");
         emit_auth_result(app, true);
         Ok(true)
     }
@@ -1567,10 +1561,7 @@ impl AIProvider for VertexAIProvider {
                     } else {
                         format!("{display} ({pub_prefix})")
                     };
-                    all_models.push(ModelInfo {
-                        name,
-                        display_name,
-                    });
+                    all_models.push(ModelInfo { name, display_name });
                 }
             }
         }
@@ -1687,12 +1678,10 @@ impl AIProvider for VertexAIProvider {
                         Ok(r) if r.status().is_success() || r.status().as_u16() == 422 => {
                             Some(model_info)
                         }
-                        Ok(r) if r.status().as_u16() == 429 => {
-                            Some(ModelInfo {
-                                name: model_info.name,
-                                display_name: format!("{} [Quota limit]", model_info.display_name),
-                            })
-                        }
+                        Ok(r) if r.status().as_u16() == 429 => Some(ModelInfo {
+                            name: model_info.name,
+                            display_name: format!("{} [Quota limit]", model_info.display_name),
+                        }),
                         Ok(r) => {
                             let status = r.status().as_u16();
                             let body = r.text().await.unwrap_or_default();
@@ -1789,7 +1778,9 @@ mod tests {
     fn valid_models() {
         assert!(is_valid_model("gemini-2.0-flash-001"));
         assert!(is_valid_model("publishers/google/models/gemini-2.0-flash"));
-        assert!(is_valid_model("publishers/anthropic/models/claude-sonnet-4-6"));
+        assert!(is_valid_model(
+            "publishers/anthropic/models/claude-sonnet-4-6"
+        ));
     }
 
     #[test]
@@ -1910,7 +1901,10 @@ mod tests {
             "publishers/google/models/gemini-2.0-flash",
         );
         assert!(msg.contains("503"), "expected real status in: {msg}");
-        assert!(!msg.contains("error 0"), "must not show placeholder status: {msg}");
+        assert!(
+            !msg.contains("error 0"),
+            "must not show placeholder status: {msg}"
+        );
     }
 
     #[test]

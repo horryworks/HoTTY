@@ -84,18 +84,10 @@ pub trait AIProvider: Send + Sync {
     fn auth_type(&self) -> AuthType;
 
     /// Start an interactive authentication flow.
-    async fn authenticate(
-        &mut self,
-        app: &AppHandle,
-        credentials: Value,
-    ) -> Result<bool, String>;
+    async fn authenticate(&mut self, app: &AppHandle, credentials: Value) -> Result<bool, String>;
 
     /// Attempt to restore a previous session from persisted credentials.
-    async fn auto_auth(
-        &mut self,
-        app_data_dir: &Path,
-        credentials: Value,
-    ) -> Result<bool, String>;
+    async fn auto_auth(&mut self, app_data_dir: &Path, credentials: Value) -> Result<bool, String>;
 
     /// Return the current authentication status.
     fn get_auth_status(&self) -> AuthStatus;

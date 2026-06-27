@@ -16,9 +16,7 @@ fn api_key_re() -> &'static Regex {
 
 fn model_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"^[a-zA-Z0-9]+([._-][a-zA-Z0-9]+)*$").expect("valid model regex")
-    })
+    RE.get_or_init(|| Regex::new(r"^[a-zA-Z0-9]+([._-][a-zA-Z0-9]+)*$").expect("valid model regex"))
 }
 
 /// True when `key` looks like a plausible API key: 1..=512 printable-ASCII

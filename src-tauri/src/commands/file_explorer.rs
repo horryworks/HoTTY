@@ -59,9 +59,7 @@ fn is_hidden_name(name: &str) -> bool {
 /// Returns entries sorted: directories first, then files, both alphabetically
 /// (case-insensitive).
 #[tauri::command]
-pub async fn file_explorer_list_directory(
-    dir_path: String,
-) -> Result<ListDirectoryResult, String> {
+pub async fn file_explorer_list_directory(dir_path: String) -> Result<ListDirectoryResult, String> {
     if dir_path.trim().is_empty() {
         return Ok(ListDirectoryResult {
             entries: None,
@@ -125,10 +123,7 @@ pub async fn file_explorer_list_directory(
 
         let is_dir = meta.is_dir();
         let size = if is_dir { 0 } else { meta.len() };
-        let mtime = meta
-            .modified()
-            .map(system_time_to_ms)
-            .unwrap_or(0.0);
+        let mtime = meta.modified().map(system_time_to_ms).unwrap_or(0.0);
         let is_hidden = is_hidden_name(&name);
 
         entries.push(DirEntry {
@@ -141,12 +136,10 @@ pub async fn file_explorer_list_directory(
     }
 
     // Sort: directories first, then files, both case-insensitive alphabetical
-    entries.sort_by(|a, b| {
-        match (a.is_directory, b.is_directory) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-        }
+    entries.sort_by(|a, b| match (a.is_directory, b.is_directory) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
     });
 
     Ok(ListDirectoryResult {
@@ -265,10 +258,9 @@ mod tests {
 
     #[tokio::test]
     async fn list_directory_nonexistent() {
-        let result =
-            file_explorer_list_directory("/absolutely/does/not/exist".into())
-                .await
-                .unwrap();
+        let result = file_explorer_list_directory("/absolutely/does/not/exist".into())
+            .await
+            .unwrap();
         assert!(result.error.is_some());
     }
 

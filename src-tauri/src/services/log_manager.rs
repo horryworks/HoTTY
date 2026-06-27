@@ -79,7 +79,7 @@ fn strip_ansi(input: &str) -> String {
                 Some('[') => {
                     // CSI sequence: ESC [ ... <final byte>
                     chars.next(); // consume '['
-                    // Skip parameter bytes (0x30-0x3F) and intermediate bytes (0x20-0x2F)
+                                  // Skip parameter bytes (0x30-0x3F) and intermediate bytes (0x20-0x2F)
                     while let Some(&c) = chars.peek() {
                         if ('\x20'..='\x3f').contains(&c) {
                             chars.next();
@@ -155,7 +155,13 @@ fn process_log_data(raw: &str) -> String {
 /// Sanitize a host string for use in filenames: replace non-alphanumeric chars with `_`.
 fn sanitize_host(host: &str) -> String {
     host.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -184,9 +190,7 @@ fn chrono_lite_stamp() -> String {
     // Calculate year/month/day from days since epoch
     let (year, month, day) = days_to_ymd(days);
 
-    format!(
-        "{year:04}{month:02}{day:02}{hours:02}{minutes:02}{seconds:02}"
-    )
+    format!("{year:04}{month:02}{day:02}{hours:02}{minutes:02}{seconds:02}")
 }
 
 /// Convert days since Unix epoch to (year, month, day).
@@ -223,9 +227,7 @@ fn ts_log_timestamp() -> String {
 
     let (year, month, day) = days_to_ymd(days);
 
-    format!(
-        "{year:04}-{month:02}-{day:02} {hours:02}:{minutes:02}:{seconds:02}.{millis:03}"
-    )
+    format!("{year:04}-{month:02}-{day:02} {hours:02}:{minutes:02}:{seconds:02}.{millis:03}")
 }
 
 /// Build the log filename: `YYYYMMDDHHMMSS-PROTOCOL-host.txt`
@@ -340,7 +342,9 @@ impl LogManager {
 
     /// Write `allowed_dirs` to disk. Caller must already hold the inner lock.
     fn persist_locked(inner: &LogManagerInner) {
-        let Some(path) = &inner.persist_path else { return };
+        let Some(path) = &inner.persist_path else {
+            return;
+        };
         let dirs: Vec<String> = inner
             .allowed_dirs
             .iter()
@@ -395,8 +399,7 @@ impl LogManager {
         }
 
         // Ensure directory exists
-        fs::create_dir_all(log_dir)
-            .map_err(|e| format!("failed to create log dir: {e}"))?;
+        fs::create_dir_all(log_dir).map_err(|e| format!("failed to create log dir: {e}"))?;
 
         // Require the directory to have been user-approved via a native dialog
         // (Browse-to-pick or yes/no confirm). This means a compromised
@@ -404,19 +407,16 @@ impl LogManager {
         // forging `connect_session` / `update_session_logging` arguments.
         let dir_buf = canonicalize_for_compare(log_dir);
         if !inner.allowed_dirs.contains(&dir_buf) {
-            return Err(format!(
-                "log directory not approved: {}",
-                log_dir.display()
-            ));
+            return Err(format!("log directory not approved: {}", log_dir.display()));
         }
 
         let txt_path = build_log_path(log_dir, protocol, host);
         let ts_path = txt_path.with_extension("tslog");
 
-        let file = File::create(&txt_path)
-            .map_err(|e| format!("failed to create log file: {e}"))?;
-        let ts_file = File::create(&ts_path)
-            .map_err(|e| format!("failed to create tslog file: {e}"))?;
+        let file =
+            File::create(&txt_path).map_err(|e| format!("failed to create log file: {e}"))?;
+        let ts_file =
+            File::create(&ts_path).map_err(|e| format!("failed to create tslog file: {e}"))?;
 
         log::info!(
             "started logging session '{session_id}' to {}",
@@ -766,13 +766,9 @@ mod tests {
 
         let mgr = LogManager::new();
         mgr.approve_dir(&dir).await;
-        mgr.start_logging("s1", &dir, "ssh", "host")
-            .await
-            .unwrap();
+        mgr.start_logging("s1", &dir, "ssh", "host").await.unwrap();
         // Second start should be ok (idempotent)
-        mgr.start_logging("s1", &dir, "ssh", "host")
-            .await
-            .unwrap();
+        mgr.start_logging("s1", &dir, "ssh", "host").await.unwrap();
 
         mgr.stop_all().await;
         let _ = fs::remove_dir_all(&dir);

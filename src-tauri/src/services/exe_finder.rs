@@ -22,7 +22,11 @@ where
     }
 
     let path_var = std::env::var("PATH").ok()?;
-    let sep = if cfg!(target_os = "windows") { ';' } else { ':' };
+    let sep = if cfg!(target_os = "windows") {
+        ';'
+    } else {
+        ':'
+    };
     for dir in path_var.split(sep).filter(|d| !d.is_empty()) {
         let p = PathBuf::from(dir).join(exe_name);
         if p.exists() {

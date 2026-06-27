@@ -47,8 +47,7 @@ fn custom_themes_dir(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| format!("failed to resolve app config dir: {e}"))?;
     let dir = config_dir.join("themes");
     if !dir.exists() {
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("failed to create themes dir: {e}"))?;
+        std::fs::create_dir_all(&dir).map_err(|e| format!("failed to create themes dir: {e}"))?;
     }
     Ok(dir)
 }
@@ -76,9 +75,8 @@ fn validate_theme_key(key: &str) -> Result<(), String> {
     // Block Windows reserved names
     let upper = key.to_ascii_uppercase();
     let reserved = [
-        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
-        "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8",
-        "LPT9",
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
     ];
     if reserved.contains(&upper.as_str()) {
         return Err(format!("'{key}' is a reserved name"));
@@ -129,18 +127,14 @@ fn validate_theme_data(data: &ThemeDef) -> Result<(), String> {
 
 /// Read and parse a theme JSON file.
 fn read_theme_file(path: &std::path::Path) -> Result<ThemeDef, String> {
-    let meta = std::fs::metadata(path)
-        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    let meta =
+        std::fs::metadata(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     if meta.len() > MAX_THEME_FILE_SIZE {
-        return Err(format!(
-            "theme file {} exceeds max size",
-            path.display()
-        ));
+        return Err(format!("theme file {} exceeds max size", path.display()));
     }
     let contents = std::fs::read_to_string(path)
         .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
-    serde_json::from_str(&contents)
-        .map_err(|e| format!("failed to parse {}: {e}", path.display()))
+    serde_json::from_str(&contents).map_err(|e| format!("failed to parse {}: {e}", path.display()))
 }
 
 // ---------------------------------------------------------------------------

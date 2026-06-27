@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 // GitHub releases endpoint.
-const RELEASES_URL: &str =
-    "https://api.github.com/repos/horryworks/HoTTY/releases/latest";
+const RELEASES_URL: &str = "https://api.github.com/repos/horryworks/HoTTY/releases/latest";
 
 #[derive(Debug, Deserialize)]
 struct GithubRelease {
@@ -27,7 +26,9 @@ pub struct UpdateInfo {
 
 /// Strip a leading `v` / `V` from a tag like `v2.0.1` → `2.0.1`.
 fn strip_v_prefix(tag: &str) -> &str {
-    tag.strip_prefix('v').or_else(|| tag.strip_prefix('V')).unwrap_or(tag)
+    tag.strip_prefix('v')
+        .or_else(|| tag.strip_prefix('V'))
+        .unwrap_or(tag)
 }
 
 /// Parse a version string into `(major, minor, patch, prerelease_tag)`.
@@ -40,9 +41,18 @@ fn parse_version(v: &str) -> (u32, u32, u32, String) {
         None => (v, String::new()),
     };
     let mut parts = core.split('.');
-    let major = parts.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
-    let minor = parts.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
-    let patch = parts.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+    let major = parts
+        .next()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+    let minor = parts
+        .next()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+    let patch = parts
+        .next()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
     (major, minor, patch, pre)
 }
 
@@ -75,9 +85,9 @@ fn is_strictly_newer(current: &str, latest: &str) -> bool {
         std::cmp::Ordering::Greater => true,
         std::cmp::Ordering::Less => false,
         std::cmp::Ordering::Equal => match (cpre.is_empty(), lpre.is_empty()) {
-            (false, true) => true,      // current is pre, latest is stable → newer
-            (true, false) => false,     // current is stable, latest is pre → not newer
-            (true, true) => false,      // identical stable
+            (false, true) => true,  // current is pre, latest is stable → newer
+            (true, false) => false, // current is stable, latest is pre → not newer
+            (true, true) => false,  // identical stable
             (false, false) => compare_prerelease(&lpre, &cpre).is_gt(),
         },
     }

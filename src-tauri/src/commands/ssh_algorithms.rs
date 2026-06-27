@@ -130,8 +130,8 @@ pub fn merge_user_with_bundled(user: &SshAlgorithms, bundled: &SshAlgorithms) ->
 
 /// Read and parse an algorithms JSON file.
 fn read_algorithms_file(path: &std::path::Path) -> Result<SshAlgorithms, String> {
-    let meta = std::fs::metadata(path)
-        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    let meta =
+        std::fs::metadata(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     if meta.len() > MAX_FILE_SIZE {
         return Err(format!(
             "algorithms file {} exceeds max size",
@@ -140,8 +140,7 @@ fn read_algorithms_file(path: &std::path::Path) -> Result<SshAlgorithms, String>
     }
     let contents = std::fs::read_to_string(path)
         .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
-    serde_json::from_str(&contents)
-        .map_err(|e| format!("failed to parse {}: {e}", path.display()))
+    serde_json::from_str(&contents).map_err(|e| format!("failed to parse {}: {e}", path.display()))
 }
 
 // ---------------------------------------------------------------------------
@@ -199,9 +198,7 @@ pub async fn get_ssh_algorithms(app: AppHandle) -> Result<SshAlgorithms, String>
         if merged != user {
             if let Ok(json) = serde_json::to_string_pretty(&merged) {
                 if let Err(e) = std::fs::write(&user_path, &json) {
-                    log::warn!(
-                        "could not persist merged algorithms to user config: {e}"
-                    );
+                    log::warn!("could not persist merged algorithms to user config: {e}");
                 }
             }
         }
@@ -211,9 +208,7 @@ pub async fn get_ssh_algorithms(app: AppHandle) -> Result<SshAlgorithms, String>
     if let Some(algorithms) = bundled {
         if let Ok(json) = serde_json::to_string_pretty(&algorithms) {
             if let Err(e) = std::fs::write(&user_path, &json) {
-                log::warn!(
-                    "could not copy default algorithms to user config: {e}"
-                );
+                log::warn!("could not copy default algorithms to user config: {e}");
             }
         }
         return Ok(algorithms);
@@ -233,8 +228,7 @@ pub async fn save_ssh_algorithms(
     let user_path = user_algorithms_path(&app)?;
     let json = serde_json::to_string_pretty(&algorithms)
         .map_err(|e| format!("failed to serialize algorithms: {e}"))?;
-    std::fs::write(&user_path, json)
-        .map_err(|e| format!("failed to write algorithms: {e}"))?;
+    std::fs::write(&user_path, json).map_err(|e| format!("failed to write algorithms: {e}"))?;
 
     log::info!("saved SSH algorithms to {}", user_path.display());
     Ok(true)

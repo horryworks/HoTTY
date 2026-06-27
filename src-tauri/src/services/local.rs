@@ -120,11 +120,7 @@ impl LocalSession {
 
 #[async_trait]
 impl SessionService for LocalSession {
-    async fn connect(
-        &mut self,
-        app: AppHandle,
-        session_id: String,
-    ) -> Result<(), SessionError> {
+    async fn connect(&mut self, app: AppHandle, session_id: String) -> Result<(), SessionError> {
         self.config.validate()?;
         let shell_path = self.config.resolve_shell_path()?;
 
@@ -170,14 +166,12 @@ impl SessionService for LocalSession {
         // Drop the slave end — we communicate through the master
         drop(pty_pair.slave);
 
-        let reader = pty_pair
-            .master
-            .try_clone_reader()
-            .map_err(|e| SessionError::ConnectionFailed(format!("failed to clone PTY reader: {e}")))?;
-        let writer = pty_pair
-            .master
-            .take_writer()
-            .map_err(|e| SessionError::ConnectionFailed(format!("failed to take PTY writer: {e}")))?;
+        let reader = pty_pair.master.try_clone_reader().map_err(|e| {
+            SessionError::ConnectionFailed(format!("failed to clone PTY reader: {e}"))
+        })?;
+        let writer = pty_pair.master.take_writer().map_err(|e| {
+            SessionError::ConnectionFailed(format!("failed to take PTY writer: {e}"))
+        })?;
 
         // Keep master alive for resize
         let master = Arc::new(Mutex::new(pty_pair.master));
@@ -194,8 +188,10 @@ impl SessionService for LocalSession {
         // terminates (e.g. user types `exit`). This is the authoritative
         // source for session-end on Windows; the reader's Ok(0) path remains
         // as a fallback for platforms where EOF propagates correctly.
-        let log_mgr: super::log_manager::LogManager =
-            app.state::<super::log_manager::LogManager>().inner().clone();
+        let log_mgr: super::log_manager::LogManager = app
+            .state::<super::log_manager::LogManager>()
+            .inner()
+            .clone();
         let app_w = app.clone();
         let sid_w = session_id.clone();
         let log_mgr_w = log_mgr.clone();
@@ -334,15 +330,43 @@ mod tests {
 
     #[test]
     fn config_validates_shell_types() {
-        assert!(LocalConfig { shell_type: "cmd".into(), shell_path: None, encoding: "utf8".into() }.validate().is_ok());
-        assert!(LocalConfig { shell_type: "powershell".into(), shell_path: None, encoding: "utf8".into() }.validate().is_ok());
-        assert!(LocalConfig { shell_type: "git-bash".into(), shell_path: None, encoding: "utf8".into() }.validate().is_ok());
-        assert!(LocalConfig { shell_type: "zsh".into(), shell_path: None, encoding: "utf8".into() }.validate().is_err());
+        assert!(LocalConfig {
+            shell_type: "cmd".into(),
+            shell_path: None,
+            encoding: "utf8".into()
+        }
+        .validate()
+        .is_ok());
+        assert!(LocalConfig {
+            shell_type: "powershell".into(),
+            shell_path: None,
+            encoding: "utf8".into()
+        }
+        .validate()
+        .is_ok());
+        assert!(LocalConfig {
+            shell_type: "git-bash".into(),
+            shell_path: None,
+            encoding: "utf8".into()
+        }
+        .validate()
+        .is_ok());
+        assert!(LocalConfig {
+            shell_type: "zsh".into(),
+            shell_path: None,
+            encoding: "utf8".into()
+        }
+        .validate()
+        .is_err());
     }
 
     #[test]
     fn resolve_cmd_path() {
-        let cfg = LocalConfig { shell_type: "cmd".into(), shell_path: None, encoding: "utf8".into() };
+        let cfg = LocalConfig {
+            shell_type: "cmd".into(),
+            shell_path: None,
+            encoding: "utf8".into(),
+        };
         let path = cfg.resolve_shell_path().unwrap();
         assert!(path.contains("cmd.exe"));
     }

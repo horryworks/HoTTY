@@ -30,7 +30,8 @@ impl EncryptedConfigStore {
     /// Encrypt `plaintext` with DPAPI and write it to disk.
     pub fn save(&self, plaintext: &str) -> Result<(), String> {
         let encrypted = dpapi::encrypt_string(plaintext)?;
-        std::fs::write(&self.path, &encrypted).map_err(|e| format!("Failed to save config: {e}"))?;
+        std::fs::write(&self.path, &encrypted)
+            .map_err(|e| format!("Failed to save config: {e}"))?;
         log::debug!("[{}] Config saved", self.tag);
         Ok(())
     }
@@ -41,8 +42,8 @@ impl EncryptedConfigStore {
         if !self.path.exists() {
             return Ok(None);
         }
-        let encrypted =
-            std::fs::read_to_string(&self.path).map_err(|e| format!("Failed to read config: {e}"))?;
+        let encrypted = std::fs::read_to_string(&self.path)
+            .map_err(|e| format!("Failed to read config: {e}"))?;
         let plaintext = dpapi::decrypt_string(&encrypted)?;
         if plaintext.is_empty() {
             return Ok(None);

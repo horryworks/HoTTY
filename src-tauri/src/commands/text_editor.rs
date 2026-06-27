@@ -107,8 +107,8 @@ pub async fn text_editor_open_file(
         .add_filter(
             "Text Files",
             &[
-                "txt", "log", "md", "json", "xml", "yaml", "yml", "csv", "ini",
-                "conf", "cfg", "sh", "bat", "ps1", "py", "js", "ts", "html", "css",
+                "txt", "log", "md", "json", "xml", "yaml", "yml", "csv", "ini", "conf", "cfg",
+                "sh", "bat", "ps1", "py", "js", "ts", "html", "css",
             ],
         )
         .add_filter("All Files", &["*"])
@@ -188,14 +188,12 @@ pub async fn text_editor_read_file(
         return Err("access to sensitive directories is not allowed".into());
     }
 
-    let meta = std::fs::metadata(&resolved)
-        .map_err(|e| format!("failed to stat file: {e}"))?;
+    let meta = std::fs::metadata(&resolved).map_err(|e| format!("failed to stat file: {e}"))?;
     if meta.len() > MAX_FILE_SIZE {
         return Err("file is too large (max 50MB)".into());
     }
 
-    let bytes =
-        std::fs::read(&resolved).map_err(|e| format!("failed to read file: {e}"))?;
+    let bytes = std::fs::read(&resolved).map_err(|e| format!("failed to read file: {e}"))?;
 
     let valid_enc = validated_encoding(&encoding);
     let content = decode_bytes(&bytes, valid_enc);
@@ -237,8 +235,7 @@ pub async fn text_editor_write_file(
     let valid_enc = validated_encoding(&encoding);
     let bytes = encode_string(&content, valid_enc);
 
-    std::fs::write(&resolved, bytes)
-        .map_err(|e| format!("failed to write file: {e}"))?;
+    std::fs::write(&resolved, bytes).map_err(|e| format!("failed to write file: {e}"))?;
 
     Ok(true)
 }
@@ -280,8 +277,7 @@ pub async fn text_editor_approve_dropped_file(
 
     let resolved = resolve_path(&file_path)?;
 
-    let meta = std::fs::metadata(&resolved)
-        .map_err(|e| format!("failed to stat file: {e}"))?;
+    let meta = std::fs::metadata(&resolved).map_err(|e| format!("failed to stat file: {e}"))?;
 
     if !meta.is_file() {
         return Err("path is not a regular file".into());
@@ -410,5 +406,4 @@ mod tests {
             assert!(set.contains(&test_path));
         }
     }
-
 }

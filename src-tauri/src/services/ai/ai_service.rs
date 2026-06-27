@@ -133,9 +133,7 @@ impl AIService {
         let provider = self
             .registry
             .get(&self.active_provider_id)
-            .ok_or_else(|| {
-                format!("AI provider '{}' not found", self.active_provider_id)
-            })?;
+            .ok_or_else(|| format!("AI provider '{}' not found", self.active_provider_id))?;
         provider.list_models().await
     }
 
@@ -150,9 +148,7 @@ impl AIService {
         let provider = self
             .registry
             .get(&self.active_provider_id)
-            .ok_or_else(|| {
-                format!("AI provider '{}' not found", self.active_provider_id)
-            })?;
+            .ok_or_else(|| format!("AI provider '{}' not found", self.active_provider_id))?;
         provider.list_locations().await
     }
 }

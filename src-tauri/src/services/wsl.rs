@@ -40,8 +40,8 @@ impl WslConfig {
                 // array (no shell interpretation), but this guards against
                 // future changes and any platform-specific quoting quirks.
                 const BLOCKED_CHARS: &[char] = &[
-                    '$', '`', '!', '(', ')', ';', '&', '|', '>', '<',
-                    '\n', '\r', '\t', ' ', '"', '\'', '\\',
+                    '$', '`', '!', '(', ')', ';', '&', '|', '>', '<', '\n', '\r', '\t', ' ', '"',
+                    '\'', '\\',
                 ];
                 if distro.chars().any(|c| BLOCKED_CHARS.contains(&c)) {
                     return Err(SessionError::InvalidConfig(format!(
@@ -102,11 +102,7 @@ impl WslSession {
 
 #[async_trait]
 impl SessionService for WslSession {
-    async fn connect(
-        &mut self,
-        app: AppHandle,
-        session_id: String,
-    ) -> Result<(), SessionError> {
+    async fn connect(&mut self, app: AppHandle, session_id: String) -> Result<(), SessionError> {
         self.config.validate()?;
 
         let distro_desc = self
@@ -150,14 +146,12 @@ impl SessionService for WslSession {
 
         drop(pty_pair.slave);
 
-        let reader = pty_pair
-            .master
-            .try_clone_reader()
-            .map_err(|e| SessionError::ConnectionFailed(format!("failed to clone PTY reader: {e}")))?;
-        let writer = pty_pair
-            .master
-            .take_writer()
-            .map_err(|e| SessionError::ConnectionFailed(format!("failed to take PTY writer: {e}")))?;
+        let reader = pty_pair.master.try_clone_reader().map_err(|e| {
+            SessionError::ConnectionFailed(format!("failed to clone PTY reader: {e}"))
+        })?;
+        let writer = pty_pair.master.take_writer().map_err(|e| {
+            SessionError::ConnectionFailed(format!("failed to take PTY writer: {e}"))
+        })?;
 
         let master = Arc::new(Mutex::new(pty_pair.master));
 
@@ -170,8 +164,10 @@ impl SessionService for WslSession {
         // On Windows ConPTY, the master reader may not get EOF when the shell
         // exits unless we actively wait on the child process. Authoritative
         // source for session-end on Windows.
-        let log_mgr: super::log_manager::LogManager =
-            app.state::<super::log_manager::LogManager>().inner().clone();
+        let log_mgr: super::log_manager::LogManager = app
+            .state::<super::log_manager::LogManager>()
+            .inner()
+            .clone();
         let app_w = app.clone();
         let sid_w = session_id.clone();
         let log_mgr_w = log_mgr.clone();
@@ -310,26 +306,44 @@ mod tests {
     #[test]
     fn config_validates_distribution_names() {
         // Valid names
-        let valid = WslConfig { distribution: Some("Ubuntu".into()), encoding: "utf8".into() };
+        let valid = WslConfig {
+            distribution: Some("Ubuntu".into()),
+            encoding: "utf8".into(),
+        };
         assert!(valid.validate().is_ok());
 
-        let valid2 = WslConfig { distribution: Some("Ubuntu-22.04".into()), encoding: "utf8".into() };
+        let valid2 = WslConfig {
+            distribution: Some("Ubuntu-22.04".into()),
+            encoding: "utf8".into(),
+        };
         assert!(valid2.validate().is_ok());
 
         // Empty = default, should be ok
-        let empty = WslConfig { distribution: Some(String::new()), encoding: "utf8".into() };
+        let empty = WslConfig {
+            distribution: Some(String::new()),
+            encoding: "utf8".into(),
+        };
         assert!(empty.validate().is_ok());
 
         // None = default
-        let none = WslConfig { distribution: None, encoding: "utf8".into() };
+        let none = WslConfig {
+            distribution: None,
+            encoding: "utf8".into(),
+        };
         assert!(none.validate().is_ok());
 
         // Invalid: starts with dot
-        let invalid = WslConfig { distribution: Some(".bad".into()), encoding: "utf8".into() };
+        let invalid = WslConfig {
+            distribution: Some(".bad".into()),
+            encoding: "utf8".into(),
+        };
         assert!(invalid.validate().is_err());
 
         // Invalid: contains space
-        let invalid2 = WslConfig { distribution: Some("has space".into()), encoding: "utf8".into() };
+        let invalid2 = WslConfig {
+            distribution: Some("has space".into()),
+            encoding: "utf8".into(),
+        };
         assert!(invalid2.validate().is_err());
     }
 
@@ -347,5 +361,4 @@ mod tests {
         assert!(cfg.distribution.is_none());
         assert_eq!(cfg.encoding, "utf8");
     }
-
 }

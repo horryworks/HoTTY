@@ -115,7 +115,10 @@ impl RusshServerHandler for SshServerHandler {
             self.authed = true;
             Ok(Auth::Accept)
         } else {
-            log::warn!("file-server: SFTP auth rejected for user '{user}' from {}", self.peer);
+            log::warn!(
+                "file-server: SFTP auth rejected for user '{user}' from {}",
+                self.peer
+            );
             Ok(Auth::reject())
         }
     }
@@ -147,7 +150,13 @@ impl RusshServerHandler for SshServerHandler {
         if name == "sftp" && self.authed {
             if let Some(channel) = self.channels.remove(&channel_id) {
                 session.channel_success(channel_id)?;
-                emit_status(&self.ctx.app, &self.ctx.server_id, PROTO, "client-connected", Some(self.peer.clone()));
+                emit_status(
+                    &self.ctx.app,
+                    &self.ctx.server_id,
+                    PROTO,
+                    "client-connected",
+                    Some(self.peer.clone()),
+                );
                 let sftp = SftpSession::new(self.ctx.clone(), self.peer.clone());
                 // Drive the SFTP protocol on this channel until the client closes it.
                 russh_sftp::server::run(channel.into_stream(), sftp).await;
@@ -277,7 +286,8 @@ impl SftpHandlerTrait for SftpSession {
             files.push(SftpFile::new(name, attrs));
         }
         let handle = self.next_handle();
-        self.dirs.insert(handle.clone(), DirListing { files, sent: false });
+        self.dirs
+            .insert(handle.clone(), DirListing { files, sent: false });
         Ok(HandleReply { id, handle })
     }
 
@@ -313,14 +323,34 @@ impl SftpHandlerTrait for SftpSession {
             resolve_in_root(&self.ctx.root, &filename, !creating).map_err(map_jail_status)?;
 
         let opts: std::fs::OpenOptions = pflags.into();
-        let file = opts.open(&resolved).map_err(|_| StatusCode::PermissionDenied)?;
+        let file = opts
+            .open(&resolved)
+            .map_err(|_| StatusCode::PermissionDenied)?;
 
-        let direction = if wants_write { DIR_UPLOAD } else { DIR_DOWNLOAD };
+        let direction = if wants_write {
+            DIR_UPLOAD
+        } else {
+            DIR_DOWNLOAD
+        };
         let size = file.metadata().ok().map(|m| m.len());
-        emit_transfer(&self.ctx.app, &self.ctx.server_id, PROTO, &self.peer, &filename, direction, size);
+        emit_transfer(
+            &self.ctx.app,
+            &self.ctx.server_id,
+            PROTO,
+            &self.peer,
+            &filename,
+            direction,
+            size,
+        );
 
         let handle = self.next_handle();
-        self.files.insert(handle.clone(), OpenFile { file, write: wants_write });
+        self.files.insert(
+            handle.clone(),
+            OpenFile {
+                file,
+                write: wants_write,
+            },
+        );
         Ok(HandleReply { id, handle })
     }
 
@@ -363,7 +393,10 @@ impl SftpHandlerTrait for SftpSession {
             .file
             .seek(SeekFrom::Start(offset))
             .map_err(|_| StatusCode::Failure)?;
-        entry.file.write_all(&data).map_err(|_| StatusCode::Failure)?;
+        entry
+            .file
+            .write_all(&data)
+            .map_err(|_| StatusCode::Failure)?;
         Ok(ok_status(id))
     }
 
