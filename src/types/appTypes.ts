@@ -317,7 +317,7 @@ export interface ProjectAccess {
  * Per-instance IAM probe result. Populated by the refresh task only when a
  * resource-level fallback probe ran (because project-level IAP was denied).
  */
-export interface InstanceAccess {
+interface InstanceAccess {
   iapTunnel: AccessState;
   osLogin: AccessState;
 }

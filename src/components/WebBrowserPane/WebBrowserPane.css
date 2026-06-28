@@ -31,19 +31,32 @@
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  background: var(--bg-secondary);
+  background: var(--btn-secondary-bg);
   color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
   transition: background-color 0.1s;
 }
 
 .web-browser-toolbar-btn:hover:not(:disabled) {
-  background: var(--accent-color);
-  color: var(--text-on-accent);
+  background: var(--btn-secondary-hover-bg);
 }
 
 .web-browser-toolbar-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Pressed state — used while the bookmarks dropdown is open. */
+.web-browser-toolbar-btn.active {
+  background: var(--accent-color);
+  color: var(--text-on-accent);
+}
+
+/* Anchor for the bookmarks dropdown (positioned absolutely within). */
+.web-browser-bookmark-wrap {
+  position: relative;
+  display: inline-flex;
 }
 
 .web-browser-go {

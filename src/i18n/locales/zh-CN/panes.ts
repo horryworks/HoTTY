@@ -181,5 +181,7 @@ export const panes = {
     bookmarkFolderLabel: '文件夹',
     bookmarkFolderRoot: '(顶层)',
     bookmarkAdd: '添加',
+    bookmarksTooltip: '显示书签',
+    bookmarksEmpty: '暂无书签',
   },
 };

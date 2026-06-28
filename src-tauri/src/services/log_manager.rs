@@ -491,12 +491,6 @@ impl LogManager {
             log::info!("stopped logging session '{id}'");
         }
     }
-
-    /// Get the list of allowed directories (for log_viewer security checks).
-    pub async fn allowed_dirs(&self) -> Vec<PathBuf> {
-        let inner = self.inner.lock().await;
-        inner.allowed_dirs.clone()
-    }
 }
 
 impl Default for LogManager {

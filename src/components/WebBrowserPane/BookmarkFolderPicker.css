@@ -1,0 +1,12 @@
+/* Scrollable folder-tree picker inside AddBookmarkModal (replaces the old
+   folder <select>). Tree rows themselves are styled by HostTree.css. */
+.bookmark-folder-picker {
+  max-height: 200px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--input-bg);
+  padding: 4px 0;
+  user-select: none;
+}

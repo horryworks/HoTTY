@@ -181,5 +181,7 @@ export const panes = {
     bookmarkFolderLabel: '폴더',
     bookmarkFolderRoot: '(최상위)',
     bookmarkAdd: '추가',
+    bookmarksTooltip: '북마크 표시',
+    bookmarksEmpty: '북마크가 없습니다',
   },
 };

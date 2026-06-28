@@ -185,5 +185,7 @@ export const panes = {
     bookmarkFolderLabel: 'Папка',
     bookmarkFolderRoot: '(Верхний уровень)',
     bookmarkAdd: 'Добавить',
+    bookmarksTooltip: 'Показать закладки',
+    bookmarksEmpty: 'Закладок пока нет',
   },
 };

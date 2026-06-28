@@ -17,6 +17,9 @@ export const chrome = {
     fileExplorer: '파일 탐색기',
     aiChat: 'AI 채팅',
     saveToHostTree: '호스트 트리에 저장…',
+    watchAi: 'AI로 모니터링',
+    stopWatchAi: 'AI 모니터링 중지',
+    bookmark: '북마크 추가…',
   },
   appSidebar: {
     layout: {

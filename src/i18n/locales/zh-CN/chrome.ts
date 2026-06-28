@@ -17,6 +17,9 @@ export const chrome = {
     fileExplorer: '文件浏览器',
     aiChat: 'AI 聊天',
     saveToHostTree: '保存到主机树…',
+    watchAi: '使用 AI 监控',
+    stopWatchAi: '停止 AI 监控',
+    bookmark: '添加书签…',
   },
   appSidebar: {
     layout: {

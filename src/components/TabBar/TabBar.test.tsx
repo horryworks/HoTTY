@@ -2,8 +2,25 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { TabBar } from './TabBar';
 import { buildTabItems, type TabItem } from './tabBarHelpers';
+import { useUiOverlayStore } from '../../stores/uiOverlayStore';
 import type { SessionRecord } from '../../hooks/useSessionManager';
 import type { FeaturePaneInfo } from '../../utils/paneTypes';
+
+/** Minimal DataTransfer stand-in (jsdom lacks one) for drag-event tests. */
+function makeDataTransfer() {
+  const store: Record<string, string> = {};
+  return {
+    effectAllowed: 'none',
+    dropEffect: 'none',
+    setData: (type: string, val: string) => {
+      store[type] = val;
+    },
+    getData: (type: string) => store[type] ?? '',
+    get types() {
+      return Object.keys(store);
+    },
+  };
+}
 
 function makeSession(id: string, overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {
@@ -294,21 +311,40 @@ describe('TabBar', () => {
     expect(tab?.classList.contains('connecting')).toBe(false);
   });
 
-  // --- Save to Host Tree context menu ---
+  // --- Drag hides the Web Browser pane's native webview ---
 
-  it('right-click on SSH session tab opens "Save to Host Tree…" menu', () => {
-    const onSaveToHostTree = vi.fn();
+  it('dragging a tab sets sessionDragging, and drag end clears it', () => {
+    useUiOverlayStore.setState({ sessionDragging: false });
+    const items = [makeTabItem('a'), makeTabItem('b')];
+    const { container } = render(
+      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['a', 'b']} />
+    );
+    const tab = container.querySelector('.tab') as HTMLElement;
+
+    fireEvent.dragStart(tab, { dataTransfer: makeDataTransfer() });
+    expect(useUiOverlayStore.getState().sessionDragging).toBe(true);
+
+    fireEvent.dragEnd(tab, { dataTransfer: makeDataTransfer() });
+    expect(useUiOverlayStore.getState().sessionDragging).toBe(false);
+  });
+
+  // --- Tab context menu ---
+
+  it('right-click on SSH session tab shows Watch + Save to Host Tree (no Bookmark)', () => {
     const items = [makeTabItem('s-1', { protocol: 'ssh' })];
     render(
       <TabBar
         {...defaultProps}
         tabItems={items}
         visibleTabIds={['s-1']}
-        onSaveToHostTree={onSaveToHostTree}
+        onToggleWatch={() => {}}
+        onSaveToHostTree={() => {}}
       />,
     );
     fireEvent.contextMenu(screen.getByText('Session s-1'));
+    expect(screen.getByText('Watch with AI')).toBeTruthy();
     expect(screen.getByText('Save to Host Tree…')).toBeTruthy();
+    expect(screen.queryByText('Add Bookmark…')).toBeNull();
   });
 
   it('right-click on Telnet session tab opens the menu', () => {
@@ -325,44 +361,63 @@ describe('TabBar', () => {
     expect(screen.getByText('Save to Host Tree…')).toBeTruthy();
   });
 
-  it('right-click on non-SSH/Telnet session tab does NOT open the menu', () => {
+  it('Watch item label reflects the isWatching state', () => {
+    const off = [makeTabItem('s-1', { protocol: 'ssh', isWatching: false })];
+    const { rerender } = render(
+      <TabBar {...defaultProps} tabItems={off} visibleTabIds={['s-1']} onToggleWatch={() => {}} />,
+    );
+    fireEvent.contextMenu(screen.getByText('Session s-1'));
+    expect(screen.getByText('Watch with AI')).toBeTruthy();
+    expect(screen.queryByText('Stop AI Watch')).toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    const on = [makeTabItem('s-1', { protocol: 'ssh', isWatching: true })];
+    rerender(
+      <TabBar {...defaultProps} tabItems={on} visibleTabIds={['s-1']} onToggleWatch={() => {}} />,
+    );
+    fireEvent.contextMenu(screen.getByText('Session s-1'));
+    expect(screen.getByText('Stop AI Watch')).toBeTruthy();
+    expect(screen.queryByText('Watch with AI')).toBeNull();
+  });
+
+  it('clicking the Watch item calls onToggleWatch and closes the menu', () => {
+    const onToggleWatch = vi.fn();
+    const items = [makeTabItem('s-1', { protocol: 'ssh' })];
+    render(
+      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onToggleWatch={onToggleWatch} />,
+    );
+    fireEvent.contextMenu(screen.getByText('Session s-1'));
+    fireEvent.click(screen.getByText('Watch with AI'));
+    expect(onToggleWatch).toHaveBeenCalledWith('s-1');
+    expect(screen.queryByText('Watch with AI')).toBeNull();
+  });
+
+  it('non-SSH/Telnet session tab shows Watch but NOT Save to Host Tree', () => {
     const items = [makeTabItem('s-1', { protocol: 'serial' })];
     render(
       <TabBar
         {...defaultProps}
         tabItems={items}
         visibleTabIds={['s-1']}
+        onToggleWatch={() => {}}
         onSaveToHostTree={() => {}}
       />,
     );
     fireEvent.contextMenu(screen.getByText('Session s-1'));
+    expect(screen.getByText('Watch with AI')).toBeTruthy();
     expect(screen.queryByText('Save to Host Tree…')).toBeNull();
   });
 
-  it('right-click on feature tab does NOT open the menu', () => {
-    const items: TabItem[] = [
-      makeTabItem('lv-1', { kind: 'feature', displayName: 'Log Viewer', featureType: 'log-viewer' }),
-    ];
+  it('session tab with no applicable callbacks does NOT open the menu', () => {
+    const items = [makeTabItem('s-1', { protocol: 'serial' })];
     render(
-      <TabBar
-        {...defaultProps}
-        tabItems={items}
-        visibleTabIds={['lv-1']}
-        onSaveToHostTree={() => {}}
-      />,
+      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onSaveToHostTree={() => {}} />,
     );
-    fireEvent.contextMenu(screen.getByText('Log Viewer'));
-    expect(screen.queryByText('Save to Host Tree…')).toBeNull();
-  });
-
-  it('right-click is a no-op when onSaveToHostTree is not provided', () => {
-    const items = [makeTabItem('s-1', { protocol: 'ssh' })];
-    render(<TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} />);
     fireEvent.contextMenu(screen.getByText('Session s-1'));
-    expect(screen.queryByText('Save to Host Tree…')).toBeNull();
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
-  it('clicking the menu item calls onSaveToHostTree and closes the menu', () => {
+  it('clicking the Save item calls onSaveToHostTree and closes the menu', () => {
     const onSaveToHostTree = vi.fn();
     const items = [makeTabItem('s-1', { protocol: 'ssh' })];
     render(
@@ -377,6 +432,45 @@ describe('TabBar', () => {
     fireEvent.click(screen.getByText('Save to Host Tree…'));
     expect(onSaveToHostTree).toHaveBeenCalledWith('s-1');
     expect(screen.queryByText('Save to Host Tree…')).toBeNull();
+  });
+
+  it('right-click on web browser tab shows Add Bookmark only and invokes onBookmark', () => {
+    const onBookmark = vi.fn();
+    const items: TabItem[] = [
+      makeTabItem('wb-1', { kind: 'feature', displayName: 'Web', featureType: 'web-browser' }),
+    ];
+    render(
+      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['wb-1']} onBookmark={onBookmark} />,
+    );
+    fireEvent.contextMenu(screen.getByText('Web'));
+    expect(screen.getByText('Add Bookmark…')).toBeTruthy();
+    expect(screen.queryByText('Watch with AI')).toBeNull();
+    expect(screen.queryByText('Save to Host Tree…')).toBeNull();
+    fireEvent.click(screen.getByText('Add Bookmark…'));
+    expect(onBookmark).toHaveBeenCalledWith('wb-1');
+    expect(screen.queryByText('Add Bookmark…')).toBeNull();
+  });
+
+  it('web browser tab without onBookmark does NOT open the menu', () => {
+    const items: TabItem[] = [
+      makeTabItem('wb-1', { kind: 'feature', displayName: 'Web', featureType: 'web-browser' }),
+    ];
+    render(<TabBar {...defaultProps} tabItems={items} visibleTabIds={['wb-1']} />);
+    fireEvent.contextMenu(screen.getByText('Web'));
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('right-click on a tab with no menu still suppresses the default menu', () => {
+    const items: TabItem[] = [
+      makeTabItem('lv-1', { kind: 'feature', displayName: 'Log Viewer', featureType: 'log-viewer' }),
+    ];
+    render(
+      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['lv-1']} onSaveToHostTree={() => {}} />,
+    );
+    // fireEvent returns false when a handler called preventDefault (default suppressed).
+    const notPrevented = fireEvent.contextMenu(screen.getByText('Log Viewer'));
+    expect(notPrevented).toBe(false);
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
   it('Escape key closes the context menu', () => {

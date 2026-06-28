@@ -5,9 +5,9 @@ import type { FileServerProtocol } from '../types/appTypes';
 
 const MAX_TRANSFERS = 200;
 
-export type ServerRunState = 'running' | 'stopped';
+type ServerRunState = 'running' | 'stopped';
 
-export interface TransferLogEntry {
+interface TransferLogEntry {
   id: number;
   protocol: FileServerProtocol;
   client: string;

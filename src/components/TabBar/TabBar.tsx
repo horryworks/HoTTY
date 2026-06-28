@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useUiOverlayStore } from '../../stores/uiOverlayStore';
 import { type TabItem } from './tabBarHelpers';
 import './TabBar.css';
 
@@ -13,6 +14,7 @@ interface TabBarProps {
   onReorder: (fromIndex: number, toIndex: number) => void;
   onToggleWatch?: (id: string) => void;
   onSaveToHostTree?: (id: string) => void;
+  onBookmark?: (id: string) => void;
   onNewLogViewer?: () => void;
   onNewPingMonitor?: () => void;
   onNewTextEditor?: () => void;
@@ -24,7 +26,11 @@ interface TabBarProps {
 type DragOverSide = 'left' | 'right' | null;
 
 interface ContextMenuState {
-  sessionId: string;
+  tabId: string;
+  kind: 'session' | 'feature';
+  isWebBrowser: boolean;
+  isSshOrTelnet: boolean;
+  isWatching: boolean;
   x: number;
   y: number;
 }
@@ -39,6 +45,7 @@ export function TabBar({
   onReorder,
   onToggleWatch,
   onSaveToHostTree,
+  onBookmark,
   onNewLogViewer,
   onNewPingMonitor,
   onNewTextEditor,
@@ -96,6 +103,9 @@ export function TabBar({
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('application/x-hotty-session', itemId);
     e.dataTransfer.setData('text/plain', itemId);
+    // Hide any Web Browser pane's native webview for the drag's duration so its
+    // OS-composited window stops swallowing the pane drop target's DOM events.
+    useUiOverlayStore.getState().setSessionDragging(true);
   };
 
   const handleDragOver = (index: number) => (e: React.DragEvent) => {
@@ -130,6 +140,8 @@ export function TabBar({
     setDragSourceIndex(null);
     setDragOverIndex(null);
     setDragOverSide(null);
+    // Drag finished (dropped or cancelled) — restore the browser webview(s).
+    useUiOverlayStore.getState().setSessionDragging(false);
   };
 
   return (
@@ -156,16 +168,26 @@ export function TabBar({
               }${item.isAiTab ? ' is-ai-tab' : ''}`}
               onClick={() => onSelect(item.id)}
               onContextMenu={(e) => {
-                if (
-                  item.kind !== 'session' ||
-                  !onSaveToHostTree ||
-                  (item.protocol !== 'ssh' && item.protocol !== 'telnet')
-                ) {
-                  return;
-                }
+                // Always suppress the default WebView2 menu on tabs, then open our
+                // custom menu only when there's an applicable action for this tab.
                 e.preventDefault();
                 e.stopPropagation();
-                setContextMenu({ sessionId: item.id, x: e.clientX, y: e.clientY });
+                const isWebBrowser = item.kind === 'feature' && item.featureType === 'web-browser';
+                const isSession = item.kind === 'session';
+                const isSshOrTelnet = item.protocol === 'ssh' || item.protocol === 'telnet';
+                const sessionHasItems =
+                  isSession && (!!onToggleWatch || (isSshOrTelnet && !!onSaveToHostTree));
+                const webHasItems = isWebBrowser && !!onBookmark;
+                if (!sessionHasItems && !webHasItems) return;
+                setContextMenu({
+                  tabId: item.id,
+                  kind: item.kind,
+                  isWebBrowser,
+                  isSshOrTelnet,
+                  isWatching: !!item.isWatching,
+                  x: e.clientX,
+                  y: e.clientY,
+                });
               }}
               onDragStart={handleDragStart(i, item.id)}
               onDragOver={handleDragOver(i)}
@@ -343,23 +365,49 @@ export function TabBar({
         </div>
       )}
 
-      {contextMenu && onSaveToHostTree && (
+      {contextMenu && (
         <div
           ref={contextMenuRef}
           className="tab-context-menu"
           style={{ top: contextMenu.y, left: contextMenu.x }}
           role="menu"
         >
-          <div
-            className="tab-context-menu-item"
-            role="menuitem"
-            onClick={() => {
-              onSaveToHostTree(contextMenu.sessionId);
-              setContextMenu(null);
-            }}
-          >
-            {t('chrome.tabBar.saveToHostTree')}
-          </div>
+          {contextMenu.kind === 'session' && onToggleWatch && (
+            <div
+              className="tab-context-menu-item"
+              role="menuitem"
+              onClick={() => {
+                onToggleWatch(contextMenu.tabId);
+                setContextMenu(null);
+              }}
+            >
+              {contextMenu.isWatching ? t('chrome.tabBar.stopWatchAi') : t('chrome.tabBar.watchAi')}
+            </div>
+          )}
+          {contextMenu.kind === 'session' && contextMenu.isSshOrTelnet && onSaveToHostTree && (
+            <div
+              className="tab-context-menu-item"
+              role="menuitem"
+              onClick={() => {
+                onSaveToHostTree(contextMenu.tabId);
+                setContextMenu(null);
+              }}
+            >
+              {t('chrome.tabBar.saveToHostTree')}
+            </div>
+          )}
+          {contextMenu.isWebBrowser && onBookmark && (
+            <div
+              className="tab-context-menu-item"
+              role="menuitem"
+              onClick={() => {
+                onBookmark(contextMenu.tabId);
+                setContextMenu(null);
+              }}
+            >
+              {t('chrome.tabBar.bookmark')}
+            </div>
+          )}
         </div>
       )}
     </div>

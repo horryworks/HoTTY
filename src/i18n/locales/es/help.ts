@@ -161,11 +161,11 @@ export const help = {
     intro:
       'Abre páginas web dentro de HoTTY en un navegador integrado, práctico para las interfaces web de administración de dispositivos de red (routers, switches, iLO/iDRAC) junto a tus terminales. Ábrelo desde la pestaña <1>🌐 Web</1> del diálogo <0>Nueva sesión</0>: haz clic en <2>🆕 Nuevo navegador web</2> para una pestaña en blanco, o haz doble clic en un marcador guardado para abrir ese sitio.',
     bookmarks:
-      '<0>Marcadores:</0> Organiza los sitios en un árbol de carpetas bajo la pestaña <1>Web</1>: añade, renombra, elimina y arrastra para reordenar. Haz doble clic en un marcador para abrirlo en un nuevo panel de navegador.',
+      '<0>Marcadores:</0> Organiza los sitios en un árbol de carpetas bajo la pestaña <1>Web</1>: añade, renombra, elimina y arrastra para reordenar. Haz doble clic en un marcador para abrirlo en un nuevo panel de navegador. Mientras navegas, el botón de marcadores de la barra de herramientas muestra tus marcadores guardados para un acceso rápido.',
     star:
       '<0>★ Añadir esta página:</0> Mientras navegas, haz clic en el botón <1>★</1> de la barra de herramientas para guardar la página actual en la carpeta que elijas.',
     toolbar:
-      '<0>Barra de herramientas:</0> Atrás, Adelante, Recargar/Detener y una barra de direcciones. Solo se permiten direcciones <1>http://</1> y <2>https://</2>; una dirección escrita sin esquema usa <3>http://</3> de forma predeterminada.',
+      '<0>Barra de herramientas:</0> Atrás, Adelante, Recargar/Detener y una barra de direcciones. Solo se permiten direcciones <1>http://</1> y <2>https://</2>; una dirección escrita sin esquema usa <3>http://</3> de forma predeterminada. El texto que no sea una dirección web se busca en la web.',
     passwords:
       '<0>Inicios de sesión y contraseñas:</0> El navegador conserva tus sesiones y puede guardar y autocompletar contraseñas, almacenadas en el perfil de navegador cifrado propio de HoTTY (separado de tu Edge/Chrome del sistema).',
     enable:

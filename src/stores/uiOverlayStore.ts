@@ -1,26 +1,39 @@
 import { create } from 'zustand';
 
 /**
- * Tracks whether any full-screen modal/dropdown overlay is currently open.
+ * Tracks UI conditions under which the Web Browser pane must hide its embedded
+ * NATIVE webview.
  *
  * The Web Browser pane embeds a NATIVE webview that the OS composites *above*
- * the HTML layer — HTML modals cannot paint over it. So whenever an overlay is
- * up, the browser pane must hide its webview. Rather than wire every modal
- * (~12 components) to push/pop, a single MutationObserver detects the presence
- * of any known overlay element by its (stable, convention-based) class name.
- * This keeps a single source of truth and cannot "forget" a modal as long as it
- * follows the `*-overlay` class convention listed below.
+ * the HTML layer. Two consequences follow:
+ *   1. HTML modals/dropdowns cannot paint over it — so whenever an overlay is
+ *      up, the browser pane must hide its webview (`overlayOpen`). Rather than
+ *      wire every modal (~12 components) to push/pop, a single MutationObserver
+ *      detects the presence of any known overlay element by its (stable,
+ *      convention-based) class name. This keeps a single source of truth and
+ *      cannot "forget" a modal as long as it follows the `*-overlay` class
+ *      convention listed below.
+ *   2. The native window also swallows DOM drag/drop events, so a terminal tab
+ *      dragged onto the browser pane never reaches the grid cell's drop handler.
+ *      `sessionDragging` is set while a tab is being dragged so the webview hides
+ *      and the underlying drop target is exposed (re-shown on drag end).
  */
 interface UiOverlayState {
   /** True while at least one modal/dropdown overlay is mounted. */
   overlayOpen: boolean;
   setOverlayOpen: (open: boolean) => void;
+  /** True while a session tab is being dragged (pane drop target must be live). */
+  sessionDragging: boolean;
+  setSessionDragging: (dragging: boolean) => void;
 }
 
 export const useUiOverlayStore = create<UiOverlayState>((set) => ({
   overlayOpen: false,
   setOverlayOpen: (open) =>
     set((s) => (s.overlayOpen === open ? s : { overlayOpen: open })),
+  sessionDragging: false,
+  setSessionDragging: (dragging) =>
+    set((s) => (s.sessionDragging === dragging ? s : { sessionDragging: dragging })),
 }));
 
 /**
@@ -45,6 +58,7 @@ const OVERLAY_SELECTOR = [
   '.ctc-overlay', // CustomThemeCreator
   '.host-edit-modal-overlay', // HostTree + BookmarkTree add/edit modal
   '.add-bookmark-modal-overlay', // Web Browser ★ add-bookmark modal
+  '.web-browser-bookmark-menu', // Web Browser bookmarks dropdown
   '.features-dropdown', // TabBar features menu
   '.tab-context-menu',
   '.context-menu', // HostTree / BookmarkTree right-click menu

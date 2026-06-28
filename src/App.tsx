@@ -31,6 +31,7 @@ import { useSessionManager, type SessionRecord } from './hooks/useSessionManager
 import { useAiChat, getActiveTab, createDefaultAiChatState, type AiChatState } from './hooks/useAiChat';
 import { usePaneStore, gridPaneIds, SIDEBAR_PANE_IDS } from './stores/paneStore';
 import { initOverlayWatcher } from './stores/uiOverlayStore';
+import { useWebBrowserBookmarkStore } from './stores/webBrowserBookmarkStore';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from './stores/settingsStore';
 import i18n from './i18n';
@@ -1152,6 +1153,14 @@ function App() {
             onReorder={reorderSessionInStore}
             onToggleWatch={toggleWatch}
             onSaveToHostTree={(id) => setSaveToTreeSessionId(id)}
+            onBookmark={(id) => {
+              // A hidden web-browser tab is in no slot (its pane is unmounted), so
+              // move it into the active pane to mount it, then request the bookmark
+              // modal — the request persists until that pane consumes it.
+              moveSessionToPane(id, activePaneId);
+              setActivePaneId(activePaneId);
+              useWebBrowserBookmarkStore.getState().requestBookmark(id);
+            }}
             onNewLogViewer={enabledFeatures['log-viewer'] ? () => handleNewFeaturePane('log-viewer') : undefined}
             onNewPingMonitor={enabledFeatures['ping-monitor'] ? () => handleNewFeaturePane('ping-monitor') : undefined}
             onNewTextEditor={enabledFeatures['text-editor'] ? () => handleNewFeaturePane('text-editor') : undefined}

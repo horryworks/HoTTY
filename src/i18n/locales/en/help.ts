@@ -161,11 +161,11 @@ export const help = {
     intro:
       'Open web pages inside HoTTY in an embedded browser — handy for network-device web admin UIs (routers, switches, iLO/iDRAC) right next to your terminals. Open it from the <0>New Session</0> dialog’s <1>🌐 Web</1> tab: click <2>🆕 New Web Browser</2> for a blank tab, or double-click a saved bookmark to open that site.',
     bookmarks:
-      '<0>Bookmarks:</0> Organize sites in a folder tree under the <1>Web</1> tab — add, rename, delete, and drag to reorder. Double-click a bookmark to open it in a new browser pane.',
+      '<0>Bookmarks:</0> Organize sites in a folder tree under the <1>Web</1> tab — add, rename, delete, and drag to reorder. Double-click a bookmark to open it in a new browser pane. While browsing, the bookmarks button in the toolbar lists your saved bookmarks for quick access.',
     star:
       '<0>★ Bookmark this page:</0> While browsing, click the <1>★</1> button in the toolbar to save the current page into a folder you choose.',
     toolbar:
-      '<0>Toolbar:</0> Back, Forward, Reload/Stop, and an address bar. Only <1>http://</1> and <2>https://</2> addresses are allowed; a typed address without a scheme defaults to <3>http://</3>.',
+      '<0>Toolbar:</0> Back, Forward, Reload/Stop, and an address bar. Only <1>http://</1> and <2>https://</2> addresses are allowed; a typed address without a scheme defaults to <3>http://</3>. Text that isn’t a web address is searched on the web.',
     passwords:
       '<0>Logins and passwords:</0> The browser keeps your login sessions and can save and autofill passwords, stored in HoTTY’s own encrypted browser profile (separate from your system Edge/Chrome).',
     enable:

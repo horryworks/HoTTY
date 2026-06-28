@@ -181,5 +181,7 @@ export const panes = {
     bookmarkFolderLabel: 'Dossier',
     bookmarkFolderRoot: '(Niveau supérieur)',
     bookmarkAdd: 'Ajouter',
+    bookmarksTooltip: 'Afficher les favoris',
+    bookmarksEmpty: 'Aucun favori pour le moment',
   },
 };

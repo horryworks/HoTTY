@@ -179,5 +179,7 @@ export const panes = {
     bookmarkFolderLabel: 'Carpeta',
     bookmarkFolderRoot: '(Nivel superior)',
     bookmarkAdd: 'Añadir',
+    bookmarksTooltip: 'Mostrar marcadores',
+    bookmarksEmpty: 'Aún no hay marcadores',
   },
 };

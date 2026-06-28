@@ -181,5 +181,7 @@ export const panes = {
     bookmarkFolderLabel: 'Folder',
     bookmarkFolderRoot: '(Top level)',
     bookmarkAdd: 'Add',
+    bookmarksTooltip: 'Show bookmarks',
+    bookmarksEmpty: 'No bookmarks yet',
   },
 } as const;

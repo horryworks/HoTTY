@@ -180,5 +180,7 @@ export const panes = {
     bookmarkFolderLabel: '資料夾',
     bookmarkFolderRoot: '(頂層)',
     bookmarkAdd: '新增',
+    bookmarksTooltip: '顯示書籤',
+    bookmarksEmpty: '尚無書籤',
   },
 };

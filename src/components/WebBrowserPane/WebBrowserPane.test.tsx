@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { WebBrowserPane } from './WebBrowserPane';
-import { normalizeUrl } from './webBrowserUrl';
+import { normalizeUrl, resolveAddress } from './webBrowserUrl';
 import { tauriService } from '../../services/tauriService';
 import { useUiOverlayStore } from '../../stores/uiOverlayStore';
 import { useBookmarkStore } from '../../stores/bookmarkStore';
+import { useWebBrowserBookmarkStore } from '../../stores/webBrowserBookmarkStore';
 import type { WebBrowserNavState } from '../../types/appTypes';
 
 vi.mock('../../services/tauriService', () => ({
@@ -30,8 +31,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(tauriService.onWebBrowserNavState).mockResolvedValue(() => {});
   vi.mocked(tauriService.webBrowserCurrentUrl).mockResolvedValue(null);
-  useUiOverlayStore.setState({ overlayOpen: false });
+  useUiOverlayStore.setState({ overlayOpen: false, sessionDragging: false });
   useBookmarkStore.setState({ tree: [] });
+  useWebBrowserBookmarkStore.setState({ pendingPaneId: null, nonce: 0 });
   // @ts-expect-error test shim
   global.ResizeObserver = class {
     observe() {}
@@ -68,6 +70,40 @@ describe('normalizeUrl', () => {
   });
 });
 
+describe('resolveAddress', () => {
+  it('navigates host-like input (domain, IP, host:port, localhost)', () => {
+    expect(resolveAddress('192.168.1.1')).toBe('http://192.168.1.1');
+    expect(resolveAddress('example.com/path')).toBe('http://example.com/path');
+    expect(resolveAddress('192.168.1.1:8080')).toBe('http://192.168.1.1:8080');
+    expect(resolveAddress('localhost')).toBe('http://localhost');
+    expect(resolveAddress('localhost:3000')).toBe('http://localhost:3000');
+  });
+
+  it('keeps an explicit scheme verbatim', () => {
+    expect(resolveAddress('https://example.com')).toBe('https://example.com');
+    expect(resolveAddress('about:blank')).toBe('about:blank');
+    expect(resolveAddress('javascript:alert(1)')).toBe('javascript:alert(1)');
+  });
+
+  it('sends free text / a bare word to Google search', () => {
+    expect(resolveAddress('weather tokyo')).toBe(
+      'https://www.google.com/search?q=weather%20tokyo',
+    );
+    expect(resolveAddress('router')).toBe('https://www.google.com/search?q=router');
+    expect(resolveAddress('how to configure vlan')).toBe(
+      'https://www.google.com/search?q=how%20to%20configure%20vlan',
+    );
+  });
+
+  it('encodes search query special characters', () => {
+    expect(resolveAddress('c# & rust')).toBe('https://www.google.com/search?q=c%23%20%26%20rust');
+  });
+
+  it('returns empty for blank input', () => {
+    expect(resolveAddress('   ')).toBe('');
+  });
+});
+
 describe('WebBrowserPane', () => {
   it('renders the address bar and toolbar controls', () => {
     render(<WebBrowserPane paneId="wb-1" active={true} />);
@@ -94,6 +130,17 @@ describe('WebBrowserPane', () => {
     fireEvent.change(input, { target: { value: '192.168.1.1' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(tauriService.webBrowserNavigate).toHaveBeenCalledWith('wb-1', 'http://192.168.1.1');
+  });
+
+  it('routes a non-URL search query to Google on Enter', () => {
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    const input = screen.getByPlaceholderText(/192\.168\.1\.1/);
+    fireEvent.change(input, { target: { value: 'weather tokyo' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(tauriService.webBrowserNavigate).toHaveBeenCalledWith(
+      'wb-1',
+      'https://www.google.com/search?q=weather%20tokyo',
+    );
   });
 
   it('rejects a disallowed scheme without navigating', () => {
@@ -154,6 +201,22 @@ describe('WebBrowserPane', () => {
     );
   });
 
+  it('hides the webview while a tab is being dragged, re-shows on drag end', async () => {
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    await waitFor(() => expect(tauriService.webBrowserSetVisible).toHaveBeenCalledWith('wb-1', true));
+    // A drag begins → the native webview must hide so the grid drop target is live.
+    act(() => useUiOverlayStore.setState({ sessionDragging: true }));
+    await waitFor(() =>
+      expect(tauriService.webBrowserSetVisible).toHaveBeenCalledWith('wb-1', false),
+    );
+    // Drag ends → webview comes back.
+    vi.mocked(tauriService.webBrowserSetVisible).mockClear();
+    act(() => useUiOverlayStore.setState({ sessionDragging: false }));
+    await waitFor(() =>
+      expect(tauriService.webBrowserSetVisible).toHaveBeenCalledWith('wb-1', true),
+    );
+  });
+
   it('hides the webview on unmount (kept alive for remount)', async () => {
     const { unmount } = render(<WebBrowserPane paneId="wb-1" active={true} />);
     await waitFor(() => expect(tauriService.webBrowserCreate).toHaveBeenCalled());
@@ -189,5 +252,82 @@ describe('WebBrowserPane', () => {
     expect(
       useBookmarkStore.getState().tree.some((n) => n.url === 'http://router.test/admin'),
     ).toBe(true);
+  });
+
+  it('★ saves into a folder picked from the folder tree', () => {
+    // Seed a folder so the picker has a non-root destination to choose.
+    useBookmarkStore.setState({
+      tree: [{ id: 'f-net', type: 'folder', name: 'Network', children: [] }],
+    });
+    render(<WebBrowserPane paneId="wb-1" active={true} initialUrl="http://router.test/admin" />);
+    fireEvent.click(screen.getByLabelText('Bookmark this page'));
+    // Choose the "Network" folder from the tree, then save.
+    fireEvent.click(screen.getByText('Network'));
+    fireEvent.click(screen.getByText('Add'));
+    const folder = useBookmarkStore.getState().tree.find((n) => n.id === 'f-net');
+    expect(folder?.children?.some((c) => c.url === 'http://router.test/admin')).toBe(true);
+    // And it must NOT have been dropped at the root.
+    expect(
+      useBookmarkStore.getState().tree.some((n) => n.url === 'http://router.test/admin'),
+    ).toBe(false);
+  });
+
+  it('opens the bookmark modal when a tab-bar bookmark request targets this pane', () => {
+    render(<WebBrowserPane paneId="wb-1" active={true} initialUrl="http://router.test/admin" />);
+    expect(screen.queryByText('Add Bookmark')).toBeNull();
+    act(() => useWebBrowserBookmarkStore.getState().requestBookmark('wb-1'));
+    expect(screen.getByText('Add Bookmark')).toBeTruthy();
+    // The request is consumed so it cannot re-fire on the next render.
+    expect(useWebBrowserBookmarkStore.getState().pendingPaneId).toBeNull();
+  });
+
+  it('ignores a bookmark request targeting a different pane', () => {
+    render(<WebBrowserPane paneId="wb-1" active={true} initialUrl="http://router.test/admin" />);
+    act(() => useWebBrowserBookmarkStore.getState().requestBookmark('wb-OTHER'));
+    expect(screen.queryByText('Add Bookmark')).toBeNull();
+    // The pending request remains for the other pane to consume when it mounts.
+    expect(useWebBrowserBookmarkStore.getState().pendingPaneId).toBe('wb-OTHER');
+  });
+
+  it('toggles the bookmarks dropdown, listing saved bookmarks', () => {
+    useBookmarkStore.setState({
+      tree: [{ id: 'b1', type: 'bookmark', name: 'Router GUI', url: 'http://192.168.1.1/' }],
+    });
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    expect(screen.queryByText('Router GUI')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Show bookmarks'));
+    expect(screen.getByText('Router GUI')).toBeTruthy();
+    // Clicking the button again closes it.
+    fireEvent.click(screen.getByLabelText('Show bookmarks'));
+    expect(screen.queryByText('Router GUI')).toBeNull();
+  });
+
+  it('navigates to a bookmark picked from the dropdown and closes it', () => {
+    useBookmarkStore.setState({
+      tree: [{ id: 'b1', type: 'bookmark', name: 'Router GUI', url: 'http://192.168.1.1/' }],
+    });
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    fireEvent.click(screen.getByLabelText('Show bookmarks'));
+    fireEvent.click(screen.getByText('Router GUI'));
+    expect(tauriService.webBrowserNavigate).toHaveBeenCalledWith('wb-1', 'http://192.168.1.1/');
+    // The dropdown closes after selection.
+    expect(screen.queryByText('Router GUI')).toBeNull();
+  });
+
+  it('shows the empty state in the dropdown when no bookmarks are saved', () => {
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    fireEvent.click(screen.getByLabelText('Show bookmarks'));
+    expect(screen.getByText('No bookmarks yet')).toBeTruthy();
+  });
+
+  it('closes the bookmarks dropdown on an outside click', () => {
+    useBookmarkStore.setState({
+      tree: [{ id: 'b1', type: 'bookmark', name: 'Router GUI', url: 'http://192.168.1.1/' }],
+    });
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    fireEvent.click(screen.getByLabelText('Show bookmarks'));
+    expect(screen.getByText('Router GUI')).toBeTruthy();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByText('Router GUI')).toBeNull();
   });
 });

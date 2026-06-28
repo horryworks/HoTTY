@@ -3,10 +3,13 @@ import { useTranslation } from 'react-i18next';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import { tauriService } from '../../services/tauriService';
 import { useUiOverlayStore } from '../../stores/uiOverlayStore';
+import { useWebBrowserBookmarkStore } from '../../stores/webBrowserBookmarkStore';
+import { useBookmarkStore } from '../../stores/bookmarkStore';
 import { logError } from '../../utils/logger';
 import type { WebBrowserRect } from '../../types/appTypes';
-import { normalizeUrl } from './webBrowserUrl';
+import { normalizeUrl, resolveAddress } from './webBrowserUrl';
 import { AddBookmarkModal } from './AddBookmarkModal';
+import { BookmarkMenu } from './BookmarkMenu';
 import './WebBrowserPane.css';
 
 interface WebBrowserPaneProps {
@@ -49,6 +52,15 @@ function rectsEqual(a: WebBrowserRect | null, b: WebBrowserRect): boolean {
 export function WebBrowserPane({ paneId, initialUrl }: WebBrowserPaneProps) {
   const { t } = useTranslation();
   const overlayOpen = useUiOverlayStore((s) => s.overlayOpen);
+  const sessionDragging = useUiOverlayStore((s) => s.sessionDragging);
+  // Tab-bar "Add Bookmark…" request bus — open this pane's bookmark modal when the
+  // pending request targets our paneId (mirrors the ☆ toolbar button).
+  const consumeBookmark = useWebBrowserBookmarkStore((s) => s.consumeBookmark);
+  const bookmarkTree = useBookmarkStore((s) => s.tree);
+  // Hide the native webview when an overlay covers it OR a tab is being dragged:
+  // in both cases the OS-composited webview would otherwise block the HTML layer
+  // (paint for overlays, DOM drag/drop events for the pane drop target).
+  const webviewHidden = overlayOpen || sessionDragging;
 
   // Normalized start URL (schemeless input → http://). Stable per pane: derived
   // from the `initialUrl` prop, which never changes for a given pane.
@@ -61,8 +73,10 @@ export function WebBrowserPane({ paneId, initialUrl }: WebBrowserPaneProps) {
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState(false);
   const [bookmarkOpen, setBookmarkOpen] = useState(false);
+  const [bookmarkMenuOpen, setBookmarkMenuOpen] = useState(false);
 
   const bodyRef = useRef<HTMLDivElement>(null);
+  const bookmarkWrapRef = useRef<HTMLDivElement>(null);
   const lastRectRef = useRef<WebBrowserRect | null>(null);
   const debounceRef = useRef<number | null>(null);
   const addressFocusedRef = useRef(false);
@@ -140,13 +154,15 @@ export function WebBrowserPane({ paneId, initialUrl }: WebBrowserPaneProps) {
     };
   }, [reportBounds]);
 
-  // Hide the native webview whenever a modal/dropdown covers it (HTML cannot
-  // paint over the OS-composited webview), and re-show + realign afterwards.
+  // Hide the native webview whenever a modal/dropdown covers it or a tab drag is
+  // in progress (HTML cannot paint over — and the native window swallows DOM
+  // drag/drop events for — the OS-composited webview), and re-show + realign
+  // afterwards.
   useEffect(() => {
     if (!created) return;
-    tauriService.webBrowserSetVisible(paneId, !overlayOpen).catch(() => {});
-    if (!overlayOpen) reportBounds(true);
-  }, [created, overlayOpen, paneId, reportBounds]);
+    tauriService.webBrowserSetVisible(paneId, !webviewHidden).catch(() => {});
+    if (!webviewHidden) reportBounds(true);
+  }, [created, webviewHidden, paneId, reportBounds]);
 
   // Track navigation so the address bar reflects redirects / in-page links.
   useEffect(() => {
@@ -171,9 +187,25 @@ export function WebBrowserPane({ paneId, initialUrl }: WebBrowserPaneProps) {
     };
   }, [paneId]);
 
+  // Open the bookmark modal when the tab-bar "Add Bookmark…" menu requests it for
+  // this pane. Drive the open from the store subscription (an external system) so we
+  // never call setState synchronously in the effect body; also handle a request that
+  // was already pending when this pane mounts (its tab was hidden at request time).
+  useEffect(() => {
+    const tryConsume = (pendingPaneId: string | null) => {
+      if (pendingPaneId !== paneId) return;
+      setBookmarkOpen(true);
+      consumeBookmark(paneId);
+    };
+    tryConsume(useWebBrowserBookmarkStore.getState().pendingPaneId);
+    return useWebBrowserBookmarkStore.subscribe((s) => tryConsume(s.pendingPaneId));
+  }, [paneId, consumeBookmark]);
+
   const handleNavigate = useCallback(
     (raw: string) => {
-      const url = normalizeUrl(raw);
+      // Host-like input navigates; free text / a bare word becomes a Google
+      // search instead of a failed navigation.
+      const url = resolveAddress(raw);
       if (!url) return;
       if (!/^(https?:\/\/|about:)/i.test(url)) {
         setError(t('panes.webBrowser.invalidUrl'));
@@ -187,6 +219,32 @@ export function WebBrowserPane({ paneId, initialUrl }: WebBrowserPaneProps) {
     },
     [paneId, t],
   );
+
+  // Navigate to a saved bookmark, then close the dropdown.
+  const handleOpenBookmark = useCallback(
+    (url: string) => {
+      setBookmarkMenuOpen(false);
+      handleNavigate(url);
+    },
+    [handleNavigate],
+  );
+
+  // Close the bookmarks dropdown on Escape or a click outside its wrapper.
+  useEffect(() => {
+    if (!bookmarkMenuOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (!bookmarkWrapRef.current?.contains(e.target as Node)) setBookmarkMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBookmarkMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [bookmarkMenuOpen]);
 
   return (
     <div className="web-browser-pane">
@@ -267,6 +325,22 @@ export function WebBrowserPane({ paneId, initialUrl }: WebBrowserPaneProps) {
         >
           {t('panes.webBrowser.go')}
         </button>
+        <div className="web-browser-bookmark-wrap" ref={bookmarkWrapRef}>
+          <button
+            type="button"
+            className={`web-browser-toolbar-btn${bookmarkMenuOpen ? ' active' : ''}`}
+            onClick={() => setBookmarkMenuOpen((o) => !o)}
+            title={t('panes.webBrowser.bookmarksTooltip')}
+            aria-label={t('panes.webBrowser.bookmarksTooltip')}
+            aria-haspopup="true"
+            aria-expanded={bookmarkMenuOpen}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
+          {bookmarkMenuOpen && <BookmarkMenu tree={bookmarkTree} onSelect={handleOpenBookmark} />}
+        </div>
         <button
           type="button"
           className="web-browser-toolbar-btn"

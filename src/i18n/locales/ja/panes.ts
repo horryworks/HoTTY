@@ -179,5 +179,7 @@ export const panes = {
     bookmarkFolderLabel: 'フォルダ',
     bookmarkFolderRoot: '(最上位)',
     bookmarkAdd: '追加',
+    bookmarksTooltip: 'ブックマークを表示',
+    bookmarksEmpty: 'ブックマークがありません',
   },
 };

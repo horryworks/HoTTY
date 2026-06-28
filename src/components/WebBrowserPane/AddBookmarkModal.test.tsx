@@ -15,17 +15,17 @@ describe('AddBookmarkModal', () => {
     expect(urlInput.readOnly).toBe(true);
   });
 
-  it('lists folders from the store in the folder dropdown', () => {
+  it('lists folders from the store in the folder tree', () => {
     useBookmarkStore.getState().addFolder(null, 'Tools');
     render(<AddBookmarkModal url="http://x.test" onClose={() => {}} />);
-    expect(screen.getByRole('option', { name: 'Tools' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: /Tools/ })).toBeTruthy();
   });
 
-  it('adds the bookmark to the chosen folder and closes', () => {
+  it('adds the bookmark to the folder picked from the tree and closes', () => {
     const fid = useBookmarkStore.getState().addFolder(null, 'Tools');
     const onClose = vi.fn();
     render(<AddBookmarkModal url="http://x.test/p" onClose={onClose} />);
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: fid } });
+    fireEvent.click(screen.getByText('Tools'));
     fireEvent.click(screen.getByText('Add'));
     const folder = useBookmarkStore.getState().tree.find((n) => n.id === fid);
     expect(folder?.children?.some((c) => c.url === 'http://x.test/p')).toBe(true);

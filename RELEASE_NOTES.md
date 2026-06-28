@@ -1,5 +1,23 @@
 # Release Notes
 
+## v2.0.7-beta7
+
+Quality-of-life refinements to the **Web Browser** added in beta6: a bookmarks button in the toolbar, an address bar that falls back to web search, and richer tab right-click menus — plus a fix for dragging terminal tabs onto a browser pane.
+
+### New Features
+
+- **Open a saved bookmark without leaving the browser.** The Web Browser toolbar has a new bookmarks button that drops down your saved bookmark folder tree — click any entry to navigate there in the current pane (it shows "No bookmarks yet" until you save one). Previously, opening a bookmark meant going back to the **New Session → Web** tab.
+- **The address bar now searches the web for non-URL text.** Typing something that isn't a web address — free text or a single bare word — runs a Google search instead of failing to navigate, matching the omnibox behavior of a normal browser. Host-like input (a domain, an IP address, `host:port`, or `localhost`) still navigates directly, and an explicit `http://` / `https://` address is unchanged.
+
+### Improvements
+
+- **Richer tab right-click menus.** Right-clicking a tab now offers actions tailored to that tab: **Watch with AI** / **Stop AI Watch** on a terminal session, **Save to Host Tree…** on an SSH/Telnet session, and **Add Bookmark…** on a Web Browser tab (the same as the toolbar ★). The browser's own right-click menu is also suppressed on tabs, so only HoTTY's menu appears.
+- **A folder tree when bookmarking a page.** The Add Bookmark dialog now picks the destination folder with an expandable tree instead of a flat drop-down, making it easier to file a page into a nested folder.
+
+### Bug Fixes
+
+- **Dragging a terminal tab onto a Web Browser pane now works.** The browser's embedded native view sits above the page and was swallowing drag-and-drop events, so dropping a terminal onto a browser pane's grid cell did nothing. The view is now hidden for the duration of a tab drag, so the drop lands on the cell underneath as expected.
+
 ## v2.0.7-beta6
 
 A built-in **Web Browser** for opening network-device web admin UIs (and any site) right inside HoTTY — launched from the New Session dialog, with folder-organized bookmarks and saved logins.

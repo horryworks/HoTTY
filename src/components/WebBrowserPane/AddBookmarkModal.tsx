@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useBookmarkStore } from '../../stores/bookmarkStore';
-import { flattenFolders } from '../BookmarkTree/bookmarkTreeHelpers';
+import { BookmarkFolderPicker } from './BookmarkFolderPicker';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 // Reuse host-edit modal styles (form group, actions, buttons, container).
 import '../HostTree/HostTree.css';
@@ -33,16 +33,14 @@ export function AddBookmarkModal({ url, onClose }: AddBookmarkModalProps) {
   const addBookmark = useBookmarkStore((s) => s.addBookmark);
 
   const [name, setName] = useState(() => defaultName(url));
-  const [folderId, setFolderId] = useState<string>(''); // '' = root
+  const [folderId, setFolderId] = useState<string | null>(null); // null = root
   const modalRef = useRef<HTMLDivElement>(null);
   useFocusTrap(modalRef, true);
-
-  const folders = flattenFolders(tree);
 
   const submit = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    addBookmark(folderId || null, trimmed, url);
+    addBookmark(folderId, trimmed, url);
     onClose();
   };
 
@@ -73,14 +71,7 @@ export function AddBookmarkModal({ url, onClose }: AddBookmarkModalProps) {
         </div>
         <div className="modal-form-group">
           <label>{t('panes.webBrowser.bookmarkFolderLabel')}</label>
-          <select value={folderId} onChange={(e) => setFolderId(e.target.value)}>
-            <option value="">{t('panes.webBrowser.bookmarkFolderRoot')}</option>
-            {folders.map((f) => (
-              <option key={f.id} value={f.id}>
-                {`${'  '.repeat(f.depth)}${f.name}`}
-              </option>
-            ))}
-          </select>
+          <BookmarkFolderPicker tree={tree} selectedId={folderId} onSelect={setFolderId} />
         </div>
         <div className="modal-form-group">
           <label>URL</label>

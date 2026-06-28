@@ -16,6 +16,9 @@ export const chrome = {
     fileExplorer: 'ファイルエクスプローラー',
     aiChat: 'AIチャット',
     saveToHostTree: 'ホストツリーに保存…',
+    watchAi: 'AIで監視',
+    stopWatchAi: 'AI監視を停止',
+    bookmark: 'ブックマークに追加…',
   },
   appSidebar: {
     layout: {
