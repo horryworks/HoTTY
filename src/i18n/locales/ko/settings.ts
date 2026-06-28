@@ -204,6 +204,22 @@ export const settings = {
     logoutMessage:
       '로그아웃하시겠습니까? AI 공급자를 사용하려면 다시 인증해야 합니다.',
     logoutConfirm: '로그아웃',
+    // 데이터 처리 고지
+    dataHandlingSection: '데이터 처리',
+    dataHandlingHelp:
+      'AI 기능을 사용하면 사용자가 구성한 타사 AI 공급자에 사용자 본인의 API 키를 사용하여 데이터가 전송되며, 이는 해당 공급자의 약관 및 개인정보 처리방침에 따라 이루어집니다.',
+    dataHandlingBulletProviders:
+      '공급자: Google Gemini / Vertex AI, Anthropic 또는 OpenAI — 위에서 선택한 항목.',
+    dataHandlingBulletWhen:
+      'AI 기능(채팅, AI에게 질문 또는 감시)을 명시적으로 사용할 때만 전송됩니다. 터미널이 지속적으로 전송되지는 않습니다.',
+    dataHandlingBulletRedaction:
+      '알려진 비밀 패턴은 로그에서 가려지지만, 메시지에 입력한 텍스트는 그대로 전송됩니다 — 자격 증명을 붙여넣지 마세요.',
+    dataConsentStatus: '고지 동의',
+    dataConsentAccepted: '동의함',
+    dataConsentNotAccepted: '아직 표시되지 않음',
+    resetDataConsent: '다시 표시',
+    resetDataConsentHelp:
+      '동의를 재설정하여 다음 AI 전송 전에 AI 데이터 공유 고지가 다시 표시되도록 합니다.',
   },
   about: {
     version: 'v{{version}}',
@@ -214,6 +230,14 @@ export const settings = {
     licenseLine2: 'GNU General Public License v3.0 또는 이후 버전.',
     viewLicense: 'GNU General Public License v3.0 보기',
     logoAlt: 'HoTTY 로고',
+    // 타사 라이선스
+    thirdPartyLicenses: '타사 라이선스',
+    thirdPartyLicensesTitle: '타사 라이선스',
+    thirdPartyLicensesIntro: 'HoTTY에는 다음 프로젝트의 오픈 소스 소프트웨어가 포함되어 있습니다:',
+    thirdPartyLicensesLoading: '라이선스 로드 중…',
+    thirdPartyLicensesError: '라이선스 정보를 로드하지 못했습니다.',
+    thirdPartyLicensesEmpty: '사용 가능한 타사 라이선스 정보가 없습니다.',
+    thirdPartyLicensesClose: '닫기',
   },
   customTheme: {
     title: '사용자 지정 테마 만들기',

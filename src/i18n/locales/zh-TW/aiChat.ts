@@ -67,6 +67,10 @@ export const aiChat = {
     dismiss: '關閉',
     newChat: '新聊天',
     newChatTitle: '開始新聊天',
+    linkPickerTitle: '將此聊天連結到終端機',
+    linkNone: '未連結',
+    linkThisWindow: '此視窗',
+    linkOtherWindow: '視窗：{{label}}',
     linkedChipTitleStale: '與 {{name}} 的連結為 {{status}}。請重新連線終端機並按「監看」以重新連結。',
     linkedChipTitle: '已連結至 {{name}}。按一下即可聚焦。',
     linkedChipAriaStale: '連結的終端機 {{name}} 為 {{status}}',
@@ -141,5 +145,15 @@ export const aiChat = {
     verdictConfidence: '（信心度 {{percent}}%）',
     verdictReasonReadOnly: '唯讀',
     verdictReasonRunManually: '手動執行',
+  },
+  consent: {
+    // 在首次將終端機資料傳送給 AI 供應商之前顯示一次的告知。
+    title: 'AI 資料分享須知',
+    intro: 'AI 功能會使用您自己的 API 金鑰，將資料傳送給您設定的第三方 AI 供應商（Google Gemini / Vertex AI、Anthropic 或 OpenAI），並受該供應商的條款與隱私權政策約束。',
+    bulletWhat: '傳送內容：您輸入的訊息，以及在使用「詢問 AI」和監看模式時，從工作階段擷取的終端機輸出與指令。',
+    bulletWhen: '傳送時機：僅在您明確使用 AI 功能時傳送。您的終端機絕不會被持續傳輸。',
+    bulletRedaction: '已知的密鑰模式會從記錄中隱去，但您自己在訊息中輸入的文字會原樣傳送——請勿將憑證貼到 AI 提示中。',
+    footnote: '您可以隨時在「設定 → AI」中檢視此須知。',
+    accept: '同意並繼續',
   },
 };

@@ -37,6 +37,7 @@ export const chrome = {
     },
     disableLineWrap: 'Desactivar ajuste de línea',
     enableLineWrap: 'Activar ajuste de línea',
+    newWindow: 'Nueva ventana',
     help: 'Ayuda / Documentación',
     settings: 'Configuración',
   },

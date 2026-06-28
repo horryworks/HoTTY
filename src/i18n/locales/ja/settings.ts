@@ -204,6 +204,22 @@ export const settings = {
     logoutMessage:
       'ログアウトしてもよろしいですか？AI プロバイダーを使用するには再認証が必要になります。',
     logoutConfirm: 'ログアウト',
+    // データの取り扱いに関する開示
+    dataHandlingSection: 'データの取り扱い',
+    dataHandlingHelp:
+      'AI 機能を使用すると、設定したサードパーティの AI プロバイダーに、お客様ご自身の API キーを使用してデータが送信されます。送信は当該プロバイダーの利用規約およびプライバシーポリシーに従って行われます。',
+    dataHandlingBulletProviders:
+      'プロバイダー: Google Gemini / Vertex AI、Anthropic、または OpenAI — 上で選択したいずれか。',
+    dataHandlingBulletWhen:
+      'AI 機能（チャット、AIに質問、監視）を明示的に使用したときのみ送信されます。端末が継続的に送信されることはありません。',
+    dataHandlingBulletRedaction:
+      '既知の機密パターンはログから秘匿されますが、メッセージに入力したテキストはそのまま送信されます。認証情報を貼り付けないでください。',
+    dataConsentStatus: '開示への同意',
+    dataConsentAccepted: '同意済み',
+    dataConsentNotAccepted: '未表示',
+    resetDataConsent: '再表示',
+    resetDataConsentHelp:
+      '同意をリセットし、次回の AI 送信前に AI データ共有の開示を再度表示します。',
   },
   about: {
     version: 'v{{version}}',
@@ -214,6 +230,14 @@ export const settings = {
     licenseLine2: 'GNU General Public License v3.0 以降の下で公開されています。',
     viewLicense: 'GNU General Public License v3.0 を表示',
     logoAlt: 'HoTTY ロゴ',
+    // サードパーティライセンス
+    thirdPartyLicenses: 'サードパーティライセンス',
+    thirdPartyLicensesTitle: 'サードパーティライセンス',
+    thirdPartyLicensesIntro: 'HoTTY には次のプロジェクトのオープンソースソフトウェアが含まれています:',
+    thirdPartyLicensesLoading: 'ライセンスを読み込み中…',
+    thirdPartyLicensesError: 'ライセンス情報の読み込みに失敗しました。',
+    thirdPartyLicensesEmpty: '利用可能なサードパーティライセンス情報はありません。',
+    thirdPartyLicensesClose: '閉じる',
   },
   customTheme: {
     title: 'カスタムテーマ作成',

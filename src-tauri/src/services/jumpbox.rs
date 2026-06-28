@@ -19,14 +19,14 @@ use russh::keys::ssh_key;
 use russh::keys::{load_secret_key, HashAlg, PrivateKey, PrivateKeyWithHashAlg};
 use russh::ChannelMsg;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tokio::sync::{oneshot, Mutex};
 
 use super::known_hosts::{
     check_known_host, default_known_hosts_path, upsert_known_host, HostKeyCheck,
 };
 use super::path_safety::is_unc_path;
-use super::session_service::SessionError;
+use super::session_service::{emit_to_owner, SessionError};
 use super::ssh::{humanize_ssh_error, HostKeyDecision};
 
 // ---------------------------------------------------------------------------
@@ -172,7 +172,13 @@ impl Handler for JumpboxHandler {
             fingerprint,
             kind: kind.to_string(),
         };
-        let _ = self.app.emit("ssh-host-key-prompt", payload);
+        // Owner is keyed by the BASE session id; our prompt id has a
+        // "::jumpbox" suffix. Strip it so the prompt targets the right window.
+        let base_id = self
+            .prompt_session_id
+            .strip_suffix("::jumpbox")
+            .unwrap_or(&self.prompt_session_id);
+        emit_to_owner(&self.app, base_id, "ssh-host-key-prompt", payload);
 
         let decision = match tokio::time::timeout(super::ssh::HOST_KEY_PROMPT_TIMEOUT, rx).await {
             Ok(Ok(d)) => d,

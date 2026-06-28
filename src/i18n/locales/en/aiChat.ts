@@ -69,6 +69,10 @@ export const aiChat = {
     dismiss: 'Dismiss',
     newChat: 'New chat',
     newChatTitle: 'Start a new chat',
+    linkPickerTitle: 'Link this chat to a terminal',
+    linkNone: 'Not linked',
+    linkThisWindow: 'This window',
+    linkOtherWindow: 'Window: {{label}}',
     linkedChipTitleStale: 'Link to {{name}} is {{status}}. Reconnect the terminal and press Watch to re-link.',
     linkedChipTitle: 'Linked to {{name}}. Click to focus.',
     linkedChipAriaStale: 'Linked terminal {{name}} is {{status}}',
@@ -143,5 +147,15 @@ export const aiChat = {
     verdictConfidence: ' (confidence {{percent}}%)',
     verdictReasonReadOnly: 'read-only',
     verdictReasonRunManually: 'run manually',
+  },
+  consent: {
+    // One-time disclosure shown before terminal data is first sent to an AI provider.
+    title: 'AI Data Sharing Notice',
+    intro: 'AI features send data to the third-party AI provider you configured (Google Gemini / Vertex AI, Anthropic, or OpenAI) using your own API key, under that provider\'s terms and privacy policy.',
+    bulletWhat: 'What is sent: the messages you type, plus — for Ask AI and Watch Mode — terminal output and commands captured from the session.',
+    bulletWhen: 'When: only when you explicitly use an AI feature. Your terminal is never streamed continuously.',
+    bulletRedaction: 'Known secret patterns are redacted from logs, but text you put in a message yourself is sent as-is — avoid pasting credentials into AI prompts.',
+    footnote: 'You can review this notice any time in Settings → AI.',
+    accept: 'Agree & Continue',
   },
 } as const;

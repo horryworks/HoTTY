@@ -69,6 +69,10 @@ export const aiChat = {
     dismiss: 'Ignorer',
     newChat: 'Nouveau chat',
     newChatTitle: 'Démarrer un nouveau chat',
+    linkPickerTitle: 'Lier ce chat à un terminal',
+    linkNone: 'Non lié',
+    linkThisWindow: 'Cette fenêtre',
+    linkOtherWindow: 'Fenêtre : {{label}}',
     linkedChipTitleStale: 'Le lien vers {{name}} est {{status}}. Reconnectez le terminal et appuyez sur Surveiller pour relier.',
     linkedChipTitle: 'Lié à {{name}}. Cliquez pour mettre au premier plan.',
     linkedChipAriaStale: 'Le terminal lié {{name}} est {{status}}',
@@ -143,5 +147,15 @@ export const aiChat = {
     verdictConfidence: ' (confiance {{percent}}%)',
     verdictReasonReadOnly: 'lecture seule',
     verdictReasonRunManually: 'exécuter manuellement',
+  },
+  consent: {
+    // Avis affiché une seule fois avant le premier envoi de données du terminal à un fournisseur d'IA.
+    title: "Avis de partage de données avec l'IA",
+    intro: "Les fonctionnalités d'IA envoient des données au fournisseur d'IA tiers que vous avez configuré (Google Gemini / Vertex AI, Anthropic ou OpenAI) à l'aide de votre propre clé d'API, conformément aux conditions et à la politique de confidentialité de ce fournisseur.",
+    bulletWhat: "Ce qui est envoyé : les messages que vous saisissez, ainsi que — pour Demander à l'IA et le mode Surveillance — la sortie du terminal et les commandes capturées dans la session.",
+    bulletWhen: "Quand : uniquement lorsque vous utilisez explicitement une fonctionnalité d'IA. Votre terminal n'est jamais transmis en continu.",
+    bulletRedaction: "Les motifs de secrets connus sont masqués dans les journaux, mais le texte que vous saisissez vous-même dans un message est envoyé tel quel — évitez de coller des identifiants dans les invites de l'IA.",
+    footnote: 'Vous pouvez consulter cet avis à tout moment dans Paramètres → IA.',
+    accept: 'Accepter et continuer',
   },
 };

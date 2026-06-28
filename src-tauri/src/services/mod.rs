@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod atomic_file;
 pub mod dpapi;
 pub mod exe_finder;
 pub mod file_server;
@@ -14,6 +15,7 @@ pub mod sensitive_env;
 pub mod serial;
 pub mod session_service;
 pub mod sftp_server;
+pub mod watch_buffer;
 pub mod ssh;
 pub mod telnet;
 pub mod tftp_server;

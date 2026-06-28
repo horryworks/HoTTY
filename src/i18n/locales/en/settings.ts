@@ -204,6 +204,22 @@ export const settings = {
     logoutMessage:
       'Are you sure you want to logout? You will need to re-authenticate to use the AI provider.',
     logoutConfirm: 'Logout',
+    // Data handling disclosure
+    dataHandlingSection: 'Data Handling',
+    dataHandlingHelp:
+      "When you use AI features, data is sent to the third-party AI provider you configured, using your own API key, under that provider's terms and privacy policy.",
+    dataHandlingBulletProviders:
+      'Providers: Google Gemini / Vertex AI, Anthropic, or OpenAI — whichever you select above.',
+    dataHandlingBulletWhen:
+      'Sent only when you explicitly use an AI feature (chat, Ask AI, or Watch). Your terminal is never streamed continuously.',
+    dataHandlingBulletRedaction:
+      'Known secret patterns are redacted from logs, but text you type into a message is sent as-is — avoid pasting credentials.',
+    dataConsentStatus: 'Disclosure consent',
+    dataConsentAccepted: 'Accepted',
+    dataConsentNotAccepted: 'Not yet shown',
+    resetDataConsent: 'Show again',
+    resetDataConsentHelp:
+      'Reset consent so the AI data-sharing disclosure is shown again before the next AI send.',
   },
   about: {
     version: 'v{{version}}',
@@ -214,6 +230,14 @@ export const settings = {
     licenseLine2: 'GNU General Public License v3.0 or later.',
     viewLicense: 'View GNU General Public License v3.0',
     logoAlt: 'HoTTY Logo',
+    // Third-party licenses
+    thirdPartyLicenses: 'Third-Party Licenses',
+    thirdPartyLicensesTitle: 'Third-Party Licenses',
+    thirdPartyLicensesIntro: 'HoTTY includes open-source software from the following projects:',
+    thirdPartyLicensesLoading: 'Loading licenses…',
+    thirdPartyLicensesError: 'Failed to load license information.',
+    thirdPartyLicensesEmpty: 'No third-party license information is available.',
+    thirdPartyLicensesClose: 'Close',
   },
   customTheme: {
     title: 'Custom Theme Creator',

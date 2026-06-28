@@ -31,10 +31,13 @@ use commands::ping_monitor::{
     ping_monitor_update_targets,
 };
 use commands::session::{
-    connect_session, disconnect_session, send_input, ssh_host_key_response, term_resize,
-    update_session_logging, SessionState,
+    connect_session, disconnect_session, list_all_sessions, send_input, ssh_host_key_response,
+    term_resize, update_session_logging, SessionState,
 };
+use services::session_service::SessionOwners;
 use commands::ssh_algorithms::{get_ssh_algorithms, save_ssh_algorithms};
+use commands::sync::broadcast_shared_change;
+use commands::watch::{clear_watch_buffer, get_watch_buffer, set_watching, take_watch_buffer};
 use commands::system::{
     detect_git_bash, focus_window, list_serial_ports, list_system_fonts, list_wsl_distributions,
     open_debug_log_folder, open_external, show_context_menu,
@@ -43,6 +46,7 @@ use commands::text_editor::{
     text_editor_approve_dropped_file, text_editor_open_file, text_editor_read_file,
     text_editor_save_file, text_editor_write_file, ApprovedEditorPaths,
 };
+use commands::licenses::get_third_party_licenses;
 use commands::themes::{delete_custom_theme, get_themes, save_custom_theme};
 use commands::updater::check_for_updates;
 use commands::utilities::{log_debug, select_folder, select_image};
@@ -52,6 +56,7 @@ use commands::web_browser::{
     web_browser_navigate, web_browser_reload, web_browser_set_bounds, web_browser_set_visible,
     web_browser_stop,
 };
+use commands::window::{create_app_window, create_window, WindowCounterState};
 use services::ai::providers::anthropic::AnthropicProvider;
 use services::ai::providers::gemini::GeminiProvider;
 use services::ai::providers::openai::OpenAIProvider;
@@ -61,11 +66,52 @@ use services::file_server::FileServerState;
 use services::iap_tunnel::GcloudCacheState;
 use services::log_manager::LogManager;
 use services::ping_monitor::PingMonitorState;
+use services::watch_buffer::WatchBufferState;
 use services::web_browser::WebBrowserState;
+
+/// Disconnect and clean up every session owned by a window that just closed, so
+/// closing one window never leaks another window's sockets/PTYs or its backend
+/// watch/owner state. (Tauri exits the process when the last window closes, at
+/// which point the OS reclaims everything regardless.)
+fn cleanup_window_sessions(app: &tauri::AppHandle, label: &str) {
+    let owners = app.state::<SessionOwners>();
+    let ids = owners.sessions_for(label);
+    if ids.is_empty() {
+        return;
+    }
+    let watch = app.state::<WatchBufferState>();
+    for id in &ids {
+        watch.remove(id);
+        owners.remove(id);
+    }
+    let sessions = app.state::<SessionState>().sessions.clone();
+    let log_manager = (*app.state::<LogManager>()).clone();
+    tauri::async_runtime::spawn(async move {
+        for id in &ids {
+            log_manager.stop_logging(id).await;
+        }
+        let mut map = sessions.lock().await;
+        for id in ids {
+            if let Some((mut service, _meta)) = map.remove(&id) {
+                let _ = service.disconnect().await;
+            }
+        }
+    });
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // MUST be the first plugin registered (tauri-plugin-single-instance
+        // requirement). A second EXE launch is forwarded here instead of
+        // starting a second process; we open a new window in the existing one.
+        .plugin(tauri_plugin_single_instance::init(
+            |app: &tauri::AppHandle, _argv: Vec<String>, _cwd: String| {
+                if let Err(e) = create_app_window(app) {
+                    log::error!("single-instance: failed to open new window: {e}");
+                }
+            },
+        ))
         .plugin(
             tauri_plugin_log::Builder::default()
                 .level(if cfg!(debug_assertions) {
@@ -87,7 +133,16 @@ pub fn run() {
         .manage(PingMonitorState::new())
         .manage(FileServerState::new())
         .manage(WebBrowserState::new())
+        .manage(WindowCounterState::new())
+        .manage(WatchBufferState::new())
+        .manage(SessionOwners::new())
         .manage(Arc::new(GcloudCacheState::new()))
+        // When a window closes, tear down only the sessions it owned.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                cleanup_window_sessions(window.app_handle(), window.label());
+            }
+        })
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 let version = app.package_info().version.to_string();
@@ -140,6 +195,7 @@ pub fn run() {
             // Session management
             connect_session,
             disconnect_session,
+            list_all_sessions,
             send_input,
             term_resize,
             update_session_logging,
@@ -153,6 +209,12 @@ pub fn run() {
             show_context_menu,
             open_debug_log_folder,
             open_external,
+            create_window,
+            broadcast_shared_change,
+            set_watching,
+            get_watch_buffer,
+            take_watch_buffer,
+            clear_watch_buffer,
             // DPAPI encryption
             dpapi_encrypt,
             dpapi_decrypt,
@@ -162,6 +224,8 @@ pub fn run() {
             get_themes,
             save_custom_theme,
             delete_custom_theme,
+            // Third-party licenses
+            get_third_party_licenses,
             // SSH algorithms
             get_ssh_algorithms,
             save_ssh_algorithms,

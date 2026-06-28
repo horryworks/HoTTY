@@ -56,8 +56,15 @@ interface UseAiChatOptions {
   sessions: Map<string, SessionRecord>;
   featurePanes: Map<string, FeaturePaneInfo>;
   aiPersonas: PersonaDefinition[];
-  getWatchBuffer: (sessionId: string) => string;
-  clearWatchBuffer: (sessionId: string) => void;
+  /** Read-and-clear a session's watch buffer (backend-backed, async). */
+  takeWatchBuffer: (sessionId: string) => Promise<string>;
+  /**
+   * Ensure the user has accepted the one-time AI data-sharing disclosure before
+   * any terminal data is sent to a third-party provider. Resolves `true` to
+   * proceed, `false` if the user declined (abort the send). Resolves immediately
+   * when consent was already granted.
+   */
+  ensureAiConsent: () => Promise<boolean>;
   createAiChatPane: () => string | undefined;
   lastTerminalSessionId: string | null;
   paneAllocations: Record<string, string | null>;
@@ -74,8 +81,8 @@ interface UseAiChatReturn {
   closeTab: (aiSessionId: string, tabId: string) => void;
   setActiveTab: (aiSessionId: string, tabId: string) => void;
   setTabLink: (aiSessionId: string, tabId: string, linkedSessionId: string | undefined, opts?: { retainBindingKey?: boolean }) => void;
-  sendMessage: (aiSessionId: string, text: string) => void;
-  askAi: (selection: string, question: string, targetSessionId?: string) => void;
+  sendMessage: (aiSessionId: string, text: string) => Promise<void>;
+  askAi: (selection: string, question: string, targetSessionId?: string) => Promise<void>;
 }
 
 // -- Pure helpers --
@@ -130,8 +137,8 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     sessions,
     featurePanes,
     aiPersonas,
-    getWatchBuffer,
-    clearWatchBuffer,
+    takeWatchBuffer,
+    ensureAiConsent,
     createAiChatPane,
     lastTerminalSessionId,
     paneAllocations,
@@ -160,14 +167,14 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     aiChatStatesRef.current = aiChatStates;
   });
 
-  const getWatchBufferRef = useRef(getWatchBuffer);
-  const clearWatchBufferRef = useRef(clearWatchBuffer);
+  const takeWatchBufferRef = useRef(takeWatchBuffer);
+  const ensureAiConsentRef = useRef(ensureAiConsent);
   const createAiChatPaneRef = useRef(createAiChatPane);
   const setActivePaneIdRef = useRef(setActivePaneId);
 
   useEffect(() => {
-    getWatchBufferRef.current = getWatchBuffer;
-    clearWatchBufferRef.current = clearWatchBuffer;
+    takeWatchBufferRef.current = takeWatchBuffer;
+    ensureAiConsentRef.current = ensureAiConsent;
     createAiChatPaneRef.current = createAiChatPane;
     setActivePaneIdRef.current = setActivePaneId;
   });
@@ -345,23 +352,22 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
   }, []);
 
   // -- sendMessage --
-  const sendMessage = useCallback((aiSessionId: string, text: string) => {
+  const sendMessage = useCallback(async (aiSessionId: string, text: string) => {
     const chatState = aiChatStatesRef.current.get(aiSessionId);
     if (!chatState) return;
     const activeTab = getActiveTab(chatState);
     if (!activeTab) return;
 
+    // Gate the first send to a third-party AI provider on the data-sharing consent.
+    if (!(await ensureAiConsentRef.current())) return;
+
     const terminalId = activeTab.linkedSessionId;
     let prependedContext = '';
 
     if (terminalId && !text.startsWith('Terminal Output (Command:')) {
-      const termSession = sessionsRef.current.get(terminalId);
-      if (termSession) {
-        const buffer = getWatchBufferRef.current(terminalId);
-        if (buffer) {
-          prependedContext = `[Watched Terminal Output (Linked)]\n${buffer}\n================\n`;
-          clearWatchBufferRef.current(terminalId);
-        }
+      const buffer = await takeWatchBufferRef.current(terminalId);
+      if (buffer) {
+        prependedContext = `[Watched Terminal Output (Linked)]\n${buffer}\n================\n`;
       }
     }
 
@@ -384,17 +390,19 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
   // -- askAi --
   // Inline terminal Ask AI: sends the user's typed question plus the selected
   // text (and any watched-terminal buffer) to the AI chat pane.
-  const askAi = useCallback((selection: string, question: string, targetSessionId?: string) => {
+  const askAi = useCallback(async (selection: string, question: string, targetSessionId?: string) => {
     if (!question.trim()) return;
+
+    // Gate before reading/consuming any terminal data for the AI provider.
+    if (!(await ensureAiConsentRef.current())) return;
 
     const { activeTermId, activeSession } = resolveTargetTerminal(targetSessionId);
 
     let prependedContext = '';
     if (activeSession) {
-      const buffer = getWatchBufferRef.current(activeTermId);
+      const buffer = await takeWatchBufferRef.current(activeTermId);
       if (buffer) {
         prependedContext = `[Watched Terminal Output]\n${buffer}\n================\n`;
-        clearWatchBufferRef.current(activeTermId);
       }
     }
 

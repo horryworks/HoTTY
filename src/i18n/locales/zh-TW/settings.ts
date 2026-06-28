@@ -204,6 +204,22 @@ export const settings = {
     logoutMessage:
       '確定要登出嗎？您將需要重新驗證才能使用 AI 供應商。',
     logoutConfirm: '登出',
+    // 資料處理告知
+    dataHandlingSection: '資料處理',
+    dataHandlingHelp:
+      '當您使用 AI 功能時，系統會使用您自己的 API 金鑰，將資料傳送給您設定的第三方 AI 供應商，並受該供應商的條款與隱私權政策約束。',
+    dataHandlingBulletProviders:
+      '供應商：Google Gemini / Vertex AI、Anthropic 或 OpenAI——以您在上方選取的為準。',
+    dataHandlingBulletWhen:
+      '僅在您明確使用 AI 功能（聊天、詢問 AI 或監看）時傳送。您的終端機絕不會被持續傳輸。',
+    dataHandlingBulletRedaction:
+      '已知的密鑰模式會從記錄中隱去，但您在訊息中輸入的文字會原樣傳送——請勿貼上憑證。',
+    dataConsentStatus: '告知同意',
+    dataConsentAccepted: '已接受',
+    dataConsentNotAccepted: '尚未顯示',
+    resetDataConsent: '重新顯示',
+    resetDataConsentHelp:
+      '重設同意，以便在下次 AI 傳送前再次顯示 AI 資料分享告知。',
   },
   about: {
     version: 'v{{version}}',
@@ -214,6 +230,14 @@ export const settings = {
     licenseLine2: 'GNU General Public License v3.0 或更新版本發行。',
     viewLicense: '檢視 GNU General Public License v3.0',
     logoAlt: 'HoTTY 標誌',
+    // 第三方授權
+    thirdPartyLicenses: '第三方授權',
+    thirdPartyLicensesTitle: '第三方授權',
+    thirdPartyLicensesIntro: 'HoTTY 包含來自以下專案的開放原始碼軟體：',
+    thirdPartyLicensesLoading: '正在載入授權…',
+    thirdPartyLicensesError: '載入授權資訊失敗。',
+    thirdPartyLicensesEmpty: '沒有可用的第三方授權資訊。',
+    thirdPartyLicensesClose: '關閉',
   },
   customTheme: {
     title: '自訂佈景主題建立工具',

@@ -1,5 +1,16 @@
 # Release Notes
 
+## v2.0.8-beta2
+
+This beta adds **multi-window support** — open multiple HoTTY windows in a single process, each with its own panes and terminal sessions while sharing your settings, theme, host tree and bookmarks. It also introduces a one-time **AI data-sharing notice** and a **Third-Party Licenses** viewer.
+
+### New Features
+
+- **Open multiple windows in one process.** Open a new HoTTY window from the new **New Window** button in the sidebar or with **Ctrl + Shift + N** — and launching HoTTY again now opens another window in the existing process instead of a separate copy. Each window keeps its own pane layout and terminal sessions, while your settings, theme, host tree and bookmarks stay shared and in sync across every open window. Closing a window cleans up only that window's sessions.
+- **Link an AI Chat to a terminal in another window.** The AI Chat pane's link picker now lists terminals from every open window, grouped by window, so a chat in one window can watch and drive a session running in another. Sessions are shared app-wide, so Watch Mode and command execution work across windows.
+- **One-time AI data-sharing notice.** The first time an AI feature would send terminal data to your configured provider, HoTTY now shows a brief disclosure of what is sent, when, and how known secrets are redacted — you confirm once before anything is sent. You can review the disclosure, see your consent status, and reset it (**Show again**) any time in **Settings → AI → Data Handling**.
+- **Third-Party Licenses viewer.** **Settings → About → Third-Party Licenses** now lists the open-source projects bundled with HoTTY together with their license texts.
+
 ## v2.0.8-beta1
 
 This beta redesigns the terminal **"Ask AI"** flow — replacing the customizable Ask AI Commands with a quick, free-form inline question box — and hardens the AI auto-execution and File Server security model.

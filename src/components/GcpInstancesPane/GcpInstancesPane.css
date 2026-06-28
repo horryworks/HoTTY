@@ -34,21 +34,20 @@
 .gcp-refresh-btn,
 .gcp-toggle-btn {
   background: var(--btn-secondary-bg);
-  border: 1px solid var(--border-color);
+  border: none;
   color: var(--text-primary);
   border-radius: 4px;
   padding: 3px 8px;
   cursor: pointer;
   font-size: var(--font-size-base);
   line-height: 1;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s;
   font-family: var(--ui-font-family);
 }
 
 .gcp-refresh-btn:hover:not(:disabled),
 .gcp-toggle-btn:hover:not(:disabled) {
   background: var(--btn-secondary-hover-bg);
-  border-color: var(--accent-color);
 }
 
 .gcp-refresh-btn:disabled,

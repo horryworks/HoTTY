@@ -69,6 +69,10 @@ export const aiChat = {
     dismiss: '关闭',
     newChat: '新建聊天',
     newChatTitle: '开始新的聊天',
+    linkPickerTitle: '将此聊天链接到终端',
+    linkNone: '未链接',
+    linkThisWindow: '此窗口',
+    linkOtherWindow: '窗口：{{label}}',
     linkedChipTitleStale: '到 {{name}} 的链接{{status}}。请重新连接终端并按“监视”以重新链接。',
     linkedChipTitle: '已链接到 {{name}}。点击以聚焦。',
     linkedChipAriaStale: '已链接的终端 {{name}} {{status}}',
@@ -143,5 +147,15 @@ export const aiChat = {
     verdictConfidence: '（置信度 {{percent}}%）',
     verdictReasonReadOnly: '只读',
     verdictReasonRunManually: '手动运行',
+  },
+  consent: {
+    // 在首次向 AI 提供商发送终端数据之前显示一次的告知。
+    title: 'AI 数据共享须知',
+    intro: 'AI 功能会使用您自己的 API 密钥，将数据发送给您配置的第三方 AI 提供商（Google Gemini / Vertex AI、Anthropic 或 OpenAI），并受该提供商的条款和隐私政策约束。',
+    bulletWhat: '发送内容：您输入的消息，以及在使用“询问 AI”和监视模式时，从会话中捕获的终端输出和命令。',
+    bulletWhen: '发送时机：仅在您明确使用 AI 功能时发送。您的终端绝不会被持续传输。',
+    bulletRedaction: '已知的密钥模式会从日志中隐去，但您自己在消息中输入的文本会原样发送——请勿将凭据粘贴到 AI 提示中。',
+    footnote: '您可以随时在“设置 → AI”中查看此须知。',
+    accept: '同意并继续',
   },
 };

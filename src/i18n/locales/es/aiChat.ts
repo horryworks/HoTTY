@@ -67,6 +67,10 @@ export const aiChat = {
     dismiss: 'Descartar',
     newChat: 'Nuevo chat',
     newChatTitle: 'Iniciar un nuevo chat',
+    linkPickerTitle: 'Vincular este chat a una terminal',
+    linkNone: 'Sin vincular',
+    linkThisWindow: 'Esta ventana',
+    linkOtherWindow: 'Ventana: {{label}}',
     linkedChipTitleStale: 'El enlace con {{name}} está {{status}}. Vuelva a conectar el terminal y pulse Monitorear para volver a enlazar.',
     linkedChipTitle: 'Enlazado con {{name}}. Haga clic para enfocar.',
     linkedChipAriaStale: 'El terminal enlazado {{name}} está {{status}}',
@@ -141,5 +145,15 @@ export const aiChat = {
     verdictConfidence: ' (confianza {{percent}}%)',
     verdictReasonReadOnly: 'solo lectura',
     verdictReasonRunManually: 'ejecutar manualmente',
+  },
+  consent: {
+    // Aviso único que se muestra antes de enviar por primera vez datos del terminal a un proveedor de IA.
+    title: 'Aviso sobre el envío de datos a la IA',
+    intro: 'Las funciones de IA envían datos al proveedor de IA externo que haya configurado (Google Gemini / Vertex AI, Anthropic u OpenAI) usando su propia clave de API, conforme a los términos y la política de privacidad de dicho proveedor.',
+    bulletWhat: 'Qué se envía: los mensajes que escribe y, en el caso de Preguntar a la IA y el modo de monitorización, la salida del terminal y los comandos capturados de la sesión.',
+    bulletWhen: 'Cuándo: solo cuando usa explícitamente una función de IA. Su terminal nunca se transmite de forma continua.',
+    bulletRedaction: 'Los patrones de secretos conocidos se ocultan de los registros, pero el texto que usted mismo incluye en un mensaje se envía tal cual: evite pegar credenciales en las indicaciones de IA.',
+    footnote: 'Puede consultar este aviso en cualquier momento en Configuración → IA.',
+    accept: 'Aceptar y continuar',
   },
 };

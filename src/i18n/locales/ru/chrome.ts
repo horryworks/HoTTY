@@ -38,6 +38,7 @@ export const chrome = {
     },
     disableLineWrap: 'Отключить перенос строк',
     enableLineWrap: 'Включить перенос строк',
+    newWindow: 'Новое окно',
     help: 'Справка / документация',
     settings: 'Настройки',
   },

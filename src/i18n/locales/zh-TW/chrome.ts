@@ -37,6 +37,7 @@ export const chrome = {
     },
     disableLineWrap: '停用自動換行',
     enableLineWrap: '啟用自動換行',
+    newWindow: '新增視窗',
     help: '說明／文件',
     settings: '設定',
   },

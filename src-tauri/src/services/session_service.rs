@@ -1,9 +1,81 @@
 use async_trait::async_trait;
 use serde::Serialize;
+use std::collections::HashMap;
+use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use thiserror::Error;
 use tokio::task::JoinHandle;
+
+use crate::services::watch_buffer::WatchBufferState;
+
+/// Maps each session id to the window label that owns it, so terminal events
+/// (`session-data`/`-status`/`-error`) are delivered only to the window
+/// rendering that session instead of broadcast to every window in the process.
+/// Populated at connect time (which knows the calling window) and cleared on
+/// disconnect / window close.
+#[derive(Default)]
+pub struct SessionOwners {
+    inner: Mutex<HashMap<String, String>>,
+}
+
+impl SessionOwners {
+    pub fn new() -> Self {
+        Self {
+            inner: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub fn set(&self, session_id: &str, label: &str) {
+        self.inner
+            .lock()
+            .unwrap()
+            .insert(session_id.to_string(), label.to_string());
+    }
+
+    pub fn get(&self, session_id: &str) -> Option<String> {
+        self.inner.lock().unwrap().get(session_id).cloned()
+    }
+
+    pub fn remove(&self, session_id: &str) {
+        self.inner.lock().unwrap().remove(session_id);
+    }
+
+    /// All session ids owned by `label` (used for per-window cleanup on close).
+    pub fn sessions_for(&self, label: &str) -> Vec<String> {
+        self.inner
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, l)| l.as_str() == label)
+            .map(|(s, _)| s.clone())
+            .collect()
+    }
+}
+
+/// Emit an event to the window that owns `session_id`, falling back to a global
+/// broadcast if the owner is unknown (e.g. before it is registered).
+fn emit_targeted<P: Serialize + Clone>(app: &AppHandle, session_id: &str, event: &str, payload: P) {
+    if let Some(owners) = app.try_state::<SessionOwners>() {
+        if let Some(label) = owners.get(session_id) {
+            let _ = app.emit_to(label.as_str(), event, payload);
+            return;
+        }
+    }
+    let _ = app.emit(event, payload);
+}
+
+/// Public wrapper for [`emit_targeted`] so protocol handlers (e.g. the SSH
+/// host-key prompt / known-hosts warning) can deliver a session-scoped event to
+/// only the owning window instead of broadcasting it to every window.
+pub fn emit_to_owner<P: Serialize + Clone>(
+    app: &AppHandle,
+    session_id: &str,
+    event: &str,
+    payload: P,
+) {
+    emit_targeted(app, session_id, event, payload);
+}
 
 #[derive(Debug, Error)]
 pub enum SessionError {
@@ -134,7 +206,15 @@ struct SessionErrorPayload {
 }
 
 pub fn emit_session_data(app: &AppHandle, session_id: &str, data: String) {
-    let _ = app.emit(
+    // Feed the app-global AI watch buffer (no-op unless this session is watched).
+    // Done here, in the one shared emit path, so every protocol's read loop
+    // contributes without per-loop changes — and so any window can read it.
+    if let Some(state) = app.try_state::<WatchBufferState>() {
+        state.append(session_id, &data);
+    }
+    emit_targeted(
+        app,
+        session_id,
         "session-data",
         SessionDataPayload {
             session_id: session_id.to_string(),
@@ -144,7 +224,9 @@ pub fn emit_session_data(app: &AppHandle, session_id: &str, data: String) {
 }
 
 pub fn emit_session_status(app: &AppHandle, session_id: &str, status: &str) {
-    let _ = app.emit(
+    emit_targeted(
+        app,
+        session_id,
         "session-status",
         SessionStatusPayload {
             session_id: session_id.to_string(),
@@ -154,7 +236,9 @@ pub fn emit_session_status(app: &AppHandle, session_id: &str, status: &str) {
 }
 
 pub fn emit_session_error(app: &AppHandle, session_id: &str, error: String) {
-    let _ = app.emit(
+    emit_targeted(
+        app,
+        session_id,
         "session-error",
         SessionErrorPayload {
             session_id: session_id.to_string(),
@@ -271,6 +355,27 @@ mod tests {
             !flag.load(std::sync::atomic::Ordering::SeqCst),
             "aborted task must not run to completion"
         );
+    }
+
+    #[test]
+    fn session_owners_track_and_filter_by_window() {
+        let owners = SessionOwners::new();
+        owners.set("s1", "main");
+        owners.set("s2", "win-1");
+        owners.set("s3", "main");
+
+        assert_eq!(owners.get("s1").as_deref(), Some("main"));
+        assert_eq!(owners.get("s2").as_deref(), Some("win-1"));
+        assert_eq!(owners.get("missing"), None);
+
+        let mut main_sessions = owners.sessions_for("main");
+        main_sessions.sort();
+        assert_eq!(main_sessions, vec!["s1".to_string(), "s3".to_string()]);
+        assert_eq!(owners.sessions_for("win-1"), vec!["s2".to_string()]);
+
+        owners.remove("s1");
+        assert_eq!(owners.get("s1"), None);
+        assert_eq!(owners.sessions_for("main"), vec!["s3".to_string()]);
     }
 
     #[test]

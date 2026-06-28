@@ -118,6 +118,25 @@
     border-color: var(--accent-color);
 }
 
+/* Cross-window link picker (select any session, incl. other windows'). */
+.ai-chat-link-select {
+    max-width: 150px;
+    padding: 3px 6px;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 2px);
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.1s;
+}
+
+.ai-chat-link-select:hover {
+    border-color: var(--accent-color);
+}
+
 /* Stale link: the watched terminal is disconnected / reconnecting / gone. */
 .ai-chat-linked-chip-stale {
     background: color-mix(in srgb, var(--color-warning) 12%, transparent);

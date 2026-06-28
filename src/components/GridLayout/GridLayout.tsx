@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { usePaneStore, gridPaneIds } from '../../stores/paneStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { STORAGE_KEYS } from '../../constants/storage';
+import { STORAGE_KEYS, windowScopedKey } from '../../constants/storage';
+import { WINDOW_LABEL } from '../../utils/windowLabel';
 import './GridLayout.css';
+
+// Grid sizes are per-window layout state, so namespace their localStorage keys
+// by window label (the initial "main" window keeps the legacy unsuffixed keys).
+const colSizesKey = (cols: number) =>
+  windowScopedKey(STORAGE_KEYS.UI_GRID_COL_SIZES(cols), WINDOW_LABEL);
+const rowSizesKey = (rows: number) =>
+  windowScopedKey(STORAGE_KEYS.UI_GRID_ROW_SIZES(rows), WINDOW_LABEL);
 
 interface GridLayoutProps {
   renderPane: (paneId: string) => ReactNode;
@@ -62,29 +70,29 @@ export function GridLayout({ renderPane, onDropSession }: GridLayoutProps) {
   );
 
   const [colSizes, setColSizes] = useState<number[]>(() =>
-    loadSizes(STORAGE_KEYS.UI_GRID_COL_SIZES(cols), cols)
+    loadSizes(colSizesKey(cols), cols)
   );
   const [rowSizes, setRowSizes] = useState<number[]>(() =>
-    loadSizes(STORAGE_KEYS.UI_GRID_ROW_SIZES(rows), rows)
+    loadSizes(rowSizesKey(rows), rows)
   );
 
   useEffect(() => {
-    setColSizes(loadSizes(STORAGE_KEYS.UI_GRID_COL_SIZES(cols), cols));
+    setColSizes(loadSizes(colSizesKey(cols), cols));
   }, [cols]);
 
   useEffect(() => {
-    setRowSizes(loadSizes(STORAGE_KEYS.UI_GRID_ROW_SIZES(rows), rows));
+    setRowSizes(loadSizes(rowSizesKey(rows), rows));
   }, [rows]);
 
   useEffect(() => {
     if (colSizes.length === cols && cols > 0) {
-      localStorage.setItem(STORAGE_KEYS.UI_GRID_COL_SIZES(cols), JSON.stringify(colSizes));
+      localStorage.setItem(colSizesKey(cols), JSON.stringify(colSizes));
     }
   }, [colSizes, cols]);
 
   useEffect(() => {
     if (rowSizes.length === rows && rows > 0) {
-      localStorage.setItem(STORAGE_KEYS.UI_GRID_ROW_SIZES(rows), JSON.stringify(rowSizes));
+      localStorage.setItem(rowSizesKey(rows), JSON.stringify(rowSizes));
     }
   }, [rowSizes, rows]);
 

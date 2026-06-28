@@ -204,6 +204,22 @@ export const settings = {
     logoutMessage:
       'Вы уверены, что хотите выйти? Чтобы снова использовать провайдер ИИ, потребуется повторная аутентификация.',
     logoutConfirm: 'Выйти',
+    // Раскрытие информации об обработке данных
+    dataHandlingSection: 'Обработка данных',
+    dataHandlingHelp:
+      'Когда вы используете функции ИИ, данные отправляются стороннему ИИ-провайдеру, которого вы настроили, с использованием вашего собственного ключа API, в соответствии с условиями и политикой конфиденциальности этого провайдера.',
+    dataHandlingBulletProviders:
+      'Провайдеры: Google Gemini / Vertex AI, Anthropic или OpenAI — тот, который вы выбрали выше.',
+    dataHandlingBulletWhen:
+      'Отправляются только когда вы явно используете функцию ИИ (чат, «Спросить ИИ» или наблюдение). Ваш терминал никогда не передаётся непрерывно.',
+    dataHandlingBulletRedaction:
+      'Известные шаблоны секретов скрываются из журналов, но текст, который вы вводите в сообщение, отправляется как есть — не вставляйте учётные данные.',
+    dataConsentStatus: 'Согласие на раскрытие',
+    dataConsentAccepted: 'Принято',
+    dataConsentNotAccepted: 'Ещё не показано',
+    resetDataConsent: 'Показать снова',
+    resetDataConsentHelp:
+      'Сбросьте согласие, чтобы уведомление о передаче данных ИИ было показано снова перед следующей отправкой данных ИИ.',
   },
   about: {
     version: 'v{{version}}',
@@ -214,6 +230,14 @@ export const settings = {
     licenseLine2: 'GNU General Public License v3.0 или более поздней.',
     viewLicense: 'Открыть GNU General Public License v3.0',
     logoAlt: 'Логотип HoTTY',
+    // Лицензии сторонних компонентов
+    thirdPartyLicenses: 'Лицензии сторонних компонентов',
+    thirdPartyLicensesTitle: 'Лицензии сторонних компонентов',
+    thirdPartyLicensesIntro: 'HoTTY включает программное обеспечение с открытым исходным кодом из следующих проектов:',
+    thirdPartyLicensesLoading: 'Загрузка лицензий…',
+    thirdPartyLicensesError: 'Не удалось загрузить сведения о лицензиях.',
+    thirdPartyLicensesEmpty: 'Сведения о лицензиях сторонних компонентов недоступны.',
+    thirdPartyLicensesClose: 'Закрыть',
   },
   customTheme: {
     title: 'Создание своей темы',

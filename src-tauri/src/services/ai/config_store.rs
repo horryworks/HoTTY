@@ -7,6 +7,7 @@
 //! own payload: an API key for OpenAI/Anthropic, or a JSON blob of OAuth
 //! tokens/project IDs for Gemini/Vertex.
 
+use crate::services::atomic_file::atomic_write;
 use crate::services::dpapi;
 use std::path::{Path, PathBuf};
 
@@ -30,7 +31,9 @@ impl EncryptedConfigStore {
     /// Encrypt `plaintext` with DPAPI and write it to disk.
     pub fn save(&self, plaintext: &str) -> Result<(), String> {
         let encrypted = dpapi::encrypt_string(plaintext)?;
-        std::fs::write(&self.path, &encrypted)
+        // Atomic write so a crash or a concurrent save from another window can
+        // never leave a truncated (unloadable) credential file.
+        atomic_write(&self.path, encrypted.as_bytes())
             .map_err(|e| format!("Failed to save config: {e}"))?;
         log::debug!("[{}] Config saved", self.tag);
         Ok(())

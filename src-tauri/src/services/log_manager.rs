@@ -357,13 +357,9 @@ impl LogManager {
                 return;
             }
         };
-        if let Some(parent) = path.parent() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                log::warn!("failed to create app data dir for approvals: {e}");
-                return;
-            }
-        }
-        if let Err(e) = std::fs::write(path, content) {
+        // Atomic write (temp + rename) so a crash or a concurrent save from
+        // another window can't truncate the approvals file. Creates parent dirs.
+        if let Err(e) = crate::services::atomic_file::atomic_write(path, content.as_bytes()) {
             log::warn!("failed to save approved log dirs: {e}");
         }
     }

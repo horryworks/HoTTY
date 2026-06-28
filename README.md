@@ -21,6 +21,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 - Keyboard pane focus navigation (`Ctrl+Tab` / `Ctrl+Shift+Tab`)
 - Drag-and-drop tab reordering and pane assignment
 - Tab bar with session and feature pane management
+- **Multiple windows** — open additional windows (New Window / `Ctrl+Shift+N`) in a single process; each window has its own panes and sessions, while settings, theme, host tree and bookmarks stay shared and in sync across windows
 
 ### Integrated Utility Tools
 - **Log Viewer** — browse and read session log files
@@ -55,6 +56,8 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 - Ask AI — select terminal output, right-click, and type a free-form question to send it (with the selection) to the AI Chat
 - Interactive Mode — AI suggests and executes terminal commands, gated by a managed Whitelist / Blacklist + AI safety classifier
 - Watch Mode — monitor terminal output and send captured logs to AI for analysis
+- Cross-window linking — link an AI Chat to a terminal running in another window
+- One-time data-sharing disclosure shown before terminal data is first sent to a provider (reviewable in Settings → AI)
 - Customizable personas
 
 ### Additional Features
@@ -63,6 +66,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 - System font detection
 - Context menu support
 - Debug log management
+- Third-Party Licenses viewer (Settings → About)
 
 ## Installation
 
@@ -97,6 +101,50 @@ cd src-tauri && cargo clippy # Run Clippy lints
 | State | Zustand (with persist middleware) |
 | Testing | Vitest (frontend), cargo test (backend) |
 
+## Privacy / Data Handling
+
+HoTTY runs locally and does **not** collect telemetry, analytics, or usage data.
+The only network calls it makes on its own are an optional update check against
+the GitHub Releases API.
+
+When you use the **AI features** (AI Chat, Ask AI, Interactive Mode, Watch Mode),
+data is sent to the third-party AI provider you configured (Google Gemini /
+Vertex AI, Anthropic, or OpenAI) using **your own API key**, under that
+provider's terms and privacy policy:
+
+- **What is sent:** the messages you type, and — when you use Ask AI or enable
+  Watch Mode — the relevant terminal output / commands captured from the session.
+- **When:** only when you explicitly invoke an AI feature. HoTTY does not stream
+  your terminal continuously.
+- **Redaction:** known secret patterns are redacted from logs by default, but
+  text you place into a chat message yourself is sent as-is — avoid pasting
+  credentials into AI prompts.
+
+On first use of an AI feature, HoTTY shows a one-time consent dialog summarizing
+the above. Credentials and API keys are stored encrypted at rest via Windows
+DPAPI.
+
+## Trademarks
+
+HoTTY is an independent project and is **not affiliated with, endorsed by, or
+sponsored by** PuTTY, Tera Term, or any other terminal-emulator project. All
+product names, logos, and trademarks referenced in this software or its
+documentation are the property of their respective owners and are used for
+identification purposes only.
+
+## Export / Cryptography Notice
+
+This software contains and uses encryption (SSH, TLS) provided by third-party
+open-source libraries. It is distributed as publicly available open-source
+software and the source is published openly; as such it is generally eligible
+for the publicly-available-source exception under applicable export-control
+regulations (e.g. U.S. EAR §742.15(b) / §740.13(e), and Japan's Foreign
+Exchange and Foreign Trade Act). **You are responsible for complying with the
+import, export, and use regulations of your own jurisdiction.**
+
 ## License
 
 GPL-3.0-or-later
+
+> The notices above are provided for transparency and are **not legal advice**.
+> Consult a qualified professional for matters that require it.

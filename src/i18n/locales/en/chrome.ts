@@ -38,6 +38,7 @@ export const chrome = {
     },
     disableLineWrap: 'Disable Line Wrap',
     enableLineWrap: 'Enable Line Wrap',
+    newWindow: 'New Window',
     help: 'Help / Documentation',
     settings: 'Settings',
   },

@@ -204,6 +204,22 @@ export const settings = {
     logoutMessage:
       "Voulez-vous vraiment vous déconnecter ? Vous devrez vous réauthentifier pour utiliser le fournisseur d'IA.",
     logoutConfirm: 'Déconnexion',
+    // Divulgation sur le traitement des données
+    dataHandlingSection: 'Traitement des données',
+    dataHandlingHelp:
+      "Lorsque vous utilisez les fonctionnalités d'IA, les données sont envoyées au fournisseur d'IA tiers que vous avez configuré, à l'aide de votre propre clé d'API, conformément aux conditions et à la politique de confidentialité de ce fournisseur.",
+    dataHandlingBulletProviders:
+      "Fournisseurs : Google Gemini / Vertex AI, Anthropic ou OpenAI — celui que vous sélectionnez ci-dessus.",
+    dataHandlingBulletWhen:
+      "Envoyées uniquement lorsque vous utilisez explicitement une fonctionnalité d'IA (chat, Demander à l'IA ou Surveillance). Votre terminal n'est jamais transmis en continu.",
+    dataHandlingBulletRedaction:
+      "Les motifs de secrets connus sont masqués dans les journaux, mais le texte que vous saisissez dans un message est envoyé tel quel — évitez de coller des identifiants.",
+    dataConsentStatus: 'Consentement à la divulgation',
+    dataConsentAccepted: 'Accepté',
+    dataConsentNotAccepted: 'Pas encore affiché',
+    resetDataConsent: 'Afficher à nouveau',
+    resetDataConsentHelp:
+      "Réinitialisez le consentement afin que la divulgation sur le partage de données avec l'IA soit affichée à nouveau avant le prochain envoi à l'IA.",
   },
   about: {
     version: 'v{{version}}',
@@ -214,6 +230,14 @@ export const settings = {
     licenseLine2: 'GNU General Public License v3.0 ou ultérieure.',
     viewLicense: 'Voir la GNU General Public License v3.0',
     logoAlt: 'Logo HoTTY',
+    // Licences tierces
+    thirdPartyLicenses: 'Licences tierces',
+    thirdPartyLicensesTitle: 'Licences tierces',
+    thirdPartyLicensesIntro: 'HoTTY intègre des logiciels open source issus des projets suivants :',
+    thirdPartyLicensesLoading: 'Chargement des licences…',
+    thirdPartyLicensesError: 'Échec du chargement des informations de licence.',
+    thirdPartyLicensesEmpty: "Aucune information de licence tierce n'est disponible.",
+    thirdPartyLicensesClose: 'Fermer',
   },
   customTheme: {
     title: 'Créateur de thème personnalisé',

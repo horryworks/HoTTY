@@ -119,6 +119,9 @@ interface SettingsState {
   aiSleepAsClientDelay: boolean;
   /** Cap (seconds) for a client-side sleep delay; over-cap waits are clamped. 0 = no cap. */
   aiSleepMaxDelaySecs: number;
+  /** Whether the user has accepted the one-time disclosure that AI features send
+   *  terminal data to the configured third-party provider. Gates all AI sends. */
+  aiDataConsentAccepted: boolean;
 }
 
 interface SettingsActions {
@@ -186,6 +189,7 @@ const DEFAULTS: SettingsState = {
   aiCommandIdleTimeoutSecs: 10,
   aiSleepAsClientDelay: true,
   aiSleepMaxDelaySecs: 900,
+  aiDataConsentAccepted: false,
 };
 
 export const useSettingsStore = create<SettingsState & SettingsActions>()(
@@ -197,7 +201,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 19,
+      version: 20,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -289,6 +293,11 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
             ...(state.enabledFeatures ?? {}),
             'web-browser': state.enabledFeatures?.['web-browser'] ?? true,
           };
+        }
+        if (version < 20) {
+          // New AI data-disclosure consent gate — existing users have not yet
+          // seen the disclosure, so default to false to prompt on next AI use.
+          state.aiDataConsentAccepted ??= false;
         }
         return state as SettingsState;
       },

@@ -64,6 +64,10 @@ export const aiChat = {
     dismiss: '閉じる',
     newChat: '新しいチャット',
     newChatTitle: '新しいチャットを開始',
+    linkPickerTitle: 'このチャットを端末にリンク',
+    linkNone: 'リンクなし',
+    linkThisWindow: 'このウィンドウ',
+    linkOtherWindow: 'ウィンドウ: {{label}}',
     linkedChipTitleStale: '{{name}} へのリンクは {{status}} です。端末を再接続して「監視」を押すと再リンクします。',
     linkedChipTitle: '{{name}} にリンク済み。クリックでフォーカスします。',
     linkedChipAriaStale: 'リンク中の端末 {{name}} は {{status}} です',
@@ -138,5 +142,15 @@ export const aiChat = {
     verdictConfidence: '（信頼度 {{percent}}%）',
     verdictReasonReadOnly: '読み取り専用',
     verdictReasonRunManually: '手動で実行',
+  },
+  consent: {
+    // 端末のデータが初めて AI プロバイダーに送信される前に一度だけ表示される告知。
+    title: 'AI データ共有に関する通知',
+    intro: 'AI 機能は、設定したサードパーティの AI プロバイダー（Google Gemini / Vertex AI、Anthropic、または OpenAI）に、お客様ご自身の API キーを使用してデータを送信します。送信は当該プロバイダーの利用規約およびプライバシーポリシーに従って行われます。',
+    bulletWhat: '送信される内容: 入力したメッセージに加え、AIに質問および監視モードの場合はセッションから取得した端末の出力とコマンド。',
+    bulletWhen: '送信のタイミング: AI 機能を明示的に使用したときのみ。端末が継続的に送信されることはありません。',
+    bulletRedaction: '既知の機密パターンはログから秘匿されますが、メッセージにご自身で入力したテキストはそのまま送信されます。AI プロンプトに認証情報を貼り付けないでください。',
+    footnote: 'この通知は、設定 → AI でいつでも確認できます。',
+    accept: '同意して続行',
   },
 };

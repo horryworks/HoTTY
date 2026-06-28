@@ -16,3 +16,15 @@ export const STORAGE_KEYS = {
   GCP_SHOW_INACCESSIBLE: 'hotty_gcp_show_inaccessible',
   GCP_SEARCH_QUERY: 'hotty_gcp_search_query',
 } as const;
+
+/**
+ * Namespace a localStorage base key by window label for multi-window isolation.
+ *
+ * The initial window keeps the legacy unsuffixed key so existing users' persisted
+ * per-window state (pane layout, grid sizes, …) survives the upgrade; only
+ * secondary windows get a `::<label>` suffix. Pass the label from
+ * {@link ../utils/windowLabel WINDOW_LABEL}.
+ */
+export function windowScopedKey(base: string, label: string): string {
+  return label === 'main' ? base : `${base}::${label}`;
+}

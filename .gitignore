@@ -41,6 +41,9 @@ lerna-debug.log*
 # Archives
 *.zip
 
+# Generated at build time (npm run licenses:generate) — not committed
+src-tauri/resources/third-party-licenses.json
+
 # Debug
 *.pdb
 

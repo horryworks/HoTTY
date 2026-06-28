@@ -54,6 +54,28 @@ export interface SessionStatusPayload {
   status: SessionStatus;
 }
 
+/** A live session as seen across all windows (from `list_all_sessions`). */
+export interface SessionInfo {
+  sessionId: string;
+  host: string;
+  protocol: string;
+  ownerLabel: string | null;
+}
+
+/**
+ * A session offered in the AI Chat link picker — either local to this window or
+ * owned by another window (cross-window AI linking). `isLocal` drives grouping;
+ * `status` is 'connected' for remote sessions (they come from `list_all_sessions`,
+ * which only returns live sessions).
+ */
+export interface LinkableSession {
+  sessionId: string;
+  displayName: string;
+  ownerLabel: string;
+  isLocal: boolean;
+  status: string;
+}
+
 export interface SessionErrorPayload {
   sessionId: string;
   error: string;
@@ -171,6 +193,24 @@ export type SshAlgorithms = Record<string, AlgorithmEntry[]>;
 export interface SaveThemeResult {
   success: boolean;
   error?: string;
+}
+
+/** One bundled third-party dependency in the attribution manifest. */
+export interface LicenseEntry {
+  name: string;
+  version: string;
+  /** "npm" | "rust" */
+  ecosystem: string;
+  /** SPDX expression or best-effort license name. */
+  license: string;
+  repository?: string;
+  licenseText?: string;
+}
+
+export interface ThirdPartyLicenses {
+  generatedAt?: string;
+  counts?: { npm: number; rust: number; total: number };
+  packages: LicenseEntry[];
 }
 
 export interface LogFile {

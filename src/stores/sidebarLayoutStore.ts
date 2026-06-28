@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { windowScopedKey } from '../constants/storage';
+import { WINDOW_LABEL } from '../utils/windowLabel';
 
 export type SidebarEdge = 'left' | 'right' | 'top' | 'bottom';
 
@@ -66,7 +68,9 @@ export const useSidebarLayoutStore = create<SidebarLayoutState>()(
       setActiveSidebarTab: (tab) => set({ activeSidebarTab: tab }),
     }),
     {
-      name: 'hotty-sidebar-layout',
+      // Per-window: each window keeps its own sidebar visibility/sizing. The
+      // initial "main" window keeps the legacy unsuffixed key (back-compat).
+      name: windowScopedKey('hotty-sidebar-layout', WINDOW_LABEL),
       version: 2,
       migrate: (persistedState) => {
         const state = (persistedState ?? {}) as Partial<SidebarLayoutState>;

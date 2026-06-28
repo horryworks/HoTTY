@@ -1,7 +1,7 @@
 //! Tauri commands for the Web Browser pane. Thin wrappers over
 //! `services::web_browser`; all URL validation happens here / in the service.
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, Window};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::services::web_browser::{self, BrowserRect, WebBrowserState};
@@ -14,13 +14,14 @@ const MAX_BOOKMARKS_BYTES: u64 = 5 * 1024 * 1024;
 #[tauri::command]
 pub async fn web_browser_create(
     app: AppHandle,
+    window: Window,
     state: State<'_, WebBrowserState>,
     pane_id: String,
     url: String,
     rect: BrowserRect,
 ) -> Result<(), String> {
     let validated = web_browser::validate_browser_url(&url)?;
-    web_browser::create(&app, &state, &pane_id, validated, &rect)
+    web_browser::create(&app, &state, window.label(), &pane_id, validated, &rect)
 }
 
 /// Navigate the pane's webview to a new address (validated server-side).

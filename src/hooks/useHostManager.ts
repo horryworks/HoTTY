@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { STORAGE_KEYS } from '../constants/storage';
 import { tauriService, isEncrypted } from '../services/tauriService';
 import { logError } from '../utils/logger';
+import { WINDOW_LABEL, IS_TAURI } from '../utils/windowLabel';
 import type { HostTreeNode, HostEntry } from '../types/appTypes';
 
 const STORAGE_KEY = STORAGE_KEYS.HOST_TREE;
@@ -142,6 +143,13 @@ function broadcastTreeUpdate(tree: HostTreeNode[]): void {
     for (const listener of treeListeners) listener(tree);
 }
 
+// Monotonic, MODULE-level write sequence. A local async encrypt only persists if
+// it is still the latest write at resolve time. Module-level (not per-hook) so it
+// coordinates across all useHostManager instances AND lets a cross-window remote
+// update (which bumps it) invalidate an in-flight local encrypt — otherwise that
+// stale encrypt would clobber the remote edit (lost update).
+let treeWriteSeq = 0;
+
 // ── In-Memory Decryption Cache ──
 
 type DecryptedCredentialInfo = {
@@ -182,7 +190,36 @@ function loadRawTree(): HostTreeNode[] {
 }
 
 function saveRawTree(tree: HostTreeNode[]) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tree));
+    const json = JSON.stringify(tree);
+    localStorage.setItem(STORAGE_KEY, json);
+    // Mirror the (encrypted) tree into other windows so the shared host tree
+    // stays consistent across the single process. The blob is the encrypted
+    // localStorage value — no plaintext credentials cross the event bus.
+    if (IS_TAURI) void tauriService.broadcastSharedChange(STORAGE_KEY, json);
+}
+
+// Apply host-tree changes broadcast by other windows (once per window, at
+// module load). Re-read the raw (encrypted) tree from localStorage and push it
+// to every in-window consumer via the same listener set used for in-window
+// mirroring — no re-broadcast, so it never echoes.
+if (IS_TAURI) {
+    void tauriService
+        .onSharedStoreChanged(({ channel, payload, origin }) => {
+            if (origin === WINDOW_LABEL || channel !== STORAGE_KEY) return;
+            if (localStorage.getItem(STORAGE_KEY) === payload) return;
+            localStorage.setItem(STORAGE_KEY, payload);
+            // Invalidate any in-flight local encrypt so its delayed saveRawTree
+            // can't overwrite this remote edit (lost update).
+            treeWriteSeq++;
+            // Drop the in-memory plaintext cache: another window may have changed
+            // a host's credentials, so cached decrypts are now stale. They are
+            // rebuilt lazily on next connect/save from the new encrypted blob.
+            clearDecryptedCache();
+            broadcastTreeUpdate(loadRawTree());
+        })
+        .catch(() => {
+            /* listen() unavailable — host-tree cross-window sync stays a no-op */
+        });
 }
 
 // ── Tree manipulation helpers (pure functions) ──
@@ -245,21 +282,18 @@ function sortNodes(nodes: HostTreeNode[]): HostTreeNode[] {
 export function useHostManager() {
     const [tree, setTree] = useState<HostTreeNode[]>([]);
 
-    // Monotonic counter to discard out-of-order encryptTree results. Without
-    // this, two rapid edits could land in localStorage in the wrong order
-    // (encryption is async and may resolve out of submission order), losing
-    // the later edit. Each call captures the next id and only writes if it
-    // is still the latest at resolve time.
-    const latestEncryptRequestRef = useRef(0);
     const persistEncryptedAsync = useCallback((nodes: HostTreeNode[]) => {
         // Mirror the change into every other useHostManager instance before
         // the async encrypt/persist: the SessionDialog tree and any other
         // consumer must see the new node immediately, not on next app launch.
         broadcastTreeUpdate(nodes);
-        const myId = ++latestEncryptRequestRef.current;
+        // Capture the module-level write sequence; only persist if still latest
+        // at resolve time. Guards against out-of-order async encrypts AND a
+        // concurrent cross-window remote update (which bumps the sequence).
+        const myId = ++treeWriteSeq;
         encryptTree(nodes)
             .then((encrypted) => {
-                if (latestEncryptRequestRef.current === myId) {
+                if (treeWriteSeq === myId) {
                     saveRawTree(encrypted);
                 }
             })
@@ -283,7 +317,6 @@ export function useHostManager() {
 
     useEffect(() => {
         const raw = loadRawTree();
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setTree(raw);
 
         // v1 (Electron safeStorage) credentials live as [SAFE] + base64("v10" + DPAPI-blob);
@@ -433,9 +466,9 @@ export function useHostManager() {
     }, [persistEncryptedAsync]);
 
     const persistAndSet = useCallback(async (decryptedTree: HostTreeNode[]) => {
-        const myId = ++latestEncryptRequestRef.current;
+        const myId = ++treeWriteSeq;
         const encrypted = await encryptTree(decryptedTree);
-        if (latestEncryptRequestRef.current === myId) {
+        if (treeWriteSeq === myId) {
             saveRawTree(encrypted);
         }
         // Broadcast first so every instance (including this one) updates via

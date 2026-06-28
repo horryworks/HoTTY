@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { LayoutMode } from '../types/appTypes';
+import { windowScopedKey } from '../constants/storage';
+import { WINDOW_LABEL } from '../utils/windowLabel';
 import { useSidebarLayoutStore } from './sidebarLayoutStore';
 
 export const SIDEBAR_PANE_IDS = [
@@ -227,7 +229,9 @@ export const usePaneStore = create<PaneState & PaneActions>()(
       setPaneAllocations: (next) => set({ paneAllocations: next }),
     }),
     {
-      name: 'hotty-pane-layout',
+      // Per-window: each window keeps its own pane layout. The initial "main"
+      // window keeps the legacy unsuffixed key (back-compat).
+      name: windowScopedKey('hotty-pane-layout', WINDOW_LABEL),
       version: 2,
       partialize: (state) => ({
         layoutMode: state.layoutMode,

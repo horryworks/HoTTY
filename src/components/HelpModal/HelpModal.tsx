@@ -47,6 +47,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
             <div className="help-section-body">
               <ul className="shortcuts-list">
                 <li><code>Ctrl + N</code> {t('help.shortcuts.newSession')}</li>
+                <li><code>Ctrl + Shift + N</code> {t('help.shortcuts.newWindow')}</li>
                 <li><code>Ctrl + Tab</code> {t('help.shortcuts.focusNext')}</li>
                 <li><code>Ctrl + Shift + Tab</code> {t('help.shortcuts.focusPrev')}</li>
                 <li><code>Ctrl + W</code> {t('help.shortcuts.closeTab')}</li>
@@ -204,6 +205,9 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               </p>
               <p className="help-text">
                 <Trans i18nKey="help.layout.lineWrap" components={[<strong key="0" />, <strong key="1" />]} />
+              </p>
+              <p className="help-text">
+                <Trans i18nKey="help.layout.multiWindow" components={[<strong key="0" />, <strong key="1" />, <code key="2" />]} />
               </p>
             </div>
           </details>

@@ -4,6 +4,7 @@ import { AppSidebar } from './AppSidebar';
 import { usePaneStore } from '../../stores/paneStore';
 import { useSidebarLayoutStore } from '../../stores/sidebarLayoutStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { tauriService } from '../../services/tauriService';
 
 describe('AppSidebar', () => {
   beforeEach(() => {
@@ -44,6 +45,14 @@ describe('AppSidebar', () => {
     render(<AppSidebar onOpenSettings={onOpenSettings} onOpenHelp={() => {}} />);
     fireEvent.click(screen.getByTitle('Settings'));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('New Window button invokes tauriService.createWindow', () => {
+    const spy = vi.spyOn(tauriService, 'createWindow').mockResolvedValue('win-1');
+    render(<AppSidebar onOpenSettings={() => {}} onOpenHelp={() => {}} />);
+    fireEvent.click(screen.getByTitle('New Window (Ctrl+Shift+N)'));
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
   });
 
   it('Help button invokes the onOpenHelp callback', () => {

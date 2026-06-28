@@ -10,6 +10,7 @@ export const help = {
   shortcuts: {
     summary: 'Raccourcis',
     newSession: 'Boîte de dialogue Nouvelle session',
+    newWindow: 'Nouvelle fenêtre',
     focusNext: 'Activer le volet suivant',
     focusPrev: 'Activer le volet précédent',
     closeTab: "Fermer l'onglet actuel",
@@ -81,6 +82,8 @@ export const help = {
       '<0>Indices des volets vides :</0> les cellules de grille vides affichent leur numéro de volet et une invite « Déposer l\'onglet ici » pour que vous sachiez où déposer un onglet.',
     lineWrap:
       '<0>Bascule du retour à la ligne :</0> désactivez <1>Paramètres → Apparence → Retour à la ligne</1> pour activer une barre de défilement horizontale sur les volets de terminal. La vue défile automatiquement pour garder le curseur visible lorsque vous tapez au-delà du bord droit, et revient à la colonne 0 sur Entrée. La barre de défilement verticale et le marqueur de prompt restent ancrés au bord droit du volet quelle que soit la position de défilement horizontal.',
+    multiWindow:
+      '<0>Fenêtres multiples :</0> ouvrez une autre fenêtre avec le bouton <1>Nouvelle fenêtre</1> de la barre latérale ou avec <2>Ctrl + Shift + N</2> — relancer HoTTY ouvre également une nouvelle fenêtre dans le même processus. Chaque fenêtre conserve ses propres volets et sessions de terminal, tandis que vos paramètres, votre thème, votre arborescence d\'hôtes et vos favoris restent partagés et synchronisés entre toutes les fenêtres. Un chat IA peut même être lié à un terminal exécuté dans une autre fenêtre.',
   },
 
   copyPaste: {

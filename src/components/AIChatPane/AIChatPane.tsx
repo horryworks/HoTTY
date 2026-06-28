@@ -24,8 +24,9 @@ import { logError } from '../../utils/logger';
 import type { AiChatState, ChatTab } from '../../hooks/useAiChat';
 import { getActiveTab } from '../../hooks/useAiChat';
 import type { SessionRecord } from '../../hooks/useSessionManager';
-import type { PersonaDefinition, AIModelInfo } from '../../types/appTypes';
+import type { PersonaDefinition, AIModelInfo, LinkableSession } from '../../types/appTypes';
 import { TabStrip } from './TabStrip';
+import { groupLinkableSessions } from './linkPicker';
 import './AIChatPane.css';
 
 interface ChatMessage {
@@ -48,6 +49,12 @@ interface AIChatPaneProps {
     onSendMessage?: (text: string) => void;
     aiPersonas: PersonaDefinition[];
     terminalBackground?: string;
+    /** Sessions selectable in the link picker (this window + other windows). */
+    linkableSessions?: LinkableSession[];
+    /** Link the active tab to a session (any window) or unlink (undefined). */
+    onLinkSession?: (sessionId: string | undefined) => void;
+    /** Refresh the cross-window session list (called when the picker opens). */
+    onRefreshSessions?: () => void;
 }
 
 // ── AI Icon Component ──
@@ -245,6 +252,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     onSendMessage,
     aiPersonas,
     terminalBackground,
+    linkableSessions,
+    onLinkSession,
+    onRefreshSessions,
 }) => {
     const { t } = useTranslation();
     // Derive active tab from chatState (Phase 1: tabs[] + activeTabId, single linkedSessionId per tab)
@@ -372,14 +382,33 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const [localSystemInstruction, setLocalSystemInstruction] = useState(chatState?.systemInstruction || 'You are a helpful assistant.');
     const [showPromptModal, setShowPromptModal] = useState(false);
 
-    // Target session info derived from the active tab
+    // Lookup of selectable sessions (incl. other windows') so a cross-window
+    // link resolves its title/liveness even though it isn't in the local
+    // `sessions` map.
+    const linkableById = useMemo(() => {
+        const m = new Map<string, LinkableSession>();
+        for (const ls of linkableSessions ?? []) m.set(ls.sessionId, ls);
+        return m;
+    }, [linkableSessions]);
+
+    // Group selectable sessions for the link picker: this window's own, then one
+    // group per other window.
+    const linkGroups = useMemo(() => groupLinkableSessions(linkableSessions), [linkableSessions]);
+
+    // Target session info derived from the active tab. Prefer the local session
+    // record; fall back to the cross-window linkable list for remote links.
     const lastTargetSessionId = activeTab?.linkedSessionId;
-    const lastTargetSessionTitle = lastTargetSessionId ? (sessions?.get(lastTargetSessionId)?.displayName) : undefined;
+    const lastTargetSessionTitle = lastTargetSessionId
+        ? (sessions?.get(lastTargetSessionId)?.displayName ?? linkableById.get(lastTargetSessionId)?.displayName)
+        : undefined;
     // Liveness of the linked target. A link can point at a session that is
-    // disconnected / reconnecting / gone (e.g. SSH dropped while watching). The
-    // chip and run-target label reflect this so the UI never looks "connected"
-    // when commands can't actually reach the terminal.
-    const lastTargetStatus = lastTargetSessionId ? sessions?.get(lastTargetSessionId)?.status : undefined;
+    // disconnected / reconnecting / gone (e.g. SSH dropped while watching), or
+    // at a session in another window (resolved via the linkable list). The chip
+    // and run-target label reflect this so the UI never looks "connected" when
+    // commands can't actually reach the terminal.
+    const lastTargetStatus = lastTargetSessionId
+        ? (sessions?.get(lastTargetSessionId)?.status ?? linkableById.get(lastTargetSessionId)?.status)
+        : undefined;
     const linkedLive = lastTargetStatus === 'connected';
     const linkedStale = !!lastTargetSessionId && !linkedLive;
 
@@ -1354,6 +1383,40 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                 {lastTargetSessionTitle || t('aiChat.pane.terminalFallback')}{linkedStale ? t('aiChat.pane.disconnectedSuffix') : ''}
                             </span>
                         </button>
+                    )}
+                    {isAuthenticated && (linkableSessions?.length ?? 0) > 0 && (
+                        <select
+                            className="ai-chat-link-select"
+                            value={lastTargetSessionId ?? ''}
+                            title={t('aiChat.pane.linkPickerTitle')}
+                            aria-label={t('aiChat.pane.linkPickerTitle')}
+                            onMouseDown={() => onRefreshSessions?.()}
+                            onFocus={() => onRefreshSessions?.()}
+                            onChange={(e) => onLinkSession?.(e.target.value || undefined)}
+                        >
+                            <option value="">{t('aiChat.pane.linkNone')}</option>
+                            {/* Keep the current (possibly now-gone) link selectable so the
+                                control stays consistent and React doesn't warn. */}
+                            {lastTargetSessionId && !linkableById.has(lastTargetSessionId) && (
+                                <option value={lastTargetSessionId}>
+                                    {lastTargetSessionTitle || lastTargetSessionId}
+                                </option>
+                            )}
+                            {linkGroups.local.length > 0 && (
+                                <optgroup label={t('aiChat.pane.linkThisWindow')}>
+                                    {linkGroups.local.map((s) => (
+                                        <option key={s.sessionId} value={s.sessionId}>{s.displayName}</option>
+                                    ))}
+                                </optgroup>
+                            )}
+                            {linkGroups.remote.map(([label, list]) => (
+                                <optgroup key={label} label={t('aiChat.pane.linkOtherWindow', { label })}>
+                                    {list.map((s) => (
+                                        <option key={s.sessionId} value={s.sessionId}>{s.displayName}</option>
+                                    ))}
+                                </optgroup>
+                            ))}
+                        </select>
                     )}
                 </div>
                 <div className="ai-chat-header-right">

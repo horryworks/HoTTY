@@ -38,8 +38,8 @@ function makeDefaultOptions(overrides: Partial<Parameters<typeof useAiChat>[0]> 
     sessions: new Map<string, SessionRecord>(),
     featurePanes: new Map<string, FeaturePaneInfo>(),
     aiPersonas: defaultPersonas,
-    getWatchBuffer: vi.fn().mockReturnValue(''),
-    clearWatchBuffer: vi.fn(),
+    takeWatchBuffer: vi.fn().mockResolvedValue(''),
+    ensureAiConsent: vi.fn().mockResolvedValue(true),
     createAiChatPane: vi.fn().mockReturnValue('ai-new-1'),
     lastTerminalSessionId: null,
     paneAllocations: {} as Record<string, string | null>,
@@ -232,7 +232,7 @@ describe('useAiChat', () => {
     expect(result.current.aiChatStates.get('ai-1')?.activeTabId).toBe(secondTabId);
   });
 
-  it('askAi creates new AI pane when none exists', () => {
+  it('askAi creates new AI pane when none exists', async () => {
     const sessions = new Map<string, SessionRecord>();
     sessions.set('s1', makeSessionRecord('s1'));
 
@@ -244,14 +244,14 @@ describe('useAiChat', () => {
 
     const { result } = renderHook(() => useAiChat(opts));
 
-    act(() => {
-      result.current.askAi('some text', 'explain');
+    await act(async () => {
+      await result.current.askAi('some text', 'explain');
     });
 
     expect(opts.createAiChatPane).toHaveBeenCalled();
   });
 
-  it('askAi reuses existing AI pane', () => {
+  it('askAi reuses existing AI pane', async () => {
     const sessions = new Map<string, SessionRecord>();
     sessions.set('s1', makeSessionRecord('s1'));
 
@@ -267,8 +267,8 @@ describe('useAiChat', () => {
 
     const { result } = renderHook(() => useAiChat(opts));
 
-    act(() => {
-      result.current.askAi('some text', 'explain');
+    await act(async () => {
+      await result.current.askAi('some text', 'explain');
     });
 
     expect(opts.createAiChatPane).not.toHaveBeenCalled();
@@ -286,7 +286,7 @@ describe('useAiChat', () => {
     expect(opts.createAiChatPane).not.toHaveBeenCalled();
   });
 
-  it('askAi sends the typed question + selection to the chat', () => {
+  it('askAi sends the typed question + selection to the chat', async () => {
     const sessions = new Map<string, SessionRecord>();
     sessions.set('s1', makeSessionRecord('s1'));
 
@@ -302,8 +302,8 @@ describe('useAiChat', () => {
 
     const { result } = renderHook(() => useAiChat(opts));
 
-    act(() => {
-      result.current.askAi('some code', 'Explain this');
+    await act(async () => {
+      await result.current.askAi('some code', 'Explain this');
     });
 
     const state = result.current.aiChatStates.get('ai-1');
@@ -342,8 +342,10 @@ describe('useAiChat', () => {
       });
     });
 
-    act(() => {
-      result.current.sendMessage('ai-1', 'Hello');
+    // The consent gate awaits before sending, so the send resolves on a later
+    // microtask — await sendMessage rather than asserting synchronously.
+    await act(async () => {
+      await result.current.sendMessage('ai-1', 'Hello');
     });
 
     expect(tauriService.aiChatSend).toHaveBeenCalledWith('ai-1', 'Hello', 'gpt-4o', 'Be helpful.');
@@ -368,13 +370,12 @@ describe('useAiChat', () => {
     const sessions = new Map<string, SessionRecord>();
     sessions.set('s1', makeSessionRecord('s1'));
 
-    const getWatchBuffer = vi.fn().mockReturnValue('watched output');
-    const clearWatchBuffer = vi.fn();
+    // Backend-backed read-and-clear: returns the watched output once.
+    const takeWatchBuffer = vi.fn().mockResolvedValue('watched output');
 
     const opts = makeDefaultOptions({
       sessions,
-      getWatchBuffer,
-      clearWatchBuffer,
+      takeWatchBuffer,
     });
 
     const { result } = renderHook(() => useAiChat(opts));
@@ -387,17 +388,46 @@ describe('useAiChat', () => {
       });
     });
 
-    act(() => {
-      result.current.sendMessage('ai-1', 'What happened?');
+    await act(async () => {
+      await result.current.sendMessage('ai-1', 'What happened?');
     });
 
+    expect(takeWatchBuffer).toHaveBeenCalledWith('s1');
     expect(tauriService.aiChatSend).toHaveBeenCalledWith(
       'ai-1',
       expect.stringContaining('Watched Terminal Output'),
       'gpt-4o',
       'Be helpful.',
     );
-    expect(clearWatchBuffer).toHaveBeenCalledWith('s1');
+  });
+
+  it('sendMessage aborts without sending when consent is declined', async () => {
+    const { tauriService } = await import('../services/tauriService');
+
+    const sessions = new Map<string, SessionRecord>();
+    sessions.set('s1', makeSessionRecord('s1'));
+    const takeWatchBuffer = vi.fn().mockResolvedValue('watched output');
+    // User declined the AI data-sharing disclosure.
+    const ensureAiConsent = vi.fn().mockResolvedValue(false);
+
+    const opts = makeDefaultOptions({ sessions, takeWatchBuffer, ensureAiConsent });
+    const { result } = renderHook(() => useAiChat(opts));
+
+    act(() => {
+      result.current.updateAiChatState('ai-1', {
+        ...createDefaultAiChatState('s1', 'Session s1'),
+        selectedModel: 'gpt-4o',
+      });
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('ai-1', 'What happened?');
+    });
+
+    expect(ensureAiConsent).toHaveBeenCalled();
+    // Neither the watch buffer is consumed nor any data sent.
+    expect(takeWatchBuffer).not.toHaveBeenCalled();
+    expect(tauriService.aiChatSend).not.toHaveBeenCalled();
   });
 });
 

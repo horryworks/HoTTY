@@ -69,6 +69,10 @@ export const aiChat = {
     dismiss: '닫기',
     newChat: '새 채팅',
     newChatTitle: '새 채팅 시작',
+    linkPickerTitle: '이 채팅을 터미널에 연결',
+    linkNone: '연결 안 됨',
+    linkThisWindow: '이 창',
+    linkOtherWindow: '창: {{label}}',
     linkedChipTitleStale: '{{name}}에 대한 링크가 {{status}}입니다. 터미널을 다시 연결하고 Watch를 눌러 다시 링크하세요.',
     linkedChipTitle: '{{name}}에 연결됨. 포커스하려면 클릭하세요.',
     linkedChipAriaStale: '연결된 터미널 {{name}}이(가) {{status}}입니다',
@@ -143,5 +147,15 @@ export const aiChat = {
     verdictConfidence: ' (신뢰도 {{percent}}%)',
     verdictReasonReadOnly: '읽기 전용',
     verdictReasonRunManually: '수동 실행',
+  },
+  consent: {
+    // 터미널 데이터가 AI 제공업체로 처음 전송되기 전에 한 번만 표시되는 고지.
+    title: 'AI 데이터 공유 고지',
+    intro: 'AI 기능은 사용자가 구성한 타사 AI 제공업체(Google Gemini / Vertex AI, Anthropic 또는 OpenAI)에 사용자 본인의 API 키를 사용하여 데이터를 전송하며, 이는 해당 제공업체의 약관 및 개인정보 처리방침에 따라 이루어집니다.',
+    bulletWhat: '전송되는 항목: 입력한 메시지와, AI에게 질문 및 감시 모드의 경우 세션에서 캡처한 터미널 출력 및 명령.',
+    bulletWhen: '시점: AI 기능을 명시적으로 사용할 때만 전송됩니다. 터미널이 지속적으로 전송되지는 않습니다.',
+    bulletRedaction: '알려진 비밀 패턴은 로그에서 가려지지만, 사용자가 메시지에 직접 입력한 텍스트는 그대로 전송됩니다 — AI 프롬프트에 자격 증명을 붙여넣지 마세요.',
+    footnote: '이 고지는 설정 → AI에서 언제든지 확인할 수 있습니다.',
+    accept: '동의하고 계속',
   },
 };

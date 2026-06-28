@@ -2,15 +2,18 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use serde::Serialize;
 use serde_json::Value;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, Window};
 use tokio::sync::Mutex;
 
 use crate::services::gcloud_iap::{GcloudIapConfig, GcloudIapSession};
 use crate::services::local::{LocalConfig, LocalSession};
 use crate::services::log_manager::LogManager;
 use crate::services::serial::{SerialConfig, SerialSession};
-use crate::services::session_service::{emit_session_error, SessionError, SessionService};
+use crate::services::session_service::{
+    emit_session_error, SessionError, SessionOwners, SessionService,
+};
 use crate::services::ssh::{resolve_host_key_prompt, HostKeyDecision, SshConfig, SshSession};
 use crate::services::telnet::{TelnetConfig, TelnetSession};
 use crate::services::wsl::{WslConfig, WslSession};
@@ -74,8 +77,10 @@ impl Default for SessionState {
 #[allow(clippy::too_many_arguments)]
 pub async fn connect_session(
     app: AppHandle,
+    window: Window,
     state: State<'_, SessionState>,
     log_manager: State<'_, LogManager>,
+    owners: State<'_, SessionOwners>,
     session_id: String,
     protocol: String,
     config: Value,
@@ -203,9 +208,16 @@ pub async fn connect_session(
         other => return Err(format!("unsupported protocol: {other}")),
     };
 
+    // Register the owning window just before connecting (after config parse, so
+    // parse/unsupported-protocol early returns above never leak an owner entry):
+    // the read loop's first emits and any connect-failure error then target this
+    // window, not all windows.
+    owners.set(&session_id, window.label());
+
     if let Err(e) = service.connect(app.clone(), session_id.clone()).await {
         log::error!("connect failed for {session_id}: {e}");
         emit_session_error(&app, &session_id, e.to_string());
+        owners.remove(&session_id);
         return Err(e.to_string());
     }
 
@@ -240,13 +252,49 @@ pub async fn connect_session(
     Ok(())
 }
 
+/// One live session as seen across ALL windows in the process (the enabler for
+/// cross-window AI: a chat in one window can discover and link to a terminal
+/// owned by another window). Display names / binding keys live in the renderer,
+/// so the frontend enriches this with its per-window session registry.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionInfo {
+    pub session_id: String,
+    pub host: String,
+    pub protocol: String,
+    pub owner_label: Option<String>,
+}
+
+/// List every live session across all windows (id, host, protocol, owning
+/// window). `send_input` and the watch buffer are keyed by global session id, so
+/// linking an AI chat to any returned session works regardless of window.
+#[tauri::command]
+pub async fn list_all_sessions(
+    state: State<'_, SessionState>,
+    owners: State<'_, SessionOwners>,
+) -> Result<Vec<SessionInfo>, String> {
+    let map = state.sessions.lock().await;
+    let infos = map
+        .iter()
+        .map(|(id, (_service, meta))| SessionInfo {
+            session_id: id.clone(),
+            host: meta.host.clone(),
+            protocol: meta.protocol.as_str().to_string(),
+            owner_label: owners.get(id),
+        })
+        .collect();
+    Ok(infos)
+}
+
 #[tauri::command]
 pub async fn disconnect_session(
     state: State<'_, SessionState>,
     log_manager: State<'_, LogManager>,
+    owners: State<'_, SessionOwners>,
     session_id: String,
 ) -> Result<(), String> {
     log_manager.stop_logging(&session_id).await;
+    owners.remove(&session_id);
     let mut map = state.sessions.lock().await;
     match map.remove(&session_id) {
         Some((mut s, _meta)) => s.disconnect().await.map_err(|e| e.to_string()),

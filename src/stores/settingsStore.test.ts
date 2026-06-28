@@ -20,6 +20,17 @@ describe('settingsStore', () => {
     expect(s.telnetConnectTimeoutSecs).toBe(5);
   });
 
+  it('defaults the AI data-consent gate to not-accepted', () => {
+    expect(useSettingsStore.getState().aiDataConsentAccepted).toBe(false);
+  });
+
+  it('records AI data-consent acceptance and clears it on reset', () => {
+    useSettingsStore.getState().update('aiDataConsentAccepted', true);
+    expect(useSettingsStore.getState().aiDataConsentAccepted).toBe(true);
+    useSettingsStore.getState().reset();
+    expect(useSettingsStore.getState().aiDataConsentAccepted).toBe(false);
+  });
+
   it('update mutates a single key', () => {
     useSettingsStore.getState().update('fontSize', 20);
     expect(useSettingsStore.getState().fontSize).toBe(20);

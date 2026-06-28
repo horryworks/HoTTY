@@ -37,6 +37,7 @@ export const chrome = {
     },
     disableLineWrap: '行の折り返しを無効化',
     enableLineWrap: '行の折り返しを有効化',
+    newWindow: '新しいウィンドウ',
     help: 'ヘルプ / ドキュメント',
     settings: '設定',
   },

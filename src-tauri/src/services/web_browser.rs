@@ -161,6 +161,7 @@ mod disabled {
     pub fn create(
         _app: &AppHandle,
         _state: &WebBrowserState,
+        _parent_label: &str,
         _pane_id: &str,
         _url: Url,
         _rect: &BrowserRect,
@@ -304,6 +305,7 @@ mod enabled {
     pub fn create(
         app: &AppHandle,
         state: &WebBrowserState,
+        parent_label: &str,
         pane_id: &str,
         url: Url,
         rect: &BrowserRect,
@@ -318,9 +320,11 @@ mod enabled {
             return Ok(());
         }
 
+        // Attach the child webview to the window that hosts this pane (not a
+        // hardcoded "main"), so the Web Browser pane works in any window.
         let window = app
-            .get_window("main")
-            .ok_or_else(|| "main window not found".to_string())?;
+            .get_window(parent_label)
+            .ok_or_else(|| format!("window '{parent_label}' not found"))?;
 
         let label = label_for_pane(pane_id);
         let (pos, size) = rect_to_physical(rect);

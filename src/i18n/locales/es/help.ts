@@ -10,6 +10,7 @@ export const help = {
   shortcuts: {
     summary: 'Atajos',
     newSession: 'Diálogo de nueva sesión',
+    newWindow: 'Nueva ventana',
     focusNext: 'Enfocar el panel siguiente',
     focusPrev: 'Enfocar el panel anterior',
     closeTab: 'Cerrar la pestaña actual',
@@ -81,6 +82,8 @@ export const help = {
       '<0>Sugerencias de paneles vacíos:</0> las celdas de cuadrícula vacías muestran su número de panel y un mensaje "Soltar pestaña aquí" para que sepa dónde soltar una pestaña.',
     lineWrap:
       '<0>Alternar ajuste de línea:</0> desactive <1>Configuración → Apariencia → Ajuste de línea</1> para activar una barra de desplazamiento horizontal en los paneles del terminal. La vista se desplaza automáticamente para mantener el cursor a la vista mientras escribe más allá del borde derecho, y vuelve a la columna 0 al pulsar Enter. La barra de desplazamiento vertical y el marcador de prompt permanecen anclados al borde derecho del panel independientemente de la posición de desplazamiento horizontal.',
+    multiWindow:
+      '<0>Múltiples ventanas:</0> abra otra ventana con el botón <1>Nueva ventana</1> de la barra lateral o con <2>Ctrl + Shift + N</2>: al iniciar HoTTY de nuevo también se abre una ventana nueva en el mismo proceso. Cada ventana mantiene sus propios paneles y sesiones de terminal, mientras que sus ajustes, tema, árbol de hosts y marcadores se comparten y sincronizan entre todas las ventanas. Un chat de IA puede incluso enlazarse a un terminal que se ejecuta en otra ventana.',
   },
 
   copyPaste: {

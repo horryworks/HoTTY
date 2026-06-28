@@ -1,6 +1,9 @@
+use std::fmt::Write as _;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+
+use crate::services::atomic_file::atomic_write;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HostKeyCheck {
@@ -120,11 +123,16 @@ pub fn upsert_known_host(
         format!("[{host}]:{port}")
     };
 
-    let mut f = File::create(path)?;
+    // Build the full file content, then write it atomically. The previous
+    // in-place File::create truncated the file first, so a crash mid-write (or a
+    // concurrent write from another window) could corrupt known_hosts and break
+    // host-key verification. atomic_write swaps a temp file in via rename.
+    let mut content = String::new();
     for line in kept {
-        writeln!(f, "{line}")?;
+        let _ = writeln!(content, "{line}");
     }
-    writeln!(f, "{pattern} {key_type} {key_base64}")?;
+    let _ = writeln!(content, "{pattern} {key_type} {key_base64}");
+    atomic_write(path, content.as_bytes())?;
     Ok(())
 }
 

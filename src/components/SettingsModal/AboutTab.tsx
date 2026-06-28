@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
+import { ThirdPartyLicensesModal } from '../ThirdPartyLicensesModal/ThirdPartyLicensesModal';
 
 // Logo is fully baked into a single PNG: white background, rounded corners,
 // and inner padding are all part of the pixel data. No CSS is required to
@@ -12,6 +13,7 @@ const HOTTY_LOGO_DATA_URL =
 
 export function AboutTab() {
   const [version, setVersion] = useState('');
+  const [licensesOpen, setLicensesOpen] = useState(false);
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -82,6 +84,23 @@ export function AboutTab() {
           {t('settings.about.viewLicense')}
         </a>
       </p>
+
+      <p style={{ margin: '8px 0 0 0' }}>
+        <a
+          href="#"
+          className="about-link"
+          onClick={(e) => {
+            e.preventDefault();
+            setLicensesOpen(true);
+          }}
+        >
+          {t('settings.about.thirdPartyLicenses')}
+        </a>
+      </p>
+
+      {licensesOpen && (
+        <ThirdPartyLicensesModal onClose={() => setLicensesOpen(false)} />
+      )}
     </div>
   );
 }

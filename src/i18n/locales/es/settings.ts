@@ -204,6 +204,22 @@ export const settings = {
     logoutMessage:
       '¿Está seguro de que desea cerrar sesión? Deberá volver a autenticarse para usar el proveedor de IA.',
     logoutConfirm: 'Cerrar sesión',
+    // Divulgación sobre el tratamiento de datos
+    dataHandlingSection: 'Tratamiento de datos',
+    dataHandlingHelp:
+      'Cuando usa las funciones de IA, los datos se envían al proveedor de IA externo que haya configurado, usando su propia clave de API, conforme a los términos y la política de privacidad de dicho proveedor.',
+    dataHandlingBulletProviders:
+      'Proveedores: Google Gemini / Vertex AI, Anthropic u OpenAI, el que seleccione más arriba.',
+    dataHandlingBulletWhen:
+      'Se envían solo cuando usa explícitamente una función de IA (chat, Preguntar a la IA o Monitorización). Su terminal nunca se transmite de forma continua.',
+    dataHandlingBulletRedaction:
+      'Los patrones de secretos conocidos se ocultan de los registros, pero el texto que escribe en un mensaje se envía tal cual: evite pegar credenciales.',
+    dataConsentStatus: 'Consentimiento de divulgación',
+    dataConsentAccepted: 'Aceptado',
+    dataConsentNotAccepted: 'Aún no se ha mostrado',
+    resetDataConsent: 'Mostrar de nuevo',
+    resetDataConsentHelp:
+      'Restablezca el consentimiento para que la divulgación sobre el envío de datos a la IA se muestre de nuevo antes del próximo envío a la IA.',
   },
   about: {
     version: 'v{{version}}',
@@ -214,6 +230,14 @@ export const settings = {
     licenseLine2: 'GNU General Public License v3.0 o posterior.',
     viewLicense: 'Ver GNU General Public License v3.0',
     logoAlt: 'Logotipo de HoTTY',
+    // Licencias de terceros
+    thirdPartyLicenses: 'Licencias de terceros',
+    thirdPartyLicensesTitle: 'Licencias de terceros',
+    thirdPartyLicensesIntro: 'HoTTY incluye software de código abierto de los siguientes proyectos:',
+    thirdPartyLicensesLoading: 'Cargando licencias…',
+    thirdPartyLicensesError: 'No se pudo cargar la información de licencias.',
+    thirdPartyLicensesEmpty: 'No hay información de licencias de terceros disponible.',
+    thirdPartyLicensesClose: 'Cerrar',
   },
   customTheme: {
     title: 'Creador de temas personalizados',

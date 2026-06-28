@@ -22,6 +22,7 @@ import { HelpModal } from './components/HelpModal/HelpModal';
 import { SshHostKeyModal } from './components/SshHostKeyModal/SshHostKeyModal';
 import { IapVmStartModal } from './components/IapVmStartModal/IapVmStartModal';
 import { PasteConfirmationModal } from './components/PasteConfirmationModal/PasteConfirmationModal';
+import { AiConsentModal } from './components/AiConsentModal/AiConsentModal';
 import { UpdateNotification } from './components/UpdateNotification/UpdateNotification';
 import { ErrorNotification } from './components/ErrorNotification/ErrorNotification';
 import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary';
@@ -38,6 +39,10 @@ import { applyTheme } from './utils/applyTheme';
 import { DEFAULT_THEMES, isBuiltInThemeId } from './themes/defaults';
 import { useThemes } from './hooks/useThemes';
 import { usePaneKeyboardNav } from './hooks/usePaneKeyboardNav';
+import { useNewWindowShortcut } from './hooks/useNewWindowShortcut';
+import { initSharedStoreSync } from './stores/sharedStoreSync';
+import { IS_TAURI, WINDOW_LABEL } from './utils/windowLabel';
+import type { SessionInfo, LinkableSession } from './types/appTypes';
 import {
   makeFeaturePaneId,
   getPaneContentType,
@@ -46,7 +51,6 @@ import {
   type FeaturePaneInfo,
   type FeaturePaneType,
 } from './utils/paneTypes';
-import { stripAnsiCodes } from './utils/ansiUtils';
 import { totalDirtyEditors } from './utils/dirtyEditors';
 import { evaluateWatchPoll } from './utils/aiCommandWatch';
 import { parseLeadingSleep, clampDelay, syntheticDelayMessage, type SleepDelayParse } from './utils/aiCommandDelay';
@@ -111,11 +115,11 @@ function App() {
 
   const handleSessionRemoved = useCallback((id: string) => {
     usePaneStore.getState().removeSession(id);
-    // Always evict this session's watch buffer — it can persist past the
-    // currently-watched session if an AI pane was closed before the linked
+    // Always evict this session's backend watch buffer — it can persist past
+    // the currently-watched session if an AI pane was closed before the linked
     // terminal session was removed (the pane's close path only knew about
     // the live `watchingSessionId`, not stale entries from prior watches).
-    watchBuffers.current.delete(id);
+    void tauriService.setWatching(id, false, 0);
     if (watchingSessionIdRef.current === id) {
       setWatchingSessionId(null);
     }
@@ -142,6 +146,16 @@ function App() {
 
   // Ctrl+Tab / Ctrl+Shift+Tab cycle keyboard focus between visible panes.
   usePaneKeyboardNav();
+  // Ctrl+Shift+N opens a new HoTTY window in the same process.
+  useNewWindowShortcut();
+
+  // Keep shared stores (settings, bookmarks) in sync across windows. Returns a
+  // disposer so StrictMode's double-mount doesn't leak duplicate listeners.
+  // No-op outside Tauri (tests).
+  useEffect(() => {
+    if (!IS_TAURI) return;
+    return initSharedStoreSync();
+  }, []);
 
   const { t } = useTranslation();
   const language = useSettingsStore((s) => s.language);
@@ -209,19 +223,33 @@ function App() {
     }
   }, [lastTerminalSessionId]);
 
-  // AI Watch mode
+  // AI Watch mode. The watch buffer itself now lives in the backend
+  // (WatchBufferState), keyed by global session id, so any window's AI Chat can
+  // read any window's session output (cross-window watch). The frontend only
+  // tracks which sessions are linked and toggles capture via setWatching.
   const [watchingSessionId, setWatchingSessionId] = useState<string | null>(null);
-  const watchBuffers = useRef(new Map<string, string>());
-  const getWatchBuffer = useCallback((sid: string) => watchBuffers.current.get(sid) || '', []);
-  const clearWatchBuffer = useCallback((sid: string) => { watchBuffers.current.delete(sid); }, []);
+  const takeWatchBuffer = useCallback(
+    (sid: string) => tauriService.takeWatchBuffer(sid),
+    [],
+  );
+
+  // Sessions across ALL windows (cross-window AI linking). `list_all_sessions`
+  // is authoritative for existence + liveness (it only returns connected
+  // sessions). Refreshed on a slow interval while an AI Chat pane is open, and
+  // on demand when the link picker opens.
+  const [crossWindowSessions, setCrossWindowSessions] = useState<SessionInfo[]>([]);
+  const refreshCrossWindowSessions = useCallback(() => {
+    if (!IS_TAURI) return;
+    tauriService.listAllSessions().then(setCrossWindowSessions).catch(() => {});
+  }, []);
 
   const watchingSessionIdRef = useRef(watchingSessionId);
   useEffect(() => { watchingSessionIdRef.current = watchingSessionId; }, [watchingSessionId]);
 
-  // Set of every session linked from any tab in any AI Chat pane.
-  // Used by onSessionData to keep capturing into watchBuffers regardless of
-  // which tab is currently active — this prevents in-flight commands from
-  // losing their output when the user switches tabs mid-execution.
+  // Set of every session linked from any tab in any AI Chat pane. Diffed in the
+  // derived-links effect to enable/disable backend capture (setWatching), and
+  // checked before polling so in-flight commands keep capturing across tab
+  // switches.
   const watchingSessionIdsRef = useRef<Set<string>>(new Set());
 
   // Track active poll intervals from onRunCommand so they can be cleared when
@@ -263,6 +291,35 @@ function App() {
   const setActiveTabRef = useRef<(aiSessionId: string, tabId: string) => void>(undefined);
   const closeTabRef = useRef<(aiSessionId: string, tabId: string) => void>(undefined);
 
+  // AI data-sharing consent gate. The disclosure (AiConsentModal) is shown once
+  // before any terminal data is first sent to a third-party AI provider — via
+  // chat send, Ask AI, or enabling Watch. Acceptance persists in the settings
+  // store (aiDataConsentAccepted); thereafter the gate resolves immediately.
+  const [aiConsentOpen, setAiConsentOpen] = useState(false);
+  const aiConsentResolversRef = useRef<((ok: boolean) => void)[]>([]);
+
+  const ensureAiConsent = useCallback((): Promise<boolean> => {
+    if (useSettingsStore.getState().aiDataConsentAccepted) return Promise.resolve(true);
+    return new Promise<boolean>((resolve) => {
+      aiConsentResolversRef.current.push(resolve);
+      setAiConsentOpen(true);
+    });
+  }, []);
+
+  const settleAiConsent = useCallback((ok: boolean) => {
+    setAiConsentOpen(false);
+    const resolvers = aiConsentResolversRef.current;
+    aiConsentResolversRef.current = [];
+    resolvers.forEach((r) => r(ok));
+  }, []);
+
+  const handleAiConsentAccept = useCallback(() => {
+    updateSetting('aiDataConsentAccepted', true);
+    settleAiConsent(true);
+  }, [updateSetting, settleAiConsent]);
+
+  const handleAiConsentCancel = useCallback(() => settleAiConsent(false), [settleAiConsent]);
+
   // "AI Monitor" toggle for the singleton AI Chat pane. Smart tab routing:
   //   1. Some tab is already linked to this session
   //        - that tab is active        → unlink it (toggle off)
@@ -271,8 +328,7 @@ function App() {
   //   3. Active tab has a different link → create a new tab linked to this session
   // This way, AI Monitor on multiple terminals naturally produces one tab per
   // terminal without overwriting existing links.
-  const toggleWatch = useCallback((sessionId?: string) => {
-    if (!sessionId) return;
+  const runToggleWatch = useCallback((sessionId: string) => {
     const aiPaneId = createAiChatPaneRef.current?.();
     if (!aiPaneId) return;
 
@@ -290,7 +346,6 @@ function App() {
     if (!state) {
       const seed = createDefaultAiChatState(sessionId, session?.displayName);
       updateAiChatStateRef.current?.(aiPaneId, seed);
-      watchBuffers.current.set(sessionId, '');
       focusPane();
       return;
     }
@@ -304,7 +359,6 @@ function App() {
     switch (routing.action) {
       case 'unlink':
         setTabLinkRef.current?.(aiPaneId, routing.tabId, undefined);
-        watchBuffers.current.delete(sessionId);
         focusPane();
         return;
       case 'switch':
@@ -312,45 +366,29 @@ function App() {
         focusPane();
         return;
       case 'relink':
-        if (routing.evictSessionId) watchBuffers.current.delete(routing.evictSessionId);
         setTabLinkRef.current?.(aiPaneId, routing.tabId, sessionId);
         break;
       case 'new-tab':
         addTabRef.current?.(aiPaneId, sessionId);
         break;
     }
-    watchBuffers.current.set(sessionId, '');
+    // NOTE: don't clear the backend buffer here — a fresh buffer for a newly
+    // watched session is already provided by setWatching(true) in the
+    // derived-links effect below, and clearing on every (re)link would wipe the
+    // output of an in-flight auto-exec command on an already-watched session.
     focusPane();
   }, [sessions, setActivePaneId]);
 
-  // Capture terminal data into watch buffers for every session that any tab
-  // is linked to (so a tab switch does not drop data for in-flight commands).
-  useEffect(() => {
-    let cancelled = false;
-    const unlistenPromise = tauriService.onSessionData(({ sessionId, data }) => {
-      if (cancelled) return;
-      if (!watchingSessionIdsRef.current.has(sessionId)) return;
-      const stripped = stripAnsiCodes(data);
-      const current = watchBuffers.current.get(sessionId) || '';
-      let newBuffer = current + stripped;
-      const limit = useSettingsStore.getState().watchBufferLimit;
-      if (newBuffer.length > limit) {
-        const oldLen = newBuffer.length;
-        newBuffer = newBuffer.substring(newBuffer.length - limit);
-        aiExecLog('warn', 'buffer-trimmed', {
-          sessionId,
-          oldLen,
-          limit,
-          droppedBytes: oldLen - limit,
-        });
-      }
-      watchBuffers.current.set(sessionId, newBuffer);
-    });
-    return () => {
-      cancelled = true;
-      unlistenPromise.then(fn => fn());
-    };
-  }, []);
+  // Enabling Watch streams a terminal's output to the AI provider, so gate the
+  // first activation on the same data-sharing consent as chat sends.
+  const toggleWatch = useCallback((sessionId?: string) => {
+    if (!sessionId) return;
+    void ensureAiConsent().then((ok) => { if (ok) runToggleWatch(sessionId); });
+  }, [ensureAiConsent, runToggleWatch]);
+
+  // Watch-buffer capture now happens in the backend (fed from the session read
+  // loop in emit_session_data). The frontend only enables/disables capture per
+  // session via setWatching — see the derived-links effect below.
 
   const createAiChatPane = useCallback((): string | undefined => {
     if (!useSettingsStore.getState().enabledFeatures['ai-chat']) return undefined;
@@ -381,8 +419,8 @@ function App() {
     sessions,
     featurePanes,
     aiPersonas,
-    getWatchBuffer,
-    clearWatchBuffer,
+    takeWatchBuffer,
+    ensureAiConsent,
     createAiChatPane,
     lastTerminalSessionId,
     paneAllocations,
@@ -421,8 +459,19 @@ function App() {
         activeDerived = activeTab.linkedSessionId;
       }
     }
+    // Toggle backend capture for sessions that became (un)linked. Only the diff
+    // is acted on so an already-watched session's buffer is never reset by an
+    // unrelated chat-state change (setWatching(true) starts a fresh buffer).
+    const prev = watchingSessionIdsRef.current;
+    const limit = useSettingsStore.getState().watchBufferLimit;
+    for (const id of allLinked) {
+      if (!prev.has(id)) void tauriService.setWatching(id, true, limit);
+    }
+    for (const id of prev) {
+      if (!allLinked.has(id)) void tauriService.setWatching(id, false, 0);
+    }
     watchingSessionIdsRef.current = allLinked;
-    setWatchingSessionId((prev) => (prev === activeDerived ? prev : activeDerived));
+    setWatchingSessionId((prevId) => (prevId === activeDerived ? prevId : activeDerived));
   }, [aiChatStates]);
 
   // Auto-rebind orphaned AI Chat tabs to a reconnected terminal. When a watched
@@ -454,7 +503,8 @@ function App() {
     const candidates = connected.filter((s) => !linkedIds.has(s.id));
     const rebinds = selectAutoRebinds(candidates, connected, orphanTabs);
     for (const r of rebinds) {
-      watchBuffers.current.set(r.sessionId, '');
+      // setWatching(true) in the derived-links effect gives the rebound session a
+      // fresh buffer; don't clear here (would race an in-flight command's output).
       setTabLinkRef.current?.(r.paneId, r.tabId, r.sessionId);
       aiExecLog('info', 'auto-rebind', { paneId: r.paneId, tabId: r.tabId, sessionId: r.sessionId });
     }
@@ -527,7 +577,7 @@ function App() {
     tauriService
       .onSessionStatus(({ sessionId, status }) => {
         if (status === 'disconnected' && watchingSessionIdRef.current === sessionId) {
-          watchBuffers.current.delete(sessionId);
+          void tauriService.setWatching(sessionId, false, 0);
           setWatchingSessionId(null);
         }
       })
@@ -561,9 +611,41 @@ function App() {
     }
   }, [themeId, fontSize, fontFamily, themesData, updateSetting]);
 
+  // Keep the cross-window session list fresh while an AI Chat pane is open, so
+  // the link picker and remote-link liveness track other windows' connects.
+  useEffect(() => {
+    if (!IS_TAURI) return;
+    const hasAiPane = Array.from(featurePanes.values()).some((p) => p.type === 'ai-chat');
+    if (!hasAiPane) return;
+    refreshCrossWindowSessions();
+    const iv = setInterval(refreshCrossWindowSessions, 4000);
+    return () => clearInterval(iv);
+  }, [featurePanes, refreshCrossWindowSessions]);
+
   const orderedSessions: SessionRecord[] = sessionOrder
     .map((id) => sessions.get(id))
     .filter((s): s is SessionRecord => !!s);
+
+  // Sessions selectable in the AI Chat link picker: this window's own sessions
+  // plus every other window's live sessions (cross-window AI linking).
+  const linkableSessions: LinkableSession[] = [
+    ...orderedSessions.map((s) => ({
+      sessionId: s.id,
+      displayName: s.displayName,
+      ownerLabel: WINDOW_LABEL,
+      isLocal: true,
+      status: s.status,
+    })),
+    ...crossWindowSessions
+      .filter((cs) => !!cs.ownerLabel && cs.ownerLabel !== WINDOW_LABEL)
+      .map((cs) => ({
+        sessionId: cs.sessionId,
+        displayName: cs.host || cs.sessionId,
+        ownerLabel: cs.ownerLabel as string,
+        isLocal: false,
+        status: 'connected',
+      })),
+  ];
 
   const featurePanesList: FeaturePaneInfo[] = Array.from(featurePanes.values());
 
@@ -625,10 +707,13 @@ function App() {
       }
       if (type === 'ai-chat') {
         clearRunCommandIntervals(id);
-        if (watchingSessionId) {
-          watchBuffers.current.delete(watchingSessionId);
-          setWatchingSessionId(null);
+        // Disable backend capture for EVERY session this pane was watching (not
+        // just the active tab's), else those watch entries leak after close.
+        for (const sid of watchingSessionIdsRef.current) {
+          void tauriService.setWatching(sid, false, 0);
         }
+        watchingSessionIdsRef.current = new Set();
+        setWatchingSessionId(null);
       }
       setFeaturePanes((prev) => {
         const next = new Map(prev);
@@ -638,7 +723,7 @@ function App() {
       removeSessionFromStore(id);
     } else {
       if (watchingSessionId === id) {
-        watchBuffers.current.delete(id);
+        void tauriService.setWatching(id, false, 0);
         setWatchingSessionId(null);
       }
       await closeSession(id);
@@ -768,14 +853,19 @@ function App() {
   // completion (shell-prompt detection / idle / safety cap). Extracted from the
   // onRunCommand prop verbatim so a client-side sleep delay can invoke it either
   // immediately or after the wait. `paneId` was previously `featureInfo.id`.
-  const sendAndWatch = (
+  const sendAndWatch = async (
     targetId: string,
     cmd: string,
     originatingTabId: string,
     paneId: string,
   ) => {
-    // Record buffer position before sending command
-    const startLen = (watchBuffers.current.get(targetId) || '').length;
+    // Start from a clean buffer so the poll captures ONLY this command's output.
+    // The backend front-trims the buffer by bytes once it exceeds the limit, so
+    // an absolute `startLen` index into a growing/trimmed buffer would mis-slice
+    // (dropping or garbling the result); clearing makes `newContent` just the
+    // whole buffer and removes all index math.
+    await tauriService.clearWatchBuffer(targetId);
+    const startLen = 0;
 
     // Send command lines to terminal
     const lines = cmd.split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -835,83 +925,98 @@ function App() {
         sendDuration,
         originatingTabId,
       });
+      // The watch buffer lives in the backend now, so each poll reads it via an
+      // async peek. `polling` guards against overlapping ticks if a read is
+      // slow (the invoke round-trip should be well under the 200ms interval).
+      let polling = false;
       const pollInterval = setInterval(() => {
-        attempts++;
-        // Bail out if the originating tab no longer exists (user closed it).
-        const paneState = aiChatStatesRef.current.get(paneId);
-        const originatingTab = paneState?.tabs.find(t => t.id === originatingTabId);
-        if (!originatingTab) {
-          aiExecLog('warn', 'originating-tab-gone', {
-            cmd: trimCmdForLog(cmd),
-            attempts,
-            originatingTabId,
-          });
-          clearInterval(pollInterval);
-          intervalSet.delete(pollInterval);
-          return;
-        }
-        const buf = watchBuffers.current.get(targetId) || '';
-        if (!startLenWarned && startLen > buf.length) {
-          startLenWarned = true;
-          aiExecLog('warn', 'startlen-out-of-range', {
-            cmd: trimCmdForLog(cmd),
-            startLen,
-            bufLen: buf.length,
-          });
-        }
-        if (buf.length > lastBufLen) {
-          lastBufLen = buf.length;
-          lastChangeAt = Date.now();
-        }
-        const newContent = buf.substring(startLen);
-        const now = Date.now();
-        // Decide what to do this poll (prompt detection + timeout semantics
-        // live in the pure, unit-tested helper). Note: the idle timeout
-        // fires after idleMs of no new data even when newContent is empty —
-        // a silent/hung device is the "no response" case it exists for.
-        const result = evaluateWatchPoll({
-          newContent,
-          attemptsMs: attempts * 200,
-          sendWindowMs: sendDuration + 300,
-          idleMs,
-          msSinceLastChange: now - lastChangeAt,
-          msSinceStart: now - startedAt,
-          safetyCapMs: SAFETY_CAP_MS,
-        });
-        if (result.action === 'wait') return;
-        if (result.action === 'prompt') {
-          aiExecLog('info', 'prompt-match', {
-            cmd: trimCmdForLog(cmd),
-            attempts,
-            bufLen: buf.length,
-            newLen: newContent.length,
-            matchedAtEnd: result.matchedAtEnd,
-          });
-          clearInterval(pollInterval);
-          intervalSet.delete(pollInterval);
-          clearWatchBuffer(targetId);
-          const outputText = `Terminal Output (Command: ${cmd}):\n${newContent.trim()}`;
-          updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
-        } else {
-          // 'idle' or 'safety'
-          const isIdle = result.action === 'idle';
-          aiExecLog('warn', isIdle ? 'idle-timeout' : 'safety-cap', {
-            cmd: trimCmdForLog(cmd),
-            attempts,
-            bufLen: buf.length,
-            newLen: newContent.length,
-            idleSecs,
-          });
-          clearInterval(pollInterval);
-          intervalSet.delete(pollInterval);
-          clearWatchBuffer(targetId);
-          const reason = isIdle
-            ? `[no response from device for ${idleSecs} seconds]`
-            : `[command exceeded safety cap of 30 minutes]`;
-          const captured = newContent.trim();
-          const outputText = `Terminal Output (Command: ${cmd}):\n${captured}\n${reason}`;
-          updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
-        }
+        if (polling) return;
+        polling = true;
+        void (async () => {
+          try {
+            attempts++;
+            // Bail out if the originating tab no longer exists (user closed it).
+            const paneState = aiChatStatesRef.current.get(paneId);
+            const originatingTab = paneState?.tabs.find(t => t.id === originatingTabId);
+            if (!originatingTab) {
+              aiExecLog('warn', 'originating-tab-gone', {
+                cmd: trimCmdForLog(cmd),
+                attempts,
+                originatingTabId,
+              });
+              clearInterval(pollInterval);
+              intervalSet.delete(pollInterval);
+              return;
+            }
+            const buf = await tauriService.getWatchBuffer(targetId);
+            if (!startLenWarned && startLen > buf.length) {
+              startLenWarned = true;
+              aiExecLog('warn', 'startlen-out-of-range', {
+                cmd: trimCmdForLog(cmd),
+                startLen,
+                bufLen: buf.length,
+              });
+            }
+            if (buf.length > lastBufLen) {
+              lastBufLen = buf.length;
+              lastChangeAt = Date.now();
+            }
+            const newContent = buf.substring(startLen);
+            const now = Date.now();
+            // Decide what to do this poll (prompt detection + timeout semantics
+            // live in the pure, unit-tested helper). Note: the idle timeout
+            // fires after idleMs of no new data even when newContent is empty —
+            // a silent/hung device is the "no response" case it exists for.
+            const result = evaluateWatchPoll({
+              newContent,
+              // Use wall-clock elapsed, not tick count: the reentrancy guard can
+              // skip ticks (so attempts undercounts time), and the idle/safety
+              // checks below already use wall-clock — keep them on one clock.
+              attemptsMs: now - startedAt,
+              sendWindowMs: sendDuration + 300,
+              idleMs,
+              msSinceLastChange: now - lastChangeAt,
+              msSinceStart: now - startedAt,
+              safetyCapMs: SAFETY_CAP_MS,
+            });
+            if (result.action === 'wait') return;
+            if (result.action === 'prompt') {
+              aiExecLog('info', 'prompt-match', {
+                cmd: trimCmdForLog(cmd),
+                attempts,
+                bufLen: buf.length,
+                newLen: newContent.length,
+                matchedAtEnd: result.matchedAtEnd,
+              });
+              clearInterval(pollInterval);
+              intervalSet.delete(pollInterval);
+              void tauriService.clearWatchBuffer(targetId);
+              const outputText = `Terminal Output (Command: ${cmd}):\n${newContent.trim()}`;
+              updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
+            } else {
+              // 'idle' or 'safety'
+              const isIdle = result.action === 'idle';
+              aiExecLog('warn', isIdle ? 'idle-timeout' : 'safety-cap', {
+                cmd: trimCmdForLog(cmd),
+                attempts,
+                bufLen: buf.length,
+                newLen: newContent.length,
+                idleSecs,
+              });
+              clearInterval(pollInterval);
+              intervalSet.delete(pollInterval);
+              void tauriService.clearWatchBuffer(targetId);
+              const reason = isIdle
+                ? `[no response from device for ${idleSecs} seconds]`
+                : `[command exceeded safety cap of 30 minutes]`;
+              const captured = newContent.trim();
+              const outputText = `Terminal Output (Command: ${cmd}):\n${captured}\n${reason}`;
+              updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
+            }
+          } finally {
+            polling = false;
+          }
+        })();
       }, 200);
       intervalSet.add(pollInterval);
     }
@@ -1033,7 +1138,7 @@ function App() {
     const asDelay = useSettingsStore.getState().aiSleepAsClientDelay;
     const parsed = asDelay ? parseLeadingSleep(cmd) : null;
     if (!parsed) {
-      sendAndWatch(targetId, cmd, originatingTabId, paneId);
+      void sendAndWatch(targetId, cmd, originatingTabId, paneId);
       return;
     }
     scheduleSleepDelay(targetId, cmd, parsed, originatingTabId, paneId);
@@ -1141,6 +1246,13 @@ function App() {
               onSendMessage={(text) => aiSendMessage(featureInfo.id, text)}
               aiPersonas={aiPersonas}
               terminalBackground={useSettingsStore.getState().terminalBackground}
+              linkableSessions={linkableSessions}
+              onRefreshSessions={refreshCrossWindowSessions}
+              onLinkSession={(sid) => {
+                const st = aiChatStates.get(featureInfo.id);
+                const activeTab = st ? getActiveTab(st) : undefined;
+                if (activeTab) setTabLink(featureInfo.id, activeTab.id, sid);
+              }}
             />
           ) : (
             <div className="pane-empty">
@@ -1274,6 +1386,12 @@ function App() {
             setPasteReq(null);
             queueMicrotask(() => term?.focus());
           }}
+        />
+      )}
+      {aiConsentOpen && (
+        <AiConsentModal
+          onAccept={handleAiConsentAccept}
+          onCancel={handleAiConsentCancel}
         />
       )}
     </div>

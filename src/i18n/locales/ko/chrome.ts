@@ -38,6 +38,7 @@ export const chrome = {
     },
     disableLineWrap: '줄 바꿈 사용 안 함',
     enableLineWrap: '줄 바꿈 사용',
+    newWindow: '새 창',
     help: '도움말 / 문서',
     settings: '설정',
   },

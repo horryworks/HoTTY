@@ -432,6 +432,48 @@ export function AISettingsTab() {
       </div>
       </div>
 
+      {/* -- Data Handling -- */}
+      <div className="settings-card">
+      <h3 className="settings-section-title">{t('settings.ai.dataHandlingSection')}</h3>
+      <p className="settings-help-text" style={{ marginBottom: '10px' }}>
+        {t('settings.ai.dataHandlingHelp')}
+      </p>
+      <ul className="settings-help-text" style={{ margin: '0 0 12px 0', paddingLeft: '20px', lineHeight: 1.5 }}>
+        <li>{t('settings.ai.dataHandlingBulletProviders')}</li>
+        <li>{t('settings.ai.dataHandlingBulletWhen')}</li>
+        <li>{t('settings.ai.dataHandlingBulletRedaction')}</li>
+      </ul>
+      <div className="settings-group">
+        <label>
+          {t('settings.ai.dataConsentStatus')}
+          <HelpTooltip text={t('settings.ai.resetDataConsentHelp')} />
+        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{
+              width: '10px',
+              height: '10px',
+              borderRadius: '50%',
+              backgroundColor: settings.aiDataConsentAccepted ? 'var(--success-color)' : 'var(--text-tertiary)',
+            }} />
+            <span>
+              {settings.aiDataConsentAccepted
+                ? t('settings.ai.dataConsentAccepted')
+                : t('settings.ai.dataConsentNotAccepted')}
+            </span>
+          </div>
+          {settings.aiDataConsentAccepted && (
+            <button
+              className="settings-button"
+              onClick={() => update('aiDataConsentAccepted', false)}
+            >
+              {t('settings.ai.resetDataConsent')}
+            </button>
+          )}
+        </div>
+      </div>
+      </div>
+
       {/* -- Modals -- */}
       {showGeminiWarning && (
         <ConfirmModal

@@ -8,6 +8,7 @@ import {
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { ask as dialogAsk } from '@tauri-apps/plugin-dialog';
 import { redactSensitive } from '../utils/redaction';
+import { WINDOW_LABEL } from '../utils/windowLabel';
 import type {
   ProtocolId,
   SshConnectionConfig,
@@ -19,6 +20,7 @@ import type {
   SessionDataPayload,
   SessionStatusPayload,
   SessionErrorPayload,
+  SessionInfo,
   SshHostKeyPromptPayload,
   SerialPortInfo,
   FontInfo,
@@ -26,6 +28,7 @@ import type {
   Theme,
   SshAlgorithms,
   SaveThemeResult,
+  ThirdPartyLicenses,
   ListLogFilesResult,
   ReadLogFileResult,
   ExportHtreeResult,
@@ -75,6 +78,36 @@ export function isEncrypted(value: string): boolean {
 
 export const tauriService = {
   // -----------------------------------------------------------------------
+  // Window identity (multi-window)
+  // -----------------------------------------------------------------------
+
+  /** This window's label, used to namespace per-window state. */
+  windowLabel: WINDOW_LABEL,
+
+  /** Open a new HoTTY window in the current process; resolves to its label. */
+  async createWindow(): Promise<string> {
+    return invoke<string>('create_window');
+  },
+
+  /**
+   * Broadcast a shared-store change to all windows (tagged with this window's
+   * label as `origin`, which receivers use to ignore their own events).
+   */
+  async broadcastSharedChange(channel: string, payload: string): Promise<void> {
+    await invoke('broadcast_shared_change', { channel, payload, origin: WINDOW_LABEL });
+  },
+
+  /** Subscribe to shared-store changes broadcast by other windows. */
+  onSharedStoreChanged(
+    cb: (p: { channel: string; payload: string; origin: string }) => void,
+  ): Promise<UnlistenFn> {
+    return listen<{ channel: string; payload: string; origin: string }>(
+      'shared-store-changed',
+      (e) => cb(e.payload),
+    );
+  },
+
+  // -----------------------------------------------------------------------
   // Session management
   // -----------------------------------------------------------------------
 
@@ -92,6 +125,15 @@ export const tauriService = {
     await invoke('disconnect_session', { sessionId });
   },
 
+  /**
+   * List every live session across ALL windows in the process (the backend
+   * enabler for cross-window AI linking). `sendInput` and the watch buffer are
+   * keyed by global session id, so any returned session can be driven.
+   */
+  async listAllSessions(): Promise<SessionInfo[]> {
+    return invoke<SessionInfo[]>('list_all_sessions');
+  },
+
   async sendInput(sessionId: string, data: string): Promise<void> {
     await invoke('send_input', { sessionId, data });
   },
@@ -102,6 +144,30 @@ export const tauriService = {
 
   async updateSessionLogging(loggingEnabled: boolean, loggingPath: string): Promise<void> {
     await invoke('update_session_logging', { loggingEnabled, loggingPath });
+  },
+
+  // -----------------------------------------------------------------------
+  // AI watch buffer (app-global, keyed by session id — see Phase 5)
+  // -----------------------------------------------------------------------
+
+  /** Enable/disable backend AI-watch capture for a session. */
+  async setWatching(sessionId: string, watching: boolean, limit: number): Promise<void> {
+    await invoke('set_watching', { sessionId, watching, limit });
+  },
+
+  /** Peek a session's watch buffer without clearing it (auto-exec poll). */
+  async getWatchBuffer(sessionId: string): Promise<string> {
+    return invoke<string>('get_watch_buffer', { sessionId });
+  },
+
+  /** Read and clear a session's watch buffer (read-once for the AI prompt). */
+  async takeWatchBuffer(sessionId: string): Promise<string> {
+    return invoke<string>('take_watch_buffer', { sessionId });
+  },
+
+  /** Clear a session's watch buffer without disabling watching. */
+  async clearWatchBuffer(sessionId: string): Promise<void> {
+    await invoke('clear_watch_buffer', { sessionId });
   },
 
   // -----------------------------------------------------------------------
@@ -177,6 +243,14 @@ export const tauriService = {
 
   async deleteCustomTheme(themeKey: string): Promise<SaveThemeResult> {
     return invoke<SaveThemeResult>('delete_custom_theme', { themeKey });
+  },
+
+  // -----------------------------------------------------------------------
+  // Third-party licenses
+  // -----------------------------------------------------------------------
+
+  async getThirdPartyLicenses(): Promise<ThirdPartyLicenses> {
+    return invoke<ThirdPartyLicenses>('get_third_party_licenses');
   },
 
   // -----------------------------------------------------------------------

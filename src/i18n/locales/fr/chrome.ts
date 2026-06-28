@@ -38,6 +38,7 @@ export const chrome = {
     },
     disableLineWrap: 'Désactiver le retour à la ligne',
     enableLineWrap: 'Activer le retour à la ligne',
+    newWindow: 'Nouvelle fenêtre',
     help: 'Aide / Documentation',
     settings: 'Paramètres',
   },

@@ -204,6 +204,22 @@ export const settings = {
     logoutMessage:
       '确定要退出登录吗？您需要重新进行身份验证才能使用该 AI 提供商。',
     logoutConfirm: '退出登录',
+    // 数据处理告知
+    dataHandlingSection: '数据处理',
+    dataHandlingHelp:
+      '当您使用 AI 功能时，系统会使用您自己的 API 密钥，将数据发送给您配置的第三方 AI 提供商，并受该提供商的条款和隐私政策约束。',
+    dataHandlingBulletProviders:
+      '提供商：Google Gemini / Vertex AI、Anthropic 或 OpenAI——以您在上方选择的为准。',
+    dataHandlingBulletWhen:
+      '仅在您明确使用 AI 功能（聊天、询问 AI 或监视）时发送。您的终端绝不会被持续传输。',
+    dataHandlingBulletRedaction:
+      '已知的密钥模式会从日志中隐去，但您在消息中输入的文本会原样发送——请勿粘贴凭据。',
+    dataConsentStatus: '告知同意',
+    dataConsentAccepted: '已接受',
+    dataConsentNotAccepted: '尚未显示',
+    resetDataConsent: '重新显示',
+    resetDataConsentHelp:
+      '重置同意，以便在下次 AI 发送前再次显示 AI 数据共享告知。',
   },
   about: {
     version: 'v{{version}}',
@@ -214,6 +230,14 @@ export const settings = {
     licenseLine2: 'GNU General Public License v3.0 或更高版本发布。',
     viewLicense: '查看 GNU General Public License v3.0',
     logoAlt: 'HoTTY 徽标',
+    // 第三方许可证
+    thirdPartyLicenses: '第三方许可证',
+    thirdPartyLicensesTitle: '第三方许可证',
+    thirdPartyLicensesIntro: 'HoTTY 包含来自以下项目的开源软件：',
+    thirdPartyLicensesLoading: '正在加载许可证…',
+    thirdPartyLicensesError: '加载许可证信息失败。',
+    thirdPartyLicensesEmpty: '没有可用的第三方许可证信息。',
+    thirdPartyLicensesClose: '关闭',
   },
   customTheme: {
     title: '自定义主题创建器',

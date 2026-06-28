@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { tauriService } from '../../services/tauriService';
 import { usePaneStore } from '../../stores/paneStore';
 import { useSidebarLayoutStore, type SidebarEdge } from '../../stores/sidebarLayoutStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -150,6 +151,20 @@ export function AppSidebar({ onOpenSettings, onOpenHelp }: AppSidebarProps) {
         ))}
       </div>
       <div className="app-sidebar-bottom">
+        <button
+          type="button"
+          className="app-sidebar-btn"
+          onClick={() => {
+            void tauriService.createWindow();
+          }}
+          title={`${t('chrome.appSidebar.newWindow')} (Ctrl+Shift+N)`}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="5" width="13" height="13" rx="2" />
+            <line x1="20" y1="9" x2="20" y2="15" />
+            <line x1="17" y1="12" x2="23" y2="12" />
+          </svg>
+        </button>
         <button
           type="button"
           className={`app-sidebar-btn${lineWrapEnabled ? ' app-sidebar-btn-active' : ''}`}

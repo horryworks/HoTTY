@@ -11,7 +11,7 @@ use russh::client::{self, Handle, Handler};
 use russh::keys::ssh_key;
 use russh::keys::{load_secret_key, HashAlg, PrivateKey, PrivateKeyWithHashAlg};
 use russh::{cipher, kex, mac, ChannelMsg, Disconnect, Preferred};
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -24,8 +24,8 @@ use super::known_hosts::{
 };
 use super::path_safety::is_unc_path;
 use super::session_service::{
-    abort_all, emit_session_data, emit_session_status, encoding_for, join_or_abort, SessionError,
-    SessionService, DISCONNECT_DRAIN_MS,
+    abort_all, emit_session_data, emit_session_status, emit_to_owner, encoding_for, join_or_abort,
+    SessionError, SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // --- Config ------------------------------------------------------------
@@ -455,7 +455,10 @@ impl Handler for SshHandler {
             fingerprint,
             kind: kind.to_string(),
         };
-        let _ = self.app.emit("ssh-host-key-prompt", payload);
+        // Target the owning window only — broadcasting would pop this prompt
+        // (incl. a security-sensitive "host key changed" warning) in every
+        // window in a multi-window session.
+        emit_to_owner(&self.app, &self.session_id, "ssh-host-key-prompt", payload);
 
         let decision = match tokio::time::timeout(HOST_KEY_PROMPT_TIMEOUT, rx).await {
             Ok(Ok(d)) => d,
@@ -489,7 +492,9 @@ impl Handler for SshHandler {
                     self.host,
                     self.port
                 );
-                let _ = self.app.emit(
+                emit_to_owner(
+                    &self.app,
+                    &self.session_id,
                     "ssh-known-hosts-warning",
                     format!(
                         "Could not save host key for {}:{} to known_hosts: {e}",
