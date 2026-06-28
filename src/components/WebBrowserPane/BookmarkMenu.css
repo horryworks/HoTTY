@@ -1,20 +1,8 @@
-/* Bookmarks dropdown — anchored under the toolbar bookmarks button. Floats over
-   the (hidden-while-open) embedded webview region. */
+/* Bookmarks list — fills the docked side panel (.web-browser-bookmark-panel).
+   It does NOT float: a native webview cannot be painted over by HTML, so the
+   webview slot shrinks and this list sits beside the page instead of above it. */
 .web-browser-bookmark-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 1000;
-  min-width: 240px;
-  max-width: 420px;
-  max-height: 360px;
-  overflow-y: auto;
   padding: 4px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px var(--modal-shadow);
-  animation: fadeIn 0.1s ease-out;
 }
 
 .web-browser-bookmark-empty {
@@ -23,4 +11,35 @@
   font-size: calc(var(--font-size-base) - 1px);
   text-align: center;
   white-space: nowrap;
+}
+
+/* Export / Import row at the top of the bookmarks panel. */
+.web-browser-bookmark-toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 4px 4px 8px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 4px;
+}
+
+.web-browser-bookmark-tool-btn {
+  flex: 1;
+  padding: 3px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--btn-secondary-bg);
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  transition: background-color 0.1s;
+}
+
+.web-browser-bookmark-tool-btn:hover:not(:disabled) {
+  background: var(--btn-secondary-hover-bg);
+}
+
+.web-browser-bookmark-tool-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

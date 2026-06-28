@@ -181,5 +181,13 @@ export const panes = {
     bookmarkAdd: 'Añadir',
     bookmarksTooltip: 'Mostrar marcadores',
     bookmarksEmpty: 'Aún no hay marcadores',
+    bookmarkRemoveTooltip: 'Quitar marcador',
+    bookmarksExport: 'Exportar',
+    bookmarksImport: 'Importar',
+    bookmarksExportError: 'No se pudieron exportar los marcadores',
+    bookmarksImportError: 'No se pudieron importar los marcadores',
+    bookmarksImportInvalid: 'El archivo seleccionado no es un archivo de marcadores válido',
+    importReplaceTitle: '¿Reemplazar marcadores?',
+    importReplaceMessage: 'Esto reemplaza todos los marcadores actuales por los importados. No se puede deshacer.',
   },
 };

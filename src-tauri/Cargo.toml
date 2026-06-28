@@ -1,6 +1,6 @@
 [package]
 name = "hotty"
-version = "2.0.7-beta7"
+version = "2.0.7"
 description = "HoTTY - AI Integrated Advanced Terminal Emulator (Rust/Tauri)"
 authors = ["horryworks"]
 license = "GPL-3.0-or-later"
@@ -102,6 +102,7 @@ windows = { version = "0.58", features = [
     "Win32_Security_Cryptography",
     "Win32_Security_Credentials",
     "Win32_System_Memory",
+    "Win32_UI_Input_KeyboardAndMouse",
 ] }
 # WebView2 COM access for the Web Browser pane (enable password autosave /
 # autofill). Versions MUST match what wry/tauri pull (see Cargo.lock):

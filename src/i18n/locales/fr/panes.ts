@@ -183,5 +183,13 @@ export const panes = {
     bookmarkAdd: 'Ajouter',
     bookmarksTooltip: 'Afficher les favoris',
     bookmarksEmpty: 'Aucun favori pour le moment',
+    bookmarkRemoveTooltip: 'Supprimer le favori',
+    bookmarksExport: 'Exporter',
+    bookmarksImport: 'Importer',
+    bookmarksExportError: 'Échec de l’exportation des favoris',
+    bookmarksImportError: 'Échec de l’importation des favoris',
+    bookmarksImportInvalid: 'Le fichier sélectionné n’est pas un fichier de favoris valide',
+    importReplaceTitle: 'Remplacer les favoris ?',
+    importReplaceMessage: 'Cela remplace tous les favoris actuels par ceux importés. Cette action est irréversible.',
   },
 };

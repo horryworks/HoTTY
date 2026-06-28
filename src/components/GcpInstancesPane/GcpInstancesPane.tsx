@@ -864,4 +864,5 @@ export function GcpInstancesPane({
 }
 
 export type { VmSelection };
+// Re-exported for unit tests; the timer constants are used internally above.
 export { STATUS_INITIAL_DELAY_MS, STATUS_POLL_INTERVAL_MS };

@@ -1,5 +1,30 @@
 # Release Notes
 
+## v2.0.7
+
+The v2.0.7 stable release, consolidating the v2.0.7 beta series. It brings three major additions — a fully multilingual interface, a built-in **File Server** for pushing firmware to network gear, and an embedded **Web Browser** for device web admin UIs — together with supply-chain hardening of the build pipeline and a round of reliability fixes (serial typing latency, session logging, and SSH host-key handling).
+
+### New Features
+
+- **The HoTTY interface is now available in 8 languages.** A new **Display language** selector in **Settings → General** switches the entire UI — menus, tabs, dialogs, settings, the AI chat panel, and in-app help — between **English, 日本語 (Japanese), 简体中文 (Simplified Chinese), 繁體中文 (Traditional Chinese), 한국어 (Korean), Русский (Russian), Español (Spanish), and Français (French)**. The change applies instantly with no restart, and your choice is remembered across launches. English remains the default, so existing installs are unaffected until you choose another language. (The AI's response language is configured separately in the AI chat panel and is unchanged by this setting.)
+- **Built-in File Server (TFTP + SFTP) for firmware uploads.** A new **File Server** pane (tab bar → Features → "File Server") runs an in-app **TFTP** server (UDP, default port 69 — the classic Cisco IOS `copy tftp: flash:` method) and an **SFTP** server (SSH-based, default port 2222, username/password authentication) over a folder you select, so routers, switches and other LAN devices can download or upload firmware/config images directly. Serving is read-only by default (toggle **Allow uploads** per protocol for device→PC transfers); every request is confined to the chosen folder (path traversal, symlink escapes and sensitive system-path access are blocked); the SFTP host key is generated automatically and stored encrypted; and a live transfer log shows each client, file and direction. If **Windows Firewall** is blocking inbound connections, the pane says so and offers a one-click **Allow through firewall** (requires administrator). The server runs only while its tab is open — closing the tab stops it and releases its ports. The feature can be turned off in **Settings → Features**.
+- **Embedded Web Browser for device web admin UIs.** Open web pages inside HoTTY in an embedded browser (Microsoft Edge WebView2) — ideal for the web admin UIs of routers, switches, iLO/iDRAC and other network gear, side by side with your terminals. Launch it from the **New Session** dialog's new **🌐 Web** tab, with either a blank tab or a saved bookmark. The pane has Back / Forward / Reload / Stop and an address bar that navigates to a typed URL or **runs a web search** for free text. Organize sites in a **folder tree of bookmarks** — add, rename, delete and drag to reorder — and open a saved bookmark straight from the toolbar's bookmarks button without leaving the browser; the **★** button files the current page into a folder you pick. Login sessions persist across restarts and the browser can **save and autofill passwords**, kept in HoTTY's own encrypted profile (separate from your system Edge/Chrome). The browsed page is sandboxed and cannot reach HoTTY's internals. The whole feature can be turned off in **Settings → Features**.
+
+### Improvements
+
+- **Richer tab right-click menus.** Right-clicking a tab now offers actions tailored to that tab: **Watch with AI** / **Stop AI Watch** on a terminal session, **Save to Host Tree…** on an SSH/Telnet session, and **Add Bookmark…** on a Web Browser tab. When bookmarking a page, the destination folder is chosen with an expandable tree instead of a flat drop-down.
+
+### Bug Fixes
+
+- **Serial connections no longer lag while you type.** On a serial session, the read and write paths shared a single internal lock, so a keystroke could be held up waiting for the current read cycle to finish before being sent — adding up to ~100 ms of latency per character on an idle line. Reading and writing now use independent handles, so what you type is echoed without the stall.
+- **Session logging now fails loudly instead of silently truncating.** If writing to a session log file failed mid-session (for example, the disk filled up or the log folder became unavailable), the error was silently ignored and the transcript was quietly cut short. Such a failure is now reported and logging for that session is stopped, so a log file is never left silently incomplete. In the unlikely event of a filename collision that couldn't be resolved, HoTTY now picks a unique name rather than risk overwriting an existing log.
+- **Accepting a changed SSH host key is now recorded atomically.** When you accept and remember a host whose key has changed (on a direct or jump-host connection), the old and new entries are written in a single update. Previously there was a brief window in which a second, simultaneous connection to the same host could see the key as missing and prompt you again unnecessarily.
+- **Fixed an event-listener leak in the Ping Monitor pane.** Repeatedly opening and closing the Ping Monitor pane could leave stale background event subscriptions behind; they are now always cleaned up when the pane closes.
+
+### Security
+
+- **Dependency supply-chain hardening.** Builds now install strictly from verified lockfiles with cryptographic integrity checking, the public package registries are pinned (guarding against dependency-confusion swaps), and dependency updates are held for a multi-day cooldown before adoption — so a maliciously published version is not pulled in before it is detected and removed. Every release, and every push via CI, is now gated on npm registry-signature verification (`npm audit signatures`) plus a `cargo-deny` audit covering security advisories, crate sources, and licenses.
+
 ## v2.0.7-beta7
 
 Quality-of-life refinements to the **Web Browser** added in beta6: a bookmarks button in the toolbar, an address bar that falls back to web search, and richer tab right-click menus — plus a fix for dragging terminal tabs onto a browser pane.

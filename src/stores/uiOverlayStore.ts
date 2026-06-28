@@ -58,7 +58,9 @@ const OVERLAY_SELECTOR = [
   '.ctc-overlay', // CustomThemeCreator
   '.host-edit-modal-overlay', // HostTree + BookmarkTree add/edit modal
   '.add-bookmark-modal-overlay', // Web Browser ★ add-bookmark modal
-  '.web-browser-bookmark-menu', // Web Browser bookmarks dropdown
+  // NOTE: the Web Browser bookmarks menu (.web-browser-bookmark-menu) is
+  // deliberately NOT here — it docks beside the page (shrinking the webview
+  // slot) rather than hiding it, so the page stays visible while it is open.
   '.features-dropdown', // TabBar features menu
   '.tab-context-menu',
   '.context-menu', // HostTree / BookmarkTree right-click menu

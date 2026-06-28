@@ -19,7 +19,7 @@ interface ListMatch {
     entry?: string;
 }
 
-/** Does a single list `entry` match a single command `line`? */
+/** Does a single list `entry` match a single command `line`? (Exported for unit tests.) */
 export function entryMatches(line: string, entry: string): boolean {
     const e = entry.trim().toLowerCase();
     if (!e) return false;

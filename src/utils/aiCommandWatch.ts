@@ -12,6 +12,7 @@
 // not a stray $ / # / > / ] mid-stream (e.g. cipher hashes / config values). Note
 // this deliberately does NOT match interactive prompts ending in ':' (e.g. Huawei
 // '[Y/N]:'); a command left at such a prompt falls through to the idle timeout.
+// Exported for unit tests; also used internally below.
 export const PROMPT_PATTERN = /[$#>\]]\s*$/;
 
 type WatchPollResult =

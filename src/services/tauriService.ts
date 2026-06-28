@@ -39,6 +39,8 @@ import type {
   FirewallStatus,
   WebBrowserRect,
   WebBrowserNavState,
+  WebBrowserHistoryState,
+  WebBrowserAccel,
   GcloudStatus,
   GcloudAuthStatus,
   GcpProject,
@@ -436,8 +438,28 @@ export const tauriService = {
     await invoke('web_browser_destroy', { paneId });
   },
 
+  /** Export the whole bookmark tree to a user-chosen JSON file (native save
+   *  dialog on the backend). Resolves false if the user cancels. */
+  async webBrowserExportBookmarks(data: string): Promise<boolean> {
+    return invoke<boolean>('web_browser_export_bookmarks', { data });
+  },
+
+  /** Pick a bookmarks JSON file (native open dialog) and return its raw text,
+   *  or null if the user cancels. Shape validation happens client-side. */
+  async webBrowserImportBookmarks(): Promise<string | null> {
+    return invoke<string | null>('web_browser_import_bookmarks');
+  },
+
   onWebBrowserNavState(cb: (p: WebBrowserNavState) => void): Promise<UnlistenFn> {
     return listen<WebBrowserNavState>('web-browser-nav-state', (e) => cb(e.payload));
+  },
+
+  onWebBrowserHistoryState(cb: (p: WebBrowserHistoryState) => void): Promise<UnlistenFn> {
+    return listen<WebBrowserHistoryState>('web-browser-history-state', (e) => cb(e.payload));
+  },
+
+  onWebBrowserAccel(cb: (p: WebBrowserAccel) => void): Promise<UnlistenFn> {
+    return listen<WebBrowserAccel>('web-browser-accel', (e) => cb(e.payload));
   },
 
   // -----------------------------------------------------------------------

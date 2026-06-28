@@ -48,8 +48,9 @@ use commands::updater::check_for_updates;
 use commands::utilities::{log_debug, select_folder, select_image};
 use commands::web_browser::{
     web_browser_back, web_browser_create, web_browser_current_url, web_browser_destroy,
-    web_browser_forward, web_browser_navigate, web_browser_reload, web_browser_set_bounds,
-    web_browser_set_visible, web_browser_stop,
+    web_browser_export_bookmarks, web_browser_forward, web_browser_import_bookmarks,
+    web_browser_navigate, web_browser_reload, web_browser_set_bounds, web_browser_set_visible,
+    web_browser_stop,
 };
 use services::ai::providers::anthropic::AnthropicProvider;
 use services::ai::providers::gemini::GeminiProvider;
@@ -205,6 +206,8 @@ pub fn run() {
             web_browser_set_bounds,
             web_browser_set_visible,
             web_browser_destroy,
+            web_browser_export_bookmarks,
+            web_browser_import_bookmarks,
             // GCE IAP tunnel
             gce_iap_check_gcloud,
             gce_iap_check_auth,

@@ -703,6 +703,23 @@ function App() {
     setActivePaneId(id);
   }, [addSessionToStore, setActivePaneId]);
 
+  // Keep a web-browser tab's name in sync with the site being browsed: derive
+  // the host from the current URL (falls back to the generic name on parse fail
+  // or about:blank). No-op if the pane no longer exists.
+  const updateWebBrowserTabName = useCallback((paneId: string, url: string) => {
+    let name = getFeatureDisplayName('web-browser');
+    if (url && url !== 'about:blank') {
+      try { name = new URL(url).hostname || name; } catch { /* keep default */ }
+    }
+    setFeaturePanes((prev) => {
+      const cur = prev.get(paneId);
+      if (!cur || cur.displayName === name) return prev;
+      const next = new Map(prev);
+      next.set(paneId, { ...cur, displayName: name });
+      return next;
+    });
+  }, []);
+
   const handleOpenFileInEditor = useCallback(async (filePath: string) => {
     if (!useSettingsStore.getState().enabledFeatures['text-editor']) return;
     try {
@@ -1100,6 +1117,7 @@ function App() {
               paneId={featureInfo.id}
               active={paneId === activePaneId}
               initialUrl={webBrowserInitialUrls.get(featureInfo.id)}
+              onUrlChange={(url) => updateWebBrowserTabName(featureInfo.id, url)}
             />
           ) : featureInfo?.type === 'ai-chat' ? (
             <AIChatPane

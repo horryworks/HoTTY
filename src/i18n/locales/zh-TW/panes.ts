@@ -182,5 +182,13 @@ export const panes = {
     bookmarkAdd: '新增',
     bookmarksTooltip: '顯示書籤',
     bookmarksEmpty: '尚無書籤',
+    bookmarkRemoveTooltip: '移除書籤',
+    bookmarksExport: '匯出',
+    bookmarksImport: '匯入',
+    bookmarksExportError: '匯出書籤失敗',
+    bookmarksImportError: '匯入書籤失敗',
+    bookmarksImportInvalid: '所選檔案不是有效的書籤檔案',
+    importReplaceTitle: '取代書籤？',
+    importReplaceMessage: '這將以匯入的書籤取代目前所有書籤，此操作無法復原。',
   },
 };

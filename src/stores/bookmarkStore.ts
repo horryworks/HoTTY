@@ -25,6 +25,8 @@ interface BookmarkState {
   deleteNode: (id: string) => void;
   moveNode: (nodeId: string, targetId: string, position: DropPosition) => void;
   sortFolder: (folderId: string | null) => void;
+  /** Replace the entire tree (used by import). Caller must validate first. */
+  replaceTree: (tree: BookmarkNode[]) => void;
 }
 
 export const useBookmarkStore = create<BookmarkState>()(
@@ -48,6 +50,7 @@ export const useBookmarkStore = create<BookmarkState>()(
       moveNode: (nodeId, targetId, position) =>
         set((s) => ({ tree: moveNodeOp(s.tree, nodeId, targetId, position) })),
       sortFolder: (folderId) => set((s) => ({ tree: sortFolderOp(s.tree, folderId) })),
+      replaceTree: (tree) => set({ tree }),
     }),
     {
       name: 'hotty-bookmarks',

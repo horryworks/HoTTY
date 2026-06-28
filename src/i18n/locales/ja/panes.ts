@@ -181,5 +181,13 @@ export const panes = {
     bookmarkAdd: '追加',
     bookmarksTooltip: 'ブックマークを表示',
     bookmarksEmpty: 'ブックマークがありません',
+    bookmarkRemoveTooltip: 'ブックマークを削除',
+    bookmarksExport: 'エクスポート',
+    bookmarksImport: 'インポート',
+    bookmarksExportError: 'ブックマークのエクスポートに失敗しました',
+    bookmarksImportError: 'ブックマークのインポートに失敗しました',
+    bookmarksImportInvalid: '選択したファイルは有効なブックマークファイルではありません',
+    importReplaceTitle: 'ブックマークを置き換えますか？',
+    importReplaceMessage: '現在のすべてのブックマークがインポートした内容に置き換えられます。元に戻せません。',
   },
 };

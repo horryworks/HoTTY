@@ -68,7 +68,9 @@ body {
 .system-prompt-modal-overlay,
 .ssh-host-key-overlay,
 .ask-ai-modal-overlay,
-.connection-dialog-overlay {
+.connection-dialog-overlay,
+.iap-vm-start-overlay,
+.save-to-tree-overlay {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }

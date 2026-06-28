@@ -183,5 +183,13 @@ export const panes = {
     bookmarkAdd: '추가',
     bookmarksTooltip: '북마크 표시',
     bookmarksEmpty: '북마크가 없습니다',
+    bookmarkRemoveTooltip: '북마크 삭제',
+    bookmarksExport: '내보내기',
+    bookmarksImport: '가져오기',
+    bookmarksExportError: '북마크를 내보내지 못했습니다',
+    bookmarksImportError: '북마크를 가져오지 못했습니다',
+    bookmarksImportInvalid: '선택한 파일은 유효한 북마크 파일이 아닙니다',
+    importReplaceTitle: '북마크를 바꾸시겠습니까?',
+    importReplaceMessage: '현재 모든 북마크가 가져온 북마크로 바뀝니다. 되돌릴 수 없습니다.',
   },
 };

@@ -17,6 +17,40 @@ export function findNode(tree: BookmarkNode[], id: string): BookmarkNode | null 
   return null;
 }
 
+/** Find the first bookmark whose URL exactly matches `url` (depth-first), or
+ *  null. Used by the Web Browser ★ button to reflect/toggle bookmarked state. */
+export function findBookmarkByUrl(tree: BookmarkNode[], url: string): BookmarkNode | null {
+  for (const n of tree) {
+    if (n.type === 'bookmark' && n.url === url) return n;
+    if (n.children) {
+      const found = findBookmarkByUrl(n.children, url);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/** Validate that untrusted data (e.g. an imported JSON file or rehydrated
+ *  localStorage) is a well-formed bookmark tree. Returns the typed tree on
+ *  success or null if any node is malformed. */
+export function validateBookmarkTree(data: unknown): BookmarkNode[] | null {
+  if (!Array.isArray(data)) return null;
+  return data.every(isValidBookmarkNode) ? (data as BookmarkNode[]) : null;
+}
+
+function isValidBookmarkNode(node: unknown): node is BookmarkNode {
+  if (typeof node !== 'object' || node === null) return false;
+  const o = node as Record<string, unknown>;
+  if (typeof o.id !== 'string' || typeof o.name !== 'string') return false;
+  if (o.type !== 'folder' && o.type !== 'bookmark') return false;
+  if (o.type === 'bookmark' && typeof o.url !== 'string') return false;
+  if (o.children !== undefined) {
+    if (!Array.isArray(o.children)) return false;
+    if (!o.children.every(isValidBookmarkNode)) return false;
+  }
+  return true;
+}
+
 /** Insert `node` under `parentId` (null = root), appended to the end.
  *  Returns a new tree (immutable). */
 export function insertNode(
@@ -69,7 +103,7 @@ export function patchNode(
 }
 
 /** True if `ancestorId` is `id` or contains `id` in its subtree — used to block
- *  dropping a folder into its own descendant. */
+ *  dropping a folder into its own descendant. (Exported for unit tests.) */
 export function isSelfOrDescendant(
   tree: BookmarkNode[],
   ancestorId: string,

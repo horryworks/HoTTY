@@ -59,6 +59,11 @@ pub struct BrowserRect {
 pub struct WebBrowserState {
     #[cfg(feature = "embedded-webview")]
     webviews: Mutex<HashMap<String, tauri::Webview>>,
+    /// Last on-screen rectangle reported for each pane. A hidden webview is
+    /// "parked" off-screen (see `set_visible`), so we keep its real bounds here
+    /// to restore them when it is shown again.
+    #[cfg(feature = "embedded-webview")]
+    last_bounds: Mutex<HashMap<String, BrowserRect>>,
 }
 
 impl WebBrowserState {
@@ -118,6 +123,20 @@ fn rect_to_physical(rect: &BrowserRect) -> (PhysicalPosition<i32>, PhysicalSize<
     let w = (rect.width.round().max(1.0)) as u32;
     let h = (rect.height.round().max(1.0)) as u32;
     (PhysicalPosition::new(x, y), PhysicalSize::new(w, h))
+}
+
+/// Physical position/size used to "park" a hidden webview far off-screen.
+///
+/// `Webview::hide()` is unreliable for child webviews on some WebView2 builds —
+/// the OS-composited child window can keep painting over HTML modals. Moving it
+/// far beyond any real monitor (1×1 at a large negative coordinate) guarantees it
+/// is not visible regardless, so dialogs like New Connection always sit in front.
+/// The real bounds are restored from `WebBrowserState::last_bounds` on show.
+// Used by `enabled` (feature-gated) and unit tests; allow dead_code in plain
+// non-test builds where the feature is off.
+#[cfg_attr(not(feature = "embedded-webview"), allow(dead_code))]
+fn off_screen_rect() -> (PhysicalPosition<i32>, PhysicalSize<u32>) {
+    (PhysicalPosition::new(-32000, -32000), PhysicalSize::new(1, 1))
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +207,10 @@ mod disabled {
 /// Real implementations — compiled only with `embedded-webview`.
 #[cfg(feature = "embedded-webview")]
 mod enabled {
-    use super::{is_allowed_navigation, label_for_pane, rect_to_physical, BrowserRect, WebBrowserState};
+    use super::{
+        is_allowed_navigation, label_for_pane, off_screen_rect, rect_to_physical, BrowserRect,
+        WebBrowserState,
+    };
 
     use serde::Serialize;
     use tauri::webview::{PageLoadEvent, WebviewBuilder};
@@ -204,12 +226,61 @@ mod enabled {
         loading: bool,
     }
 
+    /// Back/forward availability pushed to the renderer on WebView2
+    /// `HistoryChanged`, so the nav buttons enable/disable correctly.
+    #[cfg(windows)]
+    #[derive(Debug, Clone, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct HistoryStatePayload {
+        pane_id: String,
+        can_go_back: bool,
+        can_go_forward: bool,
+    }
+
+    /// A browser action triggered by an accelerator key pressed while the native
+    /// webview (the page) had focus, pushed so the renderer runs the shortcut.
+    #[cfg(windows)]
+    #[derive(Debug, Clone, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct AccelPayload {
+        pane_id: String,
+        action: String,
+    }
+
     fn physical_bounds(rect: &BrowserRect) -> Rect {
         let (pos, size) = rect_to_physical(rect);
         Rect {
             position: Position::Physical(pos),
             size: Size::Physical(size),
         }
+    }
+
+    /// Off-screen "parking" rectangle for a hidden webview (see `off_screen_rect`).
+    /// Keeps the webview's real `size_hint` so the page is not resized/reflowed —
+    /// only its position moves far off-screen. Falls back to 1×1 if size unknown.
+    fn off_screen_bounds(size_hint: Option<BrowserRect>) -> Rect {
+        let (off_pos, fallback_size) = off_screen_rect();
+        let size = match size_hint {
+            Some(rect) => rect_to_physical(&rect).1,
+            None => fallback_size,
+        };
+        Rect {
+            position: Position::Physical(off_pos),
+            size: Size::Physical(size),
+        }
+    }
+
+    /// Remember a pane's last on-screen rectangle so `set_visible(true)` can
+    /// restore it after the webview was parked off-screen while hidden.
+    fn remember_bounds(state: &WebBrowserState, pane_id: &str, rect: &BrowserRect) {
+        if let Ok(mut map) = state.last_bounds.lock() {
+            map.insert(pane_id.to_string(), *rect);
+        }
+    }
+
+    /// The last on-screen rectangle remembered for a pane, if any.
+    fn remembered_bounds(state: &WebBrowserState, pane_id: &str) -> Option<BrowserRect> {
+        state.last_bounds.lock().ok()?.get(pane_id).copied()
     }
 
     /// Clone the webview handle for a pane out of the map (cheap Arc clone)
@@ -239,6 +310,7 @@ mod enabled {
     ) -> Result<(), String> {
         // Reuse path: keep the loaded page across pane moves / remounts.
         if let Some(existing) = take_handle(state, pane_id) {
+            remember_bounds(state, pane_id, rect);
             existing
                 .set_bounds(physical_bounds(rect))
                 .map_err(|e| e.to_string())?;
@@ -278,10 +350,21 @@ mod enabled {
             .map_err(|e| format!("failed to create webview: {e}"))?;
 
         enable_password_autosave(&webview);
+        install_input_and_history_handlers(app, pane_id, &webview);
 
-        if let Ok(mut map) = state.webviews.lock() {
-            map.insert(pane_id.to_string(), webview);
+        // Store the handle. If the lock is poisoned (a thread panicked holding
+        // it), close the just-created webview instead of leaking an orphan that
+        // nothing in the map can reach — mirrors `destroy`'s poison handling.
+        match state.webviews.lock() {
+            Ok(mut map) => {
+                map.insert(pane_id.to_string(), webview);
+            }
+            Err(_) => {
+                let _ = webview.close();
+                return Err("state lock poisoned".to_string());
+            }
         }
+        remember_bounds(state, pane_id, rect);
         log::info!("web-browser: created child webview for pane {pane_id}");
         Ok(())
     }
@@ -317,6 +400,125 @@ mod enabled {
         #[cfg(not(windows))]
         {
             let _ = webview;
+        }
+    }
+
+    /// Bridge WebView2 input + history events to the renderer (Windows only):
+    /// - `AcceleratorKeyPressed` → `web-browser-accel`, so shortcuts (Ctrl+L,
+    ///   F5/Ctrl+R, Alt+←/→) work even while the page itself has keyboard focus
+    ///   (DOM key handling in the renderer only fires when the HTML chrome does).
+    /// - `HistoryChanged` → `web-browser-history-state`, so the back/forward
+    ///   buttons reflect `CanGoBack`/`CanGoForward`.
+    ///
+    /// Best-effort: registration failures are ignored (the browser still works,
+    /// just without these niceties). Handlers are kept alive by WebView2.
+    fn install_input_and_history_handlers(app: &AppHandle, pane_id: &str, webview: &tauri::Webview) {
+        #[cfg(windows)]
+        {
+            use webview2_com::Microsoft::Web::WebView2::Win32::{
+                ICoreWebView2, ICoreWebView2AcceleratorKeyPressedEventArgs,
+                ICoreWebView2Controller, COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN,
+                COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN,
+            };
+            use webview2_com::{AcceleratorKeyPressedEventHandler, HistoryChangedEventHandler};
+            use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CONTROL, VK_MENU};
+
+            let app_accel = app.clone();
+            let pane_accel = pane_id.to_string();
+            let app_hist = app.clone();
+            let pane_hist = pane_id.to_string();
+
+            // SAFETY: COM calls on the WebView2 controller/core. `with_webview`
+            // runs this on the main thread and the controller exists because
+            // `add_child` returned successfully. Each `add_*` keeps its handler
+            // alive internally; registration errors are ignored (best-effort).
+            let _ = webview.with_webview(move |pw| {
+                let controller: ICoreWebView2Controller = pw.controller();
+
+                // --- AcceleratorKeyPressed → web-browser-accel ---
+                let accel_handler = AcceleratorKeyPressedEventHandler::create(Box::new(
+                    move |_sender: Option<ICoreWebView2Controller>,
+                          args: Option<ICoreWebView2AcceleratorKeyPressedEventArgs>| {
+                        let Some(args) = args else {
+                            return Ok(());
+                        };
+                        // WebView2's COM getters write through out-params and
+                        // return Result<()>.
+                        unsafe {
+                            let mut kind = COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN;
+                            args.KeyEventKind(&mut kind)?;
+                            // Only act on key-down (ignore key-up / the paired event).
+                            if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
+                                && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN
+                            {
+                                return Ok(());
+                            }
+                            let mut vk: u32 = 0;
+                            args.VirtualKey(&mut vk)?;
+                            let ctrl = (GetKeyState(VK_CONTROL.0 as i32) as u16 & 0x8000) != 0;
+                            let alt = (GetKeyState(VK_MENU.0 as i32) as u16 & 0x8000) != 0;
+                            // Virtual-key codes: F5=0x74, R=0x52, L=0x4C,
+                            // Left=0x25, Right=0x27.
+                            let action = match vk {
+                                0x74 => Some("reload"),
+                                0x52 if ctrl => Some("reload"),
+                                0x4C if ctrl => Some("focus-address"),
+                                0x25 if alt => Some("back"),
+                                0x27 if alt => Some("forward"),
+                                _ => None,
+                            };
+                            if let Some(action) = action {
+                                // Suppress WebView2's own default for this key.
+                                let _ = args.SetHandled(true);
+                                let _ = app_accel.emit(
+                                    "web-browser-accel",
+                                    AccelPayload {
+                                        pane_id: pane_accel.clone(),
+                                        action: action.to_string(),
+                                    },
+                                );
+                            }
+                        }
+                        Ok(())
+                    },
+                ));
+                // Token type is inferred from the signature (avoids naming a type
+                // that differs across the windows/webview2-com crate versions).
+                let mut accel_token = Default::default();
+                let _ =
+                    unsafe { controller.add_AcceleratorKeyPressed(&accel_handler, &mut accel_token) };
+
+                // --- HistoryChanged → web-browser-history-state ---
+                if let Ok(core) = unsafe { controller.CoreWebView2() } {
+                    let core_for_emit: ICoreWebView2 = core.clone();
+                    let hist_handler = HistoryChangedEventHandler::create(Box::new(
+                        move |_sender, _args| {
+                            // COM getters write through out-params; best-effort.
+                            unsafe {
+                                let mut back = Default::default();
+                                let _ = core_for_emit.CanGoBack(&mut back);
+                                let mut fwd = Default::default();
+                                let _ = core_for_emit.CanGoForward(&mut fwd);
+                                let _ = app_hist.emit(
+                                    "web-browser-history-state",
+                                    HistoryStatePayload {
+                                        pane_id: pane_hist.clone(),
+                                        can_go_back: back.as_bool(),
+                                        can_go_forward: fwd.as_bool(),
+                                    },
+                                );
+                            }
+                            Ok(())
+                        },
+                    ));
+                    let mut hist_token = Default::default();
+                    let _ = unsafe { core.add_HistoryChanged(&hist_handler, &mut hist_token) };
+                }
+            });
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (app, pane_id, webview);
         }
     }
 
@@ -361,6 +563,7 @@ mod enabled {
     ) -> Result<(), String> {
         let webview =
             take_handle(state, pane_id).ok_or_else(|| "no webview for pane".to_string())?;
+        remember_bounds(state, pane_id, rect);
         webview
             .set_bounds(physical_bounds(rect))
             .map_err(|e| e.to_string())
@@ -368,17 +571,40 @@ mod enabled {
 
     /// Show or hide the pane's webview (used when a modal/dropdown covers it, the
     /// pane unmounts, or the window is minimized).
+    ///
+    /// Hiding does NOT rely on `Webview::hide()` alone: that call is unreliable for
+    /// child webviews on some WebView2 builds (the OS-composited window keeps
+    /// painting over HTML modals such as the New Connection dialog). So we also
+    /// park the webview far off-screen, guaranteeing it cannot cover a modal. On
+    /// show we restore the last on-screen bounds and call `show()`.
     pub fn set_visible(
         state: &WebBrowserState,
         pane_id: &str,
         visible: bool,
     ) -> Result<(), String> {
-        let webview =
-            take_handle(state, pane_id).ok_or_else(|| "no webview for pane".to_string())?;
+        let webview = match take_handle(state, pane_id) {
+            Some(w) => w,
+            None => {
+                log::warn!("web-browser: set_visible pane={pane_id} visible={visible} — no webview");
+                return Err("no webview for pane".to_string());
+            }
+        };
         if visible {
+            // Restore the real rectangle (the webview was parked off-screen while
+            // hidden), then show. The renderer also re-reports bounds on show, so
+            // this is belt-and-suspenders against a vanishing webview.
+            if let Some(rect) = remembered_bounds(state, pane_id) {
+                let _ = webview.set_bounds(physical_bounds(&rect));
+            }
             webview.show().map_err(|e| e.to_string())
         } else {
-            webview.hide().map_err(|e| e.to_string())
+            // Best-effort hide, then park off-screen so it cannot paint over a modal.
+            // Keep the real size (no page reflow) — only move it out of view.
+            let _ = webview.hide();
+            let size_hint = remembered_bounds(state, pane_id);
+            webview
+                .set_bounds(off_screen_bounds(size_hint))
+                .map_err(|e| e.to_string())
         }
     }
 
@@ -391,6 +617,9 @@ mod enabled {
                 .map_err(|_| "state lock poisoned".to_string())?;
             map.remove(pane_id)
         };
+        if let Ok(mut map) = state.last_bounds.lock() {
+            map.remove(pane_id);
+        }
         if let Some(webview) = webview {
             let _ = webview.close();
             log::info!("web-browser: destroyed child webview for pane {pane_id}");
@@ -437,6 +666,15 @@ mod tests {
         assert!(validate_browser_url("example.com").is_err()); // no scheme
         assert!(validate_browser_url("").is_err());
         assert!(validate_browser_url("   ").is_err());
+    }
+
+    #[test]
+    fn off_screen_rect_is_far_off_and_valid_size() {
+        let (pos, size) = off_screen_rect();
+        // Far beyond any real monitor (so a hidden webview can't paint over modals)…
+        assert!(pos.x <= -10000 && pos.y <= -10000);
+        // …yet a valid, non-zero size (a zero-size webview is invalid).
+        assert!(size.width >= 1 && size.height >= 1);
     }
 
     #[test]

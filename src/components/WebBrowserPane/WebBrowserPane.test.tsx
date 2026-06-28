@@ -6,7 +6,11 @@ import { tauriService } from '../../services/tauriService';
 import { useUiOverlayStore } from '../../stores/uiOverlayStore';
 import { useBookmarkStore } from '../../stores/bookmarkStore';
 import { useWebBrowserBookmarkStore } from '../../stores/webBrowserBookmarkStore';
-import type { WebBrowserNavState } from '../../types/appTypes';
+import type {
+  WebBrowserNavState,
+  WebBrowserHistoryState,
+  WebBrowserAccel,
+} from '../../types/appTypes';
 
 vi.mock('../../services/tauriService', () => ({
   tauriService: {
@@ -21,6 +25,8 @@ vi.mock('../../services/tauriService', () => ({
     webBrowserSetVisible: vi.fn().mockResolvedValue(undefined),
     webBrowserDestroy: vi.fn().mockResolvedValue(undefined),
     onWebBrowserNavState: vi.fn().mockResolvedValue(() => {}),
+    onWebBrowserHistoryState: vi.fn().mockResolvedValue(() => {}),
+    onWebBrowserAccel: vi.fn().mockResolvedValue(() => {}),
   },
 }));
 
@@ -30,6 +36,8 @@ vi.mock('../../utils/logger', () => ({ logError: vi.fn() }));
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(tauriService.onWebBrowserNavState).mockResolvedValue(() => {});
+  vi.mocked(tauriService.onWebBrowserHistoryState).mockResolvedValue(() => {});
+  vi.mocked(tauriService.onWebBrowserAccel).mockResolvedValue(() => {});
   vi.mocked(tauriService.webBrowserCurrentUrl).mockResolvedValue(null);
   useUiOverlayStore.setState({ overlayOpen: false, sessionDragging: false });
   useBookmarkStore.setState({ tree: [] });
@@ -41,6 +49,12 @@ beforeEach(() => {
     disconnect() {}
   };
 });
+
+/** Grab the latest registered callback of a mocked tauriService listener. */
+function latestCb<T>(fn: { mock: { calls: unknown[][] } }): (p: T) => void {
+  const calls = fn.mock.calls;
+  return calls[calls.length - 1][0] as (p: T) => void;
+}
 
 describe('normalizeUrl', () => {
   it('defaults schemeless input to http:// (LAN device friendly)', () => {
@@ -320,6 +334,25 @@ describe('WebBrowserPane', () => {
     expect(screen.getByText('No bookmarks yet')).toBeTruthy();
   });
 
+  it('keeps the webview visible (does not hide it) while the bookmarks panel is open', async () => {
+    useBookmarkStore.setState({
+      tree: [{ id: 'b1', type: 'bookmark', name: 'Router GUI', url: 'http://192.168.1.1/' }],
+    });
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    await waitFor(() =>
+      expect(tauriService.webBrowserSetVisible).toHaveBeenCalledWith('wb-1', true),
+    );
+    vi.mocked(tauriService.webBrowserSetVisible).mockClear();
+    vi.mocked(tauriService.webBrowserSetBounds).mockClear();
+
+    fireEvent.click(screen.getByLabelText('Show bookmarks'));
+    expect(screen.getByText('Router GUI')).toBeTruthy();
+    // The panel docks beside the page — the webview must NOT be hidden …
+    expect(tauriService.webBrowserSetVisible).not.toHaveBeenCalledWith('wb-1', false);
+    // … and its slot shrinks, so new bounds are reported.
+    expect(tauriService.webBrowserSetBounds).toHaveBeenCalledWith('wb-1', expect.any(Object));
+  });
+
   it('closes the bookmarks dropdown on an outside click', () => {
     useBookmarkStore.setState({
       tree: [{ id: 'b1', type: 'bookmark', name: 'Router GUI', url: 'http://192.168.1.1/' }],
@@ -330,4 +363,110 @@ describe('WebBrowserPane', () => {
     fireEvent.mouseDown(document.body);
     expect(screen.queryByText('Router GUI')).toBeNull();
   });
+
+  it('reports the current URL to onUrlChange so the tab name can follow', async () => {
+    const onUrlChange = vi.fn();
+    render(<WebBrowserPane paneId="wb-1" active={true} onUrlChange={onUrlChange} />);
+    await waitFor(() => expect(tauriService.onWebBrowserNavState).toHaveBeenCalled());
+    const cb = latestCb<WebBrowserNavState>(vi.mocked(tauriService.onWebBrowserNavState));
+    act(() => cb({ paneId: 'wb-1', url: 'http://10.0.0.1/dashboard', loading: false }));
+    expect(onUrlChange).toHaveBeenCalledWith('http://10.0.0.1/dashboard');
+  });
+
+  it('enables/disables back & forward from a history-state event', async () => {
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    await waitFor(() => expect(tauriService.onWebBrowserHistoryState).toHaveBeenCalled());
+    // Both disabled until the backend reports availability.
+    expect(screen.getByLabelText('Back')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Forward')).toHaveProperty('disabled', true);
+    const cb = latestCb<WebBrowserHistoryState>(
+      vi.mocked(tauriService.onWebBrowserHistoryState),
+    );
+    act(() => cb({ paneId: 'wb-1', canGoBack: true, canGoForward: false }));
+    expect(screen.getByLabelText('Back')).toHaveProperty('disabled', false);
+    expect(screen.getByLabelText('Forward')).toHaveProperty('disabled', true);
+  });
+
+  it('runs the matching action when an accelerator event arrives (page-focus shortcuts)', async () => {
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    await waitFor(() => expect(tauriService.onWebBrowserAccel).toHaveBeenCalled());
+    const cb = latestCb<WebBrowserAccel>(vi.mocked(tauriService.onWebBrowserAccel));
+    act(() => cb({ paneId: 'wb-1', action: 'reload' }));
+    expect(tauriService.webBrowserReload).toHaveBeenCalledWith('wb-1');
+    act(() => cb({ paneId: 'wb-1', action: 'back' }));
+    expect(tauriService.webBrowserBack).toHaveBeenCalledWith('wb-1');
+    // A different pane's accelerator is ignored.
+    act(() => cb({ paneId: 'wb-OTHER', action: 'forward' }));
+    expect(tauriService.webBrowserForward).not.toHaveBeenCalled();
+  });
+
+  it('handles keyboard shortcuts pressed while the HTML chrome has focus', () => {
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    const pane = document.querySelector('.web-browser-pane') as HTMLElement;
+    fireEvent.keyDown(pane, { key: 'F5' });
+    expect(tauriService.webBrowserReload).toHaveBeenCalledWith('wb-1');
+    fireEvent.keyDown(pane, { key: 'ArrowLeft', altKey: true });
+    expect(tauriService.webBrowserBack).toHaveBeenCalledWith('wb-1');
+    fireEvent.keyDown(pane, { key: 'ArrowRight', altKey: true });
+    expect(tauriService.webBrowserForward).toHaveBeenCalledWith('wb-1');
+  });
+
+  it('★ reflects an already-bookmarked page and removes it on click (toggle off)', () => {
+    useBookmarkStore.setState({
+      tree: [{ id: 'b1', type: 'bookmark', name: 'Router', url: 'http://router.test/admin' }],
+    });
+    render(<WebBrowserPane paneId="wb-1" active={true} initialUrl="http://router.test/admin" />);
+    const star = screen.getByLabelText('Remove bookmark');
+    expect(star.className).toContain('bookmarked');
+    fireEvent.click(star);
+    // Toggling off must NOT open the add modal …
+    expect(screen.queryByText('Add Bookmark')).toBeNull();
+    // … and the bookmark is removed from the store.
+    expect(
+      useBookmarkStore.getState().tree.some((n) => n.url === 'http://router.test/admin'),
+    ).toBe(false);
+  });
+
+  it('does not reposition the webview while it is hidden by an overlay', async () => {
+    let rect = makeRect(0, 0, 800, 600);
+    const spy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(() => rect);
+    try {
+      render(<WebBrowserPane paneId="wb-1" active={true} />);
+      await waitFor(() =>
+        expect(tauriService.webBrowserSetVisible).toHaveBeenCalledWith('wb-1', true),
+      );
+      // Hide the webview behind a modal overlay.
+      act(() => useUiOverlayStore.setState({ overlayOpen: true }));
+      await waitFor(() =>
+        expect(tauriService.webBrowserSetVisible).toHaveBeenCalledWith('wb-1', false),
+      );
+      vi.mocked(tauriService.webBrowserSetBounds).mockClear();
+      // The pane's layout shifts while hidden …
+      rect = makeRect(0, 120, 800, 600);
+      fireEvent(window, new Event('resize'));
+      // … but no bounds are pushed (else the parked webview would pop back over
+      // the modal). Wait past the bounds debounce to be sure nothing fires.
+      await new Promise((r) => setTimeout(r, 60));
+      expect(tauriService.webBrowserSetBounds).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
+
+/** Build a DOMRect-like object for getBoundingClientRect mocks. */
+function makeRect(x: number, y: number, width: number, height: number): DOMRect {
+  return {
+    x,
+    y,
+    width,
+    height,
+    left: x,
+    top: y,
+    right: x + width,
+    bottom: y + height,
+    toJSON() {},
+  } as DOMRect;
+}

@@ -183,5 +183,13 @@ export const panes = {
     bookmarkAdd: 'Add',
     bookmarksTooltip: 'Show bookmarks',
     bookmarksEmpty: 'No bookmarks yet',
+    bookmarkRemoveTooltip: 'Remove bookmark',
+    bookmarksExport: 'Export',
+    bookmarksImport: 'Import',
+    bookmarksExportError: 'Failed to export bookmarks',
+    bookmarksImportError: 'Failed to import bookmarks',
+    bookmarksImportInvalid: 'The selected file is not a valid bookmarks file',
+    importReplaceTitle: 'Replace bookmarks?',
+    importReplaceMessage: 'This replaces all current bookmarks with the imported ones. This cannot be undone.',
   },
 } as const;

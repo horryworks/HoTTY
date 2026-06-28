@@ -74,6 +74,23 @@ export interface WebBrowserNavState {
   loading: boolean;
 }
 
+/** Back/forward availability pushed from the embedded webview (WebView2
+ *  HistoryChanged). Separate from nav-state so it never disturbs the loading
+ *  spinner. Windows-only; on other platforms the buttons stay disabled. */
+export interface WebBrowserHistoryState {
+  paneId: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
+/** A browser action triggered by an accelerator key pressed while the native
+ *  webview (not the HTML chrome) had focus — bridged from WebView2's
+ *  AcceleratorKeyPressed so shortcuts work over the page too. */
+export interface WebBrowserAccel {
+  paneId: string;
+  action: 'back' | 'forward' | 'reload' | 'focus-address';
+}
+
 export interface SshHostKeyPromptPayload {
   sessionId: string;
   host: string;

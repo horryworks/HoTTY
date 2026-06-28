@@ -187,5 +187,13 @@ export const panes = {
     bookmarkAdd: 'Добавить',
     bookmarksTooltip: 'Показать закладки',
     bookmarksEmpty: 'Закладок пока нет',
+    bookmarkRemoveTooltip: 'Удалить закладку',
+    bookmarksExport: 'Экспорт',
+    bookmarksImport: 'Импорт',
+    bookmarksExportError: 'Не удалось экспортировать закладки',
+    bookmarksImportError: 'Не удалось импортировать закладки',
+    bookmarksImportInvalid: 'Выбранный файл не является допустимым файлом закладок',
+    importReplaceTitle: 'Заменить закладки?',
+    importReplaceMessage: 'Все текущие закладки будут заменены импортированными. Это действие нельзя отменить.',
   },
 };

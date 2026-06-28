@@ -183,5 +183,13 @@ export const panes = {
     bookmarkAdd: '添加',
     bookmarksTooltip: '显示书签',
     bookmarksEmpty: '暂无书签',
+    bookmarkRemoveTooltip: '移除书签',
+    bookmarksExport: '导出',
+    bookmarksImport: '导入',
+    bookmarksExportError: '导出书签失败',
+    bookmarksImportError: '导入书签失败',
+    bookmarksImportInvalid: '所选文件不是有效的书签文件',
+    importReplaceTitle: '替换书签？',
+    importReplaceMessage: '这将用导入的书签替换当前所有书签，此操作无法撤销。',
   },
 };

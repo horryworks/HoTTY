@@ -53,9 +53,17 @@
   color: var(--text-on-accent);
 }
 
-/* Anchor for the bookmarks dropdown (positioned absolutely within). */
+/* ★ button: tint the (filled) star when the current page is bookmarked. */
+.web-browser-star.bookmarked {
+  color: var(--accent-color);
+}
+
+.web-browser-star.bookmarked:hover:not(:disabled) {
+  color: var(--accent-hover);
+}
+
+/* Bookmarks toggle button container. */
 .web-browser-bookmark-wrap {
-  position: relative;
   display: inline-flex;
 }
 
@@ -92,10 +100,33 @@
   flex-shrink: 0;
 }
 
-/* Body — the native webview floats over this rect. Kept as a measured slot. */
+/* Body row — holds the webview slot and (when open) the docked bookmarks panel. */
+.web-browser-body-row {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* Body — the native webview floats over this rect. Kept as a measured slot;
+   shrinks (flex) when the bookmarks panel docks beside it. */
 .web-browser-body {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   position: relative;
   background: var(--bg-secondary);
+}
+
+/* Bookmarks side panel — docks to the right of the page while the menu is open.
+   The native webview composites above HTML, so the menu cannot float over the
+   page; instead the webview slot shrinks and the menu sits beside it, keeping
+   the page visible. */
+.web-browser-bookmark-panel {
+  flex-shrink: 0;
+  width: 300px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-color);
+  animation: fadeIn 0.1s ease-out;
 }

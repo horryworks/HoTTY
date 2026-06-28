@@ -1,3 +1,4 @@
+// Exported for unit tests; also used internally below.
 export const MAX_LOG_MESSAGE_LENGTH = 4096;
 
 const SENSITIVE_KEYS = [
