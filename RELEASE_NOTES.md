@@ -1,5 +1,22 @@
 # Release Notes
 
+## v2.0.8-beta1
+
+This beta redesigns the terminal **"Ask AI"** flow — replacing the customizable Ask AI Commands with a quick, free-form inline question box — and hardens the AI auto-execution and File Server security model.
+
+### Breaking Changes
+
+- **Customizable "Ask AI Commands" have been removed.** The preset right-click commands (such as "What is this?", "Research root cause" and "Fix this") and the **Settings → AI → Ask AI Commands** editor — where you could add, reorder and template your own `{selection}` prompts — are gone, replaced by the free-form inline box below. Any custom Ask AI commands you had configured will no longer appear, and the terminal right-click no longer shows a command list.
+
+### New Features
+
+- **Ask the AI about terminal output with a right-click.** Select text in a terminal, right-click the selection, and type your question in the inline **"Ask AI"** box that appears — press **Enter** to send (**Shift + Enter** for a new line). HoTTY opens or focuses the AI Chat pane and sends your question together with the selected text. (Click a Terminal Marker first to select a whole output block.) This replaces the previous modal-with-preset-commands flow with a faster, free-form question.
+
+### Security
+
+- **AI auto-execution no longer treats network tools as safe.** `curl`, `wget` and `nmap` have been removed from the default auto-execute Whitelist, closing a data-exfiltration path: a plain `GET` could otherwise send terminal or selected data to a remote host without tripping the write-method guard (terminal output from a hostile host is fed to the model, a prompt-injection surface). Whitelist phrase matching is now anchored to the start of a command, so a benign whitelisted phrase can no longer auto-allow an unrelated command that merely contains it.
+- **File Server: upload-path symlink escape closed.** The built-in TFTP/SFTP server's write path now resolves and rejects a final-component symlink (including a dangling one), so a symlink planted inside the served folder can no longer redirect an upload outside it.
+
 ## v2.0.7
 
 The v2.0.7 stable release, consolidating the v2.0.7 beta series. It brings three major additions — a fully multilingual interface, a built-in **File Server** for pushing firmware to network gear, and an embedded **Web Browser** for device web admin UIs — together with supply-chain hardening of the build pipeline and a round of reliability fixes (serial typing latency, session logging, and SSH host-key handling).

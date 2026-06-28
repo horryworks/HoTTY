@@ -155,19 +155,11 @@ export const settings = {
     displayNamePlaceholder: "Nom d'affichage",
     systemPrompt: 'Prompt système',
     systemPromptPlaceholder: 'Prompt système',
-    askAiCommands: "Commandes Demander à l'IA",
-    dragToReorder: 'Glisser pour réordonner',
-    labelPlaceholder: 'Libellé',
-    promptTemplatePlaceholder: 'Modèle de prompt ({selection} sera remplacé)',
-    promptTemplateHelp: "Utilisez l'espace réservé {selection} pour le texte sélectionné.",
-    addCommand: '+ Ajouter une commande',
-    resetCommands: 'Réinitialiser les commandes',
     deletePersona: 'Supprimer le persona',
     atLeastOnePersona: 'Au moins un persona est requis',
     deletePersonaTitle: 'Supprimer « {{label}} »',
     resetAllPersonas: 'Réinitialiser tous les personas',
     newPersonaLabel: 'Nouveau persona',
-    newCommandLabel: 'Nouvelle commande',
     // Command Execution
     commandExecutionSection: 'Exécution de commandes',
     commandExecutionHelp:
@@ -192,7 +184,7 @@ export const settings = {
       "Limite supérieure d'un délai sleep côté client ; les sleep plus longs sont ramenés à cette valeur et signalés. 0 = pas de limite. Par défaut : 900 (15 min).",
     whitelist: 'Liste blanche (exécution automatique)',
     whitelistHelp:
-      "Les commandes correspondant ici s'exécutent automatiquement. Un mot unique correspond comme commande de base (ex. « docker » correspond à toute commande docker) ; une entrée avec des espaces correspond comme sous-chaîne (ex. « git log »). Préremplie avec des valeurs par défaut sûres ; entièrement modifiable.",
+      "Les commandes correspondant ici s'exécutent automatiquement. Un mot unique correspond comme commande de base (ex. « docker » correspond à toute commande docker) ; une entrée avec des espaces correspond comme préfixe de commande (ex. « git log »). Préremplie avec des valeurs par défaut sûres ; entièrement modifiable.",
     whitelistPlaceholder: 'ex. docker, kubectl get',
     add: 'Ajouter',
     resetToDefaults: 'Réinitialiser par défaut',

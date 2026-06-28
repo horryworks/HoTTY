@@ -133,6 +133,24 @@ pub fn resolve_in_root(
         if is_sensitive_path(&final_path) {
             return Err(JailError::Denied);
         }
+        // `File::create` / `OpenOptions::open` FOLLOW a final-component symlink or
+        // reparse point — including a *dangling* one, where the open creates the
+        // target at the link's destination. The parent is already canonicalized,
+        // but the final component is not, so a planted symlink in the share (these
+        // servers can't create one themselves) would let a write escape the jail.
+        // Inspect the link itself (`symlink_metadata` does not follow): reject any
+        // symlink, and for a real existing entry confirm its canonical path stays
+        // inside the served root and isn't sensitive.
+        match std::fs::symlink_metadata(&final_path) {
+            Ok(meta) if meta.file_type().is_symlink() => return Err(JailError::Denied),
+            Ok(_) => {
+                let resolved = final_path.canonicalize().map_err(|_| JailError::Denied)?;
+                if !resolved.starts_with(root) || is_sensitive_path(&resolved) {
+                    return Err(JailError::Denied);
+                }
+            }
+            Err(_) => {} // Does not exist yet — fine; the parent is already jailed.
+        }
         Ok(final_path)
     }
 }

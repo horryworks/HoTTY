@@ -34,13 +34,6 @@ export const dialogs = {
     // {{persona}} se interpola.
     title: 'Prompt del sistema — {{persona}}',
   },
-  askAi: {
-    title: 'Preguntar a la IA',
-    questionLabel: 'Su pregunta:',
-    promptPlaceholder: '¿Qué le gustaría preguntar sobre la selección? (Ctrl+Enter para preguntar)',
-    selectedTextLabel: 'Texto seleccionado:',
-    ask: 'Preguntar',
-  },
   iapVmStart: {
     title: '¿Iniciar VM de GCE?',
     // <0>{{status}}</0> envuelve el estado actual en un <strong> mediante <Trans>.

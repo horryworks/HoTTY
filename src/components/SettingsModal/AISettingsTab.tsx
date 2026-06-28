@@ -5,8 +5,8 @@ import { tauriService } from '../../services/tauriService';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import HelpTooltip from '../HelpTooltip/HelpTooltip';
 import { STORAGE_KEYS } from '../../constants/storage';
-import type { PersonaDefinition, AskAiCommand } from '../../types/appTypes';
-import { DEFAULT_AI_COMMANDS, DEFAULT_PERSONAS } from '../../stores/settingsStore';
+import type { PersonaDefinition } from '../../types/appTypes';
+import { DEFAULT_PERSONAS } from '../../stores/settingsStore';
 import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from '../../utils/commandLists';
 
 export function AISettingsTab() {
@@ -20,8 +20,6 @@ export function AISettingsTab() {
   const [activePersonaId, setActivePersonaId] = useState(settings.aiPersonas[0]?.id ?? '');
   const [newWhitelistEntry, setNewWhitelistEntry] = useState('');
   const [newBlacklistEntry, setNewBlacklistEntry] = useState('');
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Check auth status on mount
   useEffect(() => {
@@ -60,33 +58,6 @@ export function AISettingsTab() {
       p.id === personaId ? { ...p, ...updates } : p
     );
     update('aiPersonas', newPersonas);
-  };
-
-  const updatePersonaCommands = (personaId: string, commands: AskAiCommand[]) => {
-    updatePersona(personaId, { askAiCommands: commands });
-  };
-
-  const handleDragStart = (index: number) => {
-    setDraggedIndex(index);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (dropIndex: number) => {
-    if (draggedIndex === null || draggedIndex === dropIndex) return;
-    const cmds = [...(activePersona?.askAiCommands || [])];
-    const [moved] = cmds.splice(draggedIndex, 1);
-    cmds.splice(dropIndex, 0, moved);
-    updatePersonaCommands(activeTabId, cmds);
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-    setDragOverIndex(null);
   };
 
   return (
@@ -179,7 +150,6 @@ export function AISettingsTab() {
               id,
               label: t('settings.ai.newPersonaLabel'),
               systemPrompt: 'You are a helpful assistant.',
-              askAiCommands: [...DEFAULT_AI_COMMANDS],
             };
             update('aiPersonas', [...personas, newPersona]);
             setActivePersonaId(id);
@@ -214,86 +184,6 @@ export function AISettingsTab() {
               className="ai-settings-textarea"
               rows={3}
             />
-          </div>
-
-          {/* Ask AI Commands */}
-          <div className="settings-group">
-            <label>{t('settings.ai.askAiCommands')}</label>
-            <div className="ai-settings-command-list">
-              {activePersona.askAiCommands?.map((cmd, index) => (
-                <div
-                  key={cmd.id}
-                  draggable
-                  onDragStart={() => handleDragStart(index)}
-                  onDragOver={(e) => { handleDragOver(e); setDragOverIndex(index); }}
-                  onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverIndex(null); }}
-                  onDrop={() => { handleDrop(index); }}
-                  onDragEnd={handleDragEnd}
-                  className="ai-settings-command-card"
-                  style={{
-                    borderColor: dragOverIndex === index && draggedIndex !== null && draggedIndex !== index ? 'var(--accent-color)' : undefined,
-                    opacity: draggedIndex === index ? 0.5 : 1,
-                  }}
-                >
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span className="ai-settings-drag-handle" title={t('settings.ai.dragToReorder')}>&#9776;</span>
-                    <input
-                      type="text"
-                      value={cmd.label}
-                      onChange={(e) => {
-                        const newCommands = [...activePersona.askAiCommands];
-                        newCommands[index] = { ...cmd, label: e.target.value };
-                        updatePersonaCommands(activeTabId, newCommands);
-                      }}
-                      placeholder={t('settings.ai.labelPlaceholder')}
-                      style={{ flex: 1 }}
-                    />
-                    <button
-                      className="ai-settings-delete-btn"
-                      onClick={() => {
-                        const newCommands = activePersona.askAiCommands.filter((_, i) => i !== index);
-                        updatePersonaCommands(activeTabId, newCommands);
-                      }}
-                    >
-                      &#10005;
-                    </button>
-                  </div>
-                  <textarea
-                    value={cmd.promptTemplate}
-                    onChange={(e) => {
-                      const newCommands = [...activePersona.askAiCommands];
-                      newCommands[index] = { ...cmd, promptTemplate: e.target.value };
-                      updatePersonaCommands(activeTabId, newCommands);
-                    }}
-                    placeholder={t('settings.ai.promptTemplatePlaceholder')}
-                    className="ai-settings-textarea"
-                    rows={2}
-                  />
-                  <HelpTooltip text={t('settings.ai.promptTemplateHelp')} />
-                </div>
-              ))}
-            </div>
-
-            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-              <button
-                className="settings-button"
-                onClick={() => {
-                  const id = crypto.randomUUID();
-                  const newCommand: AskAiCommand = { id, label: t('settings.ai.newCommandLabel'), promptTemplate: '{selection}' };
-                  updatePersonaCommands(activeTabId, [...(activePersona.askAiCommands || []), newCommand]);
-                }}
-              >
-                {t('settings.ai.addCommand')}
-              </button>
-              <button
-                className="settings-button"
-                onClick={() => {
-                  updatePersonaCommands(activeTabId, [...DEFAULT_AI_COMMANDS]);
-                }}
-              >
-                {t('settings.ai.resetCommands')}
-              </button>
-            </div>
           </div>
 
           {/* Delete Persona */}

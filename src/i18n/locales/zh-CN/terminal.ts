@@ -6,4 +6,6 @@ export const terminal = {
   markerRail: '提示符标记',
   promptMarker: '跳转到提示符',
   outputMarker: '选择输出块',
+  askAiInputTitle: '询问 AI',
+  askAiInputPlaceholder: '就所选内容询问 AI…（Enter 发送）',
 };

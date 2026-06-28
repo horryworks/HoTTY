@@ -6,4 +6,6 @@ export const terminal = {
   markerRail: 'Prompt markers',
   promptMarker: 'Jump to prompt',
   outputMarker: 'Select output block',
+  askAiInputTitle: 'Ask AI',
+  askAiInputPlaceholder: 'Ask AI about the selection… (Enter to send)',
 } as const;

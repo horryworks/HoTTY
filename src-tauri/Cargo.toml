@@ -1,6 +1,6 @@
 [package]
 name = "hotty"
-version = "2.0.7"
+version = "2.0.8-beta1"
 description = "HoTTY - AI Integrated Advanced Terminal Emulator (Rust/Tauri)"
 authors = ["horryworks"]
 license = "GPL-3.0-or-later"

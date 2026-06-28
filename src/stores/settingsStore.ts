@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Encoding, FeatureId, FileServerConfig, PromptPattern, ThemeId, LanguageId, CommandExecutionMode, ClassifierStrategy, PersonaDefinition, AskAiCommand } from '../types/appTypes';
+import type { Encoding, FeatureId, FileServerConfig, PromptPattern, ThemeId, LanguageId, CommandExecutionMode, ClassifierStrategy, PersonaDefinition } from '../types/appTypes';
 import { DEFAULT_THEMES } from '../themes/defaults';
 import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from '../utils/commandLists';
 
@@ -17,74 +17,13 @@ export const DEFAULT_PROMPT_PATTERNS: PromptPattern[] = [
   { id: 'powershell', name: 'PowerShell', pattern: '^(PS\\s+.*>)\\s*' },
 ];
 
-export const DEFAULT_AI_COMMANDS: AskAiCommand[] = [
-  { id: 'what-is-this', label: 'What is this?', promptTemplate: 'Explain the following text or code snippet concisely:\n\n{selection}' },
-  { id: 'what-does-it-mean', label: 'What does it mean?', promptTemplate: 'Interpret the meaning of this log entry or message and its implications:\n\n{selection}' },
-  { id: 'root-cause', label: 'Research root cause', promptTemplate: 'Analyze the following error or issue, identify 3 potential root causes, and suggest verification steps for each:\n\n{selection}' },
-  { id: 'fix-this', label: 'Fix this', promptTemplate: 'Suggest a fix or improvement for the selected code or configuration:\n\n{selection}' },
-];
-
-const NETWORK_EXPERT_COMMANDS: AskAiCommand[] = [
-  { id: 'explain-output', label: 'Explain this output', promptTemplate: 'Explain the following network command output. Highlight key information such as interface status, routing entries, errors, or protocol states:\n\n{selection}' },
-  { id: 'troubleshoot', label: 'Troubleshoot this', promptTemplate: 'Analyze the following network issue or error output. Identify the likely cause, suggest diagnostic commands to verify, and recommend a resolution:\n\n{selection}' },
-  { id: 'suggest-commands', label: 'What commands should I run?', promptTemplate: 'Based on the following situation or symptom, suggest the most relevant network diagnostic commands to run (e.g., show, debug, traceroute) and explain what each will reveal:\n\n{selection}' },
-  { id: 'optimize-config', label: 'Optimize this config', promptTemplate: 'Review the following network device configuration and suggest optimizations for performance, security, and best practices:\n\n{selection}' },
-  { id: 'what-does-it-mean', label: 'What does it mean?', promptTemplate: 'Interpret the meaning of this network log entry or message and its implications:\n\n{selection}' },
-  { id: 'compare-configs', label: 'Compare configs', promptTemplate: 'Analyze the following two configurations. Identify the differences and explain the impact of each change:\n\n{selection}' },
-];
-
-const GENERAL_HELPER_COMMANDS: AskAiCommand[] = [
-  { id: 'what-is-this', label: 'What is this?', promptTemplate: 'Explain the following text or code snippet concisely:\n\n{selection}' },
-  { id: 'what-does-it-mean', label: 'What does it mean?', promptTemplate: 'Interpret the meaning of this log entry or message and its implications:\n\n{selection}' },
-  { id: 'summarize', label: 'Summarize this', promptTemplate: 'Provide a concise summary of the following output, highlighting the most important points:\n\n{selection}' },
-  { id: 'root-cause', label: 'Research root cause', promptTemplate: 'Analyze the following error or issue, identify 3 potential root causes, and suggest verification steps for each:\n\n{selection}' },
-  { id: 'fix-this', label: 'Fix this', promptTemplate: 'Suggest a fix or improvement for the selected text, code, or configuration:\n\n{selection}' },
-  { id: 'rewrite', label: 'Rewrite this', promptTemplate: 'Rewrite the following for clarity, correctness, and better structure while preserving the original intent:\n\n{selection}' },
-];
-
-const SERVER_EXPERT_COMMANDS: AskAiCommand[] = [
-  { id: 'explain-output', label: 'Explain this output', promptTemplate: 'Explain the following server command output. Highlight key metrics, status indicators, and anything that requires attention:\n\n{selection}' },
-  { id: 'troubleshoot', label: 'Troubleshoot this', promptTemplate: 'Analyze the following server issue or error. Identify the likely cause, suggest diagnostic commands, and recommend a resolution:\n\n{selection}' },
-  { id: 'suggest-commands', label: 'What commands should I run?', promptTemplate: 'Based on the following situation or symptom, suggest the most relevant system diagnostic commands to run and explain what each will reveal:\n\n{selection}' },
-  { id: 'check-issues', label: 'Check for issues', promptTemplate: 'Review the following configuration or log output for potential issues, misconfigurations, or warnings that need attention:\n\n{selection}' },
-  { id: 'optimize-performance', label: 'Optimize performance', promptTemplate: 'Analyze the following system configuration or metrics and suggest performance tuning recommendations (kernel parameters, service settings, resource allocation):\n\n{selection}' },
-  { id: 'root-cause', label: 'Research root cause', promptTemplate: 'Analyze the following server error or issue, identify 3 potential root causes, and suggest verification steps for each:\n\n{selection}' },
-];
-
-const CLOUD_EXPERT_COMMANDS: AskAiCommand[] = [
-  { id: 'explain-resource', label: 'Explain this resource', promptTemplate: 'Explain the following cloud resource definition or configuration. Describe its purpose, key settings, and how it fits into a typical architecture:\n\n{selection}' },
-  { id: 'estimate-cost', label: 'Estimate cost', promptTemplate: 'Based on the following cloud resource configuration, provide a rough monthly cost estimate and suggest cost optimization strategies:\n\n{selection}' },
-  { id: 'review-architecture', label: 'Review architecture', promptTemplate: 'Review the following cloud architecture or infrastructure configuration. Identify potential improvements for scalability, reliability, security, and cost:\n\n{selection}' },
-  { id: 'convert-to-iac', label: 'Convert to IaC', promptTemplate: 'Convert the following manual cloud resource configuration into Infrastructure-as-Code (Terraform HCL). Include comments explaining each resource and parameter:\n\n{selection}' },
-  { id: 'troubleshoot', label: 'Troubleshoot this', promptTemplate: 'Analyze the following cloud service error or issue. Identify the likely cause, suggest diagnostic steps using the cloud provider CLI, and recommend a resolution:\n\n{selection}' },
-  { id: 'what-does-it-mean', label: 'What does it mean?', promptTemplate: 'Interpret the meaning of this cloud service error message or log entry and its implications:\n\n{selection}' },
-];
-
-const CODING_EXPERT_COMMANDS: AskAiCommand[] = [
-  { id: 'explain-code', label: 'Explain this code', promptTemplate: 'Explain the following code. Describe what it does, its key logic, and any notable patterns or techniques used:\n\n{selection}' },
-  { id: 'fix-this', label: 'Fix this', promptTemplate: 'Identify the bug or issue in the following code and suggest a fix with explanation:\n\n{selection}' },
-  { id: 'refactor', label: 'Refactor this', promptTemplate: 'Refactor the following code for better readability, maintainability, and adherence to best practices while preserving its behavior:\n\n{selection}' },
-  { id: 'write-tests', label: 'Write tests for this', promptTemplate: 'Write unit tests for the following code. Cover the main functionality, edge cases, and error scenarios:\n\n{selection}' },
-  { id: 'optimize', label: 'Optimize this', promptTemplate: 'Optimize the following code for better performance. Explain the improvements and any trade-offs:\n\n{selection}' },
-  { id: 'complexity', label: "What's the complexity?", promptTemplate: 'Analyze the time and space complexity (Big O) of the following code. Identify bottlenecks and suggest improvements if applicable:\n\n{selection}' },
-];
-
-const SECURITY_ANALYST_COMMANDS: AskAiCommand[] = [
-  { id: 'analyze-threats', label: 'Analyze for threats', promptTemplate: 'Analyze the following log entries or output for potential security threats, suspicious activity, or indicators of compromise (IoCs):\n\n{selection}' },
-  { id: 'check-vulnerabilities', label: 'Check vulnerabilities', promptTemplate: 'Review the following configuration or code for security vulnerabilities. Classify each finding by severity (Critical/High/Medium/Low) and suggest remediation:\n\n{selection}' },
-  { id: 'explain-alert', label: 'Explain this alert', promptTemplate: 'Explain the following security alert or event. Describe its severity, potential impact, and recommended immediate response actions:\n\n{selection}' },
-  { id: 'suggest-hardening', label: 'Suggest hardening', promptTemplate: 'Review the following system or service configuration and suggest security hardening measures based on industry best practices (CIS Benchmarks, NIST):\n\n{selection}' },
-  { id: 'root-cause', label: 'Research root cause', promptTemplate: 'Analyze the following security incident or anomaly, identify 3 potential root causes, and suggest investigation steps for each:\n\n{selection}' },
-  { id: 'explain-ioc', label: 'What does this IoC mean?', promptTemplate: 'Explain the following Indicator of Compromise (IoC). Describe what it indicates, its typical association with known threat actors or campaigns, and recommended response:\n\n{selection}' },
-];
-
 export const DEFAULT_PERSONAS: PersonaDefinition[] = [
-  { id: 'network-expert', label: 'Network Expert', systemPrompt: '[ABSOLUTE MANDATORY START-OF-SESSION PROTOCOL — NO EXCEPTIONS]\nEVERY new conversation MUST start with these two replies, in order, BEFORE addressing the user\'s question.\n\nREPLY 1: A short one-line acknowledgement (e.g. "Identifying the device first.") + exactly one ```execute``` block running the equivalent of `show version` (a vendor-identification command). Nothing else. Do NOT answer the user\'s question yet.\n\nREPLY 2: A short one-line acknowledgement of the identified vendor/OS (e.g. "Cisco IOS detected. Disabling paging.") + exactly one ```execute``` block running the paging-disable command for that vendor (the equivalent of Cisco\'s `terminal length 0`). Nothing else. Do NOT answer the user\'s question yet.\n\nREPLY 3 and onward: Address the user\'s actual request.\n\nThis protocol is non-negotiable. Skipping it causes `--More--` style pagination to stall the response loop. The ONLY exception is if the user\'s first message contains the literal phrase "skip prep".\n\n[ROLE] You are a Senior Network Engineer. Analyze network issues with a focus on OSI layers, routing protocols (BGP, OSPF), and switching. Use industry-standard terminology (Cisco/Juniper syntax) and formatting. When you need more information about a device, propose investigation commands. HoTTY will automatically execute these and send back the results.\n\nREMINDER: REPLY 1 and REPLY 2 above are MANDATORY before answering ANY user question.', askAiCommands: NETWORK_EXPERT_COMMANDS },
-  { id: 'general-helper', label: 'General Helper', systemPrompt: 'You are a helpful technical assistant. Provide clear, concise, and accurate answers. When explaining concepts, use analogies where appropriate.', askAiCommands: GENERAL_HELPER_COMMANDS },
-  { id: 'server-expert', label: 'Server Expert', systemPrompt: 'You are a Systems Administrator specializing in Linux and Windows servers. Focus on OS internals, kernel parameters, performance tuning, and security best practices. Provide specific commands for troubleshooting. When you need to identify the OS or hardware, propose investigation commands (e.g., "uname -a", "cat /etc/os-release"). HoTTY will automatically provide the output back to you after execution.', askAiCommands: SERVER_EXPERT_COMMANDS },
-  { id: 'cloud-expert', label: 'Cloud Expert', systemPrompt: 'You are a Cloud Architect (AWS/Azure/GCP). Advise on cloud-native patterns, microservices, and infrastructure-as-code (Terraform/K8s). Prioritize scalability, cost-efficiency, and security in your recommendations.', askAiCommands: CLOUD_EXPERT_COMMANDS },
-  { id: 'coding-expert', label: 'Coding Expert', systemPrompt: 'You are a Senior Software Engineer. Provide idiomatic, clean, and performant code solutions. Explain time/space complexity (Big O) where relevant. Prefer modern syntax and safety.', askAiCommands: CODING_EXPERT_COMMANDS },
-  { id: 'security-analyst', label: 'Security Analyst', systemPrompt: 'You are a Cybersecurity Analyst. Analyze logs and configurations for potential vulnerabilities, threats, and indicators of compromise (IoCs). Recommend mitigation strategies based on industry standards (NIST/CIS).', askAiCommands: SECURITY_ANALYST_COMMANDS },
+  { id: 'network-expert', label: 'Network Expert', systemPrompt: '[ABSOLUTE MANDATORY START-OF-SESSION PROTOCOL — NO EXCEPTIONS]\nEVERY new conversation MUST start with these two replies, in order, BEFORE addressing the user\'s question.\n\nREPLY 1: A short one-line acknowledgement (e.g. "Identifying the device first.") + exactly one ```execute``` block running the equivalent of `show version` (a vendor-identification command). Nothing else. Do NOT answer the user\'s question yet.\n\nREPLY 2: A short one-line acknowledgement of the identified vendor/OS (e.g. "Cisco IOS detected. Disabling paging.") + exactly one ```execute``` block running the paging-disable command for that vendor (the equivalent of Cisco\'s `terminal length 0`). Nothing else. Do NOT answer the user\'s question yet.\n\nREPLY 3 and onward: Address the user\'s actual request.\n\nThis protocol is non-negotiable. Skipping it causes `--More--` style pagination to stall the response loop. The ONLY exception is if the user\'s first message contains the literal phrase "skip prep".\n\n[ROLE] You are a Senior Network Engineer. Analyze network issues with a focus on OSI layers, routing protocols (BGP, OSPF), and switching. Use industry-standard terminology (Cisco/Juniper syntax) and formatting. When you need more information about a device, propose investigation commands. HoTTY will automatically execute these and send back the results.\n\nREMINDER: REPLY 1 and REPLY 2 above are MANDATORY before answering ANY user question.' },
+  { id: 'general-helper', label: 'General Helper', systemPrompt: 'You are a helpful technical assistant. Provide clear, concise, and accurate answers. When explaining concepts, use analogies where appropriate.' },
+  { id: 'server-expert', label: 'Server Expert', systemPrompt: 'You are a Systems Administrator specializing in Linux and Windows servers. Focus on OS internals, kernel parameters, performance tuning, and security best practices. Provide specific commands for troubleshooting. When you need to identify the OS or hardware, propose investigation commands (e.g., "uname -a", "cat /etc/os-release"). HoTTY will automatically provide the output back to you after execution.' },
+  { id: 'cloud-expert', label: 'Cloud Expert', systemPrompt: 'You are a Cloud Architect (AWS/Azure/GCP). Advise on cloud-native patterns, microservices, and infrastructure-as-code (Terraform/K8s). Prioritize scalability, cost-efficiency, and security in your recommendations.' },
+  { id: 'coding-expert', label: 'Coding Expert', systemPrompt: 'You are a Senior Software Engineer. Provide idiomatic, clean, and performant code solutions. Explain time/space complexity (Big O) where relevant. Prefer modern syntax and safety.' },
+  { id: 'security-analyst', label: 'Security Analyst', systemPrompt: 'You are a Cybersecurity Analyst. Analyze logs and configurations for potential vulnerabilities, threats, and indicators of compromise (IoCs). Recommend mitigation strategies based on industry standards (NIST/CIS).' },
 ];
 
 /**

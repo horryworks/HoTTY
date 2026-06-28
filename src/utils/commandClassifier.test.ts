@@ -70,10 +70,15 @@ describe('classifyCommand', () => {
     expect(result.safe).toBe(true);
   });
 
-  it('allows a multi-token whitelist entry (substring match)', () => {
-    // Phrase entry: only the exact phrase is whitelisted.
+  it('allows a whitelist phrase only as an anchored prefix (not any substring)', () => {
+    // Phrase entry: matched only when it is a prefix of the command segment.
     expect(classifyCommand('kubectl get pods', ['kubectl get']).safe).toBe(true);
     expect(classifyCommand('kubectl delete pod x', ['kubectl get']).safe).toBe(false);
+    // A phrase appearing as a non-prefix substring must NOT be whitelisted —
+    // guards against auto-exec smuggling via an unanchored substring match.
+    expect(classifyCommand('foo kubectl get', ['kubectl get']).safe).toBe(false);
+    // A token boundary is required: a longer word sharing the prefix is rejected.
+    expect(classifyCommand('kubectl getx', ['kubectl get']).safe).toBe(false);
   });
 
   it('rejects find with -exec', () => {

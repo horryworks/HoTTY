@@ -155,19 +155,11 @@ export const settings = {
     displayNamePlaceholder: '表示名',
     systemPrompt: 'システムプロンプト',
     systemPromptPlaceholder: 'システムプロンプト',
-    askAiCommands: 'AIに質問コマンド',
-    dragToReorder: 'ドラッグして並べ替え',
-    labelPlaceholder: 'ラベル',
-    promptTemplatePlaceholder: 'プロンプトテンプレート（{selection} が置き換えられます）',
-    promptTemplateHelp: '選択したテキストには {selection} プレースホルダーを使用します。',
-    addCommand: '+ コマンドを追加',
-    resetCommands: 'コマンドをリセット',
     deletePersona: 'ペルソナを削除',
     atLeastOnePersona: '少なくとも1つのペルソナが必要です',
     deletePersonaTitle: '「{{label}}」を削除',
     resetAllPersonas: 'すべてのペルソナをリセット',
     newPersonaLabel: '新しいペルソナ',
-    newCommandLabel: '新しいコマンド',
     // コマンド実行
     commandExecutionSection: 'コマンド実行',
     commandExecutionHelp:
@@ -192,7 +184,7 @@ export const settings = {
       'クライアント側の sleep 遅延の上限。これより長い sleep はこの値に制限され、その旨が記録されます。0 = 上限なし。デフォルト: 900（15分）。',
     whitelist: 'ホワイトリスト（自動実行）',
     whitelistHelp:
-      'ここで一致したコマンドは自動実行されます。単語1つはベースコマンドとして一致します（例: 「docker」はあらゆる docker コマンドに一致します）。スペースを含むエントリは部分文字列として一致します（例: 「git log」）。安全なデフォルトで初期化されており、完全に編集可能です。',
+      'ここで一致したコマンドは自動実行されます。単語1つはベースコマンドとして一致します（例: 「docker」はあらゆる docker コマンドに一致します）。スペースを含むエントリはコマンドの先頭（プレフィックス）として一致します（例: 「git log」）。安全なデフォルトで初期化されており、完全に編集可能です。',
     whitelistPlaceholder: '例: docker, kubectl get',
     add: '追加',
     resetToDefaults: 'デフォルトに戻す',

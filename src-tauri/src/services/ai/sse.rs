@@ -40,6 +40,13 @@ impl Default for SseBuffer {
 }
 
 impl SseBuffer {
+    /// Hard cap on the unflushed buffer. A well-formed SSE stream emits a newline
+    /// per event and token deltas are tiny, so a buffer that grows past this
+    /// without a newline indicates a malformed or hostile stream — drop it rather
+    /// than let it exhaust process memory (the streaming chat paths have no
+    /// overall request timeout, only a connect timeout).
+    const MAX_BUFFER_BYTES: usize = 8 * 1024 * 1024;
+
     pub fn new() -> Self {
         Self {
             buffer: String::new(),
@@ -56,6 +63,12 @@ impl SseBuffer {
             let line = self.buffer[..pos].trim_end_matches('\r').to_string();
             lines.push(line);
             self.buffer.drain(..=pos);
+        }
+        // Guard against unbounded growth on a newline-free stream: if the retained
+        // partial line has blown past the cap, discard it. The stream is already
+        // abnormal at this point, so dropping the malformed partial is acceptable.
+        if self.buffer.len() > Self::MAX_BUFFER_BYTES {
+            self.buffer.clear();
         }
         lines
     }
@@ -140,5 +153,23 @@ mod tests {
     #[test]
     fn data_done_marker() {
         assert_eq!(parse_sse_line("data: [DONE]"), SseLine::Data("[DONE]"));
+    }
+
+    #[test]
+    fn sse_buffer_caps_unbounded_growth() {
+        let mut buf = SseBuffer::new();
+        // A newline-free stream (malformed/hostile) must not grow without bound.
+        let chunk = vec![b'x'; 64 * 1024]; // 64 KiB, no newline
+        for _ in 0..256 {
+            assert!(buf.push(&chunk).is_empty());
+        }
+        assert!(
+            buf.buffer.len() <= SseBuffer::MAX_BUFFER_BYTES,
+            "buffer must stay capped, got {} bytes",
+            buf.buffer.len()
+        );
+        // The cap must not break normal line extraction afterwards.
+        let lines = buf.push(b"\ndata: ok\n");
+        assert_eq!(lines.last().map(String::as_str), Some("data: ok"));
     }
 }

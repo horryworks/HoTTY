@@ -10,7 +10,7 @@ pub mod validation;
 
 // Re-export commonly used types
 pub use ai_provider::{
-    AuthResultPayload, AuthStatus, AuthType, ChatResponseData, ModelInfo, ProviderInfo, TokenUsage,
+    AuthResultPayload, AuthStatus, AuthType, ChatResponseData, ModelInfo, TokenUsage,
 };
 pub use ai_service::AIService;
 pub use classifier::CommandVerdict;

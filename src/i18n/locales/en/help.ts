@@ -193,7 +193,7 @@ export const help = {
     step2:
       '<0>Authenticate:</0> Open an AI Chat tab (<1><2></2></1> → AI Chat) and follow the on-screen prompts to sign in or enter your credentials.',
     step3:
-      '<0>Start chatting:</0> Type a question, or right-click on terminal text and choose <1>"Ask AI"</1> to get instant analysis.',
+      '<0>Start chatting:</0> Type a question, or select terminal text, right-click, and type your question in the <1>"Ask AI"</1> box.',
     outro:
       'That\'s it! You can start asking questions right away — no complex configuration needed.',
   },
@@ -209,7 +209,7 @@ export const help = {
       '<0>Stream watchdog:</0> If an AI provider stops sending data mid-response (network drop, hung backend), the in-flight request is automatically cancelled after 3 minutes of silence and an error message appears in the chat — no more stuck "streaming" states.',
     askAiHeading: 'Ask AI (Right-Click)',
     askAiBody:
-      'Select text in the terminal or click a <0>Terminal Marker</0>, then right-click → <1>"Ask AI"</1>. Choose from built-in commands like "What is this?", "Research root cause", or "Fix this" — or add your own custom commands in Settings.',
+      'Select text in the terminal (or click a <0>Terminal Marker</0> to select a whole output block), then right-click and type your question in the <1>"Ask AI"</1> box — press Enter to send. HoTTY opens the AI chat with your question and the selected text.',
     interactiveHeading: 'Interactive Mode (Command Execution)',
     interactiveBody:
       'When the AI suggests a command, it can send it directly to your terminal session for execution. You\'ll see the command before it runs, so you stay in control.',
@@ -234,7 +234,7 @@ export const help = {
       'Click the <0><1></1></0> icon on any terminal tab to start watching. The icon turns blue and the tab gets a rainbow highlight.',
     step2: 'Run commands as usual. All output is captured into a buffer.',
     step3:
-      'In your <0>AI chat tab</0>, click <1>"Ask AI"</1> and select the watched session to send the entire captured log to AI for analysis.',
+      'In the linked <0>AI chat tab</0>, just type your question — or right-click terminal text and choose <1>Ask AI</1>. The captured output is automatically included for analysis.',
     tip:
       '<0>Tip:</0> Let it collect output and ask AI to summarize or find errors when you\'re ready. The buffer size limit can be adjusted in <1>Settings → AI → AI Monitor Buffer Limit</1>.',
   },
@@ -305,8 +305,6 @@ export const help = {
 
   customizing: {
     summary: 'Customizing AI Commands & Personas',
-    customCommands:
-      '<0>Custom Ask AI Commands:</0> In <1>Settings → AI → Ask AI Commands</1>, add, edit, reorder, or delete the commands that appear in the right-click context menu. Use the <2>{selection}</2> placeholder to inject the selected text into your prompt template.',
     customPersonas:
       '<0>Custom Personas:</0> In <1>Settings → AI → Personas</1>, create personas with custom system prompts. The chosen persona is applied as the initial system instruction for every new AI chat session.',
     proactiveInvestigation:

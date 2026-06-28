@@ -193,7 +193,7 @@ export const help = {
     step2:
       '<0>Authentifiez-vous :</0> ouvrez un onglet de chat IA (<1><2></2></1> → Chat IA) et suivez les invites à l\'écran pour vous connecter ou saisir vos identifiants.',
     step3:
-      '<0>Commencez à discuter :</0> saisissez une question, ou faites un clic droit sur le texte du terminal et choisissez <1>« Demander à l\'IA »</1> pour obtenir une analyse instantanée.',
+      '<0>Commencez à discuter :</0> saisissez une question, ou sélectionnez du texte dans le terminal, faites un clic droit et saisissez votre question dans le champ <1>« Demander à l\'IA »</1>.',
     outro:
       'C\'est tout ! Vous pouvez commencer à poser des questions tout de suite — aucune configuration complexe nécessaire.',
   },
@@ -209,7 +209,7 @@ export const help = {
       '<0>Chien de garde du flux :</0> si un fournisseur d\'IA cesse d\'envoyer des données au milieu d\'une réponse (coupure réseau, backend bloqué), la requête en cours est automatiquement annulée après 3 minutes de silence et un message d\'erreur apparaît dans le chat — finis les états « diffusion » bloqués.',
     askAiHeading: 'Demander à l\'IA (clic droit)',
     askAiBody:
-      'Sélectionnez du texte dans le terminal ou cliquez sur un <0>Marqueur de terminal</0>, puis faites un clic droit → <1>« Demander à l\'IA »</1>. Choisissez parmi des commandes intégrées comme « Qu\'est-ce que c\'est ? », « Rechercher la cause racine » ou « Corriger ceci » — ou ajoutez vos propres commandes personnalisées dans les Paramètres.',
+      'Sélectionnez du texte dans le terminal (ou cliquez sur un <0>Marqueur de terminal</0> pour sélectionner tout un bloc de sortie), puis faites un clic droit et saisissez votre question dans le champ <1>« Demander à l\'IA »</1> — appuyez sur Entrée pour envoyer. HoTTY ouvre le chat IA avec votre question et le texte sélectionné.',
     interactiveHeading: 'Mode interactif (exécution de commandes)',
     interactiveBody:
       'Lorsque l\'IA suggère une commande, elle peut l\'envoyer directement à votre session de terminal pour exécution. Vous verrez la commande avant son exécution, vous gardez donc le contrôle.',
@@ -234,7 +234,7 @@ export const help = {
       'Cliquez sur l\'icône <0><1></1></0> de n\'importe quel onglet de terminal pour commencer à surveiller. L\'icône devient bleue et l\'onglet reçoit un surlignage arc-en-ciel.',
     step2: 'Exécutez les commandes comme d\'habitude. Toute la sortie est capturée dans une mémoire tampon.',
     step3:
-      'Dans votre <0>onglet de chat IA</0>, cliquez sur <1>« Demander à l\'IA »</1> et sélectionnez la session surveillée pour envoyer l\'intégralité du journal capturé à l\'IA pour analyse.',
+      'Dans l\'<0>onglet de chat IA</0> lié, saisissez simplement votre question — ou faites un clic droit sur le texte du terminal et choisissez <1>Demander à l\'IA</1>. La sortie capturée est automatiquement incluse pour l\'analyse.',
     tip:
       '<0>Astuce :</0> laissez-le collecter la sortie et demandez à l\'IA de résumer ou de trouver les erreurs lorsque vous êtes prêt. La taille limite de la mémoire tampon peut être ajustée dans <1>Paramètres → IA → Limite de la mémoire tampon de la Surveillance IA</1>.',
   },
@@ -305,8 +305,6 @@ export const help = {
 
   customizing: {
     summary: 'Personnaliser les commandes d\'IA et les personas',
-    customCommands:
-      '<0>Commandes Demander à l\'IA personnalisées :</0> dans <1>Paramètres → IA → Commandes Demander à l\'IA</1>, ajoutez, modifiez, réordonnez ou supprimez les commandes qui apparaissent dans le menu contextuel du clic droit. Utilisez l\'espace réservé <2>{selection}</2> pour injecter le texte sélectionné dans votre modèle de prompt.',
     customPersonas:
       '<0>Personas personnalisés :</0> dans <1>Paramètres → IA → Personas</1>, créez des personas avec des prompts système personnalisés. Le persona choisi est appliqué comme instruction système initiale pour chaque nouvelle session de chat IA.',
     proactiveInvestigation:

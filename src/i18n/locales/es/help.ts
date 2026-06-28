@@ -193,7 +193,7 @@ export const help = {
     step2:
       '<0>Autentíquese:</0> abra una pestaña de chat de IA (<1><2></2></1> → Chat de IA) y siga las indicaciones en pantalla para iniciar sesión o introducir sus credenciales.',
     step3:
-      '<0>Empiece a chatear:</0> escriba una pregunta, o haga clic con el botón derecho en el texto del terminal y elija <1>"Preguntar a la IA"</1> para obtener un análisis instantáneo.',
+      '<0>Empiece a chatear:</0> escriba una pregunta, o seleccione texto en el terminal, haga clic derecho y escriba su pregunta en el cuadro <1>"Preguntar a la IA"</1>.',
     outro:
       '¡Eso es todo! Puede empezar a hacer preguntas de inmediato — no se necesita una configuración compleja.',
   },
@@ -209,7 +209,7 @@ export const help = {
       '<0>Vigilante de transmisión:</0> si un proveedor de IA deja de enviar datos a mitad de una respuesta (caída de red, backend colgado), la solicitud en curso se cancela automáticamente tras 3 minutos de silencio y aparece un mensaje de error en el chat — se acabaron los estados de "transmisión" atascados.',
     askAiHeading: 'Preguntar a la IA (clic derecho)',
     askAiBody:
-      'Seleccione texto en el terminal o haga clic en un <0>Marcador de terminal</0>, luego haga clic derecho → <1>"Preguntar a la IA"</1>. Elija entre comandos integrados como "¿Qué es esto?", "Investigar la causa raíz" o "Corregir esto" — o añada sus propios comandos personalizados en Configuración.',
+      'Seleccione texto en el terminal (o haga clic en un <0>Marcador de terminal</0> para seleccionar un bloque de salida completo), luego haga clic derecho y escriba su pregunta en el cuadro <1>"Preguntar a la IA"</1> — pulse Enter para enviar. HoTTY abre el chat de IA con su pregunta y el texto seleccionado.',
     interactiveHeading: 'Modo interactivo (ejecución de comandos)',
     interactiveBody:
       'Cuando la IA sugiere un comando, puede enviarlo directamente a su sesión de terminal para ejecutarlo. Verá el comando antes de que se ejecute, por lo que mantiene el control.',
@@ -234,7 +234,7 @@ export const help = {
       'Haga clic en el icono <0><1></1></0> de cualquier pestaña de terminal para empezar a monitorear. El icono se vuelve azul y la pestaña obtiene un resaltado arcoíris.',
     step2: 'Ejecute comandos como de costumbre. Toda la salida se captura en un búfer.',
     step3:
-      'En su <0>pestaña de chat de IA</0>, haga clic en <1>"Preguntar a la IA"</1> y seleccione la sesión monitoreada para enviar todo el registro capturado a la IA para su análisis.',
+      'En la <0>pestaña de chat de IA</0> enlazada, simplemente escriba su pregunta — o haga clic derecho en el texto del terminal y elija <1>Preguntar a la IA</1>. La salida capturada se incluye automáticamente para el análisis.',
     tip:
       '<0>Sugerencia:</0> deje que recopile salida y pida a la IA que la resuma o que encuentre errores cuando esté listo. El límite de tamaño del búfer se puede ajustar en <1>Configuración → IA → Límite del búfer del Monitor de IA</1>.',
   },
@@ -305,8 +305,6 @@ export const help = {
 
   customizing: {
     summary: 'Personalizar comandos y perfiles de IA',
-    customCommands:
-      '<0>Comandos personalizados de Preguntar a la IA:</0> en <1>Configuración → IA → Comandos de Preguntar a la IA</1>, añada, edite, reordene o elimine los comandos que aparecen en el menú contextual del clic derecho. Use el marcador <2>{selection}</2> para insertar el texto seleccionado en su plantilla de prompt.',
     customPersonas:
       '<0>Perfiles personalizados:</0> en <1>Configuración → IA → Perfiles</1>, cree perfiles con prompts del sistema personalizados. El perfil elegido se aplica como instrucción inicial del sistema para cada nueva sesión de chat de IA.',
     proactiveInvestigation:

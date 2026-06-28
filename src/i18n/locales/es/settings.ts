@@ -155,19 +155,11 @@ export const settings = {
     displayNamePlaceholder: 'Nombre para mostrar',
     systemPrompt: 'Prompt del sistema',
     systemPromptPlaceholder: 'Prompt del sistema',
-    askAiCommands: 'Comandos de Preguntar a la IA',
-    dragToReorder: 'Arrastre para reordenar',
-    labelPlaceholder: 'Etiqueta',
-    promptTemplatePlaceholder: 'Plantilla de prompt ({selection} se reemplazará)',
-    promptTemplateHelp: 'Use el marcador {selection} para el texto seleccionado.',
-    addCommand: '+ Añadir comando',
-    resetCommands: 'Restablecer comandos',
     deletePersona: 'Eliminar perfil',
     atLeastOnePersona: 'Se requiere al menos un perfil',
     deletePersonaTitle: 'Eliminar "{{label}}"',
     resetAllPersonas: 'Restablecer todos los perfiles',
     newPersonaLabel: 'Nuevo perfil',
-    newCommandLabel: 'Nuevo comando',
     // Ejecución de comandos
     commandExecutionSection: 'Ejecución de comandos',
     commandExecutionHelp:
@@ -192,7 +184,7 @@ export const settings = {
       'Límite superior para un retardo de sleep del lado del cliente; los sleep más largos se limitan a esto y se anotan. 0 = sin límite. Predeterminado: 900 (15 min).',
     whitelist: 'Lista blanca (ejecución automática)',
     whitelistHelp:
-      "Los comandos que coinciden aquí se ejecutan automáticamente. Una sola palabra coincide como comando base (p. ej. 'docker' coincide con cualquier comando de docker); una entrada con espacios coincide como subcadena (p. ej. 'git log'). Se inicializa con valores predeterminados seguros; totalmente editable.",
+      "Los comandos que coinciden aquí se ejecutan automáticamente. Una sola palabra coincide como comando base (p. ej. 'docker' coincide con cualquier comando de docker); una entrada con espacios coincide como prefijo de comando (p. ej. 'git log'). Se inicializa con valores predeterminados seguros; totalmente editable.",
     whitelistPlaceholder: 'p. ej., docker, kubectl get',
     add: 'Añadir',
     resetToDefaults: 'Restablecer valores predeterminados',

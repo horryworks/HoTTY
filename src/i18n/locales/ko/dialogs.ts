@@ -34,13 +34,6 @@ export const dialogs = {
     // {{persona}} is interpolated.
     title: '시스템 프롬프트 — {{persona}}',
   },
-  askAi: {
-    title: 'AI에게 질문',
-    questionLabel: '질문:',
-    promptPlaceholder: '선택한 내용에 대해 무엇을 묻고 싶으신가요? (Ctrl+Enter로 질문)',
-    selectedTextLabel: '선택한 텍스트:',
-    ask: '질문',
-  },
   iapVmStart: {
     title: 'GCE VM을 시작하시겠습니까?',
     // <0>{{status}}</0> wraps the current status in a <strong> via <Trans>.

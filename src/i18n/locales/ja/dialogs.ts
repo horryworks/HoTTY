@@ -34,13 +34,6 @@ export const dialogs = {
     // {{persona}} が挿入されます。
     title: 'システムプロンプト — {{persona}}',
   },
-  askAi: {
-    title: 'AIに質問',
-    questionLabel: '質問内容:',
-    promptPlaceholder: '選択範囲について何を質問しますか？（Ctrl+Enter で質問）',
-    selectedTextLabel: '選択したテキスト:',
-    ask: '質問',
-  },
   iapVmStart: {
     title: 'GCE VM を起動しますか？',
     // <0>{{status}}</0> は <Trans> で現在のステータスを <strong> で囲みます。

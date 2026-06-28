@@ -34,13 +34,6 @@ export const dialogs = {
     // {{persona}} is interpolated.
     title: '系统提示词 — {{persona}}',
   },
-  askAi: {
-    title: '询问 AI',
-    questionLabel: '您的问题：',
-    promptPlaceholder: '您想就所选内容询问什么？（Ctrl+Enter 提问）',
-    selectedTextLabel: '所选文本：',
-    ask: '提问',
-  },
   iapVmStart: {
     title: '启动 GCE 虚拟机？',
     // <0>{{status}}</0> wraps the current status in a <strong> via <Trans>.

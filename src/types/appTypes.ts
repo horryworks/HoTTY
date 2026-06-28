@@ -481,15 +481,8 @@ export interface CommandVerdict {
   reason: string;
 }
 
-export interface AskAiCommand {
-  id: string;
-  label: string;
-  promptTemplate: string;
-}
-
 export interface PersonaDefinition {
   id: string;
   label: string;
   systemPrompt: string;
-  askAiCommands: AskAiCommand[];
 }

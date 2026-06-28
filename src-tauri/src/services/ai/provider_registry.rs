@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::ai_provider::{AIProvider, ProviderInfo};
+use super::ai_provider::AIProvider;
 
 /// Registry that holds all available AI providers keyed by their ID.
 pub struct AIProviderRegistry {
@@ -34,21 +34,6 @@ impl AIProviderRegistry {
     /// Get a mutable reference to a provider by ID.
     pub fn get_mut(&mut self, id: &str) -> Option<&mut Box<dyn AIProvider>> {
         self.providers.get_mut(id)
-    }
-
-    /// List all registered providers as summary info.
-    pub fn list(&self) -> Vec<ProviderInfo> {
-        let mut list: Vec<ProviderInfo> = self
-            .providers
-            .values()
-            .map(|p| ProviderInfo {
-                id: p.id().to_string(),
-                display_name: p.display_name().to_string(),
-                auth_type: p.auth_type(),
-            })
-            .collect();
-        list.sort_by(|a, b| a.id.cmp(&b.id));
-        list
     }
 
     /// Check if a provider with the given ID exists.
@@ -144,23 +129,6 @@ mod tests {
         }));
         assert!(reg.contains("a"));
         assert!(!reg.contains("b"));
-    }
-
-    #[test]
-    fn list_returns_sorted() {
-        let mut reg = AIProviderRegistry::new();
-        reg.register(Box::new(MockProvider {
-            id: "z_provider".into(),
-            name: "Z".into(),
-        }));
-        reg.register(Box::new(MockProvider {
-            id: "a_provider".into(),
-            name: "A".into(),
-        }));
-        let list = reg.list();
-        assert_eq!(list.len(), 2);
-        assert_eq!(list[0].id, "a_provider");
-        assert_eq!(list[1].id, "z_provider");
     }
 
     #[test]

@@ -30,10 +30,6 @@ impl AIService {
         Ok(())
     }
 
-    pub fn active_provider_id(&self) -> &str {
-        &self.active_provider_id
-    }
-
     // -- Authentication -------------------------------------------------------
 
     pub async fn authenticate(
@@ -231,14 +227,14 @@ mod tests {
     #[test]
     fn default_provider_is_set() {
         let svc = make_service();
-        assert_eq!(svc.active_provider_id(), "alpha");
+        assert_eq!(svc.active_provider_id.as_str(), "alpha");
     }
 
     #[test]
     fn set_active_provider_valid() {
         let mut svc = make_service();
         assert!(svc.set_active_provider("beta").is_ok());
-        assert_eq!(svc.active_provider_id(), "beta");
+        assert_eq!(svc.active_provider_id.as_str(), "beta");
     }
 
     #[test]
@@ -246,7 +242,7 @@ mod tests {
         let mut svc = make_service();
         let result = svc.set_active_provider("nonexistent");
         assert!(result.is_err());
-        assert_eq!(svc.active_provider_id(), "alpha");
+        assert_eq!(svc.active_provider_id.as_str(), "alpha");
     }
 
     #[test]

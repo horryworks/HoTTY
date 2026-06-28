@@ -18,6 +18,12 @@ class MockResizeObserver {
 (globalThis as any).ResizeObserver = MockResizeObserver;
 
 import { TerminalView } from './Terminal';
+import {
+  isCellInSelection,
+  isRightClickOverSelection,
+  type SelectionRange,
+} from './selectionGeometry';
+import type { Terminal } from '@xterm/xterm';
 import type { SessionRecord } from '../../hooks/useSessionManager';
 import { useSettingsStore } from '../../stores/settingsStore';
 
@@ -69,6 +75,10 @@ function makeTerm() {
       this.cols = cols;
       this.rows = rows;
     }),
+    getSelection: vi.fn(() => ''),
+    getSelectionPosition: vi.fn(() => undefined as
+      | { start: { x: number; y: number }; end: { x: number; y: number } }
+      | undefined),
     scrollToLine: vi.fn(),
     selectLines: vi.fn(),
     buffer: {
@@ -157,6 +167,78 @@ describe('TerminalView (3-rail layout)', () => {
     expect(onPasteRequest).not.toHaveBeenCalled();
   });
 
+  it('right-click over a selection opens the inline Ask AI input instead of pasting', () => {
+    useSettingsStore.getState().update('rightClickPaste', true);
+    const onPasteRequest = vi.fn();
+    const onAskAiSubmit = vi.fn();
+    const { session, term } = makeSession();
+    term.getSelection.mockReturnValue('selected text');
+    // Non-null range → with no resolvable cell geometry the helper falls back to
+    // "over selection", so the input opens.
+    term.getSelectionPosition.mockReturnValue({ start: { x: 0, y: 0 }, end: { x: 5, y: 0 } });
+
+    const { container } = render(
+      <TerminalView
+        session={session}
+        active
+        onPasteRequest={onPasteRequest}
+        onAskAiSubmit={onAskAiSubmit}
+      />
+    );
+    fireEvent.contextMenu(container.querySelector('.terminal-view') as HTMLElement, {
+      clientX: 20,
+      clientY: 20,
+    });
+
+    const menu = container.querySelector('.terminal-context-menu');
+    expect(menu).toBeTruthy();
+    expect(onPasteRequest).not.toHaveBeenCalled();
+
+    const input = container.querySelector('.terminal-context-menu-input') as HTMLTextAreaElement;
+    expect(input).toBeTruthy();
+    fireEvent.change(input, { target: { value: 'what is this?' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onAskAiSubmit).toHaveBeenCalledWith('s1', 'selected text', 'what is this?');
+  });
+
+  it('right-click with a selection but no Ask AI handler falls back to paste', () => {
+    useSettingsStore.getState().update('rightClickPaste', true);
+    const onPasteRequest = vi.fn();
+    const { session, term } = makeSession();
+    term.getSelection.mockReturnValue('selected text');
+    term.getSelectionPosition.mockReturnValue({ start: { x: 0, y: 0 }, end: { x: 5, y: 0 } });
+
+    const { container } = render(
+      <TerminalView
+        session={session}
+        active
+        onPasteRequest={onPasteRequest}
+      />
+    );
+    fireEvent.contextMenu(container.querySelector('.terminal-view') as HTMLElement);
+
+    expect(container.querySelector('.terminal-context-menu')).toBeNull();
+    expect(onPasteRequest).toHaveBeenCalledWith('s1');
+  });
+
+  it('right-click with no selection pastes even when Ask AI is wired', () => {
+    useSettingsStore.getState().update('rightClickPaste', true);
+    const onPasteRequest = vi.fn();
+    const onAskAiSubmit = vi.fn();
+    const { session } = makeSession(); // getSelection() returns '' by default
+    const { container } = render(
+      <TerminalView
+        session={session}
+        active
+        onPasteRequest={onPasteRequest}
+        onAskAiSubmit={onAskAiSubmit}
+      />
+    );
+    fireEvent.contextMenu(container.querySelector('.terminal-view') as HTMLElement);
+    expect(onAskAiSubmit).not.toHaveBeenCalled();
+    expect(onPasteRequest).toHaveBeenCalledWith('s1');
+  });
+
   it('uses fitAddon.fit and adds no .wrap-off class when line wrap is enabled', () => {
     useSettingsStore.getState().update('lineWrapEnabled', true);
     const { session, fitAddon, term } = makeSession();
@@ -194,5 +276,97 @@ describe('TerminalView (3-rail layout)', () => {
     // usePromptDetection subscribes once and TerminalXtermHost adds a
     // scroll-reset subscription when wrap is OFF, so we expect 2 total.
     expect(term.onLineFeed).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('isCellInSelection', () => {
+  // Selection covering rows 5..7: starts at col 2 on row 5, ends at col 10
+  // (exclusive) on row 7.
+  const pos: SelectionRange = { start: { x: 2, y: 5 }, end: { x: 10, y: 7 } };
+
+  it('is true for a cell on a middle row regardless of column', () => {
+    expect(isCellInSelection(0, 6, pos)).toBe(true);
+    expect(isCellInSelection(50, 6, pos)).toBe(true);
+  });
+
+  it('is false above the first row and below the last row', () => {
+    expect(isCellInSelection(5, 4, pos)).toBe(false);
+    expect(isCellInSelection(5, 8, pos)).toBe(false);
+  });
+
+  it('respects the start column on the first row', () => {
+    expect(isCellInSelection(1, 5, pos)).toBe(false); // before start.x
+    expect(isCellInSelection(2, 5, pos)).toBe(true); // at start.x (inclusive)
+  });
+
+  it('respects the exclusive end column on the last row', () => {
+    expect(isCellInSelection(9, 7, pos)).toBe(true); // before end.x
+    expect(isCellInSelection(10, 7, pos)).toBe(false); // at end.x (exclusive)
+  });
+
+  it('handles a single-row selection', () => {
+    const single: SelectionRange = { start: { x: 3, y: 2 }, end: { x: 8, y: 2 } };
+    expect(isCellInSelection(2, 2, single)).toBe(false);
+    expect(isCellInSelection(3, 2, single)).toBe(true);
+    expect(isCellInSelection(7, 2, single)).toBe(true);
+    expect(isCellInSelection(8, 2, single)).toBe(false);
+  });
+});
+
+describe('isRightClickOverSelection', () => {
+  function makeGeometryTerm(opts: {
+    pos: SelectionRange | undefined;
+    cell?: { width: number; height: number };
+    viewportY?: number;
+    withScreen?: boolean;
+  }): Terminal {
+    const element = document.createElement('div');
+    if (opts.withScreen !== false) {
+      const screen = document.createElement('div');
+      screen.className = 'xterm-screen';
+      screen.getBoundingClientRect = () =>
+        ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} }) as DOMRect;
+      element.appendChild(screen);
+    }
+    return {
+      element,
+      getSelectionPosition: () => opts.pos,
+      buffer: { active: { viewportY: opts.viewportY ?? 0 } },
+      _core: opts.cell
+        ? { _renderService: { dimensions: { css: { cell: opts.cell } } } }
+        : undefined,
+    } as unknown as Terminal;
+  }
+
+  const pos: SelectionRange = { start: { x: 2, y: 5 }, end: { x: 10, y: 7 } };
+
+  it('returns false when there is no selection position', () => {
+    const term = makeGeometryTerm({ pos: undefined, cell: { width: 9, height: 18 } });
+    expect(isRightClickOverSelection(50, 50, term)).toBe(false);
+  });
+
+  it('falls back to true when cell geometry is unavailable', () => {
+    const term = makeGeometryTerm({ pos }); // no cell dims
+    expect(isRightClickOverSelection(50, 50, term)).toBe(true);
+  });
+
+  it('returns true for a click over the selection', () => {
+    const term = makeGeometryTerm({ pos, cell: { width: 9, height: 18 } });
+    // row 6 (y=18*6=108) is a middle row → inside regardless of column.
+    expect(isRightClickOverSelection(40, 108, term)).toBe(true);
+  });
+
+  it('returns false for a click above the selection rows', () => {
+    const term = makeGeometryTerm({ pos, cell: { width: 9, height: 18 } });
+    // row 4 (y=18*4=72) is above start.y (5) → outside.
+    expect(isRightClickOverSelection(40, 72, term)).toBe(false);
+  });
+
+  it('accounts for the scrolled viewport offset', () => {
+    const term = makeGeometryTerm({ pos, cell: { width: 9, height: 18 }, viewportY: 3 });
+    // viewRow 2 (y=36) + viewportY 3 = absRow 5 = start.y → inside (col >= start.x).
+    expect(isRightClickOverSelection(9 * 2, 36, term)).toBe(true);
+    // col 1 (< start.x 2) on the start row → outside.
+    expect(isRightClickOverSelection(9 * 1, 36, term)).toBe(false);
   });
 });

@@ -52,10 +52,10 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 ### AI Integration
 - Multi-provider support: Google AI Studio (Gemini), Vertex AI, Anthropic (Claude), OpenAI (GPT)
 - AI Chat pane with streaming responses, personas, and token cost tracking
-- Ask AI — right-click terminal output to query AI with built-in or custom commands
+- Ask AI — select terminal output, right-click, and type a free-form question to send it (with the selection) to the AI Chat
 - Interactive Mode — AI suggests and executes terminal commands, gated by a managed Whitelist / Blacklist + AI safety classifier
 - Watch Mode — monitor terminal output and send captured logs to AI for analysis
-- Customizable personas and Ask AI commands
+- Customizable personas
 
 ### Additional Features
 - GCE IAP tunnel support for Google Cloud instances

@@ -63,7 +63,6 @@ describe('AIChatPane', () => {
         id: 'default',
         label: 'Network Expert',
         systemPrompt: 'You are a network expert.',
-        askAiCommands: [],
       },
     ],
   };

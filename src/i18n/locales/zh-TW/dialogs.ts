@@ -34,13 +34,6 @@ export const dialogs = {
     // {{persona}} 會被插值。
     title: '系統提示詞 — {{persona}}',
   },
-  askAi: {
-    title: '詢問 AI',
-    questionLabel: '您的問題：',
-    promptPlaceholder: '關於所選內容，您想詢問什麼？（Ctrl+Enter 即可詢問）',
-    selectedTextLabel: '所選文字：',
-    ask: '詢問',
-  },
   iapVmStart: {
     title: '要啟動 GCE VM 嗎？',
     // <0>{{status}}</0> 透過 <Trans> 將目前狀態包在 <strong> 中。

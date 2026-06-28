@@ -5,4 +5,6 @@ export const terminal = {
   markerRail: '提示詞標記',
   promptMarker: '跳至提示詞',
   outputMarker: '選取輸出區塊',
+  askAiInputTitle: '詢問 AI',
+  askAiInputPlaceholder: '就所選內容詢問 AI…（Enter 傳送）',
 };

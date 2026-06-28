@@ -33,7 +33,7 @@
 
 .gcp-refresh-btn,
 .gcp-toggle-btn {
-  background: var(--btn-bg);
+  background: var(--btn-secondary-bg);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   border-radius: 4px;
@@ -47,7 +47,7 @@
 
 .gcp-refresh-btn:hover:not(:disabled),
 .gcp-toggle-btn:hover:not(:disabled) {
-  background: var(--btn-hover-bg);
+  background: var(--btn-secondary-hover-bg);
   border-color: var(--accent-color);
 }
 
@@ -63,7 +63,7 @@
 
 .gcp-toggle-btn.active {
   border-color: var(--accent-color);
-  background: var(--btn-hover-bg);
+  background: var(--btn-secondary-hover-bg);
 }
 
 .gcp-pane-subtitle {
@@ -105,7 +105,7 @@
 }
 
 .gcp-pane-search-clear {
-  background: var(--btn-bg);
+  background: var(--btn-secondary-bg);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   border-radius: 4px;
@@ -119,7 +119,7 @@
 }
 
 .gcp-pane-search-clear:hover {
-  background: var(--btn-hover-bg);
+  background: var(--btn-secondary-hover-bg);
   border-color: var(--accent-color);
 }
 
@@ -304,7 +304,7 @@
 }
 
 .gcp-action-btn:hover:not(:disabled) {
-  background: var(--btn-hover-bg);
+  background: var(--btn-secondary-hover-bg);
   border-color: var(--accent-color);
 }
 

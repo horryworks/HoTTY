@@ -163,8 +163,12 @@ function classifySegment(
         return { safe: true, reason: '' };
     }
 
-    // … or a whitelist phrase is a substring of the segment.
-    if (phrases.some((p) => segLower.includes(p))) {
+    // … or a whitelist phrase matches the segment as an anchored prefix (the
+    // phrase must START the segment, on a word boundary). Anchoring prevents a
+    // benign whitelisted phrase from auto-allowing any command that merely
+    // CONTAINS it as a substring (e.g. `… # git log` smuggling past a `git log`
+    // entry) — an auto-exec escalation vector.
+    if (phrases.some((p) => segLower === p || segLower.startsWith(`${p} `))) {
         return { safe: true, reason: '' };
     }
 

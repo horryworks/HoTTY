@@ -155,19 +155,11 @@ export const settings = {
     displayNamePlaceholder: '표시 이름',
     systemPrompt: '시스템 프롬프트',
     systemPromptPlaceholder: '시스템 프롬프트',
-    askAiCommands: 'AI 질문 명령',
-    dragToReorder: '드래그하여 순서 변경',
-    labelPlaceholder: '레이블',
-    promptTemplatePlaceholder: '프롬프트 템플릿 ({selection}이 대체됩니다)',
-    promptTemplateHelp: '선택한 텍스트에 {selection} 자리 표시자를 사용하세요.',
-    addCommand: '+ 명령 추가',
-    resetCommands: '명령 초기화',
     deletePersona: '페르소나 삭제',
     atLeastOnePersona: '최소 하나의 페르소나가 필요합니다',
     deletePersonaTitle: '"{{label}}" 삭제',
     resetAllPersonas: '모든 페르소나 초기화',
     newPersonaLabel: '새 페르소나',
-    newCommandLabel: '새 명령',
     // Command Execution
     commandExecutionSection: '명령 실행',
     commandExecutionHelp:
@@ -192,7 +184,7 @@ export const settings = {
       '클라이언트 측 sleep 지연의 상한선입니다. 더 긴 sleep은 이 값으로 제한되며 표시됩니다. 0 = 제한 없음. 기본값: 900 (15분).',
     whitelist: '화이트리스트 (자동 실행)',
     whitelistHelp:
-      "여기에서 일치하는 명령은 자동 실행됩니다. 단일 단어는 기본 명령으로 일치하며(예: 'docker'는 모든 docker 명령과 일치), 공백이 있는 항목은 부분 문자열로 일치합니다(예: 'git log'). 안전한 기본값으로 시드되며, 완전히 편집할 수 있습니다.",
+      "여기에서 일치하는 명령은 자동 실행됩니다. 단일 단어는 기본 명령으로 일치하며(예: 'docker'는 모든 docker 명령과 일치), 공백이 있는 항목은 명령 접두사로 일치합니다(예: 'git log'). 안전한 기본값으로 시드되며, 완전히 편집할 수 있습니다.",
     whitelistPlaceholder: '예: docker, kubectl get',
     add: '추가',
     resetToDefaults: '기본값으로 초기화',

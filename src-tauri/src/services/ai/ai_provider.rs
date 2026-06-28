@@ -60,14 +60,6 @@ pub struct AuthResultPayload {
     pub success: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProviderInfo {
-    pub id: String,
-    pub display_name: String,
-    pub auth_type: AuthType,
-}
-
 // ---------------------------------------------------------------------------
 // AIProvider trait
 // ---------------------------------------------------------------------------
@@ -234,18 +226,5 @@ mod tests {
         assert_eq!(usage["promptTokenCount"], 100);
         assert_eq!(usage["candidatesTokenCount"], 200);
         assert_eq!(usage["totalTokenCount"], 300);
-    }
-
-    #[test]
-    fn provider_info_serializes() {
-        let info = ProviderInfo {
-            id: "openai".into(),
-            display_name: "OpenAI".into(),
-            auth_type: AuthType::ApiKey,
-        };
-        let json = serde_json::to_value(&info).unwrap();
-        assert_eq!(json["id"], "openai");
-        assert_eq!(json["displayName"], "OpenAI");
-        assert_eq!(json["authType"], "api_key");
     }
 }

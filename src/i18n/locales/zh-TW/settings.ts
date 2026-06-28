@@ -155,19 +155,11 @@ export const settings = {
     displayNamePlaceholder: '顯示名稱',
     systemPrompt: '系統提示詞',
     systemPromptPlaceholder: '系統提示詞',
-    askAiCommands: '詢問 AI 指令',
-    dragToReorder: '拖曳以重新排序',
-    labelPlaceholder: '標籤',
-    promptTemplatePlaceholder: '提示詞範本（{selection} 會被取代）',
-    promptTemplateHelp: '使用 {selection} 預留位置代表所選文字。',
-    addCommand: '+ 新增指令',
-    resetCommands: '重設指令',
     deletePersona: '刪除角色',
     atLeastOnePersona: '至少需要一個角色',
     deletePersonaTitle: '刪除「{{label}}」',
     resetAllPersonas: '重設所有角色',
     newPersonaLabel: '新角色',
-    newCommandLabel: '新指令',
     // 指令執行
     commandExecutionSection: '指令執行',
     commandExecutionHelp:
@@ -192,7 +184,7 @@ export const settings = {
       '用戶端 sleep 延遲的上限；較長的 sleep 會被限制至此值並加註說明。0 = 無上限。預設值：900（15 分鐘）。',
     whitelist: '白名單（自動執行）',
     whitelistHelp:
-      '在此處比對到的指令會自動執行。單一字詞會比對為基礎指令（例如「docker」可比對任何 docker 指令）；含空格的項目則會比對為子字串（例如「git log」）。已預先填入安全的預設值；可完整編輯。',
+      '在此處比對到的指令會自動執行。單一字詞會比對為基礎指令（例如「docker」可比對任何 docker 指令）；含空格的項目則會比對為指令前綴（例如「git log」）。已預先填入安全的預設值；可完整編輯。',
     whitelistPlaceholder: '例如 docker、kubectl get',
     add: '新增',
     resetToDefaults: '重設為預設值',

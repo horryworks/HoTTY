@@ -34,13 +34,6 @@ export const dialogs = {
     // {{persona}} is interpolated.
     title: 'Prompt système — {{persona}}',
   },
-  askAi: {
-    title: "Demander à l'IA",
-    questionLabel: 'Votre question :',
-    promptPlaceholder: 'Que voulez-vous demander à propos de la sélection ? (Ctrl+Entrée pour demander)',
-    selectedTextLabel: 'Texte sélectionné :',
-    ask: 'Demander',
-  },
   iapVmStart: {
     title: 'Démarrer la VM GCE ?',
     // <0>{{status}}</0> wraps the current status in a <strong> via <Trans>.

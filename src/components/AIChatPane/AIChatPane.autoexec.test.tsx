@@ -76,6 +76,7 @@ Element.prototype.scrollIntoView = vi.fn();
 const { AIChatPane } = await import('./AIChatPane');
 const { NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP } = await import('../../constants/aiPrompts');
 const { _clearVerdictCache } = await import('../../utils/aiCommandClassifier');
+const { tauriService } = await import('../../services/tauriService');
 
 // A safe Huawei command (`display` is in the builtin safe list) wrapped in an
 // execute fence — the canonical "identify the device first" opener.
@@ -85,7 +86,7 @@ const baseProps = {
     paneId: 'ai-1',
     active: true,
     aiPersonas: [
-        { id: 'default', label: 'Network Expert', systemPrompt: 'You are a network expert.', askAiCommands: [] },
+        { id: 'default', label: 'Network Expert', systemPrompt: 'You are a network expert.' },
     ],
     chatState: {
         selectedModel: 'gemini-pro',
@@ -221,7 +222,7 @@ describe('AIChatPane auto-execute when the linked terminal is not live', () => {
 describe('AIChatPane Network Expert auto-kickoff', () => {
     // A Network Expert persona keyed by the stable id the kickoff matches on.
     const networkExpertPersonas = [
-        { id: 'network-expert', label: 'Network Expert', systemPrompt: 'You are a network expert.', askAiCommands: [] },
+        { id: 'network-expert', label: 'Network Expert', systemPrompt: 'You are a network expert.' },
     ];
 
     beforeEach(() => {
@@ -495,5 +496,63 @@ describe('AIChatPane linked-chip / Target liveness visuals', () => {
         } finally {
             h.settings.commandExecutionMode = 'auto-execute-safe';
         }
+    });
+});
+
+describe('AIChatPane pending message waits for model auto-selection', () => {
+    beforeEach(() => {
+        h.onAiChatResponseCb.current = null;
+        h.onAiAuthResultCb.current = null;
+        h.onUpdateTabById.mockClear();
+        vi.mocked(tauriService.aiChatSend).mockClear();
+        vi.mocked(tauriService.aiListModels).mockReset();
+        localStorage.clear();
+    });
+
+    const pendingChatState = {
+        selectedModel: 'Unspecified',
+        systemInstruction: 'You are a helpful assistant.',
+        activeTabId: 't1',
+        tabs: [{ id: 't1', title: 'T', ordinal: 1, pendingMessage: 'analyze this' }],
+    };
+
+    it('does not error while the model list is still loading, then sends once a model auto-selects', async () => {
+        // The provider has a previously-used model that will auto-select on load.
+        localStorage.setItem('hotty_ai_selected_model_gemini', 'gemini-3.5-flash');
+        // Hold model resolution so the pending-message effect runs first while
+        // selectedModel is still 'Unspecified'.
+        let resolveModels: (m: { name: string; displayName: string }[]) => void = () => {};
+        vi.mocked(tauriService.aiListModels).mockReturnValue(
+            new Promise((res) => { resolveModels = res; }),
+        );
+
+        renderPane({ chatState: pendingChatState, onUpdateTabById: h.onUpdateTabById });
+        await authenticate();
+
+        // Still loading → message left intact, nothing sent, no error notice.
+        expect(tauriService.aiChatSend).not.toHaveBeenCalled();
+        expect(screen.queryByText(/AI model not selected/)).toBeNull();
+
+        // Models arrive and the saved model auto-selects → the message is sent.
+        await act(async () => {
+            resolveModels([{ name: 'gemini-3.5-flash', displayName: 'Gemini 3.5 Flash' }]);
+        });
+        await act(async () => { await Promise.resolve(); });
+
+        expect(tauriService.aiChatSend).toHaveBeenCalledWith(
+            'ai-1', 'analyze this', 'gemini-3.5-flash', expect.any(String),
+        );
+        expect(screen.queryByText(/AI model not selected/)).toBeNull();
+    });
+
+    it('still shows "model not selected" once loading finishes with no usable model', async () => {
+        vi.mocked(tauriService.aiListModels).mockResolvedValue([]); // no models available
+        renderPane({ chatState: pendingChatState, onUpdateTabById: h.onUpdateTabById });
+        await authenticate();
+        await act(async () => { await Promise.resolve(); });
+        await act(async () => { await Promise.resolve(); });
+
+        expect(tauriService.aiChatSend).not.toHaveBeenCalled();
+        expect(screen.getByText(/AI model not selected/)).toBeTruthy();
     });
 });

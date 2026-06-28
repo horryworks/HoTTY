@@ -1,0 +1,49 @@
+/* Terminal right-click "Ask AI" inline input. Reuses the shared context-menu
+   theme variables (also used by HostTree / TabBar) so it follows the active
+   theme; the body is a free-text question field instead of preset buttons. */
+.terminal-context-menu {
+  position: fixed;
+  z-index: 30000;
+  background: var(--context-menu-bg);
+  border: 1px solid var(--context-menu-border);
+  border-radius: 6px;
+  padding: 6px;
+  box-shadow: 0 4px 16px var(--modal-shadow);
+  min-width: 260px;
+}
+
+.terminal-context-menu-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px 5px;
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  font-weight: 600;
+  color: var(--accent-color);
+}
+
+.terminal-context-menu-title::before {
+  content: '✦';
+  font-size: calc(var(--font-size-base) - 1px);
+}
+
+.terminal-context-menu-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  outline: none;
+  resize: none;
+  transition: border-color 0.2s;
+}
+
+.terminal-context-menu-input:focus {
+  border-color: var(--accent-color);
+}

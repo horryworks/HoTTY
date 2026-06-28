@@ -626,6 +626,18 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             const pm = tab.pendingMessage;
             if (!pm) continue;
             if (recentlyProcessedRef.current.get(tab.id) === pm) continue;
+
+            // A freshly-created pane (e.g. opened via Ask AI) hasn't resolved its
+            // model yet — the model list loads and auto-selects asynchronously.
+            // Rather than rejecting the message with "model not selected", wait:
+            // leave the pending message intact until the model settles. This
+            // effect re-runs when selectedModel / availableModels / modelLoadError
+            // change, at which point the message is sent below (or, once loading
+            // has finished with no usable model, the not-selected notice shows).
+            if (selectedModel === 'Unspecified' && availableModels.length === 0 && !modelLoadError) {
+                return;
+            }
+
             recentlyProcessedRef.current.set(tab.id, pm);
 
             const sysInstr = chatState.systemInstruction || localSystemInstruction;
@@ -668,7 +680,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             break;
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chatState, isAuthenticated, streamingTabIds, paneId, selectedModel]);
+    }, [chatState, isAuthenticated, streamingTabIds, paneId, selectedModel, availableModels, modelLoadError]);
 
     // ── Auto-kickoff: Network Expert start-of-session protocol ──
     // When a Network Expert chat has a LIVE linked terminal, inject the kickoff as

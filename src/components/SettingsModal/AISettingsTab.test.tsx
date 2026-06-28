@@ -48,26 +48,6 @@ describe('AISettingsTab', () => {
     expect(useSettingsStore.getState().aiPersonas).toHaveLength(7);
   });
 
-  it('adds a new command to active persona', () => {
-    render(<AISettingsTab />);
-    const addCmdBtn = screen.getByText('+ Add Command');
-    fireEvent.click(addCmdBtn);
-    expect(useSettingsStore.getState().aiPersonas[0].askAiCommands).toHaveLength(7);
-  });
-
-  it('resets commands to defaults', () => {
-    // Add a command first
-    const store = useSettingsStore.getState();
-    const personas = [...store.aiPersonas];
-    personas[0] = { ...personas[0], askAiCommands: [] };
-    store.update('aiPersonas', personas);
-
-    render(<AISettingsTab />);
-    const resetBtn = screen.getByText('Reset Commands');
-    fireEvent.click(resetBtn);
-    expect(useSettingsStore.getState().aiPersonas[0].askAiCommands).toHaveLength(4);
-  });
-
   it('does not render execution mode select (moved to AI Chat pane)', () => {
     render(<AISettingsTab />);
     expect(screen.queryByText('Execution Mode')).toBeNull();

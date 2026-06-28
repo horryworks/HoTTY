@@ -155,19 +155,11 @@ export const settings = {
     displayNamePlaceholder: '显示名称',
     systemPrompt: '系统提示词',
     systemPromptPlaceholder: '系统提示词',
-    askAiCommands: '询问 AI 命令',
-    dragToReorder: '拖动以重新排序',
-    labelPlaceholder: '标签',
-    promptTemplatePlaceholder: '提示词模板（{selection} 将被替换）',
-    promptTemplateHelp: '使用 {selection} 占位符表示所选文本。',
-    addCommand: '+ 添加命令',
-    resetCommands: '重置命令',
     deletePersona: '删除角色',
     atLeastOnePersona: '至少需要一个角色',
     deletePersonaTitle: '删除“{{label}}”',
     resetAllPersonas: '重置所有角色',
     newPersonaLabel: '新角色',
-    newCommandLabel: '新命令',
     // Command Execution
     commandExecutionSection: '命令执行',
     commandExecutionHelp:
@@ -192,7 +184,7 @@ export const settings = {
       '客户端 sleep 延迟的上限；更长的 sleep 将被限制到此值并予以注明。0 = 无上限。默认：900（15 分钟）。',
     whitelist: '白名单（自动执行）',
     whitelistHelp:
-      "此处匹配的命令将自动执行。单个单词作为基本命令匹配（例如 'docker' 匹配任何 docker 命令）；带空格的条目作为子字符串匹配（例如 'git log'）。已预置安全的默认值；完全可编辑。",
+      "此处匹配的命令将自动执行。单个单词作为基本命令匹配（例如 'docker' 匹配任何 docker 命令）；带空格的条目作为命令前缀匹配（例如 'git log'）。已预置安全的默认值；完全可编辑。",
     whitelistPlaceholder: '例如 docker, kubectl get',
     add: '添加',
     resetToDefaults: '恢复默认',

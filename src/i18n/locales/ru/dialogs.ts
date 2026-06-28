@@ -35,13 +35,6 @@ export const dialogs = {
     // {{persona}} подставляется.
     title: 'Системный промпт — {{persona}}',
   },
-  askAi: {
-    title: 'Спросить ИИ',
-    questionLabel: 'Ваш вопрос:',
-    promptPlaceholder: 'Что вы хотите спросить о выделенном тексте? (Ctrl+Enter — спросить)',
-    selectedTextLabel: 'Выделенный текст:',
-    ask: 'Спросить',
-  },
   iapVmStart: {
     title: 'Запустить ВМ GCE?',
     // <0>{{status}}</0> оборачивает текущий статус в <strong> через <Trans>.

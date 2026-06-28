@@ -75,11 +75,7 @@ interface UseAiChatReturn {
   setActiveTab: (aiSessionId: string, tabId: string) => void;
   setTabLink: (aiSessionId: string, tabId: string, linkedSessionId: string | undefined, opts?: { retainBindingKey?: boolean }) => void;
   sendMessage: (aiSessionId: string, text: string) => void;
-  askAi: (selection: string, type: string, targetSessionId?: string) => void;
-  showPromptMenu: (aiSessionId: string) => void;
-  askAiFreeFormatData: { selection: string } | null;
-  setAskAiFreeFormatData: (data: { selection: string } | null) => void;
-  handleFreeFormatSubmit: (prompt: string, selection: string) => void;
+  askAi: (selection: string, question: string, targetSessionId?: string) => void;
 }
 
 // -- Pure helpers --
@@ -144,7 +140,6 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
   } = options;
 
   const [aiChatStates, setAiChatStates] = useState<Map<string, AiChatState>>(() => new Map());
-  const [askAiFreeFormatData, setAskAiFreeFormatData] = useState<{ selection: string } | null>(null);
 
   // Refs for stable access in callbacks
   const sessionsRef = useRef(sessions);
@@ -310,15 +305,6 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     setTabLinkRef.current = setTabLink;
   });
 
-  // -- Helper: resolve persona --
-  const resolvePersona = useCallback((expertiseLabel?: string): PersonaDefinition | undefined => {
-    const currentPersonas = aiPersonasRef.current;
-    if (expertiseLabel) {
-      return currentPersonas.find(p => p.label === expertiseLabel) ?? currentPersonas[0];
-    }
-    return currentPersonas[0];
-  }, []);
-
   const resolvePersonaPrompt = useCallback((expertiseLabel?: string): string => {
     const currentPersonas = aiPersonasRef.current;
     let targetPrompt = 'You are a helpful assistant.';
@@ -396,8 +382,10 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
   }, []);
 
   // -- askAi --
-  const askAi = useCallback((selection: string, type: string, targetSessionId?: string) => {
-    const actualSelection = selection === '__WATCH_BUFFER__' ? '' : selection;
+  // Inline terminal Ask AI: sends the user's typed question plus the selected
+  // text (and any watched-terminal buffer) to the AI chat pane.
+  const askAi = useCallback((selection: string, question: string, targetSessionId?: string) => {
+    if (!question.trim()) return;
 
     const { activeTermId, activeSession } = resolveTargetTerminal(targetSessionId);
 
@@ -411,8 +399,8 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     }
 
     const finalSelection = prependedContext
-      ? (actualSelection ? `${prependedContext}[Target Text]\n${actualSelection}` : prependedContext)
-      : actualSelection;
+      ? (selection ? `${prependedContext}[Target Text]\n${selection}` : prependedContext)
+      : selection;
 
     if (!finalSelection) return;
 
@@ -447,94 +435,12 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
 
     const lang = localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE) || 'English';
     const expertiseLabel = existingState?.selectedExpertise;
-    const activePersona = resolvePersona(expertiseLabel);
-    const defaultPersona = resolvePersonaPrompt(expertiseLabel);
-    const currentCommands = activePersona?.askAiCommands ?? [];
-
-    let systemInstruction = '';
-    let userPrompt = '';
-
-    if (type === 'analyze-watch') {
-      systemInstruction = `${defaultPersona}${languageDirective(lang)}`;
-      userPrompt = `Please analyze the following terminal output and point out any errors, warnings, or findings of interest:\n\n${finalSelection}`;
-    } else if (type === 'free-format') {
-      setAskAiFreeFormatData({ selection: finalSelection });
-      return;
-    } else {
-      const existingCommand = currentCommands.find(c => c.id === type);
-      if (existingCommand) {
-        systemInstruction = `${defaultPersona}${languageDirective(lang)}`;
-        if (existingCommand.id === 'root-cause') {
-          systemInstruction = `You are an expert troubleshooter. ${defaultPersona}${languageDirective(lang)}`;
-        }
-        userPrompt = existingCommand.promptTemplate.replace('{selection}', finalSelection);
-      } else {
-        systemInstruction = `${defaultPersona}${languageDirective(lang)}`;
-        userPrompt = `Please explain the following text:\n\n${finalSelection}`;
-      }
-    }
+    const systemInstruction = `${resolvePersonaPrompt(expertiseLabel)}${languageDirective(lang)}`;
+    const userPrompt = `${question}\n\n\`\`\`\n${finalSelection}\n\`\`\``;
 
     updateAiChatStateRef.current(aiPaneId, { systemInstruction });
     updateActiveTabRef.current(aiPaneId, { pendingMessage: userPrompt });
-  }, [resolveTargetTerminal, resolvePersonaPrompt, resolvePersona]);
-
-  // -- showPromptMenu --
-  const showPromptMenu = useCallback(async (aiSessionId: string) => {
-    const chatState = aiChatStatesRef.current.get(aiSessionId);
-    if (!chatState) return;
-
-    const expertiseLabel = chatState.selectedExpertise;
-    const activePersona = resolvePersona(expertiseLabel);
-    const currentCommands = activePersona?.askAiCommands ?? [];
-
-    const menuItems = [
-      { id: 'analyze-watch', label: 'Analyze Watched Output', enabled: true },
-      ...currentCommands.map(c => ({ id: c.id, label: c.label, enabled: true })),
-    ];
-
-    const selected = await tauriService.showContextMenu(menuItems);
-    if (selected) {
-      askAi('__WATCH_BUFFER__', selected);
-    }
-  }, [resolvePersona, askAi]);
-
-  // -- handleFreeFormatSubmit --
-  const handleFreeFormatSubmit = useCallback((prompt: string, selection: string) => {
-    const existingAiPane = Array.from(featurePanesRef.current.entries())
-      .find(([, info]) => info.type === 'ai-chat');
-    if (!existingAiPane) return;
-
-    const aiPaneId = existingAiPane[0];
-    const chatState = aiChatStatesRef.current.get(aiPaneId);
-
-    const lang = localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE) || 'English';
-    const expertiseLabel = chatState?.selectedExpertise;
-    const basePrompt = resolvePersonaPrompt(expertiseLabel);
-    const systemInstruction = `${basePrompt}${languageDirective(lang)}`;
-    const userPrompt = `${prompt}\n\n\`\`\`\n${selection}\n\`\`\``;
-
-    updateAiChatStateRef.current(aiPaneId, { systemInstruction });
-    updateActiveTabRef.current(aiPaneId, { pendingMessage: userPrompt });
-    setActivePaneIdRef.current(aiPaneId);
-    setAskAiFreeFormatData(null);
-  }, [resolvePersonaPrompt]);
-
-  // -- Custom event listener for ask-ai from terminal context menu etc. --
-  useEffect(() => {
-    const handleCustomAskAi = (e: Event) => {
-      const customEvent = e as CustomEvent<{ selection: string; type: string; sessionId?: string }>;
-      if (customEvent.detail) {
-        askAi(customEvent.detail.selection, customEvent.detail.type, customEvent.detail.sessionId);
-      }
-    };
-
-    window.addEventListener('ask-ai-internal', handleCustomAskAi);
-
-    return () => {
-      window.removeEventListener('ask-ai-internal', handleCustomAskAi);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dep array - uses refs internally
+  }, [resolveTargetTerminal, resolvePersonaPrompt]);
 
   return {
     aiChatStates,
@@ -547,9 +453,5 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     setTabLink,
     sendMessage,
     askAi,
-    showPromptMenu,
-    askAiFreeFormatData,
-    setAskAiFreeFormatData,
-    handleFreeFormatSubmit,
   };
 }

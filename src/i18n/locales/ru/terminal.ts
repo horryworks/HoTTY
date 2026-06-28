@@ -6,4 +6,6 @@ export const terminal = {
   markerRail: 'Маркеры промптов',
   promptMarker: 'Перейти к промпту',
   outputMarker: 'Выделить блок вывода',
+  askAiInputTitle: 'Спросить ИИ',
+  askAiInputPlaceholder: 'Спросить ИИ о выделенном тексте… (Enter — отправить)',
 };

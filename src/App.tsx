@@ -14,7 +14,6 @@ import { PingMonitorPane } from './components/PingMonitorPane/PingMonitorPane';
 import { FileServerPane } from './components/FileServerPane/FileServerPane';
 import { WebBrowserPane } from './components/WebBrowserPane/WebBrowserPane';
 import { AIChatPane } from './components/AIChatPane/AIChatPane';
-import { AskAiModal } from './components/AskAiModal/AskAiModal';
 import { SessionDialog, type ConnectSubmitPayload } from './components/SessionDialog/SessionDialog';
 import { SaveToHostTreeDialog } from './components/SaveToHostTreeDialog/SaveToHostTreeDialog';
 import { SettingsModal } from './components/SettingsModal/SettingsModal';
@@ -377,9 +376,7 @@ function App() {
     setActiveTab,
     setTabLink,
     sendMessage: aiSendMessage,
-    askAiFreeFormatData,
-    setAskAiFreeFormatData,
-    handleFreeFormatSubmit,
+    askAi,
   } = useAiChat({
     sessions,
     featurePanes,
@@ -1076,6 +1073,9 @@ function App() {
                 session={session}
                 active={paneId === activePaneId}
                 onPasteRequest={handlePasteRequest}
+                onAskAiSubmit={(sessionId, selection, question) =>
+                  askAi(selection, question, sessionId)
+                }
               />
             )
           ) : featureInfo?.type === 'log-viewer' ? (
@@ -1274,14 +1274,6 @@ function App() {
             setPasteReq(null);
             queueMicrotask(() => term?.focus());
           }}
-        />
-      )}
-      {askAiFreeFormatData && (
-        <AskAiModal
-          isOpen={true}
-          selection={askAiFreeFormatData.selection}
-          onClose={() => setAskAiFreeFormatData(null)}
-          onSubmit={handleFreeFormatSubmit}
         />
       )}
     </div>

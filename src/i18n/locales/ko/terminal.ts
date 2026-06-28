@@ -6,4 +6,6 @@ export const terminal = {
   markerRail: '프롬프트 마커',
   promptMarker: '프롬프트로 이동',
   outputMarker: '출력 블록 선택',
+  askAiInputTitle: 'AI에게 질문',
+  askAiInputPlaceholder: '선택한 내용에 대해 AI에게 질문… (Enter로 전송)',
 };

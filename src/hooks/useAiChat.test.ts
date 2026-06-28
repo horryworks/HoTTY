@@ -30,10 +30,6 @@ const defaultPersonas: PersonaDefinition[] = [
     id: 'default',
     label: 'General Assistant',
     systemPrompt: 'You are a helpful assistant.',
-    askAiCommands: [
-      { id: 'explain', label: 'Explain', promptTemplate: 'Please explain:\n\n{selection}' },
-      { id: 'root-cause', label: 'Root Cause', promptTemplate: 'Root cause:\n\n{selection}' },
-    ],
   },
 ];
 
@@ -67,7 +63,6 @@ describe('useAiChat', () => {
     const { result } = renderHook(() => useAiChat(opts));
 
     expect(result.current.aiChatStates.size).toBe(0);
-    expect(result.current.askAiFreeFormatData).toBeNull();
   });
 
   it('updateAiChatState creates and updates state with default tab', () => {
@@ -291,12 +286,16 @@ describe('useAiChat', () => {
     expect(opts.createAiChatPane).not.toHaveBeenCalled();
   });
 
-  it('askAi with free-format opens modal data', () => {
+  it('askAi sends the typed question + selection to the chat', () => {
     const sessions = new Map<string, SessionRecord>();
     sessions.set('s1', makeSessionRecord('s1'));
 
+    const featurePanes = new Map<string, FeaturePaneInfo>();
+    featurePanes.set('ai-1', { id: 'ai-1', type: 'ai-chat', displayName: 'AI Chat' });
+
     const opts = makeDefaultOptions({
       sessions,
+      featurePanes,
       paneAllocations: { pane1: 's1' },
       activePaneId: 'pane1',
     });
@@ -304,10 +303,30 @@ describe('useAiChat', () => {
     const { result } = renderHook(() => useAiChat(opts));
 
     act(() => {
-      result.current.askAi('some code', 'free-format');
+      result.current.askAi('some code', 'Explain this');
     });
 
-    expect(result.current.askAiFreeFormatData).toEqual({ selection: 'some code' });
+    const state = result.current.aiChatStates.get('ai-1');
+    const activeTab = getActiveTab(state);
+    expect(activeTab?.pendingMessage).toContain('Explain this');
+    expect(activeTab?.pendingMessage).toContain('some code');
+    expect(state?.systemInstruction).toContain('You are a helpful assistant');
+  });
+
+  it('askAi ignores an empty question', () => {
+    const featurePanes = new Map<string, FeaturePaneInfo>();
+    featurePanes.set('ai-1', { id: 'ai-1', type: 'ai-chat', displayName: 'AI Chat' });
+
+    const opts = makeDefaultOptions({ featurePanes });
+    const { result } = renderHook(() => useAiChat(opts));
+
+    act(() => {
+      result.current.askAi('some code', '   ');
+    });
+
+    const state = result.current.aiChatStates.get('ai-1');
+    const activeTab = getActiveTab(state);
+    expect(activeTab?.pendingMessage).toBeUndefined();
   });
 
   it('sendMessage calls tauriService.aiChatSend', async () => {
@@ -341,58 +360,6 @@ describe('useAiChat', () => {
     });
 
     expect(tauriService.aiChatSend).not.toHaveBeenCalled();
-  });
-
-  it('handleFreeFormatSubmit sets pending message on active tab and clears modal', () => {
-    const featurePanes = new Map<string, FeaturePaneInfo>();
-    featurePanes.set('ai-1', { id: 'ai-1', type: 'ai-chat', displayName: 'AI Chat' });
-
-    const opts = makeDefaultOptions({ featurePanes });
-    const { result } = renderHook(() => useAiChat(opts));
-
-    // Set up initial state with a tab
-    act(() => {
-      result.current.updateAiChatState('ai-1', createDefaultAiChatState());
-    });
-
-    act(() => {
-      result.current.handleFreeFormatSubmit('Explain this', 'some code');
-    });
-
-    const state = result.current.aiChatStates.get('ai-1');
-    const activeTab = getActiveTab(state);
-    expect(activeTab?.pendingMessage).toContain('Explain this');
-    expect(activeTab?.pendingMessage).toContain('some code');
-    expect(state?.systemInstruction).toContain('You are a helpful assistant.');
-    expect(result.current.askAiFreeFormatData).toBeNull();
-    expect(opts.setActivePaneId).toHaveBeenCalledWith('ai-1');
-  });
-
-  it('askAi sets pending message on active tab for analyze-watch type', () => {
-    const sessions = new Map<string, SessionRecord>();
-    sessions.set('s1', makeSessionRecord('s1'));
-
-    const featurePanes = new Map<string, FeaturePaneInfo>();
-    featurePanes.set('ai-1', { id: 'ai-1', type: 'ai-chat', displayName: 'AI Chat' });
-
-    const opts = makeDefaultOptions({
-      sessions,
-      featurePanes,
-      paneAllocations: { pane1: 's1' },
-      activePaneId: 'pane1',
-    });
-
-    const { result } = renderHook(() => useAiChat(opts));
-
-    act(() => {
-      result.current.askAi('terminal output here', 'analyze-watch');
-    });
-
-    const state = result.current.aiChatStates.get('ai-1');
-    const activeTab = getActiveTab(state);
-    expect(activeTab?.pendingMessage).toContain('analyze the following terminal output');
-    expect(activeTab?.pendingMessage).toContain('terminal output here');
-    expect(state?.systemInstruction).toContain('You are a helpful assistant');
   });
 
   it('sendMessage prepends watch buffer when active tab is linked to a session', async () => {

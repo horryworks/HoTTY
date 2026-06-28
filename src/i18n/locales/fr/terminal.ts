@@ -6,4 +6,6 @@ export const terminal = {
   markerRail: 'Marqueurs de prompt',
   promptMarker: 'Aller au prompt',
   outputMarker: 'Sélectionner le bloc de sortie',
+  askAiInputTitle: "Demander à l'IA",
+  askAiInputPlaceholder: "Interroger l'IA sur la sélection… (Entrée pour envoyer)",
 };

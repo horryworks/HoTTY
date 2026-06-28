@@ -175,14 +175,13 @@ describe('appTypes', () => {
     expect(data.usageMetadata).toBeUndefined();
   });
 
-  it('PersonaDefinition carries askAiCommands list', () => {
+  it('PersonaDefinition carries id, label and systemPrompt', () => {
     const persona: PersonaDefinition = {
       id: 'p',
       label: 'General',
       systemPrompt: 'You are helpful.',
-      askAiCommands: [{ id: 'c', label: 'Explain', promptTemplate: 'Explain: {selection}' }],
     };
-    expect(persona.askAiCommands).toHaveLength(1);
+    expect(persona.systemPrompt).toBe('You are helpful.');
   });
 
   it('UpdateInfo has isNewer flag', () => {

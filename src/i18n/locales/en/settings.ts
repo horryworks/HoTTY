@@ -155,19 +155,11 @@ export const settings = {
     displayNamePlaceholder: 'Display Name',
     systemPrompt: 'System Prompt',
     systemPromptPlaceholder: 'System Prompt',
-    askAiCommands: 'Ask AI Commands',
-    dragToReorder: 'Drag to reorder',
-    labelPlaceholder: 'Label',
-    promptTemplatePlaceholder: 'Prompt Template ({selection} will be replaced)',
-    promptTemplateHelp: 'Use {selection} placeholder for the selected text.',
-    addCommand: '+ Add Command',
-    resetCommands: 'Reset Commands',
     deletePersona: 'Delete Persona',
     atLeastOnePersona: 'At least one persona is required',
     deletePersonaTitle: 'Delete "{{label}}"',
     resetAllPersonas: 'Reset All Personas',
     newPersonaLabel: 'New Persona',
-    newCommandLabel: 'New Command',
     // Command Execution
     commandExecutionSection: 'Command Execution',
     commandExecutionHelp:
@@ -192,7 +184,7 @@ export const settings = {
       'Upper bound for a client-side sleep delay; longer sleeps are clamped to this and noted. 0 = no cap. Default: 900 (15 min).',
     whitelist: 'Whitelist (auto-execute)',
     whitelistHelp:
-      "Commands matched here auto-execute. A single word matches as a base command (e.g. 'docker' matches any docker command); an entry with spaces matches as a substring (e.g. 'git log'). Seeded with safe defaults; fully editable.",
+      "Commands matched here auto-execute. A single word matches as a base command (e.g. 'docker' matches any docker command); an entry with spaces matches as a command prefix (e.g. 'git log'). Seeded with safe defaults; fully editable.",
     whitelistPlaceholder: 'e.g., docker, kubectl get',
     add: 'Add',
     resetToDefaults: 'Reset to defaults',
