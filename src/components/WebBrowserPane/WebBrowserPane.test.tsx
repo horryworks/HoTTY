@@ -24,6 +24,7 @@ vi.mock('../../services/tauriService', () => ({
     webBrowserSetBounds: vi.fn().mockResolvedValue(undefined),
     webBrowserSetVisible: vi.fn().mockResolvedValue(undefined),
     webBrowserDestroy: vi.fn().mockResolvedValue(undefined),
+    webBrowserClearBrowsingData: vi.fn().mockResolvedValue(undefined),
     onWebBrowserNavState: vi.fn().mockResolvedValue(() => {}),
     onWebBrowserHistoryState: vi.fn().mockResolvedValue(() => {}),
     onWebBrowserAccel: vi.fn().mockResolvedValue(() => {}),
@@ -453,6 +454,26 @@ describe('WebBrowserPane', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('🗑 opens the clear-data modal and clears with the selected categories', () => {
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    // Modal not shown until the toolbar button is clicked.
+    expect(screen.queryByText('Cookies and site data')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Clear browsing data'));
+    expect(screen.getByText('Cookies and site data')).toBeTruthy();
+    // Uncheck one category, then confirm — the backend gets exactly the selection.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Saved passwords' }));
+    fireEvent.click(screen.getByText('Clear'));
+    expect(tauriService.webBrowserClearBrowsingData).toHaveBeenCalledWith('wb-1', {
+      cookiesAndSiteData: true,
+      cache: true,
+      history: true,
+      passwords: false,
+      autofill: true,
+    });
+    // Modal closes after confirming.
+    expect(screen.queryByText('Cookies and site data')).toBeNull();
   });
 });
 

@@ -708,3 +708,25 @@ describe('tauriService GCE IAP tunnel commands', () => {
     expect(result).toEqual(instances);
   });
 });
+
+describe('tauriService web browser wrappers', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset();
+    mockInvoke.mockResolvedValue(undefined);
+  });
+
+  it('webBrowserClearBrowsingData forwards the pane id and selected options', async () => {
+    const options = {
+      cookiesAndSiteData: true,
+      cache: true,
+      history: false,
+      passwords: false,
+      autofill: true,
+    };
+    await tauriService.webBrowserClearBrowsingData('wb-pane-1', options);
+    expect(mockInvoke).toHaveBeenCalledWith('web_browser_clear_browsing_data', {
+      paneId: 'wb-pane-1',
+      options,
+    });
+  });
+});

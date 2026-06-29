@@ -89,6 +89,24 @@ export interface WebBrowserRect {
   height: number;
 }
 
+/** Which categories of browsing data to clear (see the Clear Browsing Data
+ *  modal). Mirrors `ClearDataOptions` on the backend. localStorage is never an
+ *  option: the embedded browser shares its WebView2 profile with HoTTY's own UI,
+ *  whose settings/bookmarks live in localStorage, so it is always preserved. */
+export interface WebBrowserClearDataOptions {
+  /** Cookies + other site storage (IndexedDB, service workers, etc.), excluding
+   *  localStorage. Clearing this logs the user out of sites. */
+  cookiesAndSiteData: boolean;
+  /** Cached images and files (HTTP disk cache). */
+  cache: boolean;
+  /** Browsing + download history. */
+  history: boolean;
+  /** Passwords saved by WebView2's autosave. */
+  passwords: boolean;
+  /** General autofill form data. */
+  autofill: boolean;
+}
+
 /** Navigation state pushed from the embedded webview (address-bar sync). */
 export interface WebBrowserNavState {
   paneId: string;

@@ -15,9 +15,10 @@ import { useWebBrowserBookmarkStore } from '../../stores/webBrowserBookmarkStore
 import { useBookmarkStore } from '../../stores/bookmarkStore';
 import { findBookmarkByUrl } from '../BookmarkTree/bookmarkTreeHelpers';
 import { logError } from '../../utils/logger';
-import type { WebBrowserRect } from '../../types/appTypes';
+import type { WebBrowserRect, WebBrowserClearDataOptions } from '../../types/appTypes';
 import { normalizeUrl, resolveAddress } from './webBrowserUrl';
 import { AddBookmarkModal } from './AddBookmarkModal';
+import { ClearBrowsingDataModal } from './ClearBrowsingDataModal';
 import { BookmarkMenu } from './BookmarkMenu';
 import './WebBrowserPane.css';
 
@@ -87,6 +88,7 @@ export function WebBrowserPane({ paneId, initialUrl, onUrlChange }: WebBrowserPa
   const [created, setCreated] = useState(false);
   const [bookmarkOpen, setBookmarkOpen] = useState(false);
   const [bookmarkMenuOpen, setBookmarkMenuOpen] = useState(false);
+  const [clearModalOpen, setClearModalOpen] = useState(false);
   // Back/forward availability, pushed from the backend (WebView2 HistoryChanged).
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
@@ -503,6 +505,20 @@ export function WebBrowserPane({ paneId, initialUrl, onUrlChange }: WebBrowserPa
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
         </button>
+        <button
+          type="button"
+          className="web-browser-toolbar-btn"
+          onClick={() => setClearModalOpen(true)}
+          title={t('panes.webBrowser.clearDataTooltip')}
+          aria-label={t('panes.webBrowser.clearDataTooltip')}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            <line x1="10" y1="11" x2="10" y2="17" />
+            <line x1="14" y1="11" x2="14" y2="17" />
+          </svg>
+        </button>
       </div>
       {error && <div className="web-browser-error">{error}</div>}
       {/* Body row: the native webview floats over .web-browser-body. When the
@@ -519,6 +535,17 @@ export function WebBrowserPane({ paneId, initialUrl, onUrlChange }: WebBrowserPa
       </div>
       {bookmarkOpen && currentUrl && (
         <AddBookmarkModal url={currentUrl} onClose={() => setBookmarkOpen(false)} />
+      )}
+      {clearModalOpen && (
+        <ClearBrowsingDataModal
+          onConfirm={(options: WebBrowserClearDataOptions) => {
+            setClearModalOpen(false);
+            tauriService
+              .webBrowserClearBrowsingData(paneId, options)
+              .catch((e) => logError('web-browser', 'clear browsing data failed', e));
+          }}
+          onCancel={() => setClearModalOpen(false)}
+        />
       )}
     </div>
   );

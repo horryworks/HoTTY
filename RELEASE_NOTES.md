@@ -1,5 +1,17 @@
 # Release Notes
 
+## v2.0.8-beta3
+
+This beta makes the embedded **Web Browser** keep you signed in to more sites across restarts, and adds a **Clear browsing data** dialog so you can wipe cookies, cache, history and saved passwords on demand.
+
+### New Features
+
+- **Clear the Web Browser's browsing data.** A new trash button in the Web Browser toolbar opens a **Clear browsing data** dialog where you choose what to remove — cookies & site data, cached images and files, browsing history, saved passwords, and autofill data — then confirm. Clearing cookies signs you out of the sites you visited. Your bookmarks and HoTTY's own settings are always kept.
+
+### Bug Fixes
+
+- **Web Browser logins that rely on session cookies now survive a restart.** Some sites (for example the Cisco Meraki dashboard) sign you in with a session cookie, which WebView2 discarded when HoTTY closed — so you were signed out on the next launch even though the browser's profile is persistent. HoTTY now preserves these sessions, so those logins are remembered across restarts like other sites.
+
 ## v2.0.8-beta2
 
 This beta adds **multi-window support** — open multiple HoTTY windows in a single process, each with its own panes and terminal sessions while sharing your settings, theme, host tree and bookmarks. It also introduces a one-time **AI data-sharing notice** and a **Third-Party Licenses** viewer.

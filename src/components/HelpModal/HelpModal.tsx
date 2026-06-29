@@ -336,6 +336,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                 <li><Trans i18nKey="help.webBrowser.star" components={[<strong key="0" />, <strong key="1" />]} /></li>
                 <li><Trans i18nKey="help.webBrowser.toolbar" components={[<strong key="0" />, <code key="1" />, <code key="2" />, <code key="3" />]} /></li>
                 <li><Trans i18nKey="help.webBrowser.passwords" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.webBrowser.clearData" components={[<strong key="0" />]} /></li>
                 <li><Trans i18nKey="help.webBrowser.enable" components={[<strong key="0" />, <strong key="1" />]} /></li>
               </ul>
             </div>

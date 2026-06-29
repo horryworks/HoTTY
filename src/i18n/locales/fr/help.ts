@@ -171,6 +171,8 @@ export const help = {
       '<0>Barre d’outils :</0> Précédent, Suivant, Recharger/Arrêter et une barre d’adresse. Seules les adresses <1>http://</1> et <2>https://</2> sont autorisées ; une adresse saisie sans schéma utilise <3>http://</3> par défaut. Le texte qui n’est pas une adresse web fait l’objet d’une recherche sur le web.',
     passwords:
       '<0>Connexions et mots de passe :</0> Le navigateur conserve vos sessions de connexion et peut enregistrer et remplir automatiquement les mots de passe, stockés dans le profil de navigateur chiffré propre à HoTTY (distinct de votre Edge/Chrome système).',
+    clearData:
+      '<0>Effacer les données de navigation :</0> Cliquez sur le bouton corbeille de la barre d’outils pour effacer les cookies et données de sites, le cache, l’historique, les mots de passe enregistrés et la saisie automatique — vous choisissez quoi supprimer. Vos favoris et les paramètres de HoTTY sont toujours conservés.',
     enable:
       '<0>Activer / désactiver :</0> L’onglet Web peut être désactivé dans <1>Paramètres → Fonctionnalités</1>.',
   },

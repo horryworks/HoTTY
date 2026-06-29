@@ -48,6 +48,29 @@ pub struct BrowserRect {
     pub height: f64,
 }
 
+/// Which categories of browsing data the user chose to clear (see
+/// `clear_browsing_data`). Each maps to one or more WebView2 data kinds.
+///
+/// `local_storage` is deliberately NOT an option: the embedded browser shares
+/// its WebView2 profile with HoTTY's own UI window, whose settings/bookmarks
+/// live in `localStorage`, and WebView2 can only clear a data kind profile-wide
+/// (no per-origin scope). So `LOCAL_STORAGE` is never cleared, protecting app data.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClearDataOptions {
+    /// Cookies + other site storage (IndexedDB, service workers, WebSQL, file
+    /// systems, CacheStorage) — but NOT localStorage. Logs the user out of sites.
+    pub cookies_and_site_data: bool,
+    /// Cached images and files (HTTP disk cache).
+    pub cache: bool,
+    /// Browsing + download history.
+    pub history: bool,
+    /// Passwords saved by WebView2's autosave.
+    pub passwords: bool,
+    /// General autofill form data.
+    pub autofill: bool,
+}
+
 /// Shared state: maps `paneId` → the child webview embedded for it.
 ///
 /// The `tauri::Webview` map is gated behind `embedded-webview`: merely
@@ -64,6 +87,11 @@ pub struct WebBrowserState {
     /// to restore them when it is shown again.
     #[cfg(feature = "embedded-webview")]
     last_bounds: Mutex<HashMap<String, BrowserRect>>,
+    /// Set once the background cookie-persistence sweeper has been spawned, so
+    /// exactly one runs for the whole app lifetime. It is started lazily on the
+    /// first `create` — see `maybe_start_cookie_sweeper`.
+    #[cfg(feature = "embedded-webview")]
+    sweeper_started: std::sync::atomic::AtomicBool,
 }
 
 impl WebBrowserState {
@@ -153,7 +181,7 @@ pub use disabled::*;
 /// ever created, so every op reports the feature is unavailable.
 #[cfg(not(feature = "embedded-webview"))]
 mod disabled {
-    use super::{BrowserRect, WebBrowserState};
+    use super::{BrowserRect, ClearDataOptions, WebBrowserState};
     use tauri::{AppHandle, Url};
 
     const MSG: &str = "embedded web browser is not enabled in this build";
@@ -203,6 +231,14 @@ mod disabled {
     pub fn destroy(_state: &WebBrowserState, _pane_id: &str) -> Result<(), String> {
         Err(MSG.to_string())
     }
+    pub fn clear_browsing_data(
+        _app: &AppHandle,
+        _state: &WebBrowserState,
+        _pane_id: &str,
+        _opts: ClearDataOptions,
+    ) -> Result<(), String> {
+        Err(MSG.to_string())
+    }
 }
 
 /// Real implementations — compiled only with `embedded-webview`.
@@ -210,7 +246,7 @@ mod disabled {
 mod enabled {
     use super::{
         is_allowed_navigation, label_for_pane, off_screen_rect, rect_to_physical, BrowserRect,
-        WebBrowserState,
+        ClearDataOptions, WebBrowserState,
     };
 
     use serde::Serialize;
@@ -345,6 +381,14 @@ mod enabled {
                         loading,
                     },
                 );
+                // Fast path: when a navigation commits, persist any session
+                // cookies it set (e.g. a dashboard login) so they survive an app
+                // restart. A SPA may set its auth cookie via XHR slightly after
+                // load, so the periodic sweeper is the real guarantee — this just
+                // captures the common case promptly.
+                if matches!(payload.event(), PageLoadEvent::Finished) {
+                    persist_session_cookies(&webview);
+                }
             })
             // The browsed page must not receive HoTTY's OS file-drop events.
             .disable_drag_drop_handler();
@@ -369,6 +413,9 @@ mod enabled {
             }
         }
         remember_bounds(state, pane_id, rect);
+        // Start the background session-cookie persister (once per app run) now
+        // that there is at least one browser webview to sweep.
+        maybe_start_cookie_sweeper(app, state);
         log::info!("web-browser: created child webview for pane {pane_id}");
         Ok(())
     }
@@ -404,6 +451,226 @@ mod enabled {
         #[cfg(not(windows))]
         {
             let _ = webview;
+        }
+    }
+
+    /// Convert the embedded browser's **session cookies** (those with no expiry,
+    /// which WebView2 drops when the browser process exits) into **persistent**
+    /// cookies, so a login whose auth is a session cookie — e.g. the Meraki
+    /// dashboard — survives an app restart.
+    ///
+    /// WebView2 does not persist session cookies across environment restarts
+    /// (WebView2Feedback #1167), and `--restore-last-session` is unreliable, so we
+    /// re-stamp each session cookie with a future expiry and write it back through
+    /// the cookie manager, which flushes it to the on-disk Cookies store. The
+    /// server never learns how the client stored the cookie, so this is
+    /// transparent; real session validity still rests with the server's own
+    /// timeout. Best-effort and Windows-only (a no-op elsewhere).
+    fn persist_session_cookies(webview: &tauri::Webview) {
+        #[cfg(windows)]
+        {
+            use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_2;
+            use webview2_com::GetCookiesCompletedHandler;
+            use windows_core::Interface;
+
+            // Expiry stamped onto session cookies: now + 30 days, as seconds since
+            // the Unix epoch (the unit WebView2's SetExpires expects).
+            let expires =
+                match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                    Ok(since_epoch) => since_epoch.as_secs_f64() + 30.0 * 24.0 * 60.0 * 60.0,
+                    Err(_) => return,
+                };
+
+            // SAFETY: COM calls on the WebView2 core, dispatched onto the webview
+            // thread by `with_webview`. Every result is ignored — persisting
+            // cookies is a best-effort convenience and must never break browsing.
+            let _ = webview.with_webview(move |pw| {
+                let controller = pw.controller();
+                unsafe {
+                    if let Ok(core) = controller.CoreWebView2() {
+                        if let Ok(core2) = core.cast::<ICoreWebView2_2>() {
+                            if let Ok(manager) = core2.CookieManager() {
+                                let manager_for_handler = manager.clone();
+                                let handler = GetCookiesCompletedHandler::create(Box::new(
+                                    move |_hr, list| {
+                                        let Some(list) = list else { return Ok(()) };
+                                        let mut count: u32 = 0;
+                                        if list.Count(&mut count).is_err() {
+                                            return Ok(());
+                                        }
+                                        for i in 0..count {
+                                            let Ok(cookie) = list.GetValueAtIndex(i) else {
+                                                continue;
+                                            };
+                                            let mut is_session = Default::default();
+                                            if cookie.IsSession(&mut is_session).is_ok()
+                                                && is_session.as_bool()
+                                                && cookie.SetExpires(expires).is_ok()
+                                            {
+                                                let _ =
+                                                    manager_for_handler.AddOrUpdateCookie(&cookie);
+                                            }
+                                        }
+                                        Ok(())
+                                    },
+                                ));
+                                // Null URI → enumerate cookies for all hosts.
+                                let _ = manager.GetCookies(windows_core::PCWSTR::null(), &handler);
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = webview;
+        }
+    }
+
+    /// Spawn — exactly once per app run — a background task that periodically
+    /// converts every live browser webview's session cookies to persistent ones
+    /// (see `persist_session_cookies`). This is the reliable guarantee behind the
+    /// `on_page_load` fast path: a SPA that sets its auth cookie via a late XHR is
+    /// still captured within one sweep interval.
+    fn maybe_start_cookie_sweeper(app: &AppHandle, state: &WebBrowserState) {
+        use std::sync::atomic::Ordering;
+        // Win the race to be the single sweeper; later calls become no-ops.
+        if state.sweeper_started.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(20));
+            loop {
+                ticker.tick().await;
+                let state = app.state::<WebBrowserState>();
+                // Clone handles out under the lock, then release it before any COM
+                // work (cookie persistence dispatches onto the webview thread).
+                let webviews: Vec<tauri::Webview> = match state.webviews.lock() {
+                    Ok(map) => map.values().cloned().collect(),
+                    Err(_) => continue,
+                };
+                for webview in webviews {
+                    persist_session_cookies(&webview);
+                }
+            }
+        });
+    }
+
+    /// Clear the selected categories of browsing data for the embedded browser.
+    ///
+    /// WebView2 clears by data *kind* across the whole profile (no per-origin
+    /// scope). The profile is shared with HoTTY's own UI window, so we build the
+    /// kinds mask to deliberately EXCLUDE `LOCAL_STORAGE` — that holds the app's
+    /// settings/bookmarks. Best-effort and Windows-only. When cookies/site data
+    /// are cleared we reload open browser tabs so the change shows as logged-out.
+    pub fn clear_browsing_data(
+        app: &AppHandle,
+        state: &WebBrowserState,
+        pane_id: &str,
+        opts: ClearDataOptions,
+    ) -> Result<(), String> {
+        let webview =
+            take_handle(state, pane_id).ok_or_else(|| "no webview for pane".to_string())?;
+        #[cfg(windows)]
+        {
+            use webview2_com::Microsoft::Web::WebView2::Win32::{
+                ICoreWebView2Profile2, ICoreWebView2_13, COREWEBVIEW2_BROWSING_DATA_KINDS,
+                COREWEBVIEW2_BROWSING_DATA_KINDS_BROWSING_HISTORY,
+                COREWEBVIEW2_BROWSING_DATA_KINDS_CACHE_STORAGE,
+                COREWEBVIEW2_BROWSING_DATA_KINDS_COOKIES,
+                COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE,
+                COREWEBVIEW2_BROWSING_DATA_KINDS_DOWNLOAD_HISTORY,
+                COREWEBVIEW2_BROWSING_DATA_KINDS_FILE_SYSTEMS,
+                COREWEBVIEW2_BROWSING_DATA_KINDS_GENERAL_AUTOFILL,
+                COREWEBVIEW2_BROWSING_DATA_KINDS_INDEXED_DB,
+                COREWEBVIEW2_BROWSING_DATA_KINDS_PASSWORD_AUTOSAVE,
+                COREWEBVIEW2_BROWSING_DATA_KINDS_SERVICE_WORKERS,
+                COREWEBVIEW2_BROWSING_DATA_KINDS_WEB_SQL,
+            };
+            use webview2_com::ClearBrowsingDataCompletedHandler;
+            use windows_core::Interface;
+
+            // Build the bitmask from the user's selection. LOCAL_STORAGE is never
+            // included — it holds the app's own data in the shared profile.
+            let mut mask: i32 = 0;
+            if opts.cookies_and_site_data {
+                mask |= COREWEBVIEW2_BROWSING_DATA_KINDS_COOKIES.0
+                    | COREWEBVIEW2_BROWSING_DATA_KINDS_INDEXED_DB.0
+                    | COREWEBVIEW2_BROWSING_DATA_KINDS_SERVICE_WORKERS.0
+                    | COREWEBVIEW2_BROWSING_DATA_KINDS_WEB_SQL.0
+                    | COREWEBVIEW2_BROWSING_DATA_KINDS_FILE_SYSTEMS.0
+                    | COREWEBVIEW2_BROWSING_DATA_KINDS_CACHE_STORAGE.0;
+            }
+            if opts.cache {
+                mask |= COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE.0;
+            }
+            if opts.history {
+                mask |= COREWEBVIEW2_BROWSING_DATA_KINDS_BROWSING_HISTORY.0
+                    | COREWEBVIEW2_BROWSING_DATA_KINDS_DOWNLOAD_HISTORY.0;
+            }
+            if opts.passwords {
+                mask |= COREWEBVIEW2_BROWSING_DATA_KINDS_PASSWORD_AUTOSAVE.0;
+            }
+            if opts.autofill {
+                mask |= COREWEBVIEW2_BROWSING_DATA_KINDS_GENERAL_AUTOFILL.0;
+            }
+            if mask == 0 {
+                return Ok(()); // nothing selected
+            }
+
+            let reload_after = opts.cookies_and_site_data;
+            let app_for_reload = app.clone();
+
+            // SAFETY: COM calls on the WebView2 core/profile, dispatched onto the
+            // webview thread by `with_webview`. Every result is ignored — a failed
+            // clear must not break browsing. On completion we reload open tabs so a
+            // cookie clear is reflected as a logged-out page.
+            let _ = webview.with_webview(move |pw| {
+                let controller = pw.controller();
+                unsafe {
+                    if let Ok(core) = controller.CoreWebView2() {
+                        if let Ok(core13) = core.cast::<ICoreWebView2_13>() {
+                            if let Ok(profile) = core13.Profile() {
+                                if let Ok(profile2) = profile.cast::<ICoreWebView2Profile2>() {
+                                    let handler = ClearBrowsingDataCompletedHandler::create(
+                                        Box::new(move |_hr| {
+                                            if reload_after {
+                                                if let Some(state) =
+                                                    app_for_reload.try_state::<WebBrowserState>()
+                                                {
+                                                    let handles: Vec<tauri::Webview> =
+                                                        match state.webviews.lock() {
+                                                            Ok(map) => {
+                                                                map.values().cloned().collect()
+                                                            }
+                                                            Err(_) => Vec::new(),
+                                                        };
+                                                    for wv in handles {
+                                                        let _ = wv.reload();
+                                                    }
+                                                }
+                                            }
+                                            Ok(())
+                                        }),
+                                    );
+                                    let _ = profile2.ClearBrowsingData(
+                                        COREWEBVIEW2_BROWSING_DATA_KINDS(mask),
+                                        &handler,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            Ok(())
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (app, opts, webview);
+            Ok(())
         }
     }
 

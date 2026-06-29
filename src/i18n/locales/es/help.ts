@@ -171,6 +171,8 @@ export const help = {
       '<0>Barra de herramientas:</0> Atrás, Adelante, Recargar/Detener y una barra de direcciones. Solo se permiten direcciones <1>http://</1> y <2>https://</2>; una dirección escrita sin esquema usa <3>http://</3> de forma predeterminada. El texto que no sea una dirección web se busca en la web.',
     passwords:
       '<0>Inicios de sesión y contraseñas:</0> El navegador conserva tus sesiones y puede guardar y autocompletar contraseñas, almacenadas en el perfil de navegador cifrado propio de HoTTY (separado de tu Edge/Chrome del sistema).',
+    clearData:
+      '<0>Borrar datos de navegación:</0> Haz clic en el botón de papelera de la barra de herramientas para borrar cookies y datos de sitios, caché, historial, contraseñas guardadas y autocompletado — eliges qué eliminar. Tus marcadores y la configuración de HoTTY se conservan siempre.',
     enable:
       '<0>Activar / desactivar:</0> La pestaña Web se puede desactivar en <1>Ajustes → Funciones</1>.',
   },

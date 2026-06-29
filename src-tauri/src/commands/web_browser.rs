@@ -4,7 +4,7 @@
 use tauri::{AppHandle, State, Window};
 use tauri_plugin_dialog::DialogExt;
 
-use crate::services::web_browser::{self, BrowserRect, WebBrowserState};
+use crate::services::web_browser::{self, BrowserRect, ClearDataOptions, WebBrowserState};
 
 /// Defensive size cap for the bookmarks JSON file (import & export).
 const MAX_BOOKMARKS_BYTES: u64 = 5 * 1024 * 1024;
@@ -105,6 +105,19 @@ pub async fn web_browser_destroy(
     pane_id: String,
 ) -> Result<(), String> {
     web_browser::destroy(&state, &pane_id)
+}
+
+/// Clear the selected categories of browsing data (cookies/site data, cache,
+/// history, saved passwords, autofill) for the embedded browser. App settings
+/// and bookmarks (localStorage in the shared profile) are never touched.
+#[tauri::command]
+pub async fn web_browser_clear_browsing_data(
+    app: AppHandle,
+    state: State<'_, WebBrowserState>,
+    pane_id: String,
+    options: ClearDataOptions,
+) -> Result<(), String> {
+    web_browser::clear_browsing_data(&app, &state, &pane_id, options)
 }
 
 /// Export the bookmark tree (`data`, a JSON array string) to a user-chosen file

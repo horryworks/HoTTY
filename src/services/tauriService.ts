@@ -41,6 +41,7 @@ import type {
   FileServerProtocol,
   FirewallStatus,
   WebBrowserRect,
+  WebBrowserClearDataOptions,
   WebBrowserNavState,
   WebBrowserHistoryState,
   WebBrowserAccel,
@@ -510,6 +511,16 @@ export const tauriService = {
 
   async webBrowserDestroy(paneId: string): Promise<void> {
     await invoke('web_browser_destroy', { paneId });
+  },
+
+  /** Clear the selected categories of browsing data (cookies/site data, cache,
+   *  history, saved passwords, autofill) for the embedded browser. HoTTY's own
+   *  settings and bookmarks (localStorage in the shared profile) are preserved. */
+  async webBrowserClearBrowsingData(
+    paneId: string,
+    options: WebBrowserClearDataOptions,
+  ): Promise<void> {
+    await invoke('web_browser_clear_browsing_data', { paneId, options });
   },
 
   /** Export the whole bookmark tree to a user-chosen JSON file (native save

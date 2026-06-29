@@ -51,10 +51,10 @@ use commands::themes::{delete_custom_theme, get_themes, save_custom_theme};
 use commands::updater::check_for_updates;
 use commands::utilities::{log_debug, select_folder, select_image};
 use commands::web_browser::{
-    web_browser_back, web_browser_create, web_browser_current_url, web_browser_destroy,
-    web_browser_export_bookmarks, web_browser_forward, web_browser_import_bookmarks,
-    web_browser_navigate, web_browser_reload, web_browser_set_bounds, web_browser_set_visible,
-    web_browser_stop,
+    web_browser_back, web_browser_clear_browsing_data, web_browser_create, web_browser_current_url,
+    web_browser_destroy, web_browser_export_bookmarks, web_browser_forward,
+    web_browser_import_bookmarks, web_browser_navigate, web_browser_reload, web_browser_set_bounds,
+    web_browser_set_visible, web_browser_stop,
 };
 use commands::window::{create_app_window, create_window, WindowCounterState};
 use services::ai::providers::anthropic::AnthropicProvider;
@@ -270,6 +270,7 @@ pub fn run() {
             web_browser_set_bounds,
             web_browser_set_visible,
             web_browser_destroy,
+            web_browser_clear_browsing_data,
             web_browser_export_bookmarks,
             web_browser_import_bookmarks,
             // GCE IAP tunnel
