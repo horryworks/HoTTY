@@ -12,12 +12,18 @@ export const hostTree = {
   newConnectionTitle: '开始新的连接（清空表单）',
   empty: '右键单击或使用上方的 + 按钮添加主机和文件夹',
   contextMenu: {
+    openAll: '全部打开',
     addFolder: '添加文件夹',
     addHost: '添加主机',
     rename: '重命名 (F2)',
     export: '导出',
     import: '导入',
     sortAscending: '升序排序',
+  },
+  openAll: {
+    confirmTitle: '打开所有主机',
+    // {{count}} = 主机数量, {{name}} = 文件夹名称
+    confirmMessage: '打开“{{name}}”中的全部 {{count}} 个主机？',
   },
   modal: {
     renameFolder: '重命名文件夹',

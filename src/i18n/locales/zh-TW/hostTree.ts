@@ -11,12 +11,18 @@ export const hostTree = {
   newConnectionTitle: '開始新連線（清除表單）',
   empty: '在上方按右鍵或使用 + 按鈕來新增主機與資料夾',
   contextMenu: {
+    openAll: '全部開啟',
     addFolder: '新增資料夾',
     addHost: '新增主機',
     rename: '重新命名（F2）',
     export: '匯出',
     import: '匯入',
     sortAscending: '遞增排序',
+  },
+  openAll: {
+    confirmTitle: '開啟所有主機',
+    // {{count}} = 主機數量, {{name}} = 資料夾名稱
+    confirmMessage: '開啟「{{name}}」中的全部 {{count}} 個主機？',
   },
   modal: {
     renameFolder: '重新命名資料夾',

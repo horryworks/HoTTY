@@ -70,6 +70,8 @@ export const help = {
       '<0>🆕 Entrée Nouvelle connexion :</0> la première ligne de l\'arborescence des hôtes démarre une nouvelle connexion — elle efface le formulaire de protocole à droite de la boîte de dialogue afin que vous puissiez vous connecter à un hôte ponctuel sans d\'abord désélectionner un hôte enregistré.',
     saveAdHoc:
       '<0>Enregistrer une session ponctuelle dans l\'arborescence des hôtes :</0> après vous être connecté via <1>Nouvelle connexion</1>, faites un clic droit sur l\'onglet de la session et choisissez <2>Enregistrer dans l\'arborescence des hôtes…</2> pour conserver la connexion pour plus tard. Les sessions SSH et Telnet sont prises en charge (le chemin de la clé privée et la phrase secrète sont conservés). Dans la boîte de dialogue d\'enregistrement, les dossiers de l\'arborescence des hôtes sont affichés sous forme d\'arborescence afin que vous puissiez choisir directement le dossier de destination, et <3>+ Nouveau dossier</3> crée un dossier sous celui actuellement sélectionné — imbriquable aussi profondément que vous le souhaitez.',
+    openAll:
+      '<0>Tout ouvrir dans un dossier :</0> Faites un clic droit sur un dossier de l’arborescence des hôtes et choisissez <1>Tout ouvrir</1> pour vous connecter à tous les hôtes qu’il contient d’un coup, y compris ceux des sous-dossiers. Lorsqu’un dossier contient 5 hôtes ou plus, une confirmation est demandée au préalable.',
   },
 
   layout: {
@@ -165,6 +167,8 @@ export const help = {
       'Ouvrez des pages web dans HoTTY grâce à un navigateur intégré — pratique pour les interfaces web d’administration des équipements réseau (routeurs, commutateurs, iLO/iDRAC) à côté de vos terminaux. Ouvrez-le depuis l’onglet <1>🌐 Web</1> de la boîte de dialogue <0>Nouvelle session</0> : cliquez sur <2>🆕 Nouveau navigateur web</2> pour un onglet vierge, ou double-cliquez sur un favori enregistré pour ouvrir ce site.',
     bookmarks:
       '<0>Favoris :</0> Organisez les sites dans une arborescence de dossiers sous l’onglet <1>Web</1> : ajoutez, renommez, supprimez et glissez pour réorganiser. Double-cliquez sur un favori pour l’ouvrir dans un nouveau volet de navigateur. Pendant la navigation, le bouton des favoris de la barre d’outils affiche vos favoris enregistrés pour un accès rapide.',
+    openAll:
+      '<0>Ouvrir tous les favoris :</0> Faites un clic droit sur un dossier de favoris — dans l’onglet <1>Web</1> ou la liste des favoris du navigateur — et choisissez <2>Tout ouvrir</2> pour ouvrir chaque favori qu’il contient (y compris les sous-dossiers), chacun dans son propre volet de navigateur. Lorsqu’un dossier contient 5 favoris ou plus, une confirmation est demandée au préalable.',
     star:
       '<0>★ Ajouter cette page aux favoris :</0> Pendant la navigation, cliquez sur le bouton <1>★</1> de la barre d’outils pour enregistrer la page actuelle dans le dossier de votre choix.',
     toolbar:

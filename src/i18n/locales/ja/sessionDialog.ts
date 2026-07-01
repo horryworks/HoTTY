@@ -12,6 +12,9 @@ export const sessionDialog = {
   },
   bookmarks: {
     newBlank: '新しい Web ブラウザー',
+    openAll: 'すべて開く',
+    openAllConfirmTitle: 'すべてのブックマークを開く',
+    openAllConfirmMessage: '「{{name}}」内のブックマーク {{count}} 件をすべて開きますか？',
     addFolder: 'フォルダを追加',
     addBookmark: 'ブックマークを追加',
     rename: '名前を変更',

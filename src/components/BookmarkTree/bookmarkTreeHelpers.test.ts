@@ -12,6 +12,7 @@ import {
   moveNode,
   sortFolder,
   flattenFolders,
+  flattenBookmarks,
 } from './bookmarkTreeHelpers';
 
 const folder = (id: string, name: string, children: BookmarkNode[] = []): BookmarkNode => ({
@@ -118,6 +119,24 @@ describe('bookmarkTreeHelpers', () => {
       { id: 'f1', name: 'A', depth: 0 },
       { id: 'f2', name: 'B', depth: 1 },
     ]);
+  });
+
+  describe('flattenBookmarks', () => {
+    it('collects all bookmarks depth-first, including nested subfolders, in order', () => {
+      const tree = [
+        folder('f1', 'A', [
+          bm('b1', 'one', 'http://1'),
+          folder('f2', 'B', [bm('b2', 'two', 'http://2')]),
+        ]),
+        bm('b3', 'three', 'http://3'),
+      ];
+      expect(flattenBookmarks(tree).map((b) => b.id)).toEqual(['b1', 'b2', 'b3']);
+    });
+
+    it('returns an empty array for an empty tree or a folder with no bookmarks', () => {
+      expect(flattenBookmarks([])).toEqual([]);
+      expect(flattenBookmarks([folder('f', 'Empty', [folder('g', 'Nested')])])).toEqual([]);
+    });
   });
 
   it('findBookmarkByUrl matches a bookmark at any depth, ignoring folders', () => {

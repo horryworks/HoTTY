@@ -1223,6 +1223,7 @@ function App() {
               active={paneId === activePaneId}
               initialUrl={webBrowserInitialUrls.get(featureInfo.id)}
               onUrlChange={(url) => updateWebBrowserTabName(featureInfo.id, url)}
+              onOpenInNewPane={handleOpenBookmark}
             />
           ) : featureInfo?.type === 'ai-chat' ? (
             <AIChatPane

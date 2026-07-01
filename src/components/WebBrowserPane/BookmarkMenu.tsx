@@ -11,7 +11,7 @@ import type { BookmarkNode } from '../../types/appTypes';
 import { useBookmarkStore } from '../../stores/bookmarkStore';
 import { useModalState } from '../../hooks/useModalState';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
-import { findNode, validateBookmarkTree } from '../BookmarkTree/bookmarkTreeHelpers';
+import { findNode, validateBookmarkTree, flattenBookmarks } from '../BookmarkTree/bookmarkTreeHelpers';
 import { tauriService } from '../../services/tauriService';
 import { logError } from '../../utils/logger';
 // Reuse the host/bookmark tree visual styles (rows, chevron, icons, labels,
@@ -24,7 +24,13 @@ interface BookmarkMenuProps {
   tree: BookmarkNode[];
   /** Called with a bookmark's URL when its row is activated (click / Enter). */
   onSelect: (url: string) => void;
+  /** Called from a folder's "Open All" to open every bookmark beneath it. */
+  onOpenAll?: (folder: BookmarkNode) => void;
 }
+
+/** "Open All" asks for confirmation once a folder holds at least this many
+ *  bookmarks, guarding against accidentally opening a large batch of tabs. */
+const OPEN_ALL_CONFIRM_THRESHOLD = 5;
 
 type DropPos = 'before' | 'after' | 'inside';
 
@@ -49,7 +55,7 @@ interface ContextMenuState {
  * within this HTML panel (the drop targets are rows, not the webview region), so
  * the native webview never swallows the drag events.
  */
-export function BookmarkMenu({ tree, onSelect }: BookmarkMenuProps) {
+export function BookmarkMenu({ tree, onSelect, onOpenAll }: BookmarkMenuProps) {
   const { t } = useTranslation();
   const editNode = useBookmarkStore((s) => s.editNode);
   const deleteNode = useBookmarkStore((s) => s.deleteNode);
@@ -65,6 +71,8 @@ export function BookmarkMenu({ tree, onSelect }: BookmarkMenuProps) {
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ nodeId: string; position: DropPos } | null>(null);
   const [nodeToDeleteOpen, openNodeToDelete, closeNodeToDelete, nodeToDelete] =
+    useModalState<BookmarkNode>();
+  const [openAllConfirmOpen, openOpenAllConfirm, closeOpenAllConfirm, openAllNode] =
     useModalState<BookmarkNode>();
   // Validated tree awaiting the user's confirmation to replace the current one.
   const [importOpen, openImport, closeImport, importTree] = useModalState<BookmarkNode[]>();
@@ -134,6 +142,17 @@ export function BookmarkMenu({ tree, onSelect }: BookmarkMenuProps) {
     setEditingNodeId(node.id);
     setEditingName(node.name);
     setContextMenu(null);
+  };
+
+  // "Open All" on a folder: open every bookmark beneath it (recursively) as new
+  // browser panes. Confirm first when the batch is large; otherwise open straight away.
+  const handleOpenAllClick = (node: BookmarkNode) => {
+    setContextMenu(null);
+    if (flattenBookmarks(node.children ?? []).length >= OPEN_ALL_CONFIRM_THRESHOLD) {
+      openOpenAllConfirm(node);
+    } else {
+      onOpenAll?.(node);
+    }
   };
 
   const commitRename = (node: BookmarkNode) => {
@@ -342,6 +361,13 @@ export function BookmarkMenu({ tree, onSelect }: BookmarkMenuProps) {
           style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
+          {contextMenu.node.type === 'folder' &&
+            onOpenAll &&
+            flattenBookmarks(contextMenu.node.children ?? []).length > 0 && (
+              <button onClick={() => handleOpenAllClick(contextMenu.node)}>
+                {t('sessionDialog.bookmarks.openAll')}
+              </button>
+            )}
           <button onClick={() => startRename(contextMenu.node)}>
             {t('sessionDialog.bookmarks.rename')}
           </button>
@@ -383,6 +409,22 @@ export function BookmarkMenu({ tree, onSelect }: BookmarkMenuProps) {
             closeNodeToDelete();
           }}
           onCancel={closeNodeToDelete}
+        />
+      )}
+
+      {openAllConfirmOpen && openAllNode && (
+        <ConfirmModal
+          title={t('sessionDialog.bookmarks.openAllConfirmTitle')}
+          message={t('sessionDialog.bookmarks.openAllConfirmMessage', {
+            count: flattenBookmarks(openAllNode.children ?? []).length,
+            name: openAllNode.name,
+          })}
+          confirmLabel={t('sessionDialog.bookmarks.openAll')}
+          onConfirm={() => {
+            onOpenAll?.(openAllNode);
+            closeOpenAllConfirm();
+          }}
+          onCancel={closeOpenAllConfirm}
         />
       )}
 

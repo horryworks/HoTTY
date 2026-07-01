@@ -12,11 +12,15 @@ export const sessionDialog = {
   },
   bookmarks: {
     newBlank: 'New Web Browser',
+    openAll: 'Open All',
     addFolder: 'Add Folder',
     addBookmark: 'Add Bookmark',
     rename: 'Rename',
     edit: 'Edit…',
     sortAscending: 'Sort Ascending',
+    openAllConfirmTitle: 'Open all bookmarks',
+    // {{count}} = number of bookmarks, {{name}} = folder name.
+    openAllConfirmMessage: 'Open all {{count}} bookmarks in "{{name}}"?',
     empty: 'No bookmarks yet. Use the toolbar to add a folder or bookmark.',
     addFolderTitle: 'Add Folder',
     renameFolderTitle: 'Rename Folder',

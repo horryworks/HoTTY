@@ -70,6 +70,8 @@ export const help = {
       '<0>🆕 New Connection entry:</0> The top row of the host tree starts a fresh connection — it clears the protocol form on the right of the dialog so you can dial an ad-hoc host without first deselecting a saved one.',
     saveAdHoc:
       '<0>Save an ad-hoc session to the Host Tree:</0> After connecting via <1>New Connection</1>, right-click the session\'s tab and choose <2>Save to Host Tree…</2> to keep the connection for later. SSH and Telnet sessions are supported (private-key path and passphrase are preserved). In the save dialog the host-tree folders are shown as a tree view so you can pick the destination folder directly, and <3>+ New Folder</3> creates a folder under the currently-selected one — nestable as deep as you like.',
+    openAll:
+      '<0>Open All in a folder:</0> Right-click a host-tree folder and choose <1>Open All</1> to connect to every host inside it at once, including hosts in sub-folders. When a folder holds 5 or more hosts you are asked to confirm first.',
   },
 
   layout: {
@@ -165,6 +167,8 @@ export const help = {
       'Open web pages inside HoTTY in an embedded browser — handy for network-device web admin UIs (routers, switches, iLO/iDRAC) right next to your terminals. Open it from the <0>New Session</0> dialog’s <1>🌐 Web</1> tab: click <2>🆕 New Web Browser</2> for a blank tab, or double-click a saved bookmark to open that site.',
     bookmarks:
       '<0>Bookmarks:</0> Organize sites in a folder tree under the <1>Web</1> tab — add, rename, delete, and drag to reorder. Double-click a bookmark to open it in a new browser pane. While browsing, the bookmarks button in the toolbar lists your saved bookmarks for quick access.',
+    openAll:
+      '<0>Open All bookmarks:</0> Right-click a bookmark folder — in the <1>Web</1> tab or the in-browser bookmarks list — and choose <2>Open All</2> to open every bookmark inside it (including sub-folders), each in its own browser pane. When a folder holds 5 or more bookmarks you are asked to confirm first.',
     star:
       '<0>★ Bookmark this page:</0> While browsing, click the <1>★</1> button in the toolbar to save the current page into a folder you choose.',
     toolbar:

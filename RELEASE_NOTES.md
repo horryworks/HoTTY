@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.8-beta4
+
+This beta adds an **Open All** command to host and bookmark folders, so you can launch everything in a folder in one action.
+
+### New Features
+
+- **Open every host or bookmark in a folder at once.** Right-click a folder — in the host tree (New Session dialog), on the New Session dialog's 🌐 Web tab, or in the Web Browser's in-page bookmarks list — and choose **Open All**. HoTTY connects to every host in that folder, or opens every bookmarked site each in its own browser pane, including items nested in sub-folders. When a folder holds 5 or more items you're asked to confirm first, so a large batch never opens by accident.
+
 ## v2.0.8-beta3
 
 This beta makes the embedded **Web Browser** keep you signed in to more sites across restarts, and adds a **Clear browsing data** dialog so you can wipe cookies, cache, history and saved passwords on demand.

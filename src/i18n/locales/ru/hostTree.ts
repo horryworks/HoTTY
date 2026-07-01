@@ -13,12 +13,18 @@ export const hostTree = {
   newConnectionTitle: 'Начать новое подключение (очищает форму)',
   empty: 'Щёлкните правой кнопкой мыши или используйте кнопки + выше, чтобы добавить хосты и папки',
   contextMenu: {
+    openAll: 'Открыть все',
     addFolder: 'Добавить папку',
     addHost: 'Добавить хост',
     rename: 'Переименовать (F2)',
     export: 'Экспортировать',
     import: 'Импортировать',
     sortAscending: 'Сортировать по возрастанию',
+  },
+  openAll: {
+    confirmTitle: 'Открыть все хосты',
+    // {{count}} = количество хостов, {{name}} = имя папки.
+    confirmMessage: 'Открыть все хосты ({{count}}) в «{{name}}»?',
   },
   modal: {
     renameFolder: 'Переименовать папку',

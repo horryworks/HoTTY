@@ -12,12 +12,18 @@ export const hostTree = {
   newConnectionTitle: 'Start a new connection (clears the form)',
   empty: 'Right-click or use the + buttons above to add hosts and folders',
   contextMenu: {
+    openAll: 'Open All',
     addFolder: 'Add Folder',
     addHost: 'Add Host',
     rename: 'Rename (F2)',
     export: 'Export',
     import: 'Import',
     sortAscending: 'Sort Ascending',
+  },
+  openAll: {
+    confirmTitle: 'Open all hosts',
+    // {{count}} = number of hosts, {{name}} = folder name.
+    confirmMessage: 'Open all {{count}} hosts in "{{name}}"?',
   },
   modal: {
     renameFolder: 'Rename Folder',

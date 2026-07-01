@@ -8,11 +8,12 @@ import { HostTree } from '../HostTree/HostTree';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { GcpInstancesPane, type VmSelection } from '../GcpInstancesPane/GcpInstancesPane';
 import { BookmarkTree } from '../BookmarkTree/BookmarkTree';
+import { flattenBookmarks } from '../BookmarkTree/bookmarkTreeHelpers';
 import { useSidebarLayoutStore } from '../../stores/sidebarLayoutStore';
 import { useResize } from '../../hooks/useResize';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { SessionRecord } from '../../hooks/useSessionManager';
-import type { HostTreeNode, HostEntry, ProtocolId, Encoding } from '../../types/appTypes';
+import type { HostTreeNode, HostEntry, ProtocolId, Encoding, BookmarkNode } from '../../types/appTypes';
 import type {
     SshConnectionConfig,
     TelnetConnectionConfig,
@@ -507,6 +508,18 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         [onOpenBookmark, onClose],
     );
 
+    // "Open All": open every bookmark beneath a folder (recursively) as new
+    // browser panes, then close the dialog once (not per item).
+    const handleOpenAllBookmarks = useCallback(
+        (folder: BookmarkNode) => {
+            for (const b of flattenBookmarks(folder.children ?? [])) {
+                if (b.url) onOpenBookmark?.(b.url);
+            }
+            onClose();
+        },
+        [onOpenBookmark, onClose],
+    );
+
     // --- Double-click: connect immediately ---
     const handleDoubleClickHost = useCallback(async (node: HostTreeNode) => {
         if (node.type !== 'host' || !node.entry) return;
@@ -590,6 +603,16 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         }
         dispatchConnect(payload);
     }, [dispatchConnect, settings.sshKeepAliveEnabled, settings.sshKeepAliveInterval, settings.telnetKeepAliveEnabled, settings.telnetKeepAliveInterval, settings.sshConnectTimeoutSecs, settings.telnetConnectTimeoutSecs]);
+
+    // --- "Open All": connect every host beneath a folder (recursively) ---
+    // Reuses the single-host path per host. Sequential `await` keeps any DPAPI
+    // decrypt prompts from overlapping. The first connect closes this dialog, but
+    // `dispatchConnect → onConnect` lives in App, so the rest still open.
+    const handleOpenAllHostsInFolder = useCallback(async (folder: HostTreeNode) => {
+        for (const host of flattenHosts(folder.children ?? [])) {
+            await handleDoubleClickHost(host);
+        }
+    }, [handleDoubleClickHost]);
 
     // --- Dirty check ---
     const isDirty = originalState !== null && (
@@ -1054,6 +1077,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                         onSelect={handleHostTreeSelect}
                                         onNewConnection={handleNewConnectionRequest}
                                         onDoubleClickHost={handleDoubleClickHost}
+                                        onOpenAllInFolder={handleOpenAllHostsInFolder}
                                         onAddFolder={hostManager.addFolder}
                                         onAddHost={hostManager.addHost}
                                         onEditNode={hostManager.editNode}
@@ -1383,6 +1407,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                             <BookmarkTree
                                 onOpenBookmark={handleOpenBookmarkFromDialog}
                                 onNewBlank={() => handleOpenBookmarkFromDialog()}
+                                onOpenAll={handleOpenAllBookmarks}
                             />
                         )}
                     </div>

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BookmarkTree } from './BookmarkTree';
 import { useBookmarkStore } from '../../stores/bookmarkStore';
+import type { BookmarkNode } from '../../types/appTypes';
 
 beforeEach(() => {
   useBookmarkStore.setState({ tree: [] });
@@ -59,5 +60,45 @@ describe('BookmarkTree', () => {
     fireEvent.click(screen.getByText('Save'));
     const added = useBookmarkStore.getState().tree.find((n) => n.name === 'Router');
     expect(added?.url).toBe('http://192.168.1.1');
+  });
+
+  it('shows "Open All" for a non-empty folder and calls onOpenAll (small folder: no confirm)', () => {
+    useBookmarkStore.setState({
+      tree: [
+        { id: 'f1', type: 'folder', name: 'Tools', children: [
+          { id: 'b1', type: 'bookmark', name: 'Grafana', url: 'http://graf' },
+        ] },
+      ],
+    });
+    const onOpenAll = vi.fn();
+    render(<BookmarkTree onOpenBookmark={() => {}} onOpenAll={onOpenAll} />);
+    fireEvent.contextMenu(screen.getByText('Tools'));
+    fireEvent.click(screen.getByText('Open All'));
+    expect(onOpenAll).toHaveBeenCalledWith(expect.objectContaining({ id: 'f1' }));
+  });
+
+  it('does not show "Open All" for an empty folder', () => {
+    useBookmarkStore.setState({ tree: [{ id: 'f1', type: 'folder', name: 'Empty', children: [] }] });
+    render(<BookmarkTree onOpenBookmark={() => {}} onOpenAll={vi.fn()} />);
+    fireEvent.contextMenu(screen.getByText('Empty'));
+    expect(screen.queryByText('Open All')).toBeNull();
+  });
+
+  it('confirms before opening when a folder holds 5+ bookmarks', () => {
+    const children: BookmarkNode[] = Array.from({ length: 5 }, (_, i) => ({
+      id: `b${i}`,
+      type: 'bookmark',
+      name: `B${i}`,
+      url: `http://b${i}.test/`,
+    }));
+    useBookmarkStore.setState({ tree: [{ id: 'f-big', type: 'folder', name: 'Many', children }] });
+    const onOpenAll = vi.fn();
+    render(<BookmarkTree onOpenBookmark={() => {}} onOpenAll={onOpenAll} />);
+    fireEvent.contextMenu(screen.getByText('Many'));
+    fireEvent.click(screen.getByText('Open All'));
+    expect(onOpenAll).not.toHaveBeenCalled();
+    expect(screen.getByText('Open all bookmarks')).toBeTruthy();
+    fireEvent.click(screen.getByText('Open All')); // confirm button
+    expect(onOpenAll).toHaveBeenCalledWith(expect.objectContaining({ id: 'f-big' }));
   });
 });

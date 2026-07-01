@@ -170,6 +170,18 @@ export function sortFolder(tree: BookmarkNode[], folderId: string | null): Bookm
   });
 }
 
+/** Recursively collect every bookmark (leaf) node in `tree`, in document order
+ *  (depth-first). Folders themselves are skipped. Used by "Open All" to gather
+ *  all bookmarks under a folder, including those in nested subfolders. */
+export function flattenBookmarks(tree: BookmarkNode[]): BookmarkNode[] {
+  const out: BookmarkNode[] = [];
+  for (const n of tree) {
+    if (n.type === 'bookmark') out.push(n);
+    if (n.children) out.push(...flattenBookmarks(n.children));
+  }
+  return out;
+}
+
 /** Flatten all folders (for the "choose a folder" dropdown), with indented
  *  labels reflecting depth. Root is represented separately by the caller. */
 export function flattenFolders(

@@ -12,12 +12,18 @@ export const hostTree = {
   newConnectionTitle: '새 연결 시작 (양식을 지웁니다)',
   empty: '마우스 오른쪽 버튼을 클릭하거나 위의 + 버튼을 사용하여 호스트와 폴더를 추가하세요',
   contextMenu: {
+    openAll: '모두 열기',
     addFolder: '폴더 추가',
     addHost: '호스트 추가',
     rename: '이름 바꾸기 (F2)',
     export: '내보내기',
     import: '가져오기',
     sortAscending: '오름차순 정렬',
+  },
+  openAll: {
+    confirmTitle: '모든 호스트 열기',
+    // {{count}} = 호스트 수, {{name}} = 폴더 이름
+    confirmMessage: '"{{name}}"의 호스트 {{count}}개를 모두 여시겠습니까?',
   },
   modal: {
     renameFolder: '폴더 이름 바꾸기',

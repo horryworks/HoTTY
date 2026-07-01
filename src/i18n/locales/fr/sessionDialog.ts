@@ -12,6 +12,9 @@ export const sessionDialog = {
   },
   bookmarks: {
     newBlank: 'Nouveau navigateur web',
+    openAll: 'Tout ouvrir',
+    openAllConfirmTitle: 'Ouvrir tous les favoris',
+    openAllConfirmMessage: 'Ouvrir les {{count}} favoris de « {{name}} » ?',
     addFolder: 'Ajouter un dossier',
     addBookmark: 'Ajouter un favori',
     rename: 'Renommer',

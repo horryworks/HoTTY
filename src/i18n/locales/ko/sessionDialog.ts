@@ -12,6 +12,9 @@ export const sessionDialog = {
   },
   bookmarks: {
     newBlank: '새 웹 브라우저',
+    openAll: '모두 열기',
+    openAllConfirmTitle: '모든 북마크 열기',
+    openAllConfirmMessage: '"{{name}}"의 북마크 {{count}}개를 모두 여시겠습니까?',
     addFolder: '폴더 추가',
     addBookmark: '북마크 추가',
     rename: '이름 바꾸기',

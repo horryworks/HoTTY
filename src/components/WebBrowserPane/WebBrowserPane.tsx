@@ -13,9 +13,9 @@ import { tauriService } from '../../services/tauriService';
 import { useUiOverlayStore } from '../../stores/uiOverlayStore';
 import { useWebBrowserBookmarkStore } from '../../stores/webBrowserBookmarkStore';
 import { useBookmarkStore } from '../../stores/bookmarkStore';
-import { findBookmarkByUrl } from '../BookmarkTree/bookmarkTreeHelpers';
+import { findBookmarkByUrl, flattenBookmarks } from '../BookmarkTree/bookmarkTreeHelpers';
 import { logError } from '../../utils/logger';
-import type { WebBrowserRect, WebBrowserClearDataOptions } from '../../types/appTypes';
+import type { WebBrowserRect, WebBrowserClearDataOptions, BookmarkNode } from '../../types/appTypes';
 import { normalizeUrl, resolveAddress } from './webBrowserUrl';
 import { AddBookmarkModal } from './AddBookmarkModal';
 import { ClearBrowsingDataModal } from './ClearBrowsingDataModal';
@@ -32,6 +32,9 @@ interface WebBrowserPaneProps {
   /** Called with the current page URL whenever it changes, so the host (App)
    *  can keep the tab name in sync with what is being browsed. */
   onUrlChange?: (url: string) => void;
+  /** Open a URL in a brand-new Web Browser pane (each pane hosts one webview, so
+   *  "Open All" on a bookmark folder fans out into multiple panes). */
+  onOpenInNewPane?: (url: string) => void;
 }
 
 const INITIAL_URL = 'about:blank';
@@ -62,7 +65,7 @@ function rectsEqual(a: WebBrowserRect | null, b: WebBrowserRect): boolean {
   );
 }
 
-export function WebBrowserPane({ paneId, initialUrl, onUrlChange }: WebBrowserPaneProps) {
+export function WebBrowserPane({ paneId, initialUrl, onUrlChange, onOpenInNewPane }: WebBrowserPaneProps) {
   const { t } = useTranslation();
   const overlayOpen = useUiOverlayStore((s) => s.overlayOpen);
   const sessionDragging = useUiOverlayStore((s) => s.sessionDragging);
@@ -342,6 +345,18 @@ export function WebBrowserPane({ paneId, initialUrl, onUrlChange }: WebBrowserPa
     [handleNavigate],
   );
 
+  // "Open All" on a folder: each bookmark opens in its own new browser pane
+  // (a pane hosts a single webview, so we fan out rather than retarget this one).
+  const handleOpenAllBookmarks = useCallback(
+    (folder: BookmarkNode) => {
+      setBookmarkMenuOpen(false);
+      for (const b of flattenBookmarks(folder.children ?? [])) {
+        if (b.url) onOpenInNewPane?.(b.url);
+      }
+    },
+    [onOpenInNewPane],
+  );
+
   // ★ button: toggle the current page's bookmark. Already saved → remove it;
   // otherwise open the Add Bookmark modal.
   const handleToggleBookmark = useCallback(() => {
@@ -529,7 +544,7 @@ export function WebBrowserPane({ paneId, initialUrl, onUrlChange }: WebBrowserPa
         <div ref={bodyRef} className="web-browser-body" />
         {bookmarkMenuOpen && (
           <div className="web-browser-bookmark-panel" ref={bookmarkPanelRef}>
-            <BookmarkMenu tree={bookmarkTree} onSelect={handleOpenBookmark} />
+            <BookmarkMenu tree={bookmarkTree} onSelect={handleOpenBookmark} onOpenAll={handleOpenAllBookmarks} />
           </div>
         )}
       </div>

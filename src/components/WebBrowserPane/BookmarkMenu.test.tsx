@@ -201,6 +201,54 @@ describe('BookmarkMenu editing', () => {
   });
 });
 
+describe('BookmarkMenu open all', () => {
+  it('shows "Open All" for a non-empty folder and calls onOpenAll (small folder: no confirm)', () => {
+    const onOpenAll = vi.fn();
+    render(<BookmarkMenu tree={tree} onSelect={vi.fn()} onOpenAll={onOpenAll} />);
+    fireEvent.contextMenu(screen.getByText('Network'));
+    fireEvent.click(screen.getByText('Open All'));
+    expect(onOpenAll).toHaveBeenCalledWith(expect.objectContaining({ id: 'f-net' }));
+  });
+
+  it('does not show "Open All" for a bookmark', () => {
+    render(<BookmarkMenu tree={tree} onSelect={vi.fn()} onOpenAll={vi.fn()} />);
+    fireEvent.contextMenu(screen.getByText('Example'));
+    expect(screen.queryByText('Open All')).toBeNull();
+  });
+
+  it('does not show "Open All" for an empty folder', () => {
+    const emptyTree: BookmarkNode[] = [{ id: 'f-empty', type: 'folder', name: 'Empty', children: [] }];
+    render(<BookmarkMenu tree={emptyTree} onSelect={vi.fn()} onOpenAll={vi.fn()} />);
+    fireEvent.contextMenu(screen.getByText('Empty'));
+    expect(screen.queryByText('Open All')).toBeNull();
+  });
+
+  it('confirms before opening when a folder holds 5+ bookmarks', () => {
+    const onOpenAll = vi.fn();
+    const big: BookmarkNode[] = [
+      {
+        id: 'f-big',
+        type: 'folder',
+        name: 'Many',
+        children: Array.from({ length: 5 }, (_, i) => ({
+          id: `b${i}`,
+          type: 'bookmark' as const,
+          name: `B${i}`,
+          url: `http://b${i}.test/`,
+        })),
+      },
+    ];
+    render(<BookmarkMenu tree={big} onSelect={vi.fn()} onOpenAll={onOpenAll} />);
+    fireEvent.contextMenu(screen.getByText('Many'));
+    fireEvent.click(screen.getByText('Open All'));
+    // Gated: not opened until the confirm dialog is accepted.
+    expect(onOpenAll).not.toHaveBeenCalled();
+    expect(screen.getByText('Open all bookmarks')).toBeTruthy();
+    fireEvent.click(screen.getByText('Open All')); // confirm button
+    expect(onOpenAll).toHaveBeenCalledWith(expect.objectContaining({ id: 'f-big' }));
+  });
+});
+
 describe('BookmarkMenu export / import', () => {
   beforeEach(() => {
     vi.clearAllMocks();

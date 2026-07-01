@@ -12,12 +12,18 @@ export const hostTree = {
   newConnectionTitle: '新しい接続を開始（フォームをクリアします）',
   empty: '右クリックまたは上部の + ボタンでホストやフォルダを追加してください',
   contextMenu: {
+    openAll: 'すべて開く',
     addFolder: 'フォルダを追加',
     addHost: 'ホストを追加',
     rename: '名前を変更 (F2)',
     export: 'エクスポート',
     import: 'インポート',
     sortAscending: '昇順で並べ替え',
+  },
+  openAll: {
+    confirmTitle: 'すべてのホストを開く',
+    // {{count}} = ホスト数, {{name}} = フォルダ名
+    confirmMessage: '「{{name}}」内のホスト {{count}} 件をすべて開きますか？',
   },
   modal: {
     renameFolder: 'フォルダ名を変更',

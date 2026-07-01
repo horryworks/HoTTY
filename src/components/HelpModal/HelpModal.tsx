@@ -188,6 +188,12 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                   components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />]}
                 />
               </p>
+              <p className="help-text">
+                <Trans
+                  i18nKey="help.hostTree.openAll"
+                  components={[<strong key="0" />, <strong key="1" />]}
+                />
+              </p>
             </div>
           </details>
 
@@ -333,6 +339,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               </p>
               <ul className="shortcuts-list">
                 <li><Trans i18nKey="help.webBrowser.bookmarks" components={[<strong key="0" />, <strong key="1" />]} /></li>
+                <li><Trans i18nKey="help.webBrowser.openAll" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />]} /></li>
                 <li><Trans i18nKey="help.webBrowser.star" components={[<strong key="0" />, <strong key="1" />]} /></li>
                 <li><Trans i18nKey="help.webBrowser.toolbar" components={[<strong key="0" />, <code key="1" />, <code key="2" />, <code key="3" />]} /></li>
                 <li><Trans i18nKey="help.webBrowser.passwords" components={[<strong key="0" />]} /></li>

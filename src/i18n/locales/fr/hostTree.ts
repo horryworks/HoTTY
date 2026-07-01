@@ -12,12 +12,18 @@ export const hostTree = {
   newConnectionTitle: 'Démarrer une nouvelle connexion (efface le formulaire)',
   empty: 'Cliquez avec le bouton droit ou utilisez les boutons + ci-dessus pour ajouter des hôtes et des dossiers',
   contextMenu: {
+    openAll: 'Tout ouvrir',
     addFolder: 'Ajouter un dossier',
     addHost: 'Ajouter un hôte',
     rename: 'Renommer (F2)',
     export: 'Exporter',
     import: 'Importer',
     sortAscending: 'Trier par ordre croissant',
+  },
+  openAll: {
+    confirmTitle: 'Ouvrir tous les hôtes',
+    // {{count}} = nombre d'hôtes, {{name}} = nom du dossier.
+    confirmMessage: 'Ouvrir les {{count}} hôtes de « {{name}} » ?',
   },
   modal: {
     renameFolder: 'Renommer le dossier',

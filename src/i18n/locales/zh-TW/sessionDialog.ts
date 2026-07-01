@@ -11,6 +11,9 @@ export const sessionDialog = {
   },
   bookmarks: {
     newBlank: '新增網頁瀏覽器',
+    openAll: '全部開啟',
+    openAllConfirmTitle: '開啟所有書籤',
+    openAllConfirmMessage: '開啟「{{name}}」中的全部 {{count}} 個書籤？',
     addFolder: '新增資料夾',
     addBookmark: '新增書籤',
     rename: '重新命名',

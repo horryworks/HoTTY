@@ -14,6 +14,10 @@ interface ContextMenuState {
     node: HostTreeNode | null;
 }
 
+/** "Open All" asks for confirmation once a folder holds at least this many hosts,
+ *  guarding against accidentally launching a large batch of connections. */
+const OPEN_ALL_CONFIRM_THRESHOLD = 5;
+
 interface EditModalState {
     mode: 'folder' | 'host' | 'export' | 'import';
     parentId: string | null;
@@ -26,6 +30,7 @@ interface HostTreeProps {
     onSelect: (node: HostTreeNode) => void;
     onNewConnection?: () => void;
     onDoubleClickHost?: (node: HostTreeNode) => void;
+    onOpenAllInFolder?: (node: HostTreeNode) => void;
     onAddFolder: (parentId: string | null, name: string) => void;
     onAddHost: (parentId: string | null, name: string, entry: HostEntry) => void;
     onEditNode: (id: string, patch: Partial<HostTreeNode>) => void;
@@ -42,6 +47,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
     onSelect,
     onNewConnection,
     onDoubleClickHost,
+    onOpenAllInFolder,
     onAddFolder,
     onAddHost,
     onEditNode,
@@ -57,6 +63,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [exportNode, setExportNode] = useState<HostTreeNode | null>(null);
     const [editModalOpen, openEditModal, closeEditModal, editModal] = useModalState<EditModalState>();
     const [nodeToDeleteOpen, openNodeToDelete, closeNodeToDelete, nodeToDelete] = useModalState<HostTreeNode>();
+    const [openAllConfirmOpen, openOpenAllConfirm, closeOpenAllConfirm, openAllNode] = useModalState<HostTreeNode>();
 
     // Inline edit state
     const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -177,6 +184,17 @@ export const HostTree: React.FC<HostTreeProps> = ({
         openEditModal({ mode: 'host', parentId });
         setContextMenu(null);
     }, [openEditModal]);
+
+    // "Open All" on a folder: connect every host beneath it (recursively). Confirm
+    // first when the batch is large; otherwise open straight away.
+    const handleOpenAllClick = useCallback((node: HostTreeNode) => {
+        setContextMenu(null);
+        if (flattenHosts(node.children ?? []).length >= OPEN_ALL_CONFIRM_THRESHOLD) {
+            openOpenAllConfirm(node);
+        } else {
+            onOpenAllInFolder?.(node);
+        }
+    }, [onOpenAllInFolder, openOpenAllConfirm]);
 
     const handleExport = (node: HostTreeNode | null = null) => {
         setExportNode(node);
@@ -609,6 +627,20 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     style={{ top: contextMenu.y, left: contextMenu.x }}
                     onClick={(e) => e.stopPropagation()}
                 >
+                    {contextMenu.node?.type === 'folder' && onOpenAllInFolder && flattenHosts(contextMenu.node.children ?? []).length > 0 && (
+                        <>
+                            <button onClick={() => handleOpenAllClick(contextMenu.node!)}>
+                                <span className="menu-icon-wrapper">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-color)' }}>
+                                        <polyline points="13 17 18 12 13 7"></polyline>
+                                        <polyline points="6 17 11 12 6 7"></polyline>
+                                    </svg>
+                                </span>
+                                {t('hostTree.contextMenu.openAll')}
+                            </button>
+                            <div className="context-menu-separator" />
+                        </>
+                    )}
                     {contextMenu.node?.type !== 'host' && (
                         <>
                             <button onClick={() => openAddFolder(contextMenu.node?.id ?? null)}>
@@ -888,6 +920,19 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 />
                 );
             })()}
+
+            {openAllConfirmOpen && openAllNode && (
+                <ConfirmModal
+                    title={t('hostTree.openAll.confirmTitle')}
+                    message={t('hostTree.openAll.confirmMessage', { count: flattenHosts(openAllNode.children ?? []).length, name: openAllNode.name })}
+                    confirmLabel={t('hostTree.contextMenu.openAll')}
+                    onConfirm={() => {
+                        onOpenAllInFolder?.(openAllNode);
+                        closeOpenAllConfirm();
+                    }}
+                    onCancel={closeOpenAllConfirm}
+                />
+            )}
         </div>
     );
 };

@@ -124,6 +124,60 @@ describe('HostTree', () => {
     expect(screen.getByText('10.0.0.2')).toBeTruthy();
   });
 
+  describe('Open All', () => {
+    it('shows "Open All" for a folder with hosts and calls onOpenAllInFolder (small folder: no confirm)', () => {
+      const onOpenAllInFolder = vi.fn();
+      render(<HostTree {...defaultProps} onOpenAllInFolder={onOpenAllInFolder} />);
+      fireEvent.contextMenu(screen.getByText('Production'));
+      fireEvent.click(screen.getByText('Open All'));
+      expect(onOpenAllInFolder).toHaveBeenCalledWith(expect.objectContaining({ id: 'folder-1' }));
+    });
+
+    it('does not show "Open All" when onOpenAllInFolder is not provided', () => {
+      render(<HostTree {...defaultProps} />);
+      fireEvent.contextMenu(screen.getByText('Production'));
+      expect(screen.queryByText('Open All')).toBeNull();
+    });
+
+    it('does not show "Open All" for a host', () => {
+      render(<HostTree {...defaultProps} onOpenAllInFolder={vi.fn()} />);
+      fireEvent.contextMenu(screen.getByText('Dev Box'));
+      expect(screen.queryByText('Open All')).toBeNull();
+    });
+
+    it('does not show "Open All" for an empty folder', () => {
+      const tree: HostTreeNode[] = [{ id: 'f-empty', type: 'folder', name: 'Empty', children: [] }];
+      render(<HostTree {...defaultProps} tree={tree} onOpenAllInFolder={vi.fn()} />);
+      fireEvent.contextMenu(screen.getByText('Empty'));
+      expect(screen.queryByText('Open All')).toBeNull();
+    });
+
+    it('confirms before opening when a folder holds 5+ hosts', () => {
+      const tree: HostTreeNode[] = [
+        {
+          id: 'f-big',
+          type: 'folder',
+          name: 'Fleet',
+          children: Array.from({ length: 5 }, (_, i) => ({
+            id: `h${i}`,
+            type: 'host' as const,
+            name: `Host ${i}`,
+            entry: { protocol: 'ssh' as const, host: `10.0.1.${i}`, port: 22 },
+          })),
+        },
+      ];
+      const onOpenAllInFolder = vi.fn();
+      render(<HostTree {...defaultProps} tree={tree} onOpenAllInFolder={onOpenAllInFolder} />);
+      fireEvent.contextMenu(screen.getByText('Fleet'));
+      fireEvent.click(screen.getByText('Open All'));
+      // Gated: not opened until the confirm dialog is accepted.
+      expect(onOpenAllInFolder).not.toHaveBeenCalled();
+      expect(screen.getByText('Open all hosts')).toBeTruthy();
+      fireEvent.click(screen.getByText('Open All')); // confirm button
+      expect(onOpenAllInFolder).toHaveBeenCalledWith(expect.objectContaining({ id: 'f-big' }));
+    });
+  });
+
   describe('New Connection pseudo-row', () => {
     it('renders when onNewConnection is provided', () => {
       const onNewConnection = vi.fn();

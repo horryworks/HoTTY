@@ -70,6 +70,8 @@ export const help = {
       '<0>🆕 Entrada de Nueva conexión:</0> la fila superior del árbol de hosts inicia una conexión nueva — limpia el formulario de protocolo a la derecha del diálogo para que pueda marcar un host ad hoc sin tener que deseleccionar primero uno guardado.',
     saveAdHoc:
       '<0>Guardar una sesión ad hoc en el árbol de hosts:</0> después de conectarse mediante <1>Nueva conexión</1>, haga clic con el botón derecho en la pestaña de la sesión y elija <2>Guardar en el árbol de hosts…</2> para conservar la conexión para más tarde. Se admiten sesiones SSH y Telnet (se conservan la ruta de la clave privada y la frase de contraseña). En el diálogo de guardado, las carpetas del árbol de hosts se muestran como una vista de árbol para que pueda elegir la carpeta de destino directamente, y <3>+ Nueva carpeta</3> crea una carpeta bajo la seleccionada actualmente — anidable tan profundamente como desee.',
+    openAll:
+      '<0>Abrir todo en una carpeta:</0> Haz clic derecho en una carpeta del árbol de hosts y elige <1>Abrir todo</1> para conectarte a todos los hosts que contiene a la vez, incluidos los de las subcarpetas. Si la carpeta tiene 5 o más hosts, se te pide confirmación primero.',
   },
 
   layout: {
@@ -165,6 +167,8 @@ export const help = {
       'Abre páginas web dentro de HoTTY en un navegador integrado, práctico para las interfaces web de administración de dispositivos de red (routers, switches, iLO/iDRAC) junto a tus terminales. Ábrelo desde la pestaña <1>🌐 Web</1> del diálogo <0>Nueva sesión</0>: haz clic en <2>🆕 Nuevo navegador web</2> para una pestaña en blanco, o haz doble clic en un marcador guardado para abrir ese sitio.',
     bookmarks:
       '<0>Marcadores:</0> Organiza los sitios en un árbol de carpetas bajo la pestaña <1>Web</1>: añade, renombra, elimina y arrastra para reordenar. Haz doble clic en un marcador para abrirlo en un nuevo panel de navegador. Mientras navegas, el botón de marcadores de la barra de herramientas muestra tus marcadores guardados para un acceso rápido.',
+    openAll:
+      '<0>Abrir todos los marcadores:</0> Haz clic derecho en una carpeta de marcadores —en la pestaña <1>Web</1> o en la lista de marcadores del navegador— y elige <2>Abrir todo</2> para abrir cada marcador que contiene (incluidas las subcarpetas), cada uno en su propio panel de navegador. Si la carpeta tiene 5 o más marcadores, se te pide confirmación primero.',
     star:
       '<0>★ Añadir esta página:</0> Mientras navegas, haz clic en el botón <1>★</1> de la barra de herramientas para guardar la página actual en la carpeta que elijas.',
     toolbar:

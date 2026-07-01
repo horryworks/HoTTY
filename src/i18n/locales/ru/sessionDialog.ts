@@ -12,6 +12,9 @@ export const sessionDialog = {
   },
   bookmarks: {
     newBlank: 'Новый веб-браузер',
+    openAll: 'Открыть все',
+    openAllConfirmTitle: 'Открыть все закладки',
+    openAllConfirmMessage: 'Открыть все закладки ({{count}}) в «{{name}}»?',
     addFolder: 'Добавить папку',
     addBookmark: 'Добавить закладку',
     rename: 'Переименовать',

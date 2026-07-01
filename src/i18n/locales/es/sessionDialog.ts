@@ -12,6 +12,9 @@ export const sessionDialog = {
   },
   bookmarks: {
     newBlank: 'Nuevo navegador web',
+    openAll: 'Abrir todo',
+    openAllConfirmTitle: 'Abrir todos los marcadores',
+    openAllConfirmMessage: '¿Abrir los {{count}} marcadores de "{{name}}"?',
     addFolder: 'Añadir carpeta',
     addBookmark: 'Añadir marcador',
     rename: 'Cambiar nombre',

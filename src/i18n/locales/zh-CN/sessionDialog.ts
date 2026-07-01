@@ -12,6 +12,9 @@ export const sessionDialog = {
   },
   bookmarks: {
     newBlank: '新建网页浏览器',
+    openAll: '全部打开',
+    openAllConfirmTitle: '打开所有书签',
+    openAllConfirmMessage: '打开“{{name}}”中的全部 {{count}} 个书签？',
     addFolder: '添加文件夹',
     addBookmark: '添加书签',
     rename: '重命名',

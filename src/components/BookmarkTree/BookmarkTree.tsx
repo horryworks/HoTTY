@@ -5,9 +5,13 @@ import { useBookmarkStore } from '../../stores/bookmarkStore';
 import { useModalState } from '../../hooks/useModalState';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
-import { findNode } from './bookmarkTreeHelpers';
+import { findNode, flattenBookmarks } from './bookmarkTreeHelpers';
 // Reuse the host-tree visual styles (tree rows, chevron, context menu, modal).
 import '../HostTree/HostTree.css';
+
+/** "Open All" asks for confirmation once a folder holds at least this many
+ *  bookmarks, guarding against accidentally opening a large batch of tabs. */
+const OPEN_ALL_CONFIRM_THRESHOLD = 5;
 
 interface ContextMenuState {
   x: number;
@@ -26,11 +30,13 @@ interface BookmarkTreeProps {
   onOpenBookmark: (url: string) => void;
   /** Called by the "New Web Browser" entry to open a blank browser tab. */
   onNewBlank?: () => void;
+  /** Called from a folder's "Open All" to open every bookmark beneath it. */
+  onOpenAll?: (folder: BookmarkNode) => void;
 }
 
 type DropPos = 'before' | 'after' | 'inside';
 
-export const BookmarkTree: React.FC<BookmarkTreeProps> = ({ onOpenBookmark, onNewBlank }) => {
+export const BookmarkTree: React.FC<BookmarkTreeProps> = ({ onOpenBookmark, onNewBlank, onOpenAll }) => {
   const { t } = useTranslation();
   const tree = useBookmarkStore((s) => s.tree);
   const addFolder = useBookmarkStore((s) => s.addFolder);
@@ -45,6 +51,8 @@ export const BookmarkTree: React.FC<BookmarkTreeProps> = ({ onOpenBookmark, onNe
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [editModalOpen, openEditModal, closeEditModal, editModal] = useModalState<EditModalState>();
   const [nodeToDeleteOpen, openNodeToDelete, closeNodeToDelete, nodeToDelete] =
+    useModalState<BookmarkNode>();
+  const [openAllConfirmOpen, openOpenAllConfirm, closeOpenAllConfirm, openAllNode] =
     useModalState<BookmarkNode>();
 
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -128,6 +136,20 @@ export const BookmarkTree: React.FC<BookmarkTreeProps> = ({ onOpenBookmark, onNe
       setContextMenu(null);
     },
     [openEditModal],
+  );
+
+  // "Open All" on a folder: open every bookmark beneath it (recursively). Confirm
+  // first when the batch is large; otherwise open straight away.
+  const handleOpenAllClick = useCallback(
+    (node: BookmarkNode) => {
+      setContextMenu(null);
+      if (flattenBookmarks(node.children ?? []).length >= OPEN_ALL_CONFIRM_THRESHOLD) {
+        openOpenAllConfirm(node);
+      } else {
+        onOpenAll?.(node);
+      }
+    },
+    [onOpenAll, openOpenAllConfirm],
   );
 
   const handleModalSubmit = () => {
@@ -436,6 +458,13 @@ export const BookmarkTree: React.FC<BookmarkTreeProps> = ({ onOpenBookmark, onNe
                   {t('sessionDialog.bookmarks.edit')}
                 </button>
               )}
+              {contextMenu.node.type === 'folder' &&
+                onOpenAll &&
+                flattenBookmarks(contextMenu.node.children ?? []).length > 0 && (
+                  <button onClick={() => handleOpenAllClick(contextMenu.node!)}>
+                    {t('sessionDialog.bookmarks.openAll')}
+                  </button>
+                )}
               {contextMenu.node.type === 'folder' && (
                 <button
                   onClick={() => {
@@ -537,6 +566,23 @@ export const BookmarkTree: React.FC<BookmarkTreeProps> = ({ onOpenBookmark, onNe
             closeNodeToDelete();
           }}
           onCancel={closeNodeToDelete}
+        />
+      )}
+
+      {/* Open-all confirm (large folders) */}
+      {openAllConfirmOpen && openAllNode && (
+        <ConfirmModal
+          title={t('sessionDialog.bookmarks.openAllConfirmTitle')}
+          message={t('sessionDialog.bookmarks.openAllConfirmMessage', {
+            count: flattenBookmarks(openAllNode.children ?? []).length,
+            name: openAllNode.name,
+          })}
+          confirmLabel={t('sessionDialog.bookmarks.openAll')}
+          onConfirm={() => {
+            onOpenAll?.(openAllNode);
+            closeOpenAllConfirm();
+          }}
+          onCancel={closeOpenAllConfirm}
         />
       )}
     </div>
