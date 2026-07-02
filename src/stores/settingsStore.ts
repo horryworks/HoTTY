@@ -96,6 +96,10 @@ interface SettingsState {
   // Features
   enabledFeatures: Record<FeatureId, boolean>;
 
+  // Web Browser — default zoom (percent) applied to each newly opened Web
+  // Browser pane. Each pane keeps its own zoom after that (session-scoped).
+  webBrowserDefaultZoom: number;
+
   // File Server (TFTP / SFTP) — persisted config (password excluded)
   fileServerConfig: FileServerConfig;
 
@@ -166,6 +170,7 @@ const DEFAULTS: SettingsState = {
     'file-server': true,
     'web-browser': true,
   },
+  webBrowserDefaultZoom: 100,
   fileServerConfig: {
     rootDir: '',
     bindAddr: '0.0.0.0',
@@ -201,7 +206,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 20,
+      version: 21,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -298,6 +303,10 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           // New AI data-disclosure consent gate — existing users have not yet
           // seen the disclosure, so default to false to prompt on next AI use.
           state.aiDataConsentAccepted ??= false;
+        }
+        if (version < 21) {
+          // New Web Browser default-zoom setting — 100% for existing users.
+          state.webBrowserDefaultZoom ??= DEFAULTS.webBrowserDefaultZoom;
         }
         return state as SettingsState;
       },

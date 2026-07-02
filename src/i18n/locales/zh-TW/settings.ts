@@ -68,6 +68,9 @@ export const settings = {
     scanning: '正在掃描...',
     rescan: '重新掃描',
     fontSize: '字型大小（px）',
+    webBrowserSection: 'Web 瀏覽器',
+    webBrowserDefaultZoom: '預設縮放（%）',
+    webBrowserDefaultZoomHelp: '每個新開啟的 Web 瀏覽器窗格的初始縮放比例（25–500%）。之後每個窗格在工作階段期間保留各自的縮放比例。',
     // 終端機顯示
     terminalDisplaySection: '終端機顯示',
     defaultEncoding: '預設編碼',

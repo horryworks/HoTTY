@@ -167,6 +167,35 @@ fn off_screen_rect() -> (PhysicalPosition<i32>, PhysicalSize<u32>) {
     (PhysicalPosition::new(-32000, -32000), PhysicalSize::new(1, 1))
 }
 
+/// Supported zoom range (percent) for the embedded browser. Mirrors the UI
+/// stepper's `ZOOM_STEPS` bounds so backend and frontend agree on the limits.
+pub const MIN_ZOOM_PERCENT: u32 = 25;
+pub const MAX_ZOOM_PERCENT: u32 = 500;
+
+/// Clamp a requested zoom percentage into the supported range.
+pub fn clamp_zoom_percent(percent: u32) -> u32 {
+    percent.clamp(MIN_ZOOM_PERCENT, MAX_ZOOM_PERCENT)
+}
+
+/// Convert a (clamped) zoom percentage to a WebView2 zoom factor (1.0 == 100%).
+// Used by `enabled` (feature-gated) and unit tests; allow dead_code in plain
+// non-test builds where the feature is off.
+#[cfg_attr(not(feature = "embedded-webview"), allow(dead_code))]
+fn zoom_percent_to_factor(percent: u32) -> f64 {
+    clamp_zoom_percent(percent) as f64 / 100.0
+}
+
+/// Convert a WebView2 zoom factor back to a rounded, clamped percentage (used
+/// when echoing WebView2's own zoom changes — Ctrl+wheel, Ctrl+± — back to the
+/// renderer). A non-finite or out-of-range factor collapses to the nearest bound.
+#[cfg_attr(not(feature = "embedded-webview"), allow(dead_code))]
+fn zoom_factor_to_percent(factor: f64) -> u32 {
+    if !factor.is_finite() || factor <= 0.0 {
+        return MIN_ZOOM_PERCENT;
+    }
+    clamp_zoom_percent((factor * 100.0).round() as u32)
+}
+
 // ---------------------------------------------------------------------------
 // Public API — real implementations (feature on) or stubs (feature off)
 // ---------------------------------------------------------------------------
@@ -193,6 +222,7 @@ mod disabled {
         _pane_id: &str,
         _url: Url,
         _rect: &BrowserRect,
+        _initial_zoom_percent: u32,
     ) -> Result<(), String> {
         Err(MSG.to_string())
     }
@@ -229,6 +259,9 @@ mod disabled {
         Err(MSG.to_string())
     }
     pub fn destroy(_state: &WebBrowserState, _pane_id: &str) -> Result<(), String> {
+        Err(MSG.to_string())
+    }
+    pub fn set_zoom(_state: &WebBrowserState, _pane_id: &str, _zoom: u32) -> Result<(), String> {
         Err(MSG.to_string())
     }
     pub fn clear_browsing_data(
@@ -282,6 +315,17 @@ mod enabled {
     struct AccelPayload {
         pane_id: String,
         action: String,
+    }
+
+    /// Zoom level (percent) pushed to the renderer whenever the webview's zoom
+    /// changes — via our own `set_zoom`, or WebView2's built-in Ctrl+± / Ctrl+wheel
+    /// — so the toolbar's `%` display and the per-pane zoom store stay in sync.
+    #[cfg(windows)]
+    #[derive(Debug, Clone, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ZoomStatePayload {
+        pane_id: String,
+        zoom: u32,
     }
 
     fn physical_bounds(rect: &BrowserRect) -> Rect {
@@ -345,8 +389,11 @@ mod enabled {
         pane_id: &str,
         url: Url,
         rect: &BrowserRect,
+        initial_zoom_percent: u32,
     ) -> Result<(), String> {
-        // Reuse path: keep the loaded page across pane moves / remounts.
+        // Reuse path: keep the loaded page across pane moves / remounts. The
+        // webview keeps the zoom it already had, so `initial_zoom_percent` (which
+        // the renderer derived from that same remembered value) is ignored here.
         if let Some(existing) = take_handle(state, pane_id) {
             remember_bounds(state, pane_id, rect);
             existing
@@ -390,6 +437,11 @@ mod enabled {
                     persist_session_cookies(&webview);
                 }
             })
+            // Enable native page zoom by Ctrl+wheel and Ctrl+±/0. Tauri defaults
+            // this to false (so the app UI can't be zoomed); the Web Browser pane
+            // is a real browser, so it must be on. Changes flow back to the toolbar
+            // `%` via the ZoomFactorChanged handler installed below.
+            .zoom_hotkeys_enabled(true)
             // The browsed page must not receive HoTTY's OS file-drop events.
             .disable_drag_drop_handler();
 
@@ -398,7 +450,7 @@ mod enabled {
             .map_err(|e| format!("failed to create webview: {e}"))?;
 
         enable_password_autosave(&webview);
-        install_input_and_history_handlers(app, pane_id, &webview);
+        install_input_and_history_handlers(app, pane_id, &webview, initial_zoom_percent);
 
         // Store the handle. If the lock is poisoned (a thread panicked holding
         // it), close the just-created webview instead of leaking an orphan that
@@ -674,16 +726,26 @@ mod enabled {
         }
     }
 
-    /// Bridge WebView2 input + history events to the renderer (Windows only):
+    /// Apply the initial zoom and bridge WebView2 input + history + zoom events to
+    /// the renderer (Windows only):
+    /// - Applies `initial_zoom_percent` to the fresh webview (flash-free — done
+    ///   before it is stored/shown).
     /// - `AcceleratorKeyPressed` → `web-browser-accel`, so shortcuts (Ctrl+L,
     ///   F5/Ctrl+R, Alt+←/→) work even while the page itself has keyboard focus
     ///   (DOM key handling in the renderer only fires when the HTML chrome does).
     /// - `HistoryChanged` → `web-browser-history-state`, so the back/forward
     ///   buttons reflect `CanGoBack`/`CanGoForward`.
+    /// - `ZoomFactorChanged` → `web-browser-zoom-state`, so the toolbar `%` and the
+    ///   per-pane zoom store follow WebView2's built-in Ctrl+± / Ctrl+wheel zoom.
     ///
     /// Best-effort: registration failures are ignored (the browser still works,
     /// just without these niceties). Handlers are kept alive by WebView2.
-    fn install_input_and_history_handlers(app: &AppHandle, pane_id: &str, webview: &tauri::Webview) {
+    fn install_input_and_history_handlers(
+        app: &AppHandle,
+        pane_id: &str,
+        webview: &tauri::Webview,
+        initial_zoom_percent: u32,
+    ) {
         #[cfg(windows)]
         {
             use webview2_com::Microsoft::Web::WebView2::Win32::{
@@ -691,13 +753,18 @@ mod enabled {
                 ICoreWebView2Controller, COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN,
                 COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN,
             };
-            use webview2_com::{AcceleratorKeyPressedEventHandler, HistoryChangedEventHandler};
+            use webview2_com::{
+                AcceleratorKeyPressedEventHandler, HistoryChangedEventHandler,
+                ZoomFactorChangedEventHandler,
+            };
             use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CONTROL, VK_MENU};
 
             let app_accel = app.clone();
             let pane_accel = pane_id.to_string();
             let app_hist = app.clone();
             let pane_hist = pane_id.to_string();
+            let app_zoom = app.clone();
+            let pane_zoom = pane_id.to_string();
 
             // SAFETY: COM calls on the WebView2 controller/core. `with_webview`
             // runs this on the main thread and the controller exists because
@@ -705,6 +772,13 @@ mod enabled {
             // alive internally; registration errors are ignored (best-effort).
             let _ = webview.with_webview(move |pw| {
                 let controller: ICoreWebView2Controller = pw.controller();
+
+                // --- Initial zoom (before the pane is shown → no visible jump) ---
+                unsafe {
+                    let _ = controller.SetZoomFactor(super::zoom_percent_to_factor(
+                        initial_zoom_percent,
+                    ));
+                }
 
                 // --- AcceleratorKeyPressed → web-browser-accel ---
                 let accel_handler = AcceleratorKeyPressedEventHandler::create(Box::new(
@@ -759,6 +833,33 @@ mod enabled {
                 let _ =
                     unsafe { controller.add_AcceleratorKeyPressed(&accel_handler, &mut accel_token) };
 
+                // --- ZoomFactorChanged → web-browser-zoom-state ---
+                // Re-read the factor from the controller (the event carries no
+                // args) and forward the rounded percentage, so any zoom change —
+                // ours or WebView2's built-in Ctrl+± / Ctrl+wheel — reaches the UI.
+                let controller_for_zoom: ICoreWebView2Controller = controller.clone();
+                let zoom_handler = ZoomFactorChangedEventHandler::create(Box::new(
+                    move |_sender, _args| {
+                        unsafe {
+                            let mut factor: f64 = 1.0;
+                            if controller_for_zoom.ZoomFactor(&mut factor).is_ok() {
+                                let _ = app_zoom.emit(
+                                    "web-browser-zoom-state",
+                                    ZoomStatePayload {
+                                        pane_id: pane_zoom.clone(),
+                                        zoom: super::zoom_factor_to_percent(factor),
+                                    },
+                                );
+                            }
+                        }
+                        Ok(())
+                    },
+                ));
+                let mut zoom_token = Default::default();
+                let _ = unsafe {
+                    controller.add_ZoomFactorChanged(&zoom_handler, &mut zoom_token)
+                };
+
                 // --- HistoryChanged → web-browser-history-state ---
                 if let Ok(core) = unsafe { controller.CoreWebView2() } {
                     let core_for_emit: ICoreWebView2 = core.clone();
@@ -789,7 +890,35 @@ mod enabled {
         }
         #[cfg(not(windows))]
         {
-            let _ = (app, pane_id, webview);
+            let _ = (app, pane_id, webview, initial_zoom_percent);
+        }
+    }
+
+    /// Set the pane's webview zoom to `zoom` percent (clamped to the supported
+    /// range). Windows-only; a no-op elsewhere. The change echoes back to the
+    /// renderer through the `ZoomFactorChanged` handler, so callers do not need to
+    /// optimistically update anything themselves for correctness.
+    pub fn set_zoom(state: &WebBrowserState, pane_id: &str, zoom: u32) -> Result<(), String> {
+        let webview =
+            take_handle(state, pane_id).ok_or_else(|| "no webview for pane".to_string())?;
+        #[cfg(windows)]
+        {
+            let factor = super::zoom_percent_to_factor(zoom);
+            // SAFETY: COM call on the WebView2 controller, dispatched onto the
+            // webview thread by `with_webview`. The result is ignored — a failed
+            // zoom must not break browsing.
+            let _ = webview.with_webview(move |pw| {
+                let controller = pw.controller();
+                unsafe {
+                    let _ = controller.SetZoomFactor(factor);
+                }
+            });
+            Ok(())
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (webview, zoom);
+            Ok(())
         }
     }
 
@@ -990,5 +1119,35 @@ mod tests {
     fn state_default_is_empty() {
         let state = WebBrowserState::new();
         assert!(state.webviews.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn zoom_percent_clamps_to_range() {
+        assert_eq!(clamp_zoom_percent(0), MIN_ZOOM_PERCENT);
+        assert_eq!(clamp_zoom_percent(10), MIN_ZOOM_PERCENT);
+        assert_eq!(clamp_zoom_percent(25), 25);
+        assert_eq!(clamp_zoom_percent(100), 100);
+        assert_eq!(clamp_zoom_percent(500), 500);
+        assert_eq!(clamp_zoom_percent(9999), MAX_ZOOM_PERCENT);
+    }
+
+    #[test]
+    fn zoom_percent_factor_round_trip() {
+        assert_eq!(zoom_percent_to_factor(100), 1.0);
+        assert_eq!(zoom_percent_to_factor(50), 0.5);
+        assert_eq!(zoom_percent_to_factor(200), 2.0);
+        // Out-of-range percentages clamp before conversion.
+        assert_eq!(zoom_percent_to_factor(10), 0.25);
+        assert_eq!(zoom_percent_to_factor(1000), 5.0);
+
+        assert_eq!(zoom_factor_to_percent(1.0), 100);
+        assert_eq!(zoom_factor_to_percent(0.5), 50);
+        assert_eq!(zoom_factor_to_percent(1.259), 126); // rounds up
+        assert_eq!(zoom_factor_to_percent(1.251), 125); // rounds down
+        // Degenerate factors collapse to the minimum rather than panicking.
+        assert_eq!(zoom_factor_to_percent(0.0), MIN_ZOOM_PERCENT);
+        assert_eq!(zoom_factor_to_percent(-1.0), MIN_ZOOM_PERCENT);
+        assert_eq!(zoom_factor_to_percent(f64::NAN), MIN_ZOOM_PERCENT);
+        assert_eq!(zoom_factor_to_percent(1000.0), MAX_ZOOM_PERCENT);
     }
 }

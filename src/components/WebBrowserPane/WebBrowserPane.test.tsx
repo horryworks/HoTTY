@@ -6,10 +6,13 @@ import { tauriService } from '../../services/tauriService';
 import { useUiOverlayStore } from '../../stores/uiOverlayStore';
 import { useBookmarkStore } from '../../stores/bookmarkStore';
 import { useWebBrowserBookmarkStore } from '../../stores/webBrowserBookmarkStore';
+import { useWebBrowserZoomStore } from '../../stores/webBrowserZoomStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import type {
   WebBrowserNavState,
   WebBrowserHistoryState,
   WebBrowserAccel,
+  WebBrowserZoomState,
 } from '../../types/appTypes';
 
 vi.mock('../../services/tauriService', () => ({
@@ -24,14 +27,22 @@ vi.mock('../../services/tauriService', () => ({
     webBrowserSetBounds: vi.fn().mockResolvedValue(undefined),
     webBrowserSetVisible: vi.fn().mockResolvedValue(undefined),
     webBrowserDestroy: vi.fn().mockResolvedValue(undefined),
+    webBrowserSetZoom: vi.fn().mockResolvedValue(undefined),
     webBrowserClearBrowsingData: vi.fn().mockResolvedValue(undefined),
     onWebBrowserNavState: vi.fn().mockResolvedValue(() => {}),
     onWebBrowserHistoryState: vi.fn().mockResolvedValue(() => {}),
     onWebBrowserAccel: vi.fn().mockResolvedValue(() => {}),
+    onWebBrowserZoomState: vi.fn().mockResolvedValue(() => {}),
   },
 }));
 
 vi.mock('../../utils/logger', () => ({ logError: vi.fn() }));
+
+/** Open the "⋯ More" secondary row so its actions (bookmarks, clear data, zoom)
+ *  are in the DOM. They live there, not the primary toolbar, after the declutter. */
+function openMore() {
+  fireEvent.click(screen.getByLabelText('More'));
+}
 
 // jsdom lacks ResizeObserver — provide a no-op so the component mounts.
 beforeEach(() => {
@@ -39,10 +50,13 @@ beforeEach(() => {
   vi.mocked(tauriService.onWebBrowserNavState).mockResolvedValue(() => {});
   vi.mocked(tauriService.onWebBrowserHistoryState).mockResolvedValue(() => {});
   vi.mocked(tauriService.onWebBrowserAccel).mockResolvedValue(() => {});
+  vi.mocked(tauriService.onWebBrowserZoomState).mockResolvedValue(() => {});
   vi.mocked(tauriService.webBrowserCurrentUrl).mockResolvedValue(null);
   useUiOverlayStore.setState({ overlayOpen: false, sessionDragging: false });
   useBookmarkStore.setState({ tree: [] });
   useWebBrowserBookmarkStore.setState({ pendingPaneId: null, nonce: 0 });
+  useWebBrowserZoomStore.setState({ zoom: {} });
+  useSettingsStore.setState({ webBrowserDefaultZoom: 100 });
   // @ts-expect-error test shim
   global.ResizeObserver = class {
     observe() {}
@@ -123,18 +137,20 @@ describe('WebBrowserPane', () => {
   it('renders the address bar and toolbar controls', () => {
     render(<WebBrowserPane paneId="wb-1" active={true} />);
     expect(screen.getByPlaceholderText(/192\.168\.1\.1/)).toBeTruthy();
-    expect(screen.getByText('Go')).toBeTruthy();
     expect(screen.getByLabelText('Back')).toBeTruthy();
     expect(screen.getByLabelText('Forward')).toBeTruthy();
+    // Secondary actions live behind the "⋯ More" toggle now (decluttered toolbar).
+    expect(screen.getByLabelText('More')).toBeTruthy();
   });
 
-  it('creates the embedded webview on mount', async () => {
+  it('creates the embedded webview on mount at the default zoom', async () => {
     render(<WebBrowserPane paneId="wb-1" active={true} />);
     await waitFor(() =>
       expect(tauriService.webBrowserCreate).toHaveBeenCalledWith(
         'wb-1',
         'about:blank',
         expect.any(Object),
+        100,
       ),
     );
   });
@@ -246,6 +262,7 @@ describe('WebBrowserPane', () => {
         'wb-1',
         'http://example.com',
         expect.any(Object),
+        100,
       ),
     );
     const input = screen.getByPlaceholderText(/192\.168\.1\.1/) as HTMLInputElement;
@@ -458,9 +475,10 @@ describe('WebBrowserPane', () => {
 
   it('🗑 opens the clear-data modal and clears with the selected categories', () => {
     render(<WebBrowserPane paneId="wb-1" active={true} />);
+    openMore();
     // Modal not shown until the toolbar button is clicked.
     expect(screen.queryByText('Cookies and site data')).toBeNull();
-    fireEvent.click(screen.getByLabelText('Clear browsing data'));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear browsing data' }));
     expect(screen.getByText('Cookies and site data')).toBeTruthy();
     // Uncheck one category, then confirm — the backend gets exactly the selection.
     fireEvent.click(screen.getByRole('checkbox', { name: 'Saved passwords' }));
@@ -474,6 +492,86 @@ describe('WebBrowserPane', () => {
     });
     // Modal closes after confirming.
     expect(screen.queryByText('Cookies and site data')).toBeNull();
+  });
+
+  describe('zoom', () => {
+    it('steps zoom in/out and resets via the ⋯ stepper', () => {
+      render(<WebBrowserPane paneId="wb-1" active={true} />);
+      openMore();
+      expect(screen.getByText('100%')).toBeTruthy();
+
+      fireEvent.click(screen.getByLabelText('Zoom in'));
+      expect(tauriService.webBrowserSetZoom).toHaveBeenLastCalledWith('wb-1', 110);
+      expect(screen.getByText('110%')).toBeTruthy();
+
+      fireEvent.click(screen.getByLabelText('Zoom out'));
+      expect(tauriService.webBrowserSetZoom).toHaveBeenLastCalledWith('wb-1', 100);
+      expect(screen.getByText('100%')).toBeTruthy();
+
+      // Bump, then click the % readout to reset back to the default (100%).
+      fireEvent.click(screen.getByLabelText('Zoom in'));
+      expect(screen.getByText('110%')).toBeTruthy();
+      fireEvent.click(screen.getByLabelText('Reset zoom'));
+      expect(tauriService.webBrowserSetZoom).toHaveBeenLastCalledWith('wb-1', 100);
+      expect(screen.getByText('100%')).toBeTruthy();
+    });
+
+    it('syncs the % display from a zoom-state event (WebView2 Ctrl+wheel / Ctrl±)', async () => {
+      render(<WebBrowserPane paneId="wb-1" active={true} />);
+      openMore();
+      await waitFor(() => expect(tauriService.onWebBrowserZoomState).toHaveBeenCalled());
+      const cb = latestCb<WebBrowserZoomState>(vi.mocked(tauriService.onWebBrowserZoomState));
+      act(() => cb({ paneId: 'wb-1', zoom: 150 }));
+      expect(screen.getByText('150%')).toBeTruthy();
+      expect(useWebBrowserZoomStore.getState().zoom['wb-1']).toBe(150);
+      // A different pane's zoom event is ignored.
+      act(() => cb({ paneId: 'wb-OTHER', zoom: 75 }));
+      expect(screen.getByText('150%')).toBeTruthy();
+    });
+
+    it('zooms via Ctrl+= / Ctrl+- / Ctrl+0 while the HTML chrome has focus', () => {
+      render(<WebBrowserPane paneId="wb-1" active={true} />);
+      const pane = document.querySelector('.web-browser-pane') as HTMLElement;
+      fireEvent.keyDown(pane, { key: '=', ctrlKey: true });
+      expect(tauriService.webBrowserSetZoom).toHaveBeenLastCalledWith('wb-1', 110);
+      fireEvent.keyDown(pane, { key: '-', ctrlKey: true });
+      expect(tauriService.webBrowserSetZoom).toHaveBeenLastCalledWith('wb-1', 100);
+      // Bump, then Ctrl+0 resets to the default.
+      fireEvent.keyDown(pane, { key: '=', ctrlKey: true });
+      fireEvent.keyDown(pane, { key: '0', ctrlKey: true });
+      expect(tauriService.webBrowserSetZoom).toHaveBeenLastCalledWith('wb-1', 100);
+    });
+
+    it('opens a new pane at the configured default zoom', async () => {
+      useSettingsStore.setState({ webBrowserDefaultZoom: 125 });
+      render(<WebBrowserPane paneId="wb-2" active={true} />);
+      await waitFor(() =>
+        expect(tauriService.webBrowserCreate).toHaveBeenCalledWith(
+          'wb-2',
+          'about:blank',
+          expect.any(Object),
+          125,
+        ),
+      );
+      openMore();
+      expect(screen.getByText('125%')).toBeTruthy();
+    });
+
+    it('"Set as default" persists the current zoom as the global default', () => {
+      render(<WebBrowserPane paneId="wb-1" active={true} />);
+      openMore();
+      // At the default zoom there is nothing to save → the button is disabled.
+      expect(screen.getByLabelText('Set as default')).toHaveProperty('disabled', true);
+
+      // Change zoom, then save it as the default.
+      fireEvent.click(screen.getByLabelText('Zoom in')); // 100 → 110
+      const preset = screen.getByLabelText('Set as default');
+      expect(preset).toHaveProperty('disabled', false);
+      fireEvent.click(preset);
+      expect(useSettingsStore.getState().webBrowserDefaultZoom).toBe(110);
+      // Current zoom now IS the default → disabled again (doubles as saved feedback).
+      expect(screen.getByLabelText('Set as default')).toHaveProperty('disabled', true);
+    });
   });
 });
 

@@ -68,6 +68,9 @@ export const settings = {
     scanning: '正在扫描...',
     rescan: '重新扫描',
     fontSize: '字号 (px)',
+    webBrowserSection: 'Web 浏览器',
+    webBrowserDefaultZoom: '默认缩放 (%)',
+    webBrowserDefaultZoomHelp: '每个新打开的 Web 浏览器窗格的初始缩放比例（25–500%）。之后每个窗格在会话期间保留各自的缩放比例。',
     // Terminal Display
     terminalDisplaySection: '终端显示',
     defaultEncoding: '默认编码',

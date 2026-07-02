@@ -67,9 +67,111 @@
   display: inline-flex;
 }
 
-.web-browser-go {
-  font-size: calc(var(--font-size-base) - 1px);
-  font-weight: 600;
+/* "⋯ More" secondary toolbar row — revealed below the primary row when the ⋯
+   button is toggled. In-flow (matches the toolbar chrome) so it never overlaps
+   the OS-composited native webview; the body shrinks beneath it and stays visible. */
+.web-browser-more-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 10px;
+  background: var(--ai-header-bg);
+  border-bottom: 1px solid var(--border-color);
+  box-sizing: border-box;
+  flex-shrink: 0;
+  animation: fadeIn 0.1s ease-out;
+}
+
+/* Zoom stepper: −  [value%]  + */
+.web-browser-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.web-browser-more-label {
+  font-size: calc(var(--font-size-base) - 2px);
+  color: var(--text-secondary);
+  margin-right: 2px;
+}
+
+/* Clickable % readout — click to reset to the default zoom. */
+.web-browser-zoom-value {
+  min-width: 48px;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  transition: background-color 0.1s;
+}
+
+.web-browser-zoom-value:hover {
+  background: var(--btn-secondary-hover-bg);
+}
+
+/* "Set as default" — persists the current zoom as the default for new panes.
+   Sits just right of the + button; greys out once the current zoom is the default. */
+.web-browser-zoom-preset {
+  margin-left: 6px;
+  padding: 3px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--btn-secondary-bg);
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  white-space: nowrap;
+  transition: background-color 0.1s;
+}
+
+.web-browser-zoom-preset:hover:not(:disabled) {
+  background: var(--btn-secondary-hover-bg);
+}
+
+.web-browser-zoom-preset:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Vertical divider between the zoom stepper and the action items. */
+.web-browser-more-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px;
+  background: var(--border-color);
+}
+
+/* Labelled action buttons (Bookmarks, Clear data) in the secondary row. */
+.web-browser-more-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--btn-secondary-bg);
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  transition: background-color 0.1s;
+}
+
+.web-browser-more-item:hover:not(:disabled) {
+  background: var(--btn-secondary-hover-bg);
+}
+
+.web-browser-more-item.active {
+  background: var(--accent-color);
+  color: var(--text-on-accent);
 }
 
 /* Address bar */

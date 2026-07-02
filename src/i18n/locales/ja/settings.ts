@@ -68,6 +68,10 @@ export const settings = {
     scanning: 'スキャン中...',
     rescan: '再スキャン',
     fontSize: 'フォントサイズ (px)',
+    // Web ブラウザ
+    webBrowserSection: 'Web ブラウザ',
+    webBrowserDefaultZoom: '既定のズーム (%)',
+    webBrowserDefaultZoomHelp: '新しく開く Web ブラウザペインの初期ズーム倍率です (25〜500%)。各ペインはその後、セッション中は個別のズームを保持します。',
     // ターミナル表示
     terminalDisplaySection: 'ターミナル表示',
     defaultEncoding: 'デフォルトのエンコーディング',

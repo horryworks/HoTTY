@@ -68,6 +68,9 @@ export const settings = {
     scanning: 'Buscando...',
     rescan: 'Volver a buscar',
     fontSize: 'Tamaño de fuente (px)',
+    webBrowserSection: 'Navegador web',
+    webBrowserDefaultZoom: 'Zoom predeterminado (%)',
+    webBrowserDefaultZoomHelp: 'Zoom inicial para cada panel del navegador web recién abierto (25–500 %). Después, cada panel conserva su propio zoom durante la sesión.',
     // Visualización del terminal
     terminalDisplaySection: 'Visualización del terminal',
     defaultEncoding: 'Codificación predeterminada',

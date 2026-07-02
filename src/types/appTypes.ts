@@ -131,6 +131,15 @@ export interface WebBrowserAccel {
   action: 'back' | 'forward' | 'reload' | 'focus-address';
 }
 
+/** Current zoom level (percent) pushed from the embedded webview whenever it
+ *  changes — via the toolbar stepper or WebView2's built-in Ctrl+± / Ctrl+wheel
+ *  (WebView2 ZoomFactorChanged). Keeps the `%` display and per-pane store in sync.
+ *  Windows-only; on other platforms zoom is a no-op and no events arrive. */
+export interface WebBrowserZoomState {
+  paneId: string;
+  zoom: number;
+}
+
 export interface SshHostKeyPromptPayload {
   sessionId: string;
   host: string;

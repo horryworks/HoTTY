@@ -68,6 +68,10 @@ export const settings = {
     scanning: 'Scanning...',
     rescan: 'Rescan',
     fontSize: 'Font size (px)',
+    // Web Browser
+    webBrowserSection: 'Web Browser',
+    webBrowserDefaultZoom: 'Default zoom (%)',
+    webBrowserDefaultZoomHelp: 'Starting zoom for each newly opened Web Browser pane (25–500%). Each pane then keeps its own zoom for the session.',
     // Terminal Display
     terminalDisplaySection: 'Terminal Display',
     defaultEncoding: 'Default encoding',

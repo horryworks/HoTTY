@@ -32,6 +32,7 @@ import { useAiChat, getActiveTab, createDefaultAiChatState, type AiChatState } f
 import { usePaneStore, gridPaneIds, SIDEBAR_PANE_IDS } from './stores/paneStore';
 import { initOverlayWatcher } from './stores/uiOverlayStore';
 import { useWebBrowserBookmarkStore } from './stores/webBrowserBookmarkStore';
+import { useWebBrowserZoomStore } from './stores/webBrowserZoomStore';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from './stores/settingsStore';
 import i18n from './i18n';
@@ -698,6 +699,8 @@ function App() {
         // Destroy the embedded child webview so it doesn't leak (it is kept
         // alive across mere remounts, so closing the tab is the teardown point).
         tauriService.webBrowserDestroy(id).catch(() => {});
+        // Drop the pane's remembered zoom level so it can't outlive the pane.
+        useWebBrowserZoomStore.getState().removeZoom(id);
         setWebBrowserInitialUrls((prev) => {
           if (!prev.has(id)) return prev;
           const next = new Map(prev);

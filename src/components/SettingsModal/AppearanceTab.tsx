@@ -292,6 +292,25 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
         </div>
       </div>
 
+      {/* ── Web Browser ── */}
+      <div className="settings-card">
+        <h3 className="settings-section-title">{t('settings.appearance.webBrowserSection')}</h3>
+        <div className="settings-group">
+          <label>
+            {t('settings.appearance.webBrowserDefaultZoom')}
+            <HelpTooltip text={t('settings.appearance.webBrowserDefaultZoomHelp')} />
+          </label>
+          <input
+            type="number"
+            min={25}
+            max={500}
+            step={25}
+            value={settings.webBrowserDefaultZoom}
+            onChange={(e) => update('webBrowserDefaultZoom', parseInt(e.target.value, 10) || 100)}
+          />
+        </div>
+      </div>
+
       {/* ── Terminal Display ── */}
       <div className="settings-card">
         <h3 className="settings-section-title">{t('settings.appearance.terminalDisplaySection')}</h3>

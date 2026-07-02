@@ -68,6 +68,9 @@ export const settings = {
     scanning: 'Сканирование...',
     rescan: 'Пересканировать',
     fontSize: 'Размер шрифта (px)',
+    webBrowserSection: 'Веб-браузер',
+    webBrowserDefaultZoom: 'Масштаб по умолчанию (%)',
+    webBrowserDefaultZoomHelp: 'Начальный масштаб каждой вновь открываемой панели веб-браузера (25–500 %). Затем каждая панель сохраняет собственный масштаб в течение сеанса.',
     // Отображение терминала
     terminalDisplaySection: 'Отображение терминала',
     defaultEncoding: 'Кодировка по умолчанию',

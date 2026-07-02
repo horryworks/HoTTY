@@ -68,6 +68,9 @@ export const settings = {
     scanning: '검색 중...',
     rescan: '다시 검색',
     fontSize: '글꼴 크기 (px)',
+    webBrowserSection: '웹 브라우저',
+    webBrowserDefaultZoom: '기본 확대/축소 (%)',
+    webBrowserDefaultZoomHelp: '새로 여는 웹 브라우저 창의 초기 확대/축소 배율입니다 (25~500%). 이후 각 창은 세션 동안 자체 확대/축소 배율을 유지합니다.',
     // Terminal Display
     terminalDisplaySection: '터미널 표시',
     defaultEncoding: '기본 인코딩',

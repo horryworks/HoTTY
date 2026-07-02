@@ -19,9 +19,11 @@ pub async fn web_browser_create(
     pane_id: String,
     url: String,
     rect: BrowserRect,
+    zoom: u32,
 ) -> Result<(), String> {
     let validated = web_browser::validate_browser_url(&url)?;
-    web_browser::create(&app, &state, window.label(), &pane_id, validated, &rect)
+    let zoom = web_browser::clamp_zoom_percent(zoom);
+    web_browser::create(&app, &state, window.label(), &pane_id, validated, &rect, zoom)
 }
 
 /// Navigate the pane's webview to a new address (validated server-side).
@@ -105,6 +107,17 @@ pub async fn web_browser_destroy(
     pane_id: String,
 ) -> Result<(), String> {
     web_browser::destroy(&state, &pane_id)
+}
+
+/// Set the pane's webview zoom level (percentage; clamped server-side to the
+/// supported range).
+#[tauri::command]
+pub async fn web_browser_set_zoom(
+    state: State<'_, WebBrowserState>,
+    pane_id: String,
+    zoom: u32,
+) -> Result<(), String> {
+    web_browser::set_zoom(&state, &pane_id, web_browser::clamp_zoom_percent(zoom))
 }
 
 /// Clear the selected categories of browsing data (cookies/site data, cache,

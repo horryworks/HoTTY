@@ -45,6 +45,7 @@ import type {
   WebBrowserNavState,
   WebBrowserHistoryState,
   WebBrowserAccel,
+  WebBrowserZoomState,
   GcloudStatus,
   GcloudAuthStatus,
   GcpProject,
@@ -473,8 +474,13 @@ export const tauriService = {
   // Web browser pane (embedded native webview)
   // -----------------------------------------------------------------------
 
-  async webBrowserCreate(paneId: string, url: string, rect: WebBrowserRect): Promise<void> {
-    await invoke('web_browser_create', { paneId, url, rect });
+  async webBrowserCreate(
+    paneId: string,
+    url: string,
+    rect: WebBrowserRect,
+    zoom: number,
+  ): Promise<void> {
+    await invoke('web_browser_create', { paneId, url, rect, zoom });
   },
 
   async webBrowserNavigate(paneId: string, url: string): Promise<void> {
@@ -513,6 +519,11 @@ export const tauriService = {
     await invoke('web_browser_destroy', { paneId });
   },
 
+  /** Set the pane's webview zoom (percentage; clamped server-side to 25–500). */
+  async webBrowserSetZoom(paneId: string, zoom: number): Promise<void> {
+    await invoke('web_browser_set_zoom', { paneId, zoom });
+  },
+
   /** Clear the selected categories of browsing data (cookies/site data, cache,
    *  history, saved passwords, autofill) for the embedded browser. HoTTY's own
    *  settings and bookmarks (localStorage in the shared profile) are preserved. */
@@ -545,6 +556,10 @@ export const tauriService = {
 
   onWebBrowserAccel(cb: (p: WebBrowserAccel) => void): Promise<UnlistenFn> {
     return listen<WebBrowserAccel>('web-browser-accel', (e) => cb(e.payload));
+  },
+
+  onWebBrowserZoomState(cb: (p: WebBrowserZoomState) => void): Promise<UnlistenFn> {
+    return listen<WebBrowserZoomState>('web-browser-zoom-state', (e) => cb(e.payload));
   },
 
   // -----------------------------------------------------------------------
