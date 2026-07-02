@@ -6,6 +6,7 @@ import { STORAGE_KEYS } from '../constants/storage';
 import { buildExecutionRules, languageDirective } from '../constants/aiPrompts';
 import { tauriService } from '../services/tauriService';
 import { sessionBindingKey } from '../utils/sessionBindingKey';
+import { redactSecrets } from '../utils/redaction';
 
 // -- Types --
 
@@ -367,7 +368,8 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     if (terminalId && !text.startsWith('Terminal Output (Command:')) {
       const buffer = await takeWatchBufferRef.current(terminalId);
       if (buffer) {
-        prependedContext = `[Watched Terminal Output (Linked)]\n${buffer}\n================\n`;
+        // Redact secrets before this scrollback egresses to the third-party AI.
+        prependedContext = `[Watched Terminal Output (Linked)]\n${redactSecrets(buffer)}\n================\n`;
       }
     }
 
@@ -402,13 +404,16 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     if (activeSession) {
       const buffer = await takeWatchBufferRef.current(activeTermId);
       if (buffer) {
-        prependedContext = `[Watched Terminal Output]\n${buffer}\n================\n`;
+        prependedContext = `[Watched Terminal Output]\n${redactSecrets(buffer)}\n================\n`;
       }
     }
 
+    // Redact secrets from BOTH the watched output and the user's selection before
+    // they egress to the third-party AI provider.
+    const redactedSelection = selection ? redactSecrets(selection) : selection;
     const finalSelection = prependedContext
-      ? (selection ? `${prependedContext}[Target Text]\n${selection}` : prependedContext)
-      : selection;
+      ? (redactedSelection ? `${prependedContext}[Target Text]\n${redactedSelection}` : prependedContext)
+      : redactedSelection;
 
     if (!finalSelection) return;
 

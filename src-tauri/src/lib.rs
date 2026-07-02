@@ -25,6 +25,7 @@ use commands::iap_tunnel::{
     gce_iap_list_instances, gce_iap_list_projects, gce_iap_list_zones, gce_iap_refresh_cache,
     gce_iap_respond_vm_start, gce_iap_start_instance, gce_iap_stop_instance,
 };
+use commands::licenses::get_third_party_licenses;
 use commands::log_viewer::{confirm_log_dir, list_log_files, read_log_file};
 use commands::ping_monitor::{
     ping_monitor_start, ping_monitor_stop, ping_monitor_update_interval,
@@ -34,10 +35,8 @@ use commands::session::{
     connect_session, disconnect_session, list_all_sessions, send_input, ssh_host_key_response,
     term_resize, update_session_logging, SessionState,
 };
-use services::session_service::SessionOwners;
 use commands::ssh_algorithms::{get_ssh_algorithms, save_ssh_algorithms};
 use commands::sync::broadcast_shared_change;
-use commands::watch::{clear_watch_buffer, get_watch_buffer, set_watching, take_watch_buffer};
 use commands::system::{
     detect_git_bash, focus_window, list_serial_ports, list_system_fonts, list_wsl_distributions,
     open_debug_log_folder, open_external, show_context_menu,
@@ -46,10 +45,10 @@ use commands::text_editor::{
     text_editor_approve_dropped_file, text_editor_open_file, text_editor_read_file,
     text_editor_save_file, text_editor_write_file, ApprovedEditorPaths,
 };
-use commands::licenses::get_third_party_licenses;
 use commands::themes::{delete_custom_theme, get_themes, save_custom_theme};
 use commands::updater::check_for_updates;
 use commands::utilities::{log_debug, select_folder, select_image};
+use commands::watch::{clear_watch_buffer, get_watch_buffer, set_watching, take_watch_buffer};
 use commands::web_browser::{
     web_browser_back, web_browser_clear_browsing_data, web_browser_create, web_browser_current_url,
     web_browser_destroy, web_browser_export_bookmarks, web_browser_forward,
@@ -66,6 +65,7 @@ use services::file_server::FileServerState;
 use services::iap_tunnel::GcloudCacheState;
 use services::log_manager::LogManager;
 use services::ping_monitor::PingMonitorState;
+use services::session_service::SessionOwners;
 use services::watch_buffer::WatchBufferState;
 use services::web_browser::WebBrowserState;
 
@@ -84,17 +84,32 @@ fn cleanup_window_sessions(app: &tauri::AppHandle, label: &str) {
         watch.remove(id);
         owners.remove(id);
     }
+    // This window may also have been WATCHING sessions owned by OTHER windows;
+    // drop those watches so they don't leak (keeping the hot append path engaged
+    // and buffering for a reader that no longer exists).
+    watch.remove_watcher_for_window(label);
     let sessions = app.state::<SessionState>().sessions.clone();
     let log_manager = (*app.state::<LogManager>()).clone();
     tauri::async_runtime::spawn(async move {
         for id in &ids {
             log_manager.stop_logging(id).await;
         }
-        let mut map = sessions.lock().await;
-        for id in ids {
-            if let Some((mut service, _meta)) = map.remove(&id) {
-                let _ = service.disconnect().await;
+        // Remove every owned session under the map lock, then release the lock
+        // before awaiting disconnect() — teardown of one window's sessions must
+        // not block session commands from the surviving windows.
+        let removed = {
+            let mut map = sessions.lock().await;
+            let mut v = Vec::new();
+            for id in &ids {
+                if let Some((service, _meta)) = map.remove(id) {
+                    v.push(service);
+                }
             }
+            v
+        };
+        for shared in removed {
+            let mut service = shared.lock().await;
+            let _ = service.disconnect().await;
         }
     });
 }

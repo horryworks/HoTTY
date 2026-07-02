@@ -20,7 +20,7 @@ use russh::keys::{load_secret_key, HashAlg, PrivateKey, PrivateKeyWithHashAlg};
 use russh::ChannelMsg;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::{oneshot, Mutex, Notify};
 
 use super::known_hosts::{
     check_known_host, default_known_hosts_path, upsert_known_host, HostKeyCheck,
@@ -115,6 +115,9 @@ pub struct JumpboxHandler {
     host: String,
     port: u16,
     known_hosts_path: PathBuf,
+    /// Signalled the instant the bastion host-key prompt begins, so the connect
+    /// timeout extends past the short network budget for the human wait.
+    host_key_prompt_started: Arc<Notify>,
 }
 
 impl Handler for JumpboxHandler {
@@ -179,6 +182,10 @@ impl Handler for JumpboxHandler {
             .strip_suffix("::jumpbox")
             .unwrap_or(&self.prompt_session_id);
         emit_to_owner(&self.app, base_id, "ssh-host-key-prompt", payload);
+
+        // Tell the connect wrapper the human prompt has started, so it stops
+        // holding the whole handshake to the short network timeout.
+        self.host_key_prompt_started.notify_one();
 
         let decision = match tokio::time::timeout(super::ssh::HOST_KEY_PROMPT_TIMEOUT, rx).await {
             Ok(Ok(d)) => d,
@@ -417,19 +424,25 @@ pub async fn establish_tunnel(
         ..client::Config::default()
     });
 
+    // Signalled when the bastion host-key prompt begins, so the connect timeout
+    // extends for the human wait (see ssh::connect_with_prompt_extension).
+    let host_key_prompt_started = Arc::new(Notify::new());
     let handler = JumpboxHandler {
         app: app.clone(),
         prompt_session_id,
         host: cfg.host.clone(),
         port: cfg.port,
         known_hosts_path,
+        host_key_prompt_started: host_key_prompt_started.clone(),
     };
 
     let addr = (cfg.host.as_str(), cfg.port);
     let connect_timeout = Duration::from_secs(connect_timeout_secs.max(1) as u64);
-    let mut handle = tokio::time::timeout(
-        connect_timeout,
+    let mut handle = super::ssh::connect_with_prompt_extension(
         client::connect(russh_config, addr, handler),
+        host_key_prompt_started,
+        connect_timeout,
+        super::ssh::HOST_KEY_PROMPT_TIMEOUT,
     )
     .await
     .map_err(|_| {

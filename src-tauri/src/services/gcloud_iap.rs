@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::process::{Child, Command as TokioCommand};
@@ -21,8 +21,8 @@ use super::iap_tunnel::{
     is_valid_zone, InstanceStatus, PreConnectAction, WaitEvent,
 };
 use super::session_service::{
-    abort_all, emit_session_data, emit_session_error, emit_session_status, encoding_for,
-    join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
+    abort_all, emit_session_data, emit_session_error, emit_session_status, emit_to_owner,
+    encoding_for, join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -1077,10 +1077,12 @@ async fn ensure_vm_running(
                 instance: config.instance.clone(),
                 current_status: current.clone(),
             };
-            if let Err(e) = app.emit("iap-vm-start-prompt", payload) {
-                drop_vm_start_prompt(session_id);
-                return Err(format!("Failed to emit VM-start prompt: {e}"));
-            }
+            // Target the owning window only. A broadcast would pop a blocking
+            // approval modal in every window for a session they don't own — and
+            // a foreign window answering it would resolve (or wrongly decline)
+            // this connection. If delivery fails, the prompt-timeout below still
+            // cleans up.
+            emit_to_owner(app, session_id, "iap-vm-start-prompt", payload);
             let approved = match timeout(Duration::from_secs(VM_START_PROMPT_TIMEOUT_SECS), rx)
                 .await
             {

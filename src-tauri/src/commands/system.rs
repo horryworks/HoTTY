@@ -248,10 +248,10 @@ pub fn list_system_fonts() -> Result<Vec<FontInfo>, String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub async fn focus_window(app: AppHandle) -> Result<(), String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or("main window not found")?;
+pub async fn focus_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    // Focus the window that INVOKED this command, not a hardcoded "main" — in a
+    // secondary window the old code stole focus to main (or failed outright once
+    // main was closed).
     window
         .set_focus()
         .map_err(|e| format!("failed to focus window: {e}"))
@@ -264,14 +264,13 @@ pub async fn focus_window(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn show_context_menu(
     app: AppHandle,
+    window: tauri::WebviewWindow,
     items: Vec<ContextMenuItem>,
 ) -> Result<Option<String>, String> {
     use tauri::menu::{MenuBuilder, MenuItemBuilder};
 
-    let window = app
-        .get_webview_window("main")
-        .ok_or("main window not found")?;
-
+    // Anchor the popup on the INVOKING window, not a hardcoded "main" (the menu
+    // would otherwise mis-parent / fail in secondary windows).
     let mut builder = MenuBuilder::new(&app);
     for item in &items {
         let mi = MenuItemBuilder::new(&item.label)

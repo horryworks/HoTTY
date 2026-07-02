@@ -12,7 +12,7 @@ use russh::keys::ssh_key;
 use russh::keys::{load_secret_key, HashAlg, PrivateKey, PrivateKeyWithHashAlg};
 use russh::{cipher, kex, mac, ChannelMsg, Disconnect, Preferred};
 use tauri::AppHandle;
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
@@ -380,6 +380,46 @@ struct SshHostKeyPromptPayload {
     kind: String,
 }
 
+/// Await an SSH connect future, bounding the pre-host-key network handshake by
+/// `network_timeout` (fast-fail on a black-hole / stalled server) but extending
+/// to `prompt_timeout` once the interactive host-key prompt begins (signalled by
+/// the handler via `prompt_started`).
+///
+/// Without this, the short connect timeout (default 5s) fires while the user is
+/// still reading the host-key fingerprint: the connection is killed with a
+/// misleading "timed out", the still-open prompt is orphaned (and a later
+/// "Accept & remember" writes a key for a dead connection), and — worst — the
+/// MITM "HOST KEY CHANGED" warning only ever gets `network_timeout` seconds.
+///
+/// `Err(())` means the (possibly extended) deadline elapsed. The extension is
+/// one-shot; the post-accept handshake tail runs under the extended deadline.
+pub(super) async fn connect_with_prompt_extension<F, T>(
+    connect_fut: F,
+    prompt_started: Arc<Notify>,
+    network_timeout: Duration,
+    prompt_timeout: Duration,
+) -> Result<T, ()>
+where
+    F: std::future::Future<Output = T>,
+{
+    tokio::pin!(connect_fut);
+    let sleep = tokio::time::sleep(network_timeout);
+    tokio::pin!(sleep);
+    let notified = prompt_started.notified();
+    tokio::pin!(notified);
+    let mut extended = false;
+    loop {
+        tokio::select! {
+            res = &mut connect_fut => return Ok(res),
+            _ = &mut sleep => return Err(()),
+            _ = &mut notified, if !extended => {
+                extended = true;
+                sleep.as_mut().reset(tokio::time::Instant::now() + prompt_timeout);
+            }
+        }
+    }
+}
+
 // --- Handler ------------------------------------------------------------
 
 struct SshHandler {
@@ -388,6 +428,9 @@ struct SshHandler {
     host: String,
     port: u16,
     known_hosts_path: PathBuf,
+    /// Signalled the instant the interactive host-key prompt begins, so the outer
+    /// connect timeout can extend past the short network budget for the human wait.
+    host_key_prompt_started: Arc<Notify>,
 }
 
 impl Handler for SshHandler {
@@ -459,6 +502,10 @@ impl Handler for SshHandler {
         // (incl. a security-sensitive "host key changed" warning) in every
         // window in a multi-window session.
         emit_to_owner(&self.app, &self.session_id, "ssh-host-key-prompt", payload);
+
+        // Tell the connect wrapper the human prompt has started, so it stops
+        // holding the whole handshake to the short network timeout.
+        self.host_key_prompt_started.notify_one();
 
         let decision = match tokio::time::timeout(HOST_KEY_PROMPT_TIMEOUT, rx).await {
             Ok(Ok(d)) => d,
@@ -766,12 +813,17 @@ impl SessionService for SshSession {
             ..client::Config::default()
         });
 
+        // Signalled by the handler when the interactive host-key prompt begins,
+        // so the connect timeout below extends past the short network budget for
+        // the human prompt wait (see connect_with_prompt_extension).
+        let host_key_prompt_started = Arc::new(Notify::new());
         let handler = SshHandler {
             app: app.clone(),
             session_id: session_id.clone(),
             host: self.config.host.clone(),
             port: self.config.port,
             known_hosts_path,
+            host_key_prompt_started: host_key_prompt_started.clone(),
         };
 
         let connect_timeout = Duration::from_secs(self.config.connect_timeout_secs.max(1) as u64);
@@ -796,9 +848,11 @@ impl SessionService for SshSession {
             let (jumpbox_handle, stream) = tunnel.into_stream();
             self.jumpbox_handle = Some(jumpbox_handle);
             let timeout_secs = self.config.connect_timeout_secs;
-            tokio::time::timeout(
-                connect_timeout,
+            connect_with_prompt_extension(
                 client::connect_stream(config, stream, handler),
+                host_key_prompt_started.clone(),
+                connect_timeout,
+                HOST_KEY_PROMPT_TIMEOUT,
             )
             .await
             .map_err(|_| {
@@ -812,14 +866,17 @@ impl SessionService for SshSession {
         } else {
             let addr = (self.config.host.as_str(), self.config.port);
             let timeout_secs = self.config.connect_timeout_secs;
-            tokio::time::timeout(connect_timeout, client::connect(config, addr, handler))
-                .await
-                .map_err(|_| {
-                    SessionError::ConnectionFailed(format!(
-                        "Connection timed out ({timeout_secs}s)"
-                    ))
-                })?
-                .map_err(|e| SessionError::ConnectionFailed(humanize_ssh_error(&e.to_string())))?
+            connect_with_prompt_extension(
+                client::connect(config, addr, handler),
+                host_key_prompt_started.clone(),
+                connect_timeout,
+                HOST_KEY_PROMPT_TIMEOUT,
+            )
+            .await
+            .map_err(|_| {
+                SessionError::ConnectionFailed(format!("Connection timed out ({timeout_secs}s)"))
+            })?
+            .map_err(|e| SessionError::ConnectionFailed(humanize_ssh_error(&e.to_string())))?
         };
 
         let auth_result = try_authenticate(&mut handle, &self.config).await;
@@ -1015,6 +1072,60 @@ impl Drop for SshSession {
 mod tests {
     use super::*;
     use crate::commands::ssh_algorithms::AlgorithmEntry;
+
+    // -- connect_with_prompt_extension --
+    // Real-time timers (no `start_paused`, which needs tokio's test-util feature).
+    // Durations are tiny but with wide margins so the assertions are unambiguous.
+
+    #[tokio::test]
+    async fn prompt_extension_returns_fast_connect() {
+        let notify = Arc::new(Notify::new());
+        let r = connect_with_prompt_extension(
+            async { 42 },
+            notify,
+            Duration::from_secs(5),
+            Duration::from_secs(300),
+        )
+        .await;
+        assert_eq!(r, Ok(42));
+    }
+
+    #[tokio::test]
+    async fn prompt_extension_times_out_without_prompt_signal() {
+        // A handshake that never reaches the host-key stage must still fail fast
+        // at the short network timeout.
+        let notify = Arc::new(Notify::new());
+        let r: Result<i32, ()> = connect_with_prompt_extension(
+            std::future::pending::<i32>(),
+            notify,
+            Duration::from_millis(50),
+            Duration::from_secs(300),
+        )
+        .await;
+        assert_eq!(r, Err(()));
+    }
+
+    #[tokio::test]
+    async fn prompt_extension_survives_prompt_longer_than_network_timeout() {
+        // The connect signals "prompt started" immediately, then finishes at
+        // ~200ms — well past the 50ms network timeout. Because the signal extends
+        // the deadline to 10s, the connect completes instead of timing out.
+        let notify = Arc::new(Notify::new());
+        let signal = notify.clone();
+        let fut = async move {
+            signal.notify_one();
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            7
+        };
+        let r = connect_with_prompt_extension(
+            fut,
+            notify,
+            Duration::from_millis(50),
+            Duration::from_secs(10),
+        )
+        .await;
+        assert_eq!(r, Ok(7));
+    }
 
     fn entry(name: &str, enabled: bool) -> AlgorithmEntry {
         AlgorithmEntry {

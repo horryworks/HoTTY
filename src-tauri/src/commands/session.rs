@@ -53,7 +53,14 @@ pub struct SessionMeta {
     pub host: String,
 }
 
-pub type SessionMap = Arc<Mutex<HashMap<String, (Box<dyn SessionService>, SessionMeta)>>>;
+/// One live session, wrapped in its own `Arc<Mutex<..>>`. Commands clone this
+/// handle out of the map, release the map lock, and only THEN `.await` on the
+/// session's `write`/`resize`/`disconnect`. Holding the map lock across those
+/// awaits would let a single wedged connection (a peer that stopped reading, so
+/// `write()` blocks on a full writer channel) stall *every* session command
+/// process-wide — the app-freeze bug this indirection prevents.
+pub type SharedSession = Arc<Mutex<Box<dyn SessionService>>>;
+pub type SessionMap = Arc<Mutex<HashMap<String, (SharedSession, SessionMeta)>>>;
 
 pub struct SessionState {
     pub sessions: SessionMap,
@@ -248,7 +255,7 @@ pub async fn connect_session(
         let _ = service.disconnect().await;
         return Err(format!("session {session_id} already exists"));
     }
-    map.insert(session_id, (service, meta));
+    map.insert(session_id, (Arc::new(Mutex::new(service)), meta));
     Ok(())
 }
 
@@ -295,9 +302,18 @@ pub async fn disconnect_session(
 ) -> Result<(), String> {
     log_manager.stop_logging(&session_id).await;
     owners.remove(&session_id);
-    let mut map = state.sessions.lock().await;
-    match map.remove(&session_id) {
-        Some((mut s, _meta)) => s.disconnect().await.map_err(|e| e.to_string()),
+    // Remove from the map under the lock, then release the map lock BEFORE
+    // awaiting disconnect() — a slow teardown drain must not block every other
+    // session command for its duration.
+    let shared = {
+        let mut map = state.sessions.lock().await;
+        map.remove(&session_id)
+    };
+    match shared {
+        Some((s, _meta)) => {
+            let mut s = s.lock().await;
+            s.disconnect().await.map_err(|e| e.to_string())
+        }
         None => Err(SessionError::NotFound.to_string()),
     }
 }
@@ -308,10 +324,16 @@ pub async fn send_input(
     session_id: String,
     data: String,
 ) -> Result<(), String> {
-    let mut map = state.sessions.lock().await;
-    let (s, _meta) = map
-        .get_mut(&session_id)
-        .ok_or_else(|| SessionError::NotFound.to_string())?;
+    // Clone the per-session handle out under the map lock, then drop the map lock
+    // before awaiting write(): if this session's peer stopped reading, write()
+    // can block on a full writer channel — holding the map lock across it would
+    // freeze send_input/resize/disconnect for ALL sessions, not just this one.
+    let shared = {
+        let map = state.sessions.lock().await;
+        map.get(&session_id).map(|(s, _)| s.clone())
+    };
+    let shared = shared.ok_or_else(|| SessionError::NotFound.to_string())?;
+    let mut s = shared.lock().await;
     s.write(data.as_bytes()).await.map_err(|e| e.to_string())
 }
 
@@ -322,10 +344,12 @@ pub async fn term_resize(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    let mut map = state.sessions.lock().await;
-    let (s, _meta) = map
-        .get_mut(&session_id)
-        .ok_or_else(|| SessionError::NotFound.to_string())?;
+    let shared = {
+        let map = state.sessions.lock().await;
+        map.get(&session_id).map(|(s, _)| s.clone())
+    };
+    let shared = shared.ok_or_else(|| SessionError::NotFound.to_string())?;
+    let mut s = shared.lock().await;
     s.resize(cols, rows).await.map_err(|e| e.to_string())
 }
 
@@ -336,22 +360,25 @@ pub async fn update_session_logging(
     logging_enabled: bool,
     logging_path: String,
 ) -> Result<(), String> {
-    let map = state.sessions.lock().await;
-    for (session_id, (_service, meta)) in map.iter() {
+    // Snapshot the (id, protocol, host) triples under the lock, then release it
+    // before the per-session log_manager awaits — don't hold the session map
+    // lock across file I/O.
+    let snapshot: Vec<(String, &'static str, String)> = {
+        let map = state.sessions.lock().await;
+        map.iter()
+            .map(|(id, (_s, meta))| (id.clone(), meta.protocol.as_str(), meta.host.clone()))
+            .collect()
+    };
+    for (session_id, protocol, host) in snapshot {
         if logging_enabled && !logging_path.is_empty() {
             if let Err(e) = log_manager
-                .start_logging(
-                    session_id,
-                    Path::new(&logging_path),
-                    meta.protocol.as_str(),
-                    &meta.host,
-                )
+                .start_logging(&session_id, Path::new(&logging_path), protocol, &host)
                 .await
             {
                 log::warn!("failed to start logging for {session_id}: {e}");
             }
         } else {
-            log_manager.stop_logging(session_id).await;
+            log_manager.stop_logging(&session_id).await;
         }
     }
     Ok(())

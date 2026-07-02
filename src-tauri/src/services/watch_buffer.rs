@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -9,7 +9,10 @@ use regex_lite::Regex;
 const DEFAULT_LIMIT: usize = 500_000;
 
 struct BufEntry {
-    watching: bool,
+    /// Window labels currently watching this session. Ref-counted so a second
+    /// window linking the same session doesn't reset the first window's buffer,
+    /// and the entry survives until the LAST watcher leaves.
+    watchers: HashSet<String>,
     buf: String,
     limit: usize,
 }
@@ -35,27 +38,41 @@ impl WatchBufferState {
         }
     }
 
-    /// Enable/disable capture for a session. Enabling (re)starts with an empty
-    /// buffer so the AI sees only output produced after Watch was pressed.
-    pub fn set_watching(&self, session_id: &str, watching: bool, limit: usize) {
+    /// Add/remove `watcher` (a window label) as a watcher of `session_id`.
+    ///
+    /// The FIRST watcher of a session starts a fresh buffer; a later watcher
+    /// joins the SAME buffer (it is not reset — that would wipe an in-flight
+    /// capture another window depends on). The entry is dropped only when the
+    /// LAST watcher leaves. Use `clear` for an intentional reset on (re)link.
+    pub fn set_watching(&self, session_id: &str, watcher: &str, watching: bool, limit: usize) {
         let mut map = self.inner.lock().unwrap();
         if watching {
             let limit = if limit == 0 { DEFAULT_LIMIT } else { limit };
-            let existed = map
-                .insert(
-                    session_id.to_string(),
-                    BufEntry {
-                        watching: true,
-                        buf: String::new(),
-                        limit,
-                    },
-                )
-                .is_some();
-            if !existed {
-                self.watching_count.fetch_add(1, Ordering::Relaxed);
+            match map.get_mut(session_id) {
+                Some(entry) => {
+                    entry.watchers.insert(watcher.to_string());
+                    entry.limit = limit;
+                }
+                None => {
+                    let mut watchers = HashSet::new();
+                    watchers.insert(watcher.to_string());
+                    map.insert(
+                        session_id.to_string(),
+                        BufEntry {
+                            watchers,
+                            buf: String::new(),
+                            limit,
+                        },
+                    );
+                    self.watching_count.fetch_add(1, Ordering::Relaxed);
+                }
             }
-        } else if map.remove(session_id).is_some() {
-            self.watching_count.fetch_sub(1, Ordering::Relaxed);
+        } else if let Some(entry) = map.get_mut(session_id) {
+            entry.watchers.remove(watcher);
+            if entry.watchers.is_empty() {
+                map.remove(session_id);
+                self.watching_count.fetch_sub(1, Ordering::Relaxed);
+            }
         }
     }
 
@@ -71,9 +88,6 @@ impl WatchBufferState {
         let Some(entry) = map.get_mut(session_id) else {
             return;
         };
-        if !entry.watching {
-            return;
-        }
         entry.buf.push_str(&strip_ansi(text));
         if entry.buf.len() > entry.limit {
             // Keep the most recent `limit` bytes; advance to a char boundary so
@@ -112,9 +126,33 @@ impl WatchBufferState {
         }
     }
 
-    /// Drop a session's entry entirely (cleanup on disconnect / window close).
+    /// Drop a session's entry entirely (cleanup on disconnect / window close of
+    /// the OWNING window — the session no longer exists, so drop regardless of
+    /// how many windows were watching it).
     pub fn remove(&self, session_id: &str) {
         if self.inner.lock().unwrap().remove(session_id).is_some() {
+            self.watching_count.fetch_sub(1, Ordering::Relaxed);
+        }
+    }
+
+    /// Drop `watcher` from every session it watches; remove any entry left with
+    /// no watchers. Called when a window closes so watches it held on OTHER
+    /// windows' sessions don't leak (which would keep the hot `append` path
+    /// engaged for every session, and buffer forever for a reader that's gone).
+    pub fn remove_watcher_for_window(&self, watcher: &str) {
+        let mut map = self.inner.lock().unwrap();
+        let emptied: Vec<String> = map
+            .iter_mut()
+            .filter_map(|(sid, entry)| {
+                if entry.watchers.remove(watcher) && entry.watchers.is_empty() {
+                    Some(sid.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        for sid in emptied {
+            map.remove(&sid);
             self.watching_count.fetch_sub(1, Ordering::Relaxed);
         }
     }
@@ -162,7 +200,7 @@ mod tests {
         s.append("sid", "ignored"); // not watching -> dropped
         assert_eq!(s.take("sid"), "");
 
-        s.set_watching("sid", true, 100);
+        s.set_watching("sid", "win", true, 100);
         s.append("sid", "\u{1b}[32mok\u{1b}[0m\n");
         assert_eq!(s.take("sid"), "ok\n");
         // take cleared it
@@ -170,29 +208,56 @@ mod tests {
     }
 
     #[test]
-    fn set_watching_false_removes_entry() {
+    fn last_watcher_leaving_removes_entry() {
         let s = WatchBufferState::new();
-        s.set_watching("sid", true, 100);
+        s.set_watching("sid", "win", true, 100);
         s.append("sid", "data");
-        s.set_watching("sid", false, 0);
+        s.set_watching("sid", "win", false, 0);
         s.append("sid", "more"); // entry gone -> dropped
         assert_eq!(s.take("sid"), "");
     }
 
     #[test]
-    fn enabling_watch_resets_buffer() {
+    fn second_watcher_does_not_reset_buffer() {
         let s = WatchBufferState::new();
-        s.set_watching("sid", true, 100);
+        s.set_watching("sid", "win-a", true, 100);
         s.append("sid", "first");
-        s.set_watching("sid", true, 100); // re-enable -> fresh
+        // A second window watching the same session must NOT wipe win-a's capture.
+        s.set_watching("sid", "win-b", true, 100);
         s.append("sid", "second");
-        assert_eq!(s.take("sid"), "second");
+        assert_eq!(s.get("sid"), "firstsecond");
+    }
+
+    #[test]
+    fn entry_persists_until_last_watcher_leaves() {
+        let s = WatchBufferState::new();
+        s.set_watching("sid", "win-a", true, 100);
+        s.set_watching("sid", "win-b", true, 100);
+        s.append("sid", "data");
+        // win-a leaving keeps the entry alive for win-b.
+        s.set_watching("sid", "win-a", false, 0);
+        s.append("sid", "more");
+        assert_eq!(s.get("sid"), "datamore");
+        // last watcher leaving drops it.
+        s.set_watching("sid", "win-b", false, 0);
+        s.append("sid", "gone");
+        assert_eq!(s.take("sid"), "");
+    }
+
+    #[test]
+    fn remove_watcher_for_window_drops_orphaned_entries() {
+        let s = WatchBufferState::new();
+        s.set_watching("sid", "win-a", true, 100);
+        s.append("sid", "x");
+        s.remove_watcher_for_window("win-a");
+        s.append("sid", "y"); // entry gone
+        assert_eq!(s.take("sid"), "");
     }
 
     #[test]
     fn append_trims_from_front_at_limit() {
         let s = WatchBufferState::new();
-        s.set_watching("sid", true, 5);
+        s.set_watching("sid", "win", true, 5);
         s.append("sid", "abcdefgh"); // 8 bytes, limit 5
         assert_eq!(s.take("sid"), "defgh");
     }
@@ -200,7 +265,7 @@ mod tests {
     #[test]
     fn clear_keeps_watching() {
         let s = WatchBufferState::new();
-        s.set_watching("sid", true, 100);
+        s.set_watching("sid", "win", true, 100);
         s.append("sid", "x");
         s.clear("sid");
         s.append("sid", "y");

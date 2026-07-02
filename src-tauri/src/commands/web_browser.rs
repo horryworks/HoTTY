@@ -23,7 +23,15 @@ pub async fn web_browser_create(
 ) -> Result<(), String> {
     let validated = web_browser::validate_browser_url(&url)?;
     let zoom = web_browser::clamp_zoom_percent(zoom);
-    web_browser::create(&app, &state, window.label(), &pane_id, validated, &rect, zoom)
+    web_browser::create(
+        &app,
+        &state,
+        window.label(),
+        &pane_id,
+        validated,
+        &rect,
+        zoom,
+    )
 }
 
 /// Navigate the pane's webview to a new address (validated server-side).

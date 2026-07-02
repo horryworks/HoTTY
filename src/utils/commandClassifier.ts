@@ -27,6 +27,9 @@ const DANGER_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
     { pattern: /`[^`]*`/, reason: 'Contains command substitution (backticks)' },
     { pattern: /(?:^|[^|]);/, reason: 'Contains command chaining (;)' },
     { pattern: /&&/, reason: 'Contains command chaining (&&)' },
+    // A lone `&` (not part of `&&`) backgrounds or chains a second command, e.g.
+    // `ls & poweroff` — the base command `ls` would otherwise classify safe.
+    { pattern: /(?:^|[^&])&(?:[^&]|$)/, reason: 'Contains command chaining/backgrounding (&)' },
     { pattern: /\|\|/, reason: 'Contains command chaining (||)' },
     { pattern: /(?:^|\s)sudo(?:\s|$)/, reason: 'Contains privilege escalation (sudo)' },
     { pattern: /(?:^|\s)su(?:\s|$)/, reason: 'Contains privilege escalation (su)' },
@@ -69,6 +72,28 @@ const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
         { patterns: [/(?:^|\s)(?:-i|--install|-e|--erase|-U|--upgrade)\b/], reason: 'rpm package modification' },
     ],
 };
+
+// ── Runner / interpreter commands ────────────────────────────────────────────
+//
+// Commands that can execute or interpret arbitrary code, or have a documented
+// exec / file-write escape hatch, so a base-command whitelist can't make them
+// "safe" (env <cmd>, awk 'system()', sed …e / w, find -execdir, git -c pager,
+// any shell/interpreter). These never take the whitelist auto-exec fast path —
+// they fall through to the AI verdict (hybrid) or a manual ask (static).
+// Deliberately broad: better to ask/AI-judge once than auto-run a shell.
+const RUNNER_COMMANDS: Set<string> = new Set([
+    // Command runners / wrappers
+    'env', 'xargs', 'nohup', 'setsid', 'stdbuf', 'nice', 'ionice', 'timeout', 'watch', 'time',
+    // Interpreters
+    'awk', 'gawk', 'mawk', 'sed', 'perl', 'python', 'python2', 'python3', 'ruby', 'node',
+    'php', 'lua', 'tclsh', 'expect', 'osascript',
+    // Shells
+    'sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'csh', 'tcsh', 'ash', 'pwsh', 'powershell', 'cmd', 'wsl',
+    // Whitelisted read tools with exec / file-write escapes
+    'find', 'git', 'set',
+    // Editors / pagers that can shell out (`:!cmd`, `!cmd`, `$PAGER`)
+    'vi', 'vim', 'nvim', 'emacs', 'nano', 'ed', 'less', 'more', 'man',
+]);
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -147,6 +172,18 @@ function classifySegment(
 
     const baseLower = baseCommand.toLowerCase();
     const segLower = segment.toLowerCase();
+
+    // Runner / interpreter commands have shell-exec or file-write escape hatches
+    // that a base-command whitelist can't safely gate. Never auto-exec them via
+    // the whitelist — defer to the AI verdict (hybrid) or a manual ask (static).
+    // Checked BEFORE the whitelist so a whitelisted runner (find/git/sed/awk/env)
+    // still can't take the fast path.
+    if (RUNNER_COMMANDS.has(baseLower)) {
+        return {
+            safe: false,
+            reason: `"${baseCommand}" can run arbitrary commands — needs AI/manual review`,
+        };
+    }
 
     // Whitelisted if the base command is a whitelist token …
     if (tokenSet.has(baseLower)) {

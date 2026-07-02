@@ -2,8 +2,16 @@ use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use crate::services::atomic_file::atomic_write;
+
+/// Serializes the read-modify-write in `upsert_known_host` across all windows
+/// (single process). `atomic_write` prevents a torn file but NOT a lost update:
+/// two concurrent upserts would each read the pre-image and the later rename
+/// would silently drop the earlier window's just-recorded key. This lock makes
+/// each upsert atomic end-to-end.
+static UPSERT_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HostKeyCheck {
@@ -32,7 +40,16 @@ pub fn check_known_host(
     let f = File::open(path)?;
     let reader = BufReader::new(f);
     let host_matches: Vec<String> = host_patterns(host, port);
-    let mut mismatch: Option<String> = None;
+    // A same-key-type record with a different key is the classic "host key
+    // changed" case. A record for this host under a *different* key type is just
+    // as security-relevant: an active MITM who cannot forge the recorded key can
+    // offer a key of a type we have no record of — if that were treated as a new
+    // host it would downgrade the alarming "changed" prompt to the benign "new
+    // host" one. Surface both as Mismatch, preferring a same-type record for the
+    // reported `recorded_base64`. (A legitimate key-type rotation therefore shows
+    // the "changed" prompt, which is the safe direction — the user re-verifies.)
+    let mut mismatch_same_type: Option<String> = None;
+    let mut mismatch_other_type: Option<String> = None;
 
     for line in reader.lines() {
         let line = line?;
@@ -52,21 +69,25 @@ pub fn check_known_host(
         if !host_match {
             continue;
         }
-        if ty == key_type && b64 == key_base64 {
-            return Ok(HostKeyCheck::Match);
-        }
-        // Same host, different key — remember first mismatch in case no later match shows up.
-        if ty == key_type && mismatch.is_none() {
-            mismatch = Some(b64.to_string());
+        if ty == key_type {
+            if b64 == key_base64 {
+                return Ok(HostKeyCheck::Match);
+            }
+            // Same host and key type, different key — the classic changed-key case.
+            if mismatch_same_type.is_none() {
+                mismatch_same_type = Some(b64.to_string());
+            }
+        } else if mismatch_other_type.is_none() {
+            // Host is on record, but only under a different key type.
+            mismatch_other_type = Some(b64.to_string());
         }
     }
 
-    if let Some(recorded) = mismatch {
-        Ok(HostKeyCheck::Mismatch {
+    match mismatch_same_type.or(mismatch_other_type) {
+        Some(recorded) => Ok(HostKeyCheck::Mismatch {
             recorded_base64: recorded,
-        })
-    } else {
-        Ok(HostKeyCheck::New)
+        }),
+        None => Ok(HostKeyCheck::New),
     }
 }
 
@@ -84,6 +105,10 @@ pub fn upsert_known_host(
     key_type: &str,
     key_base64: &str,
 ) -> std::io::Result<()> {
+    // Hold the write lock for the entire read→modify→write so a concurrent
+    // upsert from another window can't lose this key (see UPSERT_LOCK).
+    let _guard = UPSERT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -189,6 +214,52 @@ mod tests {
         upsert_known_host(&p, "example.com", 22, "ssh-ed25519", "OLDKEY").unwrap();
         let r = check_known_host(&p, "example.com", 22, "ssh-ed25519", "NEWKEY").unwrap();
         assert!(matches!(r, HostKeyCheck::Mismatch { .. }));
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn different_key_type_for_known_host_is_mismatch_not_new() {
+        // An active MITM offering a key of a type we have no record of must not
+        // be downgraded to the benign "new host" prompt — the host is already
+        // known, just under another key type, so this is a "changed" situation.
+        let p = temp_file();
+        upsert_known_host(&p, "example.com", 22, "ssh-rsa", "RSAKEY").unwrap();
+        let r = check_known_host(&p, "example.com", 22, "ssh-ed25519", "ED25519KEY").unwrap();
+        assert!(
+            matches!(r, HostKeyCheck::Mismatch { .. }),
+            "host known under a different key type must be a mismatch, got {r:?}"
+        );
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn genuinely_unknown_host_is_still_new() {
+        // The downgrade fix must not turn every unknown host into a mismatch:
+        // a host with no record at all is still New.
+        let p = temp_file();
+        upsert_known_host(&p, "known.com", 22, "ssh-ed25519", "KEY").unwrap();
+        let r = check_known_host(&p, "stranger.com", 22, "ssh-ed25519", "KEY2").unwrap();
+        assert_eq!(r, HostKeyCheck::New);
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn same_type_mismatch_is_preferred_over_other_type() {
+        // With both a same-type changed key and an other-type record on file,
+        // the reported recorded key is the same-type one.
+        let p = temp_file();
+        {
+            let mut f = File::create(&p).unwrap();
+            writeln!(f, "example.com ssh-rsa OTHERTYPE").unwrap();
+            writeln!(f, "example.com ssh-ed25519 SAMETYPE_OLD").unwrap();
+        }
+        let r = check_known_host(&p, "example.com", 22, "ssh-ed25519", "SAMETYPE_NEW").unwrap();
+        assert_eq!(
+            r,
+            HostKeyCheck::Mismatch {
+                recorded_base64: "SAMETYPE_OLD".to_string()
+            }
+        );
         let _ = std::fs::remove_file(&p);
     }
 

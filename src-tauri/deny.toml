@@ -28,6 +28,15 @@ ignore = [
   # code path HoTTY uses. `unsound` is below the release-blocking threshold per
   # project policy (see .claude/commands/verify.md). Reviewed 2026-06-23.
   "RUSTSEC-2026-0097",
+  # quick-xml DoS advisories (quadratic dup-attribute scan / unbounded NsReader
+  # namespace allocation). Both reach HoTTY only transitively via Tauri —
+  # quick-xml 0.38 through `plist` (macOS Info.plist / build-time config) and
+  # quick-xml 0.39 through `wayland-scanner` (Linux-only clipboard). Neither
+  # parses untrusted runtime input on HoTTY's Windows target, and both are pinned
+  # by Tauri (can't be bumped directly). Will clear when Tauri bumps quick-xml.
+  # Reviewed 2026-07-02.
+  "RUSTSEC-2026-0194",
+  "RUSTSEC-2026-0195",
 ]
 
 [bans]

@@ -449,7 +449,13 @@ impl SessionService for TelnetSession {
                 if login_state != LoginState::Done {
                     tail.push_str(&text);
                     if tail.len() > 256 {
-                        let cut = tail.len() - 256;
+                        // Advance the cut to a char boundary: `cut` is a byte
+                        // offset, and drain(..cut) panics if it splits a
+                        // multi-byte UTF-8 char (e.g. a multibyte login banner).
+                        let mut cut = tail.len() - 256;
+                        while cut < tail.len() && !tail.is_char_boundary(cut) {
+                            cut += 1;
+                        }
                         tail.drain(..cut);
                     }
                     match login_state {

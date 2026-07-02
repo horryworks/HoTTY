@@ -172,7 +172,7 @@ export const help = {
     star:
       '<0>★ Bookmark this page:</0> While browsing, click the <1>★</1> button in the toolbar to save the current page into a folder you choose.',
     toolbar:
-      '<0>Toolbar:</0> Back, Forward, Reload/Stop, and an address bar. Only <1>http://</1> and <2>https://</2> addresses are allowed; a typed address without a scheme defaults to <3>http://</3>. Text that isn’t a web address is searched on the web.',
+      '<0>Toolbar:</0> Back, Forward, Reload/Stop, and an address bar. Only <1>http://</1> and <2>https://</2> addresses are allowed; a typed address without a scheme defaults to <3>http://</3>. Text that isn’t a web address is searched on the web. A zoom control zooms the page (also with Ctrl + mouse wheel), and you can set a default zoom that new panes start at.',
     passwords:
       '<0>Logins and passwords:</0> The browser keeps your login sessions and can save and autofill passwords, stored in HoTTY’s own encrypted browser profile (separate from your system Edge/Chrome).',
     clearData:

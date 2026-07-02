@@ -7,11 +7,15 @@ use crate::services::watch_buffer::WatchBufferState;
 #[tauri::command]
 pub fn set_watching(
     state: State<WatchBufferState>,
+    window: tauri::WebviewWindow,
     session_id: String,
     watching: bool,
     limit: usize,
 ) {
-    state.set_watching(&session_id, watching, limit);
+    // Key the watch on the CALLING window so two windows watching the same
+    // session are ref-counted (neither resets the other's buffer, and the entry
+    // survives until the last one unwatches).
+    state.set_watching(&session_id, window.label(), watching, limit);
 }
 
 /// Peek a session's watch buffer WITHOUT clearing it (used by the auto-exec poll).

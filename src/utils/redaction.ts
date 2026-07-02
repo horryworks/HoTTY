@@ -27,7 +27,14 @@ const BEARER_HEADER_PATTERN = /\b(Bearer\s+)([A-Za-z0-9._\-+/=]+)/gi;
 
 const REDACTED = '<redacted>';
 
-export function redactSensitive(message: string): string {
+/**
+ * Replace secret-looking values (password/api-key/token/… assignments and
+ * `Bearer …` headers) with `<redacted>`, WITHOUT truncating. Use this on
+ * content that egresses to the third-party AI provider (watched terminal output,
+ * selected text, auto-exec captures) so secrets in scrollback aren't shipped
+ * verbatim. Truncation is deliberately omitted — the AI needs the full context.
+ */
+export function redactSecrets(message: string): string {
   let result = message.replace(
     KEYED_VALUE_PATTERN,
     (_match, prefix: string, dquoted?: string, squoted?: string) => {
@@ -37,7 +44,11 @@ export function redactSensitive(message: string): string {
     },
   );
   result = result.replace(BEARER_HEADER_PATTERN, (_m, prefix: string) => `${prefix}${REDACTED}`);
+  return result;
+}
 
+export function redactSensitive(message: string): string {
+  let result = redactSecrets(message);
   if (result.length > MAX_LOG_MESSAGE_LENGTH) {
     result = `${result.slice(0, MAX_LOG_MESSAGE_LENGTH)}...<truncated>`;
   }

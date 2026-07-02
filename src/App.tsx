@@ -56,6 +56,7 @@ import { totalDirtyEditors } from './utils/dirtyEditors';
 import { evaluateWatchPoll } from './utils/aiCommandWatch';
 import { parseLeadingSleep, clampDelay, syntheticDelayMessage, type SleepDelayParse } from './utils/aiCommandDelay';
 import { sessionBindingKey } from './utils/sessionBindingKey';
+import { redactSecrets } from './utils/redaction';
 import { selectAutoRebinds, type RebindSession, type RebindOrphanTab } from './utils/autoRebind';
 import { decideWatchRouting } from './utils/watchRouting';
 import { notConnectedNote } from './components/AIChatPane/terminalOutputUtils';
@@ -239,6 +240,10 @@ function App() {
   // sessions). Refreshed on a slow interval while an AI Chat pane is open, and
   // on demand when the link picker opens.
   const [crossWindowSessions, setCrossWindowSessions] = useState<SessionInfo[]>([]);
+  // Mirror in a ref so the AI run/sleep guards can consult backend-truth session
+  // liveness at fire time (after an await), not just at render time.
+  const crossWindowSessionsRef = useRef(crossWindowSessions);
+  crossWindowSessionsRef.current = crossWindowSessions;
   const refreshCrossWindowSessions = useCallback(() => {
     if (!IS_TAURI) return;
     tauriService.listAllSessions().then(setCrossWindowSessions).catch(() => {});
@@ -994,7 +999,8 @@ function App() {
               clearInterval(pollInterval);
               intervalSet.delete(pollInterval);
               void tauriService.clearWatchBuffer(targetId);
-              const outputText = `Terminal Output (Command: ${cmd}):\n${newContent.trim()}`;
+              // Redact secrets from the captured output before it egresses to the AI.
+              const outputText = `Terminal Output (Command: ${cmd}):\n${redactSecrets(newContent.trim())}`;
               updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
             } else {
               // 'idle' or 'safety'
@@ -1012,7 +1018,7 @@ function App() {
               const reason = isIdle
                 ? `[no response from device for ${idleSecs} seconds]`
                 : `[command exceeded safety cap of 30 minutes]`;
-              const captured = newContent.trim();
+              const captured = redactSecrets(newContent.trim());
               const outputText = `Terminal Output (Command: ${cmd}):\n${captured}\n${reason}`;
               updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
             }
@@ -1078,13 +1084,18 @@ function App() {
       updateTabById(paneId, originatingTabId, { sleepDelay: null });
 
       // Re-validate the link/connection after the wait (state may have changed).
+      // Accept a live remote session (owned by another window) too — see
+      // onRunCommandImpl for why the local map alone is insufficient cross-window.
       const rec = sessionsRef.current.get(targetId);
+      const isRemoteLive =
+        !rec && crossWindowSessionsRef.current.some((cs) => cs.sessionId === targetId);
+      const isLive = (!!rec && rec.status === 'connected') || isRemoteLive;
       const stillLinked = watchingSessionIdsRef.current.has(targetId);
-      if (!rec || rec.status !== 'connected' || !stillLinked) {
+      if (!isLive || !stillLinked) {
         aiExecLog('warn', 'sleep-delay-target-not-live', {
           cmd: trimCmdForLog(cmd),
           targetId,
-          status: rec?.status ?? 'missing',
+          status: rec?.status ?? (isRemoteLive ? 'remote' : 'missing'),
           stillLinked,
           originatingTabId,
         });
@@ -1119,12 +1130,18 @@ function App() {
     originatingTabId: string,
     paneId: string,
   ) => {
-    // Backend-truth guard: never send to a target that isn't a live,
-    // connected session. The AIChatPane caller already guards on status,
-    // but this defends any other caller and keeps the failure loud
-    // instead of a swallowed no-op.
+    // Backend-truth guard: never send to a target that isn't a live session.
+    // A LOCAL session must be 'connected'. A REMOTE session (owned by another
+    // window, linked via the cross-window picker) is not in this window's
+    // `sessions` map, but `send_input`/the watch buffer are backend-global and
+    // keyed by session id — so allow it when the backend reports it live in
+    // `crossWindowSessions`. Without this, every cross-window AI command was
+    // wrongly refused as "not connected".
     const targetRec = sessions.get(targetId);
-    if (!targetRec || targetRec.status !== 'connected') {
+    const isLocalConnected = !!targetRec && targetRec.status === 'connected';
+    const isRemoteLive =
+      !targetRec && crossWindowSessionsRef.current.some((cs) => cs.sessionId === targetId);
+    if (!isLocalConnected && !isRemoteLive) {
       aiExecLog('warn', 'run-target-not-live', {
         cmd: trimCmdForLog(cmd),
         targetId,

@@ -30,7 +30,7 @@
 //! restricted to http/https/about via `on_navigation` + `validate_browser_url`.
 
 #[cfg(feature = "embedded-webview")]
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 #[cfg(feature = "embedded-webview")]
 use std::sync::Mutex;
 
@@ -92,6 +92,12 @@ pub struct WebBrowserState {
     /// first `create` — see `maybe_start_cookie_sweeper`.
     #[cfg(feature = "embedded-webview")]
     sweeper_started: std::sync::atomic::AtomicBool,
+    /// Pane ids whose `destroy` arrived while `create` was still inside the slow
+    /// `add_child` (so the map was empty and nothing was removed). `create`
+    /// checks this before inserting and, if its pane is tombstoned here, closes
+    /// the just-built webview instead of leaving an unreachable zombie.
+    #[cfg(feature = "embedded-webview")]
+    pending_destroy: Mutex<HashSet<String>>,
 }
 
 impl WebBrowserState {
@@ -164,7 +170,10 @@ fn rect_to_physical(rect: &BrowserRect) -> (PhysicalPosition<i32>, PhysicalSize<
 // non-test builds where the feature is off.
 #[cfg_attr(not(feature = "embedded-webview"), allow(dead_code))]
 fn off_screen_rect() -> (PhysicalPosition<i32>, PhysicalSize<u32>) {
-    (PhysicalPosition::new(-32000, -32000), PhysicalSize::new(1, 1))
+    (
+        PhysicalPosition::new(-32000, -32000),
+        PhysicalSize::new(1, 1),
+    )
 }
 
 /// Supported zoom range (percent) for the embedded browser. Mirrors the UI
@@ -457,6 +466,23 @@ mod enabled {
         // nothing in the map can reach — mirrors `destroy`'s poison handling.
         match state.webviews.lock() {
             Ok(mut map) => {
+                // A destroy for this pane may have raced in while add_child was
+                // running (found the map empty, left a tombstone). Honor it:
+                // close this webview rather than insert a zombie that no pane id
+                // can ever reach again (it would paint over the UI until restart).
+                let superseded = state
+                    .pending_destroy
+                    .lock()
+                    .map(|mut p| p.remove(pane_id))
+                    .unwrap_or(false);
+                if superseded {
+                    drop(map);
+                    let _ = webview.close();
+                    log::info!(
+                        "web-browser: create for pane {pane_id} superseded by a racing destroy"
+                    );
+                    return Ok(());
+                }
                 map.insert(pane_id.to_string(), webview);
             }
             Err(_) => {
@@ -521,23 +547,38 @@ mod enabled {
     fn persist_session_cookies(webview: &tauri::Webview) {
         #[cfg(windows)]
         {
-            use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_2;
             use webview2_com::GetCookiesCompletedHandler;
+            use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_2;
             use windows_core::Interface;
+
+            // Scope persistence to the CURRENT page's URL. `GetCookies(null)`
+            // enumerates cookies for EVERY host in the shared WebView2 profile —
+            // including HoTTY's own app-UI session cookies — and would convert all
+            // of them to 30-day persistent cookies (a privacy regression, and it
+            // exceeds the documented "persist the browsed page's login" intent).
+            // A URI-scoped GetCookies only returns cookies applicable to this page.
+            // Only http/https pages have a persistable site login.
+            let uri = match webview.url() {
+                Ok(u) if matches!(u.scheme(), "http" | "https") => u.to_string(),
+                _ => return,
+            };
 
             // Expiry stamped onto session cookies: now + 30 days, as seconds since
             // the Unix epoch (the unit WebView2's SetExpires expects).
-            let expires =
-                match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
-                    Ok(since_epoch) => since_epoch.as_secs_f64() + 30.0 * 24.0 * 60.0 * 60.0,
-                    Err(_) => return,
-                };
+            let expires = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                Ok(since_epoch) => since_epoch.as_secs_f64() + 30.0 * 24.0 * 60.0 * 60.0,
+                Err(_) => return,
+            };
 
             // SAFETY: COM calls on the WebView2 core, dispatched onto the webview
             // thread by `with_webview`. Every result is ignored — persisting
             // cookies is a best-effort convenience and must never break browsing.
             let _ = webview.with_webview(move |pw| {
                 let controller = pw.controller();
+                // Null-terminated UTF-16 copy of the page URL for the [in] PCWSTR
+                // param. Kept alive until GetCookies returns (WebView2 copies it
+                // synchronously during the call).
+                let uri_wide: Vec<u16> = uri.encode_utf16().chain(std::iter::once(0)).collect();
                 unsafe {
                     if let Ok(core) = controller.CoreWebView2() {
                         if let Ok(core2) = core.cast::<ICoreWebView2_2>() {
@@ -566,8 +607,9 @@ mod enabled {
                                         Ok(())
                                     },
                                 ));
-                                // Null URI → enumerate cookies for all hosts.
-                                let _ = manager.GetCookies(windows_core::PCWSTR::null(), &handler);
+                                // URI-scoped: only cookies applicable to the page.
+                                let _ = manager
+                                    .GetCookies(windows_core::PCWSTR(uri_wide.as_ptr()), &handler);
                             }
                         }
                     }
@@ -627,6 +669,7 @@ mod enabled {
             take_handle(state, pane_id).ok_or_else(|| "no webview for pane".to_string())?;
         #[cfg(windows)]
         {
+            use webview2_com::ClearBrowsingDataCompletedHandler;
             use webview2_com::Microsoft::Web::WebView2::Win32::{
                 ICoreWebView2Profile2, ICoreWebView2_13, COREWEBVIEW2_BROWSING_DATA_KINDS,
                 COREWEBVIEW2_BROWSING_DATA_KINDS_BROWSING_HISTORY,
@@ -641,7 +684,6 @@ mod enabled {
                 COREWEBVIEW2_BROWSING_DATA_KINDS_SERVICE_WORKERS,
                 COREWEBVIEW2_BROWSING_DATA_KINDS_WEB_SQL,
             };
-            use webview2_com::ClearBrowsingDataCompletedHandler;
             use windows_core::Interface;
 
             // Build the bitmask from the user's selection. LOCAL_STORAGE is never
@@ -692,13 +734,13 @@ mod enabled {
                                                 if let Some(state) =
                                                     app_for_reload.try_state::<WebBrowserState>()
                                                 {
-                                                    let handles: Vec<tauri::Webview> =
-                                                        match state.webviews.lock() {
-                                                            Ok(map) => {
-                                                                map.values().cloned().collect()
-                                                            }
-                                                            Err(_) => Vec::new(),
-                                                        };
+                                                    let handles: Vec<tauri::Webview> = match state
+                                                        .webviews
+                                                        .lock()
+                                                    {
+                                                        Ok(map) => map.values().cloned().collect(),
+                                                        Err(_) => Vec::new(),
+                                                    };
                                                     for wv in handles {
                                                         let _ = wv.reload();
                                                     }
@@ -775,9 +817,8 @@ mod enabled {
 
                 // --- Initial zoom (before the pane is shown → no visible jump) ---
                 unsafe {
-                    let _ = controller.SetZoomFactor(super::zoom_percent_to_factor(
-                        initial_zoom_percent,
-                    ));
+                    let _ = controller
+                        .SetZoomFactor(super::zoom_percent_to_factor(initial_zoom_percent));
                 }
 
                 // --- AcceleratorKeyPressed → web-browser-accel ---
@@ -830,16 +871,17 @@ mod enabled {
                 // Token type is inferred from the signature (avoids naming a type
                 // that differs across the windows/webview2-com crate versions).
                 let mut accel_token = Default::default();
-                let _ =
-                    unsafe { controller.add_AcceleratorKeyPressed(&accel_handler, &mut accel_token) };
+                let _ = unsafe {
+                    controller.add_AcceleratorKeyPressed(&accel_handler, &mut accel_token)
+                };
 
                 // --- ZoomFactorChanged → web-browser-zoom-state ---
                 // Re-read the factor from the controller (the event carries no
                 // args) and forward the rounded percentage, so any zoom change —
                 // ours or WebView2's built-in Ctrl+± / Ctrl+wheel — reaches the UI.
                 let controller_for_zoom: ICoreWebView2Controller = controller.clone();
-                let zoom_handler = ZoomFactorChangedEventHandler::create(Box::new(
-                    move |_sender, _args| {
+                let zoom_handler =
+                    ZoomFactorChangedEventHandler::create(Box::new(move |_sender, _args| {
                         unsafe {
                             let mut factor: f64 = 1.0;
                             if controller_for_zoom.ZoomFactor(&mut factor).is_ok() {
@@ -853,18 +895,15 @@ mod enabled {
                             }
                         }
                         Ok(())
-                    },
-                ));
+                    }));
                 let mut zoom_token = Default::default();
-                let _ = unsafe {
-                    controller.add_ZoomFactorChanged(&zoom_handler, &mut zoom_token)
-                };
+                let _ = unsafe { controller.add_ZoomFactorChanged(&zoom_handler, &mut zoom_token) };
 
                 // --- HistoryChanged → web-browser-history-state ---
                 if let Ok(core) = unsafe { controller.CoreWebView2() } {
                     let core_for_emit: ICoreWebView2 = core.clone();
-                    let hist_handler = HistoryChangedEventHandler::create(Box::new(
-                        move |_sender, _args| {
+                    let hist_handler =
+                        HistoryChangedEventHandler::create(Box::new(move |_sender, _args| {
                             // COM getters write through out-params; best-effort.
                             unsafe {
                                 let mut back = Default::default();
@@ -881,8 +920,7 @@ mod enabled {
                                 );
                             }
                             Ok(())
-                        },
-                    ));
+                        }));
                     let mut hist_token = Default::default();
                     let _ = unsafe { core.add_HistoryChanged(&hist_handler, &mut hist_token) };
                 }
@@ -985,7 +1023,9 @@ mod enabled {
         let webview = match take_handle(state, pane_id) {
             Some(w) => w,
             None => {
-                log::warn!("web-browser: set_visible pane={pane_id} visible={visible} — no webview");
+                log::warn!(
+                    "web-browser: set_visible pane={pane_id} visible={visible} — no webview"
+                );
                 return Err("no webview for pane".to_string());
             }
         };
@@ -1015,7 +1055,16 @@ mod enabled {
                 .webviews
                 .lock()
                 .map_err(|_| "state lock poisoned".to_string())?;
-            map.remove(pane_id)
+            let removed = map.remove(pane_id);
+            if removed.is_none() {
+                // Nothing to remove — a create for this pane may be in flight
+                // inside add_child. Leave a tombstone so that create aborts and
+                // closes its webview instead of leaving an unreachable zombie.
+                if let Ok(mut pending) = state.pending_destroy.lock() {
+                    pending.insert(pane_id.to_string());
+                }
+            }
+            removed
         };
         if let Ok(mut map) = state.last_bounds.lock() {
             map.remove(pane_id);
@@ -1080,7 +1129,9 @@ mod tests {
     #[test]
     fn navigation_guard_scheme_allowlist() {
         assert!(is_allowed_navigation(&Url::parse("http://a.test").unwrap()));
-        assert!(is_allowed_navigation(&Url::parse("https://a.test").unwrap()));
+        assert!(is_allowed_navigation(
+            &Url::parse("https://a.test").unwrap()
+        ));
         assert!(is_allowed_navigation(&Url::parse("about:blank").unwrap()));
         assert!(!is_allowed_navigation(
             &Url::parse("file:///etc/passwd").unwrap()
@@ -1144,7 +1195,7 @@ mod tests {
         assert_eq!(zoom_factor_to_percent(0.5), 50);
         assert_eq!(zoom_factor_to_percent(1.259), 126); // rounds up
         assert_eq!(zoom_factor_to_percent(1.251), 125); // rounds down
-        // Degenerate factors collapse to the minimum rather than panicking.
+                                                        // Degenerate factors collapse to the minimum rather than panicking.
         assert_eq!(zoom_factor_to_percent(0.0), MIN_ZOOM_PERCENT);
         assert_eq!(zoom_factor_to_percent(-1.0), MIN_ZOOM_PERCENT);
         assert_eq!(zoom_factor_to_percent(f64::NAN), MIN_ZOOM_PERCENT);

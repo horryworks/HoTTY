@@ -1,5 +1,33 @@
 # Release Notes
 
+## v2.0.8-beta5
+
+This beta is a broad **stability and security hardening** pass — with fixes across multi-window support, SSH host-key handling, and AI auto-execution — and adds a **page zoom** control to the Web Browser.
+
+### New Features
+
+- **Web Browser page zoom.** The Web Browser toolbar has a new zoom control: zoom the current page in and out (also with **Ctrl + mouse wheel** and **Ctrl + +/−/0**), set a default zoom that new panes start at, and make the current zoom the default. Each pane keeps its own zoom for the session. The toolbar has also been decluttered.
+
+### Bug Fixes
+
+- **Running an AI command against a terminal in another window now works.** With the AI Chat linked to a session owned by a different window, executing a command previously failed with "[not connected]"; cross-window execution now works, as intended for cross-window links.
+- **Settings now sync live between windows.** Changing a setting (theme, font size, and so on) in one window updates every other open window immediately, and simultaneous edits to different settings in different windows no longer overwrite each other.
+- **One stuck connection no longer freezes everything.** A single unresponsive SSH/Telnet peer could block typing, resizing and opening or closing across all sessions and windows; each session is now isolated, so only the affected one waits.
+- **Idle local and WSL sessions are fully cleaned up on close.** Closing a local shell or WSL session that was sitting idle previously left its underlying process and reader threads running; they are now terminated on disconnect.
+- **Two windows can watch the same terminal for AI independently.** Watching one session from two windows no longer lets one window wipe or steal the other's captured output; capture stops only when the last watching window stops.
+- **Web Browser: no more stray view after a fast close.** Closing a Web Browser tab immediately after opening it could leave a native browser view painted over the UI until restart; this race is fixed.
+- **Multi-window: correct window targeting.** In a secondary window, the AI "bring window to front" action and the terminal right-click menu no longer target the main window, and the GCP IAP "start VM?" prompt now appears only in the window that owns the session instead of in every window.
+- **Telnet: robust to non-ASCII login banners.** A telnet server that sent a long multi-byte (for example non-ASCII) banner before the login prompt could crash the connection's reader; fixed.
+- **Host-key and config files are saved crash-safely.** A rare failure while replacing `known_hosts` or a config file can no longer leave it empty or truncated — the previous contents are kept until the new file is safely in place — and accepting a new host key in two windows at the same time no longer risks dropping one of them.
+
+### Security
+
+- **AI auto-execute no longer fast-tracks interpreter or "runner" commands.** In *auto-execute-safe* mode, commands that can run arbitrary code or have an exec/file-write escape hatch — `env`, `awk`, `sed`, `find`, `git`, shells and similar — are no longer auto-run via the whitelist; they are deferred to the AI's read-only verdict or a manual confirmation. A bare `&` command separator is now treated as command chaining. This closes ways a destructive command could slip through the auto-execute safety check.
+- **Terminal output sent to the AI is redacted for secrets.** Watched terminal output, selected text and auto-execution results now have passwords, API keys, tokens and `Bearer` headers redacted before they are sent to your AI provider.
+- **An SSH host-key change is no longer downgraded to a "new host" prompt.** If a known host presents a key of a different type than the one on record, HoTTY now shows the "host key changed — possible MITM" warning instead of the milder "new host" prompt, closing a downgrade an attacker could exploit.
+- **The SSH host-key prompt is no longer cancelled by the connection timeout.** The host-key confirmation (including the "HOST KEY CHANGED" warning) was previously killed by the short connect timeout (default 5 seconds) before you could read the fingerprint — failing the connection and orphaning the prompt. The network handshake still fails fast, but the prompt now stays open for your decision.
+- **Web Browser session-cookie persistence is scoped to the page you're viewing.** Keeping a site's session login signed in no longer re-stamps every cookie in the shared browser profile (including HoTTY's own) as long-lived — only cookies for the current page are affected.
+
 ## v2.0.8-beta4
 
 This beta adds an **Open All** command to host and bookmark folders, so you can launch everything in a folder in one action.

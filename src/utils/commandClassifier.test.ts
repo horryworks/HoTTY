@@ -11,7 +11,6 @@ describe('classifyCommand', () => {
     expect(classifyCommand('ls -la', wl).safe).toBe(true);
     expect(classifyCommand('show version', wl).safe).toBe(true);
     expect(classifyCommand('ping 8.8.8.8', wl).safe).toBe(true);
-    expect(classifyCommand('git status', wl).safe).toBe(true);
     expect(classifyCommand('display interface', wl).safe).toBe(true);
     expect(classifyCommand('screen-length 0 temporary', wl).safe).toBe(true);
   });
@@ -40,10 +39,43 @@ describe('classifyCommand', () => {
     expect(result.reason).toContain('privilege escalation');
   });
 
-  it('rejects dangerous git subcommands', () => {
-    const result = classifyCommand('git push origin main', wl);
+  it('defers runner/interpreter commands to AI/manual review (no whitelist fast-path)', () => {
+    // git/find/sed/awk/env are whitelisted read tools, but each has a shell-exec
+    // or file-write escape hatch, so they must NOT auto-exec via the whitelist —
+    // they fall through to the AI verdict (hybrid) or a manual ask (static).
+    for (const cmd of [
+      'git status',
+      'git push origin main',
+      'find . -name x',
+      'awk \'{print $1}\' file',
+      'sed s/a/b/ file',
+      'env MYVAR=1 printenv',
+      'xargs echo',
+      'python3 script.py',
+      'bash -c id',
+    ]) {
+      const r = classifyCommand(cmd, wl);
+      expect(r.safe, cmd).toBe(false);
+    }
+  });
+
+  it('blocks classic runner-based classifier bypasses', () => {
+    // The confirmed auto-exec bypass vectors from the audit.
+    expect(classifyCommand('env poweroff', wl).safe).toBe(false);
+    expect(classifyCommand('env sh -c id', wl).safe).toBe(false);
+    expect(classifyCommand("awk 'BEGIN{system(\"id\")}'", wl).safe).toBe(false);
+    expect(classifyCommand('sed --in-place s/a/b/ /etc/passwd', wl).safe).toBe(false);
+    expect(classifyCommand('find . -execdir rm -rf {} +', wl).safe).toBe(false);
+  });
+
+  it('rejects a lone & (backgrounding / chaining)', () => {
+    // `ls` is whitelisted, but `ls & poweroff` must not auto-exec via the base
+    // command — the lone `&` is a structural danger, distinct from `&&`.
+    const result = classifyCommand('ls & poweroff', wl);
     expect(result.safe).toBe(false);
-    expect(result.reason).toContain('git write operation');
+    expect(result.reason).toContain('&');
+    // `&&` still classifies (and is reported as chaining), not as a lone `&`.
+    expect(classifyCommand('ls && rm file', wl).safe).toBe(false);
   });
 
   it('allows piped commands with safe commands', () => {
@@ -83,19 +115,16 @@ describe('classifyCommand', () => {
 
   it('rejects find with -exec', () => {
     // The escaped semicolon matches the chaining pattern first
-    const result1 = classifyCommand('find . -exec rm {} \\;', wl);
-    expect(result1.safe).toBe(false);
-
-    // Without semicolon, -exec flag rule catches it
-    const result2 = classifyCommand('find . -exec rm {} +', wl);
-    expect(result2.safe).toBe(false);
-    expect(result2.reason).toContain('find with -exec');
+    expect(classifyCommand('find . -exec rm {} \\;', wl).safe).toBe(false);
+    // Without a semicolon, `find` is still blocked — it is a runner command, so
+    // it never takes the whitelist fast path regardless of the flag used.
+    expect(classifyCommand('find . -exec rm {} +', wl).safe).toBe(false);
   });
 
-  it('rejects sed with -i', () => {
-    const result = classifyCommand('sed -i s/foo/bar/g file.txt', wl);
-    expect(result.safe).toBe(false);
-    expect(result.reason).toContain('in-place edit');
+  it('rejects sed in-place edits', () => {
+    // `sed` is a runner (it has an `e`/`w` exec/write escape), so any sed invocation
+    // is deferred rather than auto-executed via the whitelist.
+    expect(classifyCommand('sed -i s/foo/bar/g file.txt', wl).safe).toBe(false);
   });
 
   it('rejects command substitution', () => {

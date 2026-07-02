@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, PtySize};
 use serde::Deserialize;
 use std::io::{Read as IoRead, Write as IoWrite};
 use std::sync::Arc;
@@ -85,6 +85,10 @@ pub struct WslSession {
     config: WslConfig,
     encoding: &'static encoding_rs::Encoding,
     writer_tx: Option<mpsc::Sender<WriterCmd>>,
+    /// Kills the child `wsl.exe` on disconnect so the PTY closes and the blocking
+    /// `reader.read()` returns EOF. Without it an idle session leaks its process
+    /// and pinned threads (see disconnect()).
+    killer: Option<Box<dyn ChildKiller + Send + Sync>>,
     join: Vec<JoinHandle<()>>,
 }
 
@@ -95,6 +99,7 @@ impl WslSession {
             config,
             encoding,
             writer_tx: None,
+            killer: None,
             join: Vec::new(),
         }
     }
@@ -143,6 +148,12 @@ impl SessionService for WslSession {
             .slave
             .spawn_command(cmd)
             .map_err(|e| SessionError::ConnectionFailed(format!("failed to spawn wsl.exe: {e}")))?;
+
+        // Grab a killer handle before `child` is moved into the watcher task, so
+        // disconnect() can force-terminate wsl.exe. Killing it closes the PTY,
+        // which unblocks the synchronous `reader.read()` (join_or_abort can only
+        // *detach* — not cancel — a task parked in a blocking syscall).
+        self.killer = Some(child.clone_killer());
 
         drop(pty_pair.slave);
 
@@ -278,6 +289,13 @@ impl SessionService for WslSession {
     }
 
     async fn disconnect(&mut self) -> Result<(), SessionError> {
+        // Kill the child FIRST: this closes the PTY and makes the blocking
+        // reader.read() return EOF and the child watcher's wait() return, so the
+        // tasks below actually finish instead of being detached and leaked (an
+        // idle session produces no output, so the reader never unblocks on its own).
+        if let Some(mut killer) = self.killer.take() {
+            let _ = killer.kill();
+        }
         if let Some(tx) = self.writer_tx.take() {
             let _ = tx.send(WriterCmd::Close).await;
         }
@@ -288,6 +306,11 @@ impl SessionService for WslSession {
 
 impl Drop for WslSession {
     fn drop(&mut self) {
+        // Safety net if disconnect() never ran: still kill the child so it and
+        // its PTY don't outlive the session.
+        if let Some(mut killer) = self.killer.take() {
+            let _ = killer.kill();
+        }
         if self.writer_tx.is_some() {
             log::warn!("WslSession dropped without calling disconnect()");
             abort_all(std::mem::take(&mut self.join));
