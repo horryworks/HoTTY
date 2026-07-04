@@ -199,7 +199,6 @@ export const panes = {
     bookmarksImportInvalid: 'The selected file is not a valid bookmarks file',
     importReplaceTitle: 'Replace bookmarks?',
     importReplaceMessage: 'This replaces all current bookmarks with the imported ones. This cannot be undone.',
-    clearDataTooltip: 'Clear browsing data',
     clearDataTitle: 'Clear browsing data',
     clearDataNote: 'Bookmarks and HoTTY settings are not deleted.',
     clearDataCookies: 'Cookies and site data',

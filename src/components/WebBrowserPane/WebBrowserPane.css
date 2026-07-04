@@ -53,6 +53,17 @@
   color: var(--text-on-accent);
 }
 
+/* Chrome-style nav cluster (back / forward / reload-stop): bare arrow icons
+   with a circular hover highlight instead of boxed buttons. The circle stays
+   round because the button is as wide as the row is tall (align-self: stretch
+   above + aspect-ratio here). */
+.web-browser-nav-btn {
+  background: transparent;
+  border-radius: 50%;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+}
+
 /* ★ button: tint the (filled) star when the current page is bookmarked. */
 .web-browser-star.bookmarked {
   color: var(--accent-color);
@@ -67,33 +78,48 @@
   display: inline-flex;
 }
 
-/* "⋯ More" secondary toolbar row — revealed below the primary row when the ⋯
-   button is toggled. In-flow (matches the toolbar chrome) so it never overlaps
-   the OS-composited native webview; the body shrinks beneath it and stays visible. */
-.web-browser-more-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 6px 10px;
-  background: var(--ai-header-bg);
-  border-bottom: 1px solid var(--border-color);
-  box-sizing: border-box;
-  flex-shrink: 0;
-  animation: fadeIn 0.1s ease-out;
+/* Toolbar controls stretch to the row height so every button matches the
+   address bar (the row's tallest item) instead of hugging its 16px icon.
+   Scoped to the toolbar row — the same button class inside the ⋯ More panel's
+   zoom stepper keeps its natural height. */
+.web-browser-toolbar > .web-browser-toolbar-btn,
+.web-browser-toolbar > .web-browser-bookmark-wrap {
+  align-self: stretch;
 }
 
-/* Zoom stepper: −  [value%]  + */
-.web-browser-zoom {
-  display: inline-flex;
+/* Section cards inside the ⋯ More panel — bound each feature group (mirrors
+   .settings-card) so where one group ends and the next begins is obvious. */
+.web-browser-more-section {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+/* Card heading (mirrors .settings-card > .settings-section-title). */
+.web-browser-more-section-title {
+  padding-left: 6px;
+  border-left: 2px solid var(--accent-color);
+  font-size: calc(var(--font-size-base) - 3px);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* Horizontal −  [value%]  + row within the zoom card. */
+.web-browser-zoom-stepper {
+  display: flex;
   align-items: center;
   gap: 4px;
 }
 
-.web-browser-more-label {
-  font-size: calc(var(--font-size-base) - 2px);
-  color: var(--text-secondary);
-  margin-right: 2px;
+.web-browser-zoom-stepper .web-browser-zoom-value {
+  flex: 1;
 }
 
 /* Clickable % readout — click to reset to the default zoom. */
@@ -117,9 +143,8 @@
 }
 
 /* "Set as default" — persists the current zoom as the default for new panes.
-   Sits just right of the + button; greys out once the current zoom is the default. */
+   Sits below the stepper row; greys out once the current zoom is the default. */
 .web-browser-zoom-preset {
-  margin-left: 6px;
   padding: 3px 8px;
   border: none;
   border-radius: 4px;
@@ -128,7 +153,7 @@
   color: var(--text-primary);
   font-family: var(--ui-font-family);
   font-size: calc(var(--font-size-base) - 2px);
-  white-space: nowrap;
+  white-space: normal;
   transition: background-color 0.1s;
 }
 
@@ -141,17 +166,9 @@
   cursor: not-allowed;
 }
 
-/* Vertical divider between the zoom stepper and the action items. */
-.web-browser-more-sep {
-  width: 1px;
-  align-self: stretch;
-  margin: 2px;
-  background: var(--border-color);
-}
-
-/* Labelled action buttons (Bookmarks, Clear data) in the secondary row. */
+/* Labelled action buttons (Clear data, …) in the ⋯ More panel. */
 .web-browser-more-item {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   padding: 3px 8px;
@@ -162,16 +179,12 @@
   color: var(--text-primary);
   font-family: var(--ui-font-family);
   font-size: calc(var(--font-size-base) - 2px);
+  text-align: left;
   transition: background-color 0.1s;
 }
 
 .web-browser-more-item:hover:not(:disabled) {
   background: var(--btn-secondary-hover-bg);
-}
-
-.web-browser-more-item.active {
-  background: var(--accent-color);
-  color: var(--text-on-accent);
 }
 
 /* Address bar */
@@ -210,7 +223,7 @@
 }
 
 /* Body — the native webview floats over this rect. Kept as a measured slot;
-   shrinks (flex) when the bookmarks panel docks beside it. */
+   shrinks (flex) when the bookmarks or ⋯ More panel docks beside it. */
 .web-browser-body {
   flex: 1;
   min-width: 0;
@@ -226,6 +239,25 @@
 .web-browser-bookmark-panel {
   flex-shrink: 0;
   width: 300px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-color);
+  animation: fadeIn 0.1s ease-out;
+}
+
+/* "⋯ More" panel — docks to the right of the page, directly below the ⋯ button,
+   mirroring .web-browser-bookmark-panel (same dock-beside-the-page rationale:
+   the native webview composites above HTML, so the menu cannot float over it).
+   Items stack vertically at the top; the rest is panel background. */
+.web-browser-more-panel {
+  flex-shrink: 0;
+  width: 210px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px;
   overflow-x: hidden;
   overflow-y: auto;
   background: var(--bg-secondary);

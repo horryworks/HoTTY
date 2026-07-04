@@ -197,7 +197,6 @@ export const panes = {
     bookmarksImportInvalid: '選択したファイルは有効なブックマークファイルではありません',
     importReplaceTitle: 'ブックマークを置き換えますか？',
     importReplaceMessage: '現在のすべてのブックマークがインポートした内容に置き換えられます。元に戻せません。',
-    clearDataTooltip: '閲覧データを削除',
     clearDataTitle: '閲覧データの削除',
     clearDataNote: 'ブックマークと HoTTY の設定は削除されません。',
     clearDataCookies: 'Cookie とサイトデータ',

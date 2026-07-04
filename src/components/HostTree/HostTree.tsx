@@ -36,7 +36,7 @@ interface HostTreeProps {
     onEditNode: (id: string, patch: Partial<HostTreeNode>) => void;
     onDeleteNode: (id: string) => void;
     onMoveNode?: (nodeId: string, targetId: string, position: 'before' | 'after' | 'inside') => void;
-    onSortFolder?: (folderId: string | null) => void;
+    onSortFolder?: (folderId: string | null, direction?: 'asc' | 'desc') => void;
     onImportData?: (nodes: HostTreeNode[], folderName: string, parentId: string | null) => Promise<string | undefined> | void;
     onShowMessage?: (type: 'error' | 'success' | 'info', title: string | undefined, message: string) => void;
 }
@@ -713,19 +713,34 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                 </button>
                             )}
                             {contextMenu.node.type === 'folder' && onSortFolder && (
-                                <button
-                                    onClick={() => {
-                                        onSortFolder(contextMenu.node?.id ?? null);
-                                        setContextMenu(null);
-                                    }}
-                                >
-                                    <span className="menu-icon-wrapper">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-host)' }}>
-                                            <path d="M18 15l-6-6-6 6"></path>
-                                        </svg>
-                                    </span>
-                                    {t('hostTree.contextMenu.sortAscending')}
-                                </button>
+                                <>
+                                    <button
+                                        onClick={() => {
+                                            onSortFolder(contextMenu.node?.id ?? null);
+                                            setContextMenu(null);
+                                        }}
+                                    >
+                                        <span className="menu-icon-wrapper">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-host)' }}>
+                                                <path d="M18 15l-6-6-6 6"></path>
+                                            </svg>
+                                        </span>
+                                        {t('hostTree.contextMenu.sortAscending')}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            onSortFolder(contextMenu.node?.id ?? null, 'desc');
+                                            setContextMenu(null);
+                                        }}
+                                    >
+                                        <span className="menu-icon-wrapper">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-host)' }}>
+                                                <path d="M6 9l6 6 6-6"></path>
+                                            </svg>
+                                        </span>
+                                        {t('hostTree.contextMenu.sortDescending')}
+                                    </button>
+                                </>
                             )}
                             <button
                                 className="danger"

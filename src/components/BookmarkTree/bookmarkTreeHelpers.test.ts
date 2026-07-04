@@ -113,6 +113,17 @@ describe('bookmarkTreeHelpers', () => {
     expect(sorted.map((n) => n.name)).toEqual(['Banana', 'Mango', 'Apple', 'Zebra']);
   });
 
+  it('sortFolder desc reverses the name order but keeps folders first', () => {
+    const tree: BookmarkNode[] = [
+      bm('z', 'Zebra', 'http://z'),
+      folder('m', 'Mango'),
+      bm('a', 'Apple', 'http://a'),
+      folder('b', 'Banana'),
+    ];
+    const sorted = sortFolder(tree, null, 'desc');
+    expect(sorted.map((n) => n.name)).toEqual(['Mango', 'Banana', 'Zebra', 'Apple']);
+  });
+
   it('flattenFolders returns only folders with depth', () => {
     const tree = [folder('f1', 'A', [folder('f2', 'B'), bm('b1', 'x', 'http://x')])];
     expect(flattenFolders(tree)).toEqual([

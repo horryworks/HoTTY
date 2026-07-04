@@ -203,7 +203,6 @@ export const panes = {
     bookmarksImportInvalid: 'Выбранный файл не является допустимым файлом закладок',
     importReplaceTitle: 'Заменить закладки?',
     importReplaceMessage: 'Все текущие закладки будут заменены импортированными. Это действие нельзя отменить.',
-    clearDataTooltip: 'Очистить данные браузера',
     clearDataTitle: 'Очистить данные браузера',
     clearDataNote: 'Закладки и настройки HoTTY не удаляются.',
     clearDataCookies: 'Файлы cookie и данные сайтов',

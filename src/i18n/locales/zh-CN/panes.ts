@@ -199,7 +199,6 @@ export const panes = {
     bookmarksImportInvalid: '所选文件不是有效的书签文件',
     importReplaceTitle: '替换书签？',
     importReplaceMessage: '这将用导入的书签替换当前所有书签，此操作无法撤销。',
-    clearDataTooltip: '清除浏览数据',
     clearDataTitle: '清除浏览数据',
     clearDataNote: '不会删除书签和 HoTTY 设置。',
     clearDataCookies: 'Cookie 和网站数据',

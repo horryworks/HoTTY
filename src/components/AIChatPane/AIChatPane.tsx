@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useTranslation, Trans } from 'react-i18next';
 import { marked } from 'marked';
 import { getTransparentColor } from '../../utils/colorUtils';
-import { sanitizeHtml } from '../../utils/htmlUtils';
+import { sanitizeHtml, externalLinkFromClick } from '../../utils/htmlUtils';
 import { decideAutoExec, type AutoExecDecision } from '../../utils/aiCommandClassifier';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { calcAICost, formatAICost } from '../../constants/aiPricing';
@@ -229,6 +229,16 @@ const MessageContent: React.FC<{
                     <div
                         key={part.key}
                         className="ai-chat-markdown-inline"
+                        onClick={(e) => {
+                            // AI-authored links are untrusted; never let them
+                            // navigate this privileged window in place. Route
+                            // external links through the vetted opener instead.
+                            const url = externalLinkFromClick(e.target);
+                            if (url) {
+                                e.preventDefault();
+                                void tauriService.openExternal(url).catch(() => {});
+                            }
+                        }}
                         dangerouslySetInnerHTML={{ __html: sanitizeHtml(marked.parse(part.text, { async: false }) as string) }}
                     />
                 );

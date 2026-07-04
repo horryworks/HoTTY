@@ -423,19 +423,49 @@ export const BookmarkTree: React.FC<BookmarkTreeProps> = ({ onOpenBookmark, onNe
           style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
+          {contextMenu.node?.type === 'folder' &&
+            onOpenAll &&
+            flattenBookmarks(contextMenu.node.children ?? []).length > 0 && (
+              <>
+                <button onClick={() => handleOpenAllClick(contextMenu.node!)}>
+                  <span className="menu-icon-wrapper">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-color)' }}>
+                      <polyline points="13 17 18 12 13 7"></polyline>
+                      <polyline points="6 17 11 12 6 7"></polyline>
+                    </svg>
+                  </span>
+                  {t('sessionDialog.bookmarks.openAll')}
+                </button>
+                <div className="context-menu-separator" />
+              </>
+            )}
           {contextMenu.node?.type !== 'bookmark' && (
             <>
               <button onClick={() => openAddFolder(contextMenu.node?.id ?? null)}>
+                <span className="menu-icon-wrapper">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-folder)' }}>
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    <line x1="12" y1="11" x2="12" y2="17"></line>
+                    <line x1="9" y1="14" x2="15" y2="14"></line>
+                  </svg>
+                </span>
                 {t('sessionDialog.bookmarks.addFolder')}
               </button>
               <button onClick={() => openAddBookmark(contextMenu.node?.id ?? null)}>
+                <span className="menu-icon-wrapper">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-host)' }}>
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="2" y1="12" x2="22" y2="12" />
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                  </svg>
+                </span>
                 {t('sessionDialog.bookmarks.addBookmark')}
               </button>
             </>
           )}
           {contextMenu.node && (
             <>
-              <div className="context-menu-separator" />
+              {contextMenu.node.type === 'folder' && <div className="context-menu-separator" />}
               <button
                 onClick={() => {
                   setEditingNodeId(contextMenu.node!.id);
@@ -443,6 +473,11 @@ export const BookmarkTree: React.FC<BookmarkTreeProps> = ({ onOpenBookmark, onNe
                   setContextMenu(null);
                 }}
               >
+                <span className="menu-icon-wrapper">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-warning)' }}>
+                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                  </svg>
+                </span>
                 {t('sessionDialog.bookmarks.rename')}
               </button>
               {contextMenu.node.type === 'bookmark' && (
@@ -455,25 +490,44 @@ export const BookmarkTree: React.FC<BookmarkTreeProps> = ({ onOpenBookmark, onNe
                     setContextMenu(null);
                   }}
                 >
+                  <span className="menu-icon-wrapper">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-host)' }}>
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                  </span>
                   {t('sessionDialog.bookmarks.edit')}
                 </button>
               )}
-              {contextMenu.node.type === 'folder' &&
-                onOpenAll &&
-                flattenBookmarks(contextMenu.node.children ?? []).length > 0 && (
-                  <button onClick={() => handleOpenAllClick(contextMenu.node!)}>
-                    {t('sessionDialog.bookmarks.openAll')}
-                  </button>
-                )}
               {contextMenu.node.type === 'folder' && (
-                <button
-                  onClick={() => {
-                    sortFolder(contextMenu.node?.id ?? null);
-                    setContextMenu(null);
-                  }}
-                >
-                  {t('sessionDialog.bookmarks.sortAscending')}
-                </button>
+                <>
+                  <button
+                    onClick={() => {
+                      sortFolder(contextMenu.node?.id ?? null);
+                      setContextMenu(null);
+                    }}
+                  >
+                    <span className="menu-icon-wrapper">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-host)' }}>
+                        <path d="M18 15l-6-6-6 6"></path>
+                      </svg>
+                    </span>
+                    {t('sessionDialog.bookmarks.sortAscending')}
+                  </button>
+                  <button
+                    onClick={() => {
+                      sortFolder(contextMenu.node?.id ?? null, 'desc');
+                      setContextMenu(null);
+                    }}
+                  >
+                    <span className="menu-icon-wrapper">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-host)' }}>
+                        <path d="M6 9l6 6 6-6"></path>
+                      </svg>
+                    </span>
+                    {t('sessionDialog.bookmarks.sortDescending')}
+                  </button>
+                </>
               )}
               <button
                 className="danger"
@@ -482,6 +536,14 @@ export const BookmarkTree: React.FC<BookmarkTreeProps> = ({ onOpenBookmark, onNe
                   setContextMenu(null);
                 }}
               >
+                <span className="menu-icon-wrapper">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-danger)' }}>
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                  </svg>
+                </span>
                 {t('common.delete')}
               </button>
             </>

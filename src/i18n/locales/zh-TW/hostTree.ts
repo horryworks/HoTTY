@@ -18,6 +18,7 @@ export const hostTree = {
     export: '匯出',
     import: '匯入',
     sortAscending: '遞增排序',
+    sortDescending: '遞減排序',
   },
   openAll: {
     confirmTitle: '開啟所有主機',

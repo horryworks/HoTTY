@@ -19,6 +19,7 @@ export const hostTree = {
     export: '내보내기',
     import: '가져오기',
     sortAscending: '오름차순 정렬',
+    sortDescending: '내림차순 정렬',
   },
   openAll: {
     confirmTitle: '모든 호스트 열기',

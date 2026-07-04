@@ -107,7 +107,7 @@
 
 .ssh-host-key-btn-danger {
   background: var(--btn-danger-bg);
-  color: var(--text-on-accent);
+  color: var(--text-primary);
 }
 
 .ssh-host-key-btn-danger:hover:not(:disabled) {

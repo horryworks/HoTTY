@@ -140,6 +140,13 @@ export interface WebBrowserZoomState {
   zoom: number;
 }
 
+/** Pushed when the native webview gains focus (WebView2 GotFocus) — i.e. the
+ *  user clicked or tabbed into the page. Page clicks never reach the DOM, so
+ *  this is the renderer's only signal to move pane focus to the browser pane. */
+export interface WebBrowserFocus {
+  paneId: string;
+}
+
 export interface SshHostKeyPromptPayload {
   sessionId: string;
   host: string;
@@ -497,8 +504,6 @@ export interface UpdateInfo {
   notes: string;
   isNewer: boolean;
 }
-
-export type AIAuthType = 'oauth2' | 'service_account' | 'api_key' | 'adc';
 
 export interface AIAuthStatus {
   authenticated: boolean;

@@ -156,6 +156,29 @@ describe('BookmarkMenu editing', () => {
     expect(children.map((c) => c.id)).toEqual(['a', 'z']);
   });
 
+  it('sorts a folder descending via the right-click menu', () => {
+    useBookmarkStore.setState({
+      tree: [
+        {
+          id: 'f1',
+          type: 'folder',
+          name: 'Folder',
+          children: [
+            { id: 'a', type: 'bookmark', name: 'Alpha', url: 'http://a.test/' },
+            { id: 'z', type: 'bookmark', name: 'Zeta', url: 'http://z.test/' },
+          ],
+        },
+      ],
+    });
+    render(<Harness />);
+
+    fireEvent.contextMenu(screen.getByText('Folder'));
+    fireEvent.click(screen.getByText('Sort Descending'));
+
+    const children = useBookmarkStore.getState().tree[0].children as BookmarkNode[];
+    expect(children.map((c) => c.id)).toEqual(['z', 'a']);
+  });
+
   it('reorders root bookmarks by drag and drop', () => {
     useBookmarkStore.setState({
       tree: [
@@ -208,6 +231,13 @@ describe('BookmarkMenu open all', () => {
     fireEvent.contextMenu(screen.getByText('Network'));
     fireEvent.click(screen.getByText('Open All'));
     expect(onOpenAll).toHaveBeenCalledWith(expect.objectContaining({ id: 'f-net' }));
+  });
+
+  it('shows "Open All" as the first item of the folder context menu', () => {
+    const { container } = render(<BookmarkMenu tree={tree} onSelect={vi.fn()} onOpenAll={vi.fn()} />);
+    fireEvent.contextMenu(screen.getByText('Network'));
+    const buttons = container.querySelectorAll('.context-menu button');
+    expect(buttons[0].textContent).toBe('Open All');
   });
 
   it('does not show "Open All" for a bookmark', () => {

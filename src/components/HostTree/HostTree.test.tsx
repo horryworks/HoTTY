@@ -107,10 +107,19 @@ describe('HostTree', () => {
     expect(screen.getByText('Rename (F2)')).toBeTruthy();
   });
 
-  it('shows sort option for folder context menu', () => {
+  it('shows sort options for folder context menu', () => {
     render(<HostTree {...defaultProps} />);
     fireEvent.contextMenu(screen.getByText('Production'));
     expect(screen.getByText('Sort Ascending')).toBeTruthy();
+    expect(screen.getByText('Sort Descending')).toBeTruthy();
+  });
+
+  it('calls onSortFolder with "desc" when Sort Descending is clicked', () => {
+    const onSortFolder = vi.fn();
+    render(<HostTree {...defaultProps} onSortFolder={onSortFolder} />);
+    fireEvent.contextMenu(screen.getByText('Production'));
+    fireEvent.click(screen.getByText('Sort Descending'));
+    expect(onSortFolder).toHaveBeenCalledWith('folder-1', 'desc');
   });
 
   it('highlights selected node', () => {

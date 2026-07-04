@@ -20,6 +20,7 @@ export const sessionDialog = {
     rename: '이름 바꾸기',
     edit: '편집…',
     sortAscending: '오름차순 정렬',
+    sortDescending: '내림차순 정렬',
     empty: '아직 북마크가 없습니다. 도구 모음에서 폴더나 북마크를 추가하세요.',
     addFolderTitle: '폴더 추가',
     renameFolderTitle: '폴더 이름 바꾸기',

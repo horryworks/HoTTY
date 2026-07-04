@@ -197,7 +197,6 @@ export const panes = {
     bookmarksImportInvalid: 'El archivo seleccionado no es un archivo de marcadores válido',
     importReplaceTitle: '¿Reemplazar marcadores?',
     importReplaceMessage: 'Esto reemplaza todos los marcadores actuales por los importados. No se puede deshacer.',
-    clearDataTooltip: 'Borrar datos de navegación',
     clearDataTitle: 'Borrar datos de navegación',
     clearDataNote: 'No se eliminan los marcadores ni la configuración de HoTTY.',
     clearDataCookies: 'Cookies y datos de sitios',

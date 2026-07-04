@@ -20,6 +20,7 @@ export const sessionDialog = {
     rename: 'Renommer',
     edit: 'Modifier…',
     sortAscending: 'Trier par ordre croissant',
+    sortDescending: 'Trier par ordre décroissant',
     empty: 'Aucun favori pour l’instant. Utilisez la barre d’outils pour ajouter un dossier ou un favori.',
     addFolderTitle: 'Ajouter un dossier',
     renameFolderTitle: 'Renommer le dossier',

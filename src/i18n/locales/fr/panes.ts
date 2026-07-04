@@ -199,7 +199,6 @@ export const panes = {
     bookmarksImportInvalid: 'Le fichier sélectionné n’est pas un fichier de favoris valide',
     importReplaceTitle: 'Remplacer les favoris ?',
     importReplaceMessage: 'Cela remplace tous les favoris actuels par ceux importés. Cette action est irréversible.',
-    clearDataTooltip: 'Effacer les données de navigation',
     clearDataTitle: 'Effacer les données de navigation',
     clearDataNote: 'Les favoris et les paramètres de HoTTY ne sont pas supprimés.',
     clearDataCookies: 'Cookies et données de sites',

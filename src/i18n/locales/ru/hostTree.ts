@@ -20,6 +20,7 @@ export const hostTree = {
     export: 'Экспортировать',
     import: 'Импортировать',
     sortAscending: 'Сортировать по возрастанию',
+    sortDescending: 'Сортировать по убыванию',
   },
   openAll: {
     confirmTitle: 'Открыть все хосты',

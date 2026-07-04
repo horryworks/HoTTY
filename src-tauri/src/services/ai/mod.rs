@@ -8,10 +8,11 @@ pub mod sse;
 pub mod streaming;
 pub mod validation;
 
-// Re-export commonly used types
-pub use ai_provider::{
-    AuthResultPayload, AuthStatus, AuthType, ChatResponseData, ModelInfo, TokenUsage,
-};
+// Re-export commonly used types. Only the names consumed through the
+// `services::ai::` path live here; the rest are reached via the direct
+// `ai_provider::` path (unused `pub use` draws no compiler warning, so keep
+// this list tight).
+pub use ai_provider::{AuthStatus, ModelInfo};
 pub use ai_service::AIService;
 pub use classifier::CommandVerdict;
 pub use provider_registry::AIProviderRegistry;

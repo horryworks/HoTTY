@@ -20,6 +20,7 @@ export const sessionDialog = {
     rename: '重命名',
     edit: '编辑…',
     sortAscending: '升序排序',
+    sortDescending: '降序排序',
     empty: '暂无书签。使用工具栏添加文件夹或书签。',
     addFolderTitle: '添加文件夹',
     renameFolderTitle: '重命名文件夹',

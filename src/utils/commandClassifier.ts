@@ -126,8 +126,12 @@ export function classifyCommand(
         else tokenSet.add(e);
     }
 
-    // Step 1.5: multi-line handling — classify each line independently
-    const lines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    // Step 1.5: multi-line handling — classify each line independently.
+    // Split on CR as well as LF: a bare CR is Enter to the PTY line discipline,
+    // so `ls\rshutdown` runs two commands. Splitting only on \n would let a
+    // whitelisted first token shield an unlisted command hidden after the CR
+    // (auto-exec bypass). The dispatcher (App.tsx) splits on the same set.
+    const lines = trimmed.split(/\r\n|\r|\n/).map(l => l.trim()).filter(l => l.length > 0);
     if (lines.length > 1) {
         for (const line of lines) {
             const result = classifyCommand(line, whitelist);

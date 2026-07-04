@@ -20,6 +20,7 @@ export const sessionDialog = {
     rename: 'Cambiar nombre',
     edit: 'Editar…',
     sortAscending: 'Ordenar ascendente',
+    sortDescending: 'Ordenar descendente',
     empty: 'Aún no hay marcadores. Usa la barra de herramientas para añadir una carpeta o un marcador.',
     addFolderTitle: 'Añadir carpeta',
     renameFolderTitle: 'Cambiar nombre de carpeta',

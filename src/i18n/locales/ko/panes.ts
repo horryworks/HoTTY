@@ -199,7 +199,6 @@ export const panes = {
     bookmarksImportInvalid: '선택한 파일은 유효한 북마크 파일이 아닙니다',
     importReplaceTitle: '북마크를 바꾸시겠습니까?',
     importReplaceMessage: '현재 모든 북마크가 가져온 북마크로 바뀝니다. 되돌릴 수 없습니다.',
-    clearDataTooltip: '인터넷 사용 기록 삭제',
     clearDataTitle: '인터넷 사용 기록 삭제',
     clearDataNote: '북마크와 HoTTY 설정은 삭제되지 않습니다.',
     clearDataCookies: '쿠키 및 사이트 데이터',

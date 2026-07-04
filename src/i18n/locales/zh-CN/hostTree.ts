@@ -19,6 +19,7 @@ export const hostTree = {
     export: '导出',
     import: '导入',
     sortAscending: '升序排序',
+    sortDescending: '降序排序',
   },
   openAll: {
     confirmTitle: '打开所有主机',

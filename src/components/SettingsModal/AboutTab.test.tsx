@@ -36,12 +36,12 @@ describe('AboutTab', () => {
     expect(mockGetAppVersion).toHaveBeenCalledTimes(1);
   });
 
-  it('opens the GitHub link via tauriService.openExternal', () => {
+  it('opens the website link via tauriService.openExternal', () => {
     render(<AboutTab />);
-    const ghLink = screen.getByText('https://github.com/horryworks/HoTTY');
-    fireEvent.click(ghLink);
+    const siteLink = screen.getByText('https://hotty.pages.dev/');
+    fireEvent.click(siteLink);
     expect(mockOpenExternal).toHaveBeenCalledWith(
-      'https://github.com/horryworks/HoTTY'
+      'https://hotty.pages.dev/'
     );
   });
 

@@ -18,6 +18,7 @@ export const sessionDialog = {
     rename: 'Rename',
     edit: 'Edit…',
     sortAscending: 'Sort Ascending',
+    sortDescending: 'Sort Descending',
     openAllConfirmTitle: 'Open all bookmarks',
     // {{count}} = number of bookmarks, {{name}} = folder name.
     openAllConfirmMessage: 'Open all {{count}} bookmarks in "{{name}}"?',

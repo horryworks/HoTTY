@@ -875,8 +875,10 @@ function App() {
     await tauriService.clearWatchBuffer(targetId);
     const startLen = 0;
 
-    // Send command lines to terminal
-    const lines = cmd.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    // Send command lines to terminal. Split on CR as well as LF so the units
+    // dispatched here match exactly the units the safety classifier scored — a
+    // bare CR is Enter to the PTY, so it is a command boundary too.
+    const lines = cmd.split(/\r\n|\r|\n/).map(l => l.trim()).filter(l => l.length > 0);
     aiExecLog('info', 'command-start', {
       cmd: trimCmdForLog(cmd),
       startLen,
@@ -1244,6 +1246,7 @@ function App() {
               initialUrl={webBrowserInitialUrls.get(featureInfo.id)}
               onUrlChange={(url) => updateWebBrowserTabName(featureInfo.id, url)}
               onOpenInNewPane={handleOpenBookmark}
+              onPageFocus={() => setActivePaneId(paneId)}
             />
           ) : featureInfo?.type === 'ai-chat' ? (
             <AIChatPane

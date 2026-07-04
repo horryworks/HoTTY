@@ -268,12 +268,14 @@ function removeNode(nodes: HostTreeNode[], id: string): HostTreeNode[] {
         .map(n => n.children ? { ...n, children: removeNode(n.children, id) } : n);
 }
 
-function sortNodes(nodes: HostTreeNode[]): HostTreeNode[] {
+// Descending reverses only the name order — folders stay grouped before hosts.
+function sortNodes(nodes: HostTreeNode[], direction: 'asc' | 'desc' = 'asc'): HostTreeNode[] {
+    const sign = direction === 'desc' ? -1 : 1;
     return [...nodes].sort((a, b) => {
         if (a.type !== b.type) {
             return a.type === 'folder' ? -1 : 1;
         }
-        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+        return sign * a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     });
 }
 
@@ -632,19 +634,19 @@ export function useHostManager() {
         }
     }, [persistEncryptedAsync]);
 
-    const sortFolder = useCallback((folderId: string | null) => {
+    const sortFolder = useCallback((folderId: string | null, direction: 'asc' | 'desc' = 'asc') => {
         let next: HostTreeNode[] = [];
         flushSync(() => {
             setTree(prev => {
                 if (folderId === null) {
-                    next = sortNodes(prev);
+                    next = sortNodes(prev, direction);
                     return next;
                 }
 
                 const sortInTree = (nodes: HostTreeNode[]): HostTreeNode[] => {
                     return nodes.map(n => {
                         if (n.id === folderId && n.type === 'folder') {
-                            return { ...n, children: sortNodes(n.children ?? []) };
+                            return { ...n, children: sortNodes(n.children ?? [], direction) };
                         }
                         if (n.children) {
                             return { ...n, children: sortInTree(n.children) };

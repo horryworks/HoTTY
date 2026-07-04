@@ -20,6 +20,7 @@ export const sessionDialog = {
     rename: '名前を変更',
     edit: '編集…',
     sortAscending: '昇順で並べ替え',
+    sortDescending: '降順で並べ替え',
     empty: 'ブックマークがありません。ツールバーからフォルダやブックマークを追加してください。',
     addFolderTitle: 'フォルダを追加',
     renameFolderTitle: 'フォルダ名を変更',

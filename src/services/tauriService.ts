@@ -46,6 +46,7 @@ import type {
   WebBrowserHistoryState,
   WebBrowserAccel,
   WebBrowserZoomState,
+  WebBrowserFocus,
   GcloudStatus,
   GcloudAuthStatus,
   GcpProject,
@@ -560,6 +561,10 @@ export const tauriService = {
 
   onWebBrowserZoomState(cb: (p: WebBrowserZoomState) => void): Promise<UnlistenFn> {
     return listen<WebBrowserZoomState>('web-browser-zoom-state', (e) => cb(e.payload));
+  },
+
+  onWebBrowserFocus(cb: (p: WebBrowserFocus) => void): Promise<UnlistenFn> {
+    return listen<WebBrowserFocus>('web-browser-focus', (e) => cb(e.payload));
   },
 
   // -----------------------------------------------------------------------

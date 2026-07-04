@@ -13,6 +13,7 @@ import type {
   WebBrowserHistoryState,
   WebBrowserAccel,
   WebBrowserZoomState,
+  WebBrowserFocus,
 } from '../../types/appTypes';
 
 vi.mock('../../services/tauriService', () => ({
@@ -33,15 +34,17 @@ vi.mock('../../services/tauriService', () => ({
     onWebBrowserHistoryState: vi.fn().mockResolvedValue(() => {}),
     onWebBrowserAccel: vi.fn().mockResolvedValue(() => {}),
     onWebBrowserZoomState: vi.fn().mockResolvedValue(() => {}),
+    onWebBrowserFocus: vi.fn().mockResolvedValue(() => {}),
   },
 }));
 
 vi.mock('../../utils/logger', () => ({ logError: vi.fn() }));
 
-/** Open the "⋯ More" secondary row so its actions (bookmarks, clear data, zoom)
- *  are in the DOM. They live there, not the primary toolbar, after the declutter. */
+/** Open the docked "⋯ More" panel so its actions (zoom, clear data) are in the
+ *  DOM. They live there, not the primary toolbar, after the declutter. Queried
+ *  by role because the open panel shares the 'More' accessible name. */
 function openMore() {
-  fireEvent.click(screen.getByLabelText('More'));
+  fireEvent.click(screen.getByRole('button', { name: 'More' }));
 }
 
 // jsdom lacks ResizeObserver — provide a no-op so the component mounts.
@@ -51,6 +54,7 @@ beforeEach(() => {
   vi.mocked(tauriService.onWebBrowserHistoryState).mockResolvedValue(() => {});
   vi.mocked(tauriService.onWebBrowserAccel).mockResolvedValue(() => {});
   vi.mocked(tauriService.onWebBrowserZoomState).mockResolvedValue(() => {});
+  vi.mocked(tauriService.onWebBrowserFocus).mockResolvedValue(() => {});
   vi.mocked(tauriService.webBrowserCurrentUrl).mockResolvedValue(null);
   useUiOverlayStore.setState({ overlayOpen: false, sessionDragging: false });
   useBookmarkStore.setState({ tree: [] });
@@ -382,6 +386,56 @@ describe('WebBrowserPane', () => {
     expect(screen.queryByText('Router GUI')).toBeNull();
   });
 
+  it('⋯ docks the More panel beside the page without hiding the webview', async () => {
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    await waitFor(() =>
+      expect(tauriService.webBrowserSetVisible).toHaveBeenCalledWith('wb-1', true),
+    );
+    vi.mocked(tauriService.webBrowserSetVisible).mockClear();
+    vi.mocked(tauriService.webBrowserSetBounds).mockClear();
+
+    openMore();
+    expect(screen.getByText('Zoom')).toBeTruthy();
+    // The panel docks beside the page — the webview must NOT be hidden …
+    expect(tauriService.webBrowserSetVisible).not.toHaveBeenCalledWith('wb-1', false);
+    // … and its slot shrinks, so new bounds are reported.
+    expect(tauriService.webBrowserSetBounds).toHaveBeenCalledWith('wb-1', expect.any(Object));
+  });
+
+  it('toggles the More panel closed on a second ⋯ click', () => {
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    openMore();
+    expect(screen.getByText('Zoom')).toBeTruthy();
+    openMore();
+    expect(screen.queryByText('Zoom')).toBeNull();
+  });
+
+  it('closes the More panel on an outside click', () => {
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    openMore();
+    expect(screen.getByText('Zoom')).toBeTruthy();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByText('Zoom')).toBeNull();
+  });
+
+  it('keeps the More panel open when clicking inside it (zoom stepping)', () => {
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    openMore();
+    const zoomIn = screen.getByLabelText('Zoom in');
+    fireEvent.mouseDown(zoomIn);
+    fireEvent.click(zoomIn);
+    expect(screen.getByText('Zoom')).toBeTruthy();
+    expect(tauriService.webBrowserSetZoom).toHaveBeenLastCalledWith('wb-1', 110);
+  });
+
+  it('closes the More panel on Escape', () => {
+    render(<WebBrowserPane paneId="wb-1" active={true} />);
+    openMore();
+    expect(screen.getByText('Zoom')).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByText('Zoom')).toBeNull();
+  });
+
   it('reports the current URL to onUrlChange so the tab name can follow', async () => {
     const onUrlChange = vi.fn();
     render(<WebBrowserPane paneId="wb-1" active={true} onUrlChange={onUrlChange} />);
@@ -416,6 +470,19 @@ describe('WebBrowserPane', () => {
     // A different pane's accelerator is ignored.
     act(() => cb({ paneId: 'wb-OTHER', action: 'forward' }));
     expect(tauriService.webBrowserForward).not.toHaveBeenCalled();
+  });
+
+  it('calls onPageFocus when the page (native webview) gains focus', async () => {
+    const onPageFocus = vi.fn();
+    render(<WebBrowserPane paneId="wb-1" active={true} onPageFocus={onPageFocus} />);
+    await waitFor(() => expect(tauriService.onWebBrowserFocus).toHaveBeenCalled());
+    const cb = latestCb<WebBrowserFocus>(vi.mocked(tauriService.onWebBrowserFocus));
+    // The user clicks into the page → the backend bridges WebView2's GotFocus.
+    act(() => cb({ paneId: 'wb-1' }));
+    expect(onPageFocus).toHaveBeenCalledTimes(1);
+    // Another pane's focus event is ignored.
+    act(() => cb({ paneId: 'wb-OTHER' }));
+    expect(onPageFocus).toHaveBeenCalledTimes(1);
   });
 
   it('handles keyboard shortcuts pressed while the HTML chrome has focus', () => {
@@ -473,16 +540,15 @@ describe('WebBrowserPane', () => {
     }
   });
 
-  it('🗑 opens the clear-data modal and clears with the selected categories', () => {
+  it('🗑 clears browsing data with the categories selected inline in the ⋯ More panel', () => {
     render(<WebBrowserPane paneId="wb-1" active={true} />);
-    openMore();
-    // Modal not shown until the toolbar button is clicked.
     expect(screen.queryByText('Cookies and site data')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Clear browsing data' }));
+    openMore();
+    // The category choices are visible inline right away — no modal pops up.
     expect(screen.getByText('Cookies and site data')).toBeTruthy();
-    // Uncheck one category, then confirm — the backend gets exactly the selection.
+    // Uncheck one category, then clear — the backend gets exactly the selection.
     fireEvent.click(screen.getByRole('checkbox', { name: 'Saved passwords' }));
-    fireEvent.click(screen.getByText('Clear'));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
     expect(tauriService.webBrowserClearBrowsingData).toHaveBeenCalledWith('wb-1', {
       cookiesAndSiteData: true,
       cache: true,
@@ -490,8 +556,8 @@ describe('WebBrowserPane', () => {
       passwords: false,
       autofill: true,
     });
-    // Modal closes after confirming.
-    expect(screen.queryByText('Cookies and site data')).toBeNull();
+    // Clearing closes the panel (the panel disappearing doubles as done-feedback).
+    expect(screen.queryByText('Zoom')).toBeNull();
   });
 
   describe('zoom', () => {

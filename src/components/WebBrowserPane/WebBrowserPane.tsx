@@ -21,7 +21,7 @@ import type { WebBrowserRect, WebBrowserClearDataOptions, BookmarkNode } from '.
 import { normalizeUrl, resolveAddress } from './webBrowserUrl';
 import { canZoomIn, canZoomOut, clampZoom, nextZoom, prevZoom } from './webBrowserZoom';
 import { AddBookmarkModal } from './AddBookmarkModal';
-import { ClearBrowsingDataModal } from './ClearBrowsingDataModal';
+import { ClearBrowsingDataSection } from './ClearBrowsingDataSection';
 import { BookmarkMenu } from './BookmarkMenu';
 import './WebBrowserPane.css';
 
@@ -38,6 +38,10 @@ interface WebBrowserPaneProps {
   /** Open a URL in a brand-new Web Browser pane (each pane hosts one webview, so
    *  "Open All" on a bookmark folder fans out into multiple panes). */
   onOpenInNewPane?: (url: string) => void;
+  /** Called when the user clicks/tabs into the page (the native webview gains
+   *  focus). Page clicks never reach the DOM, so the host uses this to move
+   *  pane focus to this pane. */
+  onPageFocus?: () => void;
 }
 
 const INITIAL_URL = 'about:blank';
@@ -68,7 +72,13 @@ function rectsEqual(a: WebBrowserRect | null, b: WebBrowserRect): boolean {
   );
 }
 
-export function WebBrowserPane({ paneId, initialUrl, onUrlChange, onOpenInNewPane }: WebBrowserPaneProps) {
+export function WebBrowserPane({
+  paneId,
+  initialUrl,
+  onUrlChange,
+  onOpenInNewPane,
+  onPageFocus,
+}: WebBrowserPaneProps) {
   const { t } = useTranslation();
   const overlayOpen = useUiOverlayStore((s) => s.overlayOpen);
   const sessionDragging = useUiOverlayStore((s) => s.sessionDragging);
@@ -103,11 +113,11 @@ export function WebBrowserPane({ paneId, initialUrl, onUrlChange, onOpenInNewPan
   const [created, setCreated] = useState(false);
   const [bookmarkOpen, setBookmarkOpen] = useState(false);
   const [bookmarkMenuOpen, setBookmarkMenuOpen] = useState(false);
-  const [clearModalOpen, setClearModalOpen] = useState(false);
-  // Whether the "⋯ More" secondary toolbar row is expanded. It is an in-flow row
-  // (not a floating popover) because HTML cannot paint over the OS-composited
-  // native webview — so the webview body shrinks beneath it and stays visible
-  // (essential for the zoom stepper, whose effect the user needs to watch live).
+  // Whether the "⋯ More" panel is open. Like the bookmarks panel it docks at the
+  // right edge of the body row (directly below the ⋯ button) rather than floating:
+  // HTML cannot paint over the OS-composited native webview, so the webview slot
+  // shrinks horizontally beside it and the page stays visible — essential for the
+  // zoom stepper, whose effect the user needs to watch live.
   const [moreOpen, setMoreOpen] = useState(false);
   // Back/forward availability, pushed from the backend (WebView2 HistoryChanged).
   const [canGoBack, setCanGoBack] = useState(false);
@@ -116,6 +126,8 @@ export function WebBrowserPane({ paneId, initialUrl, onUrlChange, onOpenInNewPan
   const bodyRef = useRef<HTMLDivElement>(null);
   const bookmarkWrapRef = useRef<HTMLDivElement>(null);
   const bookmarkPanelRef = useRef<HTMLDivElement>(null);
+  const moreToggleRef = useRef<HTMLButtonElement>(null);
+  const morePanelRef = useRef<HTMLDivElement>(null);
   const addressInputRef = useRef<HTMLInputElement>(null);
   const lastRectRef = useRef<WebBrowserRect | null>(null);
   const debounceRef = useRef<number | null>(null);
@@ -129,6 +141,11 @@ export function WebBrowserPane({ paneId, initialUrl, onUrlChange, onOpenInNewPan
   useEffect(() => {
     onUrlChangeRef.current = onUrlChange;
   }, [onUrlChange]);
+  // Same for onPageFocus (the focus listener below subscribes once per paneId).
+  const onPageFocusRef = useRef(onPageFocus);
+  useEffect(() => {
+    onPageFocusRef.current = onPageFocus;
+  }, [onPageFocus]);
 
   // Whether the current page is already saved as a bookmark (controls the ★ icon
   // fill and whether clicking it adds or removes the bookmark).
@@ -253,9 +270,9 @@ export function WebBrowserPane({ paneId, initialUrl, onUrlChange, onOpenInNewPan
     if (!webviewHidden) reportBounds(true);
   }, [created, webviewHidden, paneId, reportBounds]);
 
-  // Opening/closing the bookmarks side panel resizes the webview slot; report the
-  // new bounds immediately (synchronously, pre-paint) so the native webview tracks
-  // the smaller/larger rect without a frame where it overlaps the panel.
+  // Opening/closing the bookmarks or ⋯ More side panel resizes the webview slot;
+  // report the new bounds immediately (synchronously, pre-paint) so the native
+  // webview tracks the smaller/larger rect without a frame where it overlaps the panel.
   useLayoutEffect(() => {
     if (!created) return;
     reportBounds(true);
@@ -357,6 +374,27 @@ export function WebBrowserPane({ paneId, initialUrl, onUrlChange, onOpenInNewPan
       unlisten?.();
     };
   }, [paneId, focusAddress]);
+
+  // Move pane focus here when the user clicks into the page: those clicks land
+  // in the native webview and never reach the DOM, so the grid's click-to-focus
+  // handler cannot see them. The backend bridges WebView2's GotFocus instead.
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: UnlistenFn | undefined;
+    tauriService
+      .onWebBrowserFocus((p) => {
+        if (p.paneId !== paneId) return;
+        onPageFocusRef.current?.();
+      })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [paneId]);
 
   // Open the bookmark modal when the tab-bar "Add Bookmark…" menu requests it for
   // this pane. Drive the open from the store subscription (an external system) so we
@@ -474,37 +512,63 @@ export function WebBrowserPane({ paneId, initialUrl, onUrlChange, onOpenInNewPan
     };
   }, [bookmarkMenuOpen]);
 
+  // Close the ⋯ More panel on Escape or a click outside it (same pattern as the
+  // bookmarks panel above).
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      // Keep open when clicking the ⋯ toggle (its click handler performs the
+      // toggle; closing here first would immediately reopen) or the panel itself
+      // (zoom stepping must not dismiss the menu).
+      const target = e.target as Node;
+      if (moreToggleRef.current?.contains(target)) return;
+      if (morePanelRef.current?.contains(target)) return;
+      setMoreOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMoreOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [moreOpen]);
+
   return (
     <div className="web-browser-pane" onKeyDown={handlePaneKeyDown}>
       <div className="web-browser-toolbar">
         <button
           type="button"
-          className="web-browser-toolbar-btn"
+          className="web-browser-toolbar-btn web-browser-nav-btn"
           disabled={!canGoBack}
           onClick={() => tauriService.webBrowserBack(paneId).catch(() => {})}
           title={t('panes.webBrowser.back')}
           aria-label={t('panes.webBrowser.back')}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6" />
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
           </svg>
         </button>
         <button
           type="button"
-          className="web-browser-toolbar-btn"
+          className="web-browser-toolbar-btn web-browser-nav-btn"
           disabled={!canGoForward}
           onClick={() => tauriService.webBrowserForward(paneId).catch(() => {})}
           title={t('panes.webBrowser.forward')}
           aria-label={t('panes.webBrowser.forward')}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="9 18 15 12 9 6" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+            <polyline points="12 5 19 12 12 19" />
           </svg>
         </button>
         {loading ? (
           <button
             type="button"
-            className="web-browser-toolbar-btn"
+            className="web-browser-toolbar-btn web-browser-nav-btn"
             onClick={() => tauriService.webBrowserStop(paneId).catch(() => {})}
             title={t('panes.webBrowser.stop')}
             aria-label={t('panes.webBrowser.stop')}
@@ -517,7 +581,7 @@ export function WebBrowserPane({ paneId, initialUrl, onUrlChange, onOpenInNewPan
         ) : (
           <button
             type="button"
-            className="web-browser-toolbar-btn"
+            className="web-browser-toolbar-btn web-browser-nav-btn"
             onClick={() => tauriService.webBrowserReload(paneId).catch(() => {})}
             title={t('panes.webBrowser.reload')}
             aria-label={t('panes.webBrowser.reload')}
@@ -578,6 +642,7 @@ export function WebBrowserPane({ paneId, initialUrl, onUrlChange, onOpenInNewPan
         </div>
         <button
           type="button"
+          ref={moreToggleRef}
           className={`web-browser-toolbar-btn web-browser-more-toggle${moreOpen ? ' active' : ''}`}
           onClick={() => setMoreOpen((o) => !o)}
           title={t('panes.webBrowser.more')}
@@ -592,88 +657,13 @@ export function WebBrowserPane({ paneId, initialUrl, onUrlChange, onOpenInNewPan
           </svg>
         </button>
       </div>
-      {/* "⋯ More" secondary row: extra actions that would crowd the primary bar.
-          Rendered in-flow (not a floating popover) so it never has to overlap the
-          OS-composited native webview — the body shrinks beneath it instead, and
-          the page stays visible while zooming. */}
-      {moreOpen && (
-        <div className="web-browser-more-row">
-          <div
-            className="web-browser-zoom"
-            role="group"
-            aria-label={t('panes.webBrowser.zoomLevel')}
-          >
-            <span className="web-browser-more-label">{t('panes.webBrowser.zoom')}</span>
-            <button
-              type="button"
-              className="web-browser-toolbar-btn"
-              disabled={!canZoomOut(zoom)}
-              onClick={() => applyZoom(prevZoom(zoom))}
-              title={t('panes.webBrowser.zoomOut')}
-              aria-label={t('panes.webBrowser.zoomOut')}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              className="web-browser-zoom-value"
-              onClick={() => applyZoom(defaultZoom)}
-              title={t('panes.webBrowser.zoomReset')}
-              aria-label={t('panes.webBrowser.zoomReset')}
-            >
-              {zoom}%
-            </button>
-            <button
-              type="button"
-              className="web-browser-toolbar-btn"
-              disabled={!canZoomIn(zoom)}
-              onClick={() => applyZoom(nextZoom(zoom))}
-              title={t('panes.webBrowser.zoomIn')}
-              aria-label={t('panes.webBrowser.zoomIn')}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-            </button>
-            {/* Make the current zoom the persisted default for new panes. Disabled
-                (and thus visually "saved") once the current zoom already is the
-                default. */}
-            <button
-              type="button"
-              className="web-browser-zoom-preset"
-              disabled={zoom === defaultZoom}
-              onClick={() => updateSetting('webBrowserDefaultZoom', zoom)}
-              title={t('panes.webBrowser.zoomSetDefaultTooltip')}
-              aria-label={t('panes.webBrowser.zoomSetDefault')}
-            >
-              {t('panes.webBrowser.zoomSetDefault')}
-            </button>
-          </div>
-          <div className="web-browser-more-sep" />
-          <button
-            type="button"
-            className="web-browser-more-item"
-            onClick={() => setClearModalOpen(true)}
-            title={t('panes.webBrowser.clearDataTooltip')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              <line x1="10" y1="11" x2="10" y2="17" />
-              <line x1="14" y1="11" x2="14" y2="17" />
-            </svg>
-            <span>{t('panes.webBrowser.clearDataTooltip')}</span>
-          </button>
-        </div>
-      )}
       {error && <div className="web-browser-error">{error}</div>}
       {/* Body row: the native webview floats over .web-browser-body. When the
-          bookmarks menu is open it docks to the right and the webview slot
-          shrinks beside it — HTML cannot paint over the native webview, so the
-          menu sits next to the page rather than above it (keeping it visible). */}
+          bookmarks menu or the ⋯ More menu is open, a panel docks to the right
+          and the webview slot shrinks beside it — HTML cannot paint over the
+          native webview, so menus sit next to the page rather than above it
+          (keeping it visible). Panel order matches toolbar button order, so the
+          More panel (rightmost button) is the rightmost column. */}
       <div className="web-browser-body-row">
         <div ref={bodyRef} className="web-browser-body" />
         {bookmarkMenuOpen && (
@@ -681,20 +671,88 @@ export function WebBrowserPane({ paneId, initialUrl, onUrlChange, onOpenInNewPan
             <BookmarkMenu tree={bookmarkTree} onSelect={handleOpenBookmark} onOpenAll={handleOpenAllBookmarks} />
           </div>
         )}
+        {/* "⋯ More" panel: extra actions that would crowd the primary bar,
+            stacked vertically below the ⋯ button. */}
+        {moreOpen && (
+          <div
+            className="web-browser-more-panel"
+            ref={morePanelRef}
+            role="group"
+            aria-label={t('panes.webBrowser.more')}
+          >
+            {/* Each feature group gets its own section card (settings-card style)
+                so its boundary is obvious at a glance. */}
+            <div
+              className="web-browser-more-section"
+              role="group"
+              aria-label={t('panes.webBrowser.zoomLevel')}
+            >
+              <span className="web-browser-more-section-title">{t('panes.webBrowser.zoom')}</span>
+              <div className="web-browser-zoom-stepper">
+                <button
+                  type="button"
+                  className="web-browser-toolbar-btn"
+                  disabled={!canZoomOut(zoom)}
+                  onClick={() => applyZoom(prevZoom(zoom))}
+                  title={t('panes.webBrowser.zoomOut')}
+                  aria-label={t('panes.webBrowser.zoomOut')}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className="web-browser-zoom-value"
+                  onClick={() => applyZoom(defaultZoom)}
+                  title={t('panes.webBrowser.zoomReset')}
+                  aria-label={t('panes.webBrowser.zoomReset')}
+                >
+                  {zoom}%
+                </button>
+                <button
+                  type="button"
+                  className="web-browser-toolbar-btn"
+                  disabled={!canZoomIn(zoom)}
+                  onClick={() => applyZoom(nextZoom(zoom))}
+                  title={t('panes.webBrowser.zoomIn')}
+                  aria-label={t('panes.webBrowser.zoomIn')}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </button>
+              </div>
+              {/* Make the current zoom the persisted default for new panes. Disabled
+                  (and thus visually "saved") once the current zoom already is the
+                  default. */}
+              <button
+                type="button"
+                className="web-browser-zoom-preset"
+                disabled={zoom === defaultZoom}
+                onClick={() => updateSetting('webBrowserDefaultZoom', zoom)}
+                title={t('panes.webBrowser.zoomSetDefaultTooltip')}
+                aria-label={t('panes.webBrowser.zoomSetDefault')}
+              >
+                {t('panes.webBrowser.zoomSetDefault')}
+              </button>
+            </div>
+            {/* Clearing closes the panel — the panel disappearing doubles as
+                done-feedback (like the old modal closing on confirm). */}
+            <ClearBrowsingDataSection
+              onClear={(options: WebBrowserClearDataOptions) => {
+                setMoreOpen(false);
+                tauriService
+                  .webBrowserClearBrowsingData(paneId, options)
+                  .catch((e) => logError('web-browser', 'clear browsing data failed', e));
+              }}
+            />
+          </div>
+        )}
       </div>
       {bookmarkOpen && currentUrl && (
         <AddBookmarkModal url={currentUrl} onClose={() => setBookmarkOpen(false)} />
-      )}
-      {clearModalOpen && (
-        <ClearBrowsingDataModal
-          onConfirm={(options: WebBrowserClearDataOptions) => {
-            setClearModalOpen(false);
-            tauriService
-              .webBrowserClearBrowsingData(paneId, options)
-              .catch((e) => logError('web-browser', 'clear browsing data failed', e));
-          }}
-          onCancel={() => setClearModalOpen(false)}
-        />
       )}
     </div>
   );

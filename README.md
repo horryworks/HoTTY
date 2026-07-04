@@ -29,7 +29,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 - **File Explorer** — browse directories and drives, open files in the editor
 - **Ping Monitor** — monitor multiple targets with configurable intervals
 - **File Server** — built-in TFTP & SFTP servers for uploading firmware/config to network devices (e.g. Cisco), with path-jailed serving and Windows Firewall detection
-- **Web Browser** — embedded browser pane (Edge WebView2) for network-device web admin UIs, opened from New Session → Web with folder-organized bookmarks; keeps login sessions, can save/autofill passwords, and can clear browsing data (cookies, cache, history, passwords) on demand
+- **Web Browser** — embedded browser pane (Edge WebView2) for network-device web admin UIs, opened from New Session → Web with folder-organized bookmarks; keeps login sessions, can save/autofill passwords, supports per-page zoom, and can clear browsing data (cookies, cache, history, passwords) on demand
 
 ### Theming & Appearance
 - Built-in themes: Dark, Medium, Light

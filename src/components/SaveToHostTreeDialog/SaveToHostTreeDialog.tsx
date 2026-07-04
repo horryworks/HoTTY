@@ -117,7 +117,10 @@ export const SaveToHostTreeDialog: React.FC<SaveToHostTreeDialogProps> = ({
                     }
                 }}
             >
-                <h3>{t('dialogs.saveToHostTree.title')}</h3>
+                <div className="save-to-tree-header">
+                    <h3>{t('dialogs.saveToHostTree.title')}</h3>
+                </div>
+                <div className="save-to-tree-body">
                 {entry === null ? (
                     <p className="save-to-tree-error">
                         {t('dialogs.saveToHostTree.unsupported')}
@@ -209,7 +212,8 @@ export const SaveToHostTreeDialog: React.FC<SaveToHostTreeDialogProps> = ({
                         </div>
                     </>
                 )}
-                <div className="modal-actions">
+                </div>
+                <div className="save-to-tree-footer modal-actions">
                     <button className="btn-secondary" onClick={onClose}>
                         {t('common.cancel')}
                     </button>

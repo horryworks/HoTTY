@@ -176,7 +176,7 @@ export const help = {
     passwords:
       '<0>Connexions et mots de passe :</0> Le navigateur conserve vos sessions de connexion et peut enregistrer et remplir automatiquement les mots de passe, stockés dans le profil de navigateur chiffré propre à HoTTY (distinct de votre Edge/Chrome système).',
     clearData:
-      '<0>Effacer les données de navigation :</0> Cliquez sur le bouton corbeille de la barre d’outils pour effacer les cookies et données de sites, le cache, l’historique, les mots de passe enregistrés et la saisie automatique — vous choisissez quoi supprimer. Vos favoris et les paramètres de HoTTY sont toujours conservés.',
+      '<0>Effacer les données de navigation :</0> Ouvrez le menu ⋯ Plus de la barre d’outils et choisissez Effacer les données de navigation pour effacer les cookies et données de sites, le cache, l’historique, les mots de passe enregistrés et la saisie automatique — vous choisissez quoi supprimer. Vos favoris et les paramètres de HoTTY sont toujours conservés.',
     enable:
       '<0>Activer / désactiver :</0> L’onglet Web peut être désactivé dans <1>Paramètres → Fonctionnalités</1>.',
   },

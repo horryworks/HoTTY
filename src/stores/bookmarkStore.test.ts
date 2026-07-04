@@ -47,4 +47,11 @@ describe('bookmarkStore', () => {
     store().sortFolder(null);
     expect(store().tree.map((n) => n.name)).toEqual(['Apple', 'Zebra']);
   });
+
+  it('sortFolder desc sorts root children in reverse name order', () => {
+    store().addBookmark(null, 'Apple', 'http://a');
+    store().addBookmark(null, 'Zebra', 'http://z');
+    store().sortFolder(null, 'desc');
+    expect(store().tree.map((n) => n.name)).toEqual(['Zebra', 'Apple']);
+  });
 });

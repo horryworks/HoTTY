@@ -176,7 +176,7 @@ export const help = {
     passwords:
       '<0>Inicios de sesión y contraseñas:</0> El navegador conserva tus sesiones y puede guardar y autocompletar contraseñas, almacenadas en el perfil de navegador cifrado propio de HoTTY (separado de tu Edge/Chrome del sistema).',
     clearData:
-      '<0>Borrar datos de navegación:</0> Haz clic en el botón de papelera de la barra de herramientas para borrar cookies y datos de sitios, caché, historial, contraseñas guardadas y autocompletado — eliges qué eliminar. Tus marcadores y la configuración de HoTTY se conservan siempre.',
+      '<0>Borrar datos de navegación:</0> Abre el menú ⋯ Más de la barra de herramientas y elige Borrar datos de navegación para borrar cookies y datos de sitios, caché, historial, contraseñas guardadas y autocompletado — eliges qué eliminar. Tus marcadores y la configuración de HoTTY se conservan siempre.',
     enable:
       '<0>Activar / desactivar:</0> La pestaña Web se puede desactivar en <1>Ajustes → Funciones</1>.',
   },

@@ -19,6 +19,7 @@ export const hostTree = {
     export: 'Exporter',
     import: 'Importer',
     sortAscending: 'Trier par ordre croissant',
+    sortDescending: 'Trier par ordre décroissant',
   },
   openAll: {
     confirmTitle: 'Ouvrir tous les hôtes',

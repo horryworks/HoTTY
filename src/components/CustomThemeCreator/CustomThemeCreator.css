@@ -5,7 +5,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10000;
+    /* Nested-modal tier: CustomThemeCreator opens on top of the still-open
+       SettingsModal (base 10000), so it sits explicitly above it rather than
+       relying on DOM order. Matches SshHostKeyModal / IapVmStartModal. */
+    z-index: 10001;
 }
 
 .ctc-modal {

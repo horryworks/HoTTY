@@ -375,4 +375,28 @@ describe('useHostManager', () => {
     // folders first (alphabetical), then hosts (alphabetical)
     expect(names).toEqual(['Alpha', 'Beta', 'Alpha', 'Zulu']);
   });
+
+  it('sortFolder desc sorts children in reverse name order (folders still first)', () => {
+    const unsorted: HostTreeNode[] = [
+      {
+        id: 'f1',
+        type: 'folder',
+        name: 'Root',
+        children: [
+          { id: 'h1', type: 'host', name: 'Alpha', entry: { protocol: 'ssh', host: '1.1.1.1', port: 22 } },
+          { id: 'f2', type: 'folder', name: 'Alpha', children: [] },
+          { id: 'h2', type: 'host', name: 'Zulu', entry: { protocol: 'ssh', host: '2.2.2.2', port: 22 } },
+          { id: 'f3', type: 'folder', name: 'Beta', children: [] },
+        ],
+      },
+    ];
+    localStorage.setItem('hotty_host_tree', JSON.stringify(unsorted));
+    const { result } = renderHook(() => useHostManager());
+    act(() => {
+      result.current.sortFolder('f1', 'desc');
+    });
+    const names = result.current.tree[0].children!.map(c => c.name);
+    // folders first (reverse alphabetical), then hosts (reverse alphabetical)
+    expect(names).toEqual(['Beta', 'Alpha', 'Zulu', 'Alpha']);
+  });
 });

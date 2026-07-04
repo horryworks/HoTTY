@@ -9,6 +9,7 @@ import {
   sortFolder as sortFolderOp,
   makeBookmarkId,
   type DropPosition,
+  type SortDirection,
 } from '../components/BookmarkTree/bookmarkTreeHelpers';
 
 /**
@@ -24,7 +25,7 @@ interface BookmarkState {
   editNode: (id: string, patch: Partial<BookmarkNode>) => void;
   deleteNode: (id: string) => void;
   moveNode: (nodeId: string, targetId: string, position: DropPosition) => void;
-  sortFolder: (folderId: string | null) => void;
+  sortFolder: (folderId: string | null, direction?: SortDirection) => void;
   /** Replace the entire tree (used by import). Caller must validate first. */
   replaceTree: (tree: BookmarkNode[]) => void;
 }
@@ -49,7 +50,8 @@ export const useBookmarkStore = create<BookmarkState>()(
       deleteNode: (id) => set((s) => ({ tree: removeNode(s.tree, id).tree })),
       moveNode: (nodeId, targetId, position) =>
         set((s) => ({ tree: moveNodeOp(s.tree, nodeId, targetId, position) })),
-      sortFolder: (folderId) => set((s) => ({ tree: sortFolderOp(s.tree, folderId) })),
+      sortFolder: (folderId, direction) =>
+        set((s) => ({ tree: sortFolderOp(s.tree, folderId, direction) })),
       replaceTree: (tree) => set({ tree }),
     }),
     {

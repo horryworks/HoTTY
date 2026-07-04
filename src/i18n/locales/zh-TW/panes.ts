@@ -198,7 +198,6 @@ export const panes = {
     bookmarksImportInvalid: '所選檔案不是有效的書籤檔案',
     importReplaceTitle: '取代書籤？',
     importReplaceMessage: '這將以匯入的書籤取代目前所有書籤，此操作無法復原。',
-    clearDataTooltip: '清除瀏覽資料',
     clearDataTitle: '清除瀏覽資料',
     clearDataNote: '不會刪除書籤與 HoTTY 設定。',
     clearDataCookies: 'Cookie 與網站資料',

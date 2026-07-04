@@ -364,24 +364,57 @@ export function BookmarkMenu({ tree, onSelect, onOpenAll }: BookmarkMenuProps) {
           {contextMenu.node.type === 'folder' &&
             onOpenAll &&
             flattenBookmarks(contextMenu.node.children ?? []).length > 0 && (
-              <button onClick={() => handleOpenAllClick(contextMenu.node)}>
-                {t('sessionDialog.bookmarks.openAll')}
-              </button>
+              <>
+                <button onClick={() => handleOpenAllClick(contextMenu.node)}>
+                  <span className="menu-icon-wrapper">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-color)' }}>
+                      <polyline points="13 17 18 12 13 7"></polyline>
+                      <polyline points="6 17 11 12 6 7"></polyline>
+                    </svg>
+                  </span>
+                  {t('sessionDialog.bookmarks.openAll')}
+                </button>
+                <div className="context-menu-separator" />
+              </>
             )}
           <button onClick={() => startRename(contextMenu.node)}>
+            <span className="menu-icon-wrapper">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-warning)' }}>
+                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+              </svg>
+            </span>
             {t('sessionDialog.bookmarks.rename')}
           </button>
           {contextMenu.node.type === 'folder' && (
-            <button
-              onClick={() => {
-                sortFolder(contextMenu.node.id);
-                setContextMenu(null);
-              }}
-            >
-              {t('sessionDialog.bookmarks.sortAscending')}
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  sortFolder(contextMenu.node.id);
+                  setContextMenu(null);
+                }}
+              >
+                <span className="menu-icon-wrapper">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-host)' }}>
+                    <path d="M18 15l-6-6-6 6"></path>
+                  </svg>
+                </span>
+                {t('sessionDialog.bookmarks.sortAscending')}
+              </button>
+              <button
+                onClick={() => {
+                  sortFolder(contextMenu.node.id, 'desc');
+                  setContextMenu(null);
+                }}
+              >
+                <span className="menu-icon-wrapper">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-host)' }}>
+                    <path d="M6 9l6 6 6-6"></path>
+                  </svg>
+                </span>
+                {t('sessionDialog.bookmarks.sortDescending')}
+              </button>
+            </>
           )}
-          <div className="context-menu-separator" />
           <button
             className="danger"
             onClick={() => {
@@ -389,6 +422,14 @@ export function BookmarkMenu({ tree, onSelect, onOpenAll }: BookmarkMenuProps) {
               setContextMenu(null);
             }}
           >
+            <span className="menu-icon-wrapper">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-danger)' }}>
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+            </span>
             {t('common.delete')}
           </button>
         </div>

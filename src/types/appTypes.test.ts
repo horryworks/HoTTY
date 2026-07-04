@@ -15,7 +15,6 @@ import type {
   HostEntry,
   HostTreeNode,
   TextEditorTab,
-  AIAuthType,
   AIChatResponseData,
   CommandExecutionMode,
   PersonaDefinition,
@@ -49,11 +48,6 @@ describe('appTypes', () => {
   it('SessionStatus accepts every declared member', () => {
     const values: SessionStatus[] = ['connected', 'disconnected'];
     expect(values).toHaveLength(2);
-  });
-
-  it('AIAuthType accepts every declared member', () => {
-    const values: AIAuthType[] = ['oauth2', 'service_account', 'api_key', 'adc'];
-    expect(values).toHaveLength(4);
   });
 
   it('CommandExecutionMode accepts every declared member', () => {

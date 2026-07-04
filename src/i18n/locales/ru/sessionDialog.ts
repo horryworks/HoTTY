@@ -20,6 +20,7 @@ export const sessionDialog = {
     rename: 'Переименовать',
     edit: 'Изменить…',
     sortAscending: 'Сортировать по возрастанию',
+    sortDescending: 'Сортировать по убыванию',
     empty: 'Пока нет закладок. Используйте панель инструментов, чтобы добавить папку или закладку.',
     addFolderTitle: 'Добавить папку',
     renameFolderTitle: 'Переименовать папку',

@@ -1,5 +1,49 @@
 # Release Notes
 
+## v2.0.8
+
+The v2.0.8 stable release, consolidating the v2.0.8 beta series. The headline additions are **multi-window support**, a redesigned free-form **"Ask AI"** on terminal selections, and a round of **Web Browser** enhancements (page zoom, persistent logins, clear-browsing-data, Open All, and folder sorting) — together with a broad **security and stability hardening** pass across AI auto-execution, SSH host-key handling, and multi-window session isolation.
+
+### Breaking Changes
+
+- **Customizable "Ask AI Commands" have been removed.** The preset right-click commands (such as "What is this?" and "Fix this") and the **Settings → AI → Ask AI Commands** editor are gone, replaced by the free-form inline **Ask AI** box (below). Any custom Ask AI commands you configured will no longer appear.
+
+### New Features
+
+- **Open multiple windows in one process.** Open a new HoTTY window from the sidebar's **New Window** button or **Ctrl + Shift + N** — and launching HoTTY again now opens another window in the existing process instead of a separate copy. Each window keeps its own pane layout and terminal sessions, while your settings, theme, host tree and bookmarks stay shared and in sync across every open window. Closing a window cleans up only that window's sessions.
+- **Link an AI Chat to a terminal in another window.** The AI Chat pane's link picker lists terminals from every open window, grouped by window, so a chat in one window can watch and drive a session running in another.
+- **Ask the AI about terminal output with a right-click.** Select text in a terminal, right-click the selection, and type your question in the inline **"Ask AI"** box — **Enter** sends (**Shift + Enter** for a new line). HoTTY opens or focuses the AI Chat pane and sends your question together with the selected text. (Click a Terminal Marker first to select a whole output block.)
+- **One-time AI data-sharing notice.** The first time an AI feature would send terminal data to your configured provider, HoTTY shows a brief disclosure of what is sent, when, and how known secrets are redacted — you confirm once before anything is sent. Review it, see your consent status, or reset it any time in **Settings → AI → Data Handling**.
+- **Third-Party Licenses viewer.** **Settings → About → Third-Party Licenses** lists the open-source projects bundled with HoTTY together with their license texts.
+- **Web Browser — page zoom.** Zoom the current page from the toolbar (also with **Ctrl + mouse wheel** and **Ctrl + +/−/0**), set a default zoom that new panes start at, and make the current zoom the default. Each pane keeps its own zoom for the session.
+- **Web Browser — clear browsing data.** From the toolbar's **⋯ More** menu, clear cookies & site data, cached images and files, browsing history, saved passwords and autofill data — you choose what to remove. Clearing cookies signs you out of the sites you visited; your bookmarks and HoTTY's own settings are always kept.
+- **Web Browser — Open All in a folder.** Right-click a folder — in the host tree, on the New Session dialog's 🌐 Web tab, or in the Web Browser's bookmarks list — and choose **Open All** to connect to every host, or open every bookmarked site each in its own browser pane (including items in sub-folders). Folders with 5 or more items ask for confirmation first.
+- **Web Browser — persistent session logins.** Sites that sign you in with a session cookie (for example the Cisco Meraki dashboard), which WebView2 previously discarded on close, now stay signed in across restarts.
+- **Sort folders ascending or descending.** Host-tree folders and web-bookmark folders can now be sorted in either direction from the folder's right-click menu (descending is new).
+
+### Improvements
+
+- **Web Browser toolbar decluttered.** Less-frequent actions — including clear browsing data — now live in a **⋯ More** menu, and the clear-data category choices appear inline in that menu instead of in a separate pop-up dialog.
+
+### Bug Fixes
+
+- **Multi-window stability.** Running an AI command against a terminal owned by another window now works (it previously failed with "[not connected]"); a setting changed in one window syncs live to the others without simultaneous edits clobbering each other; two windows can watch the same terminal for AI without one wiping the other's captured output; and window-targeted actions — the AI "bring window to front", the terminal right-click menu, and the GCP IAP "start VM?" prompt — now act on the window that owns the session instead of the main window.
+- **One stuck connection no longer freezes everything.** A single unresponsive SSH/Telnet peer could block typing, resizing and opening or closing across all sessions and windows; each session is now isolated, so only the affected one waits.
+- **Idle local and WSL sessions are fully cleaned up on close.** Closing a local shell or WSL session that was sitting idle previously left its underlying process and reader threads running; they are now terminated on disconnect.
+- **Web Browser: no more stray view after a fast close.** Closing a Web Browser tab immediately after opening it could leave a native browser view painted over the UI until restart; this race is fixed.
+- **Telnet: robust to non-ASCII login banners.** A telnet server that sent a long multi-byte banner before the login prompt could crash the connection's reader; fixed.
+- **Host-key and config files are saved crash-safely.** A rare failure while replacing `known_hosts` or a config file can no longer leave it empty or truncated — the previous contents are kept until the new file is safely in place — and accepting a new host key in two windows at the same time no longer risks dropping one of them.
+
+### Security
+
+- **AI auto-execute is harder to slip past.** In *auto-execute-safe* mode: interpreter and "runner" commands that can run arbitrary code or write files (`env`, `awk`, `sed`, `find`, `git`, shells and similar) are no longer fast-tracked by the whitelist; the network tools `curl`, `wget` and `nmap` were removed from the default whitelist (closing a data-exfiltration path); a bare `&` separator is treated as command chaining; whitelist phrases must match from the start of a command; and a carriage return embedded in a command is now treated as a command boundary, so a whitelisted first token can no longer shield a hidden second command after it.
+- **Terminal output sent to the AI is redacted for secrets.** Watched terminal output, selected text and auto-execution results now have passwords, API keys, tokens and `Bearer` headers redacted before they are sent to your AI provider.
+- **AI Chat links open safely.** A link in an AI response now opens through HoTTY's confirmed external-open path (which shows the full URL for your approval) instead of navigating the app window to it in place — closing a phishing / UI-spoofing vector.
+- **An SSH host-key change is no longer downgraded to a "new host" prompt.** If a known host presents a key of a different type than the one on record, HoTTY now shows the "host key changed — possible MITM" warning instead of the milder "new host" prompt.
+- **The SSH host-key prompt is no longer cancelled by the connection timeout.** The host-key confirmation (including the "HOST KEY CHANGED" warning) now stays open for your decision even though the network handshake still fails fast.
+- **Web Browser session-cookie persistence is scoped to the page you're viewing.** Keeping a site's session login signed in no longer re-stamps every cookie in the shared browser profile (including HoTTY's own) as long-lived — only cookies for the current page are affected.
+- **File Server: upload-path symlink escape closed.** The built-in TFTP/SFTP server's write path resolves and rejects a final-component symlink (including a dangling one), so a symlink planted inside the served folder can no longer redirect an upload outside it.
+
 ## v2.0.8-beta5
 
 This beta is a broad **stability and security hardening** pass — with fixes across multi-window support, SSH host-key handling, and AI auto-execution — and adds a **page zoom** control to the Web Browser.

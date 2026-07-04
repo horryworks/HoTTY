@@ -49,7 +49,6 @@ const OVERLAY_SELECTOR = [
   '.confirm-modal-overlay',
   '.save-confirm-modal-overlay',
   '.paste-modal-overlay',
-  '.ask-ai-modal-overlay',
   '.system-prompt-modal-overlay',
   '.ssh-host-key-overlay',
   '.connection-dialog-overlay', // SessionDialog
@@ -58,10 +57,11 @@ const OVERLAY_SELECTOR = [
   '.ctc-overlay', // CustomThemeCreator
   '.host-edit-modal-overlay', // HostTree + BookmarkTree add/edit modal
   '.add-bookmark-modal-overlay', // Web Browser ★ add-bookmark modal
-  '.clear-browsing-data-overlay', // Web Browser 🗑 clear-browsing-data modal
-  // NOTE: the Web Browser bookmarks menu (.web-browser-bookmark-menu) is
-  // deliberately NOT here — it docks beside the page (shrinking the webview
-  // slot) rather than hiding it, so the page stays visible while it is open.
+  // NOTE: the Web Browser bookmarks menu (.web-browser-bookmark-menu) and the
+  // ⋯ More panel (.web-browser-more-panel, incl. its inline clear-browsing-data
+  // section) are deliberately NOT here — they dock beside the page (shrinking
+  // the webview slot) rather than hiding it, so the page stays visible while
+  // they are open.
   '.features-dropdown', // TabBar features menu
   '.tab-context-menu',
   '.context-menu', // HostTree / BookmarkTree right-click menu

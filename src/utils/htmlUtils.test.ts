@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeHtml } from './htmlUtils';
+import { sanitizeHtml, externalLinkFromClick } from './htmlUtils';
 
 describe('sanitizeHtml', () => {
   it('allows safe HTML tags', () => {
@@ -48,5 +48,34 @@ describe('sanitizeHtml', () => {
     const result = sanitizeHtml('<a href="#" onclick="alert(1)" onmouseover="alert(2)">x</a>');
     expect(result).not.toContain('onclick');
     expect(result).not.toContain('onmouseover');
+  });
+});
+
+describe('externalLinkFromClick', () => {
+  it('returns the http(s) href when the click is on an anchor', () => {
+    const a = document.createElement('a');
+    a.href = 'https://attacker.example/';
+    expect(externalLinkFromClick(a)).toBe('https://attacker.example/');
+  });
+
+  it('returns the href when the click lands on a child of the anchor', () => {
+    const a = document.createElement('a');
+    a.setAttribute('href', 'http://example.com/path');
+    const span = document.createElement('span');
+    a.appendChild(span);
+    expect(externalLinkFromClick(span)).toBe('http://example.com/path');
+  });
+
+  it('returns null for non-http(s) schemes and non-anchor targets', () => {
+    const mailto = document.createElement('a');
+    mailto.setAttribute('href', 'mailto:x@y.z');
+    expect(externalLinkFromClick(mailto)).toBeNull();
+
+    const rel = document.createElement('a');
+    rel.setAttribute('href', '#section');
+    expect(externalLinkFromClick(rel)).toBeNull();
+
+    expect(externalLinkFromClick(document.createElement('div'))).toBeNull();
+    expect(externalLinkFromClick(null)).toBeNull();
   });
 });

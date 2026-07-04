@@ -39,7 +39,7 @@
   border-radius: 4px;
   padding: 3px 8px;
   cursor: pointer;
-  font-size: var(--font-size-base);
+  font-size: calc(var(--font-size-base) - 2px);
   line-height: 1;
   transition: background 0.15s;
   font-family: var(--ui-font-family);
@@ -54,10 +54,6 @@
 .gcp-toggle-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.gcp-toggle-btn {
-  font-size: calc(var(--font-size-base) - 2px);
 }
 
 .gcp-toggle-btn.active {

@@ -33,6 +33,15 @@ describe('classifyCommand', () => {
     expect(result.reason).toContain('chaining');
   });
 
+  it('treats a carriage return as a command boundary (no CR smuggling)', () => {
+    // A bare CR is Enter to the PTY, so a whitelisted first token must not
+    // shield an unlisted command hidden after the CR.
+    expect(classifyCommand('ls\rshutdown -h now', wl).safe).toBe(false);
+    expect(classifyCommand('ls\r\nshutdown -h now', wl).safe).toBe(false);
+    // Trailing CR on an otherwise-safe command stays safe.
+    expect(classifyCommand('ls -la\r', wl).safe).toBe(true);
+  });
+
   it('rejects sudo', () => {
     const result = classifyCommand('sudo apt install vim', wl);
     expect(result.safe).toBe(false);

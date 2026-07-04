@@ -176,7 +176,7 @@ export const help = {
     passwords:
       '<0>Logins and passwords:</0> The browser keeps your login sessions and can save and autofill passwords, stored in HoTTY’s own encrypted browser profile (separate from your system Edge/Chrome).',
     clearData:
-      '<0>Clear browsing data:</0> Click the trash button in the toolbar to clear cookies and site data, cache, history, saved passwords, and autofill — you choose what to remove. Your bookmarks and HoTTY settings are always kept.',
+      '<0>Clear browsing data:</0> Open the ⋯ More menu in the toolbar and choose Clear browsing data to remove cookies and site data, cache, history, saved passwords, and autofill — you choose what to remove. Your bookmarks and HoTTY settings are always kept.',
     enable:
       '<0>Enable / disable:</0> The Web tab can be turned off in <1>Settings → Features</1>.',
   },

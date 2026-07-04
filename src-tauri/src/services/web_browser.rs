@@ -337,6 +337,16 @@ mod enabled {
         zoom: u32,
     }
 
+    /// Pushed when the native webview gains focus (the user clicked or tabbed
+    /// into the page). Page clicks never reach the renderer's DOM, so this is
+    /// the only signal it has to move pane focus to the browser pane.
+    #[cfg(windows)]
+    #[derive(Debug, Clone, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct FocusPayload {
+        pane_id: String,
+    }
+
     fn physical_bounds(rect: &BrowserRect) -> Rect {
         let (pos, size) = rect_to_physical(rect);
         Rect {
@@ -779,6 +789,9 @@ mod enabled {
     ///   buttons reflect `CanGoBack`/`CanGoForward`.
     /// - `ZoomFactorChanged` → `web-browser-zoom-state`, so the toolbar `%` and the
     ///   per-pane zoom store follow WebView2's built-in Ctrl+± / Ctrl+wheel zoom.
+    /// - `GotFocus` → `web-browser-focus`, so clicking into the page moves pane
+    ///   focus (page clicks land in the native webview and never reach the DOM,
+    ///   where the renderer's click-to-focus handler lives).
     ///
     /// Best-effort: registration failures are ignored (the browser still works,
     /// just without these niceties). Handlers are kept alive by WebView2.
@@ -796,8 +809,8 @@ mod enabled {
                 COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN,
             };
             use webview2_com::{
-                AcceleratorKeyPressedEventHandler, HistoryChangedEventHandler,
-                ZoomFactorChangedEventHandler,
+                AcceleratorKeyPressedEventHandler, FocusChangedEventHandler,
+                HistoryChangedEventHandler, ZoomFactorChangedEventHandler,
             };
             use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CONTROL, VK_MENU};
 
@@ -807,6 +820,8 @@ mod enabled {
             let pane_hist = pane_id.to_string();
             let app_zoom = app.clone();
             let pane_zoom = pane_id.to_string();
+            let app_focus = app.clone();
+            let pane_focus = pane_id.to_string();
 
             // SAFETY: COM calls on the WebView2 controller/core. `with_webview`
             // runs this on the main thread and the controller exists because
@@ -898,6 +913,24 @@ mod enabled {
                     }));
                 let mut zoom_token = Default::default();
                 let _ = unsafe { controller.add_ZoomFactorChanged(&zoom_handler, &mut zoom_token) };
+
+                // --- GotFocus → web-browser-focus ---
+                // Fires when the user clicks or tabs into the page. Those clicks
+                // never reach the renderer's DOM (the native webview swallows
+                // them), so this bridge is what lets the frontend move pane focus
+                // to this browser pane.
+                let focus_handler =
+                    FocusChangedEventHandler::create(Box::new(move |_sender, _args| {
+                        let _ = app_focus.emit(
+                            "web-browser-focus",
+                            FocusPayload {
+                                pane_id: pane_focus.clone(),
+                            },
+                        );
+                        Ok(())
+                    }));
+                let mut focus_token = Default::default();
+                let _ = unsafe { controller.add_GotFocus(&focus_handler, &mut focus_token) };
 
                 // --- HistoryChanged → web-browser-history-state ---
                 if let Ok(core) = unsafe { controller.CoreWebView2() } {

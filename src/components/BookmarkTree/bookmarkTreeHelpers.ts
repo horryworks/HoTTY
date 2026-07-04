@@ -153,19 +153,27 @@ export function moveNode(
   return insertSibling(without);
 }
 
+export type SortDirection = 'asc' | 'desc';
+
 /** Sort the children of `folderId` (null = root) alphabetically, folders first
- *  (case-insensitive). Non-recursive — sorts one level, like the host tree. */
-export function sortFolder(tree: BookmarkNode[], folderId: string | null): BookmarkNode[] {
+ *  (case-insensitive). Descending reverses only the name order — folders stay
+ *  grouped before bookmarks. Non-recursive — sorts one level, like the host tree. */
+export function sortFolder(
+  tree: BookmarkNode[],
+  folderId: string | null,
+  direction: SortDirection = 'asc',
+): BookmarkNode[] {
+  const sign = direction === 'desc' ? -1 : 1;
   const cmp = (a: BookmarkNode, b: BookmarkNode) => {
     if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
-    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    return sign * a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
   };
   if (folderId === null) return [...tree].sort(cmp);
   return tree.map((n) => {
     if (n.id === folderId && n.type === 'folder' && n.children) {
       return { ...n, children: [...n.children].sort(cmp) };
     }
-    if (n.children) return { ...n, children: sortFolder(n.children, folderId) };
+    if (n.children) return { ...n, children: sortFolder(n.children, folderId, direction) };
     return n;
   });
 }
