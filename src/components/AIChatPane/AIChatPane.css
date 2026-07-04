@@ -32,12 +32,6 @@
     justify-content: center;
 }
 
-.ai-chat-header-right {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
 .ai-chat-header-btn {
     background: none;
     border: none;
@@ -156,48 +150,43 @@
     max-width: 180px;
 }
 
-.ai-chat-overflow-wrap {
-    position: relative;
-    display: inline-flex;
-}
-
-.ai-chat-overflow-btn {
-    display: inline-flex;
+/* ── Not-signed-in state (sign-in lives in Settings → AI) ── */
+.ai-chat-unauth-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    text-align: center;
+    padding: 32px 24px;
+    gap: 12px;
+    color: var(--text-secondary);
+    font-family: var(--ui-font-family);
+    overflow-y: auto;
 }
 
-.ai-chat-overflow-menu {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
-    min-width: 140px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    box-shadow: 0 4px 12px var(--modal-shadow);
-    padding: 4px;
-    z-index: 1000;
+.ai-chat-unauth-body {
+    margin: 0;
+    font-size: calc(var(--font-size-base) - 1px);
+    line-height: 1.5;
+    max-width: 320px;
 }
 
-.ai-chat-overflow-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    padding: 6px 10px;
-    background: transparent;
+.ai-chat-unauth-settings-btn {
+    margin-top: 4px;
+    padding: 6px 16px;
     border: none;
     border-radius: 4px;
-    color: var(--text-primary);
-    font-family: var(--ui-font-family);
-    font-size: calc(var(--font-size-base) - 1px);
     cursor: pointer;
-    text-align: left;
+    background: var(--accent-color);
+    color: var(--text-on-accent);
+    font-family: var(--ui-font-family);
+    font-size: var(--font-size-base);
+    transition: background-color 0.1s;
 }
 
-.ai-chat-overflow-item:hover {
-    background: var(--bg-tertiary);
+.ai-chat-unauth-settings-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
 }
 
 .ai-chat-header-item {
@@ -261,104 +250,8 @@
     color: var(--text-primary);
 }
 
-/* ── Auth Container ── */
-.ai-chat-auth-container {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    overflow-y: auto;
-}
-
-.ai-chat-auth-card {
-    width: 100%;
-    max-width: 320px;
-    text-align: center;
-}
-
-.ai-chat-auth-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 24px;
-}
-
-.ai-chat-auth-card h2 {
-    color: var(--text-primary);
-    font-size: calc(var(--font-size-base) + 6px);
-    margin: 0 0 8px;
-}
-
-.ai-chat-auth-desc {
-    color: var(--text-secondary);
-    font-size: calc(var(--font-size-base) - 1px);
-    margin: 0 0 24px;
-    line-height: 1.5;
-}
-
-.ai-chat-auth-form {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    text-align: left;
-}
-
-.ai-chat-auth-form label {
-    color: var(--text-secondary);
-    font-size: calc(var(--font-size-base) - 2px);
-    font-weight: 500;
-}
-
-.ai-chat-input {
-    width: 100%;
-    padding: 5px 8px;
-    background-color: var(--input-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-primary);
-    font-size: calc(var(--font-size-base) - 1px);
-    outline: none;
-    transition: border-color 0.2s;
-    box-sizing: border-box;
-}
-
-.ai-chat-input:focus {
-    border-color: var(--accent-color);
-}
-
-.ai-chat-input::placeholder {
-    color: var(--placeholder-color);
-}
-
-.ai-chat-login-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    width: 100%;
-    padding: 12px;
-    margin-top: 8px;
-    background: linear-gradient(135deg, var(--accent-color), var(--accent-hover));
-    border: none;
-    border-radius: 6px;
-    color: var(--text-primary);
-    font-size: var(--font-size-base);
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.ai-chat-login-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, var(--accent-hover), var(--accent-color));
-    box-shadow: 0 2px 8px var(--modal-shadow, rgba(0, 0, 0, 0.2));
-}
-
-.ai-chat-login-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
+/* Inline error banner (model-list load failure). The auth forms themselves
+   moved to Settings → AI (see SettingsModal.css .settings-ai-auth-*). */
 .ai-chat-auth-error {
     margin-top: 8px;
     padding: 8px 12px;
@@ -368,12 +261,6 @@
     color: var(--color-danger);
     font-size: calc(var(--font-size-base) - 2px);
     text-align: center;
-}
-
-.ai-chat-spinner {
-    display: inline-block;
-    animation: spin 1s linear infinite;
-    font-size: calc(var(--font-size-base) + 4px);
 }
 
 /* ── Chat Body ── */
@@ -717,7 +604,7 @@
 }
 
 .ai-chat-send-btn:disabled {
-    opacity: 0.4;
+    opacity: 0.5;
     cursor: not-allowed;
 }
 

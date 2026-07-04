@@ -34,7 +34,6 @@
 .tree-toolbar-btn:hover {
     background: var(--btn-hover-bg);
     border-color: var(--accent-color);
-    transform: translateY(-1px);
 }
 
 .tree-toolbar-btn svg {

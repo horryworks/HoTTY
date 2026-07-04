@@ -141,7 +141,7 @@ export const settings = {
     providerSection: 'Proveedor',
     aiProvider: 'Proveedor de IA',
     aiProviderHelp:
-      'Vertex AI y Gemini usan OAuth de Google. Anthropic y OpenAI requieren claves de API.',
+      'Elija un proveedor y luego inicie sesión abajo. Gemini inicia sesión con Google (OAuth), Vertex AI usa su proyecto de Google Cloud (ADC o una clave de cuenta de servicio), Anthropic y OpenAI usan claves de API.',
     providerVertexAi: 'Google Cloud Vertex AI',
     providerGemini: 'Google AI Studio (Gemini)',
     providerAnthropic: 'Anthropic (Claude)',
@@ -151,6 +151,40 @@ export const settings = {
     authenticated: 'Autenticado',
     notAuthenticated: 'No autenticado',
     logout: 'Cerrar sesión',
+    // Formularios de credenciales (por proveedor)
+    auth: {
+      // Gemini (Google AI Studio)
+      geminiTitle: 'Conectar con Gemini',
+      clientId: 'ID de cliente',
+      clientSecret: 'Secreto de cliente',
+      connecting: 'Conectando...',
+      signInWithGoogle: 'Iniciar sesión con Google',
+      // Vertex AI
+      vertexTitle: 'Conectar con Vertex AI',
+      gcpProjectId: 'ID de proyecto de GCP',
+      gcpProjectIdPlaceholder: 'mi-id-de-proyecto',
+      location: 'Ubicación',
+      locationPlaceholder: 'us-central1',
+      authMethod: 'Método de autenticación',
+      authMethodAdc: 'Credenciales predeterminadas de la aplicación (ADC)',
+      authMethodServiceAccount: 'Archivo de clave de cuenta de servicio',
+      serviceAccountKeyFile: 'Archivo de clave de cuenta de servicio',
+      serviceAccountKeyFilePlaceholder: '/ruta/a/service-account-key.json',
+      browse: 'Examinar...',
+      connectVertex: 'Conectar con Vertex AI',
+      // OpenAI
+      openaiTitle: 'Conectar con OpenAI',
+      connectOpenai: 'Conectar con OpenAI',
+      openaiKeyPlaceholder: 'sk-...',
+      // Anthropic
+      anthropicTitle: 'Conectar con Anthropic',
+      connectAnthropic: 'Conectar con Anthropic',
+      anthropicKeyPlaceholder: 'sk-ant-...',
+      // Compartido
+      apiKey: 'Clave de API',
+      failed: 'La autenticación falló. Inténtelo de nuevo.',
+      timedOut: 'Se agotó el tiempo de autenticación. Inténtelo de nuevo.',
+    },
     // Perfiles
     personasSection: 'Perfiles',
     addPersona: 'Añadir perfil',

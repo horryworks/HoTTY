@@ -200,7 +200,7 @@ export const help = {
     step1:
       '<0>공급자 선택:</0> <1>설정 → AI → AI 공급자</1>로 이동하여 하나를 선택합니다. <2>Google AI Studio (Gemini)</2> 또는 <3>Vertex AI</3>를 권장합니다 — 아래 비교 표를 참조하세요.',
     step2:
-      '<0>인증:</0> AI 채팅 탭(<1><2></2></1> → AI 채팅)을 열고 화면의 안내에 따라 로그인하거나 사용자 인증 정보를 입력합니다.',
+      '<0>로그인:</0> <1>설정 → AI</1>의 공급자 선택 바로 아래에 선택한 공급자의 로그인 양식이 표시되니 그곳에 인증 정보를 입력하세요.',
     step3:
       '<0>채팅 시작:</0> 질문을 입력하거나, 터미널 텍스트를 선택하고 마우스 오른쪽 버튼으로 클릭한 다음 표시되는 <1>"AI에게 질문"</1> 상자에 질문을 입력하세요.',
     outro:
@@ -278,36 +278,62 @@ export const help = {
 
   aiSetup: {
     summary: 'AI 설정 및 인증',
-    geminiHeading: 'Google AI Studio (Gemini) — OAuth2 설정',
-    geminiStep1: 'Google Cloud Console → API 및 서비스 → 사용자 인증 정보로 이동합니다.',
-    geminiStep2: '<0>OAuth 2.0 클라이언트 ID</0>(데스크톱 애플리케이션 유형)를 만듭니다.',
+    whereHeading: '인증 정보는 어디에 입력하나요?',
+    whereBody1:
+      '모든 것이 <0>설정 → AI</0>에 모여 있습니다. 여기서 공급자를 선택하면 바로 아래에 해당 공급자의 로그인 양식이 표시되고, 인증 상태와 로그아웃 버튼도 함께 표시됩니다.',
+    whereBody2:
+      '<0>AI 채팅 패널</0> 자체에는 인증 정보 입력란이 없습니다. 로그인하지 않은 동안에는 AI 탭으로 바로 이동하는 <1>설정 열기</1> 버튼이 표시됩니다. 로그인은 한 번만 하면 되며, 이후 실행 시 HoTTY가 자동으로 다시 인증합니다. 로그아웃도 같은 곳의 로그아웃 버튼으로 합니다.',
+    geminiHeading: 'Google AI Studio (Gemini) — Google로 로그인 (OAuth2)',
+    geminiIntro:
+      '이 공급자는 OAuth2로 Google 계정에 로그인합니다 — AI Studio의 <0>API 키는 사용할 수 없습니다</0>. 자신만의 (무료) OAuth 클라이언트를 한 번만 만들면 됩니다:',
+    geminiStep1:
+      '<0>Google Cloud Console</0>(console.cloud.google.com)에서 프로젝트를 만들거나 선택한 다음 <1>Generative Language API</1>를 사용 설정합니다(API 및 서비스 → 라이브러리).',
+    geminiStep2:
+      '<0>OAuth 동의 화면</0>을 설정합니다(API 및 서비스). "외부"면 충분합니다. 앱이 <1>테스트</1> 모드인 동안에는 <2>테스트 사용자</2>에 자신의 Google 계정을 추가하세요 — 그렇지 않으면 Google이 로그인을 차단합니다.',
     geminiStep3:
-      'HoTTY에서 공급자로 <0>Google AI Studio</0>를 선택하고 AI 채팅 탭을 열어 클라이언트 ID와 클라이언트 보안 비밀을 입력합니다.',
+      'API 및 서비스 → 사용자 인증 정보 → <0>사용자 인증 정보 만들기 → OAuth 클라이언트 ID</0>에서 애플리케이션 유형으로 <1>데스크톱 앱</1>을 선택해 클라이언트를 만들고 <2>클라이언트 ID</2>와 <3>클라이언트 보안 비밀</3>을 복사합니다. 리디렉션 URI 설정은 필요 없습니다 — HoTTY가 임시 localhost 포트에서 자동으로 대기합니다.',
     geminiStep4:
-      '<0>"Google로 로그인"</0>을 클릭하면 인증을 위한 브라우저 창이 열립니다.',
+      'HoTTY에서 <0>설정 → AI</0>를 열고 공급자로 <1>Google AI Studio (Gemini)</1>를 선택한 다음, 아래 로그인 양식에 클라이언트 ID와 클라이언트 보안 비밀을 붙여넣고 <2>"Google로 로그인"</2>을 클릭합니다.',
+    geminiStep5:
+      '브라우저에 Google 동의 페이지가 열리면 5분 이내에 승인하세요. HoTTY가 로컬에서 로그인을 수신하고 채팅을 사용할 수 있게 됩니다.',
     geminiNote:
       '무료 등급 계정은 데이터가 모델 학습에 사용될 수 있습니다. 이를 거부하려면 Google Cloud 프로젝트에서 결제를 사용하도록 설정하세요.',
     vertexHeading: 'Google Cloud Vertex AI — ADC 또는 서비스 계정',
     vertexStep1:
-      '<0>ADC (가장 쉬움):</0> Google Cloud CLI를 설치한 다음 실행하세요:<1></1><2>gcloud auth application-default login</2><3></3>HoTTY가 이 사용자 인증 정보를 자동으로 감지합니다.',
+      'Google Cloud Console에서 프로젝트의 <0>Vertex AI API</0>를 사용 설정하고, 사용할 계정(또는 서비스 계정)에 <1>Vertex AI 사용자</1> 역할(roles/aiplatform.user)이 있는지 확인합니다.',
     vertexStep2:
-      '<0>서비스 계정:</0> Google Cloud Console → IAM → 서비스 계정에서 JSON 키 파일을 다운로드한 다음 설정에서 파일 경로를 제공합니다.',
+      '<0>ADC (가장 쉬움):</0> Google Cloud CLI를 설치한 다음 실행하세요:<1></1><2>gcloud auth application-default login</2><3></3>HoTTY가 이 사용자 인증 정보를 자동으로 감지합니다.',
     vertexStep3:
-      'AI 채팅 탭에서 <0>Google Cloud 프로젝트 ID</0>를 입력하고 <1>지역</1>을 선택합니다.',
+      '<0>서비스 계정 (대안):</0> IAM 및 관리자 → 서비스 계정에서 JSON 키를 만들어 로컬에 저장한 다음, 로그인 패널에서 <1>서비스 계정</1>을 선택하고 키 파일 경로를 입력합니다.',
+    vertexStep4:
+      '<0>설정 → AI</0>에서 <1>Google Cloud 프로젝트 ID</1>를 입력하고 <2>지역</2>을 선택한 다음 인증 방식을 골라 <3>로그인</3>을 클릭합니다.',
     anthropicHeading: 'Anthropic (Claude) — API 키',
     anthropicExperimental: '( 실험적)',
-    anthropicStep1: 'Anthropic Console → API Keys에서 API 키를 받습니다.',
+    anthropicStep1:
+      '<0>console.anthropic.com</0>에서 계정을 만들고 API 크레딧을 추가합니다 — API 결제는 Claude.ai 구독과는 별개입니다.',
     anthropicStep2:
-      'HoTTY에서 공급자로 <0>Anthropic</0>을 선택하고 AI 채팅 탭을 열어 API 키를 입력합니다.',
+      '설정 → <0>API Keys</0>에서 키를 만들고 바로 복사하세요 — 키는 한 번만 표시됩니다(<1>sk-ant-</1>로 시작).',
+    anthropicStep3:
+      'HoTTY에서 <0>설정 → AI</0>를 열고 공급자로 <1>Anthropic</1>을 선택한 다음 API 키를 붙여넣고 로그인을 클릭합니다.',
     anthropicNote:
       '이 공급자는 실험적이며 완전히 테스트되지 않았습니다. 일부 기능(Watch 모드, 대화형 모드 등)은 예상대로 작동하지 않을 수 있습니다. 발견한 문제를 보고해 주세요.',
     openaiHeading: 'OpenAI — API 키',
     openaiExperimental: '( 실험적)',
-    openaiStep1: 'OpenAI Platform → API Keys에서 API 키를 받습니다.',
+    openaiStep1:
+      '<0>platform.openai.com</0>에서 계정을 만들고 결제 또는 크레딧을 설정합니다 — API 결제는 ChatGPT Plus와는 별개입니다.',
     openaiStep2:
-      'HoTTY에서 공급자로 <0>OpenAI</0>를 선택하고 AI 채팅 탭을 열어 API 키를 입력합니다.',
+      '<0>API keys</0> 페이지에서 키를 만들고 바로 복사하세요 — 키는 한 번만 표시됩니다(<1>sk-</1>로 시작).',
+    openaiStep3:
+      'HoTTY에서 <0>설정 → AI</0>를 열고 공급자로 <1>OpenAI</1>를 선택한 다음 API 키를 붙여넣고 로그인을 클릭합니다.',
     openaiNote:
       '이 공급자는 실험적이며 완전히 테스트되지 않았습니다. 일부 기능(Watch 모드, 대화형 모드 등)은 예상대로 작동하지 않을 수 있습니다. 발견한 문제를 보고해 주세요.',
+    troubleshootHeading: '로그인에 실패할 때',
+    troubleshootGemini:
+      '<0>Gemini:</0> "액세스 차단됨" / "앱이 확인 절차를 완료하지 않았습니다" 페이지가 표시되면 OAuth 동의 화면의 <1>테스트 사용자</1>에 자신의 Google 계정이 등록되어 있지 않은 것입니다. 로그인 시도는 5분이 지나면 만료되므로 그 경우 다시 시작하세요.',
+    troubleshootVertex:
+      '<0>Vertex AI:</0> 권한(403) 오류는 대부분 Vertex AI API가 사용 설정되지 않았거나 <1>Vertex AI 사용자</1> 역할이 없는 경우입니다. ADC가 만료되었다면 <2>gcloud auth application-default login</2>을 다시 실행하세요.',
+    troubleshootKeys:
+      '<0>OpenAI / Anthropic:</0> 401은 키가 잘못되었거나 폐기된 것입니다. 429는 대부분 크레딧 부족이나 속도 제한입니다.',
     credentialsNote:
       '모든 사용자 인증 정보는 Windows DPAPI로 암호화되어 로컬에 저장됩니다 — 해당 AI 공급자를 제외하고는 사용자의 컴퓨터 외부로 전송되지 않습니다.',
   },

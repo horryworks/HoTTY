@@ -5,37 +5,6 @@
 // AI system prompts, and the AI-response-language option values stay in the
 // components. Grouped one key block per concern.
 export const aiChat = {
-  auth: {
-    // Gemini (Google AI Studio)
-    geminiTitle: '连接到 Gemini',
-    clientId: '客户端 ID',
-    clientSecret: '客户端密钥',
-    connecting: '正在连接...',
-    signInWithGoogle: '使用 Google 登录',
-    // Vertex AI
-    vertexTitle: '连接到 Vertex AI',
-    gcpProjectId: 'GCP 项目 ID',
-    gcpProjectIdPlaceholder: 'my-project-id',
-    location: '位置',
-    locationPlaceholder: 'us-central1',
-    authMethod: '身份验证方法',
-    authMethodAdc: '应用默认凭据 (ADC)',
-    authMethodServiceAccount: '服务账号密钥文件',
-    serviceAccountKeyFile: '服务账号密钥文件',
-    serviceAccountKeyFilePlaceholder: '/path/to/service-account-key.json',
-    browse: '浏览...',
-    connectVertex: '连接到 Vertex AI',
-    // OpenAI
-    openaiTitle: '连接到 OpenAI',
-    connectOpenai: '连接到 OpenAI',
-    openaiKeyPlaceholder: 'sk-...',
-    // Anthropic
-    anthropicTitle: '连接到 Anthropic',
-    connectAnthropic: '连接到 Anthropic',
-    anthropicKeyPlaceholder: 'sk-ant-...',
-    // Shared
-    apiKey: 'API 密钥',
-  },
   executionMode: {
     chipAuto: '自动 · 最多 {{max}}',
     chipAskBeforeExecute: '执行前询问',
@@ -81,8 +50,11 @@ export const aiChat = {
     unknownTerminal: '未知',
     disconnectedSuffix: '（已断开连接）',
     statusDisconnected: '已断开连接',
-    moreOptions: '更多选项',
-    logout: '退出登录',
+    // 未登录/登录中状态（凭据在 设置 → AI 中输入）
+    signingIn: '正在登录…',
+    notSignedInTitle: '未登录',
+    notSignedInBody: '在 设置 → AI 中登录 {{provider}} 即可开始聊天。',
+    openSettings: '打开设置',
     // Empty state
     emptyTitle: '我能帮您做什么？',
     emptyLinkedTo: '已链接到 <0>{{name}}</0>',
@@ -121,9 +93,6 @@ export const aiChat = {
     newChatConfirmTitle: '开始新的聊天？',
     newChatConfirmMessage: '当前对话将被清除。此操作无法撤销。',
     newChatConfirmButton: '开始新聊天',
-    // Auth status
-    authFailed: '身份验证失败。请重试。',
-    authTimedOut: '身份验证超时。请重试。',
     modelNotSelected: '未选择 AI 模型。请从屏幕右上角的下拉菜单中选择一个模型。',
   },
   message: {

@@ -141,7 +141,7 @@ export const settings = {
     providerSection: 'Провайдер',
     aiProvider: 'Провайдер ИИ',
     aiProviderHelp:
-      'Vertex AI и Gemini используют Google OAuth. Anthropic и OpenAI требуют API-ключи.',
+      'Выберите провайдера и войдите ниже. Gemini входит через Google (OAuth), Vertex AI использует ваш проект Google Cloud (ADC или ключ сервисного аккаунта), Anthropic и OpenAI используют API-ключи.',
     providerVertexAi: 'Google Cloud Vertex AI',
     providerGemini: 'Google AI Studio (Gemini)',
     providerAnthropic: 'Anthropic (Claude)',
@@ -151,6 +151,40 @@ export const settings = {
     authenticated: 'Аутентифицирован',
     notAuthenticated: 'Не аутентифицирован',
     logout: 'Выйти',
+    // Формы ввода учётных данных (по провайдерам)
+    auth: {
+      // Gemini (Google AI Studio)
+      geminiTitle: 'Подключение к Gemini',
+      clientId: 'Client ID',
+      clientSecret: 'Client Secret',
+      connecting: 'Подключение...',
+      signInWithGoogle: 'Войти через Google',
+      // Vertex AI
+      vertexTitle: 'Подключение к Vertex AI',
+      gcpProjectId: 'ID проекта GCP',
+      gcpProjectIdPlaceholder: 'my-project-id',
+      location: 'Расположение',
+      locationPlaceholder: 'us-central1',
+      authMethod: 'Метод аутентификации',
+      authMethodAdc: 'Application Default Credentials (ADC)',
+      authMethodServiceAccount: 'Файл ключа сервисного аккаунта',
+      serviceAccountKeyFile: 'Файл ключа сервисного аккаунта',
+      serviceAccountKeyFilePlaceholder: '/path/to/service-account-key.json',
+      browse: 'Обзор...',
+      connectVertex: 'Подключиться к Vertex AI',
+      // OpenAI
+      openaiTitle: 'Подключение к OpenAI',
+      connectOpenai: 'Подключиться к OpenAI',
+      openaiKeyPlaceholder: 'sk-...',
+      // Anthropic
+      anthropicTitle: 'Подключение к Anthropic',
+      connectAnthropic: 'Подключиться к Anthropic',
+      anthropicKeyPlaceholder: 'sk-ant-...',
+      // Общее
+      apiKey: 'API-ключ',
+      failed: 'Ошибка аутентификации. Повторите попытку.',
+      timedOut: 'Время ожидания аутентификации истекло. Повторите попытку.',
+    },
     // Персоны
     personasSection: 'Персоны',
     addPersona: 'Добавить персону',

@@ -63,6 +63,6 @@ describe('AuthenticationPanel', () => {
 
   it('does not display error when null', () => {
     const { container } = render(<AuthenticationPanel {...defaultProps} />);
-    expect(container.querySelector('.ai-chat-auth-error')).toBeNull();
+    expect(container.querySelector('.settings-ai-auth-error')).toBeNull();
   });
 });

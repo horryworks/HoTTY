@@ -5,12 +5,9 @@ import { getTransparentColor } from '../../utils/colorUtils';
 import { sanitizeHtml, externalLinkFromClick } from '../../utils/htmlUtils';
 import { decideAutoExec, type AutoExecDecision } from '../../utils/aiCommandClassifier';
 import { STORAGE_KEYS } from '../../constants/storage';
+import { aiProviderLabelKey } from '../../constants/aiProviders';
 import { calcAICost, formatAICost } from '../../constants/aiPricing';
 import { buildExecutionRules, languageDirective, AUTO_LANGUAGE, NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP } from '../../constants/aiPrompts';
-import { AuthenticationPanel } from './AuthenticationPanel';
-import { VertexAIAuthPanel } from './VertexAIAuthPanel';
-import { OpenAIAuthPanel } from './OpenAIAuthPanel';
-import { AnthropicAuthPanel } from './AnthropicAuthPanel';
 import { ExecutionModeBar } from './ExecutionModeBar';
 import { TerminalOutputBlock } from './TerminalOutputBlock';
 import { parseTerminalOutputMessage, notConnectedNote } from './terminalOutputUtils';
@@ -19,6 +16,7 @@ import { streamTimeoutMessage, STREAM_IDLE_TIMEOUT_MS, STREAM_HARD_CAP_MS } from
 import { SystemPromptModal } from '../SystemPromptModal/SystemPromptModal';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useAiAuthStore } from '../../stores/aiAuthStore';
 import { tauriService } from '../../services/tauriService';
 import { logError } from '../../utils/logger';
 import type { AiChatState, ChatTab } from '../../hooks/useAiChat';
@@ -55,6 +53,8 @@ interface AIChatPaneProps {
     onLinkSession?: (sessionId: string | undefined) => void;
     /** Refresh the cross-window session list (called when the picker opens). */
     onRefreshSessions?: () => void;
+    /** Open the Settings modal on the AI tab (sign-in lives there). */
+    onOpenSettings?: () => void;
 }
 
 // ── AI Icon Component ──
@@ -265,30 +265,18 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     linkableSessions,
     onLinkSession,
     onRefreshSessions,
+    onOpenSettings,
 }) => {
     const { t } = useTranslation();
     // Derive active tab from chatState (Phase 1: tabs[] + activeTabId, single linkedSessionId per tab)
     const activeTab = chatState ? getActiveTab(chatState) : undefined;
     const activeTabId = activeTab?.id;
-    // Auth state
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [isAuthLoading, setIsAuthLoading] = useState(false);
-    const [clientId, setClientId] = useState('');
-    const [clientSecret, setClientSecret] = useState('');
+    // Auth state is window-global (owned by useAiAuthOwner, mounted in App);
+    // the pane is a pure consumer. Sign-in lives in Settings → AI.
+    const isAuthenticated = useAiAuthStore((s) => s.isAuthenticated);
+    const isAuthLoading = useAiAuthStore((s) => s.isAuthLoading);
+    const logoutNonce = useAiAuthStore((s) => s.logoutNonce);
 
-    // Vertex AI auth state
-    const [vertexProjectId, setVertexProjectId] = useState(
-        () => localStorage.getItem(STORAGE_KEYS.VERTEXAI_PROJECT_ID) || ''
-    );
-    const [vertexLocation, setVertexLocation] = useState(
-        () => localStorage.getItem(STORAGE_KEYS.VERTEXAI_LOCATION) || ''
-    );
-    const [vertexAuthType, setVertexAuthType] = useState<'adc' | 'service_account'>(
-        () => (localStorage.getItem(STORAGE_KEYS.VERTEXAI_AUTH_TYPE) as 'adc' | 'service_account') || 'adc'
-    );
-    const [vertexKeyFilePath, setVertexKeyFilePath] = useState(
-        () => localStorage.getItem(STORAGE_KEYS.VERTEXAI_KEY_FILE_PATH) || ''
-    );
     const [selectedRegion, setSelectedRegion] = useState(
         () => localStorage.getItem(STORAGE_KEYS.VERTEXAI_SELECTED_REGION) || localStorage.getItem(STORAGE_KEYS.VERTEXAI_LOCATION) || ''
     );
@@ -332,11 +320,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         if (!m) { m = new Map<string, AutoExecDecision>(); map.set(tabId, m); }
         return m;
     }, []);
-
-    // OpenAI auth state
-    const [openaiApiKey, setOpenaiApiKey] = useState('');
-    // Anthropic auth state
-    const [anthropicApiKey, setAnthropicApiKey] = useState('');
 
     // Per-tab chat state (Phase 1: messages stored locally keyed by tabId so tab switch
     // swaps history without losing in-flight conversations).
@@ -474,9 +457,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const [totalOutputTokens, setTotalOutputTokens] = useState(0);
     const [totalCost, setTotalCost] = useState<number | null>(null);
     const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
-    const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
-    const overflowMenuRef = useRef<HTMLDivElement>(null);
-    const overflowTriggerRef = useRef<HTMLButtonElement>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const settingsPopoverRef = useRef<HTMLDivElement>(null);
     const settingsTriggerRef = useRef<HTMLButtonElement>(null);
@@ -487,12 +467,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     // Model list
-    const [authError, setAuthError] = useState<string | null>(null);
     const [availableModels, setAvailableModels] = useState<AIModelInfo[]>([]);
     const [modelLoadError, setModelLoadError] = useState(false);
-    const authTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // ── Load credentials and auto-auth on mount / provider change ──
+    // ── Clear conversations on provider change ──
+    // (Auth itself is handled window-wide by useAiAuthOwner.)
     const prevProviderRef = useRef(activeAiProvider);
     const paneIdRef = useRef(paneId);
     paneIdRef.current = paneId;
@@ -511,88 +490,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             setSelectedModel('Unspecified');
             tauriService.aiChatClear(paneIdRef.current).catch(() => {});
         }
-
-        setIsAuthenticated(false);
-
-        if (localStorage.getItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT)) {
-            localStorage.removeItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT);
-            return;
-        }
-
-        const load = async () => {
-            try {
-                if (activeAiProvider === 'vertexai') {
-                    const projectId = localStorage.getItem(STORAGE_KEYS.VERTEXAI_PROJECT_ID) || '';
-                    const location = localStorage.getItem(STORAGE_KEYS.VERTEXAI_LOCATION) || '';
-                    if (projectId && location) {
-                        setIsAuthLoading(true);
-                        try {
-                            await tauriService.aiSetProvider('vertexai');
-                            const success = await tauriService.aiAuthAuto({ projectId, location });
-                            setIsAuthenticated(success);
-                        } finally {
-                            setIsAuthLoading(false);
-                        }
-                    }
-                    return;
-                }
-
-                if (activeAiProvider === 'openai') {
-                    setIsAuthLoading(true);
-                    try {
-                        await tauriService.aiSetProvider('openai');
-                        const success = await tauriService.aiAuthAuto({});
-                        setIsAuthenticated(success);
-                    } finally {
-                        setIsAuthLoading(false);
-                    }
-                    return;
-                }
-
-                if (activeAiProvider === 'anthropic') {
-                    setIsAuthLoading(true);
-                    try {
-                        await tauriService.aiSetProvider('anthropic');
-                        const success = await tauriService.aiAuthAuto({});
-                        setIsAuthenticated(success);
-                    } finally {
-                        setIsAuthLoading(false);
-                    }
-                    return;
-                }
-
-                // Gemini (Google AI Studio) auth
-                const encId = localStorage.getItem(STORAGE_KEYS.GEMINI_CLIENT_ID) || '';
-                const encSecret = localStorage.getItem(STORAGE_KEYS.GEMINI_CLIENT_SECRET) || '';
-
-                let decryptedId = '';
-                let decryptedSecret = '';
-
-                if (encId) {
-                    decryptedId = await tauriService.dpapiDecrypt(encId);
-                    setClientId(decryptedId);
-                }
-                if (encSecret) {
-                    decryptedSecret = await tauriService.dpapiDecrypt(encSecret);
-                    setClientSecret(decryptedSecret);
-                }
-
-                if (decryptedId && decryptedSecret) {
-                    setIsAuthLoading(true);
-                    try {
-                        await tauriService.aiSetProvider('gemini');
-                        const success = await tauriService.aiAuthAuto({ clientId: decryptedId, clientSecret: decryptedSecret });
-                        setIsAuthenticated(success);
-                    } finally {
-                        setIsAuthLoading(false);
-                    }
-                }
-            } catch (err) {
-                logError('AI', 'Failed to auto-auth', err);
-                setIsAuthLoading(false);
-            }
-        };
-        load();
     }, [activeAiProvider]);
 
 
@@ -899,28 +796,21 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         return () => { cancelled = true; unlisten?.(); clearStreamWatchdog(); };
     }, [paneId, setStreamingForTab, markStreaming, armStreamWatchdog, clearStreamWatchdog]);
 
-    // ── Listen for auth result events ──
+    // ── Clear all conversations on explicit logout only ──
+    // Keyed on logoutNonce (bumped solely by the ai-auth-logout broadcast), NOT
+    // on the authenticated→false edge — a failed sign-in, provider switch, or a
+    // cross-window auto-auth race also drop that flag but must NOT wipe history.
+    const prevLogoutNonceRef = useRef(logoutNonce);
     useEffect(() => {
-        let cancelled = false;
-        let unlisten: (() => void) | undefined;
-
-        tauriService.onAiAuthResult((result) => {
-            if (cancelled) return;
-            if (authTimeoutRef.current) {
-                clearTimeout(authTimeoutRef.current);
-                authTimeoutRef.current = null;
-            }
-            setIsAuthLoading(false);
-            setIsAuthenticated(result.success);
-            if (!result.success) {
-                setAuthError(t('aiChat.pane.authFailed'));
-            }
-        }).then(fn => {
-            if (cancelled) { fn(); } else { unlisten = fn; }
-        }).catch(e => logError('AI', 'Auth result listener setup failed', e));
-
-        return () => { cancelled = true; unlisten?.(); };
-    }, [t]);
+        if (prevLogoutNonceRef.current === logoutNonce) return;
+        prevLogoutNonceRef.current = logoutNonce;
+        clearStreamWatchdog();
+        setMessagesByTab(new Map());
+        setStreamingByTab(new Map());
+        setStreamingTabIds(new Set());
+        streamingForTabIdRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [logoutNonce]);
 
     // ── Auto-execute safe commands ──
     const handleRunCommandRef = useRef<(cmd: string) => void>(() => {});
@@ -1003,7 +893,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             const load = async () => {
                 try {
                     if (activeAiProvider === 'vertexai') {
-                        await tauriService.aiSetLocation(selectedRegion);
+                        // Sign-in happens in Settings → AI after this pane mounted,
+                        // so re-read the region persisted by that sign-in — the
+                        // lazy state initializer above may hold a stale value.
+                        const storedRegion = localStorage.getItem(STORAGE_KEYS.VERTEXAI_SELECTED_REGION)
+                            || localStorage.getItem(STORAGE_KEYS.VERTEXAI_LOCATION)
+                            || selectedRegion;
+                        if (storedRegion !== selectedRegion) setSelectedRegion(storedRegion);
+                        await tauriService.aiSetLocation(storedRegion);
                         tauriService.aiListLocations().then(locations => {
                             if (locations.length > 0) setAvailableRegions(locations);
                         }).catch(() => {});
@@ -1062,83 +959,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         } finally {
             setIsLoadingModels(false);
         }
-    };
-
-    const handleLogin = async () => {
-        setIsAuthLoading(true);
-        setAuthError(null);
-        authTimeoutRef.current = setTimeout(() => {
-            setIsAuthLoading(false);
-            setAuthError(t('aiChat.pane.authTimedOut'));
-            authTimeoutRef.current = null;
-        }, 30000);
-
-        if (activeAiProvider === 'vertexai') {
-            localStorage.setItem(STORAGE_KEYS.VERTEXAI_PROJECT_ID, vertexProjectId);
-            localStorage.setItem(STORAGE_KEYS.VERTEXAI_LOCATION, vertexLocation);
-            localStorage.setItem(STORAGE_KEYS.VERTEXAI_AUTH_TYPE, vertexAuthType);
-            localStorage.setItem(STORAGE_KEYS.VERTEXAI_KEY_FILE_PATH, vertexKeyFilePath);
-            setSelectedRegion(vertexLocation);
-            localStorage.setItem(STORAGE_KEYS.VERTEXAI_SELECTED_REGION, vertexLocation);
-            await tauriService.aiSetProvider('vertexai');
-            await tauriService.aiAuthStart({
-                projectId: vertexProjectId,
-                location: vertexLocation,
-                authType: vertexAuthType,
-                keyFilePath: vertexKeyFilePath || undefined,
-            });
-            return;
-        }
-
-        if (activeAiProvider === 'openai') {
-            if (!openaiApiKey) {
-                if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
-                setIsAuthLoading(false);
-                return;
-            }
-            await tauriService.aiSetProvider('openai');
-            await tauriService.aiAuthStart({ apiKey: openaiApiKey });
-            return;
-        }
-
-        if (activeAiProvider === 'anthropic') {
-            if (!anthropicApiKey) {
-                if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
-                setIsAuthLoading(false);
-                return;
-            }
-            await tauriService.aiSetProvider('anthropic');
-            await tauriService.aiAuthStart({ apiKey: anthropicApiKey });
-            return;
-        }
-
-        if (!clientId || !clientSecret) {
-            if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
-            setIsAuthLoading(false);
-            return;
-        }
-        try {
-            const encId = await tauriService.dpapiEncrypt(clientId);
-            const encSecret = await tauriService.dpapiEncrypt(clientSecret);
-            localStorage.setItem(STORAGE_KEYS.GEMINI_CLIENT_ID, encId);
-            localStorage.setItem(STORAGE_KEYS.GEMINI_CLIENT_SECRET, encSecret);
-        } catch (err) {
-            logError('AI', 'Failed to encrypt Gemini credentials', err);
-        }
-        await tauriService.aiSetProvider('gemini');
-        await tauriService.aiAuthStart({ clientId, clientSecret });
-    };
-
-    const handleLogout = () => {
-        clearStreamWatchdog();
-        localStorage.setItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT, '1');
-        tauriService.aiAuthLogout().catch(() => {});
-        setIsAuthenticated(false);
-        // Logout clears all in-progress conversations across all tabs.
-        setMessagesByTab(new Map());
-        setStreamingByTab(new Map());
-        setStreamingTabIds(new Set());
-        streamingForTabIdRef.current = null;
     };
 
     const handleRunCommand = (command: string) => {
@@ -1253,25 +1073,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             performNewChat();
         }
     };
-
-    useEffect(() => {
-        if (!overflowMenuOpen) return;
-        const onMouseDown = (e: MouseEvent) => {
-            const target = e.target as Node;
-            if (overflowMenuRef.current?.contains(target)) return;
-            if (overflowTriggerRef.current?.contains(target)) return;
-            setOverflowMenuOpen(false);
-        };
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setOverflowMenuOpen(false);
-        };
-        document.addEventListener('mousedown', onMouseDown);
-        document.addEventListener('keydown', onKey);
-        return () => {
-            document.removeEventListener('mousedown', onMouseDown);
-            document.removeEventListener('keydown', onKey);
-        };
-    }, [overflowMenuOpen]);
 
     useEffect(() => {
         if (!settingsOpen) return;
@@ -1429,92 +1230,35 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                         </select>
                     )}
                 </div>
-                <div className="ai-chat-header-right">
-                    {isAuthenticated && (
-                        <>
-                            <div className="ai-chat-overflow-wrap">
-                                <button
-                                    ref={overflowTriggerRef}
-                                    type="button"
-                                    className="ai-chat-header-btn ai-chat-overflow-btn"
-                                    onClick={() => setOverflowMenuOpen(o => !o)}
-                                    title={t('aiChat.pane.moreOptions')}
-                                    aria-label={t('aiChat.pane.moreOptions')}
-                                    aria-haspopup="menu"
-                                    aria-expanded={overflowMenuOpen}
-                                >
-                                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
-                                        <circle cx="12" cy="5" r="1.6" />
-                                        <circle cx="12" cy="12" r="1.6" />
-                                        <circle cx="12" cy="19" r="1.6" />
-                                    </svg>
-                                </button>
-                                {overflowMenuOpen && (
-                                    <div ref={overflowMenuRef} className="ai-chat-overflow-menu" role="menu">
-                                        <button
-                                            type="button"
-                                            className="ai-chat-overflow-item"
-                                            role="menuitem"
-                                            onClick={() => {
-                                                setOverflowMenuOpen(false);
-                                                handleLogout();
-                                            }}
-                                        >
-                                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                                                <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
-                                            </svg>
-                                            <span>{t('aiChat.pane.logout')}</span>
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        </>
-                    )}
-                </div>
             </div>
 
             {!isAuthenticated ? (
-                activeAiProvider === 'vertexai' ? (
-                    <VertexAIAuthPanel
-                        projectId={vertexProjectId}
-                        setProjectId={setVertexProjectId}
-                        location={vertexLocation}
-                        setLocation={setVertexLocation}
-                        authType={vertexAuthType}
-                        setAuthType={setVertexAuthType}
-                        keyFilePath={vertexKeyFilePath}
-                        setKeyFilePath={setVertexKeyFilePath}
-                        isAuthLoading={isAuthLoading}
-                        onLogin={handleLogin}
-                        authError={authError}
-                    />
-                ) : activeAiProvider === 'openai' ? (
-                    <OpenAIAuthPanel
-                        apiKey={openaiApiKey}
-                        setApiKey={setOpenaiApiKey}
-                        isAuthLoading={isAuthLoading}
-                        onLogin={handleLogin}
-                        authError={authError}
-                    />
-                ) : activeAiProvider === 'anthropic' ? (
-                    <AnthropicAuthPanel
-                        apiKey={anthropicApiKey}
-                        setApiKey={setAnthropicApiKey}
-                        isAuthLoading={isAuthLoading}
-                        onLogin={handleLogin}
-                        authError={authError}
-                    />
-                ) : (
-                    <AuthenticationPanel
-                        clientId={clientId}
-                        setClientId={setClientId}
-                        clientSecret={clientSecret}
-                        setClientSecret={setClientSecret}
-                        isAuthLoading={isAuthLoading}
-                        onLogin={handleLogin}
-                        authError={authError}
-                    />
-                )
+                <div className="ai-chat-unauth-state">
+                    <div className="ai-chat-empty-icon">
+                        <AIIcon size={56} />
+                    </div>
+                    {isAuthLoading ? (
+                        // Silent re-auth in flight (startup / provider switch) — don't
+                        // invite a redundant manual sign-in while it's still resolving.
+                        <h2 className="ai-chat-empty-title">{t('aiChat.pane.signingIn')}</h2>
+                    ) : (
+                        <>
+                            <h2 className="ai-chat-empty-title">{t('aiChat.pane.notSignedInTitle')}</h2>
+                            <p className="ai-chat-unauth-body">
+                                {t('aiChat.pane.notSignedInBody', { provider: t(aiProviderLabelKey(activeAiProvider)) })}
+                            </p>
+                            {onOpenSettings && (
+                                <button
+                                    type="button"
+                                    className="ai-chat-unauth-settings-btn"
+                                    onClick={onOpenSettings}
+                                >
+                                    {t('aiChat.pane.openSettings')}
+                                </button>
+                            )}
+                        </>
+                    )}
+                </div>
             ) : (
                 <div className="ai-chat-body">
                     <div className="ai-chat-messages" ref={scrollContainerRef}>

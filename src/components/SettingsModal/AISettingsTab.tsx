@@ -1,13 +1,19 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { tauriService } from '../../services/tauriService';
+import { useAiAuthStore } from '../../stores/aiAuthStore';
+import { aiAuthLogin, aiAuthLogout, readStoredGeminiCredentials } from '../../hooks/useAiAuthOwner';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import HelpTooltip from '../HelpTooltip/HelpTooltip';
 import { STORAGE_KEYS } from '../../constants/storage';
+import { AI_PROVIDERS } from '../../constants/aiProviders';
 import type { PersonaDefinition } from '../../types/appTypes';
 import { DEFAULT_PERSONAS } from '../../stores/settingsStore';
 import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from '../../utils/commandLists';
+import { AuthenticationPanel } from './AuthenticationPanel';
+import { VertexAIAuthPanel } from './VertexAIAuthPanel';
+import { OpenAIAuthPanel } from './OpenAIAuthPanel';
+import { AnthropicAuthPanel } from './AnthropicAuthPanel';
 
 export function AISettingsTab() {
   const settings = useSettingsStore();
@@ -16,15 +22,74 @@ export function AISettingsTab() {
 
   const [showGeminiWarning, setShowGeminiWarning] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activePersonaId, setActivePersonaId] = useState(settings.aiPersonas[0]?.id ?? '');
   const [newWhitelistEntry, setNewWhitelistEntry] = useState('');
   const [newBlacklistEntry, setNewBlacklistEntry] = useState('');
 
-  // Check auth status on mount
+  // Auth state is owned window-wide by useAiAuthOwner (mounted in App); this
+  // tab only reads the store and calls the aiAuthLogin/aiAuthLogout actions.
+  const isAuthenticated = useAiAuthStore((s) => s.isAuthenticated);
+  const isAuthLoading = useAiAuthStore((s) => s.isAuthLoading);
+  const authErrorCode = useAiAuthStore((s) => s.authError);
+  const authError = authErrorCode === 'timedOut'
+    ? t('settings.ai.auth.timedOut')
+    : authErrorCode === 'failed'
+      ? t('settings.ai.auth.failed')
+      : null;
+
+  // Credential form state (persisted values pre-filled like the old pane form).
+  const [geminiClientId, setGeminiClientId] = useState('');
+  const [geminiClientSecret, setGeminiClientSecret] = useState('');
+  const [vertexProjectId, setVertexProjectId] = useState(
+    () => localStorage.getItem(STORAGE_KEYS.VERTEXAI_PROJECT_ID) || ''
+  );
+  const [vertexLocation, setVertexLocation] = useState(
+    () => localStorage.getItem(STORAGE_KEYS.VERTEXAI_LOCATION) || ''
+  );
+  const [vertexAuthType, setVertexAuthType] = useState<'adc' | 'service_account'>(
+    () => (localStorage.getItem(STORAGE_KEYS.VERTEXAI_AUTH_TYPE) as 'adc' | 'service_account') || 'adc'
+  );
+  const [vertexKeyFilePath, setVertexKeyFilePath] = useState(
+    () => localStorage.getItem(STORAGE_KEYS.VERTEXAI_KEY_FILE_PATH) || ''
+  );
+  const [openaiApiKey, setOpenaiApiKey] = useState('');
+  const [anthropicApiKey, setAnthropicApiKey] = useState('');
+
+  // Pre-fill the Gemini form from the DPAPI-encrypted stored credentials — only
+  // when the Gemini form is actually on screen (that provider selected and not
+  // yet authenticated), and never overwriting what the user has already typed.
   useEffect(() => {
-    tauriService.aiAuthStatus().then((s) => setIsAuthenticated(s.authenticated)).catch(() => {});
-  }, []);
+    if (settings.activeAiProvider !== 'gemini' || isAuthenticated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const creds = await readStoredGeminiCredentials();
+        if (cancelled || !creds) return;
+        setGeminiClientId((prev) => prev || creds.clientId);
+        setGeminiClientSecret((prev) => prev || creds.clientSecret);
+      } catch { /* leave the fields empty */ }
+    })();
+    return () => { cancelled = true; };
+  }, [settings.activeAiProvider, isAuthenticated]);
+
+  const handleLogin = () => {
+    const provider = settings.activeAiProvider;
+    if (provider === 'vertexai') {
+      void aiAuthLogin({
+        provider: 'vertexai',
+        projectId: vertexProjectId,
+        location: vertexLocation,
+        authType: vertexAuthType,
+        keyFilePath: vertexKeyFilePath || undefined,
+      });
+    } else if (provider === 'openai') {
+      void aiAuthLogin({ provider: 'openai', apiKey: openaiApiKey });
+    } else if (provider === 'anthropic') {
+      void aiAuthLogin({ provider: 'anthropic', apiKey: anthropicApiKey });
+    } else {
+      void aiAuthLogin({ provider: 'gemini', clientId: geminiClientId, clientSecret: geminiClientSecret });
+    }
+  };
 
   const personas = settings.aiPersonas;
   const activePersona = personas.find(p => p.id === activePersonaId) ?? personas[0];
@@ -72,24 +137,20 @@ export function AISettingsTab() {
         </label>
         <select
           value={settings.activeAiProvider}
-          onChange={async (e) => {
+          onChange={(e) => {
             const provider = e.target.value;
+            // The window's auth owner (useAiAuthOwner) reacts to this change:
+            // it switches the backend provider and attempts silent re-auth.
             update('activeAiProvider', provider);
-            try {
-              await tauriService.aiSetProvider(provider);
-              const status = await tauriService.aiAuthStatus();
-              setIsAuthenticated(status.authenticated);
-            } catch { /* ignore */ }
             if (provider === 'gemini') {
               setShowGeminiWarning(true);
             }
           }}
           style={{ width: '220px' }}
         >
-          <option value="vertexai">{t('settings.ai.providerVertexAi')}</option>
-          <option value="gemini">{t('settings.ai.providerGemini')}</option>
-          <option value="anthropic">{t('settings.ai.providerAnthropic')}</option>
-          <option value="openai">{t('settings.ai.providerOpenai')}</option>
+          {AI_PROVIDERS.map((p) => (
+            <option key={p.id} value={p.id}>{t(p.labelKey)}</option>
+          ))}
         </select>
       </div>
 
@@ -116,6 +177,51 @@ export function AISettingsTab() {
           )}
         </div>
       </div>
+
+      {/* -- Sign-in form for the selected provider -- */}
+      {!isAuthenticated && (
+        settings.activeAiProvider === 'vertexai' ? (
+          <VertexAIAuthPanel
+            projectId={vertexProjectId}
+            setProjectId={setVertexProjectId}
+            location={vertexLocation}
+            setLocation={setVertexLocation}
+            authType={vertexAuthType}
+            setAuthType={setVertexAuthType}
+            keyFilePath={vertexKeyFilePath}
+            setKeyFilePath={setVertexKeyFilePath}
+            isAuthLoading={isAuthLoading}
+            onLogin={handleLogin}
+            authError={authError}
+          />
+        ) : settings.activeAiProvider === 'openai' ? (
+          <OpenAIAuthPanel
+            apiKey={openaiApiKey}
+            setApiKey={setOpenaiApiKey}
+            isAuthLoading={isAuthLoading}
+            onLogin={handleLogin}
+            authError={authError}
+          />
+        ) : settings.activeAiProvider === 'anthropic' ? (
+          <AnthropicAuthPanel
+            apiKey={anthropicApiKey}
+            setApiKey={setAnthropicApiKey}
+            isAuthLoading={isAuthLoading}
+            onLogin={handleLogin}
+            authError={authError}
+          />
+        ) : (
+          <AuthenticationPanel
+            clientId={geminiClientId}
+            setClientId={setGeminiClientId}
+            clientSecret={geminiClientSecret}
+            setClientSecret={setGeminiClientSecret}
+            isAuthLoading={isAuthLoading}
+            onLogin={handleLogin}
+            authError={authError}
+          />
+        )
+      )}
 
       </div>
 
@@ -491,9 +597,9 @@ export function AISettingsTab() {
           confirmLabel={t('settings.ai.logoutConfirm')}
           onConfirm={async () => {
             setShowLogoutConfirm(false);
-            localStorage.setItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT, '1');
-            await tauriService.aiAuthLogout();
-            setIsAuthenticated(false);
+            // Sets the one-shot explicit-logout flag, drops backend credentials,
+            // and broadcasts ai-auth-logout so every pane/window updates.
+            await aiAuthLogout();
           }}
           onCancel={() => setShowLogoutConfirm(false)}
         />

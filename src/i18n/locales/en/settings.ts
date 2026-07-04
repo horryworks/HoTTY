@@ -142,7 +142,7 @@ export const settings = {
     providerSection: 'Provider',
     aiProvider: 'AI Provider',
     aiProviderHelp:
-      'Vertex AI and Gemini use Google OAuth. Anthropic and OpenAI require API keys.',
+      'Choose a provider, then sign in below. Gemini signs in with Google (OAuth), Vertex AI uses your Google Cloud project (ADC or a service-account key), Anthropic and OpenAI use API keys.',
     providerVertexAi: 'Google Cloud Vertex AI',
     providerGemini: 'Google AI Studio (Gemini)',
     providerAnthropic: 'Anthropic (Claude)',
@@ -152,6 +152,40 @@ export const settings = {
     authenticated: 'Authenticated',
     notAuthenticated: 'Not Authenticated',
     logout: 'Logout',
+    // Credential-entry forms (per provider)
+    auth: {
+      // Gemini (Google AI Studio)
+      geminiTitle: 'Connect to Gemini',
+      clientId: 'Client ID',
+      clientSecret: 'Client Secret',
+      connecting: 'Connecting...',
+      signInWithGoogle: 'Sign in with Google',
+      // Vertex AI
+      vertexTitle: 'Connect to Vertex AI',
+      gcpProjectId: 'GCP Project ID',
+      gcpProjectIdPlaceholder: 'my-project-id',
+      location: 'Location',
+      locationPlaceholder: 'us-central1',
+      authMethod: 'Authentication Method',
+      authMethodAdc: 'Application Default Credentials (ADC)',
+      authMethodServiceAccount: 'Service Account Key File',
+      serviceAccountKeyFile: 'Service Account Key File',
+      serviceAccountKeyFilePlaceholder: '/path/to/service-account-key.json',
+      browse: 'Browse...',
+      connectVertex: 'Connect to Vertex AI',
+      // OpenAI
+      openaiTitle: 'Connect to OpenAI',
+      connectOpenai: 'Connect to OpenAI',
+      openaiKeyPlaceholder: 'sk-...',
+      // Anthropic
+      anthropicTitle: 'Connect to Anthropic',
+      connectAnthropic: 'Connect to Anthropic',
+      anthropicKeyPlaceholder: 'sk-ant-...',
+      // Shared
+      apiKey: 'API Key',
+      failed: 'Authentication failed. Please try again.',
+      timedOut: 'Authentication timed out. Please try again.',
+    },
     // Personas
     personasSection: 'Personas',
     addPersona: 'Add Persona',

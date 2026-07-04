@@ -230,7 +230,7 @@ export interface SaveThemeResult {
 }
 
 /** One bundled third-party dependency in the attribution manifest. */
-export interface LicenseEntry {
+interface LicenseEntry {
   name: string;
   version: string;
   /** "npm" | "rust" */
@@ -529,6 +529,9 @@ export interface AIChatResponseData {
 }
 
 export interface AIAuthResultPayload {
+  /** Provider id that produced this result — lets the UI ignore a late result
+   *  for a provider the user has since switched away from. */
+  provider: string;
   success: boolean;
 }
 

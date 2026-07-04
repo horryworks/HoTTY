@@ -141,7 +141,7 @@ export const settings = {
     providerSection: '공급자',
     aiProvider: 'AI 공급자',
     aiProviderHelp:
-      'Vertex AI와 Gemini는 Google OAuth를 사용합니다. Anthropic과 OpenAI는 API 키가 필요합니다.',
+      '공급자를 선택한 다음 아래에서 로그인하세요. Gemini는 Google 로그인(OAuth), Vertex AI는 Google Cloud 프로젝트(ADC 또는 서비스 계정 키), Anthropic과 OpenAI는 API 키를 사용합니다.',
     providerVertexAi: 'Google Cloud Vertex AI',
     providerGemini: 'Google AI Studio (Gemini)',
     providerAnthropic: 'Anthropic (Claude)',
@@ -151,6 +151,40 @@ export const settings = {
     authenticated: '인증됨',
     notAuthenticated: '인증되지 않음',
     logout: '로그아웃',
+    // 인증 정보 입력 폼 (공급자별)
+    auth: {
+      // Gemini (Google AI Studio)
+      geminiTitle: 'Gemini에 연결',
+      clientId: '클라이언트 ID',
+      clientSecret: '클라이언트 보안 비밀',
+      connecting: '연결 중...',
+      signInWithGoogle: 'Google로 로그인',
+      // Vertex AI
+      vertexTitle: 'Vertex AI에 연결',
+      gcpProjectId: 'GCP 프로젝트 ID',
+      gcpProjectIdPlaceholder: 'my-project-id',
+      location: '위치',
+      locationPlaceholder: 'us-central1',
+      authMethod: '인증 방법',
+      authMethodAdc: '애플리케이션 기본 사용자 인증 정보 (ADC)',
+      authMethodServiceAccount: '서비스 계정 키 파일',
+      serviceAccountKeyFile: '서비스 계정 키 파일',
+      serviceAccountKeyFilePlaceholder: '/path/to/service-account-key.json',
+      browse: '찾아보기...',
+      connectVertex: 'Vertex AI에 연결',
+      // OpenAI
+      openaiTitle: 'OpenAI에 연결',
+      connectOpenai: 'OpenAI에 연결',
+      openaiKeyPlaceholder: 'sk-...',
+      // Anthropic
+      anthropicTitle: 'Anthropic에 연결',
+      connectAnthropic: 'Anthropic에 연결',
+      anthropicKeyPlaceholder: 'sk-ant-...',
+      // Shared
+      apiKey: 'API 키',
+      failed: '인증에 실패했습니다. 다시 시도하세요.',
+      timedOut: '인증 시간이 초과되었습니다. 다시 시도하세요.',
+    },
     // Personas
     personasSection: '페르소나',
     addPersona: '페르소나 추가',

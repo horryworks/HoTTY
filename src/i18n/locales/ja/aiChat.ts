@@ -1,36 +1,5 @@
 // AI チャットペインの日本語カタログ。未翻訳のキーは実行時に英語へフォールバックします。
 export const aiChat = {
-  auth: {
-    // Gemini (Google AI Studio)
-    geminiTitle: 'Gemini に接続',
-    clientId: 'クライアントID',
-    clientSecret: 'クライアントシークレット',
-    connecting: '接続中...',
-    signInWithGoogle: 'Googleでサインイン',
-    // Vertex AI
-    vertexTitle: 'Vertex AI に接続',
-    gcpProjectId: 'GCP プロジェクトID',
-    gcpProjectIdPlaceholder: 'my-project-id',
-    location: 'ロケーション',
-    locationPlaceholder: 'us-central1',
-    authMethod: '認証方式',
-    authMethodAdc: 'アプリケーションのデフォルト認証情報 (ADC)',
-    authMethodServiceAccount: 'サービスアカウントキーファイル',
-    serviceAccountKeyFile: 'サービスアカウントキーファイル',
-    serviceAccountKeyFilePlaceholder: '/path/to/service-account-key.json',
-    browse: '参照...',
-    connectVertex: 'Vertex AI に接続',
-    // OpenAI
-    openaiTitle: 'OpenAI に接続',
-    connectOpenai: 'OpenAI に接続',
-    openaiKeyPlaceholder: 'sk-...',
-    // Anthropic
-    anthropicTitle: 'Anthropic に接続',
-    connectAnthropic: 'Anthropic に接続',
-    anthropicKeyPlaceholder: 'sk-ant-...',
-    // 共通
-    apiKey: 'APIキー',
-  },
   executionMode: {
     chipAuto: '自動実行 · 上限 {{max}}',
     chipAskBeforeExecute: '実行前に確認',
@@ -76,8 +45,11 @@ export const aiChat = {
     unknownTerminal: '不明',
     disconnectedSuffix: '（切断）',
     statusDisconnected: '切断',
-    moreOptions: 'その他のオプション',
-    logout: 'ログアウト',
+    // 未サインイン／サインイン中の状態（認証情報の入力は 設定 → AI）
+    signingIn: 'サインインしています…',
+    notSignedInTitle: '未サインイン',
+    notSignedInBody: '設定 → AI で {{provider}} にサインインするとチャットを開始できます。',
+    openSettings: '設定を開く',
     // 空の状態
     emptyTitle: 'どのようなお手伝いをしましょうか？',
     emptyLinkedTo: '<0>{{name}}</0> にリンク済み',
@@ -116,9 +88,6 @@ export const aiChat = {
     newChatConfirmTitle: '新しいチャットを開始しますか？',
     newChatConfirmMessage: '現在の会話はクリアされます。この操作は取り消せません。',
     newChatConfirmButton: '新しいチャットを開始',
-    // 認証ステータス
-    authFailed: '認証に失敗しました。もう一度お試しください。',
-    authTimedOut: '認証がタイムアウトしました。もう一度お試しください。',
     modelNotSelected: 'AI モデルが選択されていません。画面右上のドロップダウンからモデルを選択してください。',
   },
   message: {

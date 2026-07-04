@@ -199,7 +199,7 @@ export const help = {
     step1:
       '<0>選擇供應商：</0>前往 <1>設定 → AI → AI 供應商</1> 並選取其中一個。建議使用 <2>Google AI Studio（Gemini）</2> 或 <3>Vertex AI</3> — 請見下方的比較表。',
     step2:
-      '<0>進行驗證：</0>開啟 AI 聊天分頁（<1><2></2></1> → AI 聊天），並依照畫面上的提示登入或輸入您的憑證。',
+      '<0>登入：</0>在 <1>設定 → AI</1> 中，供應商選擇器正下方會顯示所選供應商的登入表單 — 在那裡輸入您的憑證。',
     step3:
       '<0>開始聊天：</0>輸入問題，或選取終端機文字後按右鍵，在出現的 <1>「詢問 AI」</1> 方塊中輸入您的問題。',
     outro:
@@ -277,36 +277,62 @@ export const help = {
 
   aiSetup: {
     summary: 'AI 設定與驗證',
-    geminiHeading: 'Google AI Studio（Gemini）— OAuth2 設定',
-    geminiStep1: '前往 Google Cloud Console → API 與服務 → 憑證。',
-    geminiStep2: '建立 <0>OAuth 2.0 用戶端 ID</0>（桌面應用程式類型）。',
+    whereHeading: '憑證要在哪裡輸入？',
+    whereBody1:
+      '一切都在 <0>設定 → AI</0> 中：在那裡選擇供應商後，該供應商的登入表單會顯示在正下方，旁邊還有驗證狀態與登出按鈕。',
+    whereBody2:
+      '<0>AI 聊天窗格</0>本身沒有憑證輸入欄位 — 尚未登入時，它會顯示一個直接跳到 AI 分頁的<1>開啟設定</1>按鈕。只需登入一次；之後啟動時 HoTTY 會自動重新驗證，登出也在同一處的登出按鈕完成。',
+    geminiHeading: 'Google AI Studio（Gemini）— 使用 Google 登入（OAuth2）',
+    geminiIntro:
+      '此供應商透過 OAuth2 以您的 Google 帳戶登入 — <0>無法使用 AI Studio 的 API 金鑰</0>。只需一次性建立您自己的（免費）OAuth 用戶端：',
+    geminiStep1:
+      '在 <0>Google Cloud Console</0>（console.cloud.google.com）建立或選取專案，然後啟用 <1>Generative Language API</1>（API 與服務 → 程式庫）。',
+    geminiStep2:
+      '設定 <0>OAuth 同意畫面</0>（API 與服務）：選「外部」即可。應用程式處於<1>測試</1>模式期間，請在<2>測試使用者</2>中加入您自己的 Google 帳戶 — 否則 Google 會封鎖登入。',
     geminiStep3:
-      '在 HoTTY 中，選取 <0>Google AI Studio</0> 作為您的供應商，開啟 AI 聊天分頁，並輸入您的用戶端 ID 與用戶端密碼。',
+      '在 API 與服務 → 憑證 → <0>建立憑證 → OAuth 用戶端 ID</0> 建立用戶端，應用程式類型選擇<1>電腦版應用程式</1>，並複製 <2>用戶端 ID</2> 與 <3>用戶端密碼</3>。不需要設定重新導向 URI — HoTTY 會自動在暫時的 localhost 連接埠上待命。',
     geminiStep4:
-      '按一下 <0>「使用 Google 登入」</0> — 系統會開啟瀏覽器視窗進行授權。',
+      '在 HoTTY 中開啟 <0>設定 → AI</0>，選取 <1>Google AI Studio (Gemini)</1> 作為您的供應商，將用戶端 ID 與用戶端密碼貼到下方的登入表單，然後按一下 <2>「使用 Google 登入」</2>。',
+    geminiStep5:
+      '瀏覽器會開啟 Google 的同意頁面 — 請在 5 分鐘內核准存取。HoTTY 會在本機接收登入結果，聊天即可使用。',
     geminiNote:
       '免費方案帳戶的資料可能會被用於模型訓練。請在您的 Google Cloud 專案上啟用計費以選擇退出。',
     vertexHeading: 'Google Cloud Vertex AI — ADC 或服務帳戶',
     vertexStep1:
-      '<0>ADC（最簡單）：</0>安裝 Google Cloud CLI，然後執行：<1></1><2>gcloud auth application-default login</2><3></3>HoTTY 會自動偵測這些憑證。',
+      '在 Google Cloud Console 為您的專案啟用 <0>Vertex AI API</0>，並確認您使用的帳戶（或服務帳戶）具有 <1>Vertex AI User</1> 角色（roles/aiplatform.user）。',
     vertexStep2:
-      '<0>服務帳戶：</0>從 Google Cloud Console → IAM → 服務帳戶下載 JSON 金鑰檔案，然後在「設定」中提供該檔案路徑。',
+      '<0>ADC（最簡單）：</0>安裝 Google Cloud CLI，然後執行：<1></1><2>gcloud auth application-default login</2><3></3>HoTTY 會自動偵測這些憑證。',
     vertexStep3:
-      '在 AI 聊天分頁中輸入您的 <0>Google Cloud 專案 ID</0> 並選取 <1>地區</1>。',
+      '<0>服務帳戶（替代方案）：</0>在 IAM 與管理 → 服務帳戶建立 JSON 金鑰並儲存到本機；在登入面板中選取<1>服務帳戶</1>並輸入金鑰檔案路徑。',
+    vertexStep4:
+      '在 <0>設定 → AI</0> 中輸入您的 <1>Google Cloud 專案 ID</1>，選取<2>地區</2>，選擇驗證方式，然後按一下<3>登入</3>。',
     anthropicHeading: 'Anthropic（Claude）— API 金鑰',
     anthropicExperimental: '（實驗性）',
-    anthropicStep1: '從 Anthropic Console → API Keys 取得 API 金鑰。',
+    anthropicStep1:
+      '在 <0>console.anthropic.com</0> 建立帳戶並加值 API 額度 — API 計費與 Claude.ai 訂閱是分開的。',
     anthropicStep2:
-      '在 HoTTY 中，選取 <0>Anthropic</0> 作為您的供應商，開啟 AI 聊天分頁，並輸入您的 API 金鑰。',
+      '在 Settings → <0>API Keys</0> 建立金鑰並立即複製 — 金鑰只會顯示一次（以 <1>sk-ant-</1> 開頭）。',
+    anthropicStep3:
+      '在 HoTTY 中開啟 <0>設定 → AI</0>，選取 <1>Anthropic</1> 作為您的供應商，貼上 API 金鑰，然後按一下登入。',
     anthropicNote:
       '此供應商為實驗性，尚未經過完整測試。部分功能（監看模式、互動模式等）可能無法如預期運作。如遇任何問題，請回報給我們。',
     openaiHeading: 'OpenAI — API 金鑰',
     openaiExperimental: '（實驗性）',
-    openaiStep1: '從 OpenAI Platform → API Keys 取得 API 金鑰。',
+    openaiStep1:
+      '在 <0>platform.openai.com</0> 建立帳戶並設定計費或額度 — API 計費與 ChatGPT Plus 是分開的。',
     openaiStep2:
-      '在 HoTTY 中，選取 <0>OpenAI</0> 作為您的供應商，開啟 AI 聊天分頁，並輸入您的 API 金鑰。',
+      '在 <0>API keys</0> 頁面建立金鑰並立即複製 — 金鑰只會顯示一次（以 <1>sk-</1> 開頭）。',
+    openaiStep3:
+      '在 HoTTY 中開啟 <0>設定 → AI</0>，選取 <1>OpenAI</1> 作為您的供應商，貼上 API 金鑰，然後按一下登入。',
     openaiNote:
       '此供應商為實驗性，尚未經過完整測試。部分功能（監看模式、互動模式等）可能無法如預期運作。如遇任何問題，請回報給我們。',
+    troubleshootHeading: '登入失敗時',
+    troubleshootGemini:
+      '<0>Gemini：</0>出現「存取權遭封鎖」/「應用程式未完成驗證程序」頁面，表示您的 Google 帳戶未被加入 OAuth 同意畫面的<1>測試使用者</1>。登入嘗試也會在 5 分鐘後逾時 — 重新開始即可。',
+    troubleshootVertex:
+      '<0>Vertex AI：</0>權限（403）錯誤通常表示未啟用 Vertex AI API，或缺少 <1>Vertex AI User</1> 角色。若 ADC 已過期，請重新執行 <2>gcloud auth application-default login</2>。',
+    troubleshootKeys:
+      '<0>OpenAI / Anthropic：</0>401 表示金鑰無效或已被撤銷；429 通常表示額度用盡或觸發了速率限制。',
     credentialsNote:
       '所有憑證皆以 Windows DPAPI 加密並儲存在本機 — 除了傳送給各別的 AI 供應商外，它們絕不會被傳送至您的電腦之外。',
   },

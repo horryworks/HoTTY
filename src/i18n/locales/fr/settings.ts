@@ -141,7 +141,7 @@ export const settings = {
     providerSection: 'Fournisseur',
     aiProvider: "Fournisseur d'IA",
     aiProviderHelp:
-      'Vertex AI et Gemini utilisent Google OAuth. Anthropic et OpenAI nécessitent des clés API.',
+      "Choisissez un fournisseur, puis connectez-vous ci-dessous. Gemini se connecte avec Google (OAuth), Vertex AI utilise votre projet Google Cloud (ADC ou clé de compte de service), Anthropic et OpenAI utilisent des clés API.",
     providerVertexAi: 'Google Cloud Vertex AI',
     providerGemini: 'Google AI Studio (Gemini)',
     providerAnthropic: 'Anthropic (Claude)',
@@ -151,6 +151,40 @@ export const settings = {
     authenticated: 'Authentifié',
     notAuthenticated: 'Non authentifié',
     logout: 'Déconnexion',
+    // Formulaires d'identifiants (par fournisseur)
+    auth: {
+      // Gemini (Google AI Studio)
+      geminiTitle: 'Se connecter à Gemini',
+      clientId: 'ID client',
+      clientSecret: 'Secret client',
+      connecting: 'Connexion...',
+      signInWithGoogle: 'Se connecter avec Google',
+      // Vertex AI
+      vertexTitle: 'Se connecter à Vertex AI',
+      gcpProjectId: 'ID de projet GCP',
+      gcpProjectIdPlaceholder: 'mon-id-de-projet',
+      location: 'Emplacement',
+      locationPlaceholder: 'us-central1',
+      authMethod: "Méthode d'authentification",
+      authMethodAdc: 'Identifiants par défaut de l\'application (ADC)',
+      authMethodServiceAccount: 'Fichier de clé de compte de service',
+      serviceAccountKeyFile: 'Fichier de clé de compte de service',
+      serviceAccountKeyFilePlaceholder: '/chemin/vers/service-account-key.json',
+      browse: 'Parcourir...',
+      connectVertex: 'Se connecter à Vertex AI',
+      // OpenAI
+      openaiTitle: 'Se connecter à OpenAI',
+      connectOpenai: 'Se connecter à OpenAI',
+      openaiKeyPlaceholder: 'sk-...',
+      // Anthropic
+      anthropicTitle: 'Se connecter à Anthropic',
+      connectAnthropic: 'Se connecter à Anthropic',
+      anthropicKeyPlaceholder: 'sk-ant-...',
+      // Shared
+      apiKey: 'Clé API',
+      failed: "Échec de l'authentification. Veuillez réessayer.",
+      timedOut: "Délai d'authentification dépassé. Veuillez réessayer.",
+    },
     // Personas
     personasSection: 'Personas',
     addPersona: 'Ajouter un persona',

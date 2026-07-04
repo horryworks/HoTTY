@@ -164,9 +164,13 @@ pub async fn ai_auth_status(state: State<'_, AIServiceState>) -> Result<AuthStat
 }
 
 #[tauri::command]
-pub async fn ai_auth_logout(state: State<'_, AIServiceState>) -> Result<(), String> {
+pub async fn ai_auth_logout(
+    app: AppHandle,
+    state: State<'_, AIServiceState>,
+) -> Result<(), String> {
     let mut service = state.service.lock().await;
     service.logout();
+    crate::services::ai::ai_provider::emit_auth_logout(&app);
     Ok(())
 }
 

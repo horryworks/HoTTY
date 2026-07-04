@@ -181,3 +181,20 @@ pub async fn stop_tftp(state: &FileServerState, server_id: &str) {
     let mut map = state.tftp.lock().await;
     file_server::stop_handle(&mut map, server_id).await;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn map_jail_err_maps_to_tftp_error_codes() {
+        assert!(matches!(
+            map_jail_err(JailError::NotFound),
+            packet::Error::FileNotFound
+        ));
+        assert!(matches!(
+            map_jail_err(JailError::Denied),
+            packet::Error::PermissionDenied
+        ));
+    }
+}

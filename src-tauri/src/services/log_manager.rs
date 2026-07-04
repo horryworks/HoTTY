@@ -477,16 +477,6 @@ impl LogManager {
             log::info!("stopped logging session '{session_id}'");
         }
     }
-
-    /// Stop logging for all sessions.
-    pub async fn stop_all(&self) {
-        let mut inner = self.inner.lock().await;
-        for (id, mut log) in inner.logs.drain() {
-            let _ = log.file.flush();
-            let _ = log.ts_file.flush();
-            log::info!("stopped logging session '{id}'");
-        }
-    }
 }
 
 impl Default for LogManager {
@@ -760,7 +750,7 @@ mod tests {
         // Second start should be ok (idempotent)
         mgr.start_logging("s1", &dir, "ssh", "host").await.unwrap();
 
-        mgr.stop_all().await;
+        mgr.stop_logging("s1").await;
         let _ = fs::remove_dir_all(&dir);
     }
 

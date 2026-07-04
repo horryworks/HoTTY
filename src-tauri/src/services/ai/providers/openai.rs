@@ -151,7 +151,7 @@ impl AIProvider for OpenAIProvider {
 
         if !is_valid_api_key(api_key) {
             log::warn!("[openai] Auth rejected: invalid API key format");
-            emit_auth_result(app, false);
+            emit_auth_result(app, self.id(), false);
             return Ok(false);
         }
 
@@ -167,7 +167,7 @@ impl AIProvider for OpenAIProvider {
 
         if !response.status().is_success() {
             log::warn!("[openai] API key validation failed: {}", response.status());
-            emit_auth_result(app, false);
+            emit_auth_result(app, self.id(), false);
             return Ok(false);
         }
 
@@ -179,7 +179,7 @@ impl AIProvider for OpenAIProvider {
             );
         }
         log::info!("[openai] Auth success");
-        emit_auth_result(app, true);
+        emit_auth_result(app, self.id(), true);
         Ok(true)
     }
 

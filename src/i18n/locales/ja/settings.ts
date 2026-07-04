@@ -142,7 +142,7 @@ export const settings = {
     providerSection: 'プロバイダー',
     aiProvider: 'AIプロバイダー',
     aiProviderHelp:
-      'Vertex AI と Gemini は Google OAuth を使用します。Anthropic と OpenAI は API キーが必要です。',
+      'プロバイダーを選び、下でサインインします。Gemini は Google サインイン（OAuth）、Vertex AI は Google Cloud プロジェクト（ADC またはサービスアカウント鍵）、Anthropic と OpenAI は API キーを使用します。',
     providerVertexAi: 'Google Cloud Vertex AI',
     providerGemini: 'Google AI Studio (Gemini)',
     providerAnthropic: 'Anthropic (Claude)',
@@ -152,6 +152,40 @@ export const settings = {
     authenticated: '認証済み',
     notAuthenticated: '未認証',
     logout: 'ログアウト',
+    // 認証情報の入力フォーム（プロバイダー別）
+    auth: {
+      // Gemini (Google AI Studio)
+      geminiTitle: 'Gemini に接続',
+      clientId: 'クライアントID',
+      clientSecret: 'クライアントシークレット',
+      connecting: '接続中...',
+      signInWithGoogle: 'Googleでサインイン',
+      // Vertex AI
+      vertexTitle: 'Vertex AI に接続',
+      gcpProjectId: 'GCP プロジェクトID',
+      gcpProjectIdPlaceholder: 'my-project-id',
+      location: 'ロケーション',
+      locationPlaceholder: 'us-central1',
+      authMethod: '認証方式',
+      authMethodAdc: 'アプリケーションのデフォルト認証情報 (ADC)',
+      authMethodServiceAccount: 'サービスアカウントキーファイル',
+      serviceAccountKeyFile: 'サービスアカウントキーファイル',
+      serviceAccountKeyFilePlaceholder: '/path/to/service-account-key.json',
+      browse: '参照...',
+      connectVertex: 'Vertex AI に接続',
+      // OpenAI
+      openaiTitle: 'OpenAI に接続',
+      connectOpenai: 'OpenAI に接続',
+      openaiKeyPlaceholder: 'sk-...',
+      // Anthropic
+      anthropicTitle: 'Anthropic に接続',
+      connectAnthropic: 'Anthropic に接続',
+      anthropicKeyPlaceholder: 'sk-ant-...',
+      // 共通
+      apiKey: 'APIキー',
+      failed: '認証に失敗しました。もう一度お試しください。',
+      timedOut: '認証がタイムアウトしました。もう一度お試しください。',
+    },
     // ペルソナ
     personasSection: 'ペルソナ',
     addPersona: 'ペルソナを追加',

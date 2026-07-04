@@ -360,7 +360,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                   <Trans i18nKey="help.aiQuickStart.step1" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />]} />
                 </li>
                 <li>
-                  <Trans i18nKey="help.aiQuickStart.step2" components={[<strong key="0" />, <strong key="1" />, <FeaturesIcon key="2" />]} />
+                  <Trans i18nKey="help.aiQuickStart.step2" components={[<strong key="0" />, <strong key="1" />]} />
                 </li>
                 <li>
                   <Trans i18nKey="help.aiQuickStart.step3" components={[<strong key="0" />, <strong key="1" />]} />
@@ -491,12 +491,24 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
             <summary>{t('help.aiSetup.summary')}</summary>
             <div className="help-section-body">
 
+              <p className="help-text" style={{ marginBottom: '2px' }}><strong>{t('help.aiSetup.whereHeading')}</strong></p>
+              <p className="help-text" style={{ marginBottom: '4px' }}>
+                <Trans i18nKey="help.aiSetup.whereBody1" components={[<strong key="0" />]} />
+              </p>
+              <p className="help-text" style={{ marginBottom: '10px' }}>
+                <Trans i18nKey="help.aiSetup.whereBody2" components={[<strong key="0" />, <strong key="1" />]} />
+              </p>
+
               <p className="help-text" style={{ marginBottom: '2px' }}><strong>{t('help.aiSetup.geminiHeading')}</strong></p>
-              <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 10px 0' }}>
-                <li>{t('help.aiSetup.geminiStep1')}</li>
-                <li><Trans i18nKey="help.aiSetup.geminiStep2" components={[<strong key="0" />]} /></li>
-                <li><Trans i18nKey="help.aiSetup.geminiStep3" components={[<strong key="0" />]} /></li>
-                <li><Trans i18nKey="help.aiSetup.geminiStep4" components={[<strong key="0" />]} /></li>
+              <p className="help-text" style={{ marginBottom: '4px' }}>
+                <Trans i18nKey="help.aiSetup.geminiIntro" components={[<strong key="0" />]} />
+              </p>
+              <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 4px 0' }}>
+                <li><Trans i18nKey="help.aiSetup.geminiStep1" components={[<strong key="0" />, <strong key="1" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.geminiStep2" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.geminiStep3" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.geminiStep4" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />]} /></li>
+                <li>{t('help.aiSetup.geminiStep5')}</li>
               </ol>
               <p className="help-text" style={{ marginBottom: '10px' }}>
                 {t('help.aiSetup.geminiNote')}
@@ -504,15 +516,17 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
 
               <p className="help-text" style={{ marginBottom: '2px' }}><strong>{t('help.aiSetup.vertexHeading')}</strong></p>
               <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 10px 0' }}>
-                <li><Trans i18nKey="help.aiSetup.vertexStep1" components={[<strong key="0" />, <br key="1" />, <code key="2" />, <br key="3" />]} /></li>
-                <li><Trans i18nKey="help.aiSetup.vertexStep2" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.vertexStep1" components={[<strong key="0" />, <strong key="1" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.vertexStep2" components={[<strong key="0" />, <br key="1" />, <code key="2" />, <br key="3" />]} /></li>
                 <li><Trans i18nKey="help.aiSetup.vertexStep3" components={[<strong key="0" />, <strong key="1" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.vertexStep4" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />]} /></li>
               </ol>
 
               <p className="help-text" style={{ marginBottom: '2px' }}><strong>{t('help.aiSetup.anthropicHeading')}</strong> <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', opacity: 0.7 }}>{t('help.aiSetup.anthropicExperimental')}</span></p>
               <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 4px 0' }}>
-                <li>{t('help.aiSetup.anthropicStep1')}</li>
-                <li><Trans i18nKey="help.aiSetup.anthropicStep2" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.anthropicStep1" components={[<code key="0" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.anthropicStep2" components={[<strong key="0" />, <code key="1" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.anthropicStep3" components={[<strong key="0" />, <strong key="1" />]} /></li>
               </ol>
               <p className="help-text" style={{ marginBottom: '10px' }}>
                 {t('help.aiSetup.anthropicNote')}
@@ -520,12 +534,20 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
 
               <p className="help-text" style={{ marginBottom: '2px' }}><strong>{t('help.aiSetup.openaiHeading')}</strong> <span style={{ fontSize: 'calc(var(--font-size-base) - 2px)', opacity: 0.7 }}>{t('help.aiSetup.openaiExperimental')}</span></p>
               <ol className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 4px 0' }}>
-                <li>{t('help.aiSetup.openaiStep1')}</li>
-                <li><Trans i18nKey="help.aiSetup.openaiStep2" components={[<strong key="0" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.openaiStep1" components={[<code key="0" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.openaiStep2" components={[<strong key="0" />, <code key="1" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.openaiStep3" components={[<strong key="0" />, <strong key="1" />]} /></li>
               </ol>
               <p className="help-text" style={{ marginBottom: '10px' }}>
                 {t('help.aiSetup.openaiNote')}
               </p>
+
+              <p className="help-text" style={{ marginBottom: '2px' }}><strong>{t('help.aiSetup.troubleshootHeading')}</strong></p>
+              <ul className="shortcuts-list" style={{ paddingLeft: '1.5em', margin: '0 0 10px 0' }}>
+                <li><Trans i18nKey="help.aiSetup.troubleshootGemini" components={[<strong key="0" />, <strong key="1" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.troubleshootVertex" components={[<strong key="0" />, <strong key="1" />, <code key="2" />]} /></li>
+                <li><Trans i18nKey="help.aiSetup.troubleshootKeys" components={[<strong key="0" />]} /></li>
+              </ul>
 
               <p className="help-text">
                 {t('help.aiSetup.credentialsNote')}

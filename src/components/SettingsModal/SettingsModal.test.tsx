@@ -79,6 +79,11 @@ describe('SettingsModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('opens on the requested tab via initialTab (deep link)', () => {
+    render(<SettingsModal open onClose={() => {}} {...themeProps} initialTab="ai" />);
+    expect(screen.getByText('AI Provider')).toBeTruthy();
+  });
+
   it('renders all 5 tab buttons', () => {
     render(<SettingsModal open onClose={() => {}} {...themeProps} />);
     expect(screen.getByText('General')).toBeTruthy();

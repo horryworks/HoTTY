@@ -200,7 +200,7 @@ export const help = {
     step1:
       '<0>Choose a provider:</0> Go to <1>Settings → AI → AI Provider</1> and select one. <2>Google AI Studio (Gemini)</2> or <3>Vertex AI</3> are recommended — see the comparison table below.',
     step2:
-      '<0>Authenticate:</0> Open an AI Chat tab (<1><2></2></1> → AI Chat) and follow the on-screen prompts to sign in or enter your credentials.',
+      '<0>Sign in:</0> The sign-in form for the selected provider appears right below the provider selector in <1>Settings → AI</1> — enter your credentials there.',
     step3:
       '<0>Start chatting:</0> Type a question, or select terminal text, right-click, and type your question in the <1>"Ask AI"</1> box.',
     outro:
@@ -278,36 +278,62 @@ export const help = {
 
   aiSetup: {
     summary: 'AI Setup & Authentication',
-    geminiHeading: 'Google AI Studio (Gemini) — OAuth2 Setup',
-    geminiStep1: 'Go to Google Cloud Console → APIs & Services → Credentials.',
-    geminiStep2: 'Create an <0>OAuth 2.0 Client ID</0> (Desktop application type).',
+    whereHeading: 'Where do I enter my credentials?',
+    whereBody1:
+      'Everything lives in <0>Settings → AI</0>: pick a provider there, and that provider\'s sign-in form appears right below, together with your authentication status and a Logout button.',
+    whereBody2:
+      'The <0>AI Chat pane</0> itself has no credential fields — while you are not signed in, it shows an <1>Open Settings</1> button that jumps straight to the AI tab. You sign in once; HoTTY re-authenticates automatically on later launches, and signing out is the Logout button in the same place.',
+    geminiHeading: 'Google AI Studio (Gemini) — Sign in with Google (OAuth2)',
+    geminiIntro:
+      'This provider signs in with your Google account via OAuth2 — an AI Studio <0>API key cannot be used</0>. You create your own (free) OAuth client once:',
+    geminiStep1:
+      'In <0>Google Cloud Console</0> (console.cloud.google.com), create or select a project, then enable the <1>Generative Language API</1> (APIs & Services → Library).',
+    geminiStep2:
+      'Set up the <0>OAuth consent screen</0> (APIs & Services): "External" is fine. While the app is in <1>Testing</1> mode, add your own Google account under <2>Test users</2> — without this, Google blocks the sign-in.',
     geminiStep3:
-      'In HoTTY, select <0>Google AI Studio</0> as your provider, open an AI Chat tab, and enter your Client ID and Client Secret.',
+      'Create the client under APIs & Services → Credentials → <0>Create credentials → OAuth client ID</0>, application type <1>Desktop app</1>, and copy the <2>Client ID</2> and <3>Client Secret</3>. No redirect URI is needed — HoTTY listens on a temporary localhost port automatically.',
     geminiStep4:
-      'Click <0>"Sign in with Google"</0> — a browser window will open for authorization.',
+      'In HoTTY, open <0>Settings → AI</0>, select <1>Google AI Studio (Gemini)</1> as your provider, paste the Client ID and Client Secret into the sign-in form below, and click <2>"Sign in with Google"</2>.',
+    geminiStep5:
+      'Your browser opens Google\'s consent page — approve access within 5 minutes. HoTTY receives the sign-in locally and the chat is ready to use.',
     geminiNote:
       'Free-tier accounts may have data used for model training. Enable billing on your Google Cloud project to opt out.',
     vertexHeading: 'Google Cloud Vertex AI — ADC or Service Account',
     vertexStep1:
-      '<0>ADC (easiest):</0> Install the Google Cloud CLI, then run:<1></1><2>gcloud auth application-default login</2><3></3>HoTTY detects these credentials automatically.',
+      'In Google Cloud Console, enable the <0>Vertex AI API</0> for your project and make sure your account (or the service account) has the <1>Vertex AI User</1> role (roles/aiplatform.user).',
     vertexStep2:
-      '<0>Service Account:</0> Download a JSON key file from Google Cloud Console → IAM → Service Accounts, then provide the file path in Settings.',
+      '<0>ADC (easiest):</0> Install the Google Cloud CLI, then run:<1></1><2>gcloud auth application-default login</2><3></3>HoTTY detects these credentials automatically.',
     vertexStep3:
-      'Enter your <0>Google Cloud Project ID</0> and select a <1>Region</1> in the AI Chat tab.',
+      '<0>Service Account (alternative):</0> Create a JSON key under IAM & Admin → Service Accounts and save it locally; in the sign-in panel choose <1>Service Account</1> and enter the key file path.',
+    vertexStep4:
+      'In <0>Settings → AI</0>, enter your <1>Google Cloud Project ID</1>, select a <2>Region</2>, choose the authentication type, and click <3>Sign in</3>.',
     anthropicHeading: 'Anthropic (Claude) — API Key',
     anthropicExperimental: '( Experimental)',
-    anthropicStep1: 'Obtain an API key from the Anthropic Console → API Keys.',
+    anthropicStep1:
+      'Create an account at <0>console.anthropic.com</0> and add API credits — API billing is separate from a Claude.ai subscription.',
     anthropicStep2:
-      'In HoTTY, select <0>Anthropic</0> as your provider, open an AI Chat tab, and enter your API key.',
+      'Create a key under Settings → <0>API Keys</0> and copy it right away — it is shown only once (it starts with <1>sk-ant-</1>).',
+    anthropicStep3:
+      'In HoTTY, open <0>Settings → AI</0>, select <1>Anthropic</1> as your provider, paste the API key, and click Sign in.',
     anthropicNote:
       'This provider is experimental and has not been fully tested. Some features (Watch Mode, Interactive Mode, etc.) may not work as expected. Please report any issues you encounter.',
     openaiHeading: 'OpenAI — API Key',
     openaiExperimental: '( Experimental)',
-    openaiStep1: 'Obtain an API key from the OpenAI Platform → API Keys.',
+    openaiStep1:
+      'Create an account at <0>platform.openai.com</0> and set up billing or credits — API billing is separate from ChatGPT Plus.',
     openaiStep2:
-      'In HoTTY, select <0>OpenAI</0> as your provider, open an AI Chat tab, and enter your API key.',
+      'Create a key under <0>API keys</0> and copy it right away — it is shown only once (it starts with <1>sk-</1>).',
+    openaiStep3:
+      'In HoTTY, open <0>Settings → AI</0>, select <1>OpenAI</1> as your provider, paste the API key, and click Sign in.',
     openaiNote:
       'This provider is experimental and has not been fully tested. Some features (Watch Mode, Interactive Mode, etc.) may not work as expected. Please report any issues you encounter.',
+    troubleshootHeading: 'If sign-in fails',
+    troubleshootGemini:
+      '<0>Gemini:</0> An "Access blocked" / "app has not completed verification" page means your Google account is not listed under <1>Test users</1> on the OAuth consent screen. A sign-in attempt also expires after 5 minutes — just start it again.',
+    troubleshootVertex:
+      '<0>Vertex AI:</0> Permission (403) errors usually mean the Vertex AI API is not enabled or the <1>Vertex AI User</1> role is missing. If ADC has expired, re-run <2>gcloud auth application-default login</2>.',
+    troubleshootKeys:
+      '<0>OpenAI / Anthropic:</0> 401 means the key is invalid or revoked; 429 usually means you are out of credits or rate-limited.',
     credentialsNote:
       'All credentials are encrypted with Windows DPAPI and stored locally — they are never transmitted outside your machine except to the respective AI provider.',
   },

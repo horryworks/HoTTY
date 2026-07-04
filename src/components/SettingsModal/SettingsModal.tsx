@@ -9,17 +9,19 @@ import { FeaturesTab } from './FeaturesTab';
 import type { Theme } from '../../types/appTypes';
 import './SettingsModal.css';
 
+export type SettingsTab = 'general' | 'appearance' | 'protocols' | 'features' | 'ai' | 'about';
+
 interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
   themesData: Record<string, Theme>;
   onOpenCustomThemeCreator: () => void;
   onDeleteTheme: (themeKey: string) => Promise<void>;
+  /** Tab to show when the modal opens (deep link, e.g. AI Chat → 'ai'). */
+  initialTab?: SettingsTab;
 }
 
-type Tab = 'general' | 'appearance' | 'protocols' | 'features' | 'ai' | 'about';
-
-const TAB_IDS: Tab[] = ['general', 'appearance', 'protocols', 'features', 'ai', 'about'];
+const TAB_IDS: SettingsTab[] = ['general', 'appearance', 'protocols', 'features', 'ai', 'about'];
 
 export function SettingsModal({
   open,
@@ -27,9 +29,18 @@ export function SettingsModal({
   themesData,
   onOpenCustomThemeCreator,
   onDeleteTheme,
+  initialTab,
 }: SettingsModalProps) {
-  const [tab, setTab] = useState<Tab>('general');
+  const [tab, setTab] = useState<SettingsTab>(initialTab ?? 'general');
   const { t } = useTranslation();
+
+  // The component stays mounted while closed, so apply the requested tab on
+  // each open transition (render-time state adjustment, not an effect).
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open && initialTab) setTab(initialTab);
+  }
 
   if (!open) return null;
 

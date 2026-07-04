@@ -3,37 +3,6 @@
 // 面向使用者的顯示文字；程式碼識別字、CSS 類別、模型 ID、供應商／列舉值、AI 系統
 // 提示詞，以及 AI 回應語言選項值都留在元件中。每個用途對應一個鍵區塊。
 export const aiChat = {
-  auth: {
-    // Gemini（Google AI Studio）
-    geminiTitle: '連線至 Gemini',
-    clientId: '用戶端 ID',
-    clientSecret: '用戶端密碼',
-    connecting: '正在連線...',
-    signInWithGoogle: '使用 Google 登入',
-    // Vertex AI
-    vertexTitle: '連線至 Vertex AI',
-    gcpProjectId: 'GCP 專案 ID',
-    gcpProjectIdPlaceholder: 'my-project-id',
-    location: '位置',
-    locationPlaceholder: 'us-central1',
-    authMethod: '驗證方法',
-    authMethodAdc: '應用程式預設憑證（ADC）',
-    authMethodServiceAccount: '服務帳戶金鑰檔案',
-    serviceAccountKeyFile: '服務帳戶金鑰檔案',
-    serviceAccountKeyFilePlaceholder: '/path/to/service-account-key.json',
-    browse: '瀏覽...',
-    connectVertex: '連線至 Vertex AI',
-    // OpenAI
-    openaiTitle: '連線至 OpenAI',
-    connectOpenai: '連線至 OpenAI',
-    openaiKeyPlaceholder: 'sk-...',
-    // Anthropic
-    anthropicTitle: '連線至 Anthropic',
-    connectAnthropic: '連線至 Anthropic',
-    anthropicKeyPlaceholder: 'sk-ant-...',
-    // 共用
-    apiKey: 'API 金鑰',
-  },
   executionMode: {
     chipAuto: '自動 · 上限 {{max}}',
     chipAskBeforeExecute: '執行前先詢問',
@@ -79,8 +48,11 @@ export const aiChat = {
     unknownTerminal: '未知',
     disconnectedSuffix: '（已中斷連線）',
     statusDisconnected: '已中斷連線',
-    moreOptions: '更多選項',
-    logout: '登出',
+    // 未登入/登入中狀態（憑證在 設定 → AI 中輸入）
+    signingIn: '正在登入…',
+    notSignedInTitle: '尚未登入',
+    notSignedInBody: '在 設定 → AI 中登入 {{provider}} 即可開始聊天。',
+    openSettings: '開啟設定',
     // 空白狀態
     emptyTitle: '需要什麼協助嗎？',
     emptyLinkedTo: '已連結至 <0>{{name}}</0>',
@@ -119,9 +91,6 @@ export const aiChat = {
     newChatConfirmTitle: '要開始新聊天嗎？',
     newChatConfirmMessage: '目前的對話將會被清除。此動作無法復原。',
     newChatConfirmButton: '開始新聊天',
-    // 驗證狀態
-    authFailed: '驗證失敗。請再試一次。',
-    authTimedOut: '驗證逾時。請再試一次。',
     modelNotSelected: '尚未選取 AI 模型。請從畫面右上角的下拉式選單選取模型。',
   },
   message: {

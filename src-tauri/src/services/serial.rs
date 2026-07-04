@@ -166,6 +166,39 @@ impl SerialSession {
     }
 }
 
+/// Convert a raw `serialport::Error` from the port-open path into a short,
+/// human-readable message, mirroring `humanize_io_error` for the TCP
+/// protocols. Without this, Windows COM open failures surface raw OS phrases
+/// like "Access is denied." or "The system cannot find the file specified.".
+/// The port path is kept in the message because it is the port's identity.
+fn humanize_serial_error(err: &serialport::Error, path: &str) -> String {
+    use serialport::ErrorKind;
+    use std::io::ErrorKind as IoKind;
+    match err.kind {
+        ErrorKind::NoDevice | ErrorKind::Io(IoKind::NotFound) => {
+            return format!("Serial port {path} not found")
+        }
+        ErrorKind::Io(IoKind::PermissionDenied) => {
+            return format!("Serial port {path} is in use or access was denied")
+        }
+        ErrorKind::InvalidInput => return format!("Invalid serial port settings for {path}"),
+        _ => {}
+    }
+    // String-match fallback: Windows surfaces most COM open failures as an
+    // untyped error carrying a raw OS phrase rather than a typed ErrorKind.
+    let lower = err.to_string().to_ascii_lowercase();
+    if lower.contains("access is denied") || lower.contains("in use") || lower.contains("busy") {
+        format!("Serial port {path} is in use or access was denied")
+    } else if lower.contains("cannot find")
+        || lower.contains("does not exist")
+        || lower.contains("no such")
+    {
+        format!("Serial port {path} not found")
+    } else {
+        format!("Failed to open serial port {path}: {err}")
+    }
+}
+
 #[async_trait]
 impl SessionService for SerialSession {
     async fn connect(&mut self, app: AppHandle, session_id: String) -> Result<(), SessionError> {
@@ -191,7 +224,7 @@ impl SessionService for SerialSession {
             .open()
             .map_err(|e| {
                 log::error!("serial: failed to open {}: {e}", self.config.path);
-                SessionError::ConnectionFailed(format!("{}: {e}", self.config.path))
+                SessionError::ConnectionFailed(humanize_serial_error(&e, &self.config.path))
             })?;
 
         // Give the reader its own independent handle so its blocking 100ms read
@@ -436,5 +469,72 @@ mod tests {
         assert_eq!(cfg.parity, "none");
         assert_eq!(cfg.stop_bits, "one");
         assert_eq!(cfg.flow_control, "none");
+    }
+
+    // -- humanize_serial_error tests --
+
+    #[test]
+    fn humanize_serial_no_device_is_not_found() {
+        let e = serialport::Error::new(serialport::ErrorKind::NoDevice, "device disconnected");
+        assert_eq!(
+            humanize_serial_error(&e, "COM3"),
+            "Serial port COM3 not found"
+        );
+    }
+
+    #[test]
+    fn humanize_serial_permission_denied_is_in_use() {
+        let e = serialport::Error::new(
+            serialport::ErrorKind::Io(std::io::ErrorKind::PermissionDenied),
+            "Access is denied.",
+        );
+        assert_eq!(
+            humanize_serial_error(&e, "COM3"),
+            "Serial port COM3 is in use or access was denied"
+        );
+    }
+
+    #[test]
+    fn humanize_serial_io_not_found_is_not_found() {
+        let e = serialport::Error::new(
+            serialport::ErrorKind::Io(std::io::ErrorKind::NotFound),
+            "The system cannot find the file specified.",
+        );
+        assert_eq!(
+            humanize_serial_error(&e, "COM9"),
+            "Serial port COM9 not found"
+        );
+    }
+
+    #[test]
+    fn humanize_serial_string_fallback_access_denied() {
+        // Windows often reports the busy/denied case as an untyped Unknown error
+        // carrying a raw OS phrase — the string-match fallback must catch it.
+        let e = serialport::Error::new(serialport::ErrorKind::Unknown, "Access is denied.");
+        assert_eq!(
+            humanize_serial_error(&e, "COM4"),
+            "Serial port COM4 is in use or access was denied"
+        );
+    }
+
+    #[test]
+    fn humanize_serial_string_fallback_cannot_find() {
+        let e = serialport::Error::new(
+            serialport::ErrorKind::Unknown,
+            "The system cannot find the file specified.",
+        );
+        assert_eq!(
+            humanize_serial_error(&e, "COM5"),
+            "Serial port COM5 not found"
+        );
+    }
+
+    #[test]
+    fn humanize_serial_unrecognized_falls_through_to_generic() {
+        let e = serialport::Error::new(serialport::ErrorKind::Unknown, "something unexpected");
+        assert_eq!(
+            humanize_serial_error(&e, "COM6"),
+            "Failed to open serial port COM6: something unexpected"
+        );
     }
 }

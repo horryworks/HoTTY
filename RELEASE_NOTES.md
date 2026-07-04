@@ -1,5 +1,16 @@
 # Release Notes
 
+## v2.0.9-beta1
+
+This beta reworks **AI sign-in**: credentials for every provider now live in **Settings → AI** instead of the AI Chat pane, your signed-in state is shared across all open windows and remembered between launches, and the in-app AI setup help has been expanded with step-by-step instructions and troubleshooting. It also makes serial-port connection failures easier to read.
+
+### Improvements
+
+- **AI sign-in has moved to Settings → AI.** You now enter your credentials for every provider — Gemini, Vertex AI, OpenAI and Anthropic — in **Settings → AI**, directly below the provider selector, alongside your authentication status and a **Logout** button. The AI Chat pane no longer has any credential fields; while you are not signed in it shows a **Not signed in** message with an **Open Settings** button that jumps straight to the AI tab.
+- **Your AI sign-in is now shared across windows and remembered between launches.** Signing in — or out — in one window is reflected in every open window, and HoTTY re-authenticates automatically the next time you start it, so you only sign in once. OpenAI and Anthropic API keys are now kept (encrypted with Windows DPAPI) for this automatic re-sign-in as well.
+- **Clearer AI setup help.** The in-app Help walks you through creating credentials for each provider step by step — including the easily-missed **Test users** step on Google's OAuth consent screen — and adds an **"If sign-in fails"** troubleshooting section covering the most common sign-in errors.
+- **Friendlier serial-port connection errors.** When a COM port can't be opened, HoTTY now shows a plain-language reason — for example *"Serial port COM3 is in use or access was denied"* or *"…not found"* — instead of the raw Windows system message.
+
 ## v2.0.8
 
 The v2.0.8 stable release, consolidating the v2.0.8 beta series. The headline additions are **multi-window support**, a redesigned free-form **"Ask AI"** on terminal selections, and a round of **Web Browser** enhancements (page zoom, persistent logins, clear-browsing-data, Open All, and folder sorting) — together with a broad **security and stability hardening** pass across AI auto-execution, SSH host-key handling, and multi-window session isolation.

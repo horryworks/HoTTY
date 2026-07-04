@@ -61,3 +61,71 @@ impl EncryptedConfigStore {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fresh_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("hotty_cfgstore_test_{tag}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn path_is_dir_join_file_name() {
+        let dir = fresh_dir("path");
+        let store = EncryptedConfigStore::new(&dir, "cfg.bin", "TEST");
+        assert_eq!(store.path(), dir.join("cfg.bin").as_path());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_returns_none_when_file_absent() {
+        let dir = fresh_dir("absent");
+        let store = EncryptedConfigStore::new(&dir, "missing.bin", "TEST");
+        assert_eq!(store.load().unwrap(), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn save_then_load_round_trips_plaintext() {
+        let dir = fresh_dir("roundtrip");
+        let store = EncryptedConfigStore::new(&dir, "cfg.bin", "TEST");
+        store.save("super-secret-token").unwrap();
+        assert!(store.path().exists(), "save must create the file");
+        // The on-disk bytes must be encrypted, not the raw plaintext.
+        let on_disk = std::fs::read_to_string(store.path()).unwrap();
+        assert!(!on_disk.contains("super-secret-token"));
+        assert_eq!(
+            store.load().unwrap(),
+            Some("super-secret-token".to_string())
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn saving_empty_payload_loads_as_none() {
+        let dir = fresh_dir("empty");
+        let store = EncryptedConfigStore::new(&dir, "cfg.bin", "TEST");
+        store.save("").unwrap();
+        // An empty decrypted payload is treated as "no config".
+        assert_eq!(store.load().unwrap(), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn delete_removes_the_file_and_is_idempotent() {
+        let dir = fresh_dir("delete");
+        let store = EncryptedConfigStore::new(&dir, "cfg.bin", "TEST");
+        store.save("x").unwrap();
+        assert!(store.path().exists());
+        store.delete();
+        assert!(!store.path().exists());
+        assert_eq!(store.load().unwrap(), None);
+        // Best-effort: a second delete on an absent file must not panic.
+        store.delete();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

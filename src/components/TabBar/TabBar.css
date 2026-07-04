@@ -177,14 +177,6 @@
   color: var(--text-primary);
 }
 
-.new-tab-btn svg {
-  transition: transform 0.2s;
-}
-
-.new-tab-btn:hover svg {
-  transform: scale(1.1);
-}
-
 /* Features button */
 .features-btn {
   position: relative;
@@ -207,14 +199,6 @@
 .features-btn-icon.active {
   background-color: var(--bg-tertiary);
   color: var(--text-primary);
-}
-
-.features-btn-icon svg {
-  transition: transform 0.2s;
-}
-
-.features-btn-icon:hover svg {
-  transform: scale(1.1);
 }
 
 .features-dropdown {

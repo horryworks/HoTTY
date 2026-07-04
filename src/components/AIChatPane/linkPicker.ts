@@ -1,6 +1,6 @@
 import type { LinkableSession } from '../../types/appTypes';
 
-export interface LinkGroups {
+interface LinkGroups {
   /** This window's own sessions. */
   local: LinkableSession[];
   /** Other windows' sessions, as [windowLabel, sessions] pairs (insertion order). */

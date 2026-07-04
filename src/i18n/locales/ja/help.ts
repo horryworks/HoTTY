@@ -199,7 +199,7 @@ export const help = {
     step1:
       '<0>プロバイダーを選ぶ:</0> <1>設定 → AI → AI プロバイダー</1>に移動して 1 つ選択します。<2>Google AI Studio (Gemini)</2> または <3>Vertex AI</3> がおすすめです — 下の比較表を参照してください。',
     step2:
-      '<0>認証する:</0> AI チャットタブを開き（<1><2></2></1> → AI チャット）、画面の指示に従ってサインインするか、認証情報を入力します。',
+      '<0>サインインする:</0> <1>設定 → AI</1> のプロバイダー選択のすぐ下に、選択中プロバイダーのサインインフォームが表示されるので、そこに認証情報を入力します。',
     step3:
       '<0>チャットを始める:</0> 質問を入力するか、ターミナルのテキストを選択して右クリックし、表示される<1>「AI に質問」</1>ボックスに質問を入力します。',
     outro:
@@ -277,36 +277,62 @@ export const help = {
 
   aiSetup: {
     summary: 'AI のセットアップと認証',
-    geminiHeading: 'Google AI Studio (Gemini) — OAuth2 セットアップ',
-    geminiStep1: 'Google Cloud Console → API とサービス → 認証情報 に移動します。',
-    geminiStep2: '<0>OAuth 2.0 クライアント ID</0>（デスクトップアプリケーションの種類）を作成します。',
+    whereHeading: '認証情報はどこに入力する？',
+    whereBody1:
+      'すべて<0>設定 → AI</0> にまとまっています。ここでプロバイダーを選ぶと、そのすぐ下にそのプロバイダーのサインインフォームが表示され、認証ステータスとログアウトボタンも並びます。',
+    whereBody2:
+      '<0>AI チャットペイン</0>自体に認証情報の入力欄はありません。未サインインの間は、AI タブへ直接ジャンプする<1>設定を開く</1>ボタンが表示されます。サインインは一度だけで、以降の起動時は自動的に再認証されます。サインアウトも同じ場所のログアウトボタンから行います。',
+    geminiHeading: 'Google AI Studio (Gemini) — Google でサインイン（OAuth2）',
+    geminiIntro:
+      'このプロバイダーは OAuth2 で Google アカウントにサインインします — AI Studio の <0>API キーは使えません</0>。自分専用の（無料の）OAuth クライアントを一度だけ作成します:',
+    geminiStep1:
+      '<0>Google Cloud Console</0>（console.cloud.google.com）でプロジェクトを作成または選択し、<1>Generative Language API</1> を有効にします（API とサービス → ライブラリ）。',
+    geminiStep2:
+      '<0>OAuth 同意画面</0>を設定します（API とサービス）。「外部」で問題ありません。アプリが<1>テスト</1>モードの間は、<2>テストユーザー</2>に自分の Google アカウントを追加してください — これがないと Google がサインインをブロックします。',
     geminiStep3:
-      'HoTTY で<0>Google AI Studio</0>をプロバイダーとして選択し、AI チャットタブを開いて、クライアント ID とクライアントシークレットを入力します。',
+      'API とサービス → 認証情報 → <0>認証情報を作成 → OAuth クライアント ID</0> で、アプリケーションの種類に<1>デスクトップアプリ</1>を選んでクライアントを作成し、<2>クライアント ID</2> と<3>クライアントシークレット</3>をコピーします。リダイレクト URI の設定は不要です — HoTTY が一時的な localhost ポートで自動的に待ち受けます。',
     geminiStep4:
-      '<0>「Google でサインイン」</0>をクリックすると — 認可のためのブラウザウィンドウが開きます。',
+      'HoTTY で<0>設定 → AI</0> を開き、プロバイダーとして<1>Google AI Studio (Gemini)</1> を選択し、下のサインインフォームにクライアント ID とクライアントシークレットを貼り付けて<2>「Google でサインイン」</2>をクリックします。',
+    geminiStep5:
+      'ブラウザで Google の同意ページが開くので、5 分以内に承認してください。HoTTY がローカルでサインインを受け取り、チャットが使えるようになります。',
     geminiNote:
       '無料枠のアカウントでは、データがモデルのトレーニングに使われる場合があります。オプトアウトするには、Google Cloud プロジェクトで課金を有効にしてください。',
     vertexHeading: 'Google Cloud Vertex AI — ADC またはサービスアカウント',
     vertexStep1:
-      '<0>ADC（最も簡単）:</0> Google Cloud CLI をインストールして、次を実行します:<1></1><2>gcloud auth application-default login</2><3></3>HoTTY はこれらの認証情報を自動的に検出します。',
+      'Google Cloud Console でプロジェクトの <0>Vertex AI API</0> を有効にし、使用するアカウント（またはサービスアカウント）に <1>Vertex AI ユーザー</1>ロール（roles/aiplatform.user）があることを確認します。',
     vertexStep2:
-      '<0>サービスアカウント:</0> Google Cloud Console → IAM → サービスアカウント から JSON キーファイルをダウンロードし、設定でそのファイルパスを指定します。',
+      '<0>ADC（最も簡単）:</0> Google Cloud CLI をインストールして、次を実行します:<1></1><2>gcloud auth application-default login</2><3></3>HoTTY はこれらの認証情報を自動的に検出します。',
     vertexStep3:
-      'AI チャットタブで<0>Google Cloud プロジェクト ID</0>を入力し、<1>リージョン</1>を選択します。',
+      '<0>サービスアカウント（代替）:</0> IAM と管理 → サービスアカウント で JSON キーを作成してローカルに保存し、サインインパネルで<1>サービスアカウント</1>を選んでキーファイルのパスを指定します。',
+    vertexStep4:
+      '<0>設定 → AI</0> で<1>Google Cloud プロジェクト ID</1> を入力し、<2>リージョン</2>を選択して認証方式を選び、<3>サインイン</3>をクリックします。',
     anthropicHeading: 'Anthropic (Claude) — API キー',
     anthropicExperimental: '（実験的）',
-    anthropicStep1: 'Anthropic Console → API Keys から API キーを取得します。',
+    anthropicStep1:
+      '<0>console.anthropic.com</0> でアカウントを作成し、API クレジットを追加します — API の課金は Claude.ai のサブスクリプションとは別です。',
     anthropicStep2:
-      'HoTTY で<0>Anthropic</0>をプロバイダーとして選択し、AI チャットタブを開いて、API キーを入力します。',
+      '設定 → <0>API Keys</0> でキーを作成し、すぐにコピーします — キーは一度しか表示されません（<1>sk-ant-</1> で始まります）。',
+    anthropicStep3:
+      'HoTTY で<0>設定 → AI</0> を開き、プロバイダーとして<1>Anthropic</1> を選択し、API キーを貼り付けてサインインをクリックします。',
     anthropicNote:
       'このプロバイダーは実験的であり、完全にはテストされていません。一部の機能（監視モード、インタラクティブモードなど）は期待どおりに動作しない場合があります。問題が発生した場合はご報告ください。',
     openaiHeading: 'OpenAI — API キー',
     openaiExperimental: '（実験的）',
-    openaiStep1: 'OpenAI Platform → API Keys から API キーを取得します。',
+    openaiStep1:
+      '<0>platform.openai.com</0> でアカウントを作成し、課金またはクレジットを設定します — API の課金は ChatGPT Plus とは別です。',
     openaiStep2:
-      'HoTTY で<0>OpenAI</0>をプロバイダーとして選択し、AI チャットタブを開いて、API キーを入力します。',
+      '<0>API keys</0> ページでキーを作成し、すぐにコピーします — キーは一度しか表示されません（<1>sk-</1> で始まります）。',
+    openaiStep3:
+      'HoTTY で<0>設定 → AI</0> を開き、プロバイダーとして<1>OpenAI</1> を選択し、API キーを貼り付けてサインインをクリックします。',
     openaiNote:
       'このプロバイダーは実験的であり、完全にはテストされていません。一部の機能（監視モード、インタラクティブモードなど）は期待どおりに動作しない場合があります。問題が発生した場合はご報告ください。',
+    troubleshootHeading: 'サインインに失敗するとき',
+    troubleshootGemini:
+      '<0>Gemini:</0> 「アクセスがブロックされました」「アプリは確認されていません」と表示される場合、OAuth 同意画面の<1>テストユーザー</1>に自分の Google アカウントが登録されていません。サインインの試行は 5 分で期限切れになるため、その場合はやり直してください。',
+    troubleshootVertex:
+      '<0>Vertex AI:</0> 権限（403）エラーは、Vertex AI API が有効になっていないか、<1>Vertex AI ユーザー</1>ロールがないことがほとんどです。ADC の期限が切れた場合は <2>gcloud auth application-default login</2> を再実行してください。',
+    troubleshootKeys:
+      '<0>OpenAI / Anthropic:</0> 401 はキーが無効か失効しています。429 は多くの場合、クレジット不足かレート制限です。',
     credentialsNote:
       'すべての認証情報は Windows DPAPI で暗号化されてローカルに保存され、それぞれの AI プロバイダーへ送る場合を除き、お使いのマシンの外へ送信されることはありません。',
   },

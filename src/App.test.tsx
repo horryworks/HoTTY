@@ -28,6 +28,12 @@ vi.mock('./hooks/useSessionManager', () => ({
 
 vi.mock('./services/tauriService', () => ({
   tauriService: {
+    // useAiAuthOwner (mounted once in App)
+    aiSetProvider: vi.fn().mockResolvedValue(undefined),
+    aiAuthAuto: vi.fn().mockResolvedValue(false),
+    dpapiDecrypt: vi.fn().mockResolvedValue(''),
+    onAiAuthResult: vi.fn().mockResolvedValue(() => {}),
+    onAiAuthLogout: vi.fn().mockResolvedValue(() => {}),
     readClipboard: vi.fn().mockResolvedValue(''),
     sendInput: vi.fn().mockResolvedValue(undefined),
     pingMonitorStop: vi.fn().mockResolvedValue(undefined),

@@ -77,6 +77,15 @@ const { AIChatPane } = await import('./AIChatPane');
 const { NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP } = await import('../../constants/aiPrompts');
 const { _clearVerdictCache } = await import('../../utils/aiCommandClassifier');
 const { tauriService } = await import('../../services/tauriService');
+const { useAiAuthStore } = await import('../../stores/aiAuthStore');
+
+// The auth store is module-global; reset it between tests so a prior test's
+// authenticated state can't leak into the next one.
+beforeEach(() => {
+    act(() => {
+        useAiAuthStore.setState({ isAuthenticated: false, isAuthLoading: false, authError: null });
+    });
+});
 
 // A safe Huawei command (`display` is in the builtin safe list) wrapped in an
 // execute fence — the canonical "identify the device first" opener.
@@ -102,8 +111,10 @@ const makePane = (extra: Record<string, unknown>) => <AIChatPane {...(baseProps 
 const renderPane = (extra: Record<string, unknown>) => render(makePane(extra));
 
 async function authenticate() {
+    // Auth is window-global now (aiAuthStore, fed by useAiAuthOwner in App);
+    // the pane just consumes the store, so flip it directly.
     await act(async () => {
-        h.onAiAuthResultCb.current?.({ success: true });
+        useAiAuthStore.setState({ isAuthenticated: true });
     });
 }
 

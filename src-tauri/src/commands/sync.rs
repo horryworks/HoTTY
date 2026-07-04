@@ -30,3 +30,21 @@ pub fn broadcast_shared_change(
     )
     .map_err(|e| e.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shared_store_change_serializes_wire_shape() {
+        let change = SharedStoreChange {
+            channel: "settings".to_string(),
+            payload: "{\"a\":1}".to_string(),
+            origin: "main".to_string(),
+        };
+        let json: serde_json::Value = serde_json::to_value(&change).unwrap();
+        assert_eq!(json["channel"], "settings");
+        assert_eq!(json["payload"], "{\"a\":1}");
+        assert_eq!(json["origin"], "main");
+    }
+}

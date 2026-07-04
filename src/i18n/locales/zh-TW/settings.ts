@@ -141,7 +141,7 @@ export const settings = {
     providerSection: '供應商',
     aiProvider: 'AI 供應商',
     aiProviderHelp:
-      'Vertex AI 與 Gemini 使用 Google OAuth。Anthropic 與 OpenAI 需要 API 金鑰。',
+      '選擇供應商後在下方登入。Gemini 使用 Google 登入（OAuth），Vertex AI 使用您的 Google Cloud 專案（ADC 或服務帳戶金鑰），Anthropic 與 OpenAI 使用 API 金鑰。',
     providerVertexAi: 'Google Cloud Vertex AI',
     providerGemini: 'Google AI Studio（Gemini）',
     providerAnthropic: 'Anthropic（Claude）',
@@ -151,6 +151,40 @@ export const settings = {
     authenticated: '已驗證',
     notAuthenticated: '尚未驗證',
     logout: '登出',
+    // 憑證輸入表單（依供應商）
+    auth: {
+      // Gemini（Google AI Studio）
+      geminiTitle: '連線至 Gemini',
+      clientId: '用戶端 ID',
+      clientSecret: '用戶端密碼',
+      connecting: '正在連線...',
+      signInWithGoogle: '使用 Google 登入',
+      // Vertex AI
+      vertexTitle: '連線至 Vertex AI',
+      gcpProjectId: 'GCP 專案 ID',
+      gcpProjectIdPlaceholder: 'my-project-id',
+      location: '位置',
+      locationPlaceholder: 'us-central1',
+      authMethod: '驗證方法',
+      authMethodAdc: '應用程式預設憑證（ADC）',
+      authMethodServiceAccount: '服務帳戶金鑰檔案',
+      serviceAccountKeyFile: '服務帳戶金鑰檔案',
+      serviceAccountKeyFilePlaceholder: '/path/to/service-account-key.json',
+      browse: '瀏覽...',
+      connectVertex: '連線至 Vertex AI',
+      // OpenAI
+      openaiTitle: '連線至 OpenAI',
+      connectOpenai: '連線至 OpenAI',
+      openaiKeyPlaceholder: 'sk-...',
+      // Anthropic
+      anthropicTitle: '連線至 Anthropic',
+      connectAnthropic: '連線至 Anthropic',
+      anthropicKeyPlaceholder: 'sk-ant-...',
+      // 共用
+      apiKey: 'API 金鑰',
+      failed: '驗證失敗。請再試一次。',
+      timedOut: '驗證逾時。請再試一次。',
+    },
     // 角色
     personasSection: '角色',
     addPersona: '新增角色',

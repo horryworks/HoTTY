@@ -820,4 +820,9 @@ export const tauriService = {
   onAiAuthResult(cb: (p: AIAuthResultPayload) => void): Promise<UnlistenFn> {
     return listen<AIAuthResultPayload>('ai-auth-result', (e) => cb(e.payload));
   },
+
+  /** Explicit logout broadcast (all windows). Distinct from a failed sign-in. */
+  onAiAuthLogout(cb: () => void): Promise<UnlistenFn> {
+    return listen<void>('ai-auth-logout', () => cb());
+  },
 };

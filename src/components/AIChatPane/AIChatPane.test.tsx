@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 
 vi.mock('../../services/tauriService', () => ({
   tauriService: {
@@ -78,11 +78,18 @@ describe('AIChatPane', () => {
     expect(document.querySelector('.ai-chat-pane')).toBeTruthy();
   });
 
-  it('renders auth panel when not authenticated', () => {
+  it('renders the not-signed-in state when unauthenticated', () => {
     render(<AIChatPane {...defaultProps} />);
-    // With default mock (aiAuthStatus returns false), auth panel should show
-    const container = document.querySelector('.ai-chat-pane');
-    expect(container).toBeTruthy();
+    // Sign-in moved to Settings → AI; the pane shows a pointer instead of a form.
+    expect(document.querySelector('.ai-chat-unauth-state')).toBeTruthy();
+    expect(screen.getByText('Not signed in')).toBeTruthy();
+  });
+
+  it('opens Settings from the not-signed-in state', () => {
+    const onOpenSettings = vi.fn();
+    render(<AIChatPane {...defaultProps} onOpenSettings={onOpenSettings} />);
+    fireEvent.click(screen.getByText('Open Settings'));
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 });
 

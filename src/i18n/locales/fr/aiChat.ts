@@ -5,37 +5,6 @@
 // AI system prompts, and the AI-response-language option values stay in the
 // components. Grouped one key block per concern.
 export const aiChat = {
-  auth: {
-    // Gemini (Google AI Studio)
-    geminiTitle: 'Se connecter à Gemini',
-    clientId: 'ID client',
-    clientSecret: 'Secret client',
-    connecting: 'Connexion...',
-    signInWithGoogle: 'Se connecter avec Google',
-    // Vertex AI
-    vertexTitle: 'Se connecter à Vertex AI',
-    gcpProjectId: 'ID de projet GCP',
-    gcpProjectIdPlaceholder: 'mon-id-de-projet',
-    location: 'Emplacement',
-    locationPlaceholder: 'us-central1',
-    authMethod: "Méthode d'authentification",
-    authMethodAdc: 'Identifiants par défaut de l\'application (ADC)',
-    authMethodServiceAccount: 'Fichier de clé de compte de service',
-    serviceAccountKeyFile: 'Fichier de clé de compte de service',
-    serviceAccountKeyFilePlaceholder: '/chemin/vers/service-account-key.json',
-    browse: 'Parcourir...',
-    connectVertex: 'Se connecter à Vertex AI',
-    // OpenAI
-    openaiTitle: 'Se connecter à OpenAI',
-    connectOpenai: 'Se connecter à OpenAI',
-    openaiKeyPlaceholder: 'sk-...',
-    // Anthropic
-    anthropicTitle: 'Se connecter à Anthropic',
-    connectAnthropic: 'Se connecter à Anthropic',
-    anthropicKeyPlaceholder: 'sk-ant-...',
-    // Shared
-    apiKey: 'Clé API',
-  },
   executionMode: {
     chipAuto: 'Auto · Max {{max}}',
     chipAskBeforeExecute: "Confirmer avant l'exécution",
@@ -81,8 +50,11 @@ export const aiChat = {
     unknownTerminal: 'inconnu',
     disconnectedSuffix: ' (déconnecté)',
     statusDisconnected: 'déconnecté',
-    moreOptions: "Plus d'options",
-    logout: 'Déconnexion',
+    // État non connecté / connexion en cours (les identifiants se saisissent dans Paramètres → IA)
+    signingIn: 'Connexion en cours…',
+    notSignedInTitle: 'Non connecté',
+    notSignedInBody: 'Connectez-vous à {{provider}} dans Paramètres → IA pour commencer à discuter.',
+    openSettings: 'Ouvrir les Paramètres',
     // Empty state
     emptyTitle: 'Comment puis-je aider ?',
     emptyLinkedTo: 'Lié à <0>{{name}}</0>',
@@ -121,9 +93,6 @@ export const aiChat = {
     newChatConfirmTitle: 'Démarrer un nouveau chat ?',
     newChatConfirmMessage: 'La conversation actuelle sera effacée. Cette action est irréversible.',
     newChatConfirmButton: 'Démarrer un nouveau chat',
-    // Auth status
-    authFailed: "Échec de l'authentification. Veuillez réessayer.",
-    authTimedOut: "Délai d'authentification dépassé. Veuillez réessayer.",
     modelNotSelected: "Aucun modèle d'IA sélectionné. Veuillez sélectionner un modèle dans la liste déroulante en haut à droite de l'écran.",
   },
   message: {

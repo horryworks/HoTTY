@@ -101,3 +101,20 @@ pub async fn file_server_firewall_allow(protocol: String, port: u16) -> Result<(
     validate_port(port)?;
     file_server::firewall_allow(&protocol, port).await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_port_rejects_zero() {
+        assert!(validate_port(0).is_err());
+    }
+
+    #[test]
+    fn validate_port_accepts_valid_ports() {
+        assert!(validate_port(1).is_ok());
+        assert!(validate_port(69).is_ok());
+        assert!(validate_port(65535).is_ok());
+    }
+}

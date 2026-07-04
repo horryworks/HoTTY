@@ -155,7 +155,7 @@ impl AIProvider for AnthropicProvider {
 
         if !is_valid_api_key(api_key) {
             log::warn!("[anthropic] Auth rejected: invalid API key format");
-            emit_auth_result(app, false);
+            emit_auth_result(app, self.id(), false);
             return Ok(false);
         }
 
@@ -174,7 +174,7 @@ impl AIProvider for AnthropicProvider {
                 "[anthropic] API key validation failed: {}",
                 response.status()
             );
-            emit_auth_result(app, false);
+            emit_auth_result(app, self.id(), false);
             return Ok(false);
         }
 
@@ -186,7 +186,7 @@ impl AIProvider for AnthropicProvider {
             );
         }
         log::info!("[anthropic] Auth success");
-        emit_auth_result(app, true);
+        emit_auth_result(app, self.id(), true);
         Ok(true)
     }
 

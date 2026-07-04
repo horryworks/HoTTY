@@ -909,12 +909,12 @@ impl AIProvider for VertexAIProvider {
 
         if !is_valid_project(project_id) {
             log::warn!("[vertexai] Auth rejected: invalid project ID");
-            emit_auth_result(app, false);
+            emit_auth_result(app, self.id(), false);
             return Ok(false);
         }
         if !is_valid_location(location) {
             log::warn!("[vertexai] Auth rejected: invalid location");
-            emit_auth_result(app, false);
+            emit_auth_result(app, self.id(), false);
             return Ok(false);
         }
 
@@ -923,14 +923,14 @@ impl AIProvider for VertexAIProvider {
                 let adc_path = Self::get_adc_path();
                 if !adc_path.exists() {
                     log::warn!("[vertexai] ADC file not found: {}", adc_path.display());
-                    emit_auth_result(app, false);
+                    emit_auth_result(app, self.id(), false);
                     return Ok(false);
                 }
                 let meta = std::fs::metadata(&adc_path)
                     .map_err(|e| format!("Failed to stat ADC file: {e}"))?;
                 if meta.len() > CREDENTIAL_FILE_MAX_SIZE {
                     log::warn!("[vertexai] ADC file exceeds size limit");
-                    emit_auth_result(app, false);
+                    emit_auth_result(app, self.id(), false);
                     return Ok(false);
                 }
                 let content = std::fs::read_to_string(&adc_path)
@@ -960,7 +960,7 @@ impl AIProvider for VertexAIProvider {
                             || client_secret.is_empty()
                             || refresh_token.is_empty()
                         {
-                            emit_auth_result(app, false);
+                            emit_auth_result(app, self.id(), false);
                             return Ok(false);
                         }
                         RefreshData::AuthorizedUser {
@@ -981,7 +981,7 @@ impl AIProvider for VertexAIProvider {
                             .unwrap_or("")
                             .to_string();
                         if client_email.is_empty() || private_key.is_empty() {
-                            emit_auth_result(app, false);
+                            emit_auth_result(app, self.id(), false);
                             return Ok(false);
                         }
                         RefreshData::ServiceAccount {
@@ -991,32 +991,32 @@ impl AIProvider for VertexAIProvider {
                     }
                     _ => {
                         log::warn!("[vertexai] Unsupported ADC credential type: {cred_type}");
-                        emit_auth_result(app, false);
+                        emit_auth_result(app, self.id(), false);
                         return Ok(false);
                     }
                 }
             }
             "service_account" => {
                 if key_file_path.is_empty() {
-                    emit_auth_result(app, false);
+                    emit_auth_result(app, self.id(), false);
                     return Ok(false);
                 }
                 if is_unc_path(key_file_path) {
                     log::warn!("[vertexai] Rejected UNC service account key path");
-                    emit_auth_result(app, false);
+                    emit_auth_result(app, self.id(), false);
                     return Ok(false);
                 }
                 let resolved = PathBuf::from(key_file_path);
                 if !resolved.exists() {
                     log::warn!("[vertexai] Service account key file not found");
-                    emit_auth_result(app, false);
+                    emit_auth_result(app, self.id(), false);
                     return Ok(false);
                 }
                 let meta = std::fs::metadata(&resolved)
                     .map_err(|e| format!("Failed to stat key file: {e}"))?;
                 if meta.len() > CREDENTIAL_FILE_MAX_SIZE {
                     log::warn!("[vertexai] Service account key file exceeds size limit");
-                    emit_auth_result(app, false);
+                    emit_auth_result(app, self.id(), false);
                     return Ok(false);
                 }
                 let content = std::fs::read_to_string(&resolved)
@@ -1036,7 +1036,7 @@ impl AIProvider for VertexAIProvider {
                     .to_string();
                 if client_email.is_empty() || private_key.is_empty() {
                     log::warn!("[vertexai] Invalid service account key file");
-                    emit_auth_result(app, false);
+                    emit_auth_result(app, self.id(), false);
                     return Ok(false);
                 }
                 RefreshData::ServiceAccount {
@@ -1045,7 +1045,7 @@ impl AIProvider for VertexAIProvider {
                 }
             }
             _ => {
-                emit_auth_result(app, false);
+                emit_auth_result(app, self.id(), false);
                 return Ok(false);
             }
         };
@@ -1063,7 +1063,7 @@ impl AIProvider for VertexAIProvider {
             self.config = None;
             self.refresh_data = None;
             log::warn!("[vertexai] Failed to obtain access token");
-            emit_auth_result(app, false);
+            emit_auth_result(app, self.id(), false);
             return Ok(false);
         }
 
@@ -1074,7 +1074,7 @@ impl AIProvider for VertexAIProvider {
             );
         }
         log::info!("[vertexai] Auth success, project={project_id}, location={location}");
-        emit_auth_result(app, true);
+        emit_auth_result(app, self.id(), true);
         Ok(true)
     }
 

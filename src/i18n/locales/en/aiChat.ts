@@ -5,37 +5,6 @@
 // AI system prompts, and the AI-response-language option values stay in the
 // components. Grouped one key block per concern.
 export const aiChat = {
-  auth: {
-    // Gemini (Google AI Studio)
-    geminiTitle: 'Connect to Gemini',
-    clientId: 'Client ID',
-    clientSecret: 'Client Secret',
-    connecting: 'Connecting...',
-    signInWithGoogle: 'Sign in with Google',
-    // Vertex AI
-    vertexTitle: 'Connect to Vertex AI',
-    gcpProjectId: 'GCP Project ID',
-    gcpProjectIdPlaceholder: 'my-project-id',
-    location: 'Location',
-    locationPlaceholder: 'us-central1',
-    authMethod: 'Authentication Method',
-    authMethodAdc: 'Application Default Credentials (ADC)',
-    authMethodServiceAccount: 'Service Account Key File',
-    serviceAccountKeyFile: 'Service Account Key File',
-    serviceAccountKeyFilePlaceholder: '/path/to/service-account-key.json',
-    browse: 'Browse...',
-    connectVertex: 'Connect to Vertex AI',
-    // OpenAI
-    openaiTitle: 'Connect to OpenAI',
-    connectOpenai: 'Connect to OpenAI',
-    openaiKeyPlaceholder: 'sk-...',
-    // Anthropic
-    anthropicTitle: 'Connect to Anthropic',
-    connectAnthropic: 'Connect to Anthropic',
-    anthropicKeyPlaceholder: 'sk-ant-...',
-    // Shared
-    apiKey: 'API Key',
-  },
   executionMode: {
     chipAuto: 'Auto · Max {{max}}',
     chipAskBeforeExecute: 'Ask before execute',
@@ -81,8 +50,11 @@ export const aiChat = {
     unknownTerminal: 'unknown',
     disconnectedSuffix: ' (disconnected)',
     statusDisconnected: 'disconnected',
-    moreOptions: 'More options',
-    logout: 'Logout',
+    // Not-signed-in / signing-in state (credentials are entered in Settings → AI)
+    signingIn: 'Signing in…',
+    notSignedInTitle: 'Not signed in',
+    notSignedInBody: 'Sign in to {{provider}} in Settings → AI to start chatting.',
+    openSettings: 'Open Settings',
     // Empty state
     emptyTitle: 'How can I help?',
     emptyLinkedTo: 'Linked to <0>{{name}}</0>',
@@ -121,9 +93,6 @@ export const aiChat = {
     newChatConfirmTitle: 'Start a new chat?',
     newChatConfirmMessage: 'The current conversation will be cleared. This cannot be undone.',
     newChatConfirmButton: 'Start new chat',
-    // Auth status
-    authFailed: 'Authentication failed. Please try again.',
-    authTimedOut: 'Authentication timed out. Please try again.',
     modelNotSelected: 'AI model not selected. Please select a model from the dropdown at the top right of the screen.',
   },
   message: {

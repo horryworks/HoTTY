@@ -141,7 +141,7 @@ export const settings = {
     providerSection: '提供商',
     aiProvider: 'AI 提供商',
     aiProviderHelp:
-      'Vertex AI 和 Gemini 使用 Google OAuth。Anthropic 和 OpenAI 需要 API 密钥。',
+      '选择提供商，然后在下方登录。Gemini 使用 Google 登录（OAuth），Vertex AI 使用您的 Google Cloud 项目（ADC 或服务账号密钥），Anthropic 和 OpenAI 使用 API 密钥。',
     providerVertexAi: 'Google Cloud Vertex AI',
     providerGemini: 'Google AI Studio (Gemini)',
     providerAnthropic: 'Anthropic (Claude)',
@@ -151,6 +151,40 @@ export const settings = {
     authenticated: '已通过身份验证',
     notAuthenticated: '未通过身份验证',
     logout: '退出登录',
+    // 凭据输入表单（按提供商）
+    auth: {
+      // Gemini (Google AI Studio)
+      geminiTitle: '连接到 Gemini',
+      clientId: '客户端 ID',
+      clientSecret: '客户端密钥',
+      connecting: '正在连接...',
+      signInWithGoogle: '使用 Google 登录',
+      // Vertex AI
+      vertexTitle: '连接到 Vertex AI',
+      gcpProjectId: 'GCP 项目 ID',
+      gcpProjectIdPlaceholder: 'my-project-id',
+      location: '位置',
+      locationPlaceholder: 'us-central1',
+      authMethod: '身份验证方法',
+      authMethodAdc: '应用默认凭据 (ADC)',
+      authMethodServiceAccount: '服务账号密钥文件',
+      serviceAccountKeyFile: '服务账号密钥文件',
+      serviceAccountKeyFilePlaceholder: '/path/to/service-account-key.json',
+      browse: '浏览...',
+      connectVertex: '连接到 Vertex AI',
+      // OpenAI
+      openaiTitle: '连接到 OpenAI',
+      connectOpenai: '连接到 OpenAI',
+      openaiKeyPlaceholder: 'sk-...',
+      // Anthropic
+      anthropicTitle: '连接到 Anthropic',
+      connectAnthropic: '连接到 Anthropic',
+      anthropicKeyPlaceholder: 'sk-ant-...',
+      // Shared
+      apiKey: 'API 密钥',
+      failed: '身份验证失败。请重试。',
+      timedOut: '身份验证超时。请重试。',
+    },
     // Personas
     personasSection: '角色',
     addPersona: '添加角色',

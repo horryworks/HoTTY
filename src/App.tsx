@@ -16,7 +16,7 @@ import { WebBrowserPane } from './components/WebBrowserPane/WebBrowserPane';
 import { AIChatPane } from './components/AIChatPane/AIChatPane';
 import { SessionDialog, type ConnectSubmitPayload } from './components/SessionDialog/SessionDialog';
 import { SaveToHostTreeDialog } from './components/SaveToHostTreeDialog/SaveToHostTreeDialog';
-import { SettingsModal } from './components/SettingsModal/SettingsModal';
+import { SettingsModal, type SettingsTab } from './components/SettingsModal/SettingsModal';
 import { CustomThemeCreator } from './components/CustomThemeCreator/CustomThemeCreator';
 import { HelpModal } from './components/HelpModal/HelpModal';
 import { SshHostKeyModal } from './components/SshHostKeyModal/SshHostKeyModal';
@@ -28,6 +28,7 @@ import { ErrorNotification } from './components/ErrorNotification/ErrorNotificat
 import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary';
 import { tauriService } from './services/tauriService';
 import { useSessionManager, type SessionRecord } from './hooks/useSessionManager';
+import { useAiAuthOwner } from './hooks/useAiAuthOwner';
 import { useAiChat, getActiveTab, createDefaultAiChatState, type AiChatState } from './hooks/useAiChat';
 import { usePaneStore, gridPaneIds, SIDEBAR_PANE_IDS } from './stores/paneStore';
 import { initOverlayWatcher } from './stores/uiOverlayStore';
@@ -81,6 +82,10 @@ function trimCmdForLog(cmd: string): string {
 }
 
 function App() {
+  // Single per-window owner of the AI auth lifecycle (auto re-auth + event
+  // mirroring into aiAuthStore). Panes and Settings only read the store.
+  useAiAuthOwner();
+
   const [pasteReq, setPasteReq] = useState<{ sessionId: string; content: string } | null>(null);
   const [featurePanes, setFeaturePanes] = useState<Map<string, FeaturePaneInfo>>(new Map());
 
@@ -518,6 +523,11 @@ function App() {
 
   const [connectOpen, setConnectOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | undefined>(undefined);
+  const openSettings = useCallback((tab?: SettingsTab) => {
+    setSettingsInitialTab(tab);
+    setSettingsOpen(true);
+  }, []);
   const [helpOpen, setHelpOpen] = useState(false);
   const [customThemeOpen, setCustomThemeOpen] = useState(false);
   const [saveToTreeSessionId, setSaveToTreeSessionId] = useState<string | null>(null);
@@ -1277,6 +1287,7 @@ function App() {
                 const activeTab = st ? getActiveTab(st) : undefined;
                 if (activeTab) setTabLink(featureInfo.id, activeTab.id, sid);
               }}
+              onOpenSettings={() => openSettings('ai')}
             />
           ) : (
             <div className="pane-empty">
@@ -1370,10 +1381,11 @@ function App() {
       />
       <SettingsModal
         open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() => { setSettingsOpen(false); setSettingsInitialTab(undefined); }}
         themesData={themesData}
         onOpenCustomThemeCreator={() => setCustomThemeOpen(true)}
         onDeleteTheme={handleDeleteTheme}
+        initialTab={settingsInitialTab}
       />
       <CustomThemeCreator
         isOpen={customThemeOpen}

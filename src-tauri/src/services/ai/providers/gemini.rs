@@ -293,7 +293,7 @@ impl AIProvider for GeminiProvider {
 
         if !is_valid_credential(client_id) || !is_valid_credential(client_secret) {
             log::warn!("[gemini] Auth rejected: invalid credential format");
-            emit_auth_result(app, false);
+            emit_auth_result(app, self.id(), false);
             return Ok(false);
         }
 
@@ -458,17 +458,17 @@ impl AIProvider for GeminiProvider {
                     log::error!("[gemini] Failed to save token: {e}");
                 }
                 log::info!("[gemini] Auth success");
-                emit_auth_result(&app_clone, true);
+                emit_auth_result(&app_clone, self.id(), true);
                 Ok(true)
             }
             Ok(Err(e)) => {
                 log::error!("[gemini] Auth error: {e}");
-                emit_auth_result(&app_clone, false);
+                emit_auth_result(&app_clone, self.id(), false);
                 Ok(false)
             }
             Err(_) => {
                 log::warn!("[gemini] Auth timeout (5 minutes)");
-                emit_auth_result(&app_clone, false);
+                emit_auth_result(&app_clone, self.id(), false);
                 Ok(false)
             }
         }

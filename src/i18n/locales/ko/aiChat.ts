@@ -5,37 +5,6 @@
 // AI system prompts, and the AI-response-language option values stay in the
 // components. Grouped one key block per concern.
 export const aiChat = {
-  auth: {
-    // Gemini (Google AI Studio)
-    geminiTitle: 'Gemini에 연결',
-    clientId: '클라이언트 ID',
-    clientSecret: '클라이언트 보안 비밀',
-    connecting: '연결 중...',
-    signInWithGoogle: 'Google로 로그인',
-    // Vertex AI
-    vertexTitle: 'Vertex AI에 연결',
-    gcpProjectId: 'GCP 프로젝트 ID',
-    gcpProjectIdPlaceholder: 'my-project-id',
-    location: '위치',
-    locationPlaceholder: 'us-central1',
-    authMethod: '인증 방법',
-    authMethodAdc: '애플리케이션 기본 사용자 인증 정보 (ADC)',
-    authMethodServiceAccount: '서비스 계정 키 파일',
-    serviceAccountKeyFile: '서비스 계정 키 파일',
-    serviceAccountKeyFilePlaceholder: '/path/to/service-account-key.json',
-    browse: '찾아보기...',
-    connectVertex: 'Vertex AI에 연결',
-    // OpenAI
-    openaiTitle: 'OpenAI에 연결',
-    connectOpenai: 'OpenAI에 연결',
-    openaiKeyPlaceholder: 'sk-...',
-    // Anthropic
-    anthropicTitle: 'Anthropic에 연결',
-    connectAnthropic: 'Anthropic에 연결',
-    anthropicKeyPlaceholder: 'sk-ant-...',
-    // Shared
-    apiKey: 'API 키',
-  },
   executionMode: {
     chipAuto: '자동 · 최대 {{max}}',
     chipAskBeforeExecute: '실행 전 확인',
@@ -81,8 +50,11 @@ export const aiChat = {
     unknownTerminal: '알 수 없음',
     disconnectedSuffix: ' (연결 끊김)',
     statusDisconnected: '연결 끊김',
-    moreOptions: '추가 옵션',
-    logout: '로그아웃',
+    // 미로그인/로그인 중 상태 (인증 정보는 설정 → AI에서 입력)
+    signingIn: '로그인 중…',
+    notSignedInTitle: '로그인되지 않음',
+    notSignedInBody: '설정 → AI에서 {{provider}}에 로그인하면 채팅을 시작할 수 있습니다.',
+    openSettings: '설정 열기',
     // Empty state
     emptyTitle: '무엇을 도와드릴까요?',
     emptyLinkedTo: '<0>{{name}}</0>에 연결됨',
@@ -121,9 +93,6 @@ export const aiChat = {
     newChatConfirmTitle: '새 채팅을 시작하시겠습니까?',
     newChatConfirmMessage: '현재 대화가 지워집니다. 이 작업은 되돌릴 수 없습니다.',
     newChatConfirmButton: '새 채팅 시작',
-    // Auth status
-    authFailed: '인증에 실패했습니다. 다시 시도하세요.',
-    authTimedOut: '인증 시간이 초과되었습니다. 다시 시도하세요.',
     modelNotSelected: 'AI 모델이 선택되지 않았습니다. 화면 오른쪽 상단의 드롭다운에서 모델을 선택하세요.',
   },
   message: {

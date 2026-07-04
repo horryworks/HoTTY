@@ -200,7 +200,7 @@ export const help = {
     step1:
       '<0>Elija un proveedor:</0> vaya a <1>Configuración → IA → Proveedor de IA</1> y seleccione uno. Se recomiendan <2>Google AI Studio (Gemini)</2> o <3>Vertex AI</3> — consulte la tabla comparativa a continuación.',
     step2:
-      '<0>Autentíquese:</0> abra una pestaña de chat de IA (<1><2></2></1> → Chat de IA) y siga las indicaciones en pantalla para iniciar sesión o introducir sus credenciales.',
+      '<0>Inicie sesión:</0> el formulario de inicio de sesión del proveedor seleccionado aparece justo debajo del selector de proveedor en <1>Configuración → IA</1> — introduzca ahí sus credenciales.',
     step3:
       '<0>Empiece a chatear:</0> escriba una pregunta, o seleccione texto en el terminal, haga clic derecho y escriba su pregunta en el cuadro <1>"Preguntar a la IA"</1>.',
     outro:
@@ -278,36 +278,62 @@ export const help = {
 
   aiSetup: {
     summary: 'Configuración y autenticación de la IA',
-    geminiHeading: 'Google AI Studio (Gemini) — Configuración de OAuth2',
-    geminiStep1: 'Vaya a Google Cloud Console → APIs y servicios → Credenciales.',
-    geminiStep2: 'Cree un <0>ID de cliente de OAuth 2.0</0> (tipo aplicación de escritorio).',
+    whereHeading: '¿Dónde introduzco mis credenciales?',
+    whereBody1:
+      'Todo está en <0>Configuración → IA</0>: elija ahí un proveedor y el formulario de inicio de sesión de ese proveedor aparece justo debajo, junto con su estado de autenticación y un botón de cierre de sesión.',
+    whereBody2:
+      'El <0>panel de chat de IA</0> en sí no tiene campos de credenciales — mientras no haya iniciado sesión, muestra un botón <1>Abrir Configuración</1> que lleva directamente a la pestaña de IA. Solo inicia sesión una vez; HoTTY se vuelve a autenticar automáticamente en los siguientes arranques, y para salir se usa el botón de cierre de sesión en el mismo lugar.',
+    geminiHeading: 'Google AI Studio (Gemini) — Iniciar sesión con Google (OAuth2)',
+    geminiIntro:
+      'Este proveedor inicia sesión con su cuenta de Google mediante OAuth2 — <0>no se puede usar una clave de API</0> de AI Studio. Cree su propio cliente OAuth (gratuito) una sola vez:',
+    geminiStep1:
+      'En <0>Google Cloud Console</0> (console.cloud.google.com), cree o seleccione un proyecto y habilite la <1>Generative Language API</1> (APIs y servicios → Biblioteca).',
+    geminiStep2:
+      'Configure la <0>pantalla de consentimiento de OAuth</0> (APIs y servicios): "Externo" es suficiente. Mientras la aplicación esté en modo <1>Prueba</1>, añada su propia cuenta de Google en <2>Usuarios de prueba</2> — sin esto, Google bloquea el inicio de sesión.',
     geminiStep3:
-      'En HoTTY, seleccione <0>Google AI Studio</0> como su proveedor, abra una pestaña de chat de IA e introduzca su ID de cliente y secreto de cliente.',
+      'Cree el cliente en APIs y servicios → Credenciales → <0>Crear credenciales → ID de cliente de OAuth</0>, tipo de aplicación <1>Aplicación de escritorio</1>, y copie el <2>ID de cliente</2> y el <3>secreto de cliente</3>. No se necesita URI de redirección — HoTTY escucha automáticamente en un puerto localhost temporal.',
     geminiStep4:
-      'Haga clic en <0>"Iniciar sesión con Google"</0> — se abrirá una ventana del navegador para la autorización.',
+      'En HoTTY, abra <0>Configuración → IA</0>, seleccione <1>Google AI Studio (Gemini)</1> como su proveedor, pegue el ID de cliente y el secreto de cliente en el formulario de abajo y haga clic en <2>"Iniciar sesión con Google"</2>.',
+    geminiStep5:
+      'Su navegador abre la página de consentimiento de Google — apruebe el acceso en un plazo de 5 minutos. HoTTY recibe el inicio de sesión localmente y el chat queda listo para usar.',
     geminiNote:
       'Las cuentas de nivel gratuito pueden tener datos usados para el entrenamiento de modelos. Active la facturación en su proyecto de Google Cloud para excluirse.',
     vertexHeading: 'Google Cloud Vertex AI — ADC o cuenta de servicio',
     vertexStep1:
-      '<0>ADC (lo más fácil):</0> instale Google Cloud CLI y luego ejecute:<1></1><2>gcloud auth application-default login</2><3></3>HoTTY detecta estas credenciales automáticamente.',
+      'En Google Cloud Console, habilite la <0>Vertex AI API</0> para su proyecto y asegúrese de que su cuenta (o la cuenta de servicio) tenga el rol <1>Usuario de Vertex AI</1> (roles/aiplatform.user).',
     vertexStep2:
-      '<0>Cuenta de servicio:</0> descargue un archivo de clave JSON desde Google Cloud Console → IAM → Cuentas de servicio, luego proporcione la ruta del archivo en Configuración.',
+      '<0>ADC (lo más fácil):</0> instale Google Cloud CLI y luego ejecute:<1></1><2>gcloud auth application-default login</2><3></3>HoTTY detecta estas credenciales automáticamente.',
     vertexStep3:
-      'Introduzca su <0>ID de proyecto de Google Cloud</0> y seleccione una <1>Región</1> en la pestaña de chat de IA.',
+      '<0>Cuenta de servicio (alternativa):</0> cree una clave JSON en IAM y administración → Cuentas de servicio y guárdela localmente; en el panel de inicio de sesión elija <1>Cuenta de servicio</1> e introduzca la ruta del archivo de clave.',
+    vertexStep4:
+      'En <0>Configuración → IA</0>, introduzca su <1>ID de proyecto de Google Cloud</1>, seleccione una <2>Región</2>, elija el tipo de autenticación y haga clic en <3>Iniciar sesión</3>.',
     anthropicHeading: 'Anthropic (Claude) — Clave de API',
     anthropicExperimental: '( Experimental)',
-    anthropicStep1: 'Obtenga una clave de API desde Anthropic Console → API Keys.',
+    anthropicStep1:
+      'Cree una cuenta en <0>console.anthropic.com</0> y añada créditos de API — la facturación de la API es independiente de una suscripción a Claude.ai.',
     anthropicStep2:
-      'En HoTTY, seleccione <0>Anthropic</0> como su proveedor, abra una pestaña de chat de IA e introduzca su clave de API.',
+      'Cree una clave en Configuración → <0>API Keys</0> y cópiela de inmediato — solo se muestra una vez (empieza por <1>sk-ant-</1>).',
+    anthropicStep3:
+      'En HoTTY, abra <0>Configuración → IA</0>, seleccione <1>Anthropic</1> como su proveedor, pegue la clave de API y haga clic en Iniciar sesión.',
     anthropicNote:
       'Este proveedor es experimental y no se ha probado por completo. Algunas funciones (modo de monitoreo, modo interactivo, etc.) pueden no funcionar como se espera. Informe de cualquier problema que encuentre.',
     openaiHeading: 'OpenAI — Clave de API',
     openaiExperimental: '( Experimental)',
-    openaiStep1: 'Obtenga una clave de API desde OpenAI Platform → API Keys.',
+    openaiStep1:
+      'Cree una cuenta en <0>platform.openai.com</0> y configure la facturación o los créditos — la facturación de la API es independiente de ChatGPT Plus.',
     openaiStep2:
-      'En HoTTY, seleccione <0>OpenAI</0> como su proveedor, abra una pestaña de chat de IA e introduzca su clave de API.',
+      'Cree una clave en <0>API keys</0> y cópiela de inmediato — solo se muestra una vez (empieza por <1>sk-</1>).',
+    openaiStep3:
+      'En HoTTY, abra <0>Configuración → IA</0>, seleccione <1>OpenAI</1> como su proveedor, pegue la clave de API y haga clic en Iniciar sesión.',
     openaiNote:
       'Este proveedor es experimental y no se ha probado por completo. Algunas funciones (modo de monitoreo, modo interactivo, etc.) pueden no funcionar como se espera. Informe de cualquier problema que encuentre.',
+    troubleshootHeading: 'Si el inicio de sesión falla',
+    troubleshootGemini:
+      '<0>Gemini:</0> una página "Acceso bloqueado" / "la aplicación no ha completado la verificación" significa que su cuenta de Google no figura en <1>Usuarios de prueba</1> de la pantalla de consentimiento de OAuth. El intento de inicio de sesión también caduca a los 5 minutos — simplemente vuelva a empezar.',
+    troubleshootVertex:
+      '<0>Vertex AI:</0> los errores de permisos (403) suelen significar que la Vertex AI API no está habilitada o que falta el rol <1>Usuario de Vertex AI</1>. Si el ADC ha caducado, vuelva a ejecutar <2>gcloud auth application-default login</2>.',
+    troubleshootKeys:
+      '<0>OpenAI / Anthropic:</0> 401 significa que la clave es inválida o fue revocada; 429 suele significar que no quedan créditos o que hay limitación de velocidad.',
     credentialsNote:
       'Todas las credenciales se cifran con Windows DPAPI y se almacenan localmente — nunca se transmiten fuera de su máquina, salvo al proveedor de IA correspondiente.',
   },

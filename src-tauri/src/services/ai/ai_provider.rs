@@ -57,6 +57,9 @@ pub struct ChatResponseData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthResultPayload {
+    /// Provider id that produced this result (e.g. "gemini"). Lets the frontend
+    /// ignore a late result for a provider the user has since switched away from.
+    pub provider: String,
     pub success: bool,
 }
 
@@ -139,8 +142,21 @@ pub fn emit_chat_response(app: &AppHandle, data: ChatResponseData) {
     let _ = app.emit("ai-chat-response", data);
 }
 
-pub fn emit_auth_result(app: &AppHandle, success: bool) {
-    let _ = app.emit("ai-auth-result", AuthResultPayload { success });
+pub fn emit_auth_result(app: &AppHandle, provider: &str, success: bool) {
+    let _ = app.emit(
+        "ai-auth-result",
+        AuthResultPayload {
+            provider: provider.to_string(),
+            success,
+        },
+    );
+}
+
+/// Broadcast an explicit logout to every window so all AI Chat panes and
+/// Settings tabs drop their authenticated state. Distinct from
+/// `ai-auth-result { success: false }`, which means "a sign-in attempt failed".
+pub fn emit_auth_logout(app: &AppHandle) {
+    let _ = app.emit("ai-auth-logout", ());
 }
 
 // ---------------------------------------------------------------------------
@@ -182,6 +198,17 @@ mod tests {
         };
         let json = serde_json::to_value(&status).unwrap();
         assert!(json.get("accountInfo").is_none());
+    }
+
+    #[test]
+    fn auth_result_payload_carries_provider() {
+        let payload = AuthResultPayload {
+            provider: "gemini".into(),
+            success: true,
+        };
+        let json = serde_json::to_value(&payload).unwrap();
+        assert_eq!(json["provider"], "gemini");
+        assert_eq!(json["success"], true);
     }
 
     #[test]

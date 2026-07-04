@@ -6,37 +6,6 @@
 // перечислений, системные промпты ИИ и значения вариантов языка ответа ИИ остаются
 // в компонентах. По одному блоку ключей на тему.
 export const aiChat = {
-  auth: {
-    // Gemini (Google AI Studio)
-    geminiTitle: 'Подключение к Gemini',
-    clientId: 'Client ID',
-    clientSecret: 'Client Secret',
-    connecting: 'Подключение...',
-    signInWithGoogle: 'Войти через Google',
-    // Vertex AI
-    vertexTitle: 'Подключение к Vertex AI',
-    gcpProjectId: 'ID проекта GCP',
-    gcpProjectIdPlaceholder: 'my-project-id',
-    location: 'Расположение',
-    locationPlaceholder: 'us-central1',
-    authMethod: 'Метод аутентификации',
-    authMethodAdc: 'Application Default Credentials (ADC)',
-    authMethodServiceAccount: 'Файл ключа сервисного аккаунта',
-    serviceAccountKeyFile: 'Файл ключа сервисного аккаунта',
-    serviceAccountKeyFilePlaceholder: '/path/to/service-account-key.json',
-    browse: 'Обзор...',
-    connectVertex: 'Подключиться к Vertex AI',
-    // OpenAI
-    openaiTitle: 'Подключение к OpenAI',
-    connectOpenai: 'Подключиться к OpenAI',
-    openaiKeyPlaceholder: 'sk-...',
-    // Anthropic
-    anthropicTitle: 'Подключение к Anthropic',
-    connectAnthropic: 'Подключиться к Anthropic',
-    anthropicKeyPlaceholder: 'sk-ant-...',
-    // Общее
-    apiKey: 'API-ключ',
-  },
   executionMode: {
     chipAuto: 'Авто · Макс {{max}}',
     chipAskBeforeExecute: 'Спрашивать перед выполнением',
@@ -82,8 +51,11 @@ export const aiChat = {
     unknownTerminal: 'неизвестно',
     disconnectedSuffix: ' (отключён)',
     statusDisconnected: 'отключён',
-    moreOptions: 'Больше параметров',
-    logout: 'Выйти',
+    // Состояние «не выполнен вход» / «выполняется вход» (учётные данные вводятся в Настройки → ИИ)
+    signingIn: 'Вход…',
+    notSignedInTitle: 'Вход не выполнен',
+    notSignedInBody: 'Войдите в {{provider}} в разделе Настройки → ИИ, чтобы начать чат.',
+    openSettings: 'Открыть настройки',
     // Пустое состояние
     emptyTitle: 'Чем я могу помочь?',
     emptyLinkedTo: 'Связано с <0>{{name}}</0>',
@@ -122,9 +94,6 @@ export const aiChat = {
     newChatConfirmTitle: 'Начать новый чат?',
     newChatConfirmMessage: 'Текущий разговор будет очищен. Это нельзя отменить.',
     newChatConfirmButton: 'Начать новый чат',
-    // Статус аутентификации
-    authFailed: 'Ошибка аутентификации. Повторите попытку.',
-    authTimedOut: 'Время ожидания аутентификации истекло. Повторите попытку.',
     modelNotSelected: 'Модель ИИ не выбрана. Выберите модель из раскрывающегося списка в правом верхнем углу экрана.',
   },
   message: {

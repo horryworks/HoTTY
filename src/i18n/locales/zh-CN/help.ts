@@ -200,7 +200,7 @@ export const help = {
     step1:
       '<0>选择提供商：</0>转到 <1>设置 → AI → AI 提供商</1> 并选择一个。推荐使用 <2>Google AI Studio (Gemini)</2> 或 <3>Vertex AI</3> — 参见下方的对比表。',
     step2:
-      '<0>进行身份验证：</0>打开 AI 聊天标签页（<1><2></2></1> → AI 聊天）并按照屏幕提示登录或输入您的凭据。',
+      '<0>登录：</0>在 <1>设置 → AI</1> 中，提供商选择器正下方会显示所选提供商的登录表单 — 在那里输入您的凭据。',
     step3:
       '<0>开始聊天：</0>输入问题，或选择终端文本后右键单击，在出现的 <1>“询问 AI”</1> 框中输入您的问题。',
     outro:
@@ -278,36 +278,62 @@ export const help = {
 
   aiSetup: {
     summary: 'AI 设置与身份验证',
-    geminiHeading: 'Google AI Studio (Gemini) — OAuth2 设置',
-    geminiStep1: '转到 Google Cloud Console → APIs & Services → Credentials。',
-    geminiStep2: '创建一个 <0>OAuth 2.0 Client ID</0>（桌面应用类型）。',
+    whereHeading: '在哪里输入凭据？',
+    whereBody1:
+      '一切都在 <0>设置 → AI</0> 中：在那里选择提供商后，该提供商的登录表单会显示在正下方，旁边还有身份验证状态和注销按钮。',
+    whereBody2:
+      '<0>AI 聊天面板</0> 本身没有凭据输入框 — 未登录时，它会显示一个直接跳转到 AI 标签页的<1>打开设置</1>按钮。只需登录一次；之后启动时 HoTTY 会自动重新验证，注销也在同一处的注销按钮完成。',
+    geminiHeading: 'Google AI Studio (Gemini) — 使用 Google 登录（OAuth2）',
+    geminiIntro:
+      '此提供商通过 OAuth2 使用您的 Google 账号登录 — <0>无法使用 AI Studio 的 API 密钥</0>。只需一次性创建您自己的（免费）OAuth 客户端：',
+    geminiStep1:
+      '在 <0>Google Cloud Console</0>（console.cloud.google.com）中创建或选择一个项目，然后启用 <1>Generative Language API</1>（APIs & Services → Library）。',
+    geminiStep2:
+      '配置 <0>OAuth 同意屏幕</0>（APIs & Services）：选择“外部”即可。应用处于<1>测试</1>模式期间，请在<2>测试用户</2>中添加您自己的 Google 账号 — 否则 Google 会阻止登录。',
     geminiStep3:
-      '在 HoTTY 中，选择 <0>Google AI Studio</0> 作为您的提供商，打开 AI 聊天标签页，并输入您的 Client ID 和 Client Secret。',
+      '在 APIs & Services → Credentials → <0>创建凭据 → OAuth 客户端 ID</0> 中创建客户端，应用类型选择<1>桌面应用</1>，并复制 <2>Client ID</2> 和 <3>Client Secret</3>。无需设置重定向 URI — HoTTY 会自动监听一个临时的 localhost 端口。',
     geminiStep4:
-      '点击 <0>“使用 Google 登录”</0> — 将打开浏览器窗口进行授权。',
+      '在 HoTTY 中打开 <0>设置 → AI</0>，选择 <1>Google AI Studio (Gemini)</1> 作为您的提供商，将 Client ID 和 Client Secret 粘贴到下方的登录表单中，然后点击 <2>“使用 Google 登录”</2>。',
+    geminiStep5:
+      '浏览器会打开 Google 的同意页面 — 请在 5 分钟内批准访问。HoTTY 会在本地接收登录结果，聊天即可使用。',
     geminiNote:
       '免费层级账户的数据可能会用于模型训练。在您的 Google Cloud 项目上启用结算即可选择退出。',
     vertexHeading: 'Google Cloud Vertex AI — ADC 或服务账号',
     vertexStep1:
-      '<0>ADC（最简单）：</0>安装 Google Cloud CLI，然后运行：<1></1><2>gcloud auth application-default login</2><3></3>HoTTY 会自动检测这些凭据。',
+      '在 Google Cloud Console 中为您的项目启用 <0>Vertex AI API</0>，并确保您使用的账号（或服务账号）具有 <1>Vertex AI User</1> 角色（roles/aiplatform.user）。',
     vertexStep2:
-      '<0>服务账号：</0>从 Google Cloud Console → IAM → Service Accounts 下载 JSON 密钥文件，然后在设置中提供文件路径。',
+      '<0>ADC（最简单）：</0>安装 Google Cloud CLI，然后运行：<1></1><2>gcloud auth application-default login</2><3></3>HoTTY 会自动检测这些凭据。',
     vertexStep3:
-      '在 AI 聊天标签页中输入您的 <0>Google Cloud Project ID</0> 并选择一个 <1>区域</1>。',
+      '<0>服务账号（备选）：</0>在 IAM 和管理 → 服务账号中创建 JSON 密钥并保存到本地；在登录面板中选择<1>服务账号</1>并输入密钥文件路径。',
+    vertexStep4:
+      '在 <0>设置 → AI</0> 中输入您的 <1>Google Cloud Project ID</1>，选择一个<2>区域</2>，选择身份验证方式，然后点击<3>登录</3>。',
     anthropicHeading: 'Anthropic (Claude) — API 密钥',
     anthropicExperimental: '（实验性）',
-    anthropicStep1: '从 Anthropic Console → API Keys 获取 API 密钥。',
+    anthropicStep1:
+      '在 <0>console.anthropic.com</0> 创建账号并购买 API 额度 — API 计费与 Claude.ai 订阅是分开的。',
     anthropicStep2:
-      '在 HoTTY 中，选择 <0>Anthropic</0> 作为您的提供商，打开 AI 聊天标签页，并输入您的 API 密钥。',
+      '在 Settings → <0>API Keys</0> 中创建密钥并立即复制 — 密钥只显示一次（以 <1>sk-ant-</1> 开头）。',
+    anthropicStep3:
+      '在 HoTTY 中打开 <0>设置 → AI</0>，选择 <1>Anthropic</1> 作为您的提供商，粘贴 API 密钥，然后点击登录。',
     anthropicNote:
       '此提供商为实验性，尚未经过全面测试。某些功能（监视模式、交互模式等）可能无法按预期工作。如遇任何问题，请反馈。',
     openaiHeading: 'OpenAI — API 密钥',
     openaiExperimental: '（实验性）',
-    openaiStep1: '从 OpenAI Platform → API Keys 获取 API 密钥。',
+    openaiStep1:
+      '在 <0>platform.openai.com</0> 创建账号并设置计费或额度 — API 计费与 ChatGPT Plus 是分开的。',
     openaiStep2:
-      '在 HoTTY 中，选择 <0>OpenAI</0> 作为您的提供商，打开 AI 聊天标签页，并输入您的 API 密钥。',
+      '在 <0>API keys</0> 页面创建密钥并立即复制 — 密钥只显示一次（以 <1>sk-</1> 开头）。',
+    openaiStep3:
+      '在 HoTTY 中打开 <0>设置 → AI</0>，选择 <1>OpenAI</1> 作为您的提供商，粘贴 API 密钥，然后点击登录。',
     openaiNote:
       '此提供商为实验性，尚未经过全面测试。某些功能（监视模式、交互模式等）可能无法按预期工作。如遇任何问题，请反馈。',
+    troubleshootHeading: '登录失败时',
+    troubleshootGemini:
+      '<0>Gemini：</0>出现“访问已被阻止”/“应用未完成验证流程”页面，表示您的 Google 账号未被添加到 OAuth 同意屏幕的<1>测试用户</1>中。登录尝试也会在 5 分钟后过期 — 重新开始即可。',
+    troubleshootVertex:
+      '<0>Vertex AI：</0>权限（403）错误通常表示未启用 Vertex AI API 或缺少 <1>Vertex AI User</1> 角色。如果 ADC 已过期，请重新运行 <2>gcloud auth application-default login</2>。',
+    troubleshootKeys:
+      '<0>OpenAI / Anthropic：</0>401 表示密钥无效或已被吊销；429 通常表示额度用尽或触发了速率限制。',
     credentialsNote:
       '所有凭据都使用 Windows DPAPI 加密并存储在本地 — 除了发送给相应的 AI 提供商外，它们绝不会传输到您的机器之外。',
   },

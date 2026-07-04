@@ -399,3 +399,57 @@ pub async fn ssh_host_key_response(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn protocol_id_as_str_covers_all_variants() {
+        assert_eq!(ProtocolId::Ssh.as_str(), "ssh");
+        assert_eq!(ProtocolId::Telnet.as_str(), "telnet");
+        assert_eq!(ProtocolId::Serial.as_str(), "serial");
+        assert_eq!(ProtocolId::Wsl.as_str(), "wsl");
+        assert_eq!(ProtocolId::Cmd.as_str(), "cmd");
+        assert_eq!(ProtocolId::PowerShell.as_str(), "powershell");
+        assert_eq!(ProtocolId::GitBash.as_str(), "git-bash");
+        assert_eq!(ProtocolId::GcloudIap.as_str(), "gcloud-iap");
+    }
+
+    #[test]
+    fn session_info_serializes_camel_case() {
+        let info = SessionInfo {
+            session_id: "s1".to_string(),
+            host: "example.com".to_string(),
+            protocol: "ssh".to_string(),
+            owner_label: Some("main".to_string()),
+        };
+        let json: serde_json::Value = serde_json::to_value(&info).unwrap();
+        assert_eq!(json["sessionId"], "s1");
+        assert_eq!(json["host"], "example.com");
+        assert_eq!(json["protocol"], "ssh");
+        assert_eq!(json["ownerLabel"], "main");
+        // The snake_case field names must NOT leak onto the wire.
+        assert!(json.get("session_id").is_none());
+        assert!(json.get("owner_label").is_none());
+    }
+
+    #[test]
+    fn session_info_owner_label_none_serializes_null() {
+        let info = SessionInfo {
+            session_id: "s2".to_string(),
+            host: "h".to_string(),
+            protocol: "telnet".to_string(),
+            owner_label: None,
+        };
+        let json: serde_json::Value = serde_json::to_value(&info).unwrap();
+        assert!(json["ownerLabel"].is_null());
+    }
+
+    #[test]
+    fn session_state_default_is_empty() {
+        let state = SessionState::default();
+        let map = state.sessions.blocking_lock();
+        assert!(map.is_empty());
+    }
+}
