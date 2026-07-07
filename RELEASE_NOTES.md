@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.9-beta2
+
+This beta makes the **New Connection** form remember what you typed after you connect, so reopening the dialog is pre-filled for your next similar host.
+
+### Improvements
+
+- **The New Connection form now keeps your entries after connecting.** When you connect from a manually-entered **New Connection** (no saved host selected), the dialog keeps the values you typed — host, port, username and the rest — so the next time you open it, it's already pre-filled for a similar host. Connecting to a saved host or a GCP instance still clears the form as before, so a saved host's decrypted password is never left in the fields.
+
 ## v2.0.9-beta1
 
 This beta reworks **AI sign-in**: credentials for every provider now live in **Settings → AI** instead of the AI Chat pane, your signed-in state is shared across all open windows and remembered between launches, and the in-app AI setup help has been expanded with step-by-step instructions and troubleshooting. It also makes serial-port connection failures easier to read.

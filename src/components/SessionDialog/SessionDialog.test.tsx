@@ -308,7 +308,7 @@ describe('SessionDialog', () => {
       expect(stillHostInput.value).toBe('10.0.0.99');
     });
 
-    it('clears the form and the draft when the initiated session transitions to "connected"', async () => {
+    it('clears the form and the draft when a saved-host connect transitions to "connected"', async () => {
       localStorage.setItem(STORAGE_KEYS.HOST_TREE, JSON.stringify([
         { id: 'host-success-1', type: 'host', name: 'Sample Box', entry: { protocol: 'ssh', host: '10.0.0.20', port: 22, username: 'alice' } },
       ]));
@@ -352,6 +352,44 @@ describe('SessionDialog', () => {
       });
       const finalHostInput = container.querySelector('input[placeholder="example.com"]') as HTMLInputElement;
       expect(finalHostInput.value).toBe('');
+    });
+
+    it('keeps the New Connection form populated when the initiated session transitions to "connected"', async () => {
+      // A manually-entered New Connection (no saved host selected) must retain
+      // host/username/password after a successful connect, so the next open is
+      // pre-filled for a similar host.
+      const onConnect = vi.fn().mockReturnValue('sess-nc');
+      let sessions = makeSessions([['sess-nc', 'connecting']]);
+      const { container, rerender } = render(
+        <SessionDialog {...defaultProps} onConnect={onConnect} sessions={sessions} />,
+      );
+      const hostInput = container.querySelector('input[placeholder="example.com"]') as HTMLInputElement;
+      await act(async () => {
+        fireEvent.change(hostInput, { target: { value: '10.0.0.42' } });
+      });
+      const usernameInput = container.querySelectorAll('input[type="text"]')[1] as HTMLInputElement;
+      await act(async () => {
+        fireEvent.change(usernameInput, { target: { value: 'carol' } });
+      });
+      const passwordInput = container.querySelector('input[type="password"]') as HTMLInputElement;
+      await act(async () => {
+        fireEvent.change(passwordInput, { target: { value: 's3cret' } });
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByText('Connect'));
+      });
+      expect(onConnect).toHaveBeenCalledTimes(1);
+      // Backend reports success — the New Connection form must NOT be cleared.
+      sessions = makeSessions([['sess-nc', 'connected']]);
+      await act(async () => {
+        rerender(<SessionDialog {...defaultProps} onConnect={onConnect} sessions={sessions} />);
+      });
+      const hostAfter = container.querySelector('input[placeholder="example.com"]') as HTMLInputElement;
+      const usernameAfter = container.querySelectorAll('input[type="text"]')[1] as HTMLInputElement;
+      const passwordAfter = container.querySelector('input[type="password"]') as HTMLInputElement;
+      expect(hostAfter.value).toBe('10.0.0.42');
+      expect(usernameAfter.value).toBe('carol');
+      expect(passwordAfter.value).toBe('s3cret');
     });
 
     it('preserves the draft when the initiated session fails (auth error)', async () => {

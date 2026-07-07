@@ -257,17 +257,20 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     };
     const [newConnectionDraft, setNewConnectionDraft] = useState<NewConnectionDraft | null>(null);
 
-    // Session ids initiated from this dialog. The subscription effect below
-    // (placed after resetForm because the success branch uses it) watches the
-    // parent's `sessions` map and clears the form/draft only when one of these
-    // transitions to 'connected' — auth failures must NOT clear, so the user
-    // can fix credentials and retry.
-    const initiatedSessionsRef = useRef<Set<string>>(new Set());
+    // Session ids initiated from this dialog, mapped to a "keep form on connect"
+    // flag. The subscription effect below (placed after resetForm because the
+    // success branch uses it) watches the parent's `sessions` map. On a verified
+    // 'connected' it resets the form ONLY when keepForm is false — a New
+    // Connection (manual entry) keeps its values so the next open is pre-filled
+    // for a similar host, while saved-host / GCP connects reset as before (their
+    // decrypted plaintext password must not linger). Auth failures never reset,
+    // so the user can fix credentials and retry.
+    const initiatedSessionsRef = useRef<Map<string, boolean>>(new Map());
 
-    const dispatchConnect = useCallback((payload: ConnectSubmitPayload) => {
+    const dispatchConnect = useCallback((payload: ConnectSubmitPayload, keepFormOnConnect = false) => {
         const result = onConnect(payload);
         if (typeof result === 'string' && result.length > 0) {
-            initiatedSessionsRef.current.add(result);
+            initiatedSessionsRef.current.set(result, keepFormOnConnect);
         }
     }, [onConnect]);
 
@@ -374,18 +377,22 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     }, []);
 
     // Subscription effect: watches the parent's sessions map for any session
-    // initiated from this dialog transitioning to 'connected', then clears
-    // the form + draft. Failure paths ('error'/'disconnected') stop tracking
-    // but preserve user input so the next modal open is ready for retry.
+    // initiated from this dialog transitioning to 'connected'. For saved-host /
+    // GCP connects (keepForm === false) it clears the form + draft as before;
+    // for a New Connection (keepForm === true) it keeps the entered values so
+    // the next open is pre-filled for a similar host. Failure paths
+    // ('error'/'disconnected') stop tracking but always preserve user input.
     useEffect(() => {
         if (!sessions) return;
-        for (const id of Array.from(initiatedSessionsRef.current)) {
+        for (const [id, keepForm] of Array.from(initiatedSessionsRef.current)) {
             const status = sessions.get(id)?.status;
             if (status === 'connected') {
-                /* eslint-disable react-hooks/set-state-in-effect */
-                setNewConnectionDraft(null);
-                resetForm();
-                /* eslint-enable react-hooks/set-state-in-effect */
+                if (!keepForm) {
+                    /* eslint-disable react-hooks/set-state-in-effect */
+                    setNewConnectionDraft(null);
+                    resetForm();
+                    /* eslint-enable react-hooks/set-state-in-effect */
+                }
                 initiatedSessionsRef.current.delete(id);
             } else if (status === 'error' || status === 'disconnected') {
                 initiatedSessionsRef.current.delete(id);
@@ -494,7 +501,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 displayName: `IAP ${sel.instance}`,
                 protocol: 'gcloud-iap',
                 config,
-            });
+            }, false);
         },
         [dispatchConnect],
     );
@@ -541,7 +548,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             // host-tree "+" modal). An empty tab title is unfriendly.
             const fallbackName = `IAP ${e.iapTunnel.instance}`;
             const displayName = node.name?.trim() || fallbackName;
-            dispatchConnect({ displayName, protocol: 'gcloud-iap', config });
+            dispatchConnect({ displayName, protocol: 'gcloud-iap', config }, false);
             return;
         }
 
@@ -601,7 +608,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             };
             payload = { displayName: node.name, protocol: 'telnet', config };
         }
-        dispatchConnect(payload);
+        dispatchConnect(payload, false);
     }, [dispatchConnect, settings.sshKeepAliveEnabled, settings.sshKeepAliveInterval, settings.telnetKeepAliveEnabled, settings.telnetKeepAliveInterval, settings.sshConnectTimeoutSecs, settings.telnetConnectTimeoutSecs]);
 
     // --- "Open All": connect every host beneath a folder (recursively) ---
@@ -898,6 +905,11 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             }
         };
 
+        // A New Connection (no saved host selected) keeps its form values after
+        // a successful connect so the next open is pre-filled for a similar host.
+        // Editing/connecting a saved host resets as before.
+        const isNewConnection = selectedHostId === null;
+
         switch (protocol) {
             case 'ssh': {
                 const config: SshConnectionConfig = {
@@ -911,7 +923,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     keepaliveIntervalSecs: sshKeepAlive,
                     connectTimeoutSecs: sshConnectTimeout,
                 };
-                dispatchConnect({ displayName: buildName(), protocol, config });
+                dispatchConnect({ displayName: buildName(), protocol, config }, isNewConnection);
                 break;
             }
             case 'telnet': {
@@ -924,7 +936,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     keepaliveIntervalSecs: telnetKeepAlive,
                     connectTimeoutSecs: telnetConnectTimeout,
                 };
-                dispatchConnect({ displayName: buildName(), protocol, config });
+                dispatchConnect({ displayName: buildName(), protocol, config }, isNewConnection);
                 break;
             }
             case 'serial': {
@@ -937,7 +949,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     flowControl,
                     encoding,
                 };
-                dispatchConnect({ displayName: buildName(), protocol, config });
+                dispatchConnect({ displayName: buildName(), protocol, config }, isNewConnection);
                 break;
             }
             case 'wsl': {
@@ -945,7 +957,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     distribution: selectedDistro,
                     encoding,
                 };
-                dispatchConnect({ displayName: buildName(), protocol, config });
+                dispatchConnect({ displayName: buildName(), protocol, config }, isNewConnection);
                 break;
             }
             case 'cmd':
@@ -956,16 +968,17 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     shellPath: protocol === 'git-bash' && gitBashPath ? gitBashPath : undefined,
                     encoding,
                 };
-                dispatchConnect({ displayName: buildName(), protocol, config });
+                dispatchConnect({ displayName: buildName(), protocol, config }, isNewConnection);
                 break;
             }
         }
 
         // Form values intentionally persist across modal close — auth
         // success/failure is reported asynchronously by the backend, so the
-        // form stays around for retry. The New Connection draft is cleared
-        // separately by the sessions subscription effect above when a session
-        // initiated here transitions to 'connected'.
+        // form stays around for retry. For a New Connection they also persist
+        // after a *successful* connect (keepForm=true above) so the next open is
+        // pre-filled for a similar host; only saved-host connects are reset by
+        // the sessions subscription effect above on 'connected'.
     };
 
     const handleBrowseKey = async () => {

@@ -97,12 +97,16 @@ pub enum SessionError {
     #[error("session not found")]
     NotFound,
 
-    #[error("i/o error: {0}")]
-    Io(#[from] std::io::Error),
-
     #[error("{0}")]
     Other(String),
 }
+
+// `SessionError` deliberately has NO blanket `Io(#[from] std::io::Error)` variant.
+// One would let any `some_io()?` inside a connect/write path auto-convert and
+// surface a raw `os error NNNNN` to the user, silently bypassing the single
+// `humanize_io_error` translation point (ADR-005). Convert io errors explicitly
+// via `humanize_io_error(...)` and wrap the result in `ConnectionFailed` / `Other`
+// so the user only ever sees the humanized string.
 
 /// Convert a raw `std::io::Error` from a connect attempt into a short,
 /// human-friendly string. The TCP target (`host:port`) is intentionally not
