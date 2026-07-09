@@ -367,6 +367,12 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setOriginalState(null);
         setDisplayName('');
         setHost('');
+        // Reset protocol to the New Connection default alongside its default
+        // port. Resetting port to '22' without resetting protocol left a stale
+        // protocol (e.g. telnet) paired with SSH's port — the "Telnet but port
+        // 22" bug — because port only re-derives from the protocol <select>'s
+        // onChange, not from a programmatic setProtocol.
+        setProtocol('ssh');
         setPort('22');
         setUsername('');
         setPassword('');
@@ -407,6 +413,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             setOriginalState(null);
             setDisplayName('');
             setHost('');
+            // Keep protocol/port in sync (see resetForm) — resetting port to
+            // '22' without resetting protocol leaves a stale telnet + port 22.
+            setProtocol('ssh');
             setPort('22');
             setUsername('');
             setPassword('');

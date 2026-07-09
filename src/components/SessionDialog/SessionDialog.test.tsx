@@ -489,6 +489,29 @@ describe('SessionDialog', () => {
       const finalHostInput = container.querySelector('input[placeholder="example.com"]') as HTMLInputElement;
       expect(finalHostInput.value).toBe('second.example.com');
     });
+
+    it('resets protocol to SSH + port 22 (not stale telnet + port 22) when returning to New Connection from a saved telnet host', async () => {
+      // Regression: resetForm reset the port to '22' but left protocol
+      // untouched, so leaving a telnet host produced a "Telnet but port 22"
+      // mismatch (port only re-derives from the protocol <select> onChange).
+      localStorage.setItem(STORAGE_KEYS.HOST_TREE, JSON.stringify([
+        { id: 'host-telnet-1', type: 'host', name: 'Telnet Box', entry: { protocol: 'telnet', host: '10.0.0.30', port: 23 } },
+      ]));
+      const { container } = render(<SessionDialog {...defaultProps} />);
+      // Select the saved telnet host → protocol telnet, port 23.
+      await act(async () => {
+        fireEvent.click(screen.getByText('Telnet Box'));
+      });
+      expect((container.querySelector('select') as HTMLSelectElement).value).toBe('telnet');
+      // Return to New Connection (form not dirty → resets immediately).
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText('Clear form and start new connection'));
+      });
+      expect(container.querySelector('.banner-new')).toBeTruthy();
+      // A fresh New Connection must be SSH on port 22 — not telnet on 22.
+      expect((container.querySelector('select') as HTMLSelectElement).value).toBe('ssh');
+      expect((container.querySelector('input[type="number"]') as HTMLInputElement).value).toBe('22');
+    });
   });
 
   describe('Google Cloud IAP protocol (removed — handled by GCP tab)', () => {

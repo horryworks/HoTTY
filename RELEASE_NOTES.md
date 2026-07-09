@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.9-beta3
+
+This beta fixes a **New Connection** form glitch introduced by the beta2 entry-retention change, where the protocol and port could fall out of sync.
+
+### Bug Fixes
+
+- **New Connection no longer shows Telnet paired with the wrong default port.** When the form was cleared back to a fresh **New Connection** — for example after connecting a saved Telnet host, or clicking **New Connection** while a Telnet host was selected — the protocol stayed on **Telnet** while the port was reset to **22** (SSH's default), leaving an inconsistent *Telnet + port 22*. The form now resets protocol and port together, so a fresh New Connection always starts as **SSH on port 22**.
+
 ## v2.0.9-beta2
 
 This beta makes the **New Connection** form remember what you typed after you connect, so reopening the dialog is pre-filled for your next similar host.
