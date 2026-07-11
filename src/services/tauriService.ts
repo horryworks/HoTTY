@@ -728,6 +728,15 @@ export const tauriService = {
     );
   },
 
+  /**
+   * Session-scoped warning emitted when an accepted SSH host key could not be
+   * persisted to known_hosts (the key won't be remembered, so the user will be
+   * re-prompted next connect). Payload is a human-readable English message.
+   */
+  onSshKnownHostsWarning(cb: (message: string) => void): Promise<UnlistenFn> {
+    return listen<string>('ssh-known-hosts-warning', (e) => cb(e.payload));
+  },
+
   // -----------------------------------------------------------------------
   // AI
   // -----------------------------------------------------------------------

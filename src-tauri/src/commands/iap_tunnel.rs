@@ -114,3 +114,102 @@ pub async fn gce_iap_get_instance_status(
         .await
         .map(|s| s.as_str().to_string())
 }
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+//
+// Every command in this module is a thin async wrapper that shells out to
+// gcloud (or touches managed Tauri state), so there is no AppHandle-free command
+// logic to exercise directly. Instead we lock down the serde payload contracts
+// these commands return to the frontend: field casing and the
+// `skip_serializing_if` behavior the TypeScript types depend on.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gcloud_status_serializes_camel_case_and_skips_none_version() {
+        let s = GcloudStatus {
+            available: true,
+            version: None,
+        };
+        let json = serde_json::to_value(&s).unwrap();
+        assert_eq!(json["available"], true);
+        // `version` is None → omitted from the payload entirely.
+        assert!(json.get("version").is_none());
+
+        let with_version = GcloudStatus {
+            available: true,
+            version: Some("500.0.0".into()),
+        };
+        assert_eq!(
+            serde_json::to_value(&with_version).unwrap()["version"],
+            "500.0.0"
+        );
+    }
+
+    #[test]
+    fn gcloud_status_deserializes_with_missing_version() {
+        let s: GcloudStatus = serde_json::from_value(serde_json::json!({
+            "available": false
+        }))
+        .unwrap();
+        assert!(!s.available);
+        assert!(s.version.is_none());
+    }
+
+    #[test]
+    fn gcloud_auth_status_roundtrips() {
+        let s = GcloudAuthStatus {
+            authenticated: true,
+            account: Some("dev@example.com".into()),
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        let back: GcloudAuthStatus = serde_json::from_str(&json).unwrap();
+        assert!(back.authenticated);
+        assert_eq!(back.account.as_deref(), Some("dev@example.com"));
+    }
+
+    #[test]
+    fn gcp_project_roundtrips() {
+        let p = GcpProject {
+            id: "my-project".into(),
+            name: "My Project".into(),
+        };
+        let json = serde_json::to_string(&p).unwrap();
+        let back: GcpProject = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.id, "my-project");
+        assert_eq!(back.name, "My Project");
+    }
+
+    #[test]
+    fn gce_instance_serializes_camel_case_and_omits_absent_optionals() {
+        let inst = GceInstance {
+            name: "vm-1".into(),
+            status: "RUNNING".into(),
+            zone: Some("us-central1-a".into()),
+            access: None,
+        };
+        let json = serde_json::to_value(&inst).unwrap();
+        assert_eq!(json["name"], "vm-1");
+        assert_eq!(json["status"], "RUNNING");
+        assert_eq!(json["zone"], "us-central1-a");
+        // `access` is None → omitted so older payload consumers stay compatible.
+        assert!(json.get("access").is_none());
+    }
+
+    #[test]
+    fn gce_instance_deserializes_minimal_payload() {
+        // Older/minimal payloads carry only name + status.
+        let inst: GceInstance = serde_json::from_value(serde_json::json!({
+            "name": "vm-2",
+            "status": "TERMINATED"
+        }))
+        .unwrap();
+        assert_eq!(inst.name, "vm-2");
+        assert_eq!(inst.status, "TERMINATED");
+        assert!(inst.zone.is_none());
+        assert!(inst.access.is_none());
+    }
+}

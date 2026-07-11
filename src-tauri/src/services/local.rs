@@ -10,7 +10,8 @@ use tokio::task::JoinHandle;
 use super::path_safety::is_unc_path;
 use super::session_service::{
     abort_all, emit_session_data, emit_session_error, emit_session_status, encoding_for,
-    join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
+    humanize_pty_error, humanize_spawn_error, join_or_abort, SessionError, SessionService,
+    DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -142,7 +143,7 @@ impl SessionService for LocalSession {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .map_err(|e| SessionError::ConnectionFailed(format!("failed to open PTY: {e}")))?;
+            .map_err(|e| SessionError::ConnectionFailed(humanize_pty_error(&shell_path, &e)))?;
 
         let mut cmd = CommandBuilder::new(&shell_path);
 
@@ -166,7 +167,7 @@ impl SessionService for LocalSession {
         let child = pty_pair
             .slave
             .spawn_command(cmd)
-            .map_err(|e| SessionError::ConnectionFailed(format!("failed to spawn shell: {e}")))?;
+            .map_err(|e| SessionError::ConnectionFailed(humanize_spawn_error(&shell_path, &e)))?;
 
         // Grab a killer handle before `child` is moved into the watcher task, so
         // disconnect() can force-terminate the shell. Killing it closes the PTY,
@@ -177,12 +178,14 @@ impl SessionService for LocalSession {
         // Drop the slave end — we communicate through the master
         drop(pty_pair.slave);
 
-        let reader = pty_pair.master.try_clone_reader().map_err(|e| {
-            SessionError::ConnectionFailed(format!("failed to clone PTY reader: {e}"))
-        })?;
-        let writer = pty_pair.master.take_writer().map_err(|e| {
-            SessionError::ConnectionFailed(format!("failed to take PTY writer: {e}"))
-        })?;
+        let reader = pty_pair
+            .master
+            .try_clone_reader()
+            .map_err(|e| SessionError::ConnectionFailed(humanize_pty_error(&shell_path, &e)))?;
+        let writer = pty_pair
+            .master
+            .take_writer()
+            .map_err(|e| SessionError::ConnectionFailed(humanize_pty_error(&shell_path, &e)))?;
 
         // Keep master alive for resize
         let master = Arc::new(Mutex::new(pty_pair.master));

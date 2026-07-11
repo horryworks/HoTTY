@@ -22,7 +22,8 @@ use super::iap_tunnel::{
 };
 use super::session_service::{
     abort_all, emit_session_data, emit_session_error, emit_session_status, emit_to_owner,
-    encoding_for, join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
+    encoding_for, humanize_pty_error, humanize_spawn_error, join_or_abort, SessionError,
+    SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -364,7 +365,7 @@ async fn run_gcloud_capture(args: &[String], deadline: Duration) -> Result<Strin
                 "gcloud-iap: run_gcloud_capture spawn failed after {:?}: {e} (args: gcloud {pretty_args})",
                 started.elapsed()
             );
-            SessionError::ConnectionFailed(format!("failed to run gcloud: {e}"))
+            SessionError::ConnectionFailed(humanize_spawn_error("gcloud", &e))
         })?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -571,7 +572,7 @@ async fn ensure_ssh_key() -> Result<(PathBuf, bool), SessionError> {
     let output = timeout(Duration::from_secs(30), cmd.output())
         .await
         .map_err(|_| SessionError::ConnectionFailed("ssh-keygen timed out".into()))?
-        .map_err(|e| SessionError::ConnectionFailed(format!("ssh-keygen spawn failed: {e}")))?;
+        .map_err(|e| SessionError::ConnectionFailed(humanize_spawn_error("ssh-keygen", &e)))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(SessionError::ConnectionFailed(format!(
@@ -625,7 +626,7 @@ async fn ensure_key_permissions(priv_path: &Path) -> Result<(), SessionError> {
     let output = timeout(Duration::from_secs(10), cmd.output())
         .await
         .map_err(|_| SessionError::ConnectionFailed("icacls timed out".into()))?
-        .map_err(|e| SessionError::ConnectionFailed(format!("icacls spawn failed: {e}")))?;
+        .map_err(|e| SessionError::ConnectionFailed(humanize_spawn_error("icacls", &e)))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(SessionError::ConnectionFailed(format!(
@@ -758,7 +759,7 @@ async fn start_iap_tunnel(
 
     let mut child = cmd.spawn().map_err(|e| {
         log::error!("gcloud-iap: failed to spawn gcloud subprocess: {e}");
-        SessionError::ConnectionFailed(format!("failed to spawn gcloud: {e}"))
+        SessionError::ConnectionFailed(humanize_spawn_error("gcloud", &e))
     })?;
 
     let gcloud_pid = child.id().unwrap_or(0);
@@ -1400,6 +1401,9 @@ impl SessionService for GcloudIapSession {
         let argv = build_ssh_argv(&user, port, &priv_key_str, &self.config.instance);
         log::info!("gcloud-iap: ssh.exe argv={argv:?} (ssh_exe={ssh_exe:?})");
 
+        // Human name for the ssh binary, reused in all PTY/spawn error messages.
+        let ssh_program = ssh_exe.display().to_string();
+
         let pty_system = native_pty_system();
         let pty_pair = pty_system
             .openpty(PtySize {
@@ -1408,7 +1412,7 @@ impl SessionService for GcloudIapSession {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .map_err(|e| SessionError::ConnectionFailed(format!("failed to open PTY: {e}")))?;
+            .map_err(|e| SessionError::ConnectionFailed(humanize_pty_error(&ssh_program, &e)))?;
 
         let mut cmd = CommandBuilder::new(&ssh_exe);
         for a in &argv {
@@ -1425,7 +1429,7 @@ impl SessionService for GcloudIapSession {
 
         let child = pty_pair.slave.spawn_command(cmd).map_err(|e| {
             log::error!("gcloud-iap: failed to spawn ssh.exe via PTY: {e}");
-            SessionError::ConnectionFailed(format!("failed to spawn ssh: {e}"))
+            SessionError::ConnectionFailed(humanize_spawn_error(&ssh_program, &e))
         })?;
         let ssh_pid = child.process_id().unwrap_or(0);
         log::info!(
@@ -1436,12 +1440,14 @@ impl SessionService for GcloudIapSession {
         // Drop the slave end — we communicate through the master
         drop(pty_pair.slave);
 
-        let reader = pty_pair.master.try_clone_reader().map_err(|e| {
-            SessionError::ConnectionFailed(format!("failed to clone PTY reader: {e}"))
-        })?;
-        let writer = pty_pair.master.take_writer().map_err(|e| {
-            SessionError::ConnectionFailed(format!("failed to take PTY writer: {e}"))
-        })?;
+        let reader = pty_pair
+            .master
+            .try_clone_reader()
+            .map_err(|e| SessionError::ConnectionFailed(humanize_pty_error(&ssh_program, &e)))?;
+        let writer = pty_pair
+            .master
+            .take_writer()
+            .map_err(|e| SessionError::ConnectionFailed(humanize_pty_error(&ssh_program, &e)))?;
 
         // Keep master alive for resize
         let master = Arc::new(Mutex::new(pty_pair.master));

@@ -14,13 +14,19 @@ describe('FeaturesTab', () => {
     expect(screen.getByText('Web Browser')).toBeTruthy();
   });
 
-  it('all checkboxes are checked and enabled by default', () => {
+  it('has the expected default enabled state (File Explorer & Text Editor off)', () => {
     render(<FeaturesTab />);
     const checkboxes = screen.getAllByRole('checkbox');
     expect(checkboxes.length).toBe(7);
+    // All toggles are present and interactable regardless of state.
     for (const cb of checkboxes) {
-      expect(cb).toHaveProperty('checked', true);
       expect(cb).toHaveProperty('disabled', false);
+    }
+    // File Explorer and Text Editor default OFF (new installs); the rest default ON.
+    expect(screen.getByRole('checkbox', { name: 'File Explorer' })).toHaveProperty('checked', false);
+    expect(screen.getByRole('checkbox', { name: 'Text Editor' })).toHaveProperty('checked', false);
+    for (const name of ['AI Chat', 'Log Viewer', 'Ping Monitor', 'File Server', 'Web Browser']) {
+      expect(screen.getByRole('checkbox', { name })).toHaveProperty('checked', true);
     }
   });
 

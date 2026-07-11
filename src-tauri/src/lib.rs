@@ -114,6 +114,13 @@ fn cleanup_window_sessions(app: &tauri::AppHandle, label: &str) {
     });
 }
 
+/// Format the main window's title for a given app version (e.g. `HoTTY v2.0.9`).
+/// Extracted from `setup` so the title contract has unit coverage without
+/// booting a Tauri runtime.
+fn main_window_title(version: &str) -> String {
+    format!("HoTTY v{version}")
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -138,7 +145,6 @@ pub fn run() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .manage(SessionState::new())
         .manage(LogManager::new())
@@ -161,7 +167,7 @@ pub fn run() {
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 let version = app.package_info().version.to_string();
-                let _ = window.set_title(&format!("HoTTY v{}", version));
+                let _ = window.set_title(&main_window_title(&version));
             }
 
             let app_data_dir = app
@@ -324,4 +330,22 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+//
+// `run` boots a full Tauri runtime and `cleanup_window_sessions` needs a live
+// `AppHandle`, so neither is unit-testable here; we cover only the pure
+// `main_window_title` helper this module defines.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn main_window_title_formats_version() {
+        assert_eq!(main_window_title("2.0.9-beta3"), "HoTTY v2.0.9-beta3");
+        assert_eq!(main_window_title("1.0.0"), "HoTTY v1.0.0");
+    }
 }

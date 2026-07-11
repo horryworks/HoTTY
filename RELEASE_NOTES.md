@@ -1,5 +1,23 @@
 # Release Notes
 
+## v2.0.9
+
+The v2.0.9 stable release, consolidating the v2.0.9 beta series. The headline change is a reworked **AI sign-in**: credentials for every provider now live in **Settings → AI**, your signed-in state is shared across all open windows and remembered between launches, and the in-app AI setup help is expanded with step-by-step instructions and troubleshooting. This release also makes the **New Connection** form remember what you typed after connecting, and gives clearer, plain-language messages when a connection can't be started.
+
+### Improvements
+
+- **AI sign-in has moved to Settings → AI.** You now enter your credentials for every provider — Gemini, Vertex AI, OpenAI and Anthropic — in **Settings → AI**, directly below the provider selector, alongside your authentication status and a **Logout** button. The AI Chat pane no longer has any credential fields; while you are not signed in it shows a **Not signed in** message with an **Open Settings** button that jumps straight to the AI tab.
+- **Your AI sign-in is now shared across windows and remembered between launches.** Signing in — or out — in one window is reflected in every open window, and HoTTY re-authenticates automatically the next time you start it, so you only sign in once. OpenAI and Anthropic API keys are now kept (encrypted with Windows DPAPI) for this automatic re-sign-in as well.
+- **Clearer AI setup help.** The in-app Help walks you through creating credentials for each provider step by step — including the easily-missed **Test users** step on Google's OAuth consent screen — and adds an **"If sign-in fails"** troubleshooting section covering the most common sign-in errors.
+- **The New Connection form now keeps your entries after connecting.** When you connect from a manually-entered **New Connection** (no saved host selected), the dialog keeps the values you typed — host, port, username and the rest — so the next time you open it, it's already pre-filled for a similar host. Connecting to a saved host or a GCP instance still clears the form as before, so a saved host's decrypted password is never left in the fields.
+- **Friendlier connection errors.** When a connection can't be started, HoTTY now shows a plain-language reason instead of the raw Windows system message — for serial ports (*"Serial port COM3 is in use or access was denied"* / *"…not found"*), and now also for local shell, WSL and GCP IAP sessions (for example *"wsl.exe not found — check that it is installed and the path is correct"*).
+- **Text Editor and File Explorer panes are off by default on new installs.** A fresh install now starts with the Text Editor and File Explorer panes disabled in the Features menu; turn either on any time in **Settings → Features**. Existing installs keep the panes you already had enabled.
+
+### Bug Fixes
+
+- **New Connection no longer shows Telnet paired with the wrong default port.** When the form was cleared back to a fresh **New Connection** — for example after connecting a saved Telnet host, or clicking **New Connection** while a Telnet host was selected — the protocol stayed on **Telnet** while the port was reset to **22** (SSH's default), leaving an inconsistent *Telnet + port 22*. The form now resets protocol and port together, so a fresh New Connection always starts as **SSH on port 22**.
+- **You're now told when an accepted SSH host key can't be saved.** If HoTTY accepted a new SSH host key but then failed to write it to `known_hosts`, it previously failed silently — so you would be asked to confirm the same host again on your next connection with no explanation. It now shows a notification when this happens.
+
 ## v2.0.9-beta3
 
 This beta fixes a **New Connection** form glitch introduced by the beta2 entry-retention change, where the protocol and port could fall out of sync.

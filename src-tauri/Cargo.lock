@@ -2439,10 +2439,9 @@ dependencies = [
 
 [[package]]
 name = "hotty"
-version = "2.0.9-beta3"
+version = "2.0.9"
 dependencies = [
  "aes-gcm 0.10.3",
- "anyhow",
  "argon2",
  "async-tftp",
  "async-trait",
@@ -2467,7 +2466,6 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-dialog",
- "tauri-plugin-fs",
  "tauri-plugin-log",
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",

@@ -279,13 +279,9 @@ impl VertexAIProvider {
     }
 
     fn get_adc_path() -> PathBuf {
-        let appdata = std::env::var("APPDATA").unwrap_or_else(|_| {
-            let home = std::env::var("USERPROFILE").unwrap_or_default();
-            format!("{home}\\AppData\\Roaming")
-        });
-        PathBuf::from(appdata)
-            .join("gcloud")
-            .join("application_default_credentials.json")
+        // OS-specific gcloud config-dir resolution lives in `services::os_paths`
+        // so Windows path conventions stay isolated (architecture Non-goal).
+        crate::services::os_paths::gcloud_config_dir().join("application_default_credentials.json")
     }
 
     fn save_config(&self) -> Result<(), String> {
@@ -1915,5 +1911,22 @@ mod tests {
         assert!(!NON_TEXT_MODEL_KEYWORDS
             .iter()
             .any(|kw| "gemini-2.0-flash".contains(kw)));
+    }
+
+    #[test]
+    fn adc_path_targets_gcloud_credentials_file() {
+        // The OS-specific config-dir resolution moved to `services::os_paths`;
+        // this guards that the ADC path still lands on gcloud's credentials file
+        // (i.e. `<gcloud config dir>/application_default_credentials.json`).
+        let p = VertexAIProvider::get_adc_path();
+        assert_eq!(
+            p.file_name().and_then(|s| s.to_str()),
+            Some("application_default_credentials.json")
+        );
+        assert!(
+            p.to_string_lossy().contains("gcloud"),
+            "ADC path should sit under the gcloud config dir: {}",
+            p.display()
+        );
     }
 }

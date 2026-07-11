@@ -16,6 +16,7 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
   getCurrentWebviewWindow: () => ({ setTitle: vi.fn() }),
 }));
 
+import { listen } from '@tauri-apps/api/event';
 import { tauriService, isEncrypted } from './tauriService';
 
 describe('tauriService clipboard wrappers', () => {
@@ -728,5 +729,32 @@ describe('tauriService web browser wrappers', () => {
       paneId: 'wb-pane-1',
       options,
     });
+  });
+});
+
+describe('tauriService event listeners', () => {
+  const listenMock = vi.mocked(listen);
+
+  beforeEach(() => {
+    listenMock.mockReset();
+  });
+
+  it('onSshKnownHostsWarning subscribes to ssh-known-hosts-warning and forwards the message', async () => {
+    let captured: ((e: { payload: string }) => void) | undefined;
+    const unlisten = vi.fn();
+    listenMock.mockImplementation((_event, handler) => {
+      captured = handler as (e: { payload: string }) => void;
+      return Promise.resolve(unlisten);
+    });
+
+    const cb = vi.fn();
+    const result = await tauriService.onSshKnownHostsWarning(cb);
+
+    expect(listenMock).toHaveBeenCalledWith('ssh-known-hosts-warning', expect.any(Function));
+    expect(result).toBe(unlisten);
+
+    const message = 'Could not save host key for example.com:22 to known_hosts: permission denied';
+    captured?.({ payload: message });
+    expect(cb).toHaveBeenCalledWith(message);
   });
 });

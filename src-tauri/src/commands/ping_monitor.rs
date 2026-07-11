@@ -6,6 +6,20 @@ use crate::services::log_manager::LogManager;
 use crate::services::ping_monitor::{PingMonitorState, StartMonitorConfig};
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// Whether CSV logging is even a candidate before the (async) directory-approval
+/// check runs. Returns `false` when logging is disabled or no path was supplied,
+/// so the approval round-trip is skipped entirely. Pulled out of
+/// `ping_monitor_start` so this security-relevant gate is unit-testable without
+/// a `LogManager`. A `true` result still only permits logging if the directory
+/// is subsequently confirmed user-approved.
+fn logging_requested(logging_enabled: bool, logging_path: &str) -> bool {
+    logging_enabled && !logging_path.is_empty()
+}
+
+// ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
 
@@ -29,7 +43,7 @@ pub async fn ping_monitor_start(
     logging_enabled: bool,
     logging_path: String,
 ) -> Result<(), String> {
-    let effective_logging_enabled = if logging_enabled && !logging_path.is_empty() {
+    let effective_logging_enabled = if logging_requested(logging_enabled, &logging_path) {
         let approved = log_manager.is_dir_approved(Path::new(&logging_path)).await;
         if !approved {
             log::warn!(
@@ -90,4 +104,39 @@ pub async fn ping_monitor_update_interval(
     let monitors = state.monitors.lock().await;
     crate::services::ping_monitor::update_interval(&monitors, &session_id, interval_ms).await;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+//
+// The commands themselves need `AppHandle` + managed `LogManager`/`PingMonitorState`
+// and a Tauri runtime, so only the AppHandle-free `logging_requested` gate is
+// unit-tested here. The monitor engine and target validation are covered in
+// `services::ping_monitor`.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn logging_requested_needs_both_flag_and_path() {
+        assert!(logging_requested(true, "C:/logs"));
+    }
+
+    #[test]
+    fn logging_requested_false_when_disabled() {
+        // Disabled always skips the approval round-trip, even with a path.
+        assert!(!logging_requested(false, "C:/logs"));
+    }
+
+    #[test]
+    fn logging_requested_false_when_path_empty() {
+        // Enabled but no path → nothing to approve, so logging is not a candidate.
+        assert!(!logging_requested(true, ""));
+    }
+
+    #[test]
+    fn logging_requested_false_when_both_absent() {
+        assert!(!logging_requested(false, ""));
+    }
 }

@@ -283,6 +283,16 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       })
     );
 
+    // Surface known_hosts save failures (accepted host key couldn't be
+    // persisted). Without this the key is silently forgotten and the user is
+    // re-prompted next connect with no explanation. The backend message is
+    // already human-readable English, so display it as-is via the toast store.
+    track(
+      tauriService.onSshKnownHostsWarning((message) => {
+        logError('SSH', message);
+      })
+    );
+
     return () => {
       cancelled = true;
       for (const u of unlisteners) u();

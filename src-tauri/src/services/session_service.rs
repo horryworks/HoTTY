@@ -160,6 +160,53 @@ pub fn humanize_io_error(err: &std::io::Error, timeout_secs: Option<u32>) -> Str
     }
 }
 
+/// Convert a failure to *start* an external program (a PTY `spawn_command` or a
+/// `tokio` `Command::spawn`) into a short, human-friendly string. Like
+/// [`humanize_io_error`], this is an ADR-005 translation point: it keeps the raw
+/// OS text (`os error 2`, `The system cannot find the file specified`) out of
+/// the user's toast. The common, user-fixable causes — the program is not
+/// installed / not on PATH, or access was denied — get a plain-language label;
+/// anything else falls back to the raw text behind a readable prefix so no
+/// failure is ever swallowed.
+///
+/// `program` names the thing we tried to run (e.g. `wsl.exe`, `gcloud`, or a
+/// resolved shell path) and is woven into every message. `err` is taken as
+/// `&dyn Display` because these come from several unrelated error types
+/// (`anyhow::Error` from portable-pty, `std::io::Error` from tokio).
+pub fn humanize_spawn_error(program: &str, err: &dyn std::fmt::Display) -> String {
+    let raw = err.to_string();
+    let lower = raw.to_ascii_lowercase();
+    // Not found / not on PATH — the most common, user-fixable cause. Windows
+    // phrases this several ways ("cannot find the file/path", os error 2/3);
+    // POSIX says "No such file or directory".
+    if lower.contains("cannot find the file")
+        || lower.contains("cannot find the path")
+        || lower.contains("no such file")
+        || lower.contains("not found")
+        || lower.contains("os error 2")
+        || lower.contains("os error 3")
+    {
+        return format!("{program} not found — check that it is installed and the path is correct");
+    }
+    if lower.contains("access is denied")
+        || lower.contains("permission denied")
+        || lower.contains("os error 5")
+    {
+        return format!("Access was denied when starting {program}");
+    }
+    format!("Failed to start {program}: {raw}")
+}
+
+/// Convert a ConPTY / pseudo-terminal plumbing failure (`openpty`,
+/// `try_clone_reader`, `take_writer`) into a human-friendly string. Unlike a
+/// spawn failure these are rare and not something the user can act on, so —
+/// per ADR-005 — a clear context prefix is enough: it names the program we were
+/// building a terminal for and keeps the raw text behind that prefix instead of
+/// emitting a bare `os error NNNNN`.
+pub fn humanize_pty_error(program: &str, err: &dyn std::fmt::Display) -> String {
+    format!("Failed to create a terminal for {program}: {err}")
+}
+
 impl From<SessionError> for String {
     fn from(e: SessionError) -> String {
         e.to_string()
@@ -460,6 +507,65 @@ mod tests {
         assert_eq!(
             humanize_io_error(&e, Some(15)),
             "Connection failed: weird platform quirk"
+        );
+    }
+
+    // -- humanize_spawn_error / humanize_pty_error tests --
+
+    #[test]
+    fn humanize_spawn_error_not_found_windows() {
+        // portable-pty / std surface a missing program with the raw Windows text.
+        let e = "The system cannot find the file specified. (os error 2)";
+        assert_eq!(
+            humanize_spawn_error("wsl.exe", &e),
+            "wsl.exe not found — check that it is installed and the path is correct"
+        );
+    }
+
+    #[test]
+    fn humanize_spawn_error_not_found_posix() {
+        let e = "No such file or directory (os error 2)";
+        assert_eq!(
+            humanize_spawn_error("gcloud", &e),
+            "gcloud not found — check that it is installed and the path is correct"
+        );
+    }
+
+    #[test]
+    fn humanize_spawn_error_access_denied() {
+        let e = "Access is denied. (os error 5)";
+        assert_eq!(
+            humanize_spawn_error("ssh-keygen", &e),
+            "Access was denied when starting ssh-keygen"
+        );
+    }
+
+    #[test]
+    fn humanize_spawn_error_unknown_fallback() {
+        let e = "weird platform quirk";
+        assert_eq!(
+            humanize_spawn_error("gcloud", &e),
+            "Failed to start gcloud: weird platform quirk"
+        );
+    }
+
+    #[test]
+    fn humanize_pty_error_prefixes_program_and_raw() {
+        // A PTY plumbing failure is never mapped — it always keeps the raw text
+        // behind the context prefix (the fallback is its only behavior).
+        let e = "The system cannot find the file specified. (os error 2)";
+        assert_eq!(
+            humanize_pty_error("ssh.exe", &e),
+            "Failed to create a terminal for ssh.exe: The system cannot find the file specified. (os error 2)"
+        );
+    }
+
+    #[test]
+    fn humanize_pty_error_unknown_fallback() {
+        let e = "openpty: handle inheritance failed";
+        assert_eq!(
+            humanize_pty_error("cmd.exe", &e),
+            "Failed to create a terminal for cmd.exe: openpty: handle inheritance failed"
         );
     }
 }

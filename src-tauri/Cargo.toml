@@ -1,6 +1,6 @@
 [package]
 name = "hotty"
-version = "2.0.9-beta3"
+version = "2.0.9"
 description = "HoTTY - AI Integrated Advanced Terminal Emulator (Rust/Tauri)"
 authors = ["horryworks"]
 license = "GPL-3.0-or-later"
@@ -41,7 +41,6 @@ tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-clipboard-manager = "2"
-tauri-plugin-fs = "2"
 # Ensures only one HoTTY process runs; a second launch forwards to the existing
 # process (callback opens a new window instead of starting a second instance).
 tauri-plugin-single-instance = "2"
@@ -116,7 +115,6 @@ windows-core = "0.61"
 
 # Error handling
 thiserror = "2"
-anyhow = "1"
 
 # Character encoding
 encoding_rs = "0.8"

@@ -33,6 +33,7 @@ vi.mock('@xterm/addon-fit', () => {
 const onSessionDataCb = { current: null as ((p: { sessionId: string; data: string }) => void) | null };
 const onSessionStatusCb = { current: null as ((p: { sessionId: string; status: 'connected' | 'disconnected' }) => void) | null };
 const onSessionErrorCb = { current: null as ((p: { sessionId: string; error: string }) => void) | null };
+const onSshKnownHostsWarningCb = { current: null as ((message: string) => void) | null };
 
 const connectSessionMock = vi.fn();
 const disconnectSessionMock = vi.fn().mockResolvedValue(undefined);
@@ -63,6 +64,10 @@ vi.mock('../services/tauriService', () => ({
       onSessionErrorCb.current = cb;
       return Promise.resolve(() => { onSessionErrorCb.current = null; });
     }),
+    onSshKnownHostsWarning: vi.fn().mockImplementation((cb: typeof onSshKnownHostsWarningCb.current) => {
+      onSshKnownHostsWarningCb.current = cb;
+      return Promise.resolve(() => { onSshKnownHostsWarningCb.current = null; });
+    }),
   },
 }));
 
@@ -74,6 +79,7 @@ import {
   SESSION_END_AUTO_CLOSE_MS,
 } from './useSessionManager';
 import type { OpenRequest } from './useSessionManager';
+import { useErrorNotificationStore } from '../stores/errorNotificationStore';
 
 const sampleRequest: OpenRequest = {
   displayName: 'test-host',
@@ -443,5 +449,40 @@ describe('useSessionManager — session-end auto-close', () => {
 
     expect(result.current.sessions.has(id)).toBe(true);
     expect(onSessionRemoved).not.toHaveBeenCalled();
+  });
+});
+
+describe('useSessionManager — ssh known-hosts warning', () => {
+  beforeEach(() => {
+    onSshKnownHostsWarningCb.current = null;
+    useErrorNotificationStore.getState().clear();
+  });
+
+  afterEach(() => {
+    useErrorNotificationStore.getState().clear();
+  });
+
+  it('pushes an SSH toast when the backend fails to save a host key', async () => {
+    const { result } = renderHook(() => useSessionManager());
+
+    // Flush microtasks so the listener-registration promise resolves and the
+    // mock callback is captured.
+    await act(async () => { await flushMicrotasks(); });
+    expect(onSshKnownHostsWarningCb.current).not.toBeNull();
+
+    const message =
+      'Could not save host key for example.com:22 to known_hosts: permission denied';
+    act(() => {
+      onSshKnownHostsWarningCb.current?.(message);
+    });
+
+    const { notifications } = useErrorNotificationStore.getState();
+    expect(
+      notifications.some((n) => n.category === 'SSH' && n.message === message),
+    ).toBe(true);
+
+    // The hook renders normally (guards against a wiring crash from an unmocked
+    // listener).
+    expect(result.current).toBeDefined();
   });
 });
