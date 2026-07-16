@@ -99,6 +99,8 @@ export const aiChat = {
     // Run-in-terminal execute block
     runInTerminal: 'Exécuter dans le terminal',
     autoExecuted: 'Exécuté automatiquement',
+    dontExecute: 'Ne pas exécuter',
+    declined: 'Refusé',
     target: 'Cible : {{title}}',
     targetStale: 'Cible : {{title}} (déconnecté)',
     unnamedTerminal: 'Terminal sans nom',

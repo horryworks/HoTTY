@@ -93,6 +93,20 @@ export function getActiveTab(state: AiChatState | undefined): ChatTab | undefine
   return state.tabs.find(t => t.id === state.activeTabId);
 }
 
+/**
+ * Backend conversation-history key for one chat tab. The Rust AI service keys
+ * its `chat_histories` by whatever string we pass as `session_id`; scoping that
+ * key to the TAB (not just the pane) is what isolates each tab's conversation,
+ * so a newly opened tab starts with a clean context instead of inheriting the
+ * pane's earlier exchanges. `::` never appears in a pane id (makeFeaturePaneId)
+ * or tab id (makeTabId / crypto.randomUUID), so the pane prefix stays
+ * unambiguous — the response listener routes by `startsWith(paneId + '::')`.
+ * Falls back to the bare paneId when no tab id is known.
+ */
+export function aiBackendSessionId(paneId: string, tabId?: string | null): string {
+  return tabId ? `${paneId}::${tabId}` : paneId;
+}
+
 /** Build a short title from a tab's linked session, falling back to "Tab N". */
 function deriveTabTitle(
   linkedSessionId: string | undefined,
@@ -258,6 +272,13 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
   }, []);
 
   const closeTab = useCallback((aiSessionId: string, tabId: string) => {
+    // Free the closed tab's per-tab backend conversation history (see
+    // aiBackendSessionId) so it isn't orphaned until logout. Guard mirrors the
+    // state updater below: only a tab that actually closes drops its history.
+    const cur = aiChatStatesRef.current.get(aiSessionId);
+    if (cur && cur.tabs.length > 1 && cur.tabs.some(t => t.id === tabId)) {
+      tauriService.aiChatClear(aiBackendSessionId(aiSessionId, tabId)).catch(() => {});
+    }
     setAiChatStates((prev) => {
       const next = new Map(prev);
       const existing = prev.get(aiSessionId);
@@ -386,7 +407,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     console.debug(`[AIExec/info] ${prepInfo}`);
     tauriService.logDebug('info', 'AIExec', prepInfo)?.catch(() => {});
 
-    tauriService.aiChatSend(aiSessionId, finalMessage, selectedModel, systemInstruction);
+    tauriService.aiChatSend(aiBackendSessionId(aiSessionId, activeTab.id), finalMessage, selectedModel, systemInstruction);
   }, []);
 
   // -- askAi --

@@ -10,7 +10,7 @@ import { calcAICost, formatAICost } from '../../constants/aiPricing';
 import { buildExecutionRules, languageDirective, AUTO_LANGUAGE, NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP } from '../../constants/aiPrompts';
 import { ExecutionModeBar } from './ExecutionModeBar';
 import { TerminalOutputBlock } from './TerminalOutputBlock';
-import { parseTerminalOutputMessage, notConnectedNote } from './terminalOutputUtils';
+import { parseTerminalOutputMessage, notConnectedNote, declinedNote } from './terminalOutputUtils';
 import { segmentMessageContent, extractExecuteCommands } from './executeBlockUtils';
 import { streamTimeoutMessage, STREAM_IDLE_TIMEOUT_MS, STREAM_HARD_CAP_MS } from './streamWatchdog';
 import { SystemPromptModal } from '../SystemPromptModal/SystemPromptModal';
@@ -20,7 +20,7 @@ import { useAiAuthStore } from '../../stores/aiAuthStore';
 import { tauriService } from '../../services/tauriService';
 import { logError } from '../../utils/logger';
 import type { AiChatState, ChatTab } from '../../hooks/useAiChat';
-import { getActiveTab } from '../../hooks/useAiChat';
+import { getActiveTab, aiBackendSessionId } from '../../hooks/useAiChat';
 import type { SessionRecord } from '../../hooks/useSessionManager';
 import type { PersonaDefinition, AIModelInfo, LinkableSession } from '../../types/appTypes';
 import { TabStrip } from './TabStrip';
@@ -143,16 +143,18 @@ const SleepCountdown: React.FC<{ delay: NonNullable<ChatTab['sleepDelay']> }> = 
 const MessageContent: React.FC<{
     content: string;
     onRun?: (cmd: string) => void;
+    onDecline?: (cmd: string) => void;
     onHoverTarget?: (hovered: boolean) => void;
     targetTitle?: string;
     targetId?: string;
     targetLive?: boolean;
     autoExecutedCommands?: Set<string>;
+    declinedCommands?: Set<string>;
     verdictByCommand?: Map<string, AutoExecDecision>;
     classifyingCommands?: Set<string>;
     limitReached?: boolean;
     sleepDelay?: ChatTab['sleepDelay'];
-}> = ({ content, onRun, onHoverTarget, targetTitle, targetId, targetLive = true, autoExecutedCommands, verdictByCommand, classifyingCommands, limitReached, sleepDelay }) => {
+}> = ({ content, onRun, onDecline, onHoverTarget, targetTitle, targetId, targetLive = true, autoExecutedCommands, declinedCommands, verdictByCommand, classifyingCommands, limitReached, sleepDelay }) => {
     const { t } = useTranslation();
     const parts = segmentMessageContent(content);
     const targetLabel = targetId
@@ -185,11 +187,19 @@ const MessageContent: React.FC<{
                 if (part.kind === 'execute') {
                     const command = part.command;
                     const wasAutoExecuted = autoExecutedCommands?.has(command);
+                    const wasDeclined = declinedCommands?.has(command);
                     return (
-                        <div key={part.key} className={`ai-execute-block${wasAutoExecuted ? ' ai-execute-auto' : ''}`}>
+                        <div key={part.key} className={`ai-execute-block${wasAutoExecuted ? ' ai-execute-auto' : ''}${wasDeclined ? ' ai-execute-declined' : ''}`}>
                             <pre><code>{command}</code></pre>
                             <div className="ai-execute-actions">
-                                {wasAutoExecuted ? (
+                                {wasDeclined ? (
+                                    <span className="ai-execute-declined-badge">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                                            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                                        </svg>
+                                        {t('aiChat.message.declined')}
+                                    </span>
+                                ) : wasAutoExecuted ? (
                                     <span className="ai-execute-auto-badge">
                                         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
                                             <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
@@ -197,29 +207,44 @@ const MessageContent: React.FC<{
                                         {t('aiChat.message.autoExecuted')}
                                     </span>
                                 ) : (
-                                    <button
-                                        className="ai-run-btn"
-                                        onClick={() => onRun?.(command)}
-                                        onMouseEnter={() => onHoverTarget?.(true)}
-                                        onMouseLeave={() => onHoverTarget?.(false)}
-                                    >
-                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                                            <path d="M8 5v14l11-7z" />
-                                        </svg>
-                                        {t('aiChat.message.runInTerminal')}
-                                    </button>
+                                    <>
+                                        <button
+                                            className="ai-run-btn"
+                                            onClick={() => onRun?.(command)}
+                                            onMouseEnter={() => onHoverTarget?.(true)}
+                                            onMouseLeave={() => onHoverTarget?.(false)}
+                                        >
+                                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                                <path d="M8 5v14l11-7z" />
+                                            </svg>
+                                            {t('aiChat.message.runInTerminal')}
+                                        </button>
+                                        {onDecline && (
+                                            <button
+                                                className="ai-decline-btn"
+                                                onClick={() => onDecline(command)}
+                                            >
+                                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                                                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                                                </svg>
+                                                {t('aiChat.message.dontExecute')}
+                                            </button>
+                                        )}
+                                    </>
                                 )}
                                 {targetLabel}
                             </div>
-                            {sleepDelay && sleepDelay.command === command ? (
-                                <SleepCountdown delay={sleepDelay} />
-                            ) : (
-                                <VerdictNote
-                                    classifying={classifyingCommands?.has(command)}
-                                    verdict={verdictByCommand?.get(command)}
-                                />
+                            {!wasDeclined && (
+                                sleepDelay && sleepDelay.command === command ? (
+                                    <SleepCountdown delay={sleepDelay} />
+                                ) : (
+                                    <VerdictNote
+                                        classifying={classifyingCommands?.has(command)}
+                                        verdict={verdictByCommand?.get(command)}
+                                    />
+                                )
                             )}
-                            {!wasAutoExecuted && limitReached && (
+                            {!wasAutoExecuted && !wasDeclined && limitReached && (
                                 <div className="ai-execute-paused-banner">{t('aiChat.message.autoExecPaused')}</div>
                             )}
                         </div>
@@ -299,6 +324,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const [consecutiveAutoExecCount, setConsecutiveAutoExecCount] = useState(0);
     const autoExecutedByTabRef = useRef(new Map<string, Set<string>>());
     const autoExecProcessedByTabRef = useRef(new Map<string, Set<string>>());
+    // Commands the user explicitly declined ("Don't Execute"), tracked per tab and
+    // keyed by command text (mirrors autoExecutedByTabRef). Drives the "Declined"
+    // badge and lets the auto-exec async bail if a command is declined mid-classify.
+    const declinedByTabRef = useRef(new Map<string, Set<string>>());
     const getTabSet = useCallback((map: Map<string, Set<string>>, tabId: string) => {
         let set = map.get(tabId);
         if (!set) { set = new Set<string>(); map.set(tabId, set); }
@@ -306,6 +335,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     }, []);
     const [autoExecPaused, setAutoExecPaused] = useState(false);
     const autoExecutedCommands = activeTabId ? autoExecutedByTabRef.current.get(activeTabId) : undefined;
+    // Kept fresh across re-renders by the `bumpDecisions()` bump in handleDeclineCommand.
+    const declinedCommands = activeTabId ? declinedByTabRef.current.get(activeTabId) : undefined;
 
     // Per-command safety verdicts (and in-flight "classifying" markers), tracked
     // per tab and keyed by `${messageIndex}:${command}` so the UI can show WHY
@@ -464,6 +495,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const lastSentTextRef = useRef('');
+    // True only when the last dispatched message was typed by a human (handleSend).
+    // Auto-execute feedback (terminal-output envelopes, kickoff/decline notes sent
+    // via pendingMessage) sets it false so a Stop/pause cancel never restores that
+    // machine text into the human prompt textarea.
+    const lastSentWasHumanRef = useRef(false);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     // Model list
@@ -475,6 +511,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const prevProviderRef = useRef(activeAiProvider);
     const paneIdRef = useRef(paneId);
     paneIdRef.current = paneId;
+    // Mirror of the current chatState so the provider-switch effect can clear
+    // every tab's per-tab backend history without taking chatState as a dep.
+    const chatStateRef = useRef(chatState);
+    chatStateRef.current = chatState;
 
     useEffect(() => {
         if (prevProviderRef.current !== activeAiProvider) {
@@ -488,7 +528,16 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             setTotalOutputTokens(0);
             setTotalCost(null);
             setSelectedModel('Unspecified');
-            tauriService.aiChatClear(paneIdRef.current).catch(() => {});
+            // Histories are keyed per tab now, so clear each tab's session (a bare
+            // paneId key no longer exists). Fall back to the paneId if no tabs.
+            const tabs = chatStateRef.current?.tabs ?? [];
+            if (tabs.length > 0) {
+                for (const tb of tabs) {
+                    tauriService.aiChatClear(aiBackendSessionId(paneIdRef.current, tb.id)).catch(() => {});
+                }
+            } else {
+                tauriService.aiChatClear(paneIdRef.current).catch(() => {});
+            }
         }
     }, [activeAiProvider]);
 
@@ -603,11 +652,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 return next;
             });
             lastSentTextRef.current = pm;
+            lastSentWasHumanRef.current = false;
             streamingForTabIdRef.current = tab.id;
             markStreaming(tab.id, true);
             setStreamingForTab(tab.id, '');
             armStreamWatchdog();
-            tauriService.aiChatSend(paneId, pm, selectedModel, sysInstr).catch((err) => {
+            tauriService.aiChatSend(aiBackendSessionId(paneId, tab.id), pm, selectedModel, sysInstr).catch((err) => {
                 logError('AI', 'aiChatSend invoke failed', err);
                 clearStreamWatchdog();
                 markStreaming(tab.id, false);
@@ -709,7 +759,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const finalizeStuckStream = useCallback((ms: number, kind: 'idle' | 'hardcap') => {
         const targetTabId = streamingForTabIdRef.current;
         if (!targetTabId) return;
-        tauriService.aiChatCancel(paneId).catch(() => {});
+        tauriService.aiChatCancel(aiBackendSessionId(paneId, targetTabId)).catch(() => {});
         const partial = streamingByTabRef.current.get(targetTabId) ?? '';
         const body = streamTimeoutMessage(partial, ms, kind);
         setMessagesByTab(prev => {
@@ -747,7 +797,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
 
         tauriService.onAiChatResponse((data) => {
             if (cancelled) return;
-            if (data.sessionId !== paneId) return;
+            // Session ids are per-tab now (`paneId::tabId`); accept any that belong
+            // to this pane. The bare paneId is still accepted for back-compat.
+            if (data.sessionId !== paneId && !data.sessionId.startsWith(`${paneId}::`)) return;
 
             // Route chunks/done/error to the tab that initiated this request, not necessarily the currently active tab.
             const targetTabId = streamingForTabIdRef.current;
@@ -864,6 +916,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // Re-validate run preconditions against the LATEST state (they may have
             // changed while classification was in flight). The verdict is still
             // recorded above, so the UI shows the reason even when we don't run.
+            // The user may have clicked "Don't Execute" during the classify window —
+            // honor that and never auto-run a declined command.
+            if (getTabSet(declinedByTabRef.current, tabId).has(command)) return;
             if (autoExecPausedRef.current) return;
             if (!linkedLiveRef.current) return;
             if (maxConsecutiveAutoExecutions > 0
@@ -983,6 +1038,19 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     };
     handleRunCommandRef.current = handleRunCommand;
 
+    // "Don't Execute": the user declines a suggested command. The app deterministically
+    // records the decline (→ "Declined" badge + auto-exec race guard) and feeds the fact
+    // back to the model via the existing pending-message pipe so it can acknowledge and
+    // offer an alternative. Scope is this one command only — other commands' auto-exec is
+    // unaffected. `command` is the raw block text (matches the render-time lookup set).
+    const handleDeclineCommand = (command: string) => {
+        if (!activeTabId) return;
+        getTabSet(declinedByTabRef.current, activeTabId).add(command);
+        setConsecutiveAutoExecCount(0); // a human intervened — reset the auto-run streak
+        bumpDecisions();                // re-render so the block shows the Declined badge
+        onUpdateTabById?.(activeTabId, { pendingMessage: declinedNote(command.trim()) });
+    };
+
     const handleHoverTarget = (isHovering: boolean) => {
         if (!lastTargetSessionId) return;
         window.dispatchEvent(new CustomEvent('hotty-highlight-session', {
@@ -996,6 +1064,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         setConsecutiveAutoExecCount(0);
         setMessages(prev => [...prev, { role: 'user', content: text }]);
         lastSentTextRef.current = text;
+        lastSentWasHumanRef.current = true;
         setInputText('');
         // Capture which tab owns this stream so chunks land in the right tab even after a tab switch.
         streamingForTabIdRef.current = activeTabId ?? null;
@@ -1006,7 +1075,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         if (onSendMessage) {
             onSendMessage(text);
         } else {
-            tauriService.aiChatSend(paneId, text, selectedModel, localSystemInstruction).catch((err) => {
+            tauriService.aiChatSend(aiBackendSessionId(paneId, activeTabId), text, selectedModel, localSystemInstruction).catch((err) => {
                 logError('AI', 'aiChatSend invoke failed', err);
                 clearStreamWatchdog();
                 setIsStreaming(false);
@@ -1060,7 +1129,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         setTotalInputTokens(0);
         setTotalOutputTokens(0);
         setTotalCost(null);
-        tauriService.aiChatClear(paneId).catch(() => {});
+        tauriService.aiChatClear(aiBackendSessionId(paneId, activeTabId)).catch(() => {});
     };
     // Stable handle so the Network Expert auto-kickoff effect can start a fresh chat
     // on a device switch without taking performNewChat as a (churning) dependency.
@@ -1095,9 +1164,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
 
     const handleCancel = () => {
         clearStreamWatchdog();
-        tauriService.aiChatCancel(paneId).catch(() => {});
-        // Append the partial content + [cancelled] to the tab that owns the in-flight stream.
+        // Cancel on the tab that owns the in-flight stream (per-tab backend session),
+        // and append its partial content + [cancelled] to that same tab.
         const targetTabId = streamingForTabIdRef.current ?? activeTabId ?? null;
+        tauriService.aiChatCancel(aiBackendSessionId(paneId, targetTabId)).catch(() => {});
         if (targetTabId) {
             const partial = streamingByTab.get(targetTabId) ?? '';
             if (partial) {
@@ -1112,14 +1182,20 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             markStreaming(targetTabId, false);
         }
         streamingForTabIdRef.current = null;
-        setInputText(lastSentTextRef.current);
-        setTimeout(() => {
-            const ta = textareaRef.current;
-            if (ta) {
-                ta.focus();
-                ta.selectionStart = ta.selectionEnd = ta.value.length;
-            }
-        }, 0);
+        // Only restore a HUMAN-typed message for editing/resend. Auto-execute
+        // feedback (terminal-output envelopes, kickoff/decline notes) must never
+        // land in the human prompt textarea, and any text the user was typing
+        // during the stream is left untouched.
+        if (lastSentWasHumanRef.current) {
+            setInputText(lastSentTextRef.current);
+            setTimeout(() => {
+                const ta = textareaRef.current;
+                if (ta) {
+                    ta.focus();
+                    ta.selectionStart = ta.selectionEnd = ta.value.length;
+                }
+            }, 0);
+        }
     };
 
     const effectiveBg = getTransparentColor(terminalBackground || 'var(--bg-primary)');
@@ -1345,11 +1421,13 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         <MessageContent
                                             content={msg.content}
                                             onRun={(cmd) => { setConsecutiveAutoExecCount(0); handleRunCommand(cmd); }}
+                                            onDecline={handleDeclineCommand}
                                             onHoverTarget={handleHoverTarget}
                                             targetTitle={lastTargetSessionTitle}
                                             targetId={lastTargetSessionId}
                                             targetLive={linkedLive}
                                             autoExecutedCommands={autoExecutedCommands}
+                                            declinedCommands={declinedCommands}
                                             verdictByCommand={verdictByCommand}
                                             classifyingCommands={classifyingCommands}
                                             limitReached={commandExecutionMode === 'auto-execute-safe' && maxConsecutiveAutoExecutions > 0 && consecutiveAutoExecCount >= maxConsecutiveAutoExecutions}
@@ -1548,7 +1626,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             >&#x27A4;</button>
                         </div>
                     </div>
-                    {selectedModel === 'Unspecified' && (
+                    {selectedModel === 'Unspecified' && !isLoadingModels && availableModels.length > 0 && (
                         <div className="ai-chat-input-hint">
                             <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
                                 <path d="M12 2L1 21h22L12 2zm0 4l8.53 14.5H3.47L12 6zm-1 5v5h2v-5h-2zm0 7v2h2v-2h-2z" />

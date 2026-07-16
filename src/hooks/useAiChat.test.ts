@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useAiChat, getActiveTab, createDefaultAiChatState } from './useAiChat';
+import { useAiChat, getActiveTab, createDefaultAiChatState, aiBackendSessionId } from './useAiChat';
 import type { SessionRecord } from './useSessionManager';
 import type { FeaturePaneInfo } from '../utils/paneTypes';
 import type { PersonaDefinition } from '../types/appTypes';
@@ -8,6 +8,7 @@ import type { PersonaDefinition } from '../types/appTypes';
 vi.mock('../services/tauriService', () => ({
   tauriService: {
     aiChatSend: vi.fn(),
+    aiChatClear: vi.fn().mockResolvedValue(undefined),
     showContextMenu: vi.fn().mockResolvedValue(null),
     logDebug: vi.fn(),
   },
@@ -348,7 +349,9 @@ describe('useAiChat', () => {
       await result.current.sendMessage('ai-1', 'Hello');
     });
 
-    expect(tauriService.aiChatSend).toHaveBeenCalledWith('ai-1', 'Hello', 'gpt-4o', 'Be helpful.');
+    // Session id is scoped to the active tab so each tab keeps its own history.
+    const tabId = getActiveTab(result.current.aiChatStates.get('ai-1'))!.id;
+    expect(tauriService.aiChatSend).toHaveBeenCalledWith(`ai-1::${tabId}`, 'Hello', 'gpt-4o', 'Be helpful.');
   });
 
   it('sendMessage does nothing without chat state', async () => {
@@ -393,8 +396,9 @@ describe('useAiChat', () => {
     });
 
     expect(takeWatchBuffer).toHaveBeenCalledWith('s1');
+    const tabId = getActiveTab(result.current.aiChatStates.get('ai-1'))!.id;
     expect(tauriService.aiChatSend).toHaveBeenCalledWith(
-      'ai-1',
+      `ai-1::${tabId}`,
       expect.stringContaining('Watched Terminal Output'),
       'gpt-4o',
       'Be helpful.',
@@ -428,6 +432,57 @@ describe('useAiChat', () => {
     // Neither the watch buffer is consumed nor any data sent.
     expect(takeWatchBuffer).not.toHaveBeenCalled();
     expect(tauriService.aiChatSend).not.toHaveBeenCalled();
+  });
+
+  it('scopes the backend session per tab so a second tab does not inherit the first tab\'s history', async () => {
+    const { tauriService } = await import('../services/tauriService');
+
+    const opts = makeDefaultOptions();
+    const { result } = renderHook(() => useAiChat(opts));
+
+    act(() => {
+      result.current.updateAiChatState('ai-1', { selectedModel: 'gpt-4o', systemInstruction: 'Be helpful.' });
+    });
+    const firstTabId = getActiveTab(result.current.aiChatStates.get('ai-1'))!.id;
+
+    await act(async () => {
+      await result.current.sendMessage('ai-1', 'from tab one');
+    });
+
+    // Open a second tab (it becomes active) and send from it.
+    let secondTabId = '';
+    act(() => {
+      secondTabId = result.current.addTab('ai-1');
+    });
+    await act(async () => {
+      await result.current.sendMessage('ai-1', 'from tab two');
+    });
+
+    expect(secondTabId).not.toBe(firstTabId);
+    // Each send used its own tab-scoped key → the backend keeps two separate
+    // conversation histories, so the new tab starts clean.
+    expect(tauriService.aiChatSend).toHaveBeenNthCalledWith(
+      1, `ai-1::${firstTabId}`, 'from tab one', 'gpt-4o', 'Be helpful.',
+    );
+    expect(tauriService.aiChatSend).toHaveBeenNthCalledWith(
+      2, `ai-1::${secondTabId}`, 'from tab two', 'gpt-4o', 'Be helpful.',
+    );
+  });
+});
+
+describe('aiBackendSessionId', () => {
+  it('composes a per-tab key with a `::` separator', () => {
+    expect(aiBackendSessionId('ac-abc', 't1')).toBe('ac-abc::t1');
+  });
+
+  it('gives distinct keys for distinct tabs in the same pane', () => {
+    expect(aiBackendSessionId('ac-abc', 't1')).not.toBe(aiBackendSessionId('ac-abc', 't2'));
+  });
+
+  it('falls back to the bare paneId when no tab id is given', () => {
+    expect(aiBackendSessionId('ac-abc')).toBe('ac-abc');
+    expect(aiBackendSessionId('ac-abc', null)).toBe('ac-abc');
+    expect(aiBackendSessionId('ac-abc', undefined)).toBe('ac-abc');
   });
 });
 

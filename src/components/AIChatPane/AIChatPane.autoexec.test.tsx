@@ -510,6 +510,77 @@ describe('AIChatPane linked-chip / Target liveness visuals', () => {
     });
 });
 
+describe('AIChatPane "Don\'t Execute" (decline)', () => {
+    // A non-whitelisted gray-zone command so the AI classifier is consulted (used to
+    // stage the classify-in-flight race).
+    const GRAY_CONTENT = 'Running it.\n\n```execute\nfrobnicate --apply\n```';
+
+    beforeEach(() => {
+        h.onRunCommand.mockClear();
+        h.onUpdateTabById.mockClear();
+        h.aiClassifyCommand.mockReset();
+        _clearVerdictCache();
+        h.onAiChatResponseCb.current = null;
+        h.onAiAuthResultCb.current = null;
+        localStorage.clear();
+    });
+
+    it('declines a manual command: no run, posts a decline note, swaps to the Declined badge', async () => {
+        h.settings.commandExecutionMode = 'ask-before-execute';
+        try {
+            renderPane({ onRunCommand: h.onRunCommand, onUpdateTabById: h.onUpdateTabById });
+            await authenticate();
+            await sendAndComplete('check quic'); // MODEL_CONTENT → `display version`
+
+            // The decline button sits next to Run in Terminal.
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /Don't Execute/i }));
+            });
+
+            // App side: never sent to the terminal…
+            expect(h.onRunCommand).not.toHaveBeenCalled();
+            // …AI side: the decline fact is fed back via the pending-message pipe.
+            expect(h.onUpdateTabById).toHaveBeenCalledWith(
+                't1',
+                expect.objectContaining({
+                    pendingMessage: expect.stringContaining('chose NOT to run'),
+                }),
+            );
+            // The block now shows the Declined badge; Run/Decline buttons are gone.
+            expect(screen.getByText('Declined')).toBeTruthy();
+            expect(screen.queryByRole('button', { name: /Run in Terminal/i })).toBeNull();
+            expect(screen.queryByRole('button', { name: /Don't Execute/i })).toBeNull();
+        } finally {
+            h.settings.commandExecutionMode = 'auto-execute-safe';
+        }
+    });
+
+    it('aborts an in-flight auto-run when declined during the "checking safety" window', async () => {
+        // Hold the classifier so the command sits in the classify-in-flight state with
+        // the manual Run/Decline buttons visible (auto-execute-safe mode).
+        let resolveClassify: (v: { modifiesState: boolean; confidence: number; reason: string }) => void = () => {};
+        h.aiClassifyCommand.mockReturnValue(new Promise((res) => { resolveClassify = res; }));
+
+        renderPane({ onRunCommand: h.onRunCommand, onUpdateTabById: h.onUpdateTabById });
+        await authenticate();
+        await sendAndComplete('do the thing', GRAY_CONTENT);
+
+        // Decline while classification is still pending.
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Don't Execute/i }));
+        });
+
+        // Classification resolves read-only — which WOULD auto-run, but the decline guard wins.
+        await act(async () => {
+            resolveClassify({ modifiesState: false, confidence: 0.95, reason: 'reads' });
+        });
+        await act(async () => { await Promise.resolve(); });
+
+        expect(h.onRunCommand).not.toHaveBeenCalled();
+        expect(screen.getByText('Declined')).toBeTruthy();
+    });
+});
+
 describe('AIChatPane pending message waits for model auto-selection', () => {
     beforeEach(() => {
         h.onAiChatResponseCb.current = null;
@@ -551,7 +622,7 @@ describe('AIChatPane pending message waits for model auto-selection', () => {
         await act(async () => { await Promise.resolve(); });
 
         expect(tauriService.aiChatSend).toHaveBeenCalledWith(
-            'ai-1', 'analyze this', 'gemini-3.5-flash', expect.any(String),
+            'ai-1::t1', 'analyze this', 'gemini-3.5-flash', expect.any(String),
         );
         expect(screen.queryByText(/AI model not selected/)).toBeNull();
     });
@@ -565,5 +636,110 @@ describe('AIChatPane pending message waits for model auto-selection', () => {
 
         expect(tauriService.aiChatSend).not.toHaveBeenCalled();
         expect(screen.getByText(/AI model not selected/)).toBeTruthy();
+    });
+});
+
+describe('AIChatPane cancel never leaks machine text into the human prompt textarea', () => {
+    beforeEach(() => {
+        h.onAiChatResponseCb.current = null;
+        h.onUpdateTabById.mockClear();
+        vi.mocked(tauriService.aiChatSend).mockClear();
+        vi.mocked(tauriService.aiListModels).mockReset().mockResolvedValue([]);
+        localStorage.clear();
+    });
+
+    // A large auto-execute feedback envelope — the kind the user saw leak in.
+    const ENVELOPE =
+        'Terminal Output (Command: display version):\n' +
+        Array.from({ length: 40 }, (_, i) => `line ${i} of device output`).join('\n');
+
+    it('does NOT restore an auto-execute terminal-output envelope on Stop', async () => {
+        const chatState = {
+            selectedModel: 'gemini-pro',
+            systemInstruction: 'You are a helpful assistant.',
+            activeTabId: 't1',
+            tabs: [{ id: 't1', title: 'T', ordinal: 1, pendingMessage: ENVELOPE }],
+        };
+        renderPane({ chatState, onUpdateTabById: h.onUpdateTabById });
+        await authenticate();
+        await act(async () => { await Promise.resolve(); });
+
+        // The pending envelope was dispatched → the tab is streaming, Stop shows.
+        expect(tauriService.aiChatSend).toHaveBeenCalledWith(
+            'ai-1::t1', ENVELOPE, 'gemini-pro', expect.any(String),
+        );
+        const stop = document.querySelector('.ai-chat-cancel-btn');
+        expect(stop).toBeTruthy();
+
+        // Cancel mid-stream (same handler the pause-during-stream path calls).
+        await act(async () => { fireEvent.click(stop!); });
+
+        // The human prompt textarea must stay empty — no terminal output leaked in.
+        const textarea = screen.getByPlaceholderText('Type a message...') as HTMLTextAreaElement;
+        expect(textarea.value).toBe('');
+    });
+
+    it('DOES restore a human-typed message on Stop (retry UX preserved)', async () => {
+        const chatState = {
+            selectedModel: 'gemini-pro',
+            systemInstruction: 'You are a helpful assistant.',
+            activeTabId: 't1',
+            tabs: [{ id: 't1', title: 'T', ordinal: 1 }],
+        };
+        renderPane({ chatState });
+        await authenticate();
+        await act(async () => { await Promise.resolve(); });
+
+        const textarea = screen.getByPlaceholderText('Type a message...') as HTMLTextAreaElement;
+        await act(async () => { fireEvent.change(textarea, { target: { value: 'show me the routes' } }); });
+        await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
+
+        // Sent → textarea cleared, streaming on.
+        expect(textarea.value).toBe('');
+        const stop = document.querySelector('.ai-chat-cancel-btn');
+        expect(stop).toBeTruthy();
+
+        await act(async () => { fireEvent.click(stop!); });
+
+        // Human text is restored for editing/resend.
+        expect(textarea.value).toBe('show me the routes');
+    });
+});
+
+describe('AIChatPane routes per-tab (paneId::tabId) response events', () => {
+    beforeEach(() => {
+        h.onAiChatResponseCb.current = null;
+        vi.mocked(tauriService.aiListModels).mockReset().mockResolvedValue([]);
+        localStorage.clear();
+    });
+
+    it('renders a done response whose sessionId is the composite per-tab key', async () => {
+        const chatState = {
+            selectedModel: 'gemini-pro',
+            systemInstruction: 'You are a helpful assistant.',
+            activeTabId: 't1',
+            tabs: [{ id: 't1', title: 'T', ordinal: 1 }],
+        };
+        renderPane({ chatState });
+        await authenticate();
+        await act(async () => { await Promise.resolve(); });
+
+        // Send a message so the tab owns the in-flight stream (streamingForTabIdRef = 't1').
+        const textarea = screen.getByPlaceholderText('Type a message...');
+        await act(async () => { fireEvent.change(textarea, { target: { value: 'hello' } }); });
+        await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
+
+        // Backend now echoes the tab-scoped session id; the listener must accept it
+        // (startsWith `ai-1::`) and route the content to tab t1 rather than dropping it.
+        await act(async () => {
+            h.onAiChatResponseCb.current?.({
+                sessionId: 'ai-1::t1',
+                responseType: 'done',
+                content: 'ROUTED VIA COMPOSITE KEY',
+            });
+        });
+        await act(async () => { await Promise.resolve(); });
+
+        expect(screen.getByText('ROUTED VIA COMPOSITE KEY')).toBeTruthy();
     });
 });

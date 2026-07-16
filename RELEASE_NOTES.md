@@ -1,5 +1,19 @@
 # Release Notes
 
+## v2.0.10-beta1
+
+This beta adds a **Don't Execute** button so you can decline an AI-suggested command in one click — the AI is told and can offer a different approach — and fixes a set of AI Chat issues: each chat tab now keeps its own conversation, the *"select a model"* hint no longer flashes while models are loading, and stopping a response no longer leaves HoTTY's internal text in the message box.
+
+### New Features
+
+- **Decline an AI-suggested command with "Don't Execute".** When the AI suggests a command and it's waiting for your confirmation, a new **Don't Execute** button sits next to **Run in Terminal**. Click it to decline the command — the block is marked **Declined** and the AI is told, so instead of the suggestion just hanging there, it acknowledges your choice and can propose a different approach. Declining one command doesn't affect any others.
+
+### Bug Fixes
+
+- **Each AI Chat tab now keeps its own conversation.** Previously every tab in an AI Chat pane shared a single underlying conversation, so a newly opened tab could inherit — and be steered by — an earlier tab's exchanges. Each tab now has its own isolated context: a new tab starts clean, closing a tab frees its history, and switching AI provider clears every tab.
+- **The "select a model" hint no longer flashes on startup.** The *"Select a model in the header to send messages"* hint no longer appears for a moment while the model list is still loading (your previously-used model auto-selects a beat later), and it stays hidden when the model list can't be loaded. It now shows only once models are available but none is selected.
+- **Stopping an AI response no longer drops internal text into the message box.** When you press **Stop** during a reply, only a message *you* typed is restored to the input box for editing and resending. The terminal output and internal notes HoTTY sends to the AI on your behalf are no longer dumped into the prompt, and anything you were typing while the response streamed is left untouched.
+
 ## v2.0.9
 
 The v2.0.9 stable release, consolidating the v2.0.9 beta series. The headline change is a reworked **AI sign-in**: credentials for every provider now live in **Settings → AI**, your signed-in state is shared across all open windows and remembered between launches, and the in-app AI setup help is expanded with step-by-step instructions and troubleshooting. This release also makes the **New Connection** form remember what you typed after connecting, and gives clearer, plain-language messages when a connection can't be started.

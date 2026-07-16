@@ -871,6 +871,41 @@
     height: 14px;
 }
 
+/* "Don't Execute" — neutral/secondary sibling of the run button (declining is not a
+   destructive action, so secondary rather than danger). Mirrors .ai-run-btn layout. */
+.ai-decline-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 12px;
+    background-color: var(--btn-secondary-bg);
+    color: var(--text-primary);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: calc(var(--font-size-base) - 2px);
+    font-weight: 600;
+    transition: all 0.2s;
+    height: 26px;
+    line-height: 1;
+}
+
+.ai-decline-btn:hover:not(:disabled) {
+    background-color: var(--btn-secondary-hover-bg);
+}
+
+.ai-decline-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.ai-decline-btn svg {
+    display: block;
+    width: 14px;
+    height: 14px;
+}
+
 .ai-run-target {
     font-size: calc(var(--font-size-base) - 3px);
     color: var(--text-secondary);
@@ -910,6 +945,33 @@
 }
 
 .ai-execute-auto-badge svg {
+    display: block;
+    width: 14px;
+    height: 14px;
+}
+
+/* ── Declined ("Don't Execute") Styles ── */
+.ai-execute-block.ai-execute-declined {
+    border-color: var(--border-color);
+    opacity: 0.75;
+}
+
+.ai-execute-declined-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 10px;
+    height: 26px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border-radius: 4px;
+    font-size: calc(var(--font-size-base) - 2px);
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.ai-execute-declined-badge svg {
     display: block;
     width: 14px;
     height: 14px;

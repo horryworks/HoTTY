@@ -97,6 +97,8 @@ export const aiChat = {
     // 在終端機中執行的執行區塊
     runInTerminal: '在終端機中執行',
     autoExecuted: '已自動執行',
+    dontExecute: '不執行',
+    declined: '已拒絕',
     target: '目標：{{title}}',
     targetStale: '目標：{{title}}（已中斷連線）',
     unnamedTerminal: '未命名的終端機',

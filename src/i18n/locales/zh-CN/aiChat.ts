@@ -99,6 +99,8 @@ export const aiChat = {
     // Run-in-terminal execute block
     runInTerminal: '在终端中运行',
     autoExecuted: '已自动执行',
+    dontExecute: '不执行',
+    declined: '已拒绝',
     target: '目标：{{title}}',
     targetStale: '目标：{{title}}（已断开连接）',
     unnamedTerminal: '未命名终端',

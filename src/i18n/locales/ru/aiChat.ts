@@ -100,6 +100,8 @@ export const aiChat = {
     // Блок выполнения «выполнить в терминале»
     runInTerminal: 'Выполнить в терминале',
     autoExecuted: 'Выполнено автоматически',
+    dontExecute: 'Не выполнять',
+    declined: 'Отклонено',
     target: 'Цель: {{title}}',
     targetStale: 'Цель: {{title}} (отключён)',
     unnamedTerminal: 'Безымянный терминал',

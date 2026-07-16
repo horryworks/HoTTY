@@ -99,6 +99,8 @@ export const aiChat = {
     // Run-in-terminal execute block
     runInTerminal: '터미널에서 실행',
     autoExecuted: '자동 실행됨',
+    dontExecute: '실행하지 않음',
+    declined: '실행 거부됨',
     target: '대상: {{title}}',
     targetStale: '대상: {{title}} (연결 끊김)',
     unnamedTerminal: '이름 없는 터미널',

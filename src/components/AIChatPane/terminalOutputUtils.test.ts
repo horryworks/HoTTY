@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TERMINAL_OUTPUT_RE, parseTerminalOutputMessage, notConnectedNote } from './terminalOutputUtils';
+import { TERMINAL_OUTPUT_RE, parseTerminalOutputMessage, notConnectedNote, declinedNote } from './terminalOutputUtils';
 
 describe('parseTerminalOutputMessage', () => {
   it('returns null when content does not start with the marker', () => {
@@ -57,5 +57,25 @@ describe('notConnectedNote', () => {
 
   it('reflects a connecting status', () => {
     expect(notConnectedNote('ls', 'connecting')).toContain('(connecting)');
+  });
+});
+
+describe('declinedNote', () => {
+  it('produces a parseable Terminal Output envelope with the command', () => {
+    const note = declinedNote('rm -rf /tmp/cache');
+    const parsed = parseTerminalOutputMessage(note);
+    expect(parsed?.cmd).toBe('rm -rf /tmp/cache');
+    expect(parsed?.output).toContain('chose NOT to run');
+    expect(parsed?.output).toContain('Do not run it');
+    expect(parsed?.output).toContain('suggest a different approach');
+  });
+
+  it('starts with the Terminal Output marker so sendMessage skips the watch-buffer prepend', () => {
+    expect(declinedNote('ls').startsWith('Terminal Output (Command:')).toBe(true);
+  });
+
+  it('preserves a multi-line command inside the parentheses', () => {
+    const cmd = 'echo a\necho b';
+    expect(parseTerminalOutputMessage(declinedNote(cmd))?.cmd).toBe(cmd);
   });
 });
