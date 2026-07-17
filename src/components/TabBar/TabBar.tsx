@@ -14,6 +14,7 @@ interface TabBarProps {
   onReorder: (fromIndex: number, toIndex: number) => void;
   onToggleWatch?: (id: string) => void;
   onSaveToHostTree?: (id: string) => void;
+  onToggleFixedSize?: (id: string) => void;
   onBookmark?: (id: string) => void;
   onNewLogViewer?: () => void;
   onNewPingMonitor?: () => void;
@@ -31,6 +32,9 @@ interface ContextMenuState {
   isWebBrowser: boolean;
   isSshOrTelnet: boolean;
   isWatching: boolean;
+  fixedSize: boolean;
+  /** Pinned width, if known (connect-time pty cols). Undefined hides the toggle. */
+  ptyCols?: number;
   x: number;
   y: number;
 }
@@ -45,6 +49,7 @@ export function TabBar({
   onReorder,
   onToggleWatch,
   onSaveToHostTree,
+  onToggleFixedSize,
   onBookmark,
   onNewLogViewer,
   onNewPingMonitor,
@@ -175,8 +180,13 @@ export function TabBar({
                 const isWebBrowser = item.kind === 'feature' && item.featureType === 'web-browser';
                 const isSession = item.kind === 'session';
                 const isSshOrTelnet = item.protocol === 'ssh' || item.protocol === 'telnet';
+                // The fixed-size toggle only applies once the connect-time width
+                // is known (ptyCols) for an ssh/telnet session.
+                const canToggleFixedSize =
+                  isSshOrTelnet && !!onToggleFixedSize && item.ptyCols != null;
                 const sessionHasItems =
-                  isSession && (!!onToggleWatch || (isSshOrTelnet && !!onSaveToHostTree));
+                  isSession &&
+                  (!!onToggleWatch || (isSshOrTelnet && !!onSaveToHostTree) || canToggleFixedSize);
                 const webHasItems = isWebBrowser && !!onBookmark;
                 if (!sessionHasItems && !webHasItems) return;
                 setContextMenu({
@@ -185,6 +195,8 @@ export function TabBar({
                   isWebBrowser,
                   isSshOrTelnet,
                   isWatching: !!item.isWatching,
+                  fixedSize: !!item.fixedSize,
+                  ptyCols: item.ptyCols,
                   x: e.clientX,
                   y: e.clientY,
                 });
@@ -396,6 +408,23 @@ export function TabBar({
               {t('chrome.tabBar.saveToHostTree')}
             </div>
           )}
+          {contextMenu.kind === 'session' &&
+            contextMenu.isSshOrTelnet &&
+            onToggleFixedSize &&
+            contextMenu.ptyCols != null && (
+              <div
+                className="tab-context-menu-item"
+                role="menuitemcheckbox"
+                aria-checked={contextMenu.fixedSize}
+                onClick={() => {
+                  onToggleFixedSize(contextMenu.tabId);
+                  setContextMenu(null);
+                }}
+              >
+                {(contextMenu.fixedSize ? '✓ ' : '') +
+                  t('chrome.tabBar.fixedTerminalSize', { cols: contextMenu.ptyCols })}
+              </div>
+            )}
           {contextMenu.isWebBrowser && onBookmark && (
             <div
               className="tab-context-menu-item"

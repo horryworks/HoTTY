@@ -21,6 +21,7 @@ export function buildHostEntryFromConfig(
             password: c.password || undefined,
             privateKeyPath: c.privateKeyPath || undefined,
             privateKeyPassphrase: c.privateKeyPassphrase || undefined,
+            fixedTerminalSize: c.fixedTerminalSize,
         };
     }
     if (protocol === 'telnet') {
@@ -31,6 +32,7 @@ export function buildHostEntryFromConfig(
             port: c.port,
             username: c.username || undefined,
             password: c.password || undefined,
+            fixedTerminalSize: c.fixedTerminalSize,
         };
     }
     return null;

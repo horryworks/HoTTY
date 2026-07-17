@@ -10,6 +10,7 @@ const makeSession = (id: string, overrides?: Partial<SessionRecord>): SessionRec
   status: 'connected',
   term: {} as SessionRecord['term'],
   fitAddon: {} as SessionRecord['fitAddon'],
+  fixedSize: false,
   ...overrides,
 });
 
@@ -67,5 +68,18 @@ describe('buildTabItems', () => {
     const result = buildTabItems(sessions, [], ['s1']);
     expect(result[0].status).toBe('error');
     expect(result[0].errorMessage).toBe('timeout');
+  });
+
+  it('threads fixedSize and ptyCols onto session tab items (gates the fixed-size menu)', () => {
+    const sessions = [makeSession('s1', { fixedSize: true, ptyCols: 216 })];
+    const result = buildTabItems(sessions, [], ['s1']);
+    expect(result[0].fixedSize).toBe(true);
+    expect(result[0].ptyCols).toBe(216);
+  });
+
+  it('leaves ptyCols undefined before the connect-time pty-size event', () => {
+    const result = buildTabItems([makeSession('s1')], [], ['s1']);
+    expect(result[0].ptyCols).toBeUndefined();
+    expect(result[0].fixedSize).toBe(false);
   });
 });

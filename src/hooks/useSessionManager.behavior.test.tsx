@@ -33,6 +33,7 @@ vi.mock('@xterm/addon-fit', () => {
 const onSessionDataCb = { current: null as ((p: { sessionId: string; data: string }) => void) | null };
 const onSessionStatusCb = { current: null as ((p: { sessionId: string; status: 'connected' | 'disconnected' }) => void) | null };
 const onSessionErrorCb = { current: null as ((p: { sessionId: string; error: string }) => void) | null };
+const onSessionPtySizeCb = { current: null as ((p: { sessionId: string; cols: number; rows: number; deviceLatchesWidth: boolean }) => void) | null };
 const onSshKnownHostsWarningCb = { current: null as ((message: string) => void) | null };
 
 const connectSessionMock = vi.fn();
@@ -64,6 +65,10 @@ vi.mock('../services/tauriService', () => ({
       onSessionErrorCb.current = cb;
       return Promise.resolve(() => { onSessionErrorCb.current = null; });
     }),
+    onSessionPtySize: vi.fn().mockImplementation((cb: typeof onSessionPtySizeCb.current) => {
+      onSessionPtySizeCb.current = cb;
+      return Promise.resolve(() => { onSessionPtySizeCb.current = null; });
+    }),
     onSshKnownHostsWarning: vi.fn().mockImplementation((cb: typeof onSshKnownHostsWarningCb.current) => {
       onSshKnownHostsWarningCb.current = cb;
       return Promise.resolve(() => { onSshKnownHostsWarningCb.current = null; });
@@ -80,6 +85,7 @@ import {
 } from './useSessionManager';
 import type { OpenRequest } from './useSessionManager';
 import { useErrorNotificationStore } from '../stores/errorNotificationStore';
+import { useSettingsStore } from '../stores/settingsStore';
 
 const sampleRequest: OpenRequest = {
   displayName: 'test-host',
@@ -484,5 +490,135 @@ describe('useSessionManager — ssh known-hosts warning', () => {
     // The hook renders normally (guards against a wiring crash from an unmocked
     // listener).
     expect(result.current).toBeDefined();
+  });
+});
+
+describe('useSessionManager — fixed terminal size', () => {
+  beforeEach(() => {
+    disposeMock.mockClear();
+    connectSessionMock.mockReset();
+    // Keep sessions in the 'connecting' state so records stay stable for assertions.
+    connectSessionMock.mockImplementation(() => new Promise(() => {}));
+    onSessionPtySizeCb.current = null;
+    useSettingsStore.getState().reset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    useSettingsStore.getState().reset();
+  });
+
+  it("stays dynamic on 'auto' until the device is known", () => {
+    const { result } = renderHook(() => useSessionManager());
+    let id = '';
+    act(() => { id = result.current.openSession(sampleRequest); });
+    expect(result.current.sessions.get(id)?.fixedSize).toBe(false);
+  });
+
+  it("pins immediately on global mode 'on', without waiting for detection", () => {
+    useSettingsStore.getState().update('fixedTerminalSizeMode', 'on');
+    const { result } = renderHook(() => useSessionManager());
+    let id = '';
+    act(() => { id = result.current.openSession(sampleRequest); });
+    expect(result.current.sessions.get(id)?.fixedSize).toBe(true);
+  });
+
+  it('lets a per-connection override win over the global mode', () => {
+    useSettingsStore.getState().update('fixedTerminalSizeMode', 'on');
+    const { result } = renderHook(() => useSessionManager());
+    const req: OpenRequest = {
+      ...sampleRequest,
+      config: { ...sampleRequest.config, fixedTerminalSize: false },
+    };
+    let id = '';
+    act(() => { id = result.current.openSession(req); });
+    expect(result.current.sessions.get(id)?.fixedSize).toBe(false);
+  });
+
+  it('records ptyCols/ptyRows from the session-pty-size event', async () => {
+    const { result } = renderHook(() => useSessionManager());
+    await act(async () => { await flushMicrotasks(); });
+    let id = '';
+    act(() => { id = result.current.openSession(sampleRequest); });
+    expect(result.current.sessions.get(id)?.ptyCols).toBeUndefined();
+    act(() => {
+      onSessionPtySizeCb.current?.({ sessionId: id, cols: 216, rows: 40, deviceLatchesWidth: false });
+    });
+    expect(result.current.sessions.get(id)?.ptyCols).toBe(216);
+    expect(result.current.sessions.get(id)?.ptyRows).toBe(40);
+  });
+
+  it("auto-pins when the pty-size event reports a width-latching device ('auto')", async () => {
+    const { result } = renderHook(() => useSessionManager());
+    await act(async () => { await flushMicrotasks(); });
+    let id = '';
+    act(() => { id = result.current.openSession(sampleRequest); });
+    expect(result.current.sessions.get(id)?.fixedSize).toBe(false);
+    act(() => {
+      onSessionPtySizeCb.current?.({ sessionId: id, cols: 216, rows: 40, deviceLatchesWidth: true });
+    });
+    expect(result.current.sessions.get(id)?.fixedSize).toBe(true);
+    expect(result.current.sessions.get(id)?.deviceLatchesWidth).toBe(true);
+  });
+
+  it("does not auto-pin a normal host, nor when the global mode is 'off'", async () => {
+    const { result } = renderHook(() => useSessionManager());
+    await act(async () => { await flushMicrotasks(); });
+    let normal = '';
+    act(() => { normal = result.current.openSession(sampleRequest); });
+    act(() => {
+      onSessionPtySizeCb.current?.({ sessionId: normal, cols: 120, rows: 30, deviceLatchesWidth: false });
+    });
+    expect(result.current.sessions.get(normal)?.fixedSize).toBe(false);
+
+    // 'off' must ignore detection entirely.
+    useSettingsStore.getState().update('fixedTerminalSizeMode', 'off');
+    let offSession = '';
+    act(() => { offSession = result.current.openSession(sampleRequest); });
+    act(() => {
+      onSessionPtySizeCb.current?.({ sessionId: offSession, cols: 216, rows: 40, deviceLatchesWidth: true });
+    });
+    expect(result.current.sessions.get(offSession)?.fixedSize).toBe(false);
+  });
+
+  it('keeps an explicit override even when detection says the device latches width', async () => {
+    const { result } = renderHook(() => useSessionManager());
+    await act(async () => { await flushMicrotasks(); });
+    const req: OpenRequest = {
+      ...sampleRequest,
+      config: { ...sampleRequest.config, fixedTerminalSize: false },
+    };
+    let id = '';
+    act(() => { id = result.current.openSession(req); });
+    act(() => {
+      onSessionPtySizeCb.current?.({ sessionId: id, cols: 216, rows: 40, deviceLatchesWidth: true });
+    });
+    expect(result.current.sessions.get(id)?.fixedSize).toBe(false);
+  });
+
+  it('a tab-menu toggle sticks against later auto-detection', async () => {
+    const { result } = renderHook(() => useSessionManager());
+    await act(async () => { await flushMicrotasks(); });
+    let id = '';
+    act(() => { id = result.current.openSession(sampleRequest); });
+    // User turns it off before the event lands; detection must not turn it back on.
+    act(() => { result.current.setSessionFixedSize(id, false); });
+    act(() => {
+      onSessionPtySizeCb.current?.({ sessionId: id, cols: 216, rows: 40, deviceLatchesWidth: true });
+    });
+    expect(result.current.sessions.get(id)?.fixedSize).toBe(false);
+  });
+
+  it('setSessionFixedSize flips the flag and mirrors it into connectionConfig', () => {
+    const { result } = renderHook(() => useSessionManager());
+    let id = '';
+    act(() => { id = result.current.openSession(sampleRequest); });
+    expect(result.current.sessions.get(id)?.fixedSize).toBe(false);
+    act(() => { result.current.setSessionFixedSize(id, true); });
+    const rec = result.current.sessions.get(id);
+    expect(rec?.fixedSize).toBe(true);
+    expect((rec?.connectionConfig as { fixedTerminalSize?: boolean }).fixedTerminalSize).toBe(true);
+    act(() => { result.current.setSessionFixedSize(id, false); });
+    expect(result.current.sessions.get(id)?.fixedSize).toBe(false);
   });
 });

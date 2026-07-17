@@ -48,6 +48,7 @@ function makeSession(): {
       errorMessage: undefined,
       term: term as unknown as SessionRecord['term'],
       fitAddon: fitAddon as unknown as SessionRecord['fitAddon'],
+      fixedSize: false,
     },
   };
 }

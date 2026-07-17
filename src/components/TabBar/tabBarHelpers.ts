@@ -12,6 +12,11 @@ export interface TabItem {
   isWatching?: boolean;
   isAiTab?: boolean;
   protocol?: ProtocolId;
+  /** Whether this session's grid is pinned to the device's connect-time width. */
+  fixedSize?: boolean;
+  /** The pinned width (device-latched pty cols); undefined until the connect-time
+   *  `session-pty-size` event arrives. Gates the context-menu toggle's visibility. */
+  ptyCols?: number;
 }
 
 export function buildTabItems(
@@ -35,6 +40,8 @@ export function buildTabItems(
         errorMessage: session.errorMessage,
         isWatching: session.id === watchingSessionId,
         protocol: session.protocol,
+        fixedSize: session.fixedSize,
+        ptyCols: session.ptyCols,
       });
       continue;
     }

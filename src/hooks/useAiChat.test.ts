@@ -22,6 +22,7 @@ function makeSessionRecord(id: string, overrides?: Partial<SessionRecord>): Sess
     status: 'connected',
     term: {} as SessionRecord['term'],
     fitAddon: {} as SessionRecord['fitAddon'],
+    fixedSize: false,
     ...overrides,
   };
 }

@@ -24,8 +24,9 @@ use super::known_hosts::{
 };
 use super::path_safety::is_unc_path;
 use super::session_service::{
-    abort_all, emit_session_data, emit_session_status, emit_to_owner, encoding_for, join_or_abort,
-    PendingSizes, SessionError, SessionService, DISCONNECT_DRAIN_MS,
+    abort_all, emit_session_data, emit_session_pty_size, emit_session_status, emit_to_owner,
+    encoding_for, join_or_abort, resolve_initial_pty_size, SessionError, SessionService,
+    DISCONNECT_DRAIN_MS,
 };
 
 // --- Config ------------------------------------------------------------
@@ -431,10 +432,31 @@ struct SshHandler {
     /// Signalled the instant the interactive host-key prompt begins, so the outer
     /// connect timeout can extend past the short network budget for the human wait.
     host_key_prompt_started: Arc<Notify>,
+    /// The remote SSH identification string (e.g. `SSH-2.0-HUAWEI-1.5`), captured
+    /// in `kex_done`. The handler is moved into `connect`, so the connect path
+    /// reads the value back through this shared cell (same pattern as
+    /// `host_key_prompt_started`). Used to fingerprint device families that latch
+    /// the pty width — see `device_latches_terminal_width`.
+    remote_ident: Arc<OnceLock<String>>,
 }
 
 impl Handler for SshHandler {
     type Error = russh::Error;
+
+    /// Earliest callback that receives the `Session` (and so `remote_sshid()`),
+    /// and it completes before `connect()` returns — i.e. before `request_pty`,
+    /// which is exactly when we need the fingerprint.
+    async fn kex_done(
+        &mut self,
+        _shared_secret: Option<&[u8]>,
+        _names: &russh::Names,
+        session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        let ident = String::from_utf8_lossy(session.remote_sshid()).into_owned();
+        // set() fails only if already set (a rekey re-runs kex) — first wins.
+        let _ = self.remote_ident.set(ident);
+        Ok(())
+    }
 
     async fn check_server_key(
         &mut self,
@@ -786,33 +808,23 @@ fn keepalive_interval(secs: u32) -> Option<Duration> {
     (secs > 0).then(|| Duration::from_secs(secs as u64))
 }
 
-/// Clamp a frontend-reported terminal size to values that are always safe to
-/// hand to `request_pty`. Guards against a zero/absurd size from a not-yet-laid-
-/// out pane, and against the large sentinel width HoTTY uses when line-wrap is
-/// off (`NO_WRAP_COLS = 5000`) becoming the device's literal wrap column.
-fn sanitize_pty_size(cols: u16, rows: u16) -> (u16, u16) {
-    (cols.clamp(2, 1000), rows.clamp(1, 1000))
-}
-
-/// Resolve the size for the INITIAL pty allocation. Prefers the size the
-/// frontend measured and reported via `term_resize` (recorded in `PendingSizes`)
-/// so devices that latch the pty width and ignore later `window-change`
-/// (e.g. Huawei VRP) wrap and edit at HoTTY's real width. The SSH handshake
-/// normally outlasts the terminal's first measurement, so the value is usually
-/// already present; poll briefly as a safety net for a very fast connect, then
-/// fall back to the classic 80x24 so behaviour never regresses below today's.
-async fn resolve_initial_pty_size(app: &AppHandle, session_id: &str) -> (u16, u16) {
-    const DEFAULT: (u16, u16) = (80, 24);
-    let Some(pending) = app.try_state::<PendingSizes>() else {
-        return DEFAULT;
-    };
-    for _ in 0..30 {
-        if let Some((cols, rows)) = pending.get(session_id) {
-            return sanitize_pty_size(cols, rows);
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    DEFAULT
+/// Whether the remote SSH identification string names a device family KNOWN to
+/// latch the terminal width at the pty-req and ignore every later
+/// `window-change`. Drives the frontend's "auto" fixed-width mode.
+///
+/// Detecting this behaviourally is impossible: `window-change` has no reply, and
+/// these devices rely on terminal auto-wrap, so nothing in the byte stream marks
+/// where they think the line wraps. A fingerprint of the protocol-level ident is
+/// the reliable signal — unlike the login banner, it is not user-configurable.
+///
+/// Huawei VRP/USG only: verified here against a real USG and corroborated by
+/// Huawei's own `screen-width` command reference (the column setting applies to
+/// console logins but NOT to VTY/SSH, which stays at its default). Add a family
+/// ONLY once verified — a false positive letterboxes a device that would have
+/// honoured resizes, which is a real regression for that user.
+fn device_latches_terminal_width(remote_ident: &str) -> bool {
+    let id = remote_ident.to_ascii_lowercase();
+    id.contains("huawei") || id.contains("vrp")
 }
 
 #[async_trait]
@@ -846,6 +858,9 @@ impl SessionService for SshSession {
         // so the connect timeout below extends past the short network budget for
         // the human prompt wait (see connect_with_prompt_extension).
         let host_key_prompt_started = Arc::new(Notify::new());
+        // Populated by the handler's kex_done (before connect() returns), read back
+        // after connect to fingerprint the device family for the pty-req below.
+        let remote_ident: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
         let handler = SshHandler {
             app: app.clone(),
             session_id: session_id.clone(),
@@ -853,6 +868,7 @@ impl SessionService for SshSession {
             port: self.config.port,
             known_hosts_path,
             host_key_prompt_started: host_key_prompt_started.clone(),
+            remote_ident: remote_ident.clone(),
         };
 
         let connect_timeout = Duration::from_secs(self.config.connect_timeout_secs.max(1) as u64);
@@ -949,6 +965,17 @@ impl SessionService for SshSession {
             log::error!("ssh: request_shell failed: {e}");
             SessionError::Protocol("Failed to start remote shell".into())
         })?;
+
+        // Fingerprint the device family from the SSH ident captured during kex, so
+        // the frontend's "auto" mode can pin the width without the user opting in.
+        let ident = remote_ident.get().map(String::as_str).unwrap_or("");
+        let latches_width = device_latches_terminal_width(ident);
+        log::info!("ssh: id={session_id} remote ident={ident:?} latches_width={latches_width}");
+
+        // Report the width actually latched by the pty-req so a "fixed terminal
+        // size" session can pin its grid to it (the device ignores later
+        // window-change, so this is the only width that stays in sync).
+        emit_session_pty_size(&app, &session_id, pty_cols, pty_rows, latches_width);
 
         emit_session_status(&app, &session_id, "connected");
 
@@ -1111,24 +1138,34 @@ mod tests {
     use super::*;
     use crate::commands::ssh_algorithms::AlgorithmEntry;
 
-    // -- sanitize_pty_size --
+    // (sanitize_pty_size / resolve_initial_pty_size now live in session_service.rs,
+    //  shared with Telnet; their unit tests moved there too.)
+
+    // -- device_latches_terminal_width --
 
     #[test]
-    fn sanitize_pty_size_passes_normal_dimensions_through() {
-        // The common wrap-ON case — a real measured width — must reach the
-        // device unchanged so its wrap column matches HoTTY's exactly.
-        assert_eq!(sanitize_pty_size(120, 40), (120, 40));
-        assert_eq!(sanitize_pty_size(80, 24), (80, 24));
+    fn detects_huawei_idents_as_width_latching() {
+        // The real USG's ident shape, plus the lowercase/VRP variants.
+        assert!(device_latches_terminal_width("SSH-2.0-HUAWEI-1.5"));
+        assert!(device_latches_terminal_width("SSH-2.0-huawei-1.5"));
+        assert!(device_latches_terminal_width("SSH-2.0-VRP-5.170"));
     }
 
     #[test]
-    fn sanitize_pty_size_clamps_extremes() {
-        // Zero from a not-yet-laid-out pane is floored to a usable minimum.
-        assert_eq!(sanitize_pty_size(0, 0), (2, 1));
-        // The wrap-OFF sentinel (NO_WRAP_COLS = 5000) must not become the
-        // device's literal wrap column.
-        assert_eq!(sanitize_pty_size(5000, 40), (1000, 40));
-        assert_eq!(sanitize_pty_size(u16::MAX, u16::MAX), (1000, 1000));
+    fn treats_ordinary_ssh_servers_as_resize_honouring() {
+        // A false positive here would letterbox a server that resizes fine, so
+        // everything unrecognised must stay dynamic.
+        assert!(!device_latches_terminal_width(
+            "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3"
+        ));
+        assert!(!device_latches_terminal_width("SSH-2.0-dropbear_2022.83"));
+        assert!(!device_latches_terminal_width("SSH-2.0-Go"));
+    }
+
+    #[test]
+    fn missing_ident_is_not_width_latching() {
+        // kex_done never fired / ident unavailable → fall back to dynamic.
+        assert!(!device_latches_terminal_width(""));
     }
 
     // -- connect_with_prompt_extension --

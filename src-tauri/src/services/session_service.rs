@@ -91,6 +91,52 @@ impl PendingSizes {
     }
 }
 
+/// Clamp a frontend-reported terminal size to values that are always safe to hand
+/// to a pty allocation (SSH `request_pty` / Telnet NAWS). Guards against a
+/// zero/absurd size from a not-yet-laid-out pane, and against the large sentinel
+/// width HoTTY uses when line-wrap is off (`NO_WRAP_COLS = 5000`) becoming the
+/// device's literal wrap column.
+pub(crate) fn sanitize_pty_size(cols: u16, rows: u16) -> (u16, u16) {
+    (cols.clamp(2, 1000), rows.clamp(1, 1000))
+}
+
+/// Resolve the size for the INITIAL pty allocation. Prefers the size the frontend
+/// measured and reported via `term_resize` (recorded in [`PendingSizes`]) so
+/// devices that latch the pty width and ignore later `window-change` (e.g. Huawei
+/// VRP) wrap and edit at HoTTY's real width, then fall back to the classic 80x24
+/// so behaviour never regresses.
+///
+/// The terminal pane is laid out, painted, and measured concurrently with the
+/// connect handshake. On a slow link the size is already present and the poll
+/// returns on the first iteration; on a fast LAN connect (e.g. a local Huawei
+/// firewall) the handshake can beat the renderer's first paint, so we wait — the
+/// device latches THIS width and ignores every later `window-change`, so sending
+/// 80x24 here would desync the whole session. Shared by SSH and Telnet.
+pub(crate) async fn resolve_initial_pty_size(app: &AppHandle, session_id: &str) -> (u16, u16) {
+    const DEFAULT: (u16, u16) = (80, 24);
+    const POLL_INTERVAL: Duration = Duration::from_millis(10);
+    const MAX_POLLS: u32 = 200; // 200 * 10ms = 2s ceiling; returns early once reported.
+    let Some(pending) = app.try_state::<PendingSizes>() else {
+        log::info!("session: pty-size id={session_id} -> {DEFAULT:?} (no PendingSizes state)");
+        return DEFAULT;
+    };
+    for i in 0..MAX_POLLS {
+        if let Some((cols, rows)) = pending.get(session_id) {
+            let size = sanitize_pty_size(cols, rows);
+            log::info!(
+                "session: pty-size id={session_id} -> {size:?} (reported={cols}x{rows}, waited={}ms)",
+                i * 10
+            );
+            return size;
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
+    }
+    log::info!(
+        "session: pty-size id={session_id} -> {DEFAULT:?} (frontend never reported after 2s, fell back)"
+    );
+    DEFAULT
+}
+
 /// Emit an event to the window that owns `session_id`, falling back to a global
 /// broadcast if the owner is unknown (e.g. before it is registered).
 fn emit_targeted<P: Serialize + Clone>(app: &AppHandle, session_id: &str, event: &str, payload: P) {
@@ -324,6 +370,44 @@ pub fn emit_session_status(app: &AppHandle, session_id: &str, status: &str) {
     );
 }
 
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct SessionPtySizePayload {
+    session_id: String,
+    cols: u16,
+    rows: u16,
+    device_latches_width: bool,
+}
+
+/// Report the size actually baked into the INITIAL pty allocation (SSH pty-req /
+/// Telnet initial NAWS) back to the frontend. The frontend records it per session
+/// so a "fixed terminal size" session can pin its grid to exactly the width the
+/// device latched — devices like Huawei VRP ignore later `window-change`, so any
+/// post-connect resize would otherwise desync wrapped-line editing.
+///
+/// `device_latches_width` is the protocol-level fingerprint result (SSH only —
+/// see `device_latches_terminal_width` in ssh.rs) that drives the frontend's
+/// "auto" mode. Telnet has no ident to fingerprint and always reports `false`.
+pub fn emit_session_pty_size(
+    app: &AppHandle,
+    session_id: &str,
+    cols: u16,
+    rows: u16,
+    device_latches_width: bool,
+) {
+    emit_targeted(
+        app,
+        session_id,
+        "session-pty-size",
+        SessionPtySizePayload {
+            session_id: session_id.to_string(),
+            cols,
+            rows,
+            device_latches_width,
+        },
+    );
+}
+
 pub fn emit_session_error(app: &AppHandle, session_id: &str, error: String) {
     emit_targeted(
         app,
@@ -486,6 +570,24 @@ mod tests {
         sizes.remove("s1");
         assert_eq!(sizes.get("s1"), None);
         assert_eq!(sizes.get("s2"), Some((80, 24)));
+    }
+
+    #[test]
+    fn sanitize_pty_size_passes_normal_dimensions_through() {
+        // The common case — a real measured width — must reach the device
+        // unchanged so its wrap column matches HoTTY's exactly.
+        assert_eq!(sanitize_pty_size(120, 40), (120, 40));
+        assert_eq!(sanitize_pty_size(80, 24), (80, 24));
+    }
+
+    #[test]
+    fn sanitize_pty_size_clamps_extremes() {
+        // Zero from a not-yet-laid-out pane is floored to a usable minimum.
+        assert_eq!(sanitize_pty_size(0, 0), (2, 1));
+        // The wrap-OFF sentinel (NO_WRAP_COLS = 5000) must not become the
+        // device's literal wrap column.
+        assert_eq!(sanitize_pty_size(5000, 40), (1000, 40));
+        assert_eq!(sanitize_pty_size(u16::MAX, u16::MAX), (1000, 1000));
     }
 
     #[test]

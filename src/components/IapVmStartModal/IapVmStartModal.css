@@ -34,6 +34,8 @@
 .iap-vm-start-body {
   padding: 15px 20px;
   flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .iap-vm-start-message {

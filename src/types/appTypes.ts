@@ -17,6 +17,16 @@ interface BaseConnectionConfig {
   encoding: Encoding;
   keepaliveIntervalSecs: number;
   connectTimeoutSecs: number;
+  /**
+   * Pin the terminal grid to the width sent in the initial pty-req/NAWS instead
+   * of reflowing on window resize. For devices that latch the terminal width at
+   * connect and ignore later window-change (e.g. Huawei USG/VRP), reflowing
+   * desyncs wrapped-line editing. `undefined` = follow the global policy
+   * (`fixedTerminalSizeMode`, whose 'auto' fingerprints the device from the SSH
+   * ident). SSH/Telnet only. The backend ignores this field (it drives frontend
+   * rendering, not the pty request).
+   */
+  fixedTerminalSize?: boolean;
 }
 
 export interface SshConnectionConfig extends BaseConnectionConfig {
@@ -52,6 +62,21 @@ export interface SessionDataPayload {
 export interface SessionStatusPayload {
   sessionId: string;
   status: SessionStatus;
+}
+
+/**
+ * The terminal size actually baked into the initial pty allocation (SSH pty-req /
+ * Telnet initial NAWS), reported once per connect. A fixed-size session pins its
+ * grid to this width — the device latched it and ignores later window-change.
+ */
+export interface SessionPtySizePayload {
+  sessionId: string;
+  cols: number;
+  rows: number;
+  /** True when the remote SSH ident names a device family known to latch the pty
+   *  width and ignore later window-change (drives the global "auto" mode).
+   *  Always false for Telnet, which has no ident to fingerprint. */
+  deviceLatchesWidth: boolean;
 }
 
 /** A live session as seen across all windows (from `list_all_sessions`). */
@@ -466,6 +491,9 @@ export interface HostEntry {
   iapTunnel?: IapTunnelEntry;
   privateKeyPath?: string;
   privateKeyPassphrase?: string;
+  /** Per-host "fixed terminal size" preference; `undefined` = follow the global
+   *  default. Persisted so it survives across sessions and syncs across windows. */
+  fixedTerminalSize?: boolean;
 }
 
 export interface HostTreeNode {

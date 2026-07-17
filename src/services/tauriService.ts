@@ -19,6 +19,7 @@ import type {
   GcloudIapConnectionConfig,
   SessionDataPayload,
   SessionStatusPayload,
+  SessionPtySizePayload,
   SessionErrorPayload,
   SessionInfo,
   SshHostKeyPromptPayload,
@@ -714,6 +715,10 @@ export const tauriService = {
 
   onSessionStatus(cb: (p: SessionStatusPayload) => void): Promise<UnlistenFn> {
     return listen<SessionStatusPayload>('session-status', (e) => cb(e.payload));
+  },
+
+  onSessionPtySize(cb: (p: SessionPtySizePayload) => void): Promise<UnlistenFn> {
+    return listen<SessionPtySizePayload>('session-pty-size', (e) => cb(e.payload));
   },
 
   onSessionError(cb: (p: SessionErrorPayload) => void): Promise<UnlistenFn> {

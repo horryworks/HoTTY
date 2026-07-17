@@ -26,6 +26,11 @@ export const settings = {
     scrollbackBuffer: 'スクロールバックバッファ',
     scrollbackHelp: 'ターミナルごとにメモリに保持する最大行数（デフォルト: 10000）。',
     enableLineWrap: '行の折り返しを有効にする',
+    fixedTerminalSizeMode: '端末サイズの固定',
+    fixedTerminalSizeModeHelp: 'ウィンドウのリサイズで再描画せず、接続時に決めた幅に端末を固定します。ログイン時に幅を固定して以後のリサイズを無視する機器（Huawei USG/VRP など）に必要です（再描画すると行編集がズレます）。「自動」はSSHサーバがそうした機器だと判別できた時だけ固定します。接続ごとに上書きできます。',
+    fixedTerminalSizeModeOff: 'しない — 常に固定しない',
+    fixedTerminalSizeModeAuto: '自動 — 機器を判別して固定（推奨）',
+    fixedTerminalSizeModeOn: 'する — 常に固定する',
     // 入力
     inputSection: '入力',
     backspaceSendsDel: 'Backspace で DEL (0x7F) を送信',

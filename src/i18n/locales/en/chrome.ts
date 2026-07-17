@@ -17,6 +17,7 @@ export const chrome = {
     fileExplorer: 'File Explorer',
     aiChat: 'AI Chat',
     saveToHostTree: 'Save to Host Tree…',
+    fixedTerminalSize: 'Fixed width ({{cols}})',
     watchAi: 'Watch with AI',
     stopWatchAi: 'Stop AI Watch',
     bookmark: 'Add Bookmark…',

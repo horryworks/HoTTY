@@ -26,6 +26,11 @@ export const settings = {
     scrollbackBuffer: 'Scrollback Buffer',
     scrollbackHelp: 'Max lines to keep in memory per terminal (Default: 10000).',
     enableLineWrap: 'Enable line wrap',
+    fixedTerminalSizeMode: 'Fixed terminal size',
+    fixedTerminalSizeModeHelp: 'Pin the terminal width to the size negotiated at connect instead of reflowing on window resize. Needed for devices that latch the width at login and ignore later resizes (e.g. Huawei USG/VRP) — reflowing desyncs their line editing. Auto pins only when the SSH server identifies as such a device. Can be overridden per connection.',
+    fixedTerminalSizeModeOff: 'Off — never pin',
+    fixedTerminalSizeModeAuto: 'Auto — detect the device (recommended)',
+    fixedTerminalSizeModeOn: 'On — always pin',
     // Input
     inputSection: 'Input',
     backspaceSendsDel: 'Backspace sends DEL (0x7F)',

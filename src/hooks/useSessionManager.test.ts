@@ -82,8 +82,8 @@ describe('handleTerminalKey', () => {
 });
 
 describe('TERMINAL_SEQUENCES used by useSessionManager', () => {
-  it('LINE_WRAP sequences are DECAWM escape codes', () => {
-    expect(TERMINAL_SEQUENCES.LINE_WRAP_ENABLED).toBe('\x1b[?7h');
-    expect(TERMINAL_SEQUENCES.LINE_WRAP_DISABLED).toBe('\x1b[?7l');
+  it('LINE_WRAP sequences are DECAWM + reverse-wraparound escape codes', () => {
+    expect(TERMINAL_SEQUENCES.LINE_WRAP_ENABLED).toBe('\x1b[?7h\x1b[?45h');
+    expect(TERMINAL_SEQUENCES.LINE_WRAP_DISABLED).toBe('\x1b[?7l\x1b[?45l');
   });
 });

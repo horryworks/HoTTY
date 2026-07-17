@@ -28,6 +28,7 @@ import { ErrorNotification } from './components/ErrorNotification/ErrorNotificat
 import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary';
 import { tauriService } from './services/tauriService';
 import { useSessionManager, type SessionRecord } from './hooks/useSessionManager';
+import { useHostManager, flattenHosts } from './hooks/useHostManager';
 import { useAiAuthOwner } from './hooks/useAiAuthOwner';
 import { useAiChat, getActiveTab, createDefaultAiChatState, type AiChatState } from './hooks/useAiChat';
 import { usePaneStore, gridPaneIds, SIDEBAR_PANE_IDS } from './stores/paneStore';
@@ -137,7 +138,7 @@ function App() {
     }
     removeAiChatTabsForSession(id);
   }, [removeAiChatTabsForSession]);
-  const { sessions, openSession, closeSession } = useSessionManager({
+  const { sessions, openSession, closeSession, setSessionFixedSize } = useSessionManager({
     onPasteRequest: handlePasteRequest,
     onSessionRemoved: handleSessionRemoved,
   });
@@ -145,6 +146,11 @@ function App() {
   // closed `sessions` Map is stale by the time a sleep-delay timer fires).
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
+
+  // Host tree — used to persist a live fixed-size toggle back onto the host entry
+  // a session was opened from. This instance shares state with the SessionDialog's
+  // (useHostManager is multi-instance-safe and syncs across windows).
+  const hostManager = useHostManager();
 
   const layoutMode = usePaneStore((s) => s.layoutMode);
   const activePaneId = usePaneStore((s) => s.activePaneId);
@@ -1229,12 +1235,15 @@ function App() {
             )}
           >
           {session ? (
-            session.status === 'connecting' ? (
-              <ConnectingOverlay
-                key={`${session.id}-connecting`}
-                displayName={session.displayName}
-              />
-            ) : (
+            // Mount the terminal even while connecting, with the connecting
+            // overlay stacked on top of it. xterm therefore renders, measures
+            // its real width, and reports it (term_resize → PendingSizes) BEFORE
+            // the SSH connect path allocates the pty. Devices that latch the pty
+            // width and ignore later window-change (e.g. Huawei USG/VRP) would
+            // otherwise get the 80x24 fallback — the terminal used to mount only
+            // AFTER 'connected', i.e. after the pty-req — which desynced
+            // wrapped-line editing. See resolve_initial_pty_size in ssh.rs.
+            <div className="pane-session-wrap">
               <TerminalView
                 key={session.id}
                 session={session}
@@ -1244,7 +1253,13 @@ function App() {
                   askAi(selection, question, sessionId)
                 }
               />
-            )
+              {session.status === 'connecting' && (
+                <ConnectingOverlay
+                  key={`${session.id}-connecting`}
+                  displayName={session.displayName}
+                />
+              )}
+            </div>
           ) : featureInfo?.type === 'log-viewer' ? (
             <LogViewerPane
               key={featureInfo.id}
@@ -1361,6 +1376,23 @@ function App() {
             onReorder={reorderSessionInStore}
             onToggleWatch={toggleWatch}
             onSaveToHostTree={(id) => setSaveToTreeSessionId(id)}
+            onToggleFixedSize={(id) => {
+              const rec = sessionsRef.current.get(id);
+              if (!rec) return;
+              const on = !rec.fixedSize;
+              setSessionFixedSize(id, on);
+              // If this session came from a Host Tree node, persist the choice
+              // back onto that host entry so future connects inherit it (and it
+              // syncs to other windows via useHostManager's broadcast).
+              if (rec.hostNodeId) {
+                const node = flattenHosts(hostManager.tree).find((n) => n.id === rec.hostNodeId);
+                if (node?.entry) {
+                  hostManager.editNode(rec.hostNodeId, {
+                    entry: { ...node.entry, fixedTerminalSize: on },
+                  });
+                }
+              }
+            }}
             onBookmark={(id) => {
               // A hidden web-browser tab is in no slot (its pane is unmounted), so
               // move it into the active pane to mount it, then request the bookmark

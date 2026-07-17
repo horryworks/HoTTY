@@ -31,6 +31,7 @@ function makeSession(id: string, overrides: Partial<SessionRecord> = {}): Sessio
     errorMessage: undefined,
     term: {} as SessionRecord['term'],
     fitAddon: {} as SessionRecord['fitAddon'],
+    fixedSize: false,
     ...overrides,
   };
 }

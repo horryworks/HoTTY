@@ -366,8 +366,17 @@ pub async fn term_resize(
     // Not connected yet: the size is captured above for the initial pty-req, so
     // a missing session here is expected mid-connect, not an error to surface.
     let Some(shared) = shared else {
+        // DIAGNOSTIC (Huawei VRP width-sync): a size that arrives before the
+        // session is in the map is a pty-req candidate, not a live resize.
+        log::info!(
+            "session: term_resize id={session_id} {cols}x{rows} (recorded pre-connect for pty-req)"
+        );
         return Ok(());
     };
+    // DIAGNOSTIC (Huawei VRP width-sync): forwarded as a live window-change. On a
+    // device that ignores window-change this has no effect on its wrap width, so a
+    // value here that differs from the pty-size line above is the desync source.
+    log::debug!("session: term_resize id={session_id} {cols}x{rows} (forwarded window-change)");
     let mut s = shared.lock().await;
     s.resize(cols, rows).await.map_err(|e| e.to_string())
 }

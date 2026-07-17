@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useHostManager, decryptBatch, getCachedCredential, clearDecryptedCache, flattenHosts } from '../../hooks/useHostManager';
+import { type FixedSizeTri, triToBool, boolToTri } from '../../utils/fixedTerminalSize';
 import { isEncrypted } from '../../services/tauriService';
 import { tauriService } from '../../services/tauriService';
 import { HostTree } from '../HostTree/HostTree';
@@ -37,6 +38,9 @@ export interface ConnectSubmitPayload {
     displayName: string;
     protocol: ProtocolId;
     config: AnyConfig;
+    /** Host-tree node id when the connection originated from a saved host, so a
+     *  later fixed-size toggle can persist back onto that entry. */
+    hostNodeId?: string;
 }
 
 interface SessionDialogProps {
@@ -193,6 +197,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const [protocol, setProtocol] = useState<ProtocolId>('ssh');
     const [isJumpbox, setIsJumpbox] = useState(false);
     const [jumpboxId, setJumpboxId] = useState('');
+    // Per-connection "fixed terminal size" override (SSH/Telnet). 'default' follows
+    // the global setting; 'on'/'off' force it for this connection/host.
+    const [fixedTerminalSize, setFixedTerminalSize] = useState<FixedSizeTri>('default');
 
     // SSH-specific
     const [privateKeyPath, setPrivateKeyPath] = useState('');
@@ -229,6 +236,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         jumpboxId: string;
         privateKeyPath: string;
         privateKeyPassphrase: string;
+        fixedTerminalSize: FixedSizeTri;
     } | null>(null);
 
     // Per-modal-session draft for unsaved New Connection input. When the user
@@ -254,6 +262,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         flowControl: string;
         selectedDistro: string;
         encoding: Encoding;
+        fixedTerminalSize: FixedSizeTri;
     };
     const [newConnectionDraft, setNewConnectionDraft] = useState<NewConnectionDraft | null>(null);
 
@@ -380,6 +389,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setJumpboxId('');
         setPrivateKeyPath('');
         setPrivateKeyPassphrase('');
+        setFixedTerminalSize('default');
     }, []);
 
     // Subscription effect: watches the parent's sessions map for any session
@@ -423,6 +433,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             setJumpboxId('');
             setPrivateKeyPath('');
             setPrivateKeyPassphrase('');
+            setFixedTerminalSize('default');
             return;
         }
 
@@ -476,6 +487,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setJumpboxId(e.jumpboxId ?? '');
         setPrivateKeyPath(e.privateKeyPath ?? '');
         setPrivateKeyPassphrase(kpp);
+        const fixedTri = boolToTri(e.fixedTerminalSize);
+        setFixedTerminalSize(fixedTri);
 
         setDisplayName(node.name);
         setOriginalState({
@@ -489,6 +502,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             jumpboxId: e.jumpboxId ?? '',
             privateKeyPath: e.privateKeyPath ?? '',
             privateKeyPassphrase: kpp,
+            fixedTerminalSize: fixedTri,
         });
     };
 
@@ -603,8 +617,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 encoding: globalEncoding,
                 keepaliveIntervalSecs: sshKeepAlive,
                 connectTimeoutSecs: sshConnectTimeout,
+                fixedTerminalSize: e.fixedTerminalSize,
             };
-            payload = { displayName: node.name, protocol: 'ssh', config };
+            payload = { displayName: node.name, protocol: 'ssh', config, hostNodeId: node.id };
         } else {
             const config: TelnetConnectionConfig = {
                 host: e.host,
@@ -614,8 +629,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 encoding: globalEncoding,
                 keepaliveIntervalSecs: telnetKeepAlive,
                 connectTimeoutSecs: telnetConnectTimeout,
+                fixedTerminalSize: e.fixedTerminalSize,
             };
-            payload = { displayName: node.name, protocol: 'telnet', config };
+            payload = { displayName: node.name, protocol: 'telnet', config, hostNodeId: node.id };
         }
         dispatchConnect(payload, false);
     }, [dispatchConnect, settings.sshKeepAliveEnabled, settings.sshKeepAliveInterval, settings.telnetKeepAliveEnabled, settings.telnetKeepAliveInterval, settings.sshConnectTimeoutSecs, settings.telnetConnectTimeoutSecs]);
@@ -641,7 +657,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         originalState.isJumpbox !== isJumpbox ||
         originalState.jumpboxId !== jumpboxId ||
         originalState.privateKeyPath !== privateKeyPath ||
-        originalState.privateKeyPassphrase !== privateKeyPassphrase
+        originalState.privateKeyPassphrase !== privateKeyPassphrase ||
+        originalState.fixedTerminalSize !== fixedTerminalSize
     );
 
     // When no host is selected, dirty means the user has typed something into
@@ -666,7 +683,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         displayName, host, port, username, password, protocol,
         isJumpbox, jumpboxId, privateKeyPath, privateKeyPassphrase,
         serialPath, baudRate, dataBits, parity, stopBits, flowControl,
-        selectedDistro, encoding,
+        selectedDistro, encoding, fixedTerminalSize,
     });
 
     const restoreDraft = (draft: NewConnectionDraft) => {
@@ -690,6 +707,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setFlowControl(draft.flowControl);
         setSelectedDistro(draft.selectedDistro);
         setEncoding(draft.encoding);
+        setFixedTerminalSize(draft.fixedTerminalSize);
     };
 
     const applySwitch = (target: SwitchTarget) => {
@@ -782,6 +800,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             jumpboxId,
             privateKeyPath,
             privateKeyPassphrase: finalKpp,
+            fixedTerminalSize,
         });
 
         const isSsh = protocol === 'ssh';
@@ -795,6 +814,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             jumpboxId: jumpboxId || undefined,
             privateKeyPath: isSsh ? (privateKeyPath || undefined) : undefined,
             privateKeyPassphrase: isSsh ? (finalKpp || undefined) : undefined,
+            fixedTerminalSize: triToBool(fixedTerminalSize),
         };
 
         hostManager.editNode(selectedHostId, { name: displayName, entry });
@@ -862,7 +882,10 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             }
         }
 
-        // Persist credential changes back to the selected tree node
+        // Persist credential changes back to the selected tree node. This rebuilds
+        // the entry from scratch (does NOT spread the old one), so every field the
+        // user can set — including fixedTerminalSize — must be included or it is
+        // silently dropped on connect.
         if (selectedHostId && (protocol === 'ssh' || protocol === 'telnet')) {
             const isSsh = protocol === 'ssh';
             const entry: HostEntry = {
@@ -875,6 +898,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 jumpboxId: jumpboxId || undefined,
                 privateKeyPath: isSsh ? (privateKeyPath || undefined) : undefined,
                 privateKeyPassphrase: isSsh ? (finalKpp || undefined) : undefined,
+                fixedTerminalSize: triToBool(fixedTerminalSize),
             };
             const patchTree = (nodes: HostTreeNode[], id: string): HostTreeNode[] =>
                 nodes.map(n => {
@@ -931,8 +955,12 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     encoding,
                     keepaliveIntervalSecs: sshKeepAlive,
                     connectTimeoutSecs: sshConnectTimeout,
+                    fixedTerminalSize: triToBool(fixedTerminalSize),
                 };
-                dispatchConnect({ displayName: buildName(), protocol, config }, isNewConnection);
+                dispatchConnect(
+                    { displayName: buildName(), protocol, config, hostNodeId: selectedHostId ?? undefined },
+                    isNewConnection
+                );
                 break;
             }
             case 'telnet': {
@@ -944,8 +972,12 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     encoding,
                     keepaliveIntervalSecs: telnetKeepAlive,
                     connectTimeoutSecs: telnetConnectTimeout,
+                    fixedTerminalSize: triToBool(fixedTerminalSize),
                 };
-                dispatchConnect({ displayName: buildName(), protocol, config }, isNewConnection);
+                dispatchConnect(
+                    { displayName: buildName(), protocol, config, hostNodeId: selectedHostId ?? undefined },
+                    isNewConnection
+                );
                 break;
             }
             case 'serial': {
@@ -1396,6 +1428,22 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                         <option value="euc-jp">EUC-JP</option>
                                     </select>
                                 </div>
+
+                                {/* Fixed terminal size (SSH/Telnet) — pins the grid to the
+                                    connect-time width for devices that ignore later resizes. */}
+                                {(protocol === 'ssh' || protocol === 'telnet') && (
+                                    <div className="form-group">
+                                        <label>{t('sessionDialog.fixedTerminalSizeLabel')}</label>
+                                        <select
+                                            value={fixedTerminalSize}
+                                            onChange={(e) => setFixedTerminalSize(e.target.value as FixedSizeTri)}
+                                        >
+                                            <option value="default">{t('sessionDialog.fixedTerminalSizeDefault')}</option>
+                                            <option value="on">{t('sessionDialog.fixedTerminalSizeOn')}</option>
+                                            <option value="off">{t('sessionDialog.fixedTerminalSizeOff')}</option>
+                                        </select>
+                                    </div>
+                                )}
                             </fieldset>
 
                             <div className="form-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', alignItems: 'center' }}>

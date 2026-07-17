@@ -24,6 +24,18 @@ describe('settingsStore', () => {
     expect(useSettingsStore.getState().aiDataConsentAccepted).toBe(false);
   });
 
+  it("defaults fixedTerminalSizeMode to 'auto' and updates it", () => {
+    // 'auto' is the recommended default: it pins only the device families that
+    // actually latch their width, leaving normal hosts dynamic.
+    expect(useSettingsStore.getState().fixedTerminalSizeMode).toBe('auto');
+    useSettingsStore.getState().update('fixedTerminalSizeMode', 'on');
+    expect(useSettingsStore.getState().fixedTerminalSizeMode).toBe('on');
+    useSettingsStore.getState().update('fixedTerminalSizeMode', 'off');
+    expect(useSettingsStore.getState().fixedTerminalSizeMode).toBe('off');
+    useSettingsStore.getState().reset();
+    expect(useSettingsStore.getState().fixedTerminalSizeMode).toBe('auto');
+  });
+
   it('records AI data-consent acceptance and clears it on reset', () => {
     useSettingsStore.getState().update('aiDataConsentAccepted', true);
     expect(useSettingsStore.getState().aiDataConsentAccepted).toBe(true);

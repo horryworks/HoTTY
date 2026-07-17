@@ -5,6 +5,9 @@ const resize = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../services/tauriService', () => ({
   tauriService: {
     resize: (id: string, cols: number, rows: number) => resize(id, cols, rows),
+    // Diagnostic width-sync trace — no-op in tests, but must exist or the call
+    // in performResize would throw and short-circuit the resize() we assert on.
+    logDebug: () => Promise.resolve(),
   },
 }));
 
@@ -59,7 +62,7 @@ function makeTerm() {
   };
 }
 
-function makeSession() {
+function makeSession(overrides?: Partial<SessionRecord>) {
   const term = makeTerm();
   const fitAddon = {
     fit: vi.fn(),
@@ -73,6 +76,8 @@ function makeSession() {
     errorMessage: undefined,
     term: term as unknown as SessionRecord['term'],
     fitAddon: fitAddon as unknown as SessionRecord['fitAddon'],
+    fixedSize: false,
+    ...overrides,
   };
   return { session, term, fitAddon };
 }
@@ -210,6 +215,45 @@ describe('TerminalXtermHost', () => {
     render(<TerminalXtermHost session={session} active={true} />);
     expect(term.resize).toHaveBeenCalledWith(5000, 24);
     expect(resize).toHaveBeenCalledWith('s1', 5000, 24);
+  });
+
+  it('pins the grid to ptyCols in fixed-size mode and reports the pinned width', () => {
+    // Fixed-size session (device latched 100 cols). The grid must stay at 100
+    // regardless of the measured pane width, and the backend is told 100.
+    useSettingsStore.getState().update('lineWrapEnabled', true);
+    const { session, term } = makeSession({ fixedSize: true, ptyCols: 100 });
+    render(<TerminalXtermHost session={session} active={true} />);
+    expect(term.resize).toHaveBeenCalledWith(100, 24);
+    expect(resize).toHaveBeenCalledWith('s1', 100, 24);
+  });
+
+  it('applies the fixed-cols class (not wrap-off) in fixed-size mode even with global wrap OFF', () => {
+    useSettingsStore.getState().update('lineWrapEnabled', false);
+    const { session } = makeSession({ fixedSize: true, ptyCols: 100 });
+    const { container } = render(<TerminalXtermHost session={session} active={true} />);
+    const host = container.querySelector('.terminal-xterm-host') as HTMLElement;
+    expect(host.classList.contains('fixed-cols')).toBe(true);
+    expect(host.classList.contains('wrap-off')).toBe(false);
+  });
+
+  it('registers cursor-follow handlers in fixed-size mode even when global wrap is ON', () => {
+    useSettingsStore.getState().update('lineWrapEnabled', true);
+    const { session, term } = makeSession({ fixedSize: true, ptyCols: 100 });
+    render(<TerminalXtermHost session={session} active={true} />);
+    expect(term.onLineFeed).toHaveBeenCalledTimes(1);
+    expect(term.onCursorMove).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not pin until the pty-size (ptyCols) is known, even if fixedSize is set', () => {
+    // Before the connect-time event, ptyCols is undefined → dynamic behaviour,
+    // which is what feeds the initial pty-req. Here (wrap ON, no cell metrics)
+    // it must NOT resize to a pinned width nor add the fixed-cols class.
+    useSettingsStore.getState().update('lineWrapEnabled', true);
+    const { session, term } = makeSession({ fixedSize: true });
+    const { container } = render(<TerminalXtermHost session={session} active={true} />);
+    const host = container.querySelector('.terminal-xterm-host') as HTMLElement;
+    expect(host.classList.contains('fixed-cols')).toBe(false);
+    expect(term.resize).not.toHaveBeenCalled();
   });
 
   it('preventDefaults paste events on the host element to suppress xterm auto-paste', () => {

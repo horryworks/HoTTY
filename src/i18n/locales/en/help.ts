@@ -84,6 +84,8 @@ export const help = {
       '<0>Empty pane hints:</0> Empty grid cells show their pane number and a "Drop Tab Here" prompt so you know where to drop a tab.',
     lineWrap:
       '<0>Line Wrap toggle:</0> Disable <1>Settings → Appearance → Line Wrap</1> to enable a horizontal scrollbar on terminal panes. The view auto-scrolls to keep the cursor in sight as you type past the right edge, and snaps back to column 0 on Enter. The vertical scrollbar and prompt marker stay anchored to the pane\'s right edge regardless of horizontal scroll position.',
+    fixedTerminalSize:
+      '<0>Fixed terminal size:</0> Some network devices (e.g. Huawei USG/VRP) lock their terminal width at login and ignore later resizes, so editing a recalled command that wraps goes out of sync. <1>Settings → General → Terminal → Fixed terminal size</1> pins the grid to the width negotiated at connect. <2>Auto</2> pins only devices HoTTY recognises from the SSH identification; you can also force it on or off globally, per connection in the connection form, or for the current tab from its right-click menu. A pinned terminal shows a tinted letterbox when the pane is wider than the grid, and scrolls horizontally when it is narrower.',
     multiWindow:
       '<0>Multiple windows:</0> Open another window with the <1>New Window</1> button in the sidebar or <2>Ctrl + Shift + N</2> — launching HoTTY again opens a new window in the same process. Each window keeps its own panes and terminal sessions, while your settings, theme, host tree and bookmarks stay shared and in sync across all windows. An AI Chat can even link to a terminal running in another window.',
   },

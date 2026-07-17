@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HostTreeNode, HostEntry } from '../../types/appTypes';
+import { type FixedSizeTri, triToBool } from '../../utils/fixedTerminalSize';
 import { flattenHosts, getJumpboxReferences } from '../../hooks/useHostManager';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useModalState } from '../../hooks/useModalState';
@@ -76,6 +77,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [formUsername, setFormUsername] = useState('');
     const [formPassword, setFormPassword] = useState('');
     const [formIsJumpbox, setFormIsJumpbox] = useState(false);
+    const [formFixedTerminalSize, setFormFixedTerminalSize] = useState<FixedSizeTri>('default');
     const [importFilePath, setImportFilePath] = useState<string | null>(null);
     const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
     const [dropTarget, setDropTarget] = useState<{ nodeId: string; position: 'before' | 'after' | 'inside' } | null>(null);
@@ -181,6 +183,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
         setFormUsername('');
         setFormPassword('');
         setFormIsJumpbox(false);
+        setFormFixedTerminalSize('default');
         openEditModal({ mode: 'host', parentId });
         setContextMenu(null);
     }, [openEditModal]);
@@ -296,6 +299,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     username: formUsername || undefined,
                     password: formPassword || undefined,
                     isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,
+                    fixedTerminalSize: triToBool(formFixedTerminalSize),
                 };
                 onEditNode(existingNode.id, { name: formName, entry });
             }
@@ -310,6 +314,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     username: formUsername || undefined,
                     password: formPassword || undefined,
                     isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,
+                    fixedTerminalSize: triToBool(formFixedTerminalSize),
                 };
                 onAddHost(parentId, formName, entry);
             }
@@ -894,6 +899,17 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                                 onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
                                                 autoComplete="new-password"
                                             />
+                                        </div>
+                                        <div className="modal-form-group">
+                                            <label>{t('hostTree.modal.fixedTerminalSizeLabel')}</label>
+                                            <select
+                                                value={formFixedTerminalSize}
+                                                onChange={e => setFormFixedTerminalSize(e.target.value as FixedSizeTri)}
+                                            >
+                                                <option value="default">{t('hostTree.modal.fixedTerminalSizeDefault')}</option>
+                                                <option value="on">{t('hostTree.modal.fixedTerminalSizeOn')}</option>
+                                                <option value="off">{t('hostTree.modal.fixedTerminalSizeOff')}</option>
+                                            </select>
                                         </div>
                                     </>
                                 )}

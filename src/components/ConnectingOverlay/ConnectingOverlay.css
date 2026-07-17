@@ -1,6 +1,11 @@
 .connecting-overlay {
-  width: 100%;
-  height: 100%;
+  /* Overlays the terminal that is mounted underneath during connecting so xterm
+     can measure its width before the pty is allocated. Sits above the terminal's
+     rails (z-index up to 11). The background is opaque, fully hiding the
+     terminal until the session reaches 'connected'. */
+  position: absolute;
+  inset: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -16,6 +16,7 @@ export const chrome = {
     fileExplorer: '檔案總管',
     aiChat: 'AI 聊天',
     saveToHostTree: '儲存至主機樹狀清單…',
+    fixedTerminalSize: '固定寬度 ({{cols}})',
     watchAi: '使用 AI 監控',
     stopWatchAi: '停止 AI 監控',
     bookmark: '加入書籤…',

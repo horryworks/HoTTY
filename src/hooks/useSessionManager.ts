@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { tauriService } from '../services/tauriService';
 import { useSettingsStore } from '../stores/settingsStore';
 import { TERMINAL_SEQUENCES } from '../constants/terminalSequences';
+import { resolveFixedSize } from '../utils/fixedTerminalSize';
 import { logError } from '../utils/logger';
 import type {
   ProtocolId,
@@ -31,16 +32,44 @@ export interface SessionRecord {
   term: Terminal;
   fitAddon: FitAddon;
   connectionConfig?: AnyConfig;
+  /** Width/height the backend baked into the initial pty-req / NAWS, reported
+   *  once per connect via `session-pty-size`. A fixed-size session pins its grid
+   *  to `ptyCols`. Undefined until the event arrives. */
+  ptyCols?: number;
+  ptyRows?: number;
+  /** Whether the remote is a device family known to latch its width (from the
+   *  same event as ptyCols). Feeds the global 'auto' mode. */
+  deviceLatchesWidth?: boolean;
+  /** EFFECTIVE "pin the grid to the connect-time width" flag — see
+   *  `resolveFixedSize`. Recomputed when the pty-size event lands (that is when
+   *  auto-detection becomes known) and when toggled from the tab menu. */
+  fixedSize: boolean;
+  /** Explicit per-connection choice, if any (`undefined` = follow the global
+   *  mode / auto-detection). Set from the connection config at open and by the
+   *  tab context-menu toggle, and it always wins over auto-detection. */
+  fixedSizeOverride?: boolean;
+  /** Host-tree node id this session was opened from, if any — lets a live toggle
+   *  persist `fixedTerminalSize` back onto the originating host entry. */
+  hostNodeId?: string;
 }
 
 export interface OpenRequest {
   displayName: string;
   protocol: ProtocolId;
   config: AnyConfig;
+  /** Host-tree node id, when opened from the Host Tree (see SessionRecord). */
+  hostNodeId?: string;
 }
 
 function makeSessionId(): string {
   return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Write the DECAWM (+reverse-wraparound) enable/disable sequence to a terminal. */
+function applyWrapSequence(term: Terminal, wrap: boolean): void {
+  term.write(
+    wrap ? TERMINAL_SEQUENCES.LINE_WRAP_ENABLED : TERMINAL_SEQUENCES.LINE_WRAP_DISABLED
+  );
 }
 
 export interface TerminalKeyHooks {
@@ -152,13 +181,15 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
     })();
   }, [loggingEnabled, loggingPath]);
 
-  // Apply Line Wrap setting to all terminals when it changes
+  // Apply Line Wrap setting to all terminals when it changes. Fixed-size sessions
+  // stay wrap-ON regardless — their pinned grid must keep wrapping at the device's
+  // latched width, so the global toggle doesn't disable wrap for them.
   const lineWrapEnabled = settings.lineWrapEnabled;
   useEffect(() => {
-    const sequence = lineWrapEnabled
-      ? TERMINAL_SEQUENCES.LINE_WRAP_ENABLED
-      : TERMINAL_SEQUENCES.LINE_WRAP_DISABLED;
     for (const rec of sessionsRef.current.values()) {
+      const sequence = lineWrapEnabled || rec.fixedSize
+        ? TERMINAL_SEQUENCES.LINE_WRAP_ENABLED
+        : TERMINAL_SEQUENCES.LINE_WRAP_DISABLED;
       rec.term.write(sequence);
     }
   }, [lineWrapEnabled]);
@@ -218,8 +249,10 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       tauriService.onSessionData(({ sessionId, data }) => {
         const rec = sessionsRef.current.get(sessionId);
         if (!rec) return;
-        // Strip server DECAWM overrides so our lineWrapEnabled setting is authoritative
-        const wrap = settingsRef.current.lineWrapEnabled;
+        // Strip server DECAWM overrides so our effective wrap state is authoritative.
+        // A fixed-size session is always wrap-ON (its grid is pinned and must wrap
+        // at the device's latched width), regardless of the global setting.
+        const wrap = settingsRef.current.lineWrapEnabled || rec.fixedSize;
         // eslint-disable-next-line no-control-regex
         const disableWrap = /\x1b\[\?7l/g;
         // eslint-disable-next-line no-control-regex
@@ -250,6 +283,41 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
         ) {
           scheduleAutoClose(sessionId, SESSION_END_AUTO_CLOSE_MS);
         }
+      })
+    );
+
+    track(
+      // The size actually baked into the initial pty-req / NAWS, plus whether the
+      // remote fingerprints as a width-latching device. This is the point where
+      // auto-detection becomes known, so re-resolve the effective pin flag here
+      // (an explicit per-connection/tab override still wins).
+      tauriService.onSessionPtySize(({ sessionId, cols, rows, deviceLatchesWidth }) => {
+        const rec = sessionsRef.current.get(sessionId);
+        if (!rec) return;
+        const fixedSize = resolveFixedSize(
+          rec.fixedSizeOverride,
+          settingsRef.current.fixedTerminalSizeMode,
+          deviceLatchesWidth
+        );
+        // Auto-detection may have just turned pinning on; a pinned grid must be
+        // wrap-ON so it wraps at the device's latched width.
+        if (fixedSize !== rec.fixedSize) {
+          applyWrapSequence(rec.term, fixedSize || settingsRef.current.lineWrapEnabled);
+        }
+        setSessions((p) => {
+          const next = new Map(p);
+          const r = next.get(sessionId);
+          if (r) {
+            next.set(sessionId, {
+              ...r,
+              ptyCols: cols,
+              ptyRows: rows,
+              deviceLatchesWidth,
+              fixedSize,
+            });
+          }
+          return next;
+        });
       })
     );
 
@@ -312,6 +380,13 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
     (req: OpenRequest): string => {
       const id = makeSessionId();
       const s = settingsRef.current;
+      // Provisional pin flag. Auto-detection isn't known until the connect-time
+      // pty-size event, which is also the only thing that can start a pin (it
+      // carries ptyCols) — so resolving without it here is safe, and the event
+      // handler recomputes. A fixed-size session is always wrap-ON.
+      const fixedSizeOverride = (req.config as { fixedTerminalSize?: boolean })
+        .fixedTerminalSize;
+      const fixedSize = resolveFixedSize(fixedSizeOverride, s.fixedTerminalSizeMode, undefined);
       const term = new Terminal({
         fontFamily: s.fontFamily,
         fontSize: s.fontSize,
@@ -327,8 +402,8 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
 
-      // Apply initial line wrap state
-      term.write(s.lineWrapEnabled ? TERMINAL_SEQUENCES.LINE_WRAP_ENABLED : TERMINAL_SEQUENCES.LINE_WRAP_DISABLED);
+      // Apply initial line wrap state (fixed-size sessions are always wrap-ON)
+      applyWrapSequence(term, s.lineWrapEnabled || fixedSize);
 
       term.onSelectionChange(() => {
         const sel = term.getSelection();
@@ -367,6 +442,9 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
         term,
         fitAddon,
         connectionConfig: req.config,
+        fixedSize,
+        fixedSizeOverride,
+        hostNodeId: req.hostNodeId,
       };
       setSessions((prev) => {
         const next = new Map(prev);
@@ -467,5 +545,28 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
     []
   );
 
-  return { sessions, openSession, closeSession, getSession };
+  // Toggle a live session's fixed-size pinning (from the tab context menu).
+  // Flips `fixedSize`, mirrors it into `connectionConfig` (so a later Save to
+  // Host Tree captures it), and re-asserts DECAWM: pinning forces wrap-ON; when
+  // unpinning, the effective wrap reverts to the global setting.
+  const setSessionFixedSize = useCallback((id: string, on: boolean) => {
+    const rec = sessionsRef.current.get(id);
+    if (rec) {
+      applyWrapSequence(rec.term, on || settingsRef.current.lineWrapEnabled);
+    }
+    setSessions((prev) => {
+      const next = new Map(prev);
+      const r = next.get(id);
+      if (!r) return prev;
+      const connectionConfig = r.connectionConfig
+        ? { ...r.connectionConfig, fixedTerminalSize: on }
+        : r.connectionConfig;
+      // Record it as an explicit override so auto-detection can't undo the
+      // user's choice for the rest of this session.
+      next.set(id, { ...r, fixedSize: on, fixedSizeOverride: on, connectionConfig });
+      return next;
+    });
+  }, []);
+
+  return { sessions, openSession, closeSession, getSession, setSessionFixedSize };
 }

@@ -26,6 +26,11 @@ export const settings = {
     scrollbackBuffer: "Mémoire tampon de défilement",
     scrollbackHelp: 'Nombre maximal de lignes conservées en mémoire par terminal (par défaut : 10000).',
     enableLineWrap: 'Activer le retour à la ligne',
+    fixedTerminalSizeMode: 'Taille de terminal fixe',
+    fixedTerminalSizeModeHelp: 'Fige la largeur du terminal à la taille négociée à la connexion au lieu de la réajuster lors du redimensionnement. Nécessaire pour les appareils qui verrouillent la largeur à la connexion et ignorent les redimensionnements ultérieurs (ex. Huawei USG/VRP), où le réajustement désynchronise l’édition de ligne. « Auto » ne fige que si le serveur SSH s’identifie comme un tel appareil. Modifiable par connexion.',
+    fixedTerminalSizeModeOff: 'Non — ne jamais figer',
+    fixedTerminalSizeModeAuto: 'Auto — détecter l’appareil (recommandé)',
+    fixedTerminalSizeModeOn: 'Oui — toujours figer',
     // Input
     inputSection: 'Saisie',
     backspaceSendsDel: 'Retour arrière envoie DEL (0x7F)',

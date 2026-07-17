@@ -17,6 +17,7 @@ export const chrome = {
     fileExplorer: 'Проводник файлов',
     aiChat: 'ИИ-чат',
     saveToHostTree: 'Сохранить в дерево хостов…',
+    fixedTerminalSize: 'Фиксированная ширина ({{cols}})',
     watchAi: 'Наблюдать с ИИ',
     stopWatchAi: 'Остановить ИИ-наблюдение',
     bookmark: 'Добавить закладку…',

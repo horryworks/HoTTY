@@ -1,5 +1,17 @@
 # Release Notes
 
+## v2.0.10-beta4
+
+This beta follows up on beta3's terminal-width fix for network devices that lock their terminal width at login (such as Huawei USG / VRP). Beta3's fix turned out to be incomplete — the size sent at connect was still the 80×24 fallback — so this release both fixes that and adds a **Fixed terminal size** option that keeps the terminal pinned to the width the device actually agreed to.
+
+### New Features
+
+- **Fixed terminal size — keep the terminal pinned to the width negotiated at connect.** Devices such as Huawei USG / VRP lock their terminal width at login and ignore every later resize, so resizing the HoTTY window made what you see drift out of sync with how the device wraps and edits your command line. The new option pins the terminal grid to the connect-time width instead of reflowing it. Set the default in **Settings → General → Terminal → Fixed terminal size**: *Auto* (the new default) pins only devices HoTTY recognises from the SSH identification, or force it *On* / *Off* for every connection. You can override it per connection in the connection form and in the host tree, or flip it for the current tab from the tab's right-click menu. A pinned terminal tints the unused space beside the grid when the pane is wider than the terminal, and scrolls horizontally when the pane is narrower — the view follows the cursor as you type. The tint is a new themeable colour you can adjust in the custom theme editor.
+
+### Bug Fixes
+
+- **The terminal size sent at connect is now really your window size.** v2.0.10-beta3 changed HoTTY to size the initial SSH terminal to your actual window, but the terminal itself was only created *after* the session finished connecting — so it had no measured width to report yet, and the connection still requested the 80×24 fallback. That left the original cursor-jumping problem in place on devices that latch the width. The terminal is now created underneath the connecting overlay, measures its real width, and reports it before the remote terminal is allocated.
+
 ## v2.0.10-beta3
 
 This beta fixes a terminal-compatibility issue with network devices that lock their terminal width at login (such as Huawei USG / VRP): editing a command recalled from history no longer sends the cursor jumping to the line above.

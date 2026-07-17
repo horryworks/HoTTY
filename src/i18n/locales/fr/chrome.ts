@@ -17,6 +17,7 @@ export const chrome = {
     fileExplorer: 'Explorateur de fichiers',
     aiChat: 'Chat IA',
     saveToHostTree: "Enregistrer dans l'arborescence des hôtes…",
+    fixedTerminalSize: 'Largeur fixe ({{cols}})',
     watchAi: "Surveiller avec l'IA",
     stopWatchAi: 'Arrêter la surveillance IA',
     bookmark: 'Ajouter un favori…',

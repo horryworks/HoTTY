@@ -37,6 +37,29 @@
   overflow-y: hidden;
 }
 
+/* Fixed-size ("pinned") mode: the grid is locked to the device's connect-time
+   width. When the pane is wider than the grid, the leftover strip is a letterbox
+   tinted with --terminal-letterbox-bg to signal "unused space"; when narrower,
+   the grid overflows and scrolls horizontally (cursor-follow handlers). */
+.terminal-xterm-host.fixed-cols {
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Fallback for custom themes saved before this variable existed. */
+  background: var(--terminal-letterbox-bg, var(--bg-tertiary));
+}
+
+/* xterm paints the terminal background on the full-width .xterm-scrollable-element,
+   which would cover the letterbox. In pinned mode make that layer transparent and
+   paint the terminal background only on the grid-sized .xterm-screen, so the host's
+   letterbox tint shows through in the unused strip beside the grid. */
+.terminal-xterm-host.fixed-cols .xterm-scrollable-element {
+  background-color: transparent !important;
+}
+
+.terminal-xterm-host.fixed-cols .xterm-screen {
+  background-color: var(--pinned-term-bg);
+}
+
 .terminal-xterm-host .xterm {
   width: 100%;
   height: 100%;

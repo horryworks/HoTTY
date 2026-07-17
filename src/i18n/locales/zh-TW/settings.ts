@@ -26,6 +26,11 @@ export const settings = {
     scrollbackBuffer: '回捲緩衝區',
     scrollbackHelp: '每個終端機保留在記憶體中的最大行數（預設值：10000）。',
     enableLineWrap: '啟用自動換行',
+    fixedTerminalSizeMode: '固定終端機尺寸',
+    fixedTerminalSizeModeHelp: '將終端機寬度固定為連線時協商的尺寸，而不在視窗調整時重新排版。登入時鎖定寬度並忽略後續調整的裝置（如華為 USG/VRP）需要此項——重新排版會使其行編輯錯位。「自動」僅在 SSH 伺服器被識別為此類裝置時才固定。可依連線個別覆寫。',
+    fixedTerminalSizeModeOff: '關閉 — 從不固定',
+    fixedTerminalSizeModeAuto: '自動 — 偵測裝置後固定（建議）',
+    fixedTerminalSizeModeOn: '開啟 — 一律固定',
     // 輸入
     inputSection: '輸入',
     backspaceSendsDel: 'Backspace 傳送 DEL（0x7F）',

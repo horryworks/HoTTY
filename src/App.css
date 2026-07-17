@@ -90,6 +90,17 @@
   display: flex;
 }
 
+/* Positioning context for a session pane so the ConnectingOverlay can absolutely
+   cover the TerminalView mounted underneath it (the terminal renders during
+   'connecting' so xterm measures its real width before the pty is allocated). */
+.pane-session-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+}
+
 .pane-empty {
   flex: 1;
   display: flex;

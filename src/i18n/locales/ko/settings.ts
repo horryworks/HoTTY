@@ -26,6 +26,11 @@ export const settings = {
     scrollbackBuffer: '스크롤백 버퍼',
     scrollbackHelp: '터미널당 메모리에 유지할 최대 줄 수 (기본값: 10000).',
     enableLineWrap: '줄 바꿈 사용',
+    fixedTerminalSizeMode: '터미널 크기 고정',
+    fixedTerminalSizeModeHelp: '창 크기 변경 시 다시 배치하지 않고, 연결 시 협상한 크기로 터미널 너비를 고정합니다. 로그인 시 너비를 고정하고 이후 크기 변경을 무시하는 장치(예: Huawei USG/VRP)에 필요합니다(다시 배치하면 줄 편집이 어긋납니다). "자동"은 SSH 서버가 그런 장치로 식별될 때만 고정합니다. 연결별로 재정의할 수 있습니다.',
+    fixedTerminalSizeModeOff: '끄기 — 항상 고정하지 않음',
+    fixedTerminalSizeModeAuto: '자동 — 장치를 감지해 고정(권장)',
+    fixedTerminalSizeModeOn: '켜기 — 항상 고정',
     // Input
     inputSection: '입력',
     backspaceSendsDel: 'Backspace가 DEL(0x7F) 전송',

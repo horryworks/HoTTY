@@ -26,6 +26,11 @@ export const settings = {
     scrollbackBuffer: '回滚缓冲区',
     scrollbackHelp: '每个终端在内存中保留的最大行数（默认：10000）。',
     enableLineWrap: '启用自动换行',
+    fixedTerminalSizeMode: '固定终端尺寸',
+    fixedTerminalSizeModeHelp: '将终端宽度固定为连接时协商的尺寸，而不在窗口调整时重新排版。登录时锁定宽度并忽略后续调整的设备（如华为 USG/VRP）需要此项——重新排版会使其行编辑错位。“自动”仅在 SSH 服务器被识别为此类设备时才固定。可按连接单独覆盖。',
+    fixedTerminalSizeModeOff: '关闭 — 从不固定',
+    fixedTerminalSizeModeAuto: '自动 — 检测设备后固定（推荐）',
+    fixedTerminalSizeModeOn: '开启 — 始终固定',
     // Input
     inputSection: '输入',
     backspaceSendsDel: '退格键发送 DEL (0x7F)',

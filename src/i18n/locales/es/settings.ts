@@ -26,6 +26,11 @@ export const settings = {
     scrollbackBuffer: 'Búfer de desplazamiento',
     scrollbackHelp: 'Máximo de líneas que se mantienen en memoria por terminal (predeterminado: 10000).',
     enableLineWrap: 'Activar ajuste de línea',
+    fixedTerminalSizeMode: 'Tamaño de terminal fijo',
+    fixedTerminalSizeModeHelp: 'Fija el ancho del terminal al tamaño negociado al conectar en lugar de reajustarlo al redimensionar la ventana. Necesario para dispositivos que fijan el ancho al iniciar sesión e ignoran cambios posteriores (p. ej. Huawei USG/VRP), donde reajustar desincroniza la edición de líneas. «Automático» solo lo fija cuando el servidor SSH se identifica como uno de esos dispositivos. Se puede anular por conexión.',
+    fixedTerminalSizeModeOff: 'No — nunca fijar',
+    fixedTerminalSizeModeAuto: 'Automático — detectar el dispositivo (recomendado)',
+    fixedTerminalSizeModeOn: 'Sí — fijar siempre',
     // Entrada
     inputSection: 'Entrada',
     backspaceSendsDel: 'Retroceso envía DEL (0x7F)',

@@ -3,6 +3,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { tauriService } from '../../services/tauriService';
 import { SUPPORTED_LANGUAGES } from '../../i18n';
 import type { LanguageId } from '../../types/appTypes';
+import type { FixedSizeMode } from '../../utils/fixedTerminalSize';
 import HelpTooltip from '../HelpTooltip/HelpTooltip';
 
 export function GeneralTab() {
@@ -95,6 +96,20 @@ export function GeneralTab() {
           />
           {t('settings.general.enableLineWrap')}
         </label>
+        <div className="settings-group">
+          <label>
+            {t('settings.general.fixedTerminalSizeMode')}
+            <HelpTooltip text={t('settings.general.fixedTerminalSizeModeHelp')} />
+          </label>
+          <select
+            value={settings.fixedTerminalSizeMode}
+            onChange={(e) => update('fixedTerminalSizeMode', e.target.value as FixedSizeMode)}
+          >
+            <option value="off">{t('settings.general.fixedTerminalSizeModeOff')}</option>
+            <option value="auto">{t('settings.general.fixedTerminalSizeModeAuto')}</option>
+            <option value="on">{t('settings.general.fixedTerminalSizeModeOn')}</option>
+          </select>
+        </div>
       </div>
 
       {/* ── Input ── */}

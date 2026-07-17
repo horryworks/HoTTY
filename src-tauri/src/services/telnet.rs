@@ -10,8 +10,9 @@ use tokio::task::JoinHandle;
 
 use super::jumpbox::{establish_tunnel, JumpboxConfig, JumpboxHandler};
 use super::session_service::{
-    abort_all, emit_session_data, emit_session_error, emit_session_status, encoding_for,
-    humanize_io_error, join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
+    abort_all, emit_session_data, emit_session_error, emit_session_pty_size, emit_session_status,
+    encoding_for, humanize_io_error, join_or_abort, resolve_initial_pty_size, SessionError,
+    SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // --- Telnet protocol constants -----------------------------------------
@@ -108,7 +109,7 @@ enum LoginState {
 /// - We WILL: NAWS, SGA
 /// - We DO:   ECHO (server-side echo), SGA
 /// - Everything else is declined (WONT / DONT).
-pub fn process_iac(data: &[u8]) -> (Vec<u8>, Vec<u8>) {
+pub fn process_iac(data: &[u8], naws: (u16, u16)) -> (Vec<u8>, Vec<u8>) {
     let mut out = Vec::with_capacity(data.len());
     let mut resp: Vec<u8> = Vec::new();
     let mut i = 0;
@@ -185,7 +186,7 @@ pub fn process_iac(data: &[u8]) -> (Vec<u8>, Vec<u8>) {
                 i += 3;
                 // If the server asks for NAWS, also send the current size immediately.
                 if accept && opt == NAWS {
-                    resp.extend_from_slice(&naws_frame(80, 24));
+                    resp.extend_from_slice(&naws_frame(naws.0, naws.1));
                 }
             }
             DONT => {
@@ -335,12 +336,22 @@ impl SessionService for TelnetSession {
         let (tx, mut rx) = mpsc::channel::<WriterCmd>(64);
         self.writer_tx = Some(tx.clone());
 
+        // Resolve the size the frontend measured (recorded in PendingSizes while
+        // the pane painted during 'connecting') so the initial NAWS matches
+        // HoTTY's real width, and report it so a fixed-size session can pin its
+        // grid to exactly this width.
+        let (naws_cols, naws_rows) = resolve_initial_pty_size(&app, &session_id).await;
+
+        // `false`: Telnet has no protocol-level ident to fingerprint, so the
+        // frontend's "auto" fixed-width detection can't apply here — a telnet host
+        // that latches its width must be set via the global/per-connection setting.
+        emit_session_pty_size(&app, &session_id, naws_cols, naws_rows, false);
         emit_session_status(&app, &session_id, "connected");
 
         // Send initial NAWS
         {
             let mut w = write_half.lock().await;
-            let _ = w.write_all(&naws_frame(80, 24)).await;
+            let _ = w.write_all(&naws_frame(naws_cols, naws_rows)).await;
         }
 
         // --- Writer task: drains WriterCmd channel ------------------
@@ -430,7 +441,9 @@ impl SessionService for TelnetSession {
                     }
                 };
                 log::debug!("telnet {sid}: read {n} bytes");
-                let (cleaned, response) = process_iac(&buf[..n]);
+                // A late server `DO NAWS` is answered with the connect-time size;
+                // live window resizes still push fresh NAWS via WriterCmd::Resize.
+                let (cleaned, response) = process_iac(&buf[..n], (naws_cols, naws_rows));
                 if !response.is_empty() {
                     log::debug!(
                         "telnet {sid}: sending {} bytes of IAC response",
@@ -585,7 +598,7 @@ mod tests {
     /// Test-only convenience over `process_iac`: returns just the cleaned
     /// data half, so these cases exercise the production IAC parser directly.
     fn strip_iac(data: &[u8]) -> Vec<u8> {
-        process_iac(data).0
+        process_iac(data, (80, 24)).0
     }
 
     #[test]
@@ -653,7 +666,7 @@ mod tests {
     #[test]
     fn process_iac_responds_to_do_naws_with_will_and_size() {
         let input = [IAC, DO, NAWS];
-        let (clean, resp) = process_iac(&input);
+        let (clean, resp) = process_iac(&input, (80, 24));
         assert!(clean.is_empty());
         // Expect IAC WILL NAWS followed by an IAC SB NAWS ... IAC SE frame.
         assert_eq!(&resp[..3], &[IAC, WILL, NAWS]);
@@ -663,16 +676,26 @@ mod tests {
     }
 
     #[test]
+    fn process_iac_do_naws_embeds_resolved_size() {
+        // The DO NAWS reply must carry the connect-time size passed in, not a
+        // hardcoded 80x24 — that width is what a fixed-size session pins to.
+        let input = [IAC, DO, NAWS];
+        let (_clean, resp) = process_iac(&input, (300, 100));
+        // ...IAC SB NAWS <cols hi> <cols lo> <rows hi> <rows lo> IAC SE
+        assert_eq!(&resp[3..], &[IAC, SB, NAWS, 1, 44, 0, 100, IAC, SE]);
+    }
+
+    #[test]
     fn process_iac_declines_unknown_do() {
         let input = [IAC, DO, 0x20];
-        let (_clean, resp) = process_iac(&input);
+        let (_clean, resp) = process_iac(&input, (80, 24));
         assert_eq!(resp, vec![IAC, WONT, 0x20]);
     }
 
     #[test]
     fn process_iac_accepts_will_echo_and_sga() {
         let input = [IAC, WILL, OPT_ECHO, IAC, WILL, OPT_SGA, IAC, WILL, 0x20];
-        let (_clean, resp) = process_iac(&input);
+        let (_clean, resp) = process_iac(&input, (80, 24));
         assert_eq!(
             resp,
             vec![IAC, DO, OPT_ECHO, IAC, DO, OPT_SGA, IAC, DONT, 0x20]
@@ -683,7 +706,7 @@ mod tests {
     fn process_iac_responds_to_ttype_send() {
         // IAC SB TTYPE SEND IAC SE
         let input = [IAC, SB, OPT_TTYPE, 0x01, IAC, SE];
-        let (clean, resp) = process_iac(&input);
+        let (clean, resp) = process_iac(&input, (80, 24));
         assert!(clean.is_empty());
         assert_eq!(&resp[..4], &[IAC, SB, OPT_TTYPE, 0]);
         assert_eq!(&resp[resp.len() - 2..], &[IAC, SE]);

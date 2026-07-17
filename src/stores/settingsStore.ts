@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { Encoding, FeatureId, FileServerConfig, PromptPattern, ThemeId, LanguageId, CommandExecutionMode, ClassifierStrategy, PersonaDefinition } from '../types/appTypes';
 import { DEFAULT_THEMES } from '../themes/defaults';
 import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from '../utils/commandLists';
+import type { FixedSizeMode } from '../utils/fixedTerminalSize';
 
 const DEFAULT_PROMPT_HIGHLIGHT_COLOR = 'rgba(255, 255, 255, 0.15)';
 
@@ -83,6 +84,11 @@ interface SettingsState {
   lineWrapEnabled: boolean;
   backspaceSendsDel: boolean;
   rightClickPaste: boolean;
+  /** Global policy for pinning the terminal grid to the connect-time width (for
+   *  width-latching devices like Huawei USG/VRP). 'auto' pins only when the SSH
+   *  ident fingerprints such a device. A per-connection setting overrides this;
+   *  see `fixedTerminalSize` on the connection config. */
+  fixedTerminalSizeMode: FixedSizeMode;
 
   // Prompt highlighting
   enablePromptHighlight: boolean;
@@ -156,6 +162,7 @@ const DEFAULTS: SettingsState = {
   lineWrapEnabled: true,
   backspaceSendsDel: false,
   rightClickPaste: true,
+  fixedTerminalSizeMode: 'auto',
   enablePromptHighlight: true,
   promptHighlightColor: '',
   promptPatterns: DEFAULT_PROMPT_PATTERNS,
@@ -206,7 +213,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 21,
+      version: 23,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -307,6 +314,18 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
         if (version < 21) {
           // New Web Browser default-zoom setting — 100% for existing users.
           state.webBrowserDefaultZoom ??= DEFAULTS.webBrowserDefaultZoom;
+        }
+        if (version < 22) {
+          // v22 shipped a boolean `fixedTerminalSizeDefault`; v23 replaces it
+          // with the tri-state mode below, so nothing to seed here.
+        }
+        if (version < 23) {
+          // boolean → 'off' | 'auto' | 'on'. Anyone who had explicitly forced the
+          // old flag on keeps that ('on'); everyone else moves to 'auto', which
+          // pins only the device families that actually latch their width.
+          const legacy = (state as Record<string, unknown>).fixedTerminalSizeDefault;
+          state.fixedTerminalSizeMode ??= legacy === true ? 'on' : DEFAULTS.fixedTerminalSizeMode;
+          delete (state as Record<string, unknown>).fixedTerminalSizeDefault;
         }
         return state as SettingsState;
       },

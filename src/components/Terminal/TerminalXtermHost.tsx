@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, type CSSProperties } from 'react';
 import type { Terminal } from '@xterm/xterm';
 import type { SessionRecord } from '../../hooks/useSessionManager';
 import { tauriService } from '../../services/tauriService';
@@ -66,10 +66,16 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
   const fontFamily = useSettingsStore((s) => s.fontFamily);
   const scrollback = useSettingsStore((s) => s.scrollback);
 
+  // Fixed-size ("pinned") mode: the grid is locked to the width the device
+  // latched at connect (session.ptyCols), reported via `session-pty-size`. Only
+  // active once that width is known AND the session opted in. Undefined otherwise
+  // (dynamic behaviour, which also feeds the initial pty-req before the event).
+  const pinnedCols = session.fixedSize && session.ptyCols ? session.ptyCols : undefined;
+  const effectiveBg = active ? terminalBackground : terminalBackgroundInactive;
+
   useEffect(() => {
-    const effectiveBg = active ? terminalBackground : terminalBackgroundInactive;
     applyXtermTheme(session.term, terminalForeground, effectiveBg);
-  }, [session, active, terminalForeground, terminalBackground, terminalBackgroundInactive]);
+  }, [session, terminalForeground, effectiveBg]);
 
   // Compute terminal dimensions ourselves instead of using FitAddon.
   // FitAddon's `proposeDimensions` subtracts a hardcoded 14px from the
@@ -106,7 +112,20 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
     if (!el) return;
     try {
       const measured = computeDimensions();
-      if (lineWrapEnabled) {
+      if (pinnedCols) {
+        // Pinned (width-latching device): keep the grid locked to the device's
+        // connect-time width. Never reflow to the pane width — that would desync
+        // the device's wrapping. Only the row count tracks the pane. Wider pane →
+        // letterbox (CSS tint beside the grid); narrower pane → horizontal scroll
+        // handled by the cursor-follow handlers below.
+        const rows =
+          measured?.rows ?? session.fitAddon.proposeDimensions()?.rows ?? session.term.rows;
+        if (pinnedCols !== session.term.cols || rows !== session.term.rows) {
+          session.term.resize(pinnedCols, rows);
+        }
+        // Widened so the whole grid fits again → drop any leftover scroll offset.
+        if (el.scrollWidth <= el.clientWidth) el.scrollLeft = 0;
+      } else if (lineWrapEnabled) {
         el.scrollLeft = 0; // reset leftover horizontal scroll
         if (measured) {
           if (measured.cols !== session.term.cols || measured.rows !== session.term.rows) {
@@ -128,8 +147,8 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
       // measurement. Both our own compute and FitAddon's proposeDimensions read
       // the same cell metrics, so either succeeding means "measured"; until then
       // term.cols is xterm's placeholder 80. Reporting that placeholder would let
-      // the SSH connect path bake it into the INITIAL pty-req, which is exactly
-      // what desyncs wrapped-line editing on devices that latch the pty width and
+      // the connect path bake it into the INITIAL pty-req, which is exactly what
+      // desyncs wrapped-line editing on devices that latch the pty width and
       // ignore later window-change (e.g. Huawei VRP). See hasMeasuredRef.
       if (!hasMeasuredRef.current && (measured || session.fitAddon.proposeDimensions())) {
         hasMeasuredRef.current = true;
@@ -141,7 +160,7 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
     } catch {
       /* compute/resize can throw if element not in DOM yet */
     }
-  }, [session, lineWrapEnabled, computeDimensions]);
+  }, [session, lineWrapEnabled, pinnedCols, computeDimensions]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -152,8 +171,10 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
     } else {
       session.term.open(el);
     }
-    // Apply DECAWM after open to ensure it takes effect before server data renders
-    const wrap = useSettingsStore.getState().lineWrapEnabled;
+    // Apply DECAWM after open to ensure it takes effect before server data
+    // renders. Fixed-size sessions are always wrap-ON (grid pinned to the
+    // device's width), regardless of the global setting.
+    const wrap = useSettingsStore.getState().lineWrapEnabled || session.fixedSize;
     session.term.write(
       wrap ? TERMINAL_SEQUENCES.LINE_WRAP_ENABLED : TERMINAL_SEQUENCES.LINE_WRAP_DISABLED
     );
@@ -185,11 +206,12 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
     const ro = new ResizeObserver(performResize);
     ro.observe(el);
 
-    // Wrap OFF: snap horizontal scroll back to col 0 on every line feed AND
-    // auto-scroll to keep the cursor visible when typing past the right edge.
+    // Horizontal-scroll modes (wrap OFF, or pinned/fixed-size where the grid can
+    // exceed the pane): snap scroll back to col 0 on every line feed AND
+    // auto-scroll to keep the cursor visible when editing past the right edge.
     let lineFeedDispose: { dispose: () => void } | undefined;
     let cursorMoveDispose: { dispose: () => void } | undefined;
-    if (!lineWrapEnabled) {
+    if (!lineWrapEnabled || pinnedCols) {
       lineFeedDispose = session.term.onLineFeed(() => {
         el.scrollLeft = 0;
       });
@@ -220,7 +242,7 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
       cursorMoveDispose?.dispose();
       el.removeEventListener('paste', suppressPaste, true);
     };
-  }, [session, lineWrapEnabled, performResize]);
+  }, [session, lineWrapEnabled, pinnedCols, performResize]);
 
   // Reactive xterm options. Settings changes must reach already-open terminals,
   // not just new sessions. Cell size changes with the font, so re-trigger
@@ -239,7 +261,13 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
 
   return (
     <div
-      className={`terminal-xterm-host${lineWrapEnabled ? '' : ' wrap-off'}`}
+      className={`terminal-xterm-host${
+        pinnedCols ? ' fixed-cols' : lineWrapEnabled ? '' : ' wrap-off'
+      }`}
+      // `--pinned-term-bg` paints the grid-sized `.xterm-screen` in fixed-cols
+      // mode so the host's letterbox tint shows only in the unused strip beside
+      // the grid (see Terminal.css). Harmless when not pinned.
+      style={{ '--pinned-term-bg': effectiveBg } as CSSProperties}
       ref={containerRef}
     />
   );

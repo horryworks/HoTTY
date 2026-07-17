@@ -46,7 +46,7 @@ const THEME_SECTIONS: { titleKey: string; descKey: string; keys: string[] }[] = 
     {
         titleKey: 'settings.customTheme.sectionUiTitle',
         descKey: 'settings.customTheme.sectionUiDesc',
-        keys: ['sidebar-bg', 'sidebar-btn-color', 'sidebar-btn-hover-bg', 'sidebar-btn-hover-color', 'sidebar-btn-active-bg', 'tab-bg', 'tab-text', 'tab-active-text', 'tab-close-bg', 'tab-close-hover-bg', 'tab-watching-text', 'tab-watching-bg', 'tab-watching-icon', 'tab-watching-icon-glow', 'tab-connecting-bg', 'tab-connecting-text', 'pane-connecting-bg', 'context-menu-bg', 'context-menu-border', 'context-menu-text', 'context-menu-hover-bg', 'hidden-item-bg', 'hidden-item-bg-hover', 'tree-meta-color', 'icon-folder', 'icon-host', 'terminal-prompt-default', 'terminal-prompt-active', 'pane-color-1', 'pane-color-2', 'pane-color-3', 'pane-color-4', 'pane-color-5', 'pane-color-6', 'resize-grip-shadow'],
+        keys: ['sidebar-bg', 'sidebar-btn-color', 'sidebar-btn-hover-bg', 'sidebar-btn-hover-color', 'sidebar-btn-active-bg', 'tab-bg', 'tab-text', 'tab-active-text', 'tab-close-bg', 'tab-close-hover-bg', 'tab-watching-text', 'tab-watching-bg', 'tab-watching-icon', 'tab-watching-icon-glow', 'tab-connecting-bg', 'tab-connecting-text', 'pane-connecting-bg', 'context-menu-bg', 'context-menu-border', 'context-menu-text', 'context-menu-hover-bg', 'hidden-item-bg', 'hidden-item-bg-hover', 'tree-meta-color', 'icon-folder', 'icon-host', 'terminal-prompt-default', 'terminal-prompt-active', 'terminal-letterbox-bg', 'pane-color-1', 'pane-color-2', 'pane-color-3', 'pane-color-4', 'pane-color-5', 'pane-color-6', 'resize-grip-shadow'],
     },
     {
         titleKey: 'settings.customTheme.sectionProvidersTitle',
@@ -157,6 +157,7 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'icon-host': 'Color for host/connection icons in the host tree.',
     'terminal-prompt-default': 'Default color for terminal prompt marker blocks.',
     'terminal-prompt-active': 'Active color for terminal prompt marker blocks when detected as command input.',
+    'terminal-letterbox-bg': 'Background tint for the unused area beside a fixed-width (pinned) terminal.',
     'pane-color-1': 'Color 1 of 6 used for tab-to-pane connection lines.',
     'pane-color-2': 'Color 2 of 6 used for tab-to-pane connection lines.',
     'pane-color-3': 'Color 3 of 6 used for tab-to-pane connection lines.',

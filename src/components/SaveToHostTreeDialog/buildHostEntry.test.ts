@@ -74,6 +74,12 @@ describe('buildHostEntryFromConfig', () => {
         privateKeyPassphrase: undefined,
       });
     });
+
+    it('carries fixedTerminalSize through (both true and false)', () => {
+      expect(buildHostEntryFromConfig('ssh', sshConfig({ fixedTerminalSize: true }))?.fixedTerminalSize).toBe(true);
+      expect(buildHostEntryFromConfig('ssh', sshConfig({ fixedTerminalSize: false }))?.fixedTerminalSize).toBe(false);
+      expect(buildHostEntryFromConfig('ssh', sshConfig())?.fixedTerminalSize).toBeUndefined();
+    });
   });
 
   describe('telnet', () => {
@@ -95,6 +101,11 @@ describe('buildHostEntryFromConfig', () => {
       const entry = buildHostEntryFromConfig('telnet', telnetConfig());
       expect(entry).not.toHaveProperty('privateKeyPath');
       expect(entry).not.toHaveProperty('privateKeyPassphrase');
+    });
+
+    it('carries fixedTerminalSize through', () => {
+      expect(buildHostEntryFromConfig('telnet', telnetConfig({ fixedTerminalSize: true }))?.fixedTerminalSize).toBe(true);
+      expect(buildHostEntryFromConfig('telnet', telnetConfig({ fixedTerminalSize: false }))?.fixedTerminalSize).toBe(false);
     });
 
     it('coerces empty optional strings to undefined', () => {
