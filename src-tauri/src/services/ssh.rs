@@ -25,7 +25,7 @@ use super::known_hosts::{
 use super::path_safety::is_unc_path;
 use super::session_service::{
     abort_all, emit_session_data, emit_session_status, emit_to_owner, encoding_for, join_or_abort,
-    SessionError, SessionService, DISCONNECT_DRAIN_MS,
+    PendingSizes, SessionError, SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // --- Config ------------------------------------------------------------
@@ -786,6 +786,35 @@ fn keepalive_interval(secs: u32) -> Option<Duration> {
     (secs > 0).then(|| Duration::from_secs(secs as u64))
 }
 
+/// Clamp a frontend-reported terminal size to values that are always safe to
+/// hand to `request_pty`. Guards against a zero/absurd size from a not-yet-laid-
+/// out pane, and against the large sentinel width HoTTY uses when line-wrap is
+/// off (`NO_WRAP_COLS = 5000`) becoming the device's literal wrap column.
+fn sanitize_pty_size(cols: u16, rows: u16) -> (u16, u16) {
+    (cols.clamp(2, 1000), rows.clamp(1, 1000))
+}
+
+/// Resolve the size for the INITIAL pty allocation. Prefers the size the
+/// frontend measured and reported via `term_resize` (recorded in `PendingSizes`)
+/// so devices that latch the pty width and ignore later `window-change`
+/// (e.g. Huawei VRP) wrap and edit at HoTTY's real width. The SSH handshake
+/// normally outlasts the terminal's first measurement, so the value is usually
+/// already present; poll briefly as a safety net for a very fast connect, then
+/// fall back to the classic 80x24 so behaviour never regresses below today's.
+async fn resolve_initial_pty_size(app: &AppHandle, session_id: &str) -> (u16, u16) {
+    const DEFAULT: (u16, u16) = (80, 24);
+    let Some(pending) = app.try_state::<PendingSizes>() else {
+        return DEFAULT;
+    };
+    for _ in 0..30 {
+        if let Some((cols, rows)) = pending.get(session_id) {
+            return sanitize_pty_size(cols, rows);
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    DEFAULT
+}
+
 #[async_trait]
 impl SessionService for SshSession {
     async fn connect(&mut self, app: AppHandle, session_id: String) -> Result<(), SessionError> {
@@ -900,8 +929,17 @@ impl SessionService for SshSession {
             SessionError::Protocol("Failed to open SSH channel".into())
         })?;
 
+        let (pty_cols, pty_rows) = resolve_initial_pty_size(&app, &session_id).await;
         channel
-            .request_pty(true, "xterm-256color", 80, 24, 0, 0, &[])
+            .request_pty(
+                true,
+                "xterm-256color",
+                pty_cols as u32,
+                pty_rows as u32,
+                0,
+                0,
+                &[],
+            )
             .await
             .map_err(|e| {
                 log::error!("ssh: request_pty failed: {e}");
@@ -1072,6 +1110,26 @@ impl Drop for SshSession {
 mod tests {
     use super::*;
     use crate::commands::ssh_algorithms::AlgorithmEntry;
+
+    // -- sanitize_pty_size --
+
+    #[test]
+    fn sanitize_pty_size_passes_normal_dimensions_through() {
+        // The common wrap-ON case — a real measured width — must reach the
+        // device unchanged so its wrap column matches HoTTY's exactly.
+        assert_eq!(sanitize_pty_size(120, 40), (120, 40));
+        assert_eq!(sanitize_pty_size(80, 24), (80, 24));
+    }
+
+    #[test]
+    fn sanitize_pty_size_clamps_extremes() {
+        // Zero from a not-yet-laid-out pane is floored to a usable minimum.
+        assert_eq!(sanitize_pty_size(0, 0), (2, 1));
+        // The wrap-OFF sentinel (NO_WRAP_COLS = 5000) must not become the
+        // device's literal wrap column.
+        assert_eq!(sanitize_pty_size(5000, 40), (1000, 40));
+        assert_eq!(sanitize_pty_size(u16::MAX, u16::MAX), (1000, 1000));
+    }
 
     // -- connect_with_prompt_extension --
     // Real-time timers (no `start_paused`, which needs tokio's test-util feature).

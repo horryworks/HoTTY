@@ -12,7 +12,7 @@ use crate::services::local::{LocalConfig, LocalSession};
 use crate::services::log_manager::LogManager;
 use crate::services::serial::{SerialConfig, SerialSession};
 use crate::services::session_service::{
-    emit_session_error, SessionError, SessionOwners, SessionService,
+    emit_session_error, PendingSizes, SessionError, SessionOwners, SessionService,
 };
 use crate::services::ssh::{resolve_host_key_prompt, HostKeyDecision, SshConfig, SshSession};
 use crate::services::telnet::{TelnetConfig, TelnetSession};
@@ -88,6 +88,7 @@ pub async fn connect_session(
     state: State<'_, SessionState>,
     log_manager: State<'_, LogManager>,
     owners: State<'_, SessionOwners>,
+    pending: State<'_, PendingSizes>,
     session_id: String,
     protocol: String,
     config: Value,
@@ -221,7 +222,12 @@ pub async fn connect_session(
     // window, not all windows.
     owners.set(&session_id, window.label());
 
-    if let Err(e) = service.connect(app.clone(), session_id.clone()).await {
+    let connect_result = service.connect(app.clone(), session_id.clone()).await;
+    // The initial pty size (if the frontend reported one) has now been consumed
+    // by the pty allocation inside connect(); drop the rendezvous entry either
+    // way so it can't leak or be picked up by a later reconnect of the same id.
+    pending.remove(&session_id);
+    if let Err(e) = connect_result {
         log::error!("connect failed for {session_id}: {e}");
         emit_session_error(&app, &session_id, e.to_string());
         owners.remove(&session_id);
@@ -298,10 +304,12 @@ pub async fn disconnect_session(
     state: State<'_, SessionState>,
     log_manager: State<'_, LogManager>,
     owners: State<'_, SessionOwners>,
+    pending: State<'_, PendingSizes>,
     session_id: String,
 ) -> Result<(), String> {
     log_manager.stop_logging(&session_id).await;
     owners.remove(&session_id);
+    pending.remove(&session_id);
     // Remove from the map under the lock, then release the map lock BEFORE
     // awaiting disconnect() — a slow teardown drain must not block every other
     // session command for its duration.
@@ -340,15 +348,26 @@ pub async fn send_input(
 #[tauri::command]
 pub async fn term_resize(
     state: State<'_, SessionState>,
+    pending: State<'_, PendingSizes>,
     session_id: String,
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
+    // Always record the latest size first: while a session is still connecting
+    // it isn't in the map yet, and the SSH connect path reads this to size the
+    // INITIAL pty-req (devices like Huawei VRP honor only that, ignoring later
+    // window-change). The frontend only reports once it has a real measurement,
+    // so this is never the xterm placeholder width.
+    pending.set(&session_id, cols, rows);
     let shared = {
         let map = state.sessions.lock().await;
         map.get(&session_id).map(|(s, _)| s.clone())
     };
-    let shared = shared.ok_or_else(|| SessionError::NotFound.to_string())?;
+    // Not connected yet: the size is captured above for the initial pty-req, so
+    // a missing session here is expected mid-connect, not an error to surface.
+    let Some(shared) = shared else {
+        return Ok(());
+    };
     let mut s = shared.lock().await;
     s.resize(cols, rows).await.map_err(|e| e.to_string())
 }

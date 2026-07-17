@@ -65,7 +65,7 @@ use services::file_server::FileServerState;
 use services::iap_tunnel::GcloudCacheState;
 use services::log_manager::LogManager;
 use services::ping_monitor::PingMonitorState;
-use services::session_service::SessionOwners;
+use services::session_service::{PendingSizes, SessionOwners};
 use services::watch_buffer::WatchBufferState;
 use services::web_browser::WebBrowserState;
 
@@ -157,6 +157,7 @@ pub fn run() {
         .manage(WindowCounterState::new())
         .manage(WatchBufferState::new())
         .manage(SessionOwners::new())
+        .manage(PendingSizes::new())
         .manage(Arc::new(GcloudCacheState::new()))
         // When a window closes, tear down only the sessions it owned.
         .on_window_event(|window, event| {

@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.10-beta3
+
+This beta fixes a terminal-compatibility issue with network devices that lock their terminal width at login (such as Huawei USG / VRP): editing a command recalled from history no longer sends the cursor jumping to the line above.
+
+### Bug Fixes
+
+- **Editing a recalled long command no longer jumps the cursor to the previous line on devices that fix their terminal width at login (e.g. Huawei USG / VRP).** HoTTY always requested an 80×24 SSH terminal at connect and only sent your real window size afterward — but these devices ignore that later resize, so they wrapped and edited the command line at 80 columns while HoTTY displayed it wider, throwing Backspace off across the wrap boundary. HoTTY now sizes the initial SSH terminal to your actual window, so the device wraps and edits at the same width you see.
+
 ## v2.0.10-beta2
 
 This beta is a robustness and safety pass over AI Chat. **Stop** now reliably interrupts a streaming reply, the model list no longer gets stuck on an error right after sign-in, sign-in and sign-out behave correctly across providers, and only one AI Chat pane ever opens. It also tightens command auto-execution: network and kernel tools that can reconfigure the machine no longer auto-run their write subcommands.

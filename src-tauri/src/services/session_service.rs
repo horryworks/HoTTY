@@ -53,6 +53,44 @@ impl SessionOwners {
     }
 }
 
+/// The most recent terminal size `(cols, rows)` the frontend reported for each
+/// session id, recorded so an in-progress `connect` can adopt it for the INITIAL
+/// pty allocation instead of a hardcoded default. Some network devices (notably
+/// Huawei VRP) latch the terminal width from the pty-req and IGNORE later
+/// `window-change`, so a fixed `80x24` there leaves wrapped-line editing (history
+/// recall + backspace) offset from HoTTY's real width. Populated by `term_resize`,
+/// read by the SSH connect path, and cleared when the connect completes or the
+/// session ends.
+#[derive(Default)]
+pub struct PendingSizes {
+    inner: Mutex<HashMap<String, (u16, u16)>>,
+}
+
+impl PendingSizes {
+    pub fn new() -> Self {
+        Self {
+            inner: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Record the latest reported size for `session_id` (overwrites any prior).
+    pub fn set(&self, session_id: &str, cols: u16, rows: u16) {
+        self.inner
+            .lock()
+            .unwrap()
+            .insert(session_id.to_string(), (cols, rows));
+    }
+
+    /// The most recent size reported for `session_id`, if any.
+    pub fn get(&self, session_id: &str) -> Option<(u16, u16)> {
+        self.inner.lock().unwrap().get(session_id).copied()
+    }
+
+    pub fn remove(&self, session_id: &str) {
+        self.inner.lock().unwrap().remove(session_id);
+    }
+}
+
 /// Emit an event to the window that owns `session_id`, falling back to a global
 /// broadcast if the owner is unknown (e.g. before it is registered).
 fn emit_targeted<P: Serialize + Clone>(app: &AppHandle, session_id: &str, event: &str, payload: P) {
@@ -427,6 +465,27 @@ mod tests {
         owners.remove("s1");
         assert_eq!(owners.get("s1"), None);
         assert_eq!(owners.sessions_for("main"), vec!["s3".to_string()]);
+    }
+
+    #[test]
+    fn pending_sizes_record_latest_and_clear() {
+        let sizes = PendingSizes::new();
+        assert_eq!(sizes.get("s1"), None);
+
+        sizes.set("s1", 120, 40);
+        assert_eq!(sizes.get("s1"), Some((120, 40)));
+
+        // A later report for the same session overwrites the earlier one — the
+        // connect path must pick up the freshest measured size, not the first.
+        sizes.set("s1", 200, 50);
+        assert_eq!(sizes.get("s1"), Some((200, 50)));
+
+        sizes.set("s2", 80, 24);
+        assert_eq!(sizes.get("s2"), Some((80, 24)));
+
+        sizes.remove("s1");
+        assert_eq!(sizes.get("s1"), None);
+        assert_eq!(sizes.get("s2"), Some((80, 24)));
     }
 
     #[test]

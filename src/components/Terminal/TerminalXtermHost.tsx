@@ -51,6 +51,13 @@ const NO_WRAP_COLS = 5000;
  */
 export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // Whether the xterm renderer has produced at least one real cell measurement.
+  // Before that, `session.term.cols` is xterm's placeholder 80 — we must not
+  // report it to the backend, because the SSH connect path seeds the INITIAL
+  // pty-req from the first reported size, and a premature 80 is exactly what
+  // desyncs wrapped-line editing on devices that latch the pty width (e.g.
+  // Huawei VRP) and ignore later window-change.
+  const hasMeasuredRef = useRef(false);
   const terminalForeground = useSettingsStore((s) => s.terminalForeground);
   const terminalBackground = useSettingsStore((s) => s.terminalBackground);
   const terminalBackgroundInactive = useSettingsStore((s) => s.terminalBackgroundInactive);
@@ -98,25 +105,39 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
     const el = containerRef.current;
     if (!el) return;
     try {
+      const measured = computeDimensions();
       if (lineWrapEnabled) {
         el.scrollLeft = 0; // reset leftover horizontal scroll
-        const dim = computeDimensions();
-        if (dim && (dim.cols !== session.term.cols || dim.rows !== session.term.rows)) {
-          session.term.resize(dim.cols, dim.rows);
-        } else if (!dim) {
+        if (measured) {
+          if (measured.cols !== session.term.cols || measured.rows !== session.term.rows) {
+            session.term.resize(measured.cols, measured.rows);
+          }
+        } else {
           // Fallback to FitAddon if our compute failed (e.g. before first paint)
           session.fitAddon.fit();
         }
       } else {
-        const dim = computeDimensions() ?? session.fitAddon.proposeDimensions();
+        const dim = measured ?? session.fitAddon.proposeDimensions();
         if (dim) {
           const newCols = Math.max(dim.cols, NO_WRAP_COLS);
           session.term.resize(newCols, dim.rows);
         }
       }
 
-      const { cols, rows } = session.term;
-      tauriService.resize(session.id, cols, rows).catch(() => {});
+      // Only notify the backend once the renderer has produced a real cell
+      // measurement. Both our own compute and FitAddon's proposeDimensions read
+      // the same cell metrics, so either succeeding means "measured"; until then
+      // term.cols is xterm's placeholder 80. Reporting that placeholder would let
+      // the SSH connect path bake it into the INITIAL pty-req, which is exactly
+      // what desyncs wrapped-line editing on devices that latch the pty width and
+      // ignore later window-change (e.g. Huawei VRP). See hasMeasuredRef.
+      if (!hasMeasuredRef.current && (measured || session.fitAddon.proposeDimensions())) {
+        hasMeasuredRef.current = true;
+      }
+      if (hasMeasuredRef.current) {
+        const { cols, rows } = session.term;
+        tauriService.resize(session.id, cols, rows).catch(() => {});
+      }
     } catch {
       /* compute/resize can throw if element not in DOM yet */
     }

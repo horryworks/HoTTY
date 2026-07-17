@@ -190,6 +190,20 @@ describe('TerminalXtermHost', () => {
     expect(resize).toHaveBeenCalledWith('s1', 80, 24);
   });
 
+  it('does not report a size to the backend before the renderer has measured', () => {
+    // Regression guard for the initial-pty-size fix: the SSH connect path seeds
+    // the INITIAL pty-req from the first size the frontend reports, and devices
+    // that latch the pty width (e.g. Huawei VRP) ignore later window-change. So
+    // until the renderer has real cell metrics — here neither our own compute
+    // (no .xterm/cell metrics in jsdom) nor FitAddon can produce dimensions — we
+    // must not report xterm's placeholder 80.
+    useSettingsStore.getState().update('lineWrapEnabled', true);
+    const { session, fitAddon } = makeSession();
+    (fitAddon.proposeDimensions as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+    render(<TerminalXtermHost session={session} active={true} />);
+    expect(resize).not.toHaveBeenCalled();
+  });
+
   it('uses the cols=5000 trick when wrap is OFF', () => {
     useSettingsStore.getState().update('lineWrapEnabled', false);
     const { session, term } = makeSession();
