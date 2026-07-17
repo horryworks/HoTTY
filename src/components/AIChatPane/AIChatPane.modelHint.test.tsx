@@ -149,7 +149,8 @@ describe('AIChatPane model-select hint', () => {
     });
 
     it('does NOT show the hint when the model list fails to load (empty)', async () => {
-        // Empty result → modelLoadError banner shows instead; the hint would be
+        // Empty result → the fetch keeps retrying with backoff (and eventually
+        // surfaces the modelLoadError banner); either way the hint would be
         // pointless (nothing to select), so it stays hidden.
         vi.mocked(tauriService.aiListModels).mockResolvedValue([]);
 

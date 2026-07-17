@@ -83,6 +83,12 @@ type AiLoginRequest =
  * OAuth flow completes asynchronously in the system browser.
  */
 export async function aiAuthLogin(req: AiLoginRequest): Promise<void> {
+  // Supersede any in-flight silent auto-auth so its late resolution can't clobber
+  // this interactive sign-in's loading/authenticated state (isCurrent() goes false).
+  authEpoch++;
+  // The user is actively signing in — a stale "explicit logout" suppression flag
+  // must not linger to block the next auto re-auth of this provider.
+  localStorage.removeItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT);
   useAiAuthStore.setState({ isAuthLoading: true, authError: null });
   armAuthTimeout();
   try {
@@ -134,7 +140,13 @@ export async function aiAuthLogin(req: AiLoginRequest): Promise<void> {
  */
 export async function aiAuthLogout(): Promise<void> {
   clearAuthTimeout();
-  localStorage.setItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT, '1');
+  // Record WHICH provider was logged out, so the suppression is consumed only when
+  // that same provider's auto-auth effect runs — switching to a different, still
+  // authenticated provider must not be blocked by a stale logout of another one.
+  localStorage.setItem(
+    STORAGE_KEYS.AI_EXPLICIT_LOGOUT,
+    useSettingsStore.getState().activeAiProvider,
+  );
   try {
     await tauriService.aiAuthLogout();
   } catch (err) {
@@ -159,8 +171,12 @@ export function useAiAuthOwner(): void {
     // has superseded this run (guards the cross-window auto-auth race).
     const isCurrent = () => !cancelled && authEpoch === myEpoch;
 
-    // One-shot: an explicit logout suppresses exactly one auto re-auth.
-    const skipAutoAuth = !!localStorage.getItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT);
+    // One-shot: an explicit logout suppresses exactly one auto re-auth — but only
+    // for the provider that was logged out. Consume (remove) the flag only when it
+    // matches the now-active provider; a flag for a different provider is left for
+    // when that provider is reselected.
+    const loggedOutProvider = localStorage.getItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT);
+    const skipAutoAuth = !!loggedOutProvider && loggedOutProvider === activeAiProvider;
     if (skipAutoAuth) localStorage.removeItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT);
 
     const load = async () => {
@@ -224,7 +240,19 @@ export function useAiAuthOwner(): void {
       if (result.provider && result.provider !== useSettingsStore.getState().activeAiProvider) return;
       authEpoch++;
       clearAuthTimeout();
-      useAiAuthStore.getState().applyAuthResult(result.success);
+      if (result.success) {
+        useAiAuthStore.getState().applyAuthResult(true);
+      } else {
+        // A FAILED sign-in ATTEMPT doesn't necessarily mean signed-out: the backend
+        // may still hold a valid session (e.g. a mistyped re-login while already
+        // authenticated, or a failed attempt racing a successful silent auto-auth).
+        // Show the error, but reconcile isAuthenticated from the backend rather than
+        // force it false.
+        useAiAuthStore.setState({ isAuthLoading: false, authError: 'failed' });
+        void tauriService.aiAuthStatus()
+          .then((status) => { if (!cancelled) useAiAuthStore.setState({ isAuthenticated: status.authenticated }); })
+          .catch(() => { if (!cancelled) useAiAuthStore.setState({ isAuthenticated: false }); });
+      }
     }).then((fn) => { if (cancelled) fn(); else unlisteners.push(fn); })
       .catch((e) => logError('AI', 'Auth result listener setup failed', e));
 

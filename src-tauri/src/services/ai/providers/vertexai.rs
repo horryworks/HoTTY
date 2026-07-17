@@ -52,6 +52,12 @@ const NON_TEXT_MODEL_KEYWORDS: &[&str] = &[
 ];
 
 fn is_valid_model(model: &str) -> bool {
+    // The model is interpolated into the request URL, and `/` is allowed (publisher
+    // paths). Reject `..` so a crafted name can't path-traverse to another endpoint
+    // once the URL crate normalizes dot-segments.
+    if model.contains("..") {
+        return false;
+    }
     Regex::new(VALID_MODEL_PATTERN)
         .map(|re| re.is_match(model))
         .unwrap_or(false)
@@ -489,6 +495,12 @@ impl VertexAIProvider {
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_string();
+                    // A 200 with no access_token is malformed — don't store an empty
+                    // token (which would send `Authorization: Bearer ` and 401).
+                    if access_token.is_empty() {
+                        log::warn!("[vertexai] Token refresh: 200 but no access_token");
+                        return None;
+                    }
                     let expires_in = data.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(0);
 
                     self.token_data = Some(TokenData {
@@ -1153,6 +1165,7 @@ impl AIProvider for VertexAIProvider {
         message: &str,
         model: &str,
         system_instruction: Option<&str>,
+        cancel_token: CancellationToken,
     ) -> Result<(), String> {
         if !is_valid_model(model) {
             emit_chat_response(
@@ -1205,7 +1218,8 @@ impl AIProvider for VertexAIProvider {
             content: message.to_string(),
         });
 
-        let cancel_token = CancellationToken::new();
+        // Use the command-supplied token (registered outside the service lock so
+        // Stop can cancel mid-stream); keep a local copy for logout() to cancel.
         self.cancel_tokens
             .insert(session_id.to_string(), cancel_token.clone());
 
@@ -1393,17 +1407,17 @@ impl AIProvider for VertexAIProvider {
         self.chat_histories.remove(session_id);
     }
 
-    async fn list_locations(&self) -> Result<Vec<String>, String> {
-        let config = match &self.config {
-            Some(c) => c,
+    async fn list_locations(&mut self) -> Result<Vec<String>, String> {
+        // Refresh an expired access token first (list_locations is &mut self now)
+        // so region lookups don't silently return empty after the token expires.
+        let token = match self.get_valid_token().await {
+            Some(t) => t,
             None => return Ok(vec![]),
         };
 
-        // We need a valid token but list_locations takes &self, not &mut self.
-        // Use the current token if available.
-        let token = match &self.token_data {
-            Some(td) if !td.is_expired() => td.access_token.clone(),
-            _ => return Ok(vec![]),
+        let config = match &self.config {
+            Some(c) => c,
+            None => return Ok(vec![]),
         };
 
         let url = format!(
@@ -1453,15 +1467,18 @@ impl AIProvider for VertexAIProvider {
         Ok(locations)
     }
 
-    async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
-        let config = match &self.config {
-            Some(c) => c,
+    async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
+        // Refresh an expired access token first (mirrors send_message) so an
+        // expired token doesn't masquerade as "no models" and surface a spurious
+        // "Failed to retrieve the AI model list" error until the app is restarted.
+        let token = match self.get_valid_token().await {
+            Some(t) => t,
             None => return Ok(vec![]),
         };
 
-        let token = match &self.token_data {
-            Some(td) if !td.is_expired() => td.access_token.clone(),
-            _ => return Ok(vec![]),
+        let config = match &self.config {
+            Some(c) => c,
+            None => return Ok(vec![]),
         };
 
         let publishers = ["google", "anthropic", "meta", "mistral-ai", "cohere"];

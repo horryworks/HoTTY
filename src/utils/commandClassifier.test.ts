@@ -139,4 +139,40 @@ describe('classifyCommand', () => {
   it('rejects command substitution', () => {
     expect(classifyCommand('echo $(whoami)', wl).safe).toBe(false);
   });
+
+  describe('read/write network + kernel tools (whitelisted read-only, write rejected)', () => {
+    it('auto-allows read-only queries', () => {
+      expect(classifyCommand('ip addr show', wl).safe).toBe(true);
+      expect(classifyCommand('ip route show', wl).safe).toBe(true);
+      expect(classifyCommand('ip -s link', wl).safe).toBe(true);
+      expect(classifyCommand('ip route get 8.8.8.8', wl).safe).toBe(true);
+      expect(classifyCommand('ifconfig', wl).safe).toBe(true);
+      expect(classifyCommand('ifconfig eth0', wl).safe).toBe(true);
+      expect(classifyCommand('route -n', wl).safe).toBe(true);
+      expect(classifyCommand('arp -a', wl).safe).toBe(true);
+      expect(classifyCommand('netsh interface show interface', wl).safe).toBe(true);
+      expect(classifyCommand('sysctl -a', wl).safe).toBe(true);
+      expect(classifyCommand('sysctl net.ipv4.ip_forward', wl).safe).toBe(true);
+      expect(classifyCommand('dmesg', wl).safe).toBe(true);
+    });
+
+    it('rejects write / reconfiguration subcommands (must not auto-execute)', () => {
+      expect(classifyCommand('ip route del default', wl).safe).toBe(false);
+      expect(classifyCommand('ip addr add 10.0.0.1/24 dev eth0', wl).safe).toBe(false);
+      expect(classifyCommand('ip link set eth0 down', wl).safe).toBe(false);
+      expect(classifyCommand('ip route flush cache', wl).safe).toBe(false);
+      expect(classifyCommand('ifconfig eth0 down', wl).safe).toBe(false);
+      expect(classifyCommand('ifconfig eth0 192.168.1.1 netmask 255.255.255.0', wl).safe).toBe(false);
+      expect(classifyCommand('route add default gw 10.0.0.1', wl).safe).toBe(false);
+      expect(classifyCommand('route del default', wl).safe).toBe(false);
+      expect(classifyCommand('arp -d 10.0.0.5', wl).safe).toBe(false);
+      expect(classifyCommand('arp -s 10.0.0.5 aa:bb:cc:dd:ee:ff', wl).safe).toBe(false);
+      expect(classifyCommand('netsh interface ip set address name=Local static 10.0.0.1', wl).safe).toBe(false);
+      expect(classifyCommand('netsh advfirewall reset', wl).safe).toBe(false);
+      expect(classifyCommand('sysctl -w net.ipv4.ip_forward=0', wl).safe).toBe(false);
+      expect(classifyCommand('sysctl net.ipv4.ip_forward=1', wl).safe).toBe(false);
+      expect(classifyCommand('dmesg -C', wl).safe).toBe(false);
+      expect(classifyCommand('dmesg --clear', wl).safe).toBe(false);
+    });
+  });
 });

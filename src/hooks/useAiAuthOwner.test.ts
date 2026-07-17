@@ -69,8 +69,8 @@ describe('useAiAuthOwner — auto re-auth', () => {
     });
   });
 
-  it('consumes the one-shot AI_EXPLICIT_LOGOUT flag and skips auto-auth once', async () => {
-    localStorage.setItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT, '1');
+  it('consumes the one-shot AI_EXPLICIT_LOGOUT flag and skips auto-auth once (matching provider)', async () => {
+    localStorage.setItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT, 'openai');
     renderHook(() => useAiAuthOwner());
     await vi.waitFor(() => {
       // The backend provider is still switched…
@@ -79,6 +79,18 @@ describe('useAiAuthOwner — auto re-auth', () => {
     // …but no silent re-auth runs, and the flag is consumed.
     expect(tauriService.aiAuthAuto).not.toHaveBeenCalled();
     expect(localStorage.getItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT)).toBeNull();
+  });
+
+  it('does NOT consume a logout flag for a DIFFERENT provider (auto-auths normally)', async () => {
+    // Logged out of gemini, but the active provider is openai → the flag must not
+    // block openai's auto-auth, and must be left intact for when gemini is reselected.
+    localStorage.setItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT, 'gemini');
+    vi.mocked(tauriService.aiAuthAuto).mockResolvedValue(true);
+    renderHook(() => useAiAuthOwner());
+    await vi.waitFor(() => {
+      expect(tauriService.aiAuthAuto).toHaveBeenCalledWith({});
+    });
+    expect(localStorage.getItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT)).toBe('gemini');
   });
 
   it('auto-auths Gemini with DPAPI-decrypted stored credentials', async () => {
@@ -122,10 +134,31 @@ describe('useAiAuthOwner — event mirroring', () => {
     act(() => { h.onAiAuthResultCb.current?.({ success: true }); });
     expect(useAiAuthStore.getState().isAuthenticated).toBe(true);
 
-    act(() => { h.onAiAuthResultCb.current?.({ success: false }); });
-    const s = useAiAuthStore.getState();
-    expect(s.isAuthenticated).toBe(false);
-    expect(s.authError).toBe('failed');
+    // A failed attempt reconciles isAuthenticated from the backend (mocked
+    // authenticated:false here) rather than force-flipping it, and shows the error.
+    vi.mocked(tauriService.aiAuthStatus).mockResolvedValue({ authenticated: false });
+    await act(async () => { h.onAiAuthResultCb.current?.({ success: false }); });
+    await vi.waitFor(() => {
+      const s = useAiAuthStore.getState();
+      expect(s.isAuthenticated).toBe(false);
+      expect(s.authError).toBe('failed');
+    });
+  });
+
+  it('a failed attempt does NOT sign out when the backend is still authenticated', async () => {
+    renderHook(() => useAiAuthOwner());
+    await vi.waitFor(() => expect(h.onAiAuthResultCb.current).toBeTruthy());
+
+    act(() => { h.onAiAuthResultCb.current?.({ success: true }); });
+    expect(useAiAuthStore.getState().isAuthenticated).toBe(true);
+
+    // Backend session is still valid (e.g. a mistyped re-login while signed in).
+    vi.mocked(tauriService.aiAuthStatus).mockResolvedValue({ authenticated: true });
+    await act(async () => { h.onAiAuthResultCb.current?.({ success: false }); });
+    await vi.waitFor(() => {
+      expect(useAiAuthStore.getState().authError).toBe('failed');
+      expect(useAiAuthStore.getState().isAuthenticated).toBe(true);
+    });
   });
 
   it('ignores an ai-auth-result for a provider the user switched away from', async () => {
@@ -223,10 +256,12 @@ describe('aiAuthLogin', () => {
 });
 
 describe('aiAuthLogout', () => {
-  it('sets the one-shot flag, logs out on the backend, and resets the store', async () => {
+  it('sets the one-shot flag to the active provider, logs out on the backend, and resets the store', async () => {
+    h.settings.activeAiProvider = 'openai';
     act(() => { useAiAuthStore.setState({ isAuthenticated: true }); });
     await aiAuthLogout();
-    expect(localStorage.getItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT)).toBe('1');
+    // The flag records WHICH provider was logged out (per-provider suppression).
+    expect(localStorage.getItem(STORAGE_KEYS.AI_EXPLICIT_LOGOUT)).toBe('openai');
     expect(tauriService.aiAuthLogout).toHaveBeenCalledTimes(1);
     expect(useAiAuthStore.getState().isAuthenticated).toBe(false);
   });

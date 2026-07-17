@@ -1,5 +1,30 @@
 # Release Notes
 
+## v2.0.10-beta2
+
+This beta is a robustness and safety pass over AI Chat. **Stop** now reliably interrupts a streaming reply, the model list no longer gets stuck on an error right after sign-in, sign-in and sign-out behave correctly across providers, and only one AI Chat pane ever opens. It also tightens command auto-execution: network and kernel tools that can reconfigure the machine no longer auto-run their write subcommands.
+
+### Improvements
+
+- **Friendlier AI errors.** When a request to your AI provider fails, the chat now shows a short, plain message — *"An error occurred while communicating with <provider>. Please try again."* — instead of a raw technical error. The technical detail is written to the debug log for troubleshooting.
+
+### Bug Fixes
+
+- **Stop now reliably interrupts a streaming AI reply.** Pressing **Stop** while a response was streaming — and HoTTY's own stream watchdog — could get queued behind the very reply it was trying to cancel, so the reply kept going. Cancellation now runs independently of the stream and takes effect immediately; starting a new message also cancels a still-streaming previous one.
+- **The AI model list no longer gets stuck on "Failed to retrieve the AI model list."** Right after sign-in — before the network is back up on resume, or while your access token is still refreshing — the one-shot model fetch could fail and pin that error until you restarted HoTTY. HoTTY now refreshes an expired sign-in token before listing models and retries the fetch a few times with a short backoff before showing the error.
+- **Sign-in and sign-out now behave correctly across providers.** **Logout** now disconnects *every* AI provider rather than only the one currently selected (which previously left other providers' stored credentials to silently re-authenticate when you switched to them); signing out one provider no longer blocks HoTTY from automatically re-signing-in a *different*, still-authenticated provider; and a failed sign-in attempt while you are already signed in shows the error without wrongly flipping you to signed-out.
+- **Only one AI Chat pane opens, and closing it cleans up fully.** Choosing **AI Chat** from the Features menu now focuses the existing pane instead of opening a second one — two panes previously fought over terminal-watch capture. Closing the pane now stops everything it was watching and frees each tab's conversation history, so a watch can't linger or be resurrected after the pane is gone.
+- **Disconnecting a watched terminal no longer clears a still-open chat tab.** When several AI Chat tabs were linked to the same terminal and it disconnected, an out-of-date snapshot could close and wipe the history of a tab that should have survived. The surviving tab now keeps its conversation and re-links automatically when the terminal reconnects.
+- **Changing the watch buffer size now applies to sessions you're already watching**, not just ones you link afterward.
+- **Internal notes to the AI are no longer lost when they arrive together.** Terminal output, "not connected" notes and decline notes that HoTTY sends to the AI on your behalf are now queued, so several arriving while a reply is still streaming can no longer overwrite each other — every one reaches the model.
+- **The AI Chat pane's background updates immediately** when you change the terminal background or theme, instead of waiting for the next unrelated refresh.
+
+### Security
+
+- **AI auto-execute no longer fast-tracks network/kernel *write* commands.** Tools that are safe to query but can also reconfigure the machine — `ip`, `ifconfig`, `route`, `arp`, `netsh`, `sysctl` and `dmesg` — stay on the auto-execute Whitelist only for their read-only forms. Their write subcommands (for example `ip route del`, `ifconfig eth0 down`, `route add`/`del`, `arp -d`/`-s`, `netsh set`/`add`/`delete`/`reset`, `sysctl -w`, `dmesg -c`/`--clear`) are no longer auto-run and now wait for your confirmation.
+- **A hidden second command after a carriage return can't slip past the Blacklist.** The Blacklist check now treats a bare carriage return as a command boundary — the same as the Whitelist and the terminal itself — so a blacklisted command tucked after a `\r` is caught instead of being shielded by a benign first token.
+- **Linking a terminal to a chat now asks for data-sharing consent** the first time, the same as turning on Watch — because linking a live terminal streams its output to your AI provider. (Unlinking sends nothing and is never gated.)
+
 ## v2.0.10-beta1
 
 This beta adds a **Don't Execute** button so you can decline an AI-suggested command in one click — the AI is told and can offer a different approach — and fixes a set of AI Chat issues: each chat tab now keeps its own conversation, the *"select a model"* hint no longer flashes while models are loading, and stopping a response no longer leaves HoTTY's internal text in the message box.

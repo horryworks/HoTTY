@@ -229,6 +229,7 @@ impl AIProvider for AnthropicProvider {
         message: &str,
         model: &str,
         system_instruction: Option<&str>,
+        cancel_token: CancellationToken,
     ) -> Result<(), String> {
         if !is_valid_model(model) {
             emit_chat_response(
@@ -288,7 +289,8 @@ impl AIProvider for AnthropicProvider {
                 .insert("system".into(), serde_json::json!(sys));
         }
 
-        let cancel_token = CancellationToken::new();
+        // Use the command-supplied token (registered outside the service lock so
+        // Stop can cancel mid-stream); keep a local copy for logout() to cancel.
         self.cancel_tokens
             .insert(session_id.to_string(), cancel_token.clone());
 
@@ -297,7 +299,7 @@ impl AIProvider for AnthropicProvider {
 
         log::debug!("[anthropic] Sending message, model={model}");
 
-        let response = self
+        let response = match self
             .http_client
             .post("https://api.anthropic.com/v1/messages")
             .header("Content-Type", "application/json")
@@ -306,7 +308,30 @@ impl AIProvider for AnthropicProvider {
             .body(body.to_string())
             .send()
             .await
-            .map_err(|e| format!("Anthropic request failed: {e}"))?;
+        {
+            Ok(resp) => resp,
+            Err(e) => {
+                // Transport failure (DNS/TCP/TLS/timeout). Emit an error, roll back
+                // the just-pushed user turn, and clean up — a bare `?` here left the
+                // history with a dangling user message (Anthropic then 400s on the
+                // next send because roles must alternate) and leaked the cancel token.
+                log::error!("[anthropic] request failed: {e}");
+                emit_chat_response(
+                    &app_clone,
+                    ChatResponseData {
+                        session_id: sid.clone(),
+                        response_type: "error".into(),
+                        content:
+                            "An error occurred while communicating with Anthropic. Please try again."
+                                .into(),
+                        usage_metadata: None,
+                    },
+                );
+                pop_trailing_user(self.chat_histories.get_mut(&sid));
+                self.cancel_tokens.remove(&sid);
+                return Ok(());
+            }
+        };
 
         if !response.status().is_success() {
             let error_body = response
@@ -531,7 +556,7 @@ impl AIProvider for AnthropicProvider {
         self.chat_histories.remove(session_id);
     }
 
-    async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
+    async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
         let api_key = match &self.api_key {
             Some(k) => k,
             None => return Ok(fallback_models()),

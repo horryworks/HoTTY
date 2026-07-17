@@ -175,6 +175,7 @@ describe('AISettingsTab', () => {
   });
 
   it('logs out through the confirm dialog', async () => {
+    act(() => { useSettingsStore.getState().update('activeAiProvider', 'openai'); });
     act(() => { useAiAuthStore.setState({ isAuthenticated: true }); });
     render(<AISettingsTab />);
     fireEvent.click(screen.getByText('Logout', { selector: 'button' }));
@@ -187,7 +188,8 @@ describe('AISettingsTab', () => {
       expect(tauriService.aiAuthLogout).toHaveBeenCalledTimes(1);
     });
     expect(useAiAuthStore.getState().isAuthenticated).toBe(false);
-    expect(localStorage.getItem('hotty_ai_explicit_logout')).toBe('1');
+    // The suppression flag records the logged-out provider (per-provider suppression).
+    expect(localStorage.getItem('hotty_ai_explicit_logout')).toBe('openai');
   });
 
   it('renders device response timeout input with default value', () => {

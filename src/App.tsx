@@ -106,15 +106,20 @@ function App() {
     const states = aiChatStatesRef.current;
     if (!states) return;
     for (const [aiPaneId, st] of states.entries()) {
-      for (const tab of st.tabs) {
-        if (tab.linkedSessionId !== sessionId) continue;
-        if (st.tabs.length <= 1) {
-          // Last tab in the pane — unlink only so the pane keeps a usable tab.
-          // Retain the binding key so a reconnect to the same target can
-          // auto-rebind this tab (see the reconnect effect below).
-          setTabLinkRef.current?.(aiPaneId, tab.id, undefined, { retainBindingKey: true });
-        } else {
+      const linkedTabs = st.tabs.filter((t) => t.linkedSessionId === sessionId);
+      if (linkedTabs.length === 0) continue;
+      // Track the pane's tab count as we go (the state snapshot is stale after the
+      // first close). Close each linked tab while the pane will still have another
+      // tab left; UNLINK the one that would otherwise be the last (keeps the pane
+      // usable and — with retainBindingKey — auto-rebindable on reconnect). Deciding
+      // from the stale snapshot length wrongly closed+wiped the survivor's history.
+      let remaining = st.tabs.length;
+      for (const tab of linkedTabs) {
+        if (remaining > 1) {
           closeTabRef.current?.(aiPaneId, tab.id);
+          remaining--;
+        } else {
+          setTabLinkRef.current?.(aiPaneId, tab.id, undefined, { retainBindingKey: true });
         }
       }
     }
@@ -168,6 +173,9 @@ function App() {
   const language = useSettingsStore((s) => s.language);
   const themeId = useSettingsStore((s) => s.theme);
   const fontSize = useSettingsStore((s) => s.fontSize);
+  // Subscribed (not a getState() snapshot) so a theme/background change re-renders
+  // the AI Chat pane immediately instead of on the next unrelated App re-render.
+  const terminalBackground = useSettingsStore((s) => s.terminalBackground);
   const fontFamily = useSettingsStore((s) => s.fontFamily);
   const sidebarPosition = useSettingsStore((s) => s.sidebarPosition);
   const enabledFeatures = useSettingsStore((s) => s.enabledFeatures);
@@ -420,8 +428,11 @@ function App() {
     aiChatStates,
     updateAiChatState,
     updateTabById,
+    enqueuePendingMessage,
+    dequeuePendingMessage,
     addTab,
     closeTab,
+    removeAiChatState,
     setActiveTab,
     setTabLink,
     sendMessage: aiSendMessage,
@@ -484,6 +495,16 @@ function App() {
     watchingSessionIdsRef.current = allLinked;
     setWatchingSessionId((prevId) => (prevId === activeDerived ? prevId : activeDerived));
   }, [aiChatStates]);
+
+  // Re-issue the buffer cap to already-watched sessions when the setting changes
+  // (setWatching updates entry.limit on re-call). Without this, the new limit only
+  // reached sessions linked AFTER the change.
+  const watchBufferLimit = useSettingsStore((s) => s.watchBufferLimit);
+  useEffect(() => {
+    for (const id of watchingSessionIdsRef.current) {
+      void tauriService.setWatching(id, true, watchBufferLimit);
+    }
+  }, [watchBufferLimit]);
 
   // Auto-rebind orphaned AI Chat tabs to a reconnected terminal. When a watched
   // session drops, its tab is unlinked but RETAINS its config-derived binding key
@@ -725,13 +746,16 @@ function App() {
       }
       if (type === 'ai-chat') {
         clearRunCommandIntervals(id);
-        // Disable backend capture for EVERY session this pane was watching (not
-        // just the active tab's), else those watch entries leak after close.
+        // Disable backend capture for EVERY session this (singleton) pane was
+        // watching — else those watch entries leak after close.
         for (const sid of watchingSessionIdsRef.current) {
           void tauriService.setWatching(sid, false, 0);
         }
         watchingSessionIdsRef.current = new Set();
         setWatchingSessionId(null);
+        // Free the pane's per-tab backend histories and drop its in-memory state,
+        // so a later watch-diff can't resurrect capture for a pane that's gone.
+        removeAiChatState(id);
       }
       setFeaturePanes((prev) => {
         const next = new Map(prev);
@@ -761,6 +785,17 @@ function App() {
     });
     addSessionToStore(id, type === 'file-explorer' ? { preferSidebar: true } : undefined);
   }, [addSessionToStore]);
+
+  // Open (or focus) the singleton AI Chat pane. Routes through createAiChatPane so
+  // the Features menu can't spawn a SECOND AI pane — a duplicate would fight over
+  // watch capture and get torn down when either one closes.
+  const handleOpenAiChatPane = useCallback(() => {
+    const id = createAiChatPaneRef.current?.();
+    if (!id) return;
+    const alloc = usePaneStore.getState().paneAllocations;
+    const paneEntry = Object.entries(alloc).find(([, sid]) => sid === id);
+    if (paneEntry) setActivePaneId(paneEntry[0]);
+  }, [setActivePaneId]);
 
   const handleUpdateFeatureDisplayName = useCallback((id: string, displayName: string) => {
     setFeaturePanes((prev) => {
@@ -911,9 +946,8 @@ function App() {
             error: String(err),
             originatingTabId,
           });
-          updateTabById(paneId, originatingTabId, {
-            pendingMessage: notConnectedNote(cmd, sessionsRef.current.get(targetId)?.status),
-          });
+          enqueuePendingMessage(paneId, originatingTabId,
+            notConnectedNote(cmd, sessionsRef.current.get(targetId)?.status));
         });
       }, index * 150);
     });
@@ -1013,7 +1047,7 @@ function App() {
               void tauriService.clearWatchBuffer(targetId);
               // Redact secrets from the captured output before it egresses to the AI.
               const outputText = `Terminal Output (Command: ${cmd}):\n${redactSecrets(newContent.trim())}`;
-              updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
+              enqueuePendingMessage(paneId, originatingTabId, outputText);
             } else {
               // 'idle' or 'safety'
               const isIdle = result.action === 'idle';
@@ -1032,7 +1066,7 @@ function App() {
                 : `[command exceeded safety cap of 30 minutes]`;
               const captured = redactSecrets(newContent.trim());
               const outputText = `Terminal Output (Command: ${cmd}):\n${captured}\n${reason}`;
-              updateTabById(paneId, originatingTabId, { pendingMessage: outputText });
+              enqueuePendingMessage(paneId, originatingTabId, outputText);
             }
           } finally {
             polling = false;
@@ -1111,9 +1145,8 @@ function App() {
           stillLinked,
           originatingTabId,
         });
-        updateTabById(paneId, originatingTabId, {
-          pendingMessage: notConnectedNote(parsed.rest || cmd, rec?.status),
-        });
+        enqueuePendingMessage(paneId, originatingTabId,
+          notConnectedNote(parsed.rest || cmd, rec?.status));
         return;
       }
 
@@ -1126,9 +1159,8 @@ function App() {
         // Re-enter the decision so a chained leading sleep in `rest` is delayed too.
         onRunCommandImpl(targetId, parsed.rest, originatingTabId, paneId);
       } else {
-        updateTabById(paneId, originatingTabId, {
-          pendingMessage: syntheticDelayMessage(cmd, clamped, parsed.delayMs, wasClamped),
-        });
+        enqueuePendingMessage(paneId, originatingTabId,
+          syntheticDelayMessage(cmd, clamped, parsed.delayMs, wasClamped));
       }
     }, clamped);
     set.add(timer);
@@ -1160,9 +1192,7 @@ function App() {
         status: targetRec?.status ?? 'missing',
         originatingTabId,
       });
-      updateTabById(paneId, originatingTabId, {
-        pendingMessage: notConnectedNote(cmd, targetRec?.status),
-      });
+      enqueuePendingMessage(paneId, originatingTabId, notConnectedNote(cmd, targetRec?.status));
       return;
     }
 
@@ -1266,6 +1296,9 @@ function App() {
               chatState={aiChatStates.get(featureInfo.id)}
               onChatStateChange={(newState) => updateAiChatState(featureInfo.id, newState)}
               onUpdateTabById={(tabId, partial) => updateTabById(featureInfo.id, tabId, partial)}
+              onEnqueuePending={(tabId, message) => enqueuePendingMessage(featureInfo.id, tabId, message)}
+              onDequeuePending={(tabId) => dequeuePendingMessage(featureInfo.id, tabId)}
+              ensureConsent={ensureAiConsent}
               onAddTab={(initialLink) => {
                 const linkId = initialLink ?? lastTerminalSessionId ?? undefined;
                 addTab(featureInfo.id, linkId);
@@ -1279,13 +1312,23 @@ function App() {
               }
               onSendMessage={(text) => aiSendMessage(featureInfo.id, text)}
               aiPersonas={aiPersonas}
-              terminalBackground={useSettingsStore.getState().terminalBackground}
+              terminalBackground={terminalBackground}
               linkableSessions={linkableSessions}
               onRefreshSessions={refreshCrossWindowSessions}
               onLinkSession={(sid) => {
                 const st = aiChatStates.get(featureInfo.id);
                 const activeTab = st ? getActiveTab(st) : undefined;
-                if (activeTab) setTabLink(featureInfo.id, activeTab.id, sid);
+                if (!activeTab) return;
+                // Unlinking egresses nothing; link first-time gates on data-sharing
+                // consent (linking a live terminal streams its output to the AI,
+                // same as enabling Watch — see runToggleWatch).
+                if (sid === undefined) {
+                  setTabLink(featureInfo.id, activeTab.id, undefined);
+                  return;
+                }
+                void ensureAiConsent().then((ok) => {
+                  if (ok) setTabLink(featureInfo.id, activeTab.id, sid);
+                });
               }}
               onOpenSettings={() => openSettings('ai')}
             />
@@ -1331,7 +1374,7 @@ function App() {
             onNewTextEditor={enabledFeatures['text-editor'] ? () => handleNewFeaturePane('text-editor') : undefined}
             onNewFileExplorer={enabledFeatures['file-explorer'] ? () => handleNewFeaturePane('file-explorer') : undefined}
             onNewFileServer={enabledFeatures['file-server'] ? () => handleNewFeaturePane('file-server') : undefined}
-            onNewAiChat={enabledFeatures['ai-chat'] ? () => handleNewFeaturePane('ai-chat') : undefined}
+            onNewAiChat={enabledFeatures['ai-chat'] ? handleOpenAiChatPane : undefined}
           />
           <div className="content-area">
             <Sidebar

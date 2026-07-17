@@ -71,6 +71,33 @@ const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
     rpm: [
         { patterns: [/(?:^|\s)(?:-i|--install|-e|--erase|-U|--upgrade)\b/], reason: 'rpm package modification' },
     ],
+    // Read/WRITE network + kernel tools: whitelisted for their read-only queries
+    // (`ip addr show`, `netsh interface show`, `sysctl -a`), but their write
+    // subcommands reconfigure the box / cut the management link and must never
+    // auto-execute. Reject the write verbs; anything else stays fast-path safe.
+    ip: [
+        { patterns: [/(?:^|\s)(?:add|del|delete|change|replace|flush|set|append|prepend)\b/], reason: 'ip write subcommand' },
+    ],
+    ifconfig: [
+        // A bare query (`ifconfig`, `ifconfig eth0`) is safe; any config verb is not.
+        { patterns: [/(?:^|\s)(?:up|down|add|del|netmask|mtu|broadcast|promisc|-promisc|arp|-arp|hw)\b/], reason: 'ifconfig interface reconfiguration' },
+    ],
+    route: [
+        { patterns: [/(?:^|\s)(?:add|del|delete|change|flush)\b/], reason: 'route table modification' },
+    ],
+    arp: [
+        { patterns: [/(?:^|\s)-[ds]\b/], reason: 'arp cache modification (-d/-s)' },
+    ],
+    netsh: [
+        { patterns: [/(?:^|\s)(?:set|add|delete|reset)\b/], reason: 'netsh configuration change' },
+    ],
+    sysctl: [
+        // `sysctl -w key=val` or `sysctl key=val` writes kernel parameters.
+        { patterns: [/(?:^|\s)-w\b/, /=/], reason: 'sysctl kernel parameter write' },
+    ],
+    dmesg: [
+        { patterns: [/(?:^|\s)(?:-c|-C|--clear|--read-clear)\b/], reason: 'dmesg ring-buffer clear' },
+    ],
 };
 
 // ── Runner / interpreter commands ────────────────────────────────────────────

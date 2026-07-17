@@ -223,6 +223,7 @@ impl AIProvider for OpenAIProvider {
         message: &str,
         model: &str,
         system_instruction: Option<&str>,
+        cancel_token: CancellationToken,
     ) -> Result<(), String> {
         if !is_valid_model(model) {
             emit_chat_response(
@@ -272,7 +273,8 @@ impl AIProvider for OpenAIProvider {
             messages.push(serde_json::json!({"role": &msg.role, "content": &msg.content}));
         }
 
-        let cancel_token = CancellationToken::new();
+        // Use the command-supplied token (registered outside the service lock so
+        // Stop can cancel mid-stream); keep a local copy for logout() to cancel.
         self.cancel_tokens
             .insert(session_id.to_string(), cancel_token.clone());
 
@@ -288,7 +290,7 @@ impl AIProvider for OpenAIProvider {
 
         log::debug!("[openai] Sending message, model={model}");
 
-        let response = self
+        let response = match self
             .http_client
             .post("https://api.openai.com/v1/chat/completions")
             .header("Content-Type", "application/json")
@@ -296,7 +298,28 @@ impl AIProvider for OpenAIProvider {
             .body(body.to_string())
             .send()
             .await
-            .map_err(|e| format!("OpenAI request failed: {e}"))?;
+        {
+            Ok(resp) => resp,
+            Err(e) => {
+                // Transport failure — emit an error and roll back the pushed user
+                // turn / cancel token, instead of a bare `?` that leaks both.
+                log::error!("[openai] request failed: {e}");
+                emit_chat_response(
+                    &app_clone,
+                    ChatResponseData {
+                        session_id: sid.clone(),
+                        response_type: "error".into(),
+                        content:
+                            "An error occurred while communicating with OpenAI. Please try again."
+                                .into(),
+                        usage_metadata: None,
+                    },
+                );
+                pop_trailing_user(self.chat_histories.get_mut(&sid));
+                self.cancel_tokens.remove(&sid);
+                return Ok(());
+            }
+        };
 
         if !response.status().is_success() {
             let error_body = response
@@ -479,7 +502,7 @@ impl AIProvider for OpenAIProvider {
         self.chat_histories.remove(session_id);
     }
 
-    async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
+    async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
         let api_key = match &self.api_key {
             Some(k) => k,
             None => return Ok(fallback_models()),

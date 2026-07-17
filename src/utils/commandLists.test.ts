@@ -44,6 +44,13 @@ describe('matchBlacklist', () => {
         expect(matchBlacklist('show version\nshow interfaces', DEFAULT_BLACKLIST).matched).toBe(false);
     });
 
+    it('splits on CR and CRLF too, not just LF (PTY line discipline)', () => {
+        // A token hidden after a bare CR must still be caught.
+        expect(matchBlacklist('show version\rsudo reboot', ['sudo']).matched).toBe(true);
+        expect(matchBlacklist('show version\r\nreboot', DEFAULT_BLACKLIST).matched).toBe(true);
+        expect(matchBlacklist('ls -la\rrm -rf /', DEFAULT_BLACKLIST).matched).toBe(true);
+    });
+
     it('default blacklist catches catastrophic commands', () => {
         expect(matchBlacklist('rm -rf /', DEFAULT_BLACKLIST).matched).toBe(true);
         expect(matchBlacklist('sudo apt install nginx', DEFAULT_BLACKLIST).matched).toBe(true);

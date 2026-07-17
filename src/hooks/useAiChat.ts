@@ -29,7 +29,15 @@ export interface ChatTab {
    * (Watch toggle-off).
    */
   linkBindingKey?: string;
-  pendingMessage?: string;
+  /**
+   * FIFO queue of machine-generated messages waiting to be dispatched to the AI
+   * (Network-Expert kickoff, terminal-output envelopes, decline / not-connected
+   * notes, sleep-delay results). A QUEUE rather than a single slot so two
+   * producers writing while a stream blocks the send loop can't overwrite each
+   * other — every fact reaches the model. Enqueue via `enqueuePendingMessage`;
+   * the send loop dispatches index 0 then `dequeuePendingMessage`s it.
+   */
+  pendingMessages?: string[];
   /**
    * Active client-side sleep delay for an AI-issued command (see App.tsx
    * scheduleSleepDelay). Drives the "⏳ Waiting Ns…" indicator on the matching
@@ -78,8 +86,14 @@ interface UseAiChatReturn {
   updateAiChatState: (aiSessionId: string, newState: Partial<AiChatState>) => void;
   updateActiveTab: (aiSessionId: string, partial: Partial<ChatTab>) => void;
   updateTabById: (aiSessionId: string, tabId: string, partial: Partial<ChatTab>) => void;
+  /** Append a machine-generated message to a tab's pending-send queue. */
+  enqueuePendingMessage: (aiSessionId: string, tabId: string, message: string) => void;
+  /** Drop the first message from a tab's pending-send queue (after dispatch). */
+  dequeuePendingMessage: (aiSessionId: string, tabId: string) => void;
   addTab: (aiSessionId: string, initialLinkSessionId?: string) => string;
   closeTab: (aiSessionId: string, tabId: string) => void;
+  /** Remove an entire pane's chat state + free its per-tab backend histories. */
+  removeAiChatState: (aiSessionId: string) => void;
   setActiveTab: (aiSessionId: string, tabId: string) => void;
   setTabLink: (aiSessionId: string, tabId: string, linkedSessionId: string | undefined, opts?: { retainBindingKey?: boolean }) => void;
   sendMessage: (aiSessionId: string, text: string) => Promise<void>;
@@ -234,6 +248,35 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     });
   }, []);
 
+  const enqueuePendingMessage = useCallback((aiSessionId: string, tabId: string, message: string) => {
+    setAiChatStates((prev) => {
+      const next = new Map(prev);
+      const existing = prev.get(aiSessionId);
+      if (!existing) return prev;
+      if (!existing.tabs.find(t => t.id === tabId)) return prev;
+      const updatedTabs = existing.tabs.map(t =>
+        t.id === tabId ? { ...t, pendingMessages: [...(t.pendingMessages ?? []), message] } : t
+      );
+      next.set(aiSessionId, { ...existing, tabs: updatedTabs });
+      return next;
+    });
+  }, []);
+
+  const dequeuePendingMessage = useCallback((aiSessionId: string, tabId: string) => {
+    setAiChatStates((prev) => {
+      const next = new Map(prev);
+      const existing = prev.get(aiSessionId);
+      if (!existing) return prev;
+      const tab = existing.tabs.find(t => t.id === tabId);
+      if (!tab || !tab.pendingMessages || tab.pendingMessages.length === 0) return prev;
+      const updatedTabs = existing.tabs.map(t =>
+        t.id === tabId ? { ...t, pendingMessages: t.pendingMessages!.slice(1) } : t
+      );
+      next.set(aiSessionId, { ...existing, tabs: updatedTabs });
+      return next;
+    });
+  }, []);
+
   const setActiveTab = useCallback((aiSessionId: string, tabId: string) => {
     setAiChatStates((prev) => {
       const next = new Map(prev);
@@ -298,6 +341,24 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     });
   }, []);
 
+  /** Remove an entire AI-chat pane's state (on pane close): free every tab's
+   *  per-tab backend conversation history and drop the in-memory entry so a
+   *  future watch-diff can't resurrect capture for a pane that no longer exists. */
+  const removeAiChatState = useCallback((aiSessionId: string) => {
+    const existing = aiChatStatesRef.current.get(aiSessionId);
+    if (existing) {
+      for (const t of existing.tabs) {
+        tauriService.aiChatClear(aiBackendSessionId(aiSessionId, t.id)).catch(() => {});
+      }
+    }
+    setAiChatStates((prev) => {
+      if (!prev.has(aiSessionId)) return prev;
+      const next = new Map(prev);
+      next.delete(aiSessionId);
+      return next;
+    });
+  }, []);
+
   const setTabLink = useCallback((aiSessionId: string, tabId: string, linkedSessionId: string | undefined, opts?: { retainBindingKey?: boolean }) => {
     setAiChatStates((prev) => {
       const next = new Map(prev);
@@ -328,10 +389,12 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
   const updateAiChatStateRef = useRef(updateAiChatState);
   const updateActiveTabRef = useRef(updateActiveTab);
   const setTabLinkRef = useRef(setTabLink);
+  const enqueuePendingMessageRef = useRef(enqueuePendingMessage);
   useEffect(() => {
     updateAiChatStateRef.current = updateAiChatState;
     updateActiveTabRef.current = updateActiveTab;
     setTabLinkRef.current = setTabLink;
+    enqueuePendingMessageRef.current = enqueuePendingMessage;
   });
 
   const resolvePersonaPrompt = useCallback((expertiseLabel?: string): string => {
@@ -473,7 +536,10 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     const userPrompt = `${question}\n\n\`\`\`\n${finalSelection}\n\`\`\``;
 
     updateAiChatStateRef.current(aiPaneId, { systemInstruction });
-    updateActiveTabRef.current(aiPaneId, { pendingMessage: userPrompt });
+    // Resolve the active tab from the state we're operating on (aiChatStatesRef is
+    // updated in a post-commit effect, so it can be stale right after a create).
+    const targetTabId = getActiveTab(existingState)?.id;
+    if (targetTabId) enqueuePendingMessageRef.current(aiPaneId, targetTabId, userPrompt);
   }, [resolveTargetTerminal, resolvePersonaPrompt]);
 
   return {
@@ -481,8 +547,11 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     updateAiChatState,
     updateActiveTab,
     updateTabById,
+    enqueuePendingMessage,
+    dequeuePendingMessage,
     addTab,
     closeTab,
+    removeAiChatState,
     setActiveTab,
     setTabLink,
     sendMessage,

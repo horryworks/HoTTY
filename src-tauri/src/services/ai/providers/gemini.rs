@@ -97,6 +97,39 @@ fn pop_trailing_user(history: Option<&mut Vec<ChatMessage>>) {
     }
 }
 
+/// Minimal `application/x-www-form-urlencoded` value decoder for the OAuth callback
+/// query string (avoids pulling in the `url` crate). Decodes `%XX` escapes and `+`
+/// as space — Google's authorization code arrives with `%2F` for its `/`.
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => {
+                let hi = (bytes[i + 1] as char).to_digit(16);
+                let lo = (bytes[i + 2] as char).to_digit(16);
+                if let (Some(hi), Some(lo)) = (hi, lo) {
+                    out.push((hi * 16 + lo) as u8);
+                    i += 3;
+                    continue;
+                }
+                out.push(b'%');
+                i += 1;
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// Extract the first text part from a non-streaming `generateContent` response
 /// body. Pulled out so the classification parsing path is unit-testable.
 fn extract_first_text(data: &Value) -> Option<&str> {
@@ -116,6 +149,17 @@ pub struct GeminiProvider {
     cancel_tokens: HashMap<String, CancellationToken>,
     app_data_dir: PathBuf,
     http_client: reqwest::Client,
+}
+
+/// Outcome of an OAuth access-token refresh. Distinguishes a DEFINITIVE failure
+/// (the refresh token is dead — `invalid_grant`) from a TRANSIENT one (network
+/// down, timeout, 5xx). Only a definitive failure should destroy the persisted
+/// credentials; a transient failure must keep them so a later launch can retry.
+#[derive(Debug, PartialEq, Eq)]
+enum TokenRefresh {
+    Ok,
+    Transient,
+    Invalid,
 }
 
 impl GeminiProvider {
@@ -197,22 +241,23 @@ impl GeminiProvider {
         Ok(true)
     }
 
-    async fn refresh_access_token(&mut self) -> bool {
+    async fn refresh_access_token(&mut self) -> TokenRefresh {
+        // Missing local material is a definitive failure (nothing to retry with).
         let refresh_token = match self
             .token_data
             .as_ref()
             .and_then(|t| t.refresh_token.as_ref())
         {
             Some(rt) => rt.clone(),
-            None => return false,
+            None => return TokenRefresh::Invalid,
         };
         let client_id = match &self.client_id {
             Some(id) => id.clone(),
-            None => return false,
+            None => return TokenRefresh::Invalid,
         };
         let client_secret = match &self.client_secret {
             Some(s) => s.clone(),
-            None => return false,
+            None => return TokenRefresh::Invalid,
         };
 
         let params = [
@@ -238,6 +283,12 @@ impl GeminiProvider {
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_string();
+                    // A 200 with no access_token is a malformed response — treat as
+                    // transient (don't destroy the refresh token over it).
+                    if access_token.is_empty() {
+                        log::warn!("[gemini] Token refresh: 200 but no access_token");
+                        return TokenRefresh::Transient;
+                    }
                     let expires_in = data.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(0);
 
                     if let Some(td) = &mut self.token_data {
@@ -246,17 +297,33 @@ impl GeminiProvider {
                         td.obtained_at = now_millis();
                     }
                     let _ = self.save_token();
-                    return true;
+                    return TokenRefresh::Ok;
                 }
-                false
+                TokenRefresh::Transient
             }
-            _ => false,
+            // 4xx (invalid_grant / revoked) = the refresh token is dead.
+            Ok(resp) if resp.status().is_client_error() => {
+                log::warn!("[gemini] Token refresh rejected: {}", resp.status());
+                TokenRefresh::Invalid
+            }
+            // 5xx or a network/timeout error = transient; keep credentials.
+            Ok(resp) => {
+                log::warn!(
+                    "[gemini] Token refresh transient failure: {}",
+                    resp.status()
+                );
+                TokenRefresh::Transient
+            }
+            Err(e) => {
+                log::warn!("[gemini] Token refresh network error: {e}");
+                TokenRefresh::Transient
+            }
         }
     }
 
     async fn get_valid_token(&mut self) -> Option<String> {
         let td = self.token_data.as_ref()?;
-        if td.is_expired() && !self.refresh_access_token().await {
+        if td.is_expired() && self.refresh_access_token().await != TokenRefresh::Ok {
             return None;
         }
         self.token_data.as_ref().map(|t| t.access_token.clone())
@@ -345,6 +412,11 @@ impl AIProvider for GeminiProvider {
 
         // Wait for callback with 5-minute timeout
         let result = tokio::time::timeout(std::time::Duration::from_secs(300), async {
+          // Accept in a LOOP: browsers open speculative preconnections and probe
+          // /favicon.ico, and any of those could be the first accepted connection.
+          // Ignore stray/mismatched requests and keep waiting for the real callback
+          // (or the 5-minute timeout) instead of letting one probe abort the sign-in.
+          loop {
             let (mut stream, _addr) = listener
                 .accept()
                 .await
@@ -352,17 +424,19 @@ impl AIProvider for GeminiProvider {
 
             // Read the HTTP request
             let mut buf = vec![0u8; 4096];
-            let n = stream
-                .read(&mut buf)
-                .await
-                .map_err(|e| format!("Failed to read request: {e}"))?;
+            let n = match stream.read(&mut buf).await {
+                Ok(n) if n > 0 => n,
+                _ => continue, // empty/failed read (e.g. a bare preconnect) — keep waiting
+            };
             let request = String::from_utf8_lossy(&buf[..n]);
 
             // Parse the request line to get the path
             let first_line = request.lines().next().unwrap_or("");
             let path = first_line.split_whitespace().nth(1).unwrap_or("");
 
-            // Parse query parameters from the callback URL
+            // Parse query parameters from the callback URL. Values are form-encoded,
+            // so percent-decode them — Google's authorization code contains `%2F`
+            // (a `/`); using the raw value fails the token exchange with invalid_grant.
             let query_start = path.find('?').map(|i| i + 1).unwrap_or(path.len());
             let query_str = &path[query_start..];
             let params: HashMap<String, String> = query_str
@@ -370,7 +444,7 @@ impl AIProvider for GeminiProvider {
                 .filter_map(|pair| {
                     let mut parts = pair.splitn(2, '=');
                     let key = parts.next()?.to_string();
-                    let value = parts.next().unwrap_or("").to_string();
+                    let value = percent_decode(parts.next().unwrap_or(""));
                     Some((key, value))
                 })
                 .collect();
@@ -379,12 +453,19 @@ impl AIProvider for GeminiProvider {
             let code = params.get("code").cloned().unwrap_or_default();
             let error = params.get("error").cloned().unwrap_or_default();
 
-            // CSRF protection: validate state
+            // A request carrying none of our OAuth params (favicon probe, preconnect)
+            // is not the callback — answer 204 and keep waiting.
+            if received_state.is_empty() && code.is_empty() && error.is_empty() {
+                let _ = stream.write_all(b"HTTP/1.1 204 No Content\r\n\r\n").await;
+                continue;
+            }
+
+            // CSRF: a request whose state doesn't match the one we generated isn't
+            // our callback (stray tab / hostile probe) — keep waiting, don't abort.
             if received_state != oauth_state {
-                log::warn!("[gemini] Auth CSRF validation failed");
-                let response = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<html><body><h1>Invalid State</h1><p>Security validation failed.</p></body></html>";
-                let _ = stream.write_all(response.as_bytes()).await;
-                return Err("CSRF validation failed".to_string());
+                log::warn!("[gemini] Ignoring callback with mismatched state");
+                let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n").await;
+                continue;
             }
 
             if !error.is_empty() {
@@ -447,7 +528,8 @@ impl AIProvider for GeminiProvider {
             let response_html = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<html><body style=\"background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0\"><div style=\"text-align:center\"><h1 style=\"color:#4ade80\">Authentication Successful</h1><p>You can return to HoTTY. You may close this window.</p></div></body></html>";
             let _ = stream.write_all(response_html.as_bytes()).await;
 
-            Ok(token_data)
+            return Ok(token_data);
+          } // loop
         })
         .await;
 
@@ -501,13 +583,24 @@ impl AIProvider for GeminiProvider {
             return Ok(false);
         }
 
-        // Try to refresh the access token
-        if self.refresh_access_token().await {
-            log::info!("[gemini] Auto-auth success");
-            Ok(true)
-        } else {
-            self.logout();
-            Ok(false)
+        // Try to refresh the access token.
+        match self.refresh_access_token().await {
+            TokenRefresh::Ok => {
+                log::info!("[gemini] Auto-auth success");
+                Ok(true)
+            }
+            TokenRefresh::Transient => {
+                // Network/timeout/5xx — KEEP the persisted refresh token so a later
+                // launch (once connectivity returns) can silently re-auth. Only the
+                // in-memory access token is stale; get_valid_token retries on demand.
+                log::warn!("[gemini] Auto-auth deferred: transient token refresh failure (credentials kept)");
+                Ok(false)
+            }
+            TokenRefresh::Invalid => {
+                // The refresh token is dead (revoked / invalid_grant) — clear it.
+                self.logout();
+                Ok(false)
+            }
         }
     }
 
@@ -537,6 +630,7 @@ impl AIProvider for GeminiProvider {
         message: &str,
         model: &str,
         system_instruction: Option<&str>,
+        cancel_token: CancellationToken,
     ) -> Result<(), String> {
         if !is_valid_model(model) {
             emit_chat_response(
@@ -595,7 +689,9 @@ impl AIProvider for GeminiProvider {
             );
         }
 
-        let cancel_token = CancellationToken::new();
+        // Use the command-supplied token (also registered outside the service
+        // lock so Stop can cancel mid-stream) and keep a local copy so logout()
+        // can cancel every in-flight stream.
         self.cancel_tokens
             .insert(session_id.to_string(), cancel_token.clone());
 
@@ -609,7 +705,7 @@ impl AIProvider for GeminiProvider {
             "[gemini] Sending message, model={model}, system_instruction={system_instruction:?}"
         );
 
-        let response = self
+        let response = match self
             .http_client
             .post(&url)
             .header("Content-Type", "application/json")
@@ -617,7 +713,28 @@ impl AIProvider for GeminiProvider {
             .body(body.to_string())
             .send()
             .await
-            .map_err(|e| format!("Gemini request failed: {e}"))?;
+        {
+            Ok(resp) => resp,
+            Err(e) => {
+                // Transport failure — emit an error and roll back the pushed user
+                // turn / cancel token, instead of a bare `?` that leaks both.
+                log::error!("[gemini] request failed: {e}");
+                emit_chat_response(
+                    &app_clone,
+                    ChatResponseData {
+                        session_id: sid.clone(),
+                        response_type: "error".into(),
+                        content:
+                            "An error occurred while communicating with Gemini. Please try again."
+                                .into(),
+                        usage_metadata: None,
+                    },
+                );
+                pop_trailing_user(self.chat_histories.get_mut(&sid));
+                self.cancel_tokens.remove(&sid);
+                return Ok(());
+            }
+        };
 
         if !response.status().is_success() {
             let error_body = response
@@ -804,13 +921,11 @@ impl AIProvider for GeminiProvider {
         self.chat_histories.remove(session_id);
     }
 
-    async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
-        let token = match self
-            .token_data
-            .as_ref()
-            .filter(|t| !t.is_expired())
-            .map(|t| t.access_token.clone())
-        {
+    async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
+        // Refresh an expired access token first (mirrors send_message). Reading
+        // the cached token without refreshing made an expired token look like
+        // "no models", surfacing as a spurious model-list error until restart.
+        let token = match self.get_valid_token().await {
             Some(t) if !t.is_empty() => t,
             _ => return Ok(vec![]),
         };
@@ -973,6 +1088,17 @@ mod tests {
         let keywords = NON_TEXT_MODEL_KEYWORDS;
         assert!(keywords.iter().any(|kw| "gemini-tts-model".contains(kw)));
         assert!(!keywords.iter().any(|kw| "gemini-2.0-flash".contains(kw)));
+    }
+
+    #[test]
+    fn percent_decode_handles_oauth_code() {
+        // Google's authorization code arrives with %2F for its '/'.
+        assert_eq!(percent_decode("4%2F0AeanS0abc-_xyz"), "4/0AeanS0abc-_xyz");
+        assert_eq!(percent_decode("a+b"), "a b");
+        assert_eq!(percent_decode("plain"), "plain");
+        // A malformed trailing escape is left as-is rather than dropped.
+        assert_eq!(percent_decode("bad%"), "bad%");
+        assert_eq!(percent_decode("hex%zz"), "hex%zz");
     }
 
     #[test]

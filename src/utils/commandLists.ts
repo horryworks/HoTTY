@@ -44,8 +44,12 @@ export function entryMatches(line: string, entry: string): boolean {
  * ANY entry. Returns the offending entry for display.
  */
 export function matchBlacklist(command: string, entries: string[]): ListMatch {
+    // Split on CR as well as LF: a bare CR is Enter to the PTY line discipline,
+    // so `show ver\rreboot` is two commands. The whitelist classifier and the
+    // PTY dispatcher split on the same set — keep the blacklist layer aligned so
+    // a token entry can't be shielded behind a CR.
     const lines = command
-        .split('\n')
+        .split(/\r\n|\r|\n/)
         .map((l) => l.trim())
         .filter((l) => l.length > 0);
 
@@ -82,7 +86,10 @@ export const DEFAULT_WHITELIST: string[] = [
     'lsblk', 'lscpu', 'lspci', 'lsusb', 'lsmod', 'dmesg',
     'printenv', 'env', 'echo', 'printf', 'sysctl',
 
-    // Network diagnostics
+    // Network diagnostics. NOTE: ip / ifconfig / route / arp / netsh / sysctl /
+    // dmesg are read/WRITE tools — only their read-only queries auto-execute;
+    // their write subcommands are rejected by DANGEROUS_FLAGS in
+    // commandClassifier.ts (e.g. `ip route del`, `ifconfig eth0 down`).
     'ping', 'ping6', 'traceroute', 'tracert', 'tracepath', 'mtr',
     'dig', 'nslookup', 'host', 'whois',
     'ip', 'ifconfig', 'route',

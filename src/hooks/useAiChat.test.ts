@@ -178,19 +178,35 @@ describe('useAiChat', () => {
     expect(result.current.aiChatStates.get('ai-1')?.activeTabId).toBe(secondTabId);
 
     act(() => {
-      result.current.updateTabById('ai-1', firstTabId, { pendingMessage: 'cross-tab payload' });
+      result.current.enqueuePendingMessage('ai-1', firstTabId, 'cross-tab payload');
     });
 
     const state = result.current.aiChatStates.get('ai-1');
     const firstTab = state!.tabs.find(t => t.id === firstTabId);
     const secondTab = state!.tabs.find(t => t.id === secondTabId);
-    expect(firstTab?.pendingMessage).toBe('cross-tab payload');
+    expect(firstTab?.pendingMessages).toEqual(['cross-tab payload']);
     // Active tab must NOT be touched.
-    expect(secondTab?.pendingMessage).toBeUndefined();
+    expect(secondTab?.pendingMessages).toBeUndefined();
     expect(state?.activeTabId).toBe(secondTabId);
   });
 
-  it('updateTabById is a no-op if the tab id does not exist', () => {
+  it('pending-message queue enqueues FIFO and dequeues from the front', () => {
+    const opts = makeDefaultOptions();
+    const { result } = renderHook(() => useAiChat(opts));
+    act(() => { result.current.updateAiChatState('ai-1', createDefaultAiChatState()); });
+    const tabId = result.current.aiChatStates.get('ai-1')!.activeTabId;
+
+    act(() => {
+      result.current.enqueuePendingMessage('ai-1', tabId, 'first');
+      result.current.enqueuePendingMessage('ai-1', tabId, 'second');
+    });
+    expect(result.current.aiChatStates.get('ai-1')!.tabs[0].pendingMessages).toEqual(['first', 'second']);
+
+    act(() => { result.current.dequeuePendingMessage('ai-1', tabId); });
+    expect(result.current.aiChatStates.get('ai-1')!.tabs[0].pendingMessages).toEqual(['second']);
+  });
+
+  it('updateTabById / enqueue is a no-op if the tab id does not exist', () => {
     const opts = makeDefaultOptions();
     const { result } = renderHook(() => useAiChat(opts));
 
@@ -199,11 +215,11 @@ describe('useAiChat', () => {
     });
 
     act(() => {
-      result.current.updateTabById('ai-1', 'bogus-tab-id', { pendingMessage: 'should not appear' });
+      result.current.enqueuePendingMessage('ai-1', 'bogus-tab-id', 'should not appear');
     });
 
     const state = result.current.aiChatStates.get('ai-1');
-    expect(state?.tabs.every(t => t.pendingMessage === undefined)).toBe(true);
+    expect(state?.tabs.every(t => !t.pendingMessages)).toBe(true);
   });
 
   it('setActiveTab switches the active tab', () => {
@@ -309,8 +325,8 @@ describe('useAiChat', () => {
 
     const state = result.current.aiChatStates.get('ai-1');
     const activeTab = getActiveTab(state);
-    expect(activeTab?.pendingMessage).toContain('Explain this');
-    expect(activeTab?.pendingMessage).toContain('some code');
+    expect(activeTab?.pendingMessages?.[0]).toContain('Explain this');
+    expect(activeTab?.pendingMessages?.[0]).toContain('some code');
     expect(state?.systemInstruction).toContain('You are a helpful assistant');
   });
 
@@ -327,7 +343,7 @@ describe('useAiChat', () => {
 
     const state = result.current.aiChatStates.get('ai-1');
     const activeTab = getActiveTab(state);
-    expect(activeTab?.pendingMessage).toBeUndefined();
+    expect(activeTab?.pendingMessages).toBeUndefined();
   });
 
   it('sendMessage calls tauriService.aiChatSend', async () => {

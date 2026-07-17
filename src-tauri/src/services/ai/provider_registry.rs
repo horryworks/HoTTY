@@ -36,6 +36,13 @@ impl AIProviderRegistry {
         self.providers.get_mut(id)
     }
 
+    /// Mutable iterator over every registered provider. Used for session-scoped
+    /// operations (clear/cancel a `session_id`) that must reach whichever provider
+    /// actually holds that session's state — not just the active one.
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Box<dyn AIProvider>> {
+        self.providers.values_mut()
+    }
+
     /// Check if a provider with the given ID exists.
     pub fn contains(&self, id: &str) -> bool {
         self.providers.contains_key(id)
@@ -99,12 +106,13 @@ mod tests {
             _message: &str,
             _model: &str,
             _system_instruction: Option<&str>,
+            _cancel_token: tokio_util::sync::CancellationToken,
         ) -> Result<(), String> {
             Ok(())
         }
         fn cancel_message(&mut self, _session_id: &str) {}
         fn clear_history(&mut self, _session_id: &str) {}
-        async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
+        async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
             Ok(vec![])
         }
     }

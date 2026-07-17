@@ -29,8 +29,13 @@ pub fn parse_sse_line(line: &str) -> SseLine<'_> {
 }
 
 /// Buffer for accumulating streaming bytes and extracting complete SSE lines.
+///
+/// Holds RAW BYTES (not a String) so a multi-byte UTF-8 character split across
+/// two network chunks is not mangled: `from_utf8_lossy` per chunk would turn a
+/// half-received character into `U+FFFD` and commit the garbled text to history.
+/// Bytes are only decoded once a complete line (up to `\n`) has arrived.
 pub struct SseBuffer {
-    buffer: String,
+    buffer: Vec<u8>,
 }
 
 impl Default for SseBuffer {
@@ -48,21 +53,26 @@ impl SseBuffer {
     const MAX_BUFFER_BYTES: usize = 8 * 1024 * 1024;
 
     pub fn new() -> Self {
-        Self {
-            buffer: String::new(),
-        }
+        Self { buffer: Vec::new() }
     }
 
-    /// Append raw bytes and return an iterator over complete lines.
-    /// Incomplete lines (without a trailing newline) are retained in the buffer.
+    /// Append raw bytes and return the complete lines that are now available.
+    /// Incomplete lines (no trailing newline yet) — including a partial multi-byte
+    /// UTF-8 sequence at a chunk boundary — are retained in the buffer until the
+    /// rest arrives. Only complete lines are decoded (lossily, so a genuinely
+    /// invalid byte inside a full line still degrades gracefully).
     pub fn push(&mut self, chunk: &[u8]) -> Vec<String> {
-        self.buffer.push_str(&String::from_utf8_lossy(chunk));
+        self.buffer.extend_from_slice(chunk);
 
         let mut lines = Vec::new();
-        while let Some(pos) = self.buffer.find('\n') {
-            let line = self.buffer[..pos].trim_end_matches('\r').to_string();
-            lines.push(line);
-            self.buffer.drain(..=pos);
+        // Split off each complete line at every `\n`, decoding only whole lines.
+        while let Some(pos) = self.buffer.iter().position(|&b| b == b'\n') {
+            let mut line_bytes: Vec<u8> = self.buffer.drain(..=pos).collect();
+            line_bytes.pop(); // drop the trailing '\n'
+            if line_bytes.last() == Some(&b'\r') {
+                line_bytes.pop(); // drop a trailing '\r' (CRLF)
+            }
+            lines.push(String::from_utf8_lossy(&line_bytes).into_owned());
         }
         // Guard against unbounded growth on a newline-free stream: if the retained
         // partial line has blown past the cap, discard it. The stream is already
@@ -139,6 +149,31 @@ mod tests {
         let mut buf = SseBuffer::new();
         let lines = buf.push(b"data: test\r\n");
         assert_eq!(lines, vec!["data: test"]);
+    }
+
+    #[test]
+    fn sse_buffer_reassembles_utf8_split_across_chunks() {
+        // "こんにちは" — each kana is 3 UTF-8 bytes. Split the stream mid-character
+        // (a real network-chunk boundary) and confirm the reassembled line is intact,
+        // not mangled into replacement characters.
+        let full = "data: こんにちは\n".as_bytes().to_vec();
+        let split = 9; // partway through a multi-byte character
+        let mut buf = SseBuffer::new();
+        assert!(buf.push(&full[..split]).is_empty());
+        let lines = buf.push(&full[split..]);
+        assert_eq!(lines, vec!["data: こんにちは"]);
+        assert!(!lines[0].contains('\u{FFFD}'));
+    }
+
+    #[test]
+    fn sse_buffer_reassembles_utf8_split_one_byte_at_a_time() {
+        let full = "data: 日本語\n".as_bytes().to_vec();
+        let mut buf = SseBuffer::new();
+        let mut out = Vec::new();
+        for b in &full {
+            out.extend(buf.push(&[*b]));
+        }
+        assert_eq!(out, vec!["data: 日本語"]);
     }
 
     #[test]

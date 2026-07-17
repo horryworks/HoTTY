@@ -25,6 +25,7 @@ import type { SessionRecord } from '../../hooks/useSessionManager';
 import type { PersonaDefinition, AIModelInfo, LinkableSession } from '../../types/appTypes';
 import { TabStrip } from './TabStrip';
 import { groupLinkableSessions } from './linkPicker';
+import { MODEL_LOAD_RETRY_DELAYS_MS } from './modelLoadRetry';
 import './AIChatPane.css';
 
 interface ChatMessage {
@@ -38,6 +39,10 @@ interface AIChatPaneProps {
     chatState?: AiChatState;
     onChatStateChange?: (newState: Partial<AiChatState>) => void;
     onUpdateTabById?: (tabId: string, partial: Partial<ChatTab>) => void;
+    /** Append a machine-generated message to a tab's pending-send queue. */
+    onEnqueuePending?: (tabId: string, message: string) => void;
+    /** Drop the first message from a tab's pending-send queue (after dispatch). */
+    onDequeuePending?: (tabId: string) => void;
     onAddTab?: (initialLinkSessionId?: string) => void;
     onCloseTab?: (tabId: string) => void;
     onSelectTab?: (tabId: string) => void;
@@ -55,6 +60,8 @@ interface AIChatPaneProps {
     onRefreshSessions?: () => void;
     /** Open the Settings modal on the AI tab (sign-in lives there). */
     onOpenSettings?: () => void;
+    /** Resolve the AI data-sharing consent gate (shows the modal if needed). */
+    ensureConsent?: () => Promise<boolean>;
 }
 
 // ── AI Icon Component ──
@@ -278,6 +285,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     chatState,
     onChatStateChange,
     onUpdateTabById,
+    onEnqueuePending,
+    onDequeuePending,
+    ensureConsent,
     onAddTab,
     onCloseTab,
     onSelectTab,
@@ -315,6 +325,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const maxConsecutiveAutoExecutions = useSettingsStore(s => s.maxConsecutiveAutoExecutions);
     const classifierStrategy = useSettingsStore(s => s.classifierStrategy);
     const aiClassifyConfidenceThreshold = useSettingsStore(s => s.aiClassifyConfidenceThreshold);
+    const aiDataConsentAccepted = useSettingsStore(s => s.aiDataConsentAccepted);
 
     // Auto-execute state. The de-dup guard and the executed-command badge set are
     // tracked PER TAB: their keys (blockKey = messageIndex:command, and command text)
@@ -334,9 +345,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         return set;
     }, []);
     const [autoExecPaused, setAutoExecPaused] = useState(false);
-    const autoExecutedCommands = activeTabId ? autoExecutedByTabRef.current.get(activeTabId) : undefined;
-    // Kept fresh across re-renders by the `bumpDecisions()` bump in handleDeclineCommand.
-    const declinedCommands = activeTabId ? declinedByTabRef.current.get(activeTabId) : undefined;
+    // NOTE: autoExecutedByTabRef / declinedByTabRef are keyed by blockKey
+    // (`${messageIndex}:${command}`), NOT bare command text — otherwise the same
+    // command appearing in two messages would mislabel the later block (badge shown,
+    // Run/Decline hidden) or retroactively flip an earlier one. The per-message sets
+    // fed to MessageContent are built in the messages.map below.
 
     // Per-command safety verdicts (and in-flight "classifying" markers), tracked
     // per tab and keyed by `${messageIndex}:${command}` so the UI can show WHY
@@ -363,6 +376,15 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // pane's lifetime instead of tearing down and re-arming on every chunk.
     const streamingByTabRef = useRef(streamingByTab);
     streamingByTabRef.current = streamingByTab;
+    const streamingTabIdsRef = useRef(streamingTabIds);
+    streamingTabIdsRef.current = streamingTabIds;
+    // Generation guard shared by the model-list retry effect and handleRegionChange
+    // so a region change cancels an in-flight retry chain (see the retry effect).
+    const modelLoadGenRef = useRef(0);
+    // Forward handle: clears EVERY per-tab auto-exec / kickoff tracking ref. Assigned
+    // once all those refs exist; called on provider switch and explicit logout so a
+    // new conversation (message indices restart at 0) isn't shadowed by stale keys.
+    const resetAllTabTrackingRef = useRef<() => void>(() => {});
     const messages = useMemo<ChatMessage[]>(
         () => (activeTabId ? (messagesByTab.get(activeTabId) ?? []) : []),
         [activeTabId, messagesByTab],
@@ -441,14 +463,36 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // resolves). Updated every render.
     const linkedLiveRef = useRef(linkedLive);
     linkedLiveRef.current = linkedLive;
+    // Mirror of the current chatState so refs/effects can read tabs without taking
+    // chatState as a dependency.
+    const chatStateRef = useRef(chatState);
+    chatStateRef.current = chatState;
+    // Refs the async auto-exec continuation reads to resolve/re-check a SPECIFIC
+    // tab's linked session (auto-exec can complete on a background tab whose link
+    // differs from the active tab's). Updated every render.
+    const sessionsRef = useRef(sessions);
+    sessionsRef.current = sessions;
+    const linkableByIdRef = useRef(linkableById);
+    linkableByIdRef.current = linkableById;
+    const activeTabIdRef = useRef(activeTabId);
+    activeTabIdRef.current = activeTabId;
+    /** Resolve a tab's linked session id + live-ness (this window or another). */
+    const resolveTabTarget = useCallback((tabId: string) => {
+        const tab = chatStateRef.current?.tabs.find((t) => t.id === tabId);
+        const sid = tab?.linkedSessionId;
+        if (!sid) return { sid: undefined as string | undefined, live: false, status: undefined as string | undefined };
+        const status = sessionsRef.current?.get(sid)?.status ?? linkableByIdRef.current.get(sid)?.status;
+        return { sid, live: status === 'connected', status };
+    }, []);
     const autoExecPausedRef = useRef(autoExecPaused);
     autoExecPausedRef.current = autoExecPaused;
     const consecutiveAutoExecCountRef = useRef(consecutiveAutoExecCount);
     consecutiveAutoExecCountRef.current = consecutiveAutoExecCount;
 
-    // De-dup guard: tabId → last pendingMessage text we already started processing.
-    // Prevents re-firing the same auto-send while the parent state is mid-update.
-    const recentlyProcessedRef = useRef<Map<string, string>>(new Map());
+    // Guards against re-opening the consent modal on every effect re-run while a
+    // pending message is parked awaiting consent (the send loop below). Cleared
+    // when the gate resolves; the loop re-runs on the consent-state flip.
+    const consentPromptShownRef = useRef(false);
 
     // Per-tab streaming state. Streamed chunks are routed to whichever tab was active
     // when the request was sent (captured in streamingForTabIdRef), so a tab switch
@@ -511,15 +555,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const prevProviderRef = useRef(activeAiProvider);
     const paneIdRef = useRef(paneId);
     paneIdRef.current = paneId;
-    // Mirror of the current chatState so the provider-switch effect can clear
-    // every tab's per-tab backend history without taking chatState as a dep.
-    const chatStateRef = useRef(chatState);
-    chatStateRef.current = chatState;
 
     useEffect(() => {
         if (prevProviderRef.current !== activeAiProvider) {
             prevProviderRef.current = activeAiProvider;
             // Provider switch invalidates all in-progress conversations.
+            clearStreamWatchdog();
             setMessagesByTab(new Map());
             setStreamingByTab(new Map());
             setStreamingTabIds(new Set());
@@ -528,6 +569,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             setTotalOutputTokens(0);
             setTotalCost(null);
             setSelectedModel('Unspecified');
+            // Messages restart at index 0, so blockKey-based auto-exec tracking must
+            // be reset too — otherwise a `3:ls` in the new conversation is treated as
+            // already-processed and never classifies/runs, and stale badges linger.
+            resetAllTabTrackingRef.current();
             // Histories are keyed per tab now, so clear each tab's session (a bare
             // paneId key no longer exists). Fall back to the paneId if no tabs.
             const tabs = chatStateRef.current?.tabs ?? [];
@@ -539,6 +584,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 tauriService.aiChatClear(paneIdRef.current).catch(() => {});
             }
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeAiProvider]);
 
 
@@ -585,51 +631,48 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         }
     }, [messages, streamingContent, isStreaming]);
 
-    // Prune `recentlyProcessedRef` entries for tabs that have been closed so
-    // the de-dup map doesn't grow unbounded over a long-running session.
-    useEffect(() => {
-        if (!chatState) return;
-        const liveIds = new Set(chatState.tabs.map((t) => t.id));
-        for (const id of recentlyProcessedRef.current.keys()) {
-            if (!liveIds.has(id)) {
-                recentlyProcessedRef.current.delete(id);
-            }
-        }
-    }, [chatState]);
-
-    // ── Auto-send pending message for ANY tab (one stream at a time per pane) ──
-    // Scans every tab for a pending message; processes the first one that isn't
-    // currently streaming. Results that arrive on a non-active tab still trigger
-    // the next AI request, so the loop keeps running across tab switches.
+    // ── Auto-send pending messages for ANY tab (one stream at a time per pane) ──
+    // Scans every tab for a queued pending message; dispatches the first tab's
+    // head-of-queue that isn't currently streaming. Results that arrive on a
+    // non-active tab still trigger the next request, so the loop keeps running
+    // across tab switches. Double-dispatch is prevented structurally: dispatching
+    // dequeues the message AND marks the tab streaming (both batched), so the next
+    // effect run bails on the streaming guard — no de-dup-by-text needed.
     useEffect(() => {
         if (!isAuthenticated || !chatState) return;
-        // Backend uses paneId as the stream session id, so only one in-flight stream
-        // per pane is safe regardless of tab.
+        // Only one in-flight stream per pane (single streamingForTabIdRef).
         if (streamingTabIds.size > 0) return;
 
         for (const tab of chatState.tabs) {
-            const pm = tab.pendingMessage;
-            if (!pm) continue;
-            if (recentlyProcessedRef.current.get(tab.id) === pm) continue;
+            const queue = tab.pendingMessages;
+            if (!queue || queue.length === 0) continue;
+            const pm = queue[0];
 
             // A freshly-created pane (e.g. opened via Ask AI) hasn't resolved its
             // model yet — the model list loads and auto-selects asynchronously.
-            // Rather than rejecting the message with "model not selected", wait:
-            // leave the pending message intact until the model settles. This
-            // effect re-runs when selectedModel / availableModels / modelLoadError
-            // change, at which point the message is sent below (or, once loading
-            // has finished with no usable model, the not-selected notice shows).
+            // Leave the queue intact until the model settles; this effect re-runs
+            // when selectedModel / availableModels / modelLoadError change.
             if (selectedModel === 'Unspecified' && availableModels.length === 0 && !modelLoadError) {
                 return;
             }
 
-            recentlyProcessedRef.current.set(tab.id, pm);
+            // Data-sharing consent gate: machine-generated pending messages
+            // (kickoff, terminal-output envelopes, decline/not-connected notes)
+            // egress terminal data to the provider just like a manual send, so
+            // they must clear the same consent. Park the queue (don't dequeue)
+            // and prompt once; the effect re-runs when consent flips accepted.
+            if (!aiDataConsentAccepted) {
+                if (!consentPromptShownRef.current) {
+                    consentPromptShownRef.current = true;
+                    void ensureConsent?.().finally(() => { consentPromptShownRef.current = false; });
+                }
+                return;
+            }
 
             const sysInstr = chatState.systemInstruction || localSystemInstruction;
-
-            // Clear the pending message on this tab and persist the system instruction.
-            onUpdateTabById?.(tab.id, { pendingMessage: undefined });
             onChatStateChange?.({ systemInstruction: sysInstr });
+            // Remove the head of the queue now that we're dispatching it.
+            onDequeuePending?.(tab.id);
 
             if (selectedModel === 'Unspecified') {
                 setMessagesByTab((prev) => {
@@ -666,7 +709,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             break;
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chatState, isAuthenticated, streamingTabIds, paneId, selectedModel, availableModels, modelLoadError]);
+    }, [chatState, isAuthenticated, streamingTabIds, paneId, selectedModel, availableModels, modelLoadError, aiDataConsentAccepted]);
 
     // ── Auto-kickoff: Network Expert start-of-session protocol ──
     // When a Network Expert chat has a LIVE linked terminal, inject the kickoff as
@@ -695,12 +738,23 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     //     untouched (we never hijack a manual chat).
     const kickedForDeviceRef = useRef<Map<string, string>>(new Map());
     const lastSessionForDeviceRef = useRef<Map<string, string>>(new Map());
+    // Now that every per-tab tracking ref exists, wire the forward handle used by
+    // the provider-switch and logout effects (declared above these refs).
+    resetAllTabTrackingRef.current = () => {
+        autoExecProcessedByTabRef.current.clear();
+        autoExecutedByTabRef.current.clear();
+        declinedByTabRef.current.clear();
+        decisionsByTabRef.current.clear();
+        classifyingByTabRef.current.clear();
+        kickedForDeviceRef.current.clear();
+        lastSessionForDeviceRef.current.clear();
+    };
     const performNewChatRef = useRef<() => void>(() => {});
     useEffect(() => {
         if (!isNetworkExpert) return;
         if (!isAuthenticated || selectedModel === 'Unspecified') return;
         if (!activeTabId || isStreaming) return;
-        if (activeTab?.pendingMessage) return;
+        if (activeTab?.pendingMessages?.length) return;
         if (!lastTargetSessionId || !linkedLive) return;   // need a live linked target right now
 
         // Stable device identity (survives reconnect); fall back to the session id
@@ -715,7 +769,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             lastSessionForDeviceRef.current.set(activeTabId, lastTargetSessionId);
             if (messages.length === 0) return;             // nothing to preserve; persona re-preps on next msg
             setConsecutiveAutoExecCount(0);
-            onUpdateTabById?.(activeTabId, { pendingMessage: NETWORK_EXPERT_RECONNECT_PREP });
+            onEnqueuePending?.(activeTabId, NETWORK_EXPERT_RECONNECT_PREP);
             return;
         }
 
@@ -727,11 +781,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         kickedForDeviceRef.current.set(activeTabId, device);
         lastSessionForDeviceRef.current.set(activeTabId, lastTargetSessionId);
         setConsecutiveAutoExecCount(0);
-        onUpdateTabById?.(activeTabId, { pendingMessage: NETWORK_EXPERT_KICKOFF });
+        onEnqueuePending?.(activeTabId, NETWORK_EXPERT_KICKOFF);
     }, [
         isNetworkExpert, isAuthenticated, selectedModel, activeTabId, lastTargetSessionId,
-        linkedLive, messages.length, isStreaming, activeTab?.pendingMessage,
-        activeTab?.linkBindingKey, onUpdateTabById,
+        linkedLive, messages.length, isStreaming, activeTab?.pendingMessages?.length,
+        activeTab?.linkBindingKey, onEnqueuePending,
     ]);
 
     // Watchdog: guard an in-flight stream with two timers (see streamWatchdog.ts).
@@ -801,9 +855,17 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // to this pane. The bare paneId is still accepted for back-compat.
             if (data.sessionId !== paneId && !data.sessionId.startsWith(`${paneId}::`)) return;
 
-            // Route chunks/done/error to the tab that initiated this request, not necessarily the currently active tab.
-            const targetTabId = streamingForTabIdRef.current;
+            // Route by the tab id embedded in the sessionId, NOT a single shared
+            // ref: a late event from a stopped/superseded stream must land in ITS
+            // OWN tab (where it's ignored below), never bleed into whatever tab is
+            // streaming now. Bare-paneId events fall back to the ref (back-compat).
+            const targetTabId = data.sessionId.startsWith(`${paneId}::`)
+                ? data.sessionId.slice(paneId.length + 2)
+                : streamingForTabIdRef.current;
             if (!targetTabId) return;
+            // Drop late events for a tab that is no longer streaming (e.g. chunks
+            // that trailed a Stop before the backend noticed the cancel).
+            if (!streamingTabIdsRef.current.has(targetTabId)) return;
 
             if (data.responseType === 'chunk') {
                 setStreamingForTab(targetTabId, prev => prev + data.content);
@@ -818,7 +880,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 });
                 setStreamingForTab(targetTabId, '');
                 markStreaming(targetTabId, false);
-                streamingForTabIdRef.current = null;
+                if (streamingForTabIdRef.current === targetTabId) streamingForTabIdRef.current = null;
                 if (data.usageMetadata) {
                     const inTokens = data.usageMetadata.promptTokenCount || 0;
                     const outTokens = data.usageMetadata.candidatesTokenCount || 0;
@@ -839,7 +901,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 });
                 setStreamingForTab(targetTabId, '');
                 markStreaming(targetTabId, false);
-                streamingForTabIdRef.current = null;
+                if (streamingForTabIdRef.current === targetTabId) streamingForTabIdRef.current = null;
             }
         }).then(fn => {
             if (cancelled) { fn(); } else { unlisten = fn; }
@@ -861,77 +923,135 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         setStreamingByTab(new Map());
         setStreamingTabIds(new Set());
         streamingForTabIdRef.current = null;
+        setTotalInputTokens(0);
+        setTotalOutputTokens(0);
+        setTotalCost(null);
+        // Reset per-tab auto-exec/kickoff tracking too, mirroring performNewChat —
+        // otherwise stale badges and blockKeys shadow the post-re-login conversation.
+        resetAllTabTrackingRef.current();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [logoutNonce]);
 
-    // ── Auto-execute safe commands ──
-    const handleRunCommandRef = useRef<(cmd: string) => void>(() => {});
-    const prevIsStreamingRef = useRef(isStreaming);
+    // ── Prune per-tab state/refs for closed tabs ──
+    // Keyed on the SET of tab ids (not the tabs array, which changes on every
+    // pendingMessage enqueue) so a long-running pane doesn't accumulate closed
+    // tabs' conversations, streaming buffers, and auto-exec tracking forever.
+    const tabIdsKey = (chatState?.tabs ?? []).map((t) => t.id).join(',');
     useEffect(() => {
-        const wasStreaming = prevIsStreamingRef.current;
-        prevIsStreamingRef.current = isStreaming;
+        const liveIds = new Set((chatStateRef.current?.tabs ?? []).map((t) => t.id));
+        const pruneMap = (m: Map<string, unknown>) => {
+            for (const id of [...m.keys()]) if (!liveIds.has(id)) m.delete(id);
+        };
+        pruneMap(autoExecutedByTabRef.current as Map<string, unknown>);
+        pruneMap(autoExecProcessedByTabRef.current as Map<string, unknown>);
+        pruneMap(declinedByTabRef.current as Map<string, unknown>);
+        pruneMap(decisionsByTabRef.current as Map<string, unknown>);
+        pruneMap(classifyingByTabRef.current as Map<string, unknown>);
+        pruneMap(kickedForDeviceRef.current as Map<string, unknown>);
+        pruneMap(lastSessionForDeviceRef.current as Map<string, unknown>);
+        const dropClosed = <T,>(prev: Map<string, T>): Map<string, T> => {
+            let changed = false;
+            const next = new Map(prev);
+            for (const id of [...next.keys()]) if (!liveIds.has(id)) { next.delete(id); changed = true; }
+            return changed ? next : prev;
+        };
+        setMessagesByTab(dropClosed);
+        setStreamingByTab(dropClosed);
+        setStreamingTabIds((prev) => {
+            let changed = false;
+            const next = new Set(prev);
+            for (const id of [...next]) if (!liveIds.has(id)) { next.delete(id); changed = true; }
+            return changed ? next : prev;
+        });
+    }, [tabIdsKey]);
 
-        if (!(wasStreaming && !isStreaming && commandExecutionMode === 'auto-execute-safe')) return;
-        if (!activeTabId) return;
-        const lastMsg = messages[messages.length - 1];
-        if (!lastMsg || lastMsg.role !== 'model') return;
-        const commands = extractExecuteCommands(lastMsg.content);
-        if (commands.length === 0) return;
+    // ── Auto-execute safe commands ──
+    // Assigned later; the effect calls it via ref (forward reference). Runs a
+    // command on a SPECIFIC tab's linked session (auto-exec can complete on a
+    // background tab), not the active tab.
+    const handleRunCommandForTabRef = useRef<(tabId: string, cmd: string) => void>(() => {});
+    // Fire auto-exec off the SPECIFIC tab that just finished streaming — computed
+    // by diffing streamingTabIds — instead of the active tab's isStreaming edge.
+    // This (a) still classifies/runs a command that completed on a background tab,
+    // and (b) never (phantom-)classifies the switched-TO tab's command when the
+    // user merely switches away from a streaming tab.
+    const prevStreamingTabIdsRef = useRef(streamingTabIds);
+    useEffect(() => {
+        const prev = prevStreamingTabIdsRef.current;
+        prevStreamingTabIdsRef.current = streamingTabIds;
+        if (commandExecutionMode !== 'auto-execute-safe') return;
+        const completed = [...prev].filter((id) => !streamingTabIds.has(id));
+        if (completed.length === 0) return;
 
-        const command = commands[commands.length - 1];
-        const blockKey = `${messages.length - 1}:${command}`;
-        const processedSet = getTabSet(autoExecProcessedByTabRef.current, activeTabId);
-        // Reserve the block BEFORE the await so a re-render during classification
-        // can't fire a second, duplicate classification/run for the same command.
-        if (processedSet.has(blockKey)) return;
-        processedSet.add(blockKey);
+        const aborters: Array<() => void> = [];
+        for (const tabId of completed) {
+            const tabMessages = messagesByTab.get(tabId) ?? [];
+            const lastMsg = tabMessages[tabMessages.length - 1];
+            if (!lastMsg || lastMsg.role !== 'model') continue;
+            const commands = extractExecuteCommands(lastMsg.content);
+            if (commands.length === 0) continue;
 
-        const tabId = activeTabId;
-        let aborted = false;
-        const classifyingSet = getTabSet(classifyingByTabRef.current, tabId);
-        classifyingSet.add(blockKey);
-        bumpDecisions();
+            const command = commands[commands.length - 1];
+            const blockKey = `${tabMessages.length - 1}:${command}`;
+            const processedSet = getTabSet(autoExecProcessedByTabRef.current, tabId);
+            // Reserve the block BEFORE the await so a re-render during classification
+            // can't fire a second, duplicate classification/run for the same command.
+            if (processedSet.has(blockKey)) continue;
+            processedSet.add(blockKey);
 
-        (async () => {
-            let decision: AutoExecDecision;
-            try {
-                decision = await decideAutoExec(command, {
-                    strategy: classifierStrategy,
-                    whitelist: whitelistCommands,
-                    blacklist: blacklistCommands,
-                    model: selectedModelRef.current,
-                    providerId: activeAiProvider,
-                    confidenceThreshold: aiClassifyConfidenceThreshold,
-                });
-            } catch {
-                decision = { autoExec: false, reason: 'classification error', source: 'fallback' };
-            }
-            if (aborted) return;
-
-            classifyingSet.delete(blockKey);
-            getTabMap(decisionsByTabRef.current, tabId).set(blockKey, decision);
+            let aborted = false;
+            aborters.push(() => { aborted = true; });
+            const classifyingSet = getTabSet(classifyingByTabRef.current, tabId);
+            classifyingSet.add(blockKey);
             bumpDecisions();
 
-            if (!decision.autoExec) return;
-            // Re-validate run preconditions against the LATEST state (they may have
-            // changed while classification was in flight). The verdict is still
-            // recorded above, so the UI shows the reason even when we don't run.
-            // The user may have clicked "Don't Execute" during the classify window —
-            // honor that and never auto-run a declined command.
-            if (getTabSet(declinedByTabRef.current, tabId).has(command)) return;
-            if (autoExecPausedRef.current) return;
-            if (!linkedLiveRef.current) return;
-            if (maxConsecutiveAutoExecutions > 0
-                && consecutiveAutoExecCountRef.current >= maxConsecutiveAutoExecutions) return;
+            (async () => {
+                let decision: AutoExecDecision;
+                try {
+                    decision = await decideAutoExec(command, {
+                        strategy: classifierStrategy,
+                        whitelist: whitelistCommands,
+                        blacklist: blacklistCommands,
+                        model: selectedModelRef.current,
+                        providerId: activeAiProvider,
+                        confidenceThreshold: aiClassifyConfidenceThreshold,
+                    });
+                } catch {
+                    decision = { autoExec: false, reason: 'classification error', source: 'fallback' };
+                }
+                if (aborted) {
+                    // Un-stick the "🔍 Checking safety…" marker and un-reserve the
+                    // block so it isn't pinned spinner-forever with no verdict.
+                    classifyingSet.delete(blockKey);
+                    processedSet.delete(blockKey);
+                    bumpDecisions();
+                    return;
+                }
 
-            getTabSet(autoExecutedByTabRef.current, tabId).add(command);
-            setConsecutiveAutoExecCount(prev => prev + 1);
-            handleRunCommandRef.current(command);
-        })();
+                classifyingSet.delete(blockKey);
+                getTabMap(decisionsByTabRef.current, tabId).set(blockKey, decision);
+                bumpDecisions();
 
-        return () => { aborted = true; };
+                if (!decision.autoExec) return;
+                // Re-validate run preconditions against the LATEST state (they may
+                // have changed while classification was in flight). Declined is keyed
+                // by blockKey so declining THIS block doesn't shadow the same command
+                // elsewhere.
+                if (getTabSet(declinedByTabRef.current, tabId).has(blockKey)) return;
+                if (autoExecPausedRef.current) return;
+                if (!resolveTabTarget(tabId).live) return; // this tab's link, not active
+                if (maxConsecutiveAutoExecutions > 0
+                    && consecutiveAutoExecCountRef.current >= maxConsecutiveAutoExecutions) return;
+
+                getTabSet(autoExecutedByTabRef.current, tabId).add(blockKey);
+                setConsecutiveAutoExecCount(prev => prev + 1);
+                handleRunCommandForTabRef.current(tabId, command);
+            })();
+        }
+
+        return () => { aborters.forEach((fn) => fn()); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isStreaming, messages, commandExecutionMode, whitelistCommands, blacklistCommands, classifierStrategy, activeAiProvider, aiClassifyConfidenceThreshold, maxConsecutiveAutoExecutions, activeTabId]);
+    }, [streamingTabIds, messagesByTab, commandExecutionMode, whitelistCommands, blacklistCommands, classifierStrategy, activeAiProvider, aiClassifyConfidenceThreshold, maxConsecutiveAutoExecutions]);
 
     useEffect(() => {
         if (commandExecutionMode === 'ask-before-execute') {
@@ -941,55 +1061,78 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     }, [commandExecutionMode]);
 
     // ── Load models when authenticated ──
+    // An empty/failed fetch retries with backoff (MODEL_LOAD_RETRY_DELAYS_MS)
+    // before surfacing the error banner: startup can race transient conditions
+    // (network not yet up, backend token refresh in flight), and this effect is
+    // one-shot per sign-in — without retries a single blip pinned the banner
+    // until restart. isLoadingModels stays true across the whole retry window.
     useEffect(() => {
-        if (isAuthenticated) {
-            setIsLoadingModels(true);
-            setModelLoadError(false);
-            const load = async () => {
-                try {
-                    if (activeAiProvider === 'vertexai') {
-                        // Sign-in happens in Settings → AI after this pane mounted,
-                        // so re-read the region persisted by that sign-in — the
-                        // lazy state initializer above may hold a stale value.
-                        const storedRegion = localStorage.getItem(STORAGE_KEYS.VERTEXAI_SELECTED_REGION)
-                            || localStorage.getItem(STORAGE_KEYS.VERTEXAI_LOCATION)
-                            || selectedRegion;
-                        if (storedRegion !== selectedRegion) setSelectedRegion(storedRegion);
-                        await tauriService.aiSetLocation(storedRegion);
-                        tauriService.aiListLocations().then(locations => {
-                            if (locations.length > 0) setAvailableRegions(locations);
-                        }).catch(() => {});
+        if (!isAuthenticated) return;
+        let aborted = false;
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
+        // Bump the shared generation so a region change (handleRegionChange) that
+        // starts its own load can invalidate this retry chain — otherwise a late
+        // retry could show the failure banner over the region's healthy result.
+        const myGen = ++modelLoadGenRef.current;
+        const stale = () => aborted || modelLoadGenRef.current !== myGen;
+        setIsLoadingModels(true);
+        setModelLoadError(false);
+        const attempt = async (attemptIdx: number) => {
+            try {
+                if (activeAiProvider === 'vertexai') {
+                    // Sign-in happens in Settings → AI after this pane mounted,
+                    // so re-read the region persisted by that sign-in — the
+                    // lazy state initializer above may hold a stale value.
+                    const storedRegion = localStorage.getItem(STORAGE_KEYS.VERTEXAI_SELECTED_REGION)
+                        || localStorage.getItem(STORAGE_KEYS.VERTEXAI_LOCATION)
+                        || selectedRegion;
+                    if (storedRegion !== selectedRegion) setSelectedRegion(storedRegion);
+                    await tauriService.aiSetLocation(storedRegion);
+                    tauriService.aiListLocations().then(locations => {
+                        if (!aborted && locations.length > 0) setAvailableRegions(locations);
+                    }).catch(() => {});
+                }
+                const models = await tauriService.aiListModels();
+                if (stale()) return;
+                if (models.length === 0) throw new Error('empty model list');
+                setAvailableModels(models);
+                setSelectedModel(prev => {
+                    const savedModel = localStorage.getItem(STORAGE_KEYS.AI_SELECTED_MODEL_PER_PROVIDER(activeAiProvider));
+                    const candidate = prev === 'Unspecified' && savedModel ? savedModel : prev;
+                    if (candidate === 'Unspecified') return 'Unspecified';
+                    const stillAvailable = models.some(m => m.name === candidate);
+                    const resolved = stillAvailable ? candidate : 'Unspecified';
+                    if (resolved !== 'Unspecified') {
+                        onChatStateChange?.({ selectedModel: resolved });
                     }
-                    const models = await tauriService.aiListModels();
-                    if (models.length > 0) {
-                        setAvailableModels(models);
-                        setSelectedModel(prev => {
-                            const savedModel = localStorage.getItem(STORAGE_KEYS.AI_SELECTED_MODEL_PER_PROVIDER(activeAiProvider));
-                            const candidate = prev === 'Unspecified' && savedModel ? savedModel : prev;
-                            if (candidate === 'Unspecified') return 'Unspecified';
-                            const stillAvailable = models.some(m => m.name === candidate);
-                            const resolved = stillAvailable ? candidate : 'Unspecified';
-                            if (resolved !== 'Unspecified') {
-                                onChatStateChange?.({ selectedModel: resolved });
-                            }
-                            return resolved;
-                        });
-                    } else {
-                        setModelLoadError(true);
-                    }
-                } catch {
+                    return resolved;
+                });
+                setIsLoadingModels(false);
+            } catch {
+                if (stale()) return;
+                const delay = MODEL_LOAD_RETRY_DELAYS_MS[attemptIdx];
+                console.debug(`[AI] model list attempt ${attemptIdx + 1} failed${delay !== undefined ? `, retrying in ${delay}ms` : ', giving up'}`);
+                if (delay !== undefined) {
+                    retryTimer = setTimeout(() => { attempt(attemptIdx + 1); }, delay);
+                } else {
                     setModelLoadError(true);
-                } finally {
                     setIsLoadingModels(false);
                 }
-            };
-            load();
-        }
+            }
+        };
+        attempt(0);
+        return () => {
+            aborted = true;
+            if (retryTimer) clearTimeout(retryTimer);
+        };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAuthenticated]);
 
     // ── Handlers ──
     const handleRegionChange = async (region: string) => {
+        // Invalidate any in-flight model-list retry chain so a late retry can't
+        // overwrite this region's result with a spurious failure banner.
+        modelLoadGenRef.current++;
         setSelectedRegion(region);
         localStorage.setItem(STORAGE_KEYS.VERTEXAI_SELECTED_REGION, region);
         setSelectedModel('Unspecified');
@@ -1016,39 +1159,48 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         }
     };
 
-    const handleRunCommand = (command: string) => {
-        if (!lastTargetSessionId || !activeTabId) return;
+    // Run a command on a SPECIFIC tab's linked session. Used both by the manual
+    // Run button (for the active tab) and by auto-exec (which can complete on a
+    // background tab whose linked session differs from the active one).
+    const handleRunCommandForTab = (tabId: string, command: string) => {
+        const { sid, live, status } = resolveTabTarget(tabId);
+        if (!sid) return;
         const cleanCmd = command.trim();
         // Fail loudly when the linked terminal isn't live. Without this, sending to
         // a dead/stale session is a silent no-op (the backend has no such session,
         // and the send error is swallowed) — the exact symptom after an SSH drop +
         // reconnect where the chat still looks linked. Post a result the model can
         // read so it stops and tells the user to re-link.
-        if (!linkedLive) {
-            onUpdateTabById?.(activeTabId, {
-                pendingMessage: notConnectedNote(cleanCmd, lastTargetStatus),
-            });
+        if (!live) {
+            onEnqueuePending?.(tabId, notConnectedNote(cleanCmd, status));
             return;
         }
         // Pass the originating tab id so the result is delivered back to the same tab,
         // even if the user switches tabs while the command is executing.
-        onRunCommand?.(lastTargetSessionId, cleanCmd, activeTabId);
-        tauriService.focusWindow().catch(() => {});
-        window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: lastTargetSessionId } }));
+        onRunCommand?.(sid, cleanCmd, tabId);
+        // Only steal focus for the tab the user is actually looking at.
+        if (tabId === activeTabIdRef.current) {
+            tauriService.focusWindow().catch(() => {});
+            window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: sid } }));
+        }
     };
-    handleRunCommandRef.current = handleRunCommand;
+    handleRunCommandForTabRef.current = handleRunCommandForTab;
+    const handleRunCommand = (command: string) => {
+        if (!activeTabId) return;
+        handleRunCommandForTab(activeTabId, command);
+    };
 
     // "Don't Execute": the user declines a suggested command. The app deterministically
     // records the decline (→ "Declined" badge + auto-exec race guard) and feeds the fact
     // back to the model via the existing pending-message pipe so it can acknowledge and
-    // offer an alternative. Scope is this one command only — other commands' auto-exec is
-    // unaffected. `command` is the raw block text (matches the render-time lookup set).
-    const handleDeclineCommand = (command: string) => {
+    // offer an alternative. Keyed by blockKey (`${messageIndex}:${command}`) so declining
+    // THIS block never mislabels the same command in another message.
+    const handleDeclineCommand = (messageIndex: number, command: string) => {
         if (!activeTabId) return;
-        getTabSet(declinedByTabRef.current, activeTabId).add(command);
+        getTabSet(declinedByTabRef.current, activeTabId).add(`${messageIndex}:${command}`);
         setConsecutiveAutoExecCount(0); // a human intervened — reset the auto-run streak
         bumpDecisions();                // re-render so the block shows the Declined badge
-        onUpdateTabById?.(activeTabId, { pendingMessage: declinedNote(command.trim()) });
+        onEnqueuePending?.(activeTabId, declinedNote(command.trim()));
     };
 
     const handleHoverTarget = (isHovering: boolean) => {
@@ -1060,27 +1212,43 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
 
     const handleSend = () => {
         const text = inputText.trim();
-        if (!text || isStreaming || selectedModel === 'Unspecified') return;
-        setConsecutiveAutoExecCount(0);
-        setMessages(prev => [...prev, { role: 'user', content: text }]);
-        lastSentTextRef.current = text;
-        lastSentWasHumanRef.current = true;
-        setInputText('');
-        // Capture which tab owns this stream so chunks land in the right tab even after a tab switch.
-        streamingForTabIdRef.current = activeTabId ?? null;
-        setIsStreaming(true);
-        setStreamingContent('');
-        armStreamWatchdog();
+        // Block while ANY tab in this pane is streaming (only one in-flight stream
+        // per pane — a single streamingForTabIdRef). Guarding on the active tab's
+        // isStreaming alone let a send from a second tab hijack the first's stream.
+        if (!text || streamingTabIds.size > 0 || selectedModel === 'Unspecified') return;
 
-        if (onSendMessage) {
-            onSendMessage(text);
+        const dispatch = () => {
+            setConsecutiveAutoExecCount(0);
+            setMessages(prev => [...prev, { role: 'user', content: text }]);
+            lastSentTextRef.current = text;
+            lastSentWasHumanRef.current = true;
+            setInputText('');
+            // Capture which tab owns this stream so chunks land in the right tab even after a tab switch.
+            streamingForTabIdRef.current = activeTabId ?? null;
+            setIsStreaming(true);
+            setStreamingContent('');
+            armStreamWatchdog();
+
+            if (onSendMessage) {
+                onSendMessage(text);
+            } else {
+                tauriService.aiChatSend(aiBackendSessionId(paneId, activeTabId), text, selectedModel, localSystemInstruction).catch((err) => {
+                    logError('AI', 'aiChatSend invoke failed', err);
+                    clearStreamWatchdog();
+                    setIsStreaming(false);
+                    streamingForTabIdRef.current = null;
+                });
+            }
+        };
+
+        // Gate on data-sharing consent BEFORE mutating any UI. Declining used to
+        // leave a phantom "Thinking…" bubble that only the 180s watchdog cleared
+        // (or, if accepted after 180s, dropped the real reply). The consent modal
+        // is app-modal, so activeTabId can't change while it's open.
+        if (ensureConsent) {
+            void ensureConsent().then((ok) => { if (ok) dispatch(); });
         } else {
-            tauriService.aiChatSend(aiBackendSessionId(paneId, activeTabId), text, selectedModel, localSystemInstruction).catch((err) => {
-                logError('AI', 'aiChatSend invoke failed', err);
-                clearStreamWatchdog();
-                setIsStreaming(false);
-                streamingForTabIdRef.current = null;
-            });
+            dispatch();
         }
     };
 
@@ -1094,6 +1262,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const performNewChat = () => {
         // Clear only the active tab's messages and streaming state.
         if (activeTabId) {
+            // If we're tearing down THIS tab's in-flight stream, disarm the pane
+            // watchdog too — otherwise its stale hard-cap timer keeps ticking and
+            // force-cancels the NEXT (healthy) stream with a bogus timeout error.
+            if (streamingForTabIdRef.current === activeTabId) clearStreamWatchdog();
             setMessagesByTab(prev => {
                 const next = new Map(prev);
                 next.delete(activeTabId);
@@ -1116,6 +1288,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // at 0) and the "Auto-executed" badge doesn't linger from the old chat.
             autoExecProcessedByTabRef.current.delete(activeTabId);
             autoExecutedByTabRef.current.delete(activeTabId);
+            declinedByTabRef.current.delete(activeTabId);
             // Drop stale per-command verdicts so they don't reappear against the
             // new conversation's commands (which restart at message index 0).
             decisionsByTabRef.current.delete(activeTabId);
@@ -1399,16 +1572,30 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             void decisionsVersion;
                             let verdictByCommand: Map<string, AutoExecDecision> | undefined;
                             let classifyingCommands: Set<string> | undefined;
-                            if (msg.role === 'model' && commandExecutionMode === 'auto-execute-safe' && activeTabId) {
-                                const decMap = decisionsByTabRef.current.get(activeTabId);
-                                const clsSet = classifyingByTabRef.current.get(activeTabId);
+                            let autoExecutedCommands: Set<string> | undefined;
+                            let declinedCommands: Set<string> | undefined;
+                            // Build the per-message badge/verdict lookups from the
+                            // blockKey-keyed tab refs (a command's identity is its
+                            // message index + text, so the same command in two messages
+                            // is tracked independently). Declined/auto-executed apply in
+                            // any mode; verdicts/classifying only in auto-execute-safe.
+                            if (msg.role === 'model' && activeTabId) {
+                                const autoExecMode = commandExecutionMode === 'auto-execute-safe';
+                                const decMap = autoExecMode ? decisionsByTabRef.current.get(activeTabId) : undefined;
+                                const clsSet = autoExecMode ? classifyingByTabRef.current.get(activeTabId) : undefined;
+                                const autoSet = autoExecutedByTabRef.current.get(activeTabId);
+                                const declSet = declinedByTabRef.current.get(activeTabId);
                                 verdictByCommand = new Map<string, AutoExecDecision>();
                                 classifyingCommands = new Set<string>();
+                                autoExecutedCommands = new Set<string>();
+                                declinedCommands = new Set<string>();
                                 for (const cmd of extractExecuteCommands(msg.content)) {
                                     const bk = `${idx}:${cmd}`;
                                     const d = decMap?.get(bk);
                                     if (d) verdictByCommand.set(cmd, d);
                                     if (clsSet?.has(bk)) classifyingCommands.add(cmd);
+                                    if (autoSet?.has(bk)) autoExecutedCommands.add(cmd);
+                                    if (declSet?.has(bk)) declinedCommands.add(cmd);
                                 }
                             }
                             return (
@@ -1421,7 +1608,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         <MessageContent
                                             content={msg.content}
                                             onRun={(cmd) => { setConsecutiveAutoExecCount(0); handleRunCommand(cmd); }}
-                                            onDecline={handleDeclineCommand}
+                                            onDecline={(cmd) => handleDeclineCommand(idx, cmd)}
                                             onHoverTarget={handleHoverTarget}
                                             targetTitle={lastTargetSessionTitle}
                                             targetId={lastTargetSessionId}
@@ -1613,7 +1800,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             <button
                                 className="ai-chat-send-btn"
                                 onClick={handleSend}
-                                disabled={!inputText.trim() || isStreaming || selectedModel === 'Unspecified'}
+                                disabled={!inputText.trim() || streamingTabIds.size > 0 || selectedModel === 'Unspecified'}
                                 title={
                                     selectedModel === 'Unspecified'
                                         ? t('aiChat.pane.sendTitleSelectModel')

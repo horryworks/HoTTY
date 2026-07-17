@@ -9,6 +9,9 @@ const h = vi.hoisted(() => ({
     onAiAuthResultCb: { current: null as null | ((r: { success: boolean }) => void) },
     onRunCommand: vi.fn(),
     onUpdateTabById: vi.fn(),
+    onEnqueuePending: vi.fn(),
+    onDequeuePending: vi.fn(),
+    ensureConsent: vi.fn().mockResolvedValue(true),
     settings: {
         activeAiProvider: 'gemini',
         commandExecutionMode: 'auto-execute-safe',
@@ -17,6 +20,7 @@ const h = vi.hoisted(() => ({
         maxConsecutiveAutoExecutions: 5,
         classifierStrategy: 'hybrid',
         aiClassifyConfidenceThreshold: 0.7,
+        aiDataConsentAccepted: true,
         watchBufferLimit: 500000,
         terminalBackground: '#000',
         theme: 'dark',
@@ -74,6 +78,7 @@ vi.mock('../../stores/settingsStore', () => ({
 Element.prototype.scrollIntoView = vi.fn();
 
 const { AIChatPane } = await import('./AIChatPane');
+const { MODEL_LOAD_RETRY_DELAYS_MS } = await import('./modelLoadRetry');
 const { NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP } = await import('../../constants/aiPrompts');
 const { _clearVerdictCache } = await import('../../utils/aiCommandClassifier');
 const { tauriService } = await import('../../services/tauriService');
@@ -104,6 +109,9 @@ const baseProps = {
         tabs: [{ id: 't1', title: 'Local USG', ordinal: 1, linkedSessionId: 'sess-1' }],
     },
     sessions: new Map([['sess-1', { id: 'sess-1', displayName: 'Local USG', status: 'connected' }]]),
+    onEnqueuePending: h.onEnqueuePending,
+    onDequeuePending: h.onDequeuePending,
+    ensureConsent: h.ensureConsent,
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -210,11 +218,9 @@ describe('AIChatPane auto-execute when the linked terminal is not live', () => {
             });
 
             expect(h.onRunCommand).not.toHaveBeenCalled();
-            expect(h.onUpdateTabById).toHaveBeenCalledWith(
+            expect(h.onEnqueuePending).toHaveBeenCalledWith(
                 't1',
-                expect.objectContaining({
-                    pendingMessage: expect.stringContaining('not connected (disconnected)'),
-                }),
+                expect.stringContaining('not connected (disconnected)'),
             );
         } finally {
             h.settings.commandExecutionMode = 'auto-execute-safe';
@@ -238,6 +244,7 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
 
     beforeEach(() => {
         h.onUpdateTabById.mockClear();
+        h.onEnqueuePending.mockClear();
         h.onRunCommand.mockClear();
         h.onAiChatResponseCb.current = null;
         h.onAiAuthResultCb.current = null;
@@ -247,14 +254,11 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
     it('injects the kickoff pending message when a Network Expert chat links to a live terminal', async () => {
         renderPane({ aiPersonas: networkExpertPersonas, onUpdateTabById: h.onUpdateTabById });
         // Before auth nothing should fire (the auto-send loop can't dispatch yet).
-        expect(h.onUpdateTabById).not.toHaveBeenCalled();
+        expect(h.onEnqueuePending).not.toHaveBeenCalled();
 
         await authenticate();
 
-        expect(h.onUpdateTabById).toHaveBeenCalledWith(
-            't1',
-            { pendingMessage: NETWORK_EXPERT_KICKOFF },
-        );
+        expect(h.onEnqueuePending).toHaveBeenCalledWith('t1', NETWORK_EXPERT_KICKOFF);
     });
 
     it('re-runs the kickoff when the chat is re-linked to a DIFFERENT device', async () => {
@@ -273,7 +277,7 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
             chatState: stateA,
         }));
         await authenticate();
-        expect(h.onUpdateTabById).toHaveBeenCalledTimes(1); // kicked for device A
+        expect(h.onEnqueuePending).toHaveBeenCalledTimes(1); // kicked for device A
 
         // Re-link the active tab to a different device (different binding key).
         const stateB = {
@@ -289,8 +293,8 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
             }));
         });
         // Different device → re-kicked.
-        expect(h.onUpdateTabById).toHaveBeenCalledTimes(2);
-        expect(h.onUpdateTabById).toHaveBeenLastCalledWith('t1', { pendingMessage: NETWORK_EXPERT_KICKOFF });
+        expect(h.onEnqueuePending).toHaveBeenCalledTimes(2);
+        expect(h.onEnqueuePending).toHaveBeenLastCalledWith('t1', NETWORK_EXPERT_KICKOFF);
     });
 
     it('does NOT re-prep on reconnect to the SAME device when the conversation is empty', async () => {
@@ -305,7 +309,7 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
             chatState: stateA,
         }));
         await authenticate();
-        expect(h.onUpdateTabById).toHaveBeenCalledTimes(1); // initial full kickoff
+        expect(h.onEnqueuePending).toHaveBeenCalledTimes(1); // initial full kickoff
 
         // Reconnect: a NEW session id for the SAME device (same binding key), but the
         // conversation is still empty (the mock never fed the kickoff back), so there
@@ -322,7 +326,7 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
                 chatState: stateReconnected,
             }));
         });
-        expect(h.onUpdateTabById).toHaveBeenCalledTimes(1); // no New chat, no re-prep
+        expect(h.onEnqueuePending).toHaveBeenCalledTimes(1); // no New chat, no re-prep
     });
 
     it('re-disables paging (no New chat) on reconnect to the SAME device mid-conversation', async () => {
@@ -340,7 +344,7 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
         await authenticate();
         // Build an ongoing conversation so there is something to preserve.
         await sendAndComplete('check something');
-        h.onUpdateTabById.mockClear();
+        h.onEnqueuePending.mockClear();
 
         // Reconnect: same device (same binding key), new session id.
         const stateReconnected = {
@@ -357,29 +361,26 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
             }));
         });
         // Conversation preserved; only the lightweight paging re-prep is injected.
-        expect(h.onUpdateTabById).toHaveBeenCalledWith('t1', { pendingMessage: NETWORK_EXPERT_RECONNECT_PREP });
-        expect(h.onUpdateTabById).not.toHaveBeenCalledWith('t1', { pendingMessage: NETWORK_EXPERT_KICKOFF });
+        expect(h.onEnqueuePending).toHaveBeenCalledWith('t1', NETWORK_EXPERT_RECONNECT_PREP);
+        expect(h.onEnqueuePending).not.toHaveBeenCalledWith('t1', NETWORK_EXPERT_KICKOFF);
     });
 
     it('does NOT re-kick when the same link is re-rendered (id unchanged)', async () => {
         const { rerender } = renderPane({ aiPersonas: networkExpertPersonas, onUpdateTabById: h.onUpdateTabById });
         await authenticate();
-        expect(h.onUpdateTabById).toHaveBeenCalledTimes(1);
+        expect(h.onEnqueuePending).toHaveBeenCalledTimes(1);
 
         await act(async () => {
             rerender(makePane({ aiPersonas: networkExpertPersonas, onUpdateTabById: h.onUpdateTabById }));
         });
-        expect(h.onUpdateTabById).toHaveBeenCalledTimes(1); // unchanged link → no re-kick
+        expect(h.onEnqueuePending).toHaveBeenCalledTimes(1); // unchanged link → no re-kick
     });
 
     it('does NOT kick off for a non-Network-Expert persona', async () => {
         // baseProps persona has id 'default' (label "Network Expert" but not the id).
         renderPane({ onUpdateTabById: h.onUpdateTabById });
         await authenticate();
-        expect(h.onUpdateTabById).not.toHaveBeenCalledWith(
-            't1',
-            expect.objectContaining({ pendingMessage: NETWORK_EXPERT_KICKOFF }),
-        );
+        expect(h.onEnqueuePending).not.toHaveBeenCalledWith('t1', NETWORK_EXPERT_KICKOFF);
     });
 
     it('does NOT kick off when the linked terminal is disconnected', async () => {
@@ -392,10 +393,7 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
             sessions: disconnectedSessions,
         });
         await authenticate();
-        expect(h.onUpdateTabById).not.toHaveBeenCalledWith(
-            't1',
-            expect.objectContaining({ pendingMessage: NETWORK_EXPERT_KICKOFF }),
-        );
+        expect(h.onEnqueuePending).not.toHaveBeenCalledWith('t1', NETWORK_EXPERT_KICKOFF);
     });
 
     it('does NOT kick off when no model is selected', async () => {
@@ -405,10 +403,7 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
             chatState: { ...baseProps.chatState, selectedModel: 'Unspecified' },
         });
         await authenticate();
-        expect(h.onUpdateTabById).not.toHaveBeenCalledWith(
-            't1',
-            expect.objectContaining({ pendingMessage: NETWORK_EXPERT_KICKOFF }),
-        );
+        expect(h.onEnqueuePending).not.toHaveBeenCalledWith('t1', NETWORK_EXPERT_KICKOFF);
     });
 });
 
@@ -540,11 +535,9 @@ describe('AIChatPane "Don\'t Execute" (decline)', () => {
             // App side: never sent to the terminal…
             expect(h.onRunCommand).not.toHaveBeenCalled();
             // …AI side: the decline fact is fed back via the pending-message pipe.
-            expect(h.onUpdateTabById).toHaveBeenCalledWith(
+            expect(h.onEnqueuePending).toHaveBeenCalledWith(
                 't1',
-                expect.objectContaining({
-                    pendingMessage: expect.stringContaining('chose NOT to run'),
-                }),
+                expect.stringContaining('chose NOT to run'),
             );
             // The block now shows the Declined badge; Run/Decline buttons are gone.
             expect(screen.getByText('Declined')).toBeTruthy();
@@ -595,7 +588,7 @@ describe('AIChatPane pending message waits for model auto-selection', () => {
         selectedModel: 'Unspecified',
         systemInstruction: 'You are a helpful assistant.',
         activeTabId: 't1',
-        tabs: [{ id: 't1', title: 'T', ordinal: 1, pendingMessage: 'analyze this' }],
+        tabs: [{ id: 't1', title: 'T', ordinal: 1, pendingMessages: ['analyze this'] }],
     };
 
     it('does not error while the model list is still loading, then sends once a model auto-selects', async () => {
@@ -628,14 +621,29 @@ describe('AIChatPane pending message waits for model auto-selection', () => {
     });
 
     it('still shows "model not selected" once loading finishes with no usable model', async () => {
-        vi.mocked(tauriService.aiListModels).mockResolvedValue([]); // no models available
-        renderPane({ chatState: pendingChatState, onUpdateTabById: h.onUpdateTabById });
-        await authenticate();
-        await act(async () => { await Promise.resolve(); });
-        await act(async () => { await Promise.resolve(); });
+        // Empty results are retried with backoff before the load is declared
+        // failed, so drive the fake clock through every retry delay first.
+        vi.useFakeTimers();
+        try {
+            vi.mocked(tauriService.aiListModels).mockResolvedValue([]); // no models available
+            renderPane({ chatState: pendingChatState, onUpdateTabById: h.onUpdateTabById });
+            await authenticate();
+            await act(async () => { await Promise.resolve(); });
 
-        expect(tauriService.aiChatSend).not.toHaveBeenCalled();
-        expect(screen.getByText(/AI model not selected/)).toBeTruthy();
+            // Still inside the retry window → no error yet, nothing sent.
+            expect(tauriService.aiChatSend).not.toHaveBeenCalled();
+            expect(screen.queryByText(/AI model not selected/)).toBeNull();
+
+            for (const delay of MODEL_LOAD_RETRY_DELAYS_MS) {
+                await act(async () => { vi.advanceTimersByTime(delay); });
+                await act(async () => { await Promise.resolve(); });
+            }
+
+            expect(tauriService.aiChatSend).not.toHaveBeenCalled();
+            expect(screen.getByText(/AI model not selected/)).toBeTruthy();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });
 
@@ -658,7 +666,7 @@ describe('AIChatPane cancel never leaks machine text into the human prompt texta
             selectedModel: 'gemini-pro',
             systemInstruction: 'You are a helpful assistant.',
             activeTabId: 't1',
-            tabs: [{ id: 't1', title: 'T', ordinal: 1, pendingMessage: ENVELOPE }],
+            tabs: [{ id: 't1', title: 'T', ordinal: 1, pendingMessages: [ENVELOPE] }],
         };
         renderPane({ chatState, onUpdateTabById: h.onUpdateTabById });
         await authenticate();

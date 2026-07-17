@@ -4,6 +4,7 @@ use tauri::AppHandle;
 
 use super::ai_provider::{AuthStatus, ModelInfo};
 use super::provider_registry::AIProviderRegistry;
+use tokio_util::sync::CancellationToken;
 
 /// Centralised AI service that manages an active provider and delegates
 /// all operations to the provider registry.
@@ -69,8 +70,10 @@ impl AIService {
     }
 
     pub fn logout(&mut self) {
-        let id = self.active_provider_id.clone();
-        if let Some(provider) = self.registry.get_mut(&id) {
+        // Log out of EVERY provider, not just the active one. A single "Logout"
+        // means "disconnect AI"; clearing only the active provider left other
+        // providers' stored credentials on disk to silently re-auth on switch.
+        for provider in self.registry.iter_mut() {
             provider.logout();
         }
     }
@@ -84,6 +87,7 @@ impl AIService {
         message: &str,
         model: &str,
         system_instruction: Option<&str>,
+        cancel_token: CancellationToken,
     ) -> Result<(), String> {
         let id = self.active_provider_id.clone();
         let provider = self
@@ -91,7 +95,14 @@ impl AIService {
             .get_mut(&id)
             .ok_or_else(|| format!("AI provider '{}' not found", id))?;
         provider
-            .send_message(app, session_id, message, model, system_instruction)
+            .send_message(
+                app,
+                session_id,
+                message,
+                model,
+                system_instruction,
+                cancel_token,
+            )
             .await
     }
 
@@ -110,26 +121,31 @@ impl AIService {
     }
 
     pub fn cancel_message(&mut self, session_id: &str) {
-        let id = self.active_provider_id.clone();
-        if let Some(provider) = self.registry.get_mut(&id) {
+        // Session ids (paneId::tabId) are unique across providers, and a stream
+        // may be owned by a provider the user has since switched away from. Cancel
+        // in EVERY provider so Stop works after a provider switch mid-stream.
+        for provider in self.registry.iter_mut() {
             provider.cancel_message(session_id);
         }
     }
 
     pub fn clear_history(&mut self, session_id: &str) {
-        let id = self.active_provider_id.clone();
-        if let Some(provider) = self.registry.get_mut(&id) {
+        // A tab's history can live in a non-active provider (opened under provider
+        // A, then switched to B). Clear the session in ALL providers so closing a
+        // tab or starting a new chat never strands a conversation in memory.
+        for provider in self.registry.iter_mut() {
             provider.clear_history(session_id);
         }
     }
 
     // -- Models & locations ---------------------------------------------------
 
-    pub async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
+    pub async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
+        let id = self.active_provider_id.clone();
         let provider = self
             .registry
-            .get(&self.active_provider_id)
-            .ok_or_else(|| format!("AI provider '{}' not found", self.active_provider_id))?;
+            .get_mut(&id)
+            .ok_or_else(|| format!("AI provider '{id}' not found"))?;
         provider.list_models().await
     }
 
@@ -140,11 +156,12 @@ impl AIService {
         }
     }
 
-    pub async fn list_locations(&self) -> Result<Vec<String>, String> {
+    pub async fn list_locations(&mut self) -> Result<Vec<String>, String> {
+        let id = self.active_provider_id.clone();
         let provider = self
             .registry
-            .get(&self.active_provider_id)
-            .ok_or_else(|| format!("AI provider '{}' not found", self.active_provider_id))?;
+            .get_mut(&id)
+            .ok_or_else(|| format!("AI provider '{id}' not found"))?;
         provider.list_locations().await
     }
 }
@@ -203,12 +220,13 @@ mod tests {
             _message: &str,
             _model: &str,
             _system_instruction: Option<&str>,
+            _cancel_token: tokio_util::sync::CancellationToken,
         ) -> Result<(), String> {
             Ok(())
         }
         fn cancel_message(&mut self, _session_id: &str) {}
         fn clear_history(&mut self, _session_id: &str) {}
-        async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
+        async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
             Ok(vec![])
         }
     }

@@ -1,17 +1,30 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex as StdMutex};
 
 use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::{AIService, AuthStatus, CommandVerdict, ModelInfo};
 use crate::services::path_safety::{is_sensitive_path, is_unc_path};
 
+/// Monotonic id per send, so deregistration only removes its OWN registry entry
+/// (a newer send for the same session may have replaced it while it streamed).
+static SEND_GEN: AtomicU64 = AtomicU64::new(0);
+
 /// Managed state holding the AI service behind an async-aware mutex.
 pub struct AIServiceState {
     pub service: Mutex<AIService>,
+    /// In-flight stream cancellation tokens, keyed by `session_id` (value carries
+    /// the owning send's generation id). Kept in a SEPARATE (fast, non-async) mutex
+    /// so `ai_chat_cancel` can interrupt a stream WITHOUT waiting on `service`,
+    /// which the streaming `send_message` holds for its entire duration. Without
+    /// this, Stop and the stream watchdog were dead (they queued behind the very
+    /// stream they were trying to cancel).
+    pub cancels: StdMutex<HashMap<String, (u64, CancellationToken)>>,
 }
 
 /// Managed state: set of service-account key file paths approved via the
@@ -190,16 +203,42 @@ pub async fn ai_chat_send(
     validate_session_id(&session_id)?;
     validate_message(&message)?;
 
-    let mut service = state.service.lock().await;
-    service
-        .send_message(
-            &app,
-            &session_id,
-            &message,
-            &model,
-            system_instruction.as_deref(),
-        )
-        .await
+    // Register a cancellation token OUTSIDE the service lock before streaming, so
+    // ai_chat_cancel (Stop / watchdog) can interrupt this stream while we hold the
+    // service lock for its whole duration.
+    let gen = SEND_GEN.fetch_add(1, Ordering::Relaxed);
+    let cancel_token = CancellationToken::new();
+    {
+        let mut cancels = state.cancels.lock().unwrap();
+        // A superseding send for the same session cancels the previous stream.
+        if let Some((_, prev)) = cancels.insert(session_id.clone(), (gen, cancel_token.clone())) {
+            prev.cancel();
+        }
+    }
+
+    let result = {
+        let mut service = state.service.lock().await;
+        service
+            .send_message(
+                &app,
+                &session_id,
+                &message,
+                &model,
+                system_instruction.as_deref(),
+                cancel_token,
+            )
+            .await
+    };
+
+    // Deregister — but only if we're still the current entry (a newer send for the
+    // same session may have replaced us while we streamed).
+    {
+        let mut cancels = state.cancels.lock().unwrap();
+        if cancels.get(&session_id).is_some_and(|(g, _)| *g == gen) {
+            cancels.remove(&session_id);
+        }
+    }
+    result
 }
 
 #[tauri::command]
@@ -208,8 +247,17 @@ pub async fn ai_chat_cancel(
     session_id: String,
 ) -> Result<(), String> {
     validate_session_id(&session_id)?;
-    let mut service = state.service.lock().await;
-    service.cancel_message(&session_id);
+    // Cancel WITHOUT taking the service lock (the stream holds it). The streaming
+    // send selects on the token and unwinds, releasing the service lock.
+    let token = state
+        .cancels
+        .lock()
+        .unwrap()
+        .get(&session_id)
+        .map(|(_, t)| t.clone());
+    if let Some(token) = token {
+        token.cancel();
+    }
     Ok(())
 }
 
@@ -252,13 +300,13 @@ pub async fn ai_classify_command(
 
 #[tauri::command]
 pub async fn ai_list_models(state: State<'_, AIServiceState>) -> Result<Vec<ModelInfo>, String> {
-    let service = state.service.lock().await;
+    let mut service = state.service.lock().await;
     service.list_models().await
 }
 
 #[tauri::command]
 pub async fn ai_list_locations(state: State<'_, AIServiceState>) -> Result<Vec<String>, String> {
-    let service = state.service.lock().await;
+    let mut service = state.service.lock().await;
     service.list_locations().await
 }
 
