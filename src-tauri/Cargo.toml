@@ -93,6 +93,9 @@ argon2 = "0.5"
 pbkdf2 = { version = "0.12", features = ["simple"] }
 sha2 = "0.10"
 rand = "0.8"
+# rand 0.10 (already in the tree via russh) exposes an OsRng whose rand_core
+# major matches ssh-key's RSA keygen; used only for the SFTP RSA host key.
+rand_v010 = { package = "rand", version = "0.10" }
 base64 = "0.22"
 
 # Windows APIs (DPAPI, credential encryption)

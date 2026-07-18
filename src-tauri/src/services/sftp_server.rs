@@ -13,7 +13,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rand::RngCore;
-use russh::keys::ssh_key::private::{Ed25519Keypair, Ed25519PrivateKey, KeypairData};
+use russh::keys::ssh_key::private::{
+    Ed25519Keypair, Ed25519PrivateKey, KeypairData, RsaKeypair,
+};
 use russh::keys::ssh_key::LineEnding;
 use russh::keys::PrivateKey;
 use russh::server::{Auth, Handler as RusshServerHandler, Msg, Session};
@@ -29,8 +31,9 @@ use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
 use crate::services::file_server::{
-    self, ct_eq, emit_error, emit_status, emit_transfer, resolve_in_root, validate_root_dir,
-    FileServerState, JailError, ServerHandle, DIR_DOWNLOAD, DIR_UPLOAD,
+    self, clamp_for_display, ct_eq, emit_error, emit_status, emit_transfer, jail_reason,
+    resolve_in_root, resolve_in_root_creating, upload_error_msg, validate_root_dir, FileServerState,
+    JailError, ServerHandle, DIR_DOWNLOAD, DIR_UPLOAD, REASON_UPLOADS_DISABLED,
 };
 
 const PROTO: &str = "sftp";
@@ -39,18 +42,24 @@ const PROTO: &str = "sftp";
 // Host key (auto-generated, DPAPI-encrypted at rest)
 // ---------------------------------------------------------------------------
 
-fn host_key_path(app: &AppHandle) -> Result<PathBuf, String> {
+fn host_key_path(app: &AppHandle, filename: &str) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("Cannot resolve app data dir: {e}"))?;
     let _ = std::fs::create_dir_all(&dir);
-    Ok(dir.join("sftp_host_key"))
+    Ok(dir.join(filename))
 }
 
-/// Load the persisted SFTP host key, or generate + persist a new ed25519 key.
-fn load_or_create_host_key(app: &AppHandle) -> Result<PrivateKey, String> {
-    let path = host_key_path(app)?;
+/// Load a persisted host key from `filename`, or generate one via `generate`
+/// and persist it (DPAPI-encrypted OpenSSH PEM). Persistence is best-effort;
+/// on non-Windows the key simply isn't persisted across restarts.
+fn load_or_create_key(
+    app: &AppHandle,
+    filename: &str,
+    generate: impl FnOnce() -> Result<PrivateKey, String>,
+) -> Result<PrivateKey, String> {
+    let path = host_key_path(app, filename)?;
 
     if let Ok(enc) = std::fs::read_to_string(&path) {
         if let Ok(pem) = crate::services::dpapi::decrypt_string(&enc) {
@@ -58,30 +67,57 @@ fn load_or_create_host_key(app: &AppHandle) -> Result<PrivateKey, String> {
                 return Ok(key);
             }
         }
-        log::warn!("file-server: existing SFTP host key unreadable; regenerating");
+        log::warn!("file-server: existing SFTP host key '{filename}' unreadable; regenerating");
     }
 
-    // Generate ed25519 from 32 OS-random bytes (rand 0.8 OsRng).
-    let mut seed = [0u8; 32];
-    let mut rng = rand::rngs::OsRng;
-    rng.fill_bytes(&mut seed);
-    let private = Ed25519PrivateKey::from_bytes(&seed);
-    let keypair = Ed25519Keypair::from(private);
-    let key = PrivateKey::new(KeypairData::Ed25519(keypair), "hotty-sftp-host-key")
-        .map_err(|e| format!("Failed to create host key: {e}"))?;
+    let key = generate()?;
 
-    // Persist DPAPI-encrypted (best-effort; non-Windows simply won't persist).
     if let Ok(pem) = key.to_openssh(LineEnding::LF) {
         match crate::services::dpapi::encrypt_string(&pem) {
             Ok(enc) => {
                 if let Err(e) = std::fs::write(&path, enc) {
-                    log::warn!("file-server: could not persist SFTP host key: {e}");
+                    log::warn!("file-server: could not persist SFTP host key '{filename}': {e}");
                 }
             }
-            Err(e) => log::warn!("file-server: could not encrypt SFTP host key: {e}"),
+            Err(e) => log::warn!("file-server: could not encrypt SFTP host key '{filename}': {e}"),
         }
     }
     Ok(key)
+}
+
+/// Load or create the SFTP host keys: an ed25519 key for modern clients, plus
+/// an RSA-3072 key for older SSH clients. Many network devices (e.g. Huawei
+/// VRP) only accept `rsa-sha2-*`/`ecdsa` host keys and reject ed25519, so
+/// without the RSA key their SFTP handshake fails at host-key negotiation.
+/// russh presents both and the client selects whichever it supports.
+///
+/// This is blocking (RSA-3072 generation takes a few seconds the first time,
+/// then loads from disk), so callers run it on a blocking thread.
+fn load_or_create_host_keys(app: &AppHandle) -> Result<Vec<PrivateKey>, String> {
+    let ed25519 = load_or_create_key(app, "sftp_host_key", || {
+        // ed25519 from 32 OS-random bytes (rand 0.8 OsRng).
+        let mut seed = [0u8; 32];
+        let mut rng = rand::rngs::OsRng;
+        rng.fill_bytes(&mut seed);
+        let private = Ed25519PrivateKey::from_bytes(&seed);
+        let keypair = Ed25519Keypair::from(private);
+        PrivateKey::new(KeypairData::Ed25519(keypair), "hotty-sftp-host-key")
+            .map_err(|e| format!("Failed to create ed25519 host key: {e}"))
+    })?;
+
+    let rsa = load_or_create_key(app, "sftp_host_key_rsa", || {
+        // rand 0.10's ThreadRng matches ssh-key's rand_core major (our
+        // top-level `rand` 0.8 does not, so its RNG wouldn't satisfy the
+        // CryptoRng bound). It's a CSPRNG seeded from the OS; fine for keygen,
+        // and we're on a blocking thread so the thread-local RNG is OK.
+        let mut rng = rand_v010::rng();
+        let keypair = RsaKeypair::random(&mut rng, 3072)
+            .map_err(|e| format!("Failed to generate RSA host key: {e}"))?;
+        PrivateKey::new(KeypairData::Rsa(keypair), "hotty-sftp-host-key-rsa")
+            .map_err(|e| format!("Failed to create RSA host key: {e}"))
+    })?;
+
+    Ok(vec![ed25519, rsa])
 }
 
 // ---------------------------------------------------------------------------
@@ -115,10 +151,16 @@ impl RusshServerHandler for SshServerHandler {
             self.authed = true;
             Ok(Auth::Accept)
         } else {
-            log::warn!(
-                "file-server: SFTP auth rejected for user '{user}' from {}",
+            // Surface it: the operator otherwise sees nothing but a client that
+            // "can't connect". `user` is attacker-controlled, so clamp it; the
+            // password never appears anywhere.
+            let msg = format!(
+                "SFTP login failed for user '{}' from {}",
+                clamp_for_display(user, 64),
                 self.peer
             );
+            log::warn!("file-server: {msg}");
+            emit_error(&self.ctx.app, &self.ctx.server_id, PROTO, &msg);
             Ok(Auth::reject())
         }
     }
@@ -177,6 +219,11 @@ impl RusshServerHandler for SshServerHandler {
 struct OpenFile {
     file: std::fs::File,
     write: bool,
+    /// Client-supplied name, kept for error reporting after open.
+    name: String,
+    /// One error event per handle — a failing large upload would otherwise emit
+    /// one per chunk.
+    error_reported: bool,
 }
 
 struct DirListing {
@@ -208,6 +255,14 @@ impl SftpSession {
     fn next_handle(&mut self) -> String {
         self.seq += 1;
         format!("h{}", self.seq)
+    }
+
+    /// Surface a refused/failed upload in the pane. Takes `&self` so it can be
+    /// called from `map_err` closures that sit alongside `&self.ctx` borrows.
+    fn report_upload_error(&self, filename: &str, reason: &str) {
+        let msg = upload_error_msg(PROTO, filename, &self.peer, reason);
+        log::warn!("file-server: {msg}");
+        emit_error(&self.ctx.app, &self.ctx.server_id, PROTO, &msg);
     }
 }
 
@@ -315,33 +370,51 @@ impl SftpHandlerTrait for SftpSession {
             || pflags.contains(OpenFlags::CREATE)
             || pflags.contains(OpenFlags::TRUNCATE);
         if wants_write && !self.ctx.allow_write {
+            self.report_upload_error(&filename, REASON_UPLOADS_DISABLED);
             return Err(StatusCode::PermissionDenied);
         }
 
+        // Uploads may create missing parent directories (jail-safely); reads
+        // must resolve to something that already exists.
         let creating = pflags.contains(OpenFlags::CREATE);
-        let resolved =
-            resolve_in_root(&self.ctx.root, &filename, !creating).map_err(map_jail_status)?;
+        let resolved = if creating {
+            resolve_in_root_creating(&self.ctx.root, &filename)
+        } else {
+            resolve_in_root(&self.ctx.root, &filename, true)
+        }
+        .map_err(|e| {
+            // Reads are not reported: clients probe for absent files routinely,
+            // and that noise would bury the uploads that actually failed.
+            if wants_write {
+                self.report_upload_error(&filename, jail_reason(e));
+            }
+            map_jail_status(e)
+        })?;
 
         let opts: std::fs::OpenOptions = pflags.into();
-        let file = opts
-            .open(&resolved)
-            .map_err(|_| StatusCode::PermissionDenied)?;
+        let file = opts.open(&resolved).map_err(|e| {
+            if wants_write {
+                self.report_upload_error(&filename, &e.to_string());
+            }
+            StatusCode::PermissionDenied
+        })?;
 
-        let direction = if wants_write {
-            DIR_UPLOAD
-        } else {
-            DIR_DOWNLOAD
-        };
-        let size = file.metadata().ok().map(|m| m.len());
-        emit_transfer(
-            &self.ctx.app,
-            &self.ctx.server_id,
-            PROTO,
-            &self.peer,
-            &filename,
-            direction,
-            size,
-        );
+        // Downloads log here with the file's real size. Uploads log on close
+        // instead: at open the file is empty (created/truncated), so its size
+        // would always be 0 — the real byte count is only known once writing
+        // finishes.
+        if !wants_write {
+            let size = file.metadata().ok().map(|m| m.len());
+            emit_transfer(
+                &self.ctx.app,
+                &self.ctx.server_id,
+                PROTO,
+                &self.peer,
+                &filename,
+                DIR_DOWNLOAD,
+                size,
+            );
+        }
 
         let handle = self.next_handle();
         self.files.insert(
@@ -349,6 +422,8 @@ impl SftpHandlerTrait for SftpSession {
             OpenFile {
                 file,
                 write: wants_write,
+                name: filename,
+                error_reported: false,
             },
         );
         Ok(HandleReply { id, handle })
@@ -382,26 +457,56 @@ impl SftpHandlerTrait for SftpSession {
         offset: u64,
         data: Vec<u8>,
     ) -> Result<Status, Self::Error> {
-        if !self.ctx.allow_write {
-            return Err(StatusCode::PermissionDenied);
-        }
+        let allow_write = self.ctx.allow_write;
         let entry = self.files.get_mut(&handle).ok_or(StatusCode::Failure)?;
-        if !entry.write {
-            return Err(StatusCode::PermissionDenied);
+
+        let failure = if !allow_write || !entry.write {
+            Some((
+                StatusCode::PermissionDenied,
+                REASON_UPLOADS_DISABLED.to_string(),
+            ))
+        } else if let Err(e) = entry.file.seek(SeekFrom::Start(offset)) {
+            Some((StatusCode::Failure, e.to_string()))
+        } else if let Err(e) = entry.file.write_all(&data) {
+            Some((StatusCode::Failure, e.to_string()))
+        } else {
+            None
+        };
+
+        let Some((code, reason)) = failure else {
+            return Ok(ok_status(id));
+        };
+        // Report the first failure on this handle only; the client will usually
+        // keep pushing chunks that all fail the same way.
+        let report = if entry.error_reported {
+            None
+        } else {
+            entry.error_reported = true;
+            Some(entry.name.clone())
+        };
+        if let Some(name) = report {
+            self.report_upload_error(&name, &reason);
         }
-        entry
-            .file
-            .seek(SeekFrom::Start(offset))
-            .map_err(|_| StatusCode::Failure)?;
-        entry
-            .file
-            .write_all(&data)
-            .map_err(|_| StatusCode::Failure)?;
-        Ok(ok_status(id))
+        Err(code)
     }
 
     async fn close(&mut self, id: u32, handle: String) -> Result<Status, Self::Error> {
-        self.files.remove(&handle);
+        // An upload's final size is known only now — emit its transfer here with
+        // the real byte count (open-time it was an empty file).
+        if let Some(entry) = self.files.remove(&handle) {
+            if entry.write {
+                let size = entry.file.metadata().ok().map(|m| m.len());
+                emit_transfer(
+                    &self.ctx.app,
+                    &self.ctx.server_id,
+                    PROTO,
+                    &self.peer,
+                    &entry.name,
+                    DIR_UPLOAD,
+                    size,
+                );
+            }
+        }
         self.dirs.remove(&handle);
         Ok(ok_status(id))
     }
@@ -527,11 +632,17 @@ pub async fn start_sftp(
         file_server::stop_handle(&mut map, &server_id).await;
     }
 
-    let host_key = load_or_create_host_key(&app)?;
+    // RSA-3072 generation (first run only) is CPU-bound and takes a few
+    // seconds, so build the host keys on a blocking thread rather than stalling
+    // the async runtime.
+    let app_for_keys = app.clone();
+    let host_keys = tokio::task::spawn_blocking(move || load_or_create_host_keys(&app_for_keys))
+        .await
+        .map_err(|e| format!("SFTP host key task failed: {e}"))??;
     let config = Arc::new(russh::server::Config {
         auth_rejection_time: Duration::from_secs(2),
         auth_rejection_time_initial: Some(Duration::from_secs(0)),
-        keys: vec![host_key],
+        keys: host_keys,
         ..Default::default()
     });
 
@@ -567,19 +678,30 @@ pub async fn start_sftp(
                         }
                     };
                     let _ = stream.set_nodelay(true);
+                    let peer_str = peer.to_string();
                     let handler = SshServerHandler {
                         ctx: ctx.clone(),
-                        peer: peer.to_string(),
+                        peer: peer_str.clone(),
                         channels: HashMap::new(),
                         authed: false,
                     };
                     let cfg = config.clone();
                     let conn_cancel = cancel_child.child_token();
                     tokio::spawn(async move {
-                        if let Ok(session) = russh::server::run_stream(cfg, stream, handler).await {
-                            tokio::select! {
-                                _ = session => {}
-                                _ = conn_cancel.cancelled() => {}
+                        // A failed handshake (e.g. no common host-key/kex/cipher
+                        // with an old client) used to be swallowed silently; log
+                        // it so mismatches are diagnosable.
+                        match russh::server::run_stream(cfg, stream, handler).await {
+                            Ok(session) => {
+                                tokio::select! {
+                                    _ = session => {}
+                                    _ = conn_cancel.cancelled() => {}
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!(
+                                    "file-server: SFTP handshake failed from {peer_str}: {e}"
+                                );
                             }
                         }
                     });
@@ -611,6 +733,26 @@ pub async fn stop_sftp(state: &FileServerState, server_id: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rsa_host_key_generates_and_roundtrips() {
+        // Smoke test the RSA host-key path added for old SSH clients (e.g.
+        // Huawei VRP, which rejects ed25519 host keys). 2048 bits keeps the
+        // test fast; production uses 3072.
+        let mut rng = rand_v010::rng();
+        let keypair = RsaKeypair::random(&mut rng, 2048).expect("RSA keygen");
+        let key =
+            PrivateKey::new(KeypairData::Rsa(keypair), "test-rsa").expect("wrap RSA keypair");
+        assert!(
+            matches!(key.algorithm(), russh::keys::ssh_key::Algorithm::Rsa { .. }),
+            "host key should be RSA"
+        );
+        let pem = key.to_openssh(LineEnding::LF).expect("serialize to openssh");
+        assert!(
+            PrivateKey::from_openssh(pem.as_bytes()).is_ok(),
+            "RSA host key should round-trip through OpenSSH PEM"
+        );
+    }
 
     #[test]
     fn normalize_virtual_root() {

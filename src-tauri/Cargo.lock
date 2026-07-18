@@ -2453,6 +2453,7 @@ dependencies = [
  "log",
  "pbkdf2 0.12.2",
  "portable-pty",
+ "rand 0.10.1",
  "rand 0.8.5",
  "regex-lite",
  "reqwest 0.12.28",

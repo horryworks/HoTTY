@@ -40,7 +40,7 @@ import type {
   PingLogFilePayload,
   FileServerEvent,
   FileServerProtocol,
-  FirewallStatus,
+  FirewallReport,
   WebBrowserRect,
   WebBrowserClearDataOptions,
   WebBrowserNavState,
@@ -460,8 +460,8 @@ export const tauriService = {
   async fileServerFirewallStatus(
     protocol: FileServerProtocol,
     port: number
-  ): Promise<FirewallStatus> {
-    return invoke<FirewallStatus>('file_server_firewall_status', { protocol, port });
+  ): Promise<FirewallReport> {
+    return invoke<FirewallReport>('file_server_firewall_status', { protocol, port });
   },
 
   async fileServerFirewallAllow(protocol: FileServerProtocol, port: number): Promise<void> {

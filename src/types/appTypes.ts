@@ -365,6 +365,24 @@ export type FileServerProtocol = 'tftp' | 'sftp';
 /** Mirrors the Rust `FirewallStatus` enum (serde camelCase). */
 export type FirewallStatus = 'allowed' | 'blocked' | 'unknown' | 'notApplicable';
 
+/** Mirrors the Rust `FirewallReason` enum — why the status is what it is. */
+export type FirewallReason =
+  | 'blockRule'
+  | 'otherExeRule'
+  | 'profileMismatch'
+  | 'noRule'
+  | 'fwOff'
+  | 'thirdPartyFw'
+  | 'queryFailed';
+
+/** Mirrors the Rust `FirewallReport` struct (serde camelCase). */
+export interface FirewallReport {
+  status: FirewallStatus;
+  reason?: FirewallReason;
+  /** Set with reason `otherExeRule`: the program that rule targets. */
+  otherExePath?: string;
+}
+
 /** Persisted File Server pane configuration (password is never persisted). */
 export interface FileServerConfig {
   rootDir: string;

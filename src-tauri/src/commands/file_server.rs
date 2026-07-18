@@ -4,7 +4,7 @@
 
 use tauri::{AppHandle, State};
 
-use crate::services::file_server::{self, validate_root_dir, FileServerState, FirewallStatus};
+use crate::services::file_server::{self, validate_root_dir, FileServerState, FirewallReport};
 use crate::services::{sftp_server, tftp_server};
 
 fn validate_port(port: u16) -> Result<(), String> {
@@ -92,7 +92,7 @@ pub async fn file_server_sftp_stop(
 pub async fn file_server_firewall_status(
     protocol: String,
     port: u16,
-) -> Result<FirewallStatus, String> {
+) -> Result<FirewallReport, String> {
     Ok(file_server::firewall_status(&protocol, port).await)
 }
 

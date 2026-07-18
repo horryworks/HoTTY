@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useFileServerEvents } from '../../hooks/useFileServerEvents';
-import type { FileServerConfig, FileServerProtocol, FirewallStatus } from '../../types/appTypes';
+import type { FileServerConfig, FileServerProtocol, FirewallReport } from '../../types/appTypes';
 import './FileServerPane.css';
 
 interface FileServerPaneProps {
@@ -11,8 +11,8 @@ interface FileServerPaneProps {
   active: boolean;
 }
 
-function formatBytes(n?: number): string {
-  if (n === undefined) return '—';
+function formatBytes(n?: number | null): string {
+  if (n == null) return '—';
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
@@ -34,8 +34,8 @@ export function FileServerPane({ paneId, active }: FileServerPaneProps) {
   const [cfg, setCfg] = useState<FileServerConfig>(persisted);
   const [sftpPassword, setSftpPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [fwTftp, setFwTftp] = useState<FirewallStatus | null>(null);
-  const [fwSftp, setFwSftp] = useState<FirewallStatus | null>(null);
+  const [fwTftp, setFwTftp] = useState<FirewallReport | null>(null);
+  const [fwSftp, setFwSftp] = useState<FirewallReport | null>(null);
   const [fwChecking, setFwChecking] = useState<FileServerProtocol | null>(null);
 
   const { tftpState, sftpState, transfers, lastError, clearTransfers } = useFileServerEvents(paneId);
@@ -57,12 +57,13 @@ export function FileServerPane({ paneId, active }: FileServerPaneProps) {
   const checkFirewall = useCallback(async (protocol: FileServerProtocol, port: number) => {
     setFwChecking(protocol);
     try {
-      const status = await tauriService.fileServerFirewallStatus(protocol, port);
-      if (protocol === 'tftp') setFwTftp(status);
-      else setFwSftp(status);
+      const report = await tauriService.fileServerFirewallStatus(protocol, port);
+      if (protocol === 'tftp') setFwTftp(report);
+      else setFwSftp(report);
     } catch {
-      if (protocol === 'tftp') setFwTftp('unknown');
-      else setFwSftp('unknown');
+      const report: FirewallReport = { status: 'unknown', reason: 'queryFailed' };
+      if (protocol === 'tftp') setFwTftp(report);
+      else setFwSftp(report);
     } finally {
       setFwChecking(null);
     }
@@ -147,9 +148,28 @@ export function FileServerPane({ paneId, active }: FileServerPaneProps) {
 
   const sharedDisabled = tftpRunning || sftpRunning;
 
+  /** Explains *why* traffic is (or may be) dropped, so the fix is obvious. */
+  const firewallHint = (report: FirewallReport): string => {
+    switch (report.reason) {
+      case 'otherExeRule':
+        return t('panes.fileServer.fwOtherExeHint', { path: report.otherExePath ?? '' });
+      case 'blockRule':
+        return t('panes.fileServer.fwBlockRuleHint');
+      case 'profileMismatch':
+        return t('panes.fileServer.fwProfileMismatchHint');
+      case 'thirdPartyFw':
+        return t('panes.fileServer.fwThirdPartyHint');
+      case 'queryFailed':
+        return t('panes.fileServer.fwUnknownHint');
+      default:
+        return t('panes.fileServer.fwBlockedHint');
+    }
+  };
+
   const renderFirewall = (protocol: FileServerProtocol, port: number, running: boolean) => {
     if (!running) return null;
-    const status = protocol === 'tftp' ? fwTftp : fwSftp;
+    const report = protocol === 'tftp' ? fwTftp : fwSftp;
+    const status = report?.status;
     const checking = fwChecking === protocol;
     let cls = 'fs-fw-unknown';
     let label = t('panes.fileServer.fwUnknown');
@@ -164,18 +184,21 @@ export function FileServerPane({ paneId, active }: FileServerPaneProps) {
     } else if (status === 'notApplicable') {
       return null;
     }
+    // Offer remediation on 'unknown' too: a check we couldn't complete is no
+    // reason to strand the user, and adding the rule is harmless if allowed.
+    const canRemediate = !checking && report != null && (status === 'blocked' || status === 'unknown');
     return (
       <div className={`fs-firewall ${cls}`}>
         <span className="fs-firewall-label">{label}</span>
         <button type="button" className="fs-link-btn" onClick={() => checkFirewall(protocol, port)}>
           {t('panes.fileServer.recheck')}
         </button>
-        {status === 'blocked' && !checking && (
+        {canRemediate && (
           <>
             <button type="button" className="fs-link-btn fs-fw-allow" onClick={() => handleAllowFirewall(protocol, port)}>
               {t('panes.fileServer.allowThroughFirewall')}
             </button>
-            <span className="fs-firewall-hint">{t('panes.fileServer.fwBlockedHint')}</span>
+            <span className="fs-firewall-hint">{firewallHint(report)}</span>
           </>
         )}
       </div>

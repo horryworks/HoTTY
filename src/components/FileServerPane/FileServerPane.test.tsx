@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { FileServerPane } from './FileServerPane';
 import { tauriService } from '../../services/tauriService';
 import { useSettingsStore } from '../../stores/settingsStore';
-import type { FileServerEvent } from '../../types/appTypes';
+import type { FileServerEvent, FirewallReport } from '../../types/appTypes';
 
 let eventCb: ((e: FileServerEvent) => void) | null = null;
 
@@ -13,7 +13,7 @@ vi.mock('../../services/tauriService', () => ({
     fileServerTftpStop: vi.fn().mockResolvedValue(undefined),
     fileServerSftpStart: vi.fn().mockResolvedValue(undefined),
     fileServerSftpStop: vi.fn().mockResolvedValue(undefined),
-    fileServerFirewallStatus: vi.fn().mockResolvedValue('allowed'),
+    fileServerFirewallStatus: vi.fn().mockResolvedValue({ status: 'allowed' }),
     fileServerFirewallAllow: vi.fn().mockResolvedValue(undefined),
     selectFolder: vi.fn().mockResolvedValue('C:/firmware'),
     onFileServerEvent: vi.fn((cb: (e: FileServerEvent) => void) => {
@@ -112,10 +112,106 @@ describe('FileServerPane', () => {
     expect(screen.getByText('10.0.0.5:5000')).toBeTruthy();
   });
 
+  it('shows — for a transfer whose size is unknown (TFTP without tsize)', async () => {
+    render(<FileServerPane paneId="fs-1" active />);
+    await emit({
+      serverId: 'fs-1',
+      protocol: 'tftp',
+      kind: 'transfer',
+      client: '192.168.1.1:16189',
+      filename: 'ips.zip',
+      direction: 'upload',
+      // Backend sends null (serde None) when the client omits the tsize option;
+      // this must render as an em dash, not the literal "null B".
+      bytes: null as unknown as undefined,
+      timestamp: 0,
+    });
+    expect(screen.getByText('ips.zip')).toBeTruthy();
+    expect(screen.getByText('—')).toBeTruthy();
+  });
+
   it('ignores events for other panes', async () => {
     render(<FileServerPane paneId="fs-1" active />);
     await emit({ serverId: 'fs-OTHER', protocol: 'tftp', kind: 'status', status: 'running', timestamp: 0 });
     expect(screen.queryByText('Running')).toBeNull();
     expect(screen.getAllByText('Stopped')).toHaveLength(2);
+  });
+
+  it('shows backend error events in the banner', async () => {
+    render(<FileServerPane paneId="fs-1" active />);
+    await emit({
+      serverId: 'fs-1',
+      protocol: 'tftp',
+      kind: 'error',
+      message: "TFTP upload failed: 'rtr1.cfg' from 10.0.0.5:5000 — uploads are disabled.",
+      timestamp: 0,
+    });
+    expect(screen.getByText(/uploads are disabled/i)).toBeTruthy();
+  });
+
+  describe('firewall status', () => {
+    /** Start TFTP, then report `report` from the firewall check. */
+    const startTftpWith = async (report: FirewallReport) => {
+      vi.mocked(tauriService.fileServerFirewallStatus).mockResolvedValue(report);
+      render(<FileServerPane paneId="fs-1" active />);
+      await emit({ serverId: 'fs-1', protocol: 'tftp', kind: 'status', status: 'running', timestamp: 0 });
+      fireEvent.click(screen.getByText('Re-check'));
+      await waitFor(() => {
+        expect(tauriService.fileServerFirewallStatus).toHaveBeenCalledWith('tftp', 69);
+      });
+    };
+
+    it('names the other HoTTY installation when its rule is the one that exists', async () => {
+      await startTftpWith({
+        status: 'blocked',
+        reason: 'otherExeRule',
+        otherExePath: 'C:\\dev\\HoTTY\\target\\debug\\hotty.exe',
+      });
+      await waitFor(() => {
+        expect(screen.getByText(/Blocked by Windows Firewall/i)).toBeTruthy();
+      });
+      expect(screen.getByText('Allow through firewall')).toBeTruthy();
+      expect(screen.getByText(/C:\\dev\\HoTTY\\target\\debug\\hotty\.exe/)).toBeTruthy();
+    });
+
+    it('still offers remediation when the status is unknown', async () => {
+      await startTftpWith({ status: 'unknown', reason: 'queryFailed' });
+      await waitFor(() => {
+        expect(screen.getByText('Firewall status unknown')).toBeTruthy();
+      });
+      // A check we could not complete must not strand the user.
+      expect(screen.getByText('Allow through firewall')).toBeTruthy();
+      expect(screen.getByText(/Couldn’t determine the firewall status/i)).toBeTruthy();
+    });
+
+    it('explains a profile-scoped rule', async () => {
+      await startTftpWith({ status: 'blocked', reason: 'profileMismatch' });
+      await waitFor(() => {
+        expect(screen.getByText(/not for the network you are on now/i)).toBeTruthy();
+      });
+    });
+
+    it('offers nothing to fix when allowed', async () => {
+      await startTftpWith({ status: 'allowed' });
+      await waitFor(() => {
+        expect(screen.getByText('Allowed through firewall')).toBeTruthy();
+      });
+      expect(screen.queryByText('Allow through firewall')).toBeNull();
+    });
+
+    it('adds the rule and re-checks when Allow is clicked', async () => {
+      await startTftpWith({ status: 'blocked', reason: 'noRule' });
+      await waitFor(() => {
+        expect(screen.getByText('Allow through firewall')).toBeTruthy();
+      });
+      vi.mocked(tauriService.fileServerFirewallStatus).mockResolvedValue({ status: 'allowed' });
+      fireEvent.click(screen.getByText('Allow through firewall'));
+      await waitFor(() => {
+        expect(tauriService.fileServerFirewallAllow).toHaveBeenCalledWith('tftp', 69);
+      });
+      await waitFor(() => {
+        expect(screen.getByText('Allowed through firewall')).toBeTruthy();
+      });
+    });
   });
 });

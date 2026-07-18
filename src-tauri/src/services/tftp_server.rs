@@ -17,8 +17,9 @@ use tauri::AppHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::file_server::{
-    self, emit_error, emit_status, emit_transfer, resolve_in_root, FileServerState, JailError,
-    ServerHandle, DIR_DOWNLOAD, DIR_UPLOAD,
+    self, emit_error, emit_status, emit_transfer, jail_reason, resolve_in_root,
+    resolve_in_root_creating, upload_error_msg, FileServerState, JailError, ServerHandle,
+    DIR_DOWNLOAD, DIR_UPLOAD, REASON_UPLOADS_DISABLED,
 };
 
 const PROTO: &str = "tftp";
@@ -36,6 +37,16 @@ fn map_jail_err(e: JailError) -> packet::Error {
     match e {
         JailError::NotFound => packet::Error::FileNotFound,
         JailError::Denied => packet::Error::PermissionDenied,
+    }
+}
+
+impl JailedDirHandler {
+    /// Surface a refused/failed upload in the pane. Takes `&self` so it can be
+    /// called from the `map_err` closures alongside `&self.root`.
+    fn report_upload_error(&self, requested: &str, client: &str, reason: &str) {
+        let msg = upload_error_msg(PROTO, requested, client, reason);
+        log::warn!("file-server: {msg}");
+        emit_error(&self.app, &self.server_id, PROTO, &msg);
     }
 }
 
@@ -83,13 +94,21 @@ impl Handler for JailedDirHandler {
         path: &Path,
         size: Option<u64>,
     ) -> Result<Self::Writer, packet::Error> {
-        if !self.allow_write {
-            return Err(packet::Error::IllegalOperation);
-        }
         let requested = path.to_string_lossy().to_string();
         let client_str = client.to_string();
 
-        let resolved = resolve_in_root(&self.root, &requested, false).map_err(map_jail_err)?;
+        // A WRQ rejected here only tells the *device* ("access violation"), so
+        // every failure below also reaches the pane — otherwise a refused
+        // upload is indistinguishable from nothing happening at all.
+        if !self.allow_write {
+            self.report_upload_error(&requested, &client_str, REASON_UPLOADS_DISABLED);
+            return Err(packet::Error::IllegalOperation);
+        }
+
+        let resolved = resolve_in_root_creating(&self.root, &requested).map_err(|e| {
+            self.report_upload_error(&requested, &client_str, jail_reason(e));
+            map_jail_err(e)
+        })?;
 
         let create_path = resolved.clone();
         let file = unblock(move || {
@@ -100,7 +119,10 @@ impl Handler for JailedDirHandler {
             Ok::<File, std::io::Error>(f)
         })
         .await
-        .map_err(|_| packet::Error::PermissionDenied)?;
+        .map_err(|e| {
+            self.report_upload_error(&requested, &client_str, &e.to_string());
+            packet::Error::PermissionDenied
+        })?;
 
         emit_transfer(
             &self.app,
