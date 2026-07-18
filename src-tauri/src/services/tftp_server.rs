@@ -17,9 +17,9 @@ use tauri::AppHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::file_server::{
-    self, emit_error, emit_status, emit_transfer, jail_reason, resolve_in_root,
-    resolve_in_root_creating, upload_error_msg, FileServerState, JailError, ServerHandle,
-    DIR_DOWNLOAD, DIR_UPLOAD, REASON_UPLOADS_DISABLED,
+    self, emit_error, emit_status, emit_transfer, humanize_bind_error, humanize_file_error,
+    jail_reason, resolve_in_root, resolve_in_root_creating, upload_error_msg, FileServerState,
+    JailError, ServerHandle, DIR_DOWNLOAD, DIR_UPLOAD, REASON_UPLOADS_DISABLED,
 };
 
 const PROTO: &str = "tftp";
@@ -120,7 +120,7 @@ impl Handler for JailedDirHandler {
         })
         .await
         .map_err(|e| {
-            self.report_upload_error(&requested, &client_str, &e.to_string());
+            self.report_upload_error(&requested, &client_str, &humanize_file_error(&e));
             packet::Error::PermissionDenied
         })?;
 
@@ -140,6 +140,7 @@ impl Handler for JailedDirHandler {
 /// Start (or restart) the TFTP server for `server_id`. `root` must already be
 /// canonicalized/validated by the caller. Binding happens synchronously so bind
 /// failures are returned to the caller; the serve loop then runs in a task.
+#[allow(clippy::too_many_arguments)]
 pub async fn start_tftp(
     app: AppHandle,
     state: &FileServerState,
@@ -148,6 +149,7 @@ pub async fn start_tftp(
     port: u16,
     root: PathBuf,
     allow_write: bool,
+    window_label: String,
 ) -> Result<(), String> {
     {
         let mut map = state.tftp.lock().await;
@@ -169,7 +171,7 @@ pub async fn start_tftp(
         .bind(sock_addr)
         .build()
         .await
-        .map_err(|e| format!("Failed to bind TFTP on {sock_addr}: {e}"))?;
+        .map_err(|e| humanize_bind_error(&sock_addr.to_string(), &e))?;
 
     let cancel = CancellationToken::new();
     let cancel_child = cancel.clone();
@@ -181,7 +183,8 @@ pub async fn start_tftp(
         tokio::select! {
             res = server.serve() => {
                 if let Err(e) = res {
-                    emit_error(&app_task, &sid, PROTO, &format!("TFTP server stopped: {e}"));
+                    log::warn!("file-server: TFTP server error: {e}");
+                    emit_error(&app_task, &sid, PROTO, "The TFTP server stopped unexpectedly");
                 }
             }
             _ = cancel_child.cancelled() => {}
@@ -189,11 +192,14 @@ pub async fn start_tftp(
         emit_status(&app_task, &sid, PROTO, "stopped", None);
     });
 
-    state
-        .tftp
-        .lock()
-        .await
-        .insert(server_id.clone(), ServerHandle { cancel, join });
+    state.tftp.lock().await.insert(
+        server_id.clone(),
+        ServerHandle {
+            cancel,
+            join,
+            window_label,
+        },
+    );
     log::info!("file-server: TFTP listening on {sock_addr} (server {server_id})");
     Ok(())
 }

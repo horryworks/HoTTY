@@ -48,6 +48,7 @@ export const panes = {
     noTransfers: 'Передач пока нет',
     errorNoRoot: 'Сначала выберите папку для общего доступа',
     errorNoCreds: 'Введите имя пользователя и пароль SFTP',
+    unknownError: 'Неизвестная ошибка',
   },
   logViewer: {
     title: 'Просмотр журналов',

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyCommand } from './commandClassifier';
+import { classifyCommand, structuralDanger } from './commandClassifier';
 import { DEFAULT_WHITELIST } from './commandLists';
 
 // The classifier no longer carries a built-in list — callers inject the
@@ -173,6 +173,32 @@ describe('classifyCommand', () => {
       expect(classifyCommand('sysctl net.ipv4.ip_forward=1', wl).safe).toBe(false);
       expect(classifyCommand('dmesg -C', wl).safe).toBe(false);
       expect(classifyCommand('dmesg --clear', wl).safe).toBe(false);
+    });
+  });
+
+  describe('structuralDanger (shared floor)', () => {
+    it('flags redirection, substitution, chaining, backgrounding, and sudo', () => {
+      expect(structuralDanger('cat a > b').danger).toBe(true);
+      expect(structuralDanger('cat a >> b').danger).toBe(true);
+      expect(structuralDanger('cmd < input').danger).toBe(true);
+      expect(structuralDanger('echo $(whoami)').danger).toBe(true);
+      expect(structuralDanger('echo `id`').danger).toBe(true);
+      expect(structuralDanger('a; b').danger).toBe(true);
+      expect(structuralDanger('a && b').danger).toBe(true);
+      expect(structuralDanger('a || b').danger).toBe(true);
+      expect(structuralDanger('ls & poweroff').danger).toBe(true);
+      expect(structuralDanger('sudo reboot').danger).toBe(true);
+    });
+
+    it('does not flag a plain command or a simple pipe', () => {
+      expect(structuralDanger('show version').danger).toBe(false);
+      expect(structuralDanger('ps aux | grep ssh').danger).toBe(false);
+      expect(structuralDanger('ls -la').danger).toBe(false);
+    });
+
+    it('scans every CR/LF line so danger can\'t hide after a bare CR', () => {
+      expect(structuralDanger('show version\rsudo reboot').danger).toBe(true);
+      expect(structuralDanger('ls\ncat x > y').danger).toBe(true);
     });
   });
 });

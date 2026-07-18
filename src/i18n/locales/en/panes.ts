@@ -48,6 +48,7 @@ export const panes = {
     noTransfers: 'No transfers yet',
     errorNoRoot: 'Choose a folder to serve first',
     errorNoCreds: 'Enter an SFTP username and password',
+    unknownError: 'Unknown error',
   },
   logViewer: {
     title: 'Log Viewer',

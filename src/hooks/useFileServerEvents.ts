@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { tauriService } from '../services/tauriService';
 import { logError } from '../utils/logger';
 import type { FileServerProtocol } from '../types/appTypes';
@@ -31,6 +32,7 @@ interface FileServerEventData {
  * exposes per-protocol run state plus a rolling transfer log.
  */
 export function useFileServerEvents(serverId: string): FileServerEventData {
+  const { t } = useTranslation();
   const [tftpState, setTftpState] = useState<ServerRunState>('stopped');
   const [sftpState, setSftpState] = useState<ServerRunState>('stopped');
   const [transfers, setTransfers] = useState<TransferLogEntry[]>([]);
@@ -66,7 +68,7 @@ export function useFileServerEvents(serverId: string): FileServerEventData {
             return next;
           });
         } else if (ev.kind === 'error') {
-          setLastError(ev.message ?? 'Unknown error');
+          setLastError(ev.message ?? t('panes.fileServer.unknownError'));
         }
       });
       // If the effect was torn down while this subscribe was in flight,
@@ -81,7 +83,9 @@ export function useFileServerEvents(serverId: string): FileServerEventData {
       cancelled = true;
       unlisten?.();
     };
-  }, [serverId]);
+    // `t` is included so the fallback resolves in the current language; its
+    // identity only changes on a language switch, so re-subscribing then is fine.
+  }, [serverId, t]);
 
   const clearTransfers = useCallback(() => setTransfers([]), []);
 

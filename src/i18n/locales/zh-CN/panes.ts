@@ -48,6 +48,7 @@ export const panes = {
     noTransfers: '暂无传输',
     errorNoRoot: '请先选择要共享的文件夹',
     errorNoCreds: '请输入 SFTP 用户名和密码',
+    unknownError: '未知错误',
   },
   logViewer: {
     title: '日志查看器',

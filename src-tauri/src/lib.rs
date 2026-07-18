@@ -114,6 +114,19 @@ fn cleanup_window_sessions(app: &tauri::AppHandle, label: &str) {
     });
 }
 
+/// Stop the File Server (TFTP/SFTP) instances a closing window owned, so their
+/// listeners don't outlive the window in this shared process. Mirrors
+/// [`cleanup_window_sessions`]; a window that ran no File Server is a cheap no-op.
+fn cleanup_window_file_servers(app: &tauri::AppHandle, label: &str) {
+    let state = app.state::<FileServerState>();
+    let tftp = state.tftp.clone();
+    let sftp = state.sftp.clone();
+    let label = label.to_string();
+    tauri::async_runtime::spawn(async move {
+        services::file_server::stop_servers_for_window(&tftp, &sftp, &label).await;
+    });
+}
+
 /// Format the main window's title for a given app version (e.g. `HoTTY v2.0.9`).
 /// Extracted from `setup` so the title contract has unit coverage without
 /// booting a Tauri runtime.
@@ -159,10 +172,12 @@ pub fn run() {
         .manage(SessionOwners::new())
         .manage(PendingSizes::new())
         .manage(Arc::new(GcloudCacheState::new()))
-        // When a window closes, tear down only the sessions it owned.
+        // When a window closes, tear down only the sessions and File Server
+        // instances it owned (other windows keep running in this shared process).
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
                 cleanup_window_sessions(window.app_handle(), window.label());
+                cleanup_window_file_servers(window.app_handle(), window.label());
             }
         })
         .setup(|app| {

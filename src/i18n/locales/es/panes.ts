@@ -46,6 +46,7 @@ export const panes = {
     noTransfers: 'Aún no hay transferencias',
     errorNoRoot: 'Elige primero una carpeta para compartir',
     errorNoCreds: 'Introduce un usuario y una contraseña de SFTP',
+    unknownError: 'Error desconocido',
   },
   logViewer: {
     title: 'Visor de registros',

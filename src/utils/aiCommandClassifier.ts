@@ -4,12 +4,17 @@
  * Per command, in auto-execute-safe mode, decides between auto-execute and
  * "ask before execute", and records WHY for the UI. The model (Hybrid, default):
  *
- *   1. Blacklist match (user list) → ask before execute. Checked first (safety).
- *   2. Whitelist match (user list) → auto-execute (structural-danger checks kept).
- *   3. AI verdict                  → read-only & confident → auto; else → ask.
- *   4. None of the above           → ask before execute.
+ *   1. Blacklist match (user list)  → ask before execute. Checked first (safety).
+ *   2. Structural danger (floor)    → ask. Redirection/substitution/chaining/
+ *                                      sudo NEVER auto-run, whatever a verdict
+ *                                      says — applied to every strategy so the AI
+ *                                      path can't approve what the whitelist path
+ *                                      rejects structurally.
+ *   3. Whitelist match (user list)  → auto-execute.
+ *   4. AI verdict                   → read-only & confident → auto; else → ask.
+ *   5. None of the above            → ask before execute.
  *
- * Strategy variants: `static` skips step 3; `ai` skips step 2; `hybrid` (default)
+ * Strategy variants: `static` skips step 4; `ai` skips step 3; `hybrid` (default)
  * runs all. Anything that can't be decided (AI error/timeout/unauthed) falls back
  * to manual — never to "assume safe".
  *
@@ -18,7 +23,7 @@
 
 import type { ClassifierStrategy, CommandVerdict } from '../types/appTypes';
 import { matchBlacklist } from './commandLists';
-import { classifyCommand } from './commandClassifier';
+import { classifyCommand, structuralDanger } from './commandClassifier';
 import { tauriService } from '../services/tauriService';
 
 type DecisionSource = 'blacklist' | 'whitelist' | 'ai' | 'ask' | 'fallback';
@@ -116,6 +121,16 @@ export async function decideAutoExec(
             reason: blk.entry ? `matches blacklist entry "${blk.entry}"` : 'blacklisted',
             source: 'blacklist',
         };
+    }
+
+    // 2. Structural-danger floor — applies to EVERY strategy, before the AI path.
+    // A redirection / command-substitution / chaining / sudo construct must never
+    // auto-execute even if the AI rates the command read-only and confident. The
+    // whitelist path already enforces this; hoisting it here closes the gap where
+    // the `ai`/`hybrid` AI verdict could otherwise approve it.
+    const danger = structuralDanger(command);
+    if (danger.danger) {
+        return { autoExec: false, reason: danger.reason, source: 'ask' };
     }
 
     if (opts.strategy === 'ai') {

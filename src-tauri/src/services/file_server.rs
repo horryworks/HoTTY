@@ -28,6 +28,11 @@ use crate::services::path_safety::{is_sensitive_path, is_unc_path};
 pub struct ServerHandle {
     pub cancel: CancellationToken,
     pub join: tokio::task::JoinHandle<()>,
+    /// Label of the window that started this server, so it can be torn down when
+    /// that window closes (mirrors `SessionOwners` for sessions). A File Server
+    /// pane's servers normally stop on tab close; this covers closing the whole
+    /// window with the pane still open, so the listener doesn't outlive it.
+    pub window_label: String,
 }
 
 /// Shared Tauri state: running TFTP and SFTP servers keyed by `server_id`
@@ -49,6 +54,28 @@ impl FileServerState {
 impl Default for FileServerState {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Stop every TFTP and SFTP server started by the window labelled `label`.
+/// Called when that window is destroyed so a File Server pane closed together
+/// with its window (rather than via its tab) does not leave a listener bound in
+/// the shared process. No-op for windows that started no servers.
+pub async fn stop_servers_for_window(
+    tftp: &Arc<Mutex<HashMap<String, ServerHandle>>>,
+    sftp: &Arc<Mutex<HashMap<String, ServerHandle>>>,
+    label: &str,
+) {
+    for map in [tftp, sftp] {
+        let mut guard = map.lock().await;
+        let ids: Vec<String> = guard
+            .iter()
+            .filter(|(_, h)| h.window_label == label)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in ids {
+            stop_handle(&mut guard, &id).await;
+        }
     }
 }
 
@@ -417,6 +444,86 @@ pub const REASON_UPLOADS_DISABLED: &str =
     "uploads are disabled. Stop the server, tick “Allow uploads (write)”, then start it again.";
 
 // ---------------------------------------------------------------------------
+// Error humanization (ADR-005: never surface a raw `os error NNNNN` to the user)
+// ---------------------------------------------------------------------------
+
+/// Turn a listener-bind failure into a short, human-readable string. Like the
+/// session-layer `humanize_io_error`, this keeps the raw `os error NNNNN` /
+/// `(WSAE…)` text out of the pane's error banner and toast.
+///
+/// `bind` is the `addr:port` we tried to bind (safe to show — the user typed it).
+/// `err` is taken as `&dyn Display` because the two servers surface different
+/// error types: SFTP a `std::io::Error` from `TcpListener::bind`, TFTP an
+/// `async_tftp::Error` that wraps the UDP bind failure. Both render the OS text
+/// (with the stable `os error N` code on Windows), so we match on that.
+pub fn humanize_bind_error(bind: &str, err: &dyn std::fmt::Display) -> String {
+    let lower = err.to_string().to_ascii_lowercase();
+    // Port already taken (WSAEADDRINUSE 10048 / EADDRINUSE 98). The most common
+    // real failure — another program, or our own server still winding down.
+    if lower.contains("os error 10048")
+        || lower.contains("os error 98")
+        || lower.contains("address already in use")
+        || lower.contains("only one usage of each socket address")
+    {
+        return format!(
+            "Port {bind} is already in use — another program (or a still-closing server) holds it"
+        );
+    }
+    // Access denied (WSAEACCES 10013 / EACCES 13) — a reserved/privileged port,
+    // or a firewall/policy forbidding the bind.
+    if lower.contains("os error 10013")
+        || lower.contains("os error 13")
+        || lower.contains("forbidden by its access permissions")
+        || lower.contains("permission denied")
+        || lower.contains("access is denied")
+    {
+        return format!(
+            "Permission denied binding to {bind} — the port may be reserved or need elevation"
+        );
+    }
+    // Address not assignable to this host (WSAEADDRNOTAVAIL 10049 / EADDRNOTAVAIL 99).
+    if lower.contains("os error 10049")
+        || lower.contains("os error 99")
+        || lower.contains("cannot assign requested address")
+        || lower.contains("not valid in its context")
+    {
+        return format!("Cannot bind to {bind} — that address isn't available on this machine");
+    }
+    format!("Could not start the server on {bind}")
+}
+
+/// Turn a file open/create/read/write failure into a short, human-readable
+/// reason (used as the `reason` fragment of [`upload_error_msg`] and for
+/// download opens). Same ADR-005 intent: no raw `os error NNNNN` in the UI.
+pub fn humanize_file_error(err: &std::io::Error) -> String {
+    use std::io::ErrorKind;
+    match err.kind() {
+        ErrorKind::PermissionDenied => "access denied".to_string(),
+        ErrorKind::NotFound => "file or folder not found".to_string(),
+        _ => {
+            let lower = err.to_string().to_ascii_lowercase();
+            // Disk full (ERROR_DISK_FULL 112 / ENOSPC 28).
+            if lower.contains("os error 112")
+                || lower.contains("os error 28")
+                || lower.contains("no space left")
+                || lower.contains("not enough space")
+                || lower.contains("disk is full")
+            {
+                return "the disk is full".to_string();
+            }
+            if lower.contains("os error 5")
+                || lower.contains("os error 13")
+                || lower.contains("access is denied")
+                || lower.contains("permission denied")
+            {
+                return "access denied".to_string();
+            }
+            "the file could not be written".to_string()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Windows Firewall awareness
 // ---------------------------------------------------------------------------
 
@@ -635,7 +742,8 @@ fn map_detect_json(v: &serde_json::Value) -> FirewallReport {
     }
     if let Some(path) = v.get("otherExe").and_then(|x| x.as_str()) {
         if !path.is_empty() {
-            let mut report = FirewallReport::new(FirewallStatus::Blocked, FirewallReason::OtherExeRule);
+            let mut report =
+                FirewallReport::new(FirewallStatus::Blocked, FirewallReason::OtherExeRule);
             report.other_exe_path = Some(path.to_string());
             return report;
         }
@@ -1009,6 +1117,87 @@ mod tests {
         assert!(msg.contains("Allow uploads"));
     }
 
+    // -- error humanization (ADR-005) --------------------------------------
+
+    #[test]
+    fn humanize_bind_error_labels_common_causes() {
+        // Windows (WSAE* with a stable os-error code) and POSIX phrasings both
+        // reduce to the same short label — no raw "os error NNNNN" leaks out.
+        let in_use = std::io::Error::new(
+            std::io::ErrorKind::AddrInUse,
+            "Only one usage of each socket address (protocol/network address/port) is normally permitted. (os error 10048)",
+        );
+        let msg = humanize_bind_error("0.0.0.0:69", &in_use);
+        assert!(msg.contains("already in use"), "got: {msg}");
+        assert!(!msg.contains("os error"), "raw OS code leaked: {msg}");
+        assert!(msg.contains("0.0.0.0:69"));
+
+        let denied = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "os error 10013");
+        assert!(humanize_bind_error("0.0.0.0:69", &denied).contains("Permission denied"));
+
+        let notavail = std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "os error 10049");
+        assert!(humanize_bind_error("10.9.9.9:69", &notavail).contains("isn't available"));
+    }
+
+    #[test]
+    fn humanize_bind_error_falls_back_without_raw_text() {
+        let weird = std::io::Error::other("something inscrutable (os error 424242)");
+        let msg = humanize_bind_error("0.0.0.0:2222", &weird);
+        assert!(!msg.contains("os error"), "raw OS code leaked: {msg}");
+        assert!(msg.contains("0.0.0.0:2222"));
+    }
+
+    #[tokio::test]
+    async fn stop_servers_for_window_stops_only_that_windows_servers() {
+        let tftp = Arc::new(Mutex::new(HashMap::new()));
+        let sftp = Arc::new(Mutex::new(HashMap::new()));
+        // A ServerHandle whose task simply parks until cancelled — so stop_handle's
+        // cancel → join completes immediately (no 2s timeout).
+        let mk = |label: &str| {
+            let cancel = CancellationToken::new();
+            let child = cancel.clone();
+            let join = tokio::spawn(async move { child.cancelled().await });
+            ServerHandle {
+                cancel,
+                join,
+                window_label: label.to_string(),
+            }
+        };
+        tftp.lock()
+            .await
+            .insert("win-a::1".to_string(), mk("win-a"));
+        tftp.lock()
+            .await
+            .insert("win-b::1".to_string(), mk("win-b"));
+        sftp.lock()
+            .await
+            .insert("win-a::2".to_string(), mk("win-a"));
+
+        stop_servers_for_window(&tftp, &sftp, "win-a").await;
+
+        // Only win-a's servers were stopped; win-b's is untouched.
+        assert!(!tftp.lock().await.contains_key("win-a::1"));
+        assert!(tftp.lock().await.contains_key("win-b::1"));
+        assert!(!sftp.lock().await.contains_key("win-a::2"));
+    }
+
+    #[test]
+    fn humanize_file_error_maps_kinds_and_hides_raw() {
+        assert_eq!(
+            humanize_file_error(&std::io::Error::from(std::io::ErrorKind::PermissionDenied)),
+            "access denied"
+        );
+        assert_eq!(
+            humanize_file_error(&std::io::Error::from(std::io::ErrorKind::NotFound)),
+            "file or folder not found"
+        );
+        let full = std::io::Error::other("There is not enough space on the disk. (os error 112)");
+        assert_eq!(humanize_file_error(&full), "the disk is full");
+        let other = std::io::Error::other("gremlins (os error 999)");
+        let msg = humanize_file_error(&other);
+        assert!(!msg.contains("os error"), "raw OS code leaked: {msg}");
+    }
+
     #[test]
     fn validate_root_rejects_empty() {
         assert!(validate_root_dir("").is_err());
@@ -1103,7 +1292,9 @@ mod tests {
     #[test]
     fn detect_block_rule_beats_allow_rule() {
         // Windows evaluates inbound Block ahead of Allow; the mapping must too.
-        let r = map_detect_json(&detect(serde_json::json!({"allow": true, "blockRule": true})));
+        let r = map_detect_json(&detect(
+            serde_json::json!({"allow": true, "blockRule": true}),
+        ));
         assert_eq!(r.status, FirewallStatus::Blocked);
         assert_eq!(r.reason, Some(FirewallReason::BlockRule));
     }
@@ -1194,7 +1385,8 @@ mod tests {
     fn netsh_cmdline_deletes_then_adds_named_rule() {
         let line = netsh_add_rule_cmdline(r"C:\Program Files\HoTTY\hotty.exe", "UDP", 69);
         // cmd /c, delete-before-add on a single `&` chain (not `&&`).
-        assert!(line.starts_with(r"/c %SystemRoot%\System32\netsh.exe advfirewall firewall delete rule"));
+        assert!(line
+            .starts_with(r"/c %SystemRoot%\System32\netsh.exe advfirewall firewall delete rule"));
         assert!(line.contains(r#"name="HoTTY File Server (UDP 69)""#));
         assert!(line.contains(r" & %SystemRoot%\System32\netsh.exe advfirewall firewall add rule"));
         assert!(line.contains(r#"program="C:\Program Files\HoTTY\hotty.exe""#));

@@ -40,7 +40,7 @@
     padding: 4px 6px;
     border-radius: 4px;
     font-size: var(--font-size-base);
-    transition: all 0.2s;
+    transition: background-color 0.15s, color 0.15s;
 }
 
 .ai-chat-header-btn:hover:not(:disabled) {

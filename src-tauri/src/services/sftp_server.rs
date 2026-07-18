@@ -13,9 +13,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rand::RngCore;
-use russh::keys::ssh_key::private::{
-    Ed25519Keypair, Ed25519PrivateKey, KeypairData, RsaKeypair,
-};
+use russh::keys::ssh_key::private::{Ed25519Keypair, Ed25519PrivateKey, KeypairData, RsaKeypair};
 use russh::keys::ssh_key::LineEnding;
 use russh::keys::PrivateKey;
 use russh::server::{Auth, Handler as RusshServerHandler, Msg, Session};
@@ -31,12 +29,30 @@ use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
 use crate::services::file_server::{
-    self, clamp_for_display, ct_eq, emit_error, emit_status, emit_transfer, jail_reason,
-    resolve_in_root, resolve_in_root_creating, upload_error_msg, validate_root_dir, FileServerState,
-    JailError, ServerHandle, DIR_DOWNLOAD, DIR_UPLOAD, REASON_UPLOADS_DISABLED,
+    self, clamp_for_display, ct_eq, emit_error, emit_status, emit_transfer, humanize_bind_error,
+    humanize_file_error, jail_reason, resolve_in_root, resolve_in_root_creating, upload_error_msg,
+    validate_root_dir, FileServerState, JailError, ServerHandle, DIR_DOWNLOAD, DIR_UPLOAD,
+    REASON_UPLOADS_DISABLED,
 };
 
 const PROTO: &str = "sftp";
+
+/// Cap on a single SFTP `read` length. The client controls the requested `len`
+/// (a 32-bit field), so without a ceiling one request could force a multi-GiB
+/// zeroed allocation and OOM the whole process — an authenticated but cheap DoS.
+/// OpenSSH clamps a single read to 256 KiB for the same reason; larger reads are
+/// split by the client across requests.
+const MAX_SFTP_READ: usize = 256 * 1024;
+
+/// How long a client has to complete the SSH handshake before its connection is
+/// dropped. Bounds a half-open connection that stalls mid-handshake (e.g. a
+/// scanner) so it can't pin a task past server stop.
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Clamp a client-requested read length to [`MAX_SFTP_READ`].
+fn clamp_read_len(len: u32) -> usize {
+    (len as usize).min(MAX_SFTP_READ)
+}
 
 // ---------------------------------------------------------------------------
 // Host key (auto-generated, DPAPI-encrypted at rest)
@@ -394,7 +410,7 @@ impl SftpHandlerTrait for SftpSession {
         let opts: std::fs::OpenOptions = pflags.into();
         let file = opts.open(&resolved).map_err(|e| {
             if wants_write {
-                self.report_upload_error(&filename, &e.to_string());
+                self.report_upload_error(&filename, &humanize_file_error(&e));
             }
             StatusCode::PermissionDenied
         })?;
@@ -441,7 +457,7 @@ impl SftpHandlerTrait for SftpSession {
             .file
             .seek(SeekFrom::Start(offset))
             .map_err(|_| StatusCode::Failure)?;
-        let mut buf = vec![0u8; len as usize];
+        let mut buf = vec![0u8; clamp_read_len(len)];
         let n = entry.file.read(&mut buf).map_err(|_| StatusCode::Failure)?;
         if n == 0 {
             return Err(StatusCode::Eof);
@@ -466,9 +482,9 @@ impl SftpHandlerTrait for SftpSession {
                 REASON_UPLOADS_DISABLED.to_string(),
             ))
         } else if let Err(e) = entry.file.seek(SeekFrom::Start(offset)) {
-            Some((StatusCode::Failure, e.to_string()))
+            Some((StatusCode::Failure, humanize_file_error(&e)))
         } else if let Err(e) = entry.file.write_all(&data) {
-            Some((StatusCode::Failure, e.to_string()))
+            Some((StatusCode::Failure, humanize_file_error(&e)))
         } else {
             None
         };
@@ -618,6 +634,7 @@ pub async fn start_sftp(
     username: String,
     password: String,
     allow_write: bool,
+    window_label: String,
 ) -> Result<(), String> {
     if username.trim().is_empty() {
         return Err("SFTP username is required".into());
@@ -648,7 +665,7 @@ pub async fn start_sftp(
 
     let listener = TcpListener::bind(format!("{bind_addr}:{port}"))
         .await
-        .map_err(|e| format!("Failed to bind SFTP on {bind_addr}:{port}: {e}"))?;
+        .map_err(|e| humanize_bind_error(&format!("{bind_addr}:{port}"), &e))?;
 
     let ctx = ConnContext {
         root,
@@ -673,7 +690,10 @@ pub async fn start_sftp(
                     let (stream, peer) = match accepted {
                         Ok(v) => v,
                         Err(e) => {
-                            emit_error(&app_task, &sid, PROTO, &format!("SFTP accept failed: {e}"));
+                            // Rare and not user-actionable — log the raw cause for
+                            // diagnosis but show a plain message (ADR-005).
+                            log::warn!("file-server: SFTP accept failed: {e}");
+                            emit_error(&app_task, &sid, PROTO, "The SFTP server stopped accepting connections");
                             break;
                         }
                     };
@@ -688,20 +708,30 @@ pub async fn start_sftp(
                     let cfg = config.clone();
                     let conn_cancel = cancel_child.child_token();
                     tokio::spawn(async move {
-                        // A failed handshake (e.g. no common host-key/kex/cipher
-                        // with an old client) used to be swallowed silently; log
-                        // it so mismatches are diagnosable.
-                        match russh::server::run_stream(cfg, stream, handler).await {
-                            Ok(session) => {
-                                tokio::select! {
-                                    _ = session => {}
-                                    _ = conn_cancel.cancelled() => {}
-                                }
-                            }
-                            Err(e) => {
-                                log::warn!(
+                        // Race the handshake against (a) a bounded timeout and (b)
+                        // server stop, so a client that stalls mid-handshake — or a
+                        // stop issued while the handshake is in flight — can't pin
+                        // this task open (russh's own run_stream has no cancel arm).
+                        let handshake =
+                            tokio::time::timeout(HANDSHAKE_TIMEOUT, russh::server::run_stream(cfg, stream, handler));
+                        tokio::select! {
+                            _ = conn_cancel.cancelled() => {}
+                            res = handshake => match res {
+                                // A failed handshake (e.g. no common host-key/kex/
+                                // cipher with an old client) used to be swallowed
+                                // silently; log it so mismatches are diagnosable.
+                                Err(_) => log::warn!(
+                                    "file-server: SFTP handshake from {peer_str} timed out"
+                                ),
+                                Ok(Err(e)) => log::warn!(
                                     "file-server: SFTP handshake failed from {peer_str}: {e}"
-                                );
+                                ),
+                                Ok(Ok(session)) => {
+                                    tokio::select! {
+                                        _ = session => {}
+                                        _ = conn_cancel.cancelled() => {}
+                                    }
+                                }
                             }
                         }
                     });
@@ -711,11 +741,14 @@ pub async fn start_sftp(
         emit_status(&app_task, &sid, PROTO, "stopped", None);
     });
 
-    state
-        .sftp
-        .lock()
-        .await
-        .insert(server_id.clone(), ServerHandle { cancel, join });
+    state.sftp.lock().await.insert(
+        server_id.clone(),
+        ServerHandle {
+            cancel,
+            join,
+            window_label,
+        },
+    );
     log::info!("file-server: SFTP listening on {bind_addr}:{port} (server {server_id})");
     Ok(())
 }
@@ -741,17 +774,29 @@ mod tests {
         // test fast; production uses 3072.
         let mut rng = rand_v010::rng();
         let keypair = RsaKeypair::random(&mut rng, 2048).expect("RSA keygen");
-        let key =
-            PrivateKey::new(KeypairData::Rsa(keypair), "test-rsa").expect("wrap RSA keypair");
+        let key = PrivateKey::new(KeypairData::Rsa(keypair), "test-rsa").expect("wrap RSA keypair");
         assert!(
             matches!(key.algorithm(), russh::keys::ssh_key::Algorithm::Rsa { .. }),
             "host key should be RSA"
         );
-        let pem = key.to_openssh(LineEnding::LF).expect("serialize to openssh");
+        let pem = key
+            .to_openssh(LineEnding::LF)
+            .expect("serialize to openssh");
         assert!(
             PrivateKey::from_openssh(pem.as_bytes()).is_ok(),
             "RSA host key should round-trip through OpenSSH PEM"
         );
+    }
+
+    #[test]
+    fn read_len_is_capped_to_max() {
+        // A client controls `len` directly; a huge value must not translate into
+        // a huge allocation. Small reads pass through unchanged.
+        assert_eq!(clamp_read_len(0), 0);
+        assert_eq!(clamp_read_len(4096), 4096);
+        assert_eq!(clamp_read_len(MAX_SFTP_READ as u32), MAX_SFTP_READ);
+        assert_eq!(clamp_read_len(MAX_SFTP_READ as u32 + 1), MAX_SFTP_READ);
+        assert_eq!(clamp_read_len(u32::MAX), MAX_SFTP_READ);
     }
 
     #[test]

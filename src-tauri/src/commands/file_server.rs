@@ -2,7 +2,7 @@
 //! Windows Firewall status/remediation surface. Thin wrappers that validate
 //! input then delegate to the services in `crate::services`.
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, Window};
 
 use crate::services::file_server::{self, validate_root_dir, FileServerState, FirewallReport};
 use crate::services::{sftp_server, tftp_server};
@@ -20,8 +20,10 @@ fn validate_port(port: u16) -> Result<(), String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn file_server_tftp_start(
     app: AppHandle,
+    window: Window,
     state: State<'_, FileServerState>,
     server_id: String,
     bind_addr: String,
@@ -31,7 +33,18 @@ pub async fn file_server_tftp_start(
 ) -> Result<(), String> {
     validate_port(port)?;
     let root = validate_root_dir(&root_dir)?;
-    tftp_server::start_tftp(app, &state, server_id, bind_addr, port, root, allow_write).await
+    let label = window.label().to_string();
+    tftp_server::start_tftp(
+        app,
+        &state,
+        server_id,
+        bind_addr,
+        port,
+        root,
+        allow_write,
+        label,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -51,6 +64,7 @@ pub async fn file_server_tftp_stop(
 #[allow(clippy::too_many_arguments)]
 pub async fn file_server_sftp_start(
     app: AppHandle,
+    window: Window,
     state: State<'_, FileServerState>,
     server_id: String,
     bind_addr: String,
@@ -61,6 +75,7 @@ pub async fn file_server_sftp_start(
     allow_write: bool,
 ) -> Result<(), String> {
     validate_port(port)?;
+    let label = window.label().to_string();
     sftp_server::start_sftp(
         app,
         &state,
@@ -71,6 +86,7 @@ pub async fn file_server_sftp_start(
         username,
         password,
         allow_write,
+        label,
     )
     .await
 }

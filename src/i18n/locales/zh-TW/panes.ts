@@ -47,6 +47,7 @@ export const panes = {
     noTransfers: '尚無傳輸',
     errorNoRoot: '請先選擇要共用的資料夾',
     errorNoCreds: '請輸入 SFTP 使用者名稱和密碼',
+    unknownError: '未知錯誤',
   },
   logViewer: {
     title: '記錄檢視器',

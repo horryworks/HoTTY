@@ -46,6 +46,7 @@ export const panes = {
     noTransfers: 'まだ転送はありません',
     errorNoRoot: '先に共有するフォルダーを選択してください',
     errorNoCreds: 'SFTP のユーザー名とパスワードを入力してください',
+    unknownError: '不明なエラー',
   },
   logViewer: {
     title: 'ログビューア',

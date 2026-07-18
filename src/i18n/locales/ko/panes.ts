@@ -48,6 +48,7 @@ export const panes = {
     noTransfers: '아직 전송이 없습니다',
     errorNoRoot: '먼저 공유할 폴더를 선택하세요',
     errorNoCreds: 'SFTP 사용자 이름과 비밀번호를 입력하세요',
+    unknownError: '알 수 없는 오류',
   },
   logViewer: {
     title: '로그 뷰어',

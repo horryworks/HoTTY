@@ -12,6 +12,7 @@
     "core:event:allow-unlisten",
     "core:window:allow-set-size",
     "core:window:allow-set-focus",
+    "core:window:allow-set-title",
     "core:menu:default",
     "dialog:allow-open",
     "dialog:allow-save",

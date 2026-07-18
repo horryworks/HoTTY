@@ -48,6 +48,7 @@ export const panes = {
     noTransfers: 'Aucun transfert pour le moment',
     errorNoRoot: 'Choisissez d\'abord un dossier à partager',
     errorNoCreds: 'Saisissez un nom d’utilisateur et un mot de passe SFTP',
+    unknownError: 'Erreur inconnue',
   },
   logViewer: {
     title: 'Visionneuse de journaux',
