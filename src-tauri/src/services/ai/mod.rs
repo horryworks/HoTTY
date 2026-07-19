@@ -2,6 +2,7 @@ pub mod ai_provider;
 pub mod ai_service;
 pub mod classifier;
 pub mod config_store;
+pub mod errors;
 pub mod history;
 pub mod provider_registry;
 pub mod providers;

@@ -21,6 +21,7 @@ use crate::services::ai::classifier::{
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
+use crate::services::ai::errors::{describe_http_error, describe_transport_error};
 use crate::services::ai::history::ChatHistoryStore;
 use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
 
@@ -703,9 +704,7 @@ impl AIProvider for GeminiProvider {
                     ChatResponseData {
                         session_id: sid.clone(),
                         response_type: "error".into(),
-                        content:
-                            "An error occurred while communicating with Gemini. Please try again."
-                                .into(),
+                        content: describe_transport_error("Gemini"),
                         usage_metadata: None,
                     },
                 );
@@ -716,18 +715,18 @@ impl AIProvider for GeminiProvider {
         };
 
         if !response.status().is_success() {
+            let status = response.status().as_u16();
             let error_body = response
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".into());
-            log::error!("[gemini] API error: {error_body}");
+            log::error!("[gemini] API error {status}: {error_body}");
             emit_chat_response(
                 &app_clone,
                 ChatResponseData {
                     session_id: sid.clone(),
                     response_type: "error".into(),
-                    content: "An error occurred while communicating with Gemini. Please try again."
-                        .into(),
+                    content: describe_http_error("Gemini", status, &error_body),
                     usage_metadata: None,
                 },
             );
@@ -790,7 +789,7 @@ impl AIProvider for GeminiProvider {
                             emit_chat_response(&app_clone, ChatResponseData {
                                 session_id: sid.clone(),
                                 response_type: "error".into(),
-                                content: "An error occurred while communicating with Gemini. Please try again.".into(),
+                                content: describe_transport_error("Gemini"),
                                 usage_metadata: None,
                             });
                             stream_errored = true;

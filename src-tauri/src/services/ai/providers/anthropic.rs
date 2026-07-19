@@ -16,6 +16,7 @@ use crate::services::ai::classifier::{
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
+use crate::services::ai::errors::{describe_http_error, describe_transport_error};
 use crate::services::ai::history::ChatHistoryStore;
 use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
 use crate::services::ai::validation::{is_valid_api_key, is_valid_model};
@@ -299,9 +300,7 @@ impl AIProvider for AnthropicProvider {
                     ChatResponseData {
                         session_id: sid.clone(),
                         response_type: "error".into(),
-                        content:
-                            "An error occurred while communicating with Anthropic. Please try again."
-                                .into(),
+                        content: describe_transport_error("Anthropic"),
                         usage_metadata: None,
                     },
                 );
@@ -312,23 +311,21 @@ impl AIProvider for AnthropicProvider {
         };
 
         if !response.status().is_success() {
+            let status = response.status().as_u16();
             let error_body = response
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".into());
-            let err_msg = format!("API error: {error_body}");
+            log::error!("[anthropic] API error {status}: {error_body}");
             emit_chat_response(
                 &app_clone,
                 ChatResponseData {
                     session_id: sid.clone(),
                     response_type: "error".into(),
-                    content:
-                        "An error occurred while communicating with Anthropic. Please try again."
-                            .into(),
+                    content: describe_http_error("Anthropic", status, &error_body),
                     usage_metadata: None,
                 },
             );
-            log::error!("[anthropic] {err_msg}");
             // Drop the user message pushed before the request so the history
             // stays consistent for retry (mirror vertexai's pop-on-error).
             self.history.pop_trailing_user(&sid);
@@ -410,7 +407,7 @@ impl AIProvider for AnthropicProvider {
                             emit_chat_response(&app_clone, ChatResponseData {
                                 session_id: sid.clone(),
                                 response_type: "error".into(),
-                                content: "An error occurred while communicating with Anthropic. Please try again.".into(),
+                                content: describe_transport_error("Anthropic"),
                                 usage_metadata: None,
                             });
                             stream_errored = true;

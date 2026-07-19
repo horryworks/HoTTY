@@ -103,6 +103,13 @@ const MAX_COMMAND_LENGTH: usize = 8_192;
 /// service lock (and block auto-exec) indefinitely.
 const CLASSIFY_TIMEOUT_SECS: u64 = 12;
 
+/// Backstop deadline for a whole chat stream. Defense-in-depth: the frontend
+/// watchdog normally cancels a stalled stream at its ~600s hard cap, but if the
+/// UI is gone (window crashed) that cancel never arrives and the stream would
+/// hold the service lock forever. Set a bit above the frontend cap so the UI
+/// wins under normal operation and this only fires when the UI can't.
+const STREAM_DEADLINE_SECS: u64 = 660;
+
 fn validate_session_id(session_id: &str) -> Result<(), String> {
     if session_id.is_empty() {
         return Err("session_id must not be empty".into());
@@ -216,6 +223,16 @@ pub async fn ai_chat_send(
         }
     }
 
+    // Backstop deadline guard: cancels the same token if the stream outlives the
+    // frontend watchdog (e.g. the UI crashed), so send_message unwinds gracefully
+    // and releases the service lock instead of wedging the AI subsystem.
+    let deadline_token = cancel_token.clone();
+    let deadline_guard = tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(STREAM_DEADLINE_SECS)).await;
+        log::warn!("[ai] stream exceeded backstop deadline; cancelling");
+        deadline_token.cancel();
+    });
+
     let result = {
         let mut service = state.service.lock().await;
         service
@@ -229,6 +246,7 @@ pub async fn ai_chat_send(
             )
             .await
     };
+    deadline_guard.abort();
 
     // Deregister — but only if we're still the current entry (a newer send for the
     // same session may have replaced us while we streamed).
