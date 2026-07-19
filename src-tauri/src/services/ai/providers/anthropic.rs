@@ -15,9 +15,9 @@ use crate::services::ai::classifier::{
     build_user_prompt, parse_verdict, CommandVerdict, CLASSIFIER_SYSTEM_PROMPT,
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
-use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
 use crate::services::ai::errors::{describe_http_error, describe_transport_error};
 use crate::services::ai::history::ChatHistoryStore;
+use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
 use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
 use crate::services::ai::validation::{is_valid_api_key, is_valid_model};
 
@@ -32,7 +32,6 @@ const MAX_TOKENS: u32 = 8192;
 // ---------------------------------------------------------------------------
 // Chat message type
 // ---------------------------------------------------------------------------
-
 
 /// Extract the forced-tool input object from a Messages API response. The
 /// classifier forces `tool_choice` to `report_verdict`, so the verdict arrives
@@ -431,8 +430,12 @@ impl AIProvider for AnthropicProvider {
             // cancelled turn would leave only the user message in history, and
             // the next request would send two consecutive user messages and be
             // rejected by the API.
-            self.history
-                .finalize_assistant(&sid, "assistant", &full_response, cancel_token.is_cancelled());
+            self.history.finalize_assistant(
+                &sid,
+                "assistant",
+                &full_response,
+                cancel_token.is_cancelled(),
+            );
         }
 
         if !cancel_token.is_cancelled() && !stream_errored {

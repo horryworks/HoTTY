@@ -20,9 +20,9 @@ use crate::services::ai::classifier::{
     CLASSIFIER_SYSTEM_PROMPT,
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
-use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
 use crate::services::ai::errors::{describe_http_error, describe_transport_error};
 use crate::services::ai::history::ChatHistoryStore;
+use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
 use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
 
 // ---------------------------------------------------------------------------
@@ -80,7 +80,6 @@ fn now_millis() -> u64 {
 // ---------------------------------------------------------------------------
 // Chat message type
 // ---------------------------------------------------------------------------
-
 
 /// Minimal `application/x-www-form-urlencoded` value decoder for the OAuth callback
 /// query string (avoids pulling in the `url` crate). Decodes `%XX` escapes and `+`
@@ -810,8 +809,12 @@ impl AIProvider for GeminiProvider {
         } else {
             // Normal completion or cancel: close out the assistant turn so the
             // user/assistant alternation stays consistent for the next request.
-            self.history
-                .finalize_assistant(&sid, "model", &full_response, cancel_token.is_cancelled());
+            self.history.finalize_assistant(
+                &sid,
+                "model",
+                &full_response,
+                cancel_token.is_cancelled(),
+            );
         }
 
         if !cancel_token.is_cancelled() && !stream_errored {

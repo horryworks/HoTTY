@@ -17,8 +17,8 @@ use crate::services::ai::classifier::{
     CLASSIFIER_SYSTEM_PROMPT,
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
-use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
 use crate::services::ai::history::{ChatHistoryStore, ChatMessage};
+use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
 use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
 use crate::services::path_safety::is_unc_path;
 
@@ -1250,8 +1250,12 @@ impl AIProvider for VertexAIProvider {
             Ok((full_response, usage_metadata)) => {
                 // Always close out the assistant turn so user/model alternation
                 // stays consistent for the next request, even on cancel.
-                self.history
-                    .finalize_assistant(&sid, "model", &full_response, cancel_token.is_cancelled());
+                self.history.finalize_assistant(
+                    &sid,
+                    "model",
+                    &full_response,
+                    cancel_token.is_cancelled(),
+                );
                 if !cancel_token.is_cancelled() {
                     emit_chat_response(
                         app,

@@ -388,8 +388,12 @@ impl AIProvider for OpenAIProvider {
         } else {
             // Normal completion or cancel: close out the assistant turn to
             // preserve the alternation OpenAI's chat completions API expects.
-            self.history
-                .finalize_assistant(&sid, "assistant", &full_response, cancel_token.is_cancelled());
+            self.history.finalize_assistant(
+                &sid,
+                "assistant",
+                &full_response,
+                cancel_token.is_cancelled(),
+            );
         }
 
         if !cancel_token.is_cancelled() && !stream_errored {

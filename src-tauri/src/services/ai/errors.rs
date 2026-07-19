@@ -31,9 +31,7 @@ pub fn describe_http_error(provider: &str, status: u16, body: &str) -> String {
 
 /// Format a transport-level failure (no HTTP response — DNS, TLS, connection).
 pub fn describe_transport_error(provider: &str) -> String {
-    format!(
-        "Could not reach {provider}. Check your network connection and try again."
-    )
+    format!("Could not reach {provider}. Check your network connection and try again.")
 }
 
 /// Pull a concise human message out of a provider error body without dumping the
