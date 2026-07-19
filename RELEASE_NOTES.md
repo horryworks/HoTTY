@@ -1,5 +1,14 @@
 # Release Notes
 
+## v2.0.11-beta2
+
+Makes **AI Chat** concurrent: a streaming response no longer blocks everything else, and you can change the model, persona or language mid-response.
+
+### Improvements
+
+- **AI Chat no longer serializes across tabs.** A response streaming in one tab used to block every other AI action — a second tab's send, the model-list fetch, command-safety checks, even **New Chat** — until it finished. Those now run in parallel, so multiple AI conversations (and background safety classification) proceed concurrently, and **Stop**, provider switch and logout take effect immediately instead of queuing behind the stream.
+- **Change the model, persona or response language mid-response.** These selectors in the AI Chat settings were locked while a reply was streaming; they're now editable at any time and apply to your next message. This matters most during the Network-Expert auto-run loop, where the tab streams almost continuously. (The Vertex AI region selector stays locked during a stream — changing it reloads the model list and cancels the response.)
+
 ## v2.0.11-beta1
 
 An **AI Chat** quality pass — safer command review, clearer errors, consistent naming, and better accessibility — plus internal groundwork (a shared conversation-history store and unified error handling) toward faster multi-tab AI. Headline: command safety verdicts now appear in **Ask before execute** mode too, so a blacklisted command is flagged before you run it, not silently.
