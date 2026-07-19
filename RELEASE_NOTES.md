@@ -1,5 +1,29 @@
 # Release Notes
 
+## v2.0.11-beta1
+
+An **AI Chat** quality pass — safer command review, clearer errors, consistent naming, and better accessibility — plus internal groundwork (a shared conversation-history store and unified error handling) toward faster multi-tab AI. Headline: command safety verdicts now appear in **Ask before execute** mode too, so a blacklisted command is flagged before you run it, not silently.
+
+### Improvements
+
+- **Safety verdicts now appear in "Ask before execute" mode, not just auto mode.** When you review each AI-suggested command by hand, HoTTY now flags a blacklisted command with a 🛑 badge and a whitelisted one with a ✅ badge *before* you press Run. Previously these signals showed only in auto-execute mode, so a dangerous command in ask mode carried no visible warning. The check is instant and makes no AI call.
+- **Clearer AI error messages.** When a request to OpenAI, Anthropic or Gemini fails, the chat now names the actual cause — authentication failure, quota / rate limit, model not found, or a provider outage — with a short detail from the provider, instead of the generic *"An error occurred while communicating with …"*. (Vertex AI already did this.)
+- **"AI Watch" is now the single name for terminal monitoring.** The tab button, right-click menu and tooltips previously mixed *"Monitor with AI"*, *"AI Monitor"* and *"Watch with AI"*; they now read **AI Watch** / **Start AI Watch** / **Stop AI Watch** consistently.
+- **AI Chat accessibility.** The Stop and Send buttons are now labelled for screen readers, streaming replies are announced, the input area can be resized from the keyboard (focus the divider handle, then ↑/↓), and every AI reply has a copy button.
+- **The AI Chat message icon now reflects the active provider's brand colour** instead of always showing the Gemini gradient.
+- **Smarter empty state and a settings shortcut.** With no terminal linked, the starter suggestions no longer assume terminal output exists, and the execution-mode popover gains a **More safety settings…** link that jumps to Settings → AI.
+- **More of the AI Chat is translated** — cancellation, stream-timeout and error text, and tab labels, now follow your UI language.
+
+### Performance
+
+- **AI conversation history is now bounded per tab**, so a very long chat can no longer grow HoTTY's memory without limit.
+
+### Bug Fixes
+
+- **Fixed a stale hint.** The *"select a model"* hint pointed to a header / top-right dropdown that no longer exists; it now points to the AI settings button below the message box, where the model selector actually lives.
+- **AI command-safety checks no longer stall behind a long reply.** The safety classification that gates auto-execution could get stuck waiting behind an in-progress chat stream; it now has its own timeout, so the auto-execute decision never hangs.
+- **A stalled AI response can no longer wedge the AI features.** If a response stream stops responding and the window is closed mid-stream, a backstop timeout now releases it so other AI actions keep working.
+
 ## v2.0.10
 
 The v2.0.10 stable release, consolidating the v2.0.10 beta series plus a File Server reliability pass. The headline changes: a new **Fixed terminal size** option keeps the terminal pinned to the width your network device locked at login (e.g. Huawei USG / VRP), so command-line editing never drifts out of sync; **AI Chat** gains a one-click **Don't Execute** button and a broad reliability pass (per-tab conversations, a dependable Stop, sign-in fixes); command **auto-execution is hardened** against dangerous shell constructs and network/kernel write commands; and **File Server** uploads from network devices now work reliably end-to-end.
