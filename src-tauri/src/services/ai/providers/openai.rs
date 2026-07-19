@@ -3,15 +3,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use async_trait::async_trait;
-use futures::StreamExt;
 use regex_lite::Regex;
 use serde_json::Value;
 use tauri::AppHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{
-    emit_auth_result, emit_chat_response, AIProvider, AuthStatus, AuthType, ChatResponseData,
-    ModelInfo, TokenUsage,
+    emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, AuthType,
+    ChatResponseData, ModelInfo,
 };
 use crate::services::ai::classifier::{
     build_user_prompt, openai_response_format, parse_verdict, CommandVerdict,
@@ -20,7 +19,7 @@ use crate::services::ai::classifier::{
 use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::errors::{describe_http_error, describe_transport_error};
 use crate::services::ai::history::ChatHistoryStore;
-use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
+use crate::services::ai::sse::run_openai_sse_stream;
 use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
 use crate::services::ai::validation::{is_valid_api_key, is_valid_model};
 
@@ -317,98 +316,52 @@ impl AIProvider for OpenAIProvider {
             return Ok(());
         }
 
-        let mut stream = response.bytes_stream();
-        let mut sse_buf = SseBuffer::new();
-        let mut full_response = String::new();
-        let mut last_usage: Option<TokenUsage> = None;
-        let mut stream_errored = false;
-
-        loop {
-            tokio::select! {
-                _ = cancel_token.cancelled() => {
-                    log::debug!("[openai] Message cancelled for session {sid}");
-                    break;
-                }
-                chunk = stream.next() => {
-                    match chunk {
-                        Some(Ok(bytes)) => {
-                            let lines = sse_buf.push(&bytes);
-                            for line in lines {
-                                if let SseLine::Data(data) = parse_sse_line(&line) {
-                                    if data.is_empty() || data == "[DONE]" {
-                                        continue;
-                                    }
-                                    if let Ok(parsed) = serde_json::from_str::<Value>(data) {
-                                        // Extract content chunk
-                                        if let Some(text) = parsed
-                                            .pointer("/choices/0/delta/content")
-                                            .and_then(|v| v.as_str())
-                                        {
-                                            if !text.is_empty() {
-                                                full_response.push_str(text);
-                                                emit_chat_response(&app_clone, ChatResponseData {
-                                                    session_id: sid.clone(),
-                                                    response_type: "chunk".into(),
-                                                    content: text.to_string(),
-                                                    usage_metadata: None,
-                                                });
-                                            }
-                                        }
-                                        // Extract usage metadata
-                                        if let Some(usage) = parsed.get("usage") {
-                                            last_usage = Some(TokenUsage {
-                                                prompt_token_count: usage.get("prompt_tokens").and_then(|v| v.as_u64()).map(|v| v as u32),
-                                                candidates_token_count: usage.get("completion_tokens").and_then(|v| v.as_u64()).map(|v| v as u32),
-                                                total_token_count: usage.get("total_tokens").and_then(|v| v.as_u64()).map(|v| v as u32),
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Some(Err(e)) => {
-                            log::error!("[openai] Stream error: {e}");
-                            emit_chat_response(&app_clone, ChatResponseData {
-                                session_id: sid.clone(),
-                                response_type: "error".into(),
-                                content: describe_transport_error("OpenAI"),
-                                usage_metadata: None,
-                            });
-                            stream_errored = true;
-                            break;
-                        }
-                        None => break, // Stream ended
-                    }
+        match run_openai_sse_stream(
+            response.bytes_stream(),
+            &AppHandleSink(&app_clone),
+            &sid,
+            &cancel_token,
+        )
+        .await
+        {
+            Ok(outcome) => {
+                // Normal completion or cancel: close out the assistant turn to
+                // preserve the alternation OpenAI's chat completions API expects.
+                self.history.finalize_assistant(
+                    &sid,
+                    "assistant",
+                    &outcome.full_response,
+                    cancel_token.is_cancelled(),
+                );
+                if !cancel_token.is_cancelled() {
+                    emit_chat_response(
+                        &app_clone,
+                        ChatResponseData {
+                            session_id: sid.clone(),
+                            response_type: "done".into(),
+                            content: outcome.full_response,
+                            usage_metadata: outcome.usage,
+                        },
+                    );
                 }
             }
-        }
-
-        if stream_errored {
-            // Hard error mid-stream: drop the user message rather than commit a
-            // partial assistant turn — a truncated/empty assistant message would
-            // break OpenAI's strict user/assistant alternation on the next send.
-            self.history.pop_trailing_user(&sid);
-        } else {
-            // Normal completion or cancel: close out the assistant turn to
-            // preserve the alternation OpenAI's chat completions API expects.
-            self.history.finalize_assistant(
-                &sid,
-                "assistant",
-                &full_response,
-                cancel_token.is_cancelled(),
-            );
-        }
-
-        if !cancel_token.is_cancelled() && !stream_errored {
-            emit_chat_response(
-                &app_clone,
-                ChatResponseData {
-                    session_id: sid.clone(),
-                    response_type: "done".into(),
-                    content: full_response,
-                    usage_metadata: last_usage,
-                },
-            );
+            Err(e) => {
+                // Hard error mid-stream: emit the error and drop the user message
+                // rather than commit a partial assistant turn — a truncated/empty
+                // assistant message would break OpenAI's strict user/assistant
+                // alternation on the next send.
+                log::error!("[openai] Stream error: {e}");
+                emit_chat_response(
+                    &app_clone,
+                    ChatResponseData {
+                        session_id: sid.clone(),
+                        response_type: "error".into(),
+                        content: describe_transport_error("OpenAI"),
+                        usage_metadata: None,
+                    },
+                );
+                self.history.pop_trailing_user(&sid);
+            }
         }
 
         self.cancel_tokens.lock().unwrap().remove(&sid);

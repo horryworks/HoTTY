@@ -139,3 +139,11 @@ regex-lite = "0.1"
 
 # Secure memory wiping for sensitive data (passwords, passphrases)
 zeroize = "1"
+
+[dev-dependencies]
+# Integration tests for the shared SSE stream drivers (tests/ai_streaming.rs)
+# feed synthetic byte streams to the same loops production uses — no live HTTP.
+# All already resolved as normal/transitive deps, so `--locked` sees no delta.
+tokio = { version = "1", features = ["rt", "macros", "time", "sync"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+futures = "0.3"

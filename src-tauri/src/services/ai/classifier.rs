@@ -12,6 +12,7 @@
 //! conflict-of-interest of a model judging a command it is mid-task to run.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 /// Structured verdict returned by a one-shot classification.
 ///
@@ -87,6 +88,52 @@ pub fn gemini_response_schema() -> serde_json::Value {
         },
         "required": ["modifiesState", "confidence", "reason"]
     })
+}
+
+/// The forced-tool definition that makes Anthropic Messages emit a structured
+/// verdict as a single `report_verdict` tool call (Anthropic's mechanism for
+/// guaranteed-structured output). Shared by the direct Anthropic provider and
+/// Claude-on-Vertex, which both set `tool_choice` to this tool's name.
+pub fn anthropic_verdict_tool() -> serde_json::Value {
+    serde_json::json!({
+        "name": "report_verdict",
+        "description": "Report the command-safety verdict.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "modifiesState": {"type": "boolean"},
+                "confidence": {"type": "number"},
+                "reason": {"type": "string"}
+            },
+            "required": ["modifiesState", "confidence", "reason"]
+        }
+    })
+}
+
+/// Extract the first text part from a Gemini / Vertex `generateContent` response.
+/// Shared by the Gemini provider and Google-on-Vertex classification.
+pub fn extract_gemini_text(data: &Value) -> Option<&str> {
+    data.pointer("/candidates/0/content/parts/0/text")
+        .and_then(|v| v.as_str())
+}
+
+/// Extract the `input` object of the first `tool_use` content block from an
+/// Anthropic Messages response — where the forced `report_verdict` call carries
+/// the verdict.
+fn extract_tool_input(data: &Value) -> Option<&Value> {
+    data.get("content")?
+        .as_array()?
+        .iter()
+        .find(|b| b.get("type").and_then(|v| v.as_str()) == Some("tool_use"))
+        .and_then(|b| b.get("input"))
+}
+
+/// Parse a [`CommandVerdict`] from an Anthropic Messages response whose
+/// `tool_choice` forced [`anthropic_verdict_tool`]. Shared by the direct
+/// Anthropic provider and Claude-on-Vertex.
+pub fn parse_anthropic_tool_verdict(data: &Value) -> Result<CommandVerdict, String> {
+    let input = extract_tool_input(data).ok_or("classification response had no tool output")?;
+    parse_verdict(&input.to_string())
 }
 
 /// Parse a model text response into a [`CommandVerdict`].
@@ -199,5 +246,59 @@ mod tests {
         let s = gemini_response_schema();
         assert_eq!(s["type"], "OBJECT");
         assert_eq!(s["properties"]["confidence"]["type"], "NUMBER");
+    }
+
+    #[test]
+    fn anthropic_verdict_tool_shape() {
+        let t = anthropic_verdict_tool();
+        assert_eq!(t["name"], "report_verdict");
+        assert_eq!(
+            t["input_schema"]["properties"]["modifiesState"]["type"],
+            "boolean"
+        );
+        assert_eq!(t["input_schema"]["required"][0], "modifiesState");
+    }
+
+    #[test]
+    fn extract_gemini_text_reads_first_part() {
+        let body = serde_json::json!({
+            "candidates": [{ "content": { "parts": [{ "text": "hello" }] } }]
+        });
+        assert_eq!(extract_gemini_text(&body), Some("hello"));
+        assert_eq!(
+            extract_gemini_text(&serde_json::json!({ "candidates": [] })),
+            None
+        );
+    }
+
+    #[test]
+    fn parse_anthropic_tool_verdict_reads_forced_tool_call() {
+        let body = serde_json::json!({
+            "content": [{
+                "type": "tool_use",
+                "name": "report_verdict",
+                "input": { "modifiesState": true, "confidence": 0.88, "reason": "enters config mode" }
+            }]
+        });
+        let v = parse_anthropic_tool_verdict(&body).unwrap();
+        assert!(v.modifies_state);
+        assert_eq!(v.reason, "enters config mode");
+    }
+
+    #[test]
+    fn parse_anthropic_tool_verdict_skips_text_blocks() {
+        let body = serde_json::json!({
+            "content": [
+                { "type": "text", "text": "thinking..." },
+                { "type": "tool_use", "name": "report_verdict", "input": { "modifiesState": false, "confidence": 0.5, "reason": "x" } }
+            ]
+        });
+        assert!(parse_anthropic_tool_verdict(&body).is_ok());
+    }
+
+    #[test]
+    fn parse_anthropic_tool_verdict_errors_without_tool_use() {
+        let body = serde_json::json!({ "content": [{ "type": "text", "text": "no tool" }] });
+        assert!(parse_anthropic_tool_verdict(&body).is_err());
     }
 }

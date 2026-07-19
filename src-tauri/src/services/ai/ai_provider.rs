@@ -34,7 +34,7 @@ pub struct ModelInfo {
     pub display_name: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenUsage {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -156,6 +156,18 @@ pub trait AIProvider: Send + Sync {
 
 pub fn emit_chat_response(app: &AppHandle, data: ChatResponseData) {
     let _ = app.emit("ai-chat-response", data);
+}
+
+/// Production [`ChatSink`](crate::services::ai::sse::ChatSink): forwards streamed
+/// `chunk` events to the frontend via `ai-chat-response`. The shared SSE stream
+/// drivers ([`crate::services::ai::sse`]) emit through this so the loops stay
+/// Tauri-free and unit/integration testable with a collecting sink.
+pub struct AppHandleSink<'a>(pub &'a AppHandle);
+
+impl crate::services::ai::sse::ChatSink for AppHandleSink<'_> {
+    fn emit(&self, data: ChatResponseData) {
+        emit_chat_response(self.0, data);
+    }
 }
 
 pub fn emit_auth_result(app: &AppHandle, provider: &str, success: bool) {

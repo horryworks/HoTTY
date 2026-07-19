@@ -4,8 +4,6 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD as BASE64URL, Engine};
-use futures::StreamExt;
-use regex_lite::Regex;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tauri::AppHandle;
@@ -13,40 +11,32 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{
-    emit_auth_result, emit_chat_response, AIProvider, AuthStatus, AuthType, ChatResponseData,
-    ModelInfo, TokenUsage,
+    emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, AuthType,
+    ChatResponseData, ModelInfo,
 };
 use crate::services::ai::classifier::{
-    build_user_prompt, gemini_response_schema, parse_verdict, CommandVerdict,
+    build_user_prompt, extract_gemini_text, gemini_response_schema, parse_verdict, CommandVerdict,
     CLASSIFIER_SYSTEM_PROMPT,
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::errors::{describe_http_error, describe_transport_error};
 use crate::services::ai::history::ChatHistoryStore;
-use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
+use crate::services::ai::sse::run_google_sse_stream;
 use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
+use crate::services::ai::validation::{is_valid_api_key, is_valid_model};
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const VALID_MODEL_PATTERN: &str = r"^[a-zA-Z0-9]+([._-][a-zA-Z0-9]+)*$";
-const CRED_PATTERN: &str = r"^[\x21-\x7E]{1,512}$";
 const CONFIG_FILE_NAME: &str = "gemini_token.json";
 const NON_TEXT_MODEL_KEYWORDS: &[&str] =
     &["tts", "image", "robotics", "computer-use", "nano-banana"];
 
-fn is_valid_model(model: &str) -> bool {
-    Regex::new(VALID_MODEL_PATTERN)
-        .map(|re| re.is_match(model))
-        .unwrap_or(false)
-}
-
-fn is_valid_credential(cred: &str) -> bool {
-    Regex::new(CRED_PATTERN)
-        .map(|re| re.is_match(cred))
-        .unwrap_or(false)
-}
+// Model-name and credential shape checks are the shared `validation` helpers:
+// the Gemini model pattern is the generic simple-model rule, and an OAuth
+// client id/secret is validated with the same printable-ASCII shape as an API
+// key (`is_valid_api_key`).
 
 // ---------------------------------------------------------------------------
 // Token data
@@ -113,13 +103,6 @@ fn percent_decode(s: &str) -> String {
         }
     }
     String::from_utf8_lossy(&out).into_owned()
-}
-
-/// Extract the first text part from a non-streaming `generateContent` response
-/// body. Pulled out so the classification parsing path is unit-testable.
-fn extract_first_text(data: &Value) -> Option<&str> {
-    data.pointer("/candidates/0/content/parts/0/text")
-        .and_then(|v| v.as_str())
 }
 
 // ---------------------------------------------------------------------------
@@ -364,7 +347,7 @@ impl AIProvider for GeminiProvider {
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
-        if !is_valid_credential(client_id) || !is_valid_credential(client_secret) {
+        if !is_valid_api_key(client_id) || !is_valid_api_key(client_secret) {
             log::warn!("[gemini] Auth rejected: invalid credential format");
             emit_auth_result(app, self.id(), false);
             return Ok(false);
@@ -760,97 +743,52 @@ impl AIProvider for GeminiProvider {
             return Ok(());
         }
 
-        let mut stream = response.bytes_stream();
-        let mut sse_buf = SseBuffer::new();
-        let mut full_response = String::new();
-        let mut last_usage: Option<TokenUsage> = None;
-        let mut stream_errored = false;
-
-        loop {
-            tokio::select! {
-                _ = cancel_token.cancelled() => {
-                    log::debug!("[gemini] Message cancelled for session {sid}");
-                    break;
-                }
-                chunk = stream.next() => {
-                    match chunk {
-                        Some(Ok(bytes)) => {
-                            let lines = sse_buf.push(&bytes);
-                            for line in lines {
-                                if let SseLine::Data(data) = parse_sse_line(&line) {
-                                    if data.is_empty() {
-                                        continue;
-                                    }
-                                    if let Ok(parsed) = serde_json::from_str::<Value>(data) {
-                                        if let Some(text) = parsed
-                                            .pointer("/candidates/0/content/parts/0/text")
-                                            .and_then(|v| v.as_str())
-                                        {
-                                            if !text.is_empty() {
-                                                full_response.push_str(text);
-                                                emit_chat_response(&app_clone, ChatResponseData {
-                                                    session_id: sid.clone(),
-                                                    response_type: "chunk".into(),
-                                                    content: text.to_string(),
-                                                    usage_metadata: None,
-                                                });
-                                            }
-                                        }
-                                        if let Some(usage) = parsed.get("usageMetadata") {
-                                            last_usage = Some(TokenUsage {
-                                                prompt_token_count: usage.get("promptTokenCount").and_then(|v| v.as_u64()).map(|v| v as u32),
-                                                candidates_token_count: usage.get("candidatesTokenCount").and_then(|v| v.as_u64()).map(|v| v as u32),
-                                                total_token_count: usage.get("totalTokenCount").and_then(|v| v.as_u64()).map(|v| v as u32),
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Some(Err(e)) => {
-                            log::error!("[gemini] Stream error: {e}");
-                            emit_chat_response(&app_clone, ChatResponseData {
-                                session_id: sid.clone(),
-                                response_type: "error".into(),
-                                content: describe_transport_error("Gemini"),
-                                usage_metadata: None,
-                            });
-                            stream_errored = true;
-                            break;
-                        }
-                        None => break,
-                    }
+        match run_google_sse_stream(
+            response.bytes_stream(),
+            &AppHandleSink(&app_clone),
+            &sid,
+            &cancel_token,
+        )
+        .await
+        {
+            Ok(outcome) => {
+                // Normal completion or cancel: close out the assistant turn so the
+                // user/assistant alternation stays consistent for the next request.
+                self.history.finalize_assistant(
+                    &sid,
+                    "model",
+                    &outcome.full_response,
+                    cancel_token.is_cancelled(),
+                );
+                if !cancel_token.is_cancelled() {
+                    emit_chat_response(
+                        &app_clone,
+                        ChatResponseData {
+                            session_id: sid.clone(),
+                            response_type: "done".into(),
+                            content: outcome.full_response,
+                            usage_metadata: outcome.usage,
+                        },
+                    );
                 }
             }
-        }
-
-        if stream_errored {
-            // Hard error mid-stream: drop the user message pushed before the
-            // request rather than committing a partial assistant turn — that
-            // would corrupt the alternation and resend a truncated reply as
-            // context on the next request.
-            self.history.pop_trailing_user(&sid);
-        } else {
-            // Normal completion or cancel: close out the assistant turn so the
-            // user/assistant alternation stays consistent for the next request.
-            self.history.finalize_assistant(
-                &sid,
-                "model",
-                &full_response,
-                cancel_token.is_cancelled(),
-            );
-        }
-
-        if !cancel_token.is_cancelled() && !stream_errored {
-            emit_chat_response(
-                &app_clone,
-                ChatResponseData {
-                    session_id: sid.clone(),
-                    response_type: "done".into(),
-                    content: full_response,
-                    usage_metadata: last_usage,
-                },
-            );
+            Err(e) => {
+                // Hard error mid-stream: emit the error and drop the user message
+                // pushed before the request rather than committing a partial
+                // assistant turn — that would corrupt the alternation and resend a
+                // truncated reply as context on the next request.
+                log::error!("[gemini] Stream error: {e}");
+                emit_chat_response(
+                    &app_clone,
+                    ChatResponseData {
+                        session_id: sid.clone(),
+                        response_type: "error".into(),
+                        content: describe_transport_error("Gemini"),
+                        usage_metadata: None,
+                    },
+                );
+                self.history.pop_trailing_user(&sid);
+            }
         }
 
         self.cancel_tokens.lock().unwrap().remove(&sid);
@@ -905,7 +843,7 @@ impl AIProvider for GeminiProvider {
             .await
             .map_err(|e| format!("failed to read classification response: {e}"))?;
 
-        let content = extract_first_text(&data).ok_or("classification response had no content")?;
+        let content = extract_gemini_text(&data).ok_or("classification response had no content")?;
         parse_verdict(content)
     }
 
@@ -1004,14 +942,14 @@ mod tests {
 
     #[test]
     fn valid_credentials() {
-        assert!(is_valid_credential("abc123.apps.googleusercontent.com"));
-        assert!(is_valid_credential("GOCSPX-abc123"));
+        assert!(is_valid_api_key("abc123.apps.googleusercontent.com"));
+        assert!(is_valid_api_key("GOCSPX-abc123"));
     }
 
     #[test]
     fn invalid_credentials() {
-        assert!(!is_valid_credential(""));
-        assert!(!is_valid_credential("has spaces"));
+        assert!(!is_valid_api_key(""));
+        assert!(!is_valid_api_key("has spaces"));
     }
 
     #[test]
@@ -1083,15 +1021,9 @@ mod tests {
                 }
             }]
         });
-        let content = extract_first_text(&body).unwrap();
+        let content = extract_gemini_text(&body).unwrap();
         let verdict = parse_verdict(content).unwrap();
         assert!(!verdict.modifies_state);
         assert_eq!(verdict.reason, "read-only show command");
-    }
-
-    #[test]
-    fn extract_first_text_missing() {
-        let body = serde_json::json!({ "candidates": [] });
-        assert!(extract_first_text(&body).is_none());
     }
 }

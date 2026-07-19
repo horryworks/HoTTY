@@ -1,25 +1,24 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use async_trait::async_trait;
-use futures::StreamExt;
 use regex_lite::Regex;
 use serde_json::Value;
 use tauri::AppHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{
-    emit_auth_result, emit_chat_response, AIProvider, AuthStatus, AuthType, ChatResponseData,
-    ModelInfo, TokenUsage,
+    emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, AuthType,
+    ChatResponseData, ModelInfo, TokenUsage,
 };
 use crate::services::ai::classifier::{
-    build_user_prompt, gemini_response_schema, parse_verdict, CommandVerdict,
-    CLASSIFIER_SYSTEM_PROMPT,
+    anthropic_verdict_tool, build_user_prompt, extract_gemini_text, gemini_response_schema,
+    parse_anthropic_tool_verdict, parse_verdict, CommandVerdict, CLASSIFIER_SYSTEM_PROMPT,
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::history::{ChatHistoryStore, ChatMessage};
-use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
+use crate::services::ai::sse::{run_anthropic_sse_stream, run_google_sse_stream};
 use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
 use crate::services::path_safety::is_unc_path;
 
@@ -53,6 +52,25 @@ const NON_TEXT_MODEL_KEYWORDS: &[&str] = &[
     "virtual-try-on",
 ];
 
+// These patterns are provider-specific (Vertex model names carry publisher
+// paths with `/`; project/location have their own shapes), so they stay local
+// rather than moving to the shared `validation` module — but each compiles once
+// via `OnceLock` instead of re-`Regex::new`-ing on every call.
+fn model_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(VALID_MODEL_PATTERN).expect("valid vertex model regex"))
+}
+
+fn project_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(VALID_PROJECT_PATTERN).expect("valid vertex project regex"))
+}
+
+fn location_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(VALID_LOCATION_PATTERN).expect("valid vertex location regex"))
+}
+
 fn is_valid_model(model: &str) -> bool {
     // The model is interpolated into the request URL, and `/` is allowed (publisher
     // paths). Reject `..` so a crafted name can't path-traverse to another endpoint
@@ -60,21 +78,15 @@ fn is_valid_model(model: &str) -> bool {
     if model.contains("..") {
         return false;
     }
-    Regex::new(VALID_MODEL_PATTERN)
-        .map(|re| re.is_match(model))
-        .unwrap_or(false)
+    model_re().is_match(model)
 }
 
 fn is_valid_project(project: &str) -> bool {
-    Regex::new(VALID_PROJECT_PATTERN)
-        .map(|re| re.is_match(project))
-        .unwrap_or(false)
+    project_re().is_match(project)
 }
 
 fn is_valid_location(location: &str) -> bool {
-    Regex::new(VALID_LOCATION_PATTERN)
-        .map(|re| re.is_match(location))
-        .unwrap_or(false)
+    location_re().is_match(location)
 }
 
 /// Build the Vertex AI API base URL, handling the global endpoint correctly.
@@ -90,24 +102,6 @@ fn vertex_base_url(loc: &str, api_version: &str) -> String {
 /// Build a resource path prefix like `projects/{pid}/locations/{loc}`.
 fn vertex_resource_prefix(project_id: &str, loc: &str) -> String {
     format!("projects/{project_id}/locations/{loc}")
-}
-
-/// Extract the first text part from a non-streaming `generateContent` response
-/// body. Pulled out so the classification parsing path is unit-testable.
-fn extract_candidate_text(data: &Value) -> Option<&str> {
-    data.pointer("/candidates/0/content/parts/0/text")
-        .and_then(|v| v.as_str())
-}
-
-/// Extract the `input` object of the first `tool_use` content block from an
-/// Anthropic Messages response. Used for Claude-on-Vertex classification, where
-/// the structured verdict is returned as a forced tool call rather than text.
-fn extract_tool_input(data: &Value) -> Option<&Value> {
-    data.get("content")?
-        .as_array()?
-        .iter()
-        .find(|b| b.get("type").and_then(|v| v.as_str()) == Some("tool_use"))
-        .and_then(|b| b.get("input"))
 }
 
 fn now_millis() -> u64 {
@@ -596,66 +590,14 @@ impl VertexAIProvider {
             return Err(format!("API error {status}: {error_body}"));
         }
 
-        self.stream_google_response(app, sid, response, cancel_token)
-            .await
-    }
-
-    async fn stream_google_response(
-        &self,
-        app: &AppHandle,
-        sid: &str,
-        response: reqwest::Response,
-        cancel_token: &CancellationToken,
-    ) -> Result<(String, Option<TokenUsage>), String> {
-        let mut stream = response.bytes_stream();
-        let mut sse_buf = SseBuffer::new();
-        let mut full_response = String::new();
-        let mut last_usage: Option<TokenUsage> = None;
-
-        loop {
-            tokio::select! {
-                _ = cancel_token.cancelled() => break,
-                chunk = stream.next() => {
-                    match chunk {
-                        Some(Ok(bytes)) => {
-                            let lines = sse_buf.push(&bytes);
-                            for line in lines {
-                                if let SseLine::Data(data) = parse_sse_line(&line) {
-                                    if data.is_empty() { continue; }
-                                    if let Ok(parsed) = serde_json::from_str::<Value>(data) {
-                                        if let Some(text) = parsed
-                                            .pointer("/candidates/0/content/parts/0/text")
-                                            .and_then(|v| v.as_str())
-                                        {
-                                            if !text.is_empty() {
-                                                full_response.push_str(text);
-                                                emit_chat_response(app, ChatResponseData {
-                                                    session_id: sid.to_string(),
-                                                    response_type: "chunk".into(),
-                                                    content: text.to_string(),
-                                                    usage_metadata: None,
-                                                });
-                                            }
-                                        }
-                                        if let Some(usage) = parsed.get("usageMetadata") {
-                                            last_usage = Some(TokenUsage {
-                                                prompt_token_count: usage.get("promptTokenCount").and_then(|v| v.as_u64()).map(|v| v as u32),
-                                                candidates_token_count: usage.get("candidatesTokenCount").and_then(|v| v.as_u64()).map(|v| v as u32),
-                                                total_token_count: usage.get("totalTokenCount").and_then(|v| v.as_u64()).map(|v| v as u32),
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Some(Err(e)) => return Err(format!("Stream error: {e}")),
-                        None => break,
-                    }
-                }
-            }
-        }
-
-        Ok((full_response, last_usage))
+        run_google_sse_stream(
+            response.bytes_stream(),
+            &AppHandleSink(app),
+            sid,
+            cancel_token,
+        )
+        .await
+        .map(|o| (o.full_response, o.usage))
     }
 
     /// Stream an Anthropic-format API call via Vertex AI streamRawPredict.
@@ -726,94 +668,14 @@ impl VertexAIProvider {
             return Err(format!("API error {status}: {error_body}"));
         }
 
-        self.stream_anthropic_response(app, sid, response, cancel_token)
-            .await
-    }
-
-    async fn stream_anthropic_response(
-        &self,
-        app: &AppHandle,
-        sid: &str,
-        response: reqwest::Response,
-        cancel_token: &CancellationToken,
-    ) -> Result<(String, Option<TokenUsage>), String> {
-        let mut stream = response.bytes_stream();
-        let mut sse_buf = SseBuffer::new();
-        let mut full_response = String::new();
-        let mut current_event = String::new();
-        let mut input_tokens: u32 = 0;
-        let mut output_tokens: u32 = 0;
-
-        loop {
-            tokio::select! {
-                _ = cancel_token.cancelled() => break,
-                chunk = stream.next() => {
-                    match chunk {
-                        Some(Ok(bytes)) => {
-                            let lines = sse_buf.push(&bytes);
-                            for line in lines {
-                                match parse_sse_line(&line) {
-                                    SseLine::Event(event) => {
-                                        current_event = event.to_string();
-                                    }
-                                    SseLine::Data(data) => {
-                                        if data.is_empty() { continue; }
-                                        if let Ok(parsed) = serde_json::from_str::<Value>(data) {
-                                            match current_event.as_str() {
-                                                "content_block_delta" => {
-                                                    if let Some(text) = parsed
-                                                        .pointer("/delta/text")
-                                                        .and_then(|v| v.as_str())
-                                                    {
-                                                        if !text.is_empty() {
-                                                            full_response.push_str(text);
-                                                            emit_chat_response(app, ChatResponseData {
-                                                                session_id: sid.to_string(),
-                                                                response_type: "chunk".into(),
-                                                                content: text.to_string(),
-                                                                usage_metadata: None,
-                                                            });
-                                                        }
-                                                    }
-                                                }
-                                                "message_start" => {
-                                                    if let Some(tokens) = parsed
-                                                        .pointer("/message/usage/input_tokens")
-                                                        .and_then(|v| v.as_u64())
-                                                    {
-                                                        input_tokens = tokens as u32;
-                                                    }
-                                                }
-                                                "message_delta" => {
-                                                    if let Some(tokens) = parsed
-                                                        .pointer("/usage/output_tokens")
-                                                        .and_then(|v| v.as_u64())
-                                                    {
-                                                        output_tokens = tokens as u32;
-                                                    }
-                                                }
-                                                _ => {}
-                                            }
-                                        }
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        Some(Err(e)) => return Err(format!("Stream error: {e}")),
-                        None => break,
-                    }
-                }
-            }
-        }
-
-        let usage = TokenUsage {
-            prompt_token_count: Some(input_tokens),
-            candidates_token_count: Some(output_tokens),
-            total_token_count: Some(input_tokens + output_tokens),
-        };
-
-        Ok((full_response, Some(usage)))
+        run_anthropic_sse_stream(
+            response.bytes_stream(),
+            &AppHandleSink(app),
+            sid,
+            cancel_token,
+        )
+        .await
+        .map(|o| (o.full_response, o.usage))
     }
 
     /// Classify a command using a Claude-on-Vertex model via the Anthropic
@@ -841,19 +703,7 @@ impl VertexAIProvider {
             "max_tokens": 256,
             "system": CLASSIFIER_SYSTEM_PROMPT,
             "messages": [{"role": "user", "content": build_user_prompt(command)}],
-            "tools": [{
-                "name": "report_verdict",
-                "description": "Report the command-safety verdict.",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "modifiesState": {"type": "boolean"},
-                        "confidence": {"type": "number"},
-                        "reason": {"type": "string"}
-                    },
-                    "required": ["modifiesState", "confidence", "reason"]
-                }
-            }],
+            "tools": [anthropic_verdict_tool()],
             "tool_choice": {"type": "tool", "name": "report_verdict"}
         });
 
@@ -880,9 +730,7 @@ impl VertexAIProvider {
             .await
             .map_err(|e| format!("failed to read classification response: {e}"))?;
 
-        let input =
-            extract_tool_input(&data).ok_or("classification response had no tool output")?;
-        parse_verdict(&input.to_string())
+        parse_anthropic_tool_verdict(&data)
     }
 }
 
@@ -1382,8 +1230,7 @@ impl AIProvider for VertexAIProvider {
             .await
             .map_err(|e| format!("failed to read classification response: {e}"))?;
 
-        let content =
-            extract_candidate_text(&data).ok_or("classification response had no content")?;
+        let content = extract_gemini_text(&data).ok_or("classification response had no content")?;
         parse_verdict(content)
     }
 
@@ -1821,37 +1668,10 @@ mod tests {
                 }
             }]
         });
-        let content = extract_candidate_text(&body).unwrap();
+        let content = extract_gemini_text(&body).unwrap();
         let verdict = parse_verdict(content).unwrap();
         assert!(verdict.modifies_state);
         assert_eq!(verdict.reason, "writes config");
-    }
-
-    #[test]
-    fn extract_candidate_text_missing() {
-        let body = serde_json::json!({ "candidates": [] });
-        assert!(extract_candidate_text(&body).is_none());
-    }
-
-    #[test]
-    fn extract_tool_input_skips_text_blocks() {
-        let body = serde_json::json!({
-            "content": [
-                { "type": "text", "text": "thinking..." },
-                { "type": "tool_use", "name": "report_verdict",
-                  "input": { "modifiesState": true, "confidence": 0.9, "reason": "x" } }
-            ]
-        });
-        let input = extract_tool_input(&body).expect("tool input present");
-        assert_eq!(input["modifiesState"], true);
-        let verdict = parse_verdict(&input.to_string()).unwrap();
-        assert!(verdict.modifies_state);
-    }
-
-    #[test]
-    fn extract_tool_input_missing() {
-        let body = serde_json::json!({ "content": [{ "type": "text", "text": "no tool" }] });
-        assert!(extract_tool_input(&body).is_none());
     }
 
     #[test]

@@ -3,22 +3,22 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use async_trait::async_trait;
-use futures::StreamExt;
 use serde_json::Value;
 use tauri::AppHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{
-    emit_auth_result, emit_chat_response, AIProvider, AuthStatus, AuthType, ChatResponseData,
-    ModelInfo, TokenUsage,
+    emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, AuthType,
+    ChatResponseData, ModelInfo,
 };
 use crate::services::ai::classifier::{
-    build_user_prompt, parse_verdict, CommandVerdict, CLASSIFIER_SYSTEM_PROMPT,
+    anthropic_verdict_tool, build_user_prompt, parse_anthropic_tool_verdict, CommandVerdict,
+    CLASSIFIER_SYSTEM_PROMPT,
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::errors::{describe_http_error, describe_transport_error};
 use crate::services::ai::history::ChatHistoryStore;
-use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
+use crate::services::ai::sse::run_anthropic_sse_stream;
 use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
 use crate::services::ai::validation::{is_valid_api_key, is_valid_model};
 
@@ -29,22 +29,6 @@ use crate::services::ai::validation::{is_valid_api_key, is_valid_model};
 const CONFIG_FILE_NAME: &str = "anthropic_config.json";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 const MAX_TOKENS: u32 = 8192;
-
-// ---------------------------------------------------------------------------
-// Chat message type
-// ---------------------------------------------------------------------------
-
-/// Extract the forced-tool input object from a Messages API response. The
-/// classifier forces `tool_choice` to `report_verdict`, so the verdict arrives
-/// as the `input` of the first `tool_use` content block. Pulled out so the
-/// parsing path is unit-testable.
-fn extract_tool_input(data: &Value) -> Option<&Value> {
-    data.get("content")?
-        .as_array()?
-        .iter()
-        .find(|b| b.get("type").and_then(|v| v.as_str()) == Some("tool_use"))
-        .and_then(|b| b.get("input"))
-}
 
 // ---------------------------------------------------------------------------
 // Fallback models
@@ -335,128 +319,56 @@ impl AIProvider for AnthropicProvider {
             return Ok(());
         }
 
-        let mut stream = response.bytes_stream();
-        let mut sse_buf = SseBuffer::new();
-        let mut full_response = String::new();
-        let mut current_event = String::new();
-        let mut input_tokens: u32 = 0;
-        let mut output_tokens: u32 = 0;
-        let mut stream_errored = false;
-
-        loop {
-            tokio::select! {
-                _ = cancel_token.cancelled() => {
-                    log::debug!("[anthropic] Message cancelled for session {sid}");
-                    break;
-                }
-                chunk = stream.next() => {
-                    match chunk {
-                        Some(Ok(bytes)) => {
-                            let lines = sse_buf.push(&bytes);
-                            for line in lines {
-                                match parse_sse_line(&line) {
-                                    SseLine::Event(event) => {
-                                        current_event = event.to_string();
-                                    }
-                                    SseLine::Data(data) => {
-                                        if data.is_empty() {
-                                            continue;
-                                        }
-                                        if let Ok(parsed) = serde_json::from_str::<Value>(data) {
-                                            match current_event.as_str() {
-                                                "content_block_delta" => {
-                                                    if let Some(text) = parsed
-                                                        .pointer("/delta/text")
-                                                        .and_then(|v| v.as_str())
-                                                    {
-                                                        if !text.is_empty() {
-                                                            full_response.push_str(text);
-                                                            emit_chat_response(&app_clone, ChatResponseData {
-                                                                session_id: sid.clone(),
-                                                                response_type: "chunk".into(),
-                                                                content: text.to_string(),
-                                                                usage_metadata: None,
-                                                            });
-                                                        }
-                                                    }
-                                                }
-                                                "message_start" => {
-                                                    if let Some(tokens) = parsed
-                                                        .pointer("/message/usage/input_tokens")
-                                                        .and_then(|v| v.as_u64())
-                                                    {
-                                                        input_tokens = tokens as u32;
-                                                    }
-                                                }
-                                                "message_delta" => {
-                                                    if let Some(tokens) = parsed
-                                                        .pointer("/usage/output_tokens")
-                                                        .and_then(|v| v.as_u64())
-                                                    {
-                                                        output_tokens = tokens as u32;
-                                                    }
-                                                }
-                                                _ => {}
-                                            }
-                                        }
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        Some(Err(e)) => {
-                            log::error!("[anthropic] Stream error: {e}");
-                            emit_chat_response(&app_clone, ChatResponseData {
-                                session_id: sid.clone(),
-                                response_type: "error".into(),
-                                content: describe_transport_error("Anthropic"),
-                                usage_metadata: None,
-                            });
-                            stream_errored = true;
-                            break;
-                        }
-                        None => break,
-                    }
+        match run_anthropic_sse_stream(
+            response.bytes_stream(),
+            &AppHandleSink(&app_clone),
+            &sid,
+            &cancel_token,
+        )
+        .await
+        {
+            Ok(outcome) => {
+                // Normal completion or cancel: close out the assistant turn to
+                // preserve the alternation Anthropic requires. Without this, a
+                // cancelled turn would leave only the user message in history, and
+                // the next request would send two consecutive user messages and be
+                // rejected by the API.
+                self.history.finalize_assistant(
+                    &sid,
+                    "assistant",
+                    &outcome.full_response,
+                    cancel_token.is_cancelled(),
+                );
+                if !cancel_token.is_cancelled() {
+                    emit_chat_response(
+                        &app_clone,
+                        ChatResponseData {
+                            session_id: sid.clone(),
+                            response_type: "done".into(),
+                            content: outcome.full_response,
+                            usage_metadata: outcome.usage,
+                        },
+                    );
                 }
             }
-        }
-
-        if stream_errored {
-            // Hard error mid-stream: drop the user message rather than commit a
-            // partial assistant turn. Committing a truncated/empty assistant
-            // message would leave the history in a state the API rejects (or
-            // resend a partial reply as context) on the next send.
-            self.history.pop_trailing_user(&sid);
-        } else {
-            // Normal completion or cancel: close out the assistant turn to
-            // preserve the alternation Anthropic requires. Without this, a
-            // cancelled turn would leave only the user message in history, and
-            // the next request would send two consecutive user messages and be
-            // rejected by the API.
-            self.history.finalize_assistant(
-                &sid,
-                "assistant",
-                &full_response,
-                cancel_token.is_cancelled(),
-            );
-        }
-
-        if !cancel_token.is_cancelled() && !stream_errored {
-            let usage_metadata = TokenUsage {
-                prompt_token_count: Some(input_tokens),
-                candidates_token_count: Some(output_tokens),
-                total_token_count: Some(input_tokens + output_tokens),
-            };
-
-            emit_chat_response(
-                &app_clone,
-                ChatResponseData {
-                    session_id: sid.clone(),
-                    response_type: "done".into(),
-                    content: full_response,
-                    usage_metadata: Some(usage_metadata),
-                },
-            );
+            Err(e) => {
+                // Hard error mid-stream: emit the error and drop the user message
+                // rather than commit a partial assistant turn. Committing a
+                // truncated/empty assistant message would leave the history in a
+                // state the API rejects (or resend a partial reply as context) on
+                // the next send.
+                log::error!("[anthropic] Stream error: {e}");
+                emit_chat_response(
+                    &app_clone,
+                    ChatResponseData {
+                        session_id: sid.clone(),
+                        response_type: "error".into(),
+                        content: describe_transport_error("Anthropic"),
+                        usage_metadata: None,
+                    },
+                );
+                self.history.pop_trailing_user(&sid);
+            }
         }
 
         self.cancel_tokens.lock().unwrap().remove(&sid);
@@ -476,19 +388,7 @@ impl AIProvider for AnthropicProvider {
             "max_tokens": 256,
             "system": CLASSIFIER_SYSTEM_PROMPT,
             "messages": [{"role": "user", "content": build_user_prompt(command)}],
-            "tools": [{
-                "name": "report_verdict",
-                "description": "Report the command-safety verdict.",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "modifiesState": {"type": "boolean"},
-                        "confidence": {"type": "number"},
-                        "reason": {"type": "string"}
-                    },
-                    "required": ["modifiesState", "confidence", "reason"]
-                }
-            }],
+            "tools": [anthropic_verdict_tool()],
             "tool_choice": {"type": "tool", "name": "report_verdict"}
         });
 
@@ -515,9 +415,7 @@ impl AIProvider for AnthropicProvider {
             .await
             .map_err(|e| format!("failed to read classification response: {e}"))?;
 
-        let input =
-            extract_tool_input(&data).ok_or("classification response had no tool output")?;
-        parse_verdict(&input.to_string())
+        parse_anthropic_tool_verdict(&data)
     }
 
     fn clear_history(&self, session_id: &str) {
@@ -619,37 +517,5 @@ mod tests {
         let models = fallback_models();
         assert!(!models.is_empty());
         assert!(models.iter().any(|m| m.name.contains("claude")));
-    }
-
-    #[test]
-    fn extract_and_parse_tool_verdict() {
-        let body = serde_json::json!({
-            "content": [{
-                "type": "tool_use",
-                "name": "report_verdict",
-                "input": { "modifiesState": true, "confidence": 0.88, "reason": "enters config mode" }
-            }]
-        });
-        let input = extract_tool_input(&body).unwrap();
-        let verdict = parse_verdict(&input.to_string()).unwrap();
-        assert!(verdict.modifies_state);
-        assert_eq!(verdict.reason, "enters config mode");
-    }
-
-    #[test]
-    fn extract_tool_input_skips_text_blocks() {
-        let body = serde_json::json!({
-            "content": [
-                { "type": "text", "text": "thinking..." },
-                { "type": "tool_use", "name": "report_verdict", "input": { "modifiesState": false, "confidence": 0.5, "reason": "x" } }
-            ]
-        });
-        assert!(extract_tool_input(&body).is_some());
-    }
-
-    #[test]
-    fn extract_tool_input_missing() {
-        let body = serde_json::json!({ "content": [{ "type": "text", "text": "no tool" }] });
-        assert!(extract_tool_input(&body).is_none());
     }
 }
