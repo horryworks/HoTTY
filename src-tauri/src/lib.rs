@@ -224,7 +224,7 @@ pub fn run() {
 
             let service = AIService::new(registry, "openai");
             app.manage(AIServiceState {
-                service: tokio::sync::Mutex::new(service),
+                service: tokio::sync::RwLock::new(service),
                 cancels: std::sync::Mutex::new(std::collections::HashMap::new()),
             });
             Ok(())

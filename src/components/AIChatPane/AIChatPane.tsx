@@ -1791,7 +1791,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                                     localStorage.setItem(STORAGE_KEYS.AI_SELECTED_MODEL_PER_PROVIDER(activeAiProvider), model);
                                                     onChatStateChange?.({ selectedModel: model });
                                                 }}
-                                                disabled={isStreaming || isLoadingModels}
+                                                // Changing the model applies to the NEXT message; the
+                                                // in-flight stream keeps its own model, so this is safe
+                                                // mid-response (important for the auto-exec loop).
+                                                disabled={isLoadingModels}
                                             >
                                                 {selectedModel === 'Unspecified' && <option value="Unspecified">{isLoadingModels ? t('aiChat.pane.modelLoading') : t('aiChat.pane.modelSelectPlaceholder')}</option>}
                                                 {availableModels.map(m => (
@@ -1806,7 +1809,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                                     className="ai-chat-settings-popover-select"
                                                     value={selectedExpertise}
                                                     onChange={(e) => setSelectedExpertise(e.target.value)}
-                                                    disabled={isStreaming}
                                                 >
                                                     {aiPersonas?.map(persona => (
                                                         <option key={persona.id} value={persona.label}>{persona.label}</option>
@@ -1831,7 +1833,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                                     setSelectedLanguage(lang);
                                                     localStorage.setItem(STORAGE_KEYS.GEMINI_LANGUAGE, lang);
                                                 }}
-                                                disabled={isStreaming}
                                             >
                                                 {[AUTO_LANGUAGE, 'English', 'Japanese', 'Chinese', 'Korean', 'Spanish', 'French', 'German', 'Russian'].map(lang => (
                                                     <option key={lang} value={lang}>{lang}</option>

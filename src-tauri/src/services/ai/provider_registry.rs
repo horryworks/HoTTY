@@ -36,11 +36,19 @@ impl AIProviderRegistry {
         self.providers.get_mut(id)
     }
 
-    /// Mutable iterator over every registered provider. Used for session-scoped
-    /// operations (clear/cancel a `session_id`) that must reach whichever provider
+    /// Mutable iterator over every registered provider. Used for `&mut self`
+    /// session-scoped operations (logout) that must reach whichever provider
     /// actually holds that session's state — not just the active one.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Box<dyn AIProvider>> {
         self.providers.values_mut()
+    }
+
+    /// Shared iterator over every registered provider. Used for `&self`
+    /// session-scoped operations (clear_history) now that per-session state is
+    /// interior-mutable — reaches whichever provider holds the session, not just
+    /// the active one, without an exclusive borrow.
+    pub fn iter(&self) -> impl Iterator<Item = &dyn AIProvider> {
+        self.providers.values().map(|p| p.as_ref())
     }
 
     /// Check if a provider with the given ID exists.
@@ -100,7 +108,7 @@ mod tests {
         }
         fn logout(&mut self) {}
         async fn send_message(
-            &mut self,
+            &self,
             _app: &AppHandle,
             _session_id: &str,
             _message: &str,
@@ -110,8 +118,8 @@ mod tests {
         ) -> Result<(), String> {
             Ok(())
         }
-        fn clear_history(&mut self, _session_id: &str) {}
-        async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
+        fn clear_history(&self, _session_id: &str) {}
+        async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
             Ok(vec![])
         }
     }

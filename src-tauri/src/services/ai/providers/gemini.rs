@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD as BASE64URL, Engine};
@@ -126,11 +127,11 @@ fn extract_first_text(data: &Value) -> Option<&str> {
 // ---------------------------------------------------------------------------
 
 pub struct GeminiProvider {
-    token_data: Option<TokenData>,
+    token_data: Mutex<Option<TokenData>>,
     client_id: Option<String>,
     client_secret: Option<String>,
     history: ChatHistoryStore,
-    cancel_tokens: HashMap<String, CancellationToken>,
+    cancel_tokens: Mutex<HashMap<String, CancellationToken>>,
     app_data_dir: PathBuf,
     http_client: reqwest::Client,
 }
@@ -149,11 +150,11 @@ enum TokenRefresh {
 impl GeminiProvider {
     pub fn new(app_data_dir: PathBuf) -> Self {
         Self {
-            token_data: None,
+            token_data: Mutex::new(None),
             client_id: None,
             client_secret: None,
             history: ChatHistoryStore::new(MAX_HISTORY_MESSAGES),
-            cancel_tokens: HashMap::new(),
+            cancel_tokens: Mutex::new(HashMap::new()),
             app_data_dir,
             http_client: reqwest::Client::builder()
                 .connect_timeout(std::time::Duration::from_secs(30))
@@ -167,17 +168,23 @@ impl GeminiProvider {
     }
 
     fn save_token(&self) -> Result<(), String> {
-        let token_data = self.token_data.as_ref().ok_or("No token data to save")?;
-        let refresh_token = token_data
-            .refresh_token
-            .as_deref()
-            .ok_or("No refresh token")?;
+        // Copy out under the lock; the guard drops before any I/O.
+        let (refresh_token, obtained_at) = {
+            let guard = self.token_data.lock().unwrap();
+            let token_data = guard.as_ref().ok_or("No token data to save")?;
+            let refresh_token = token_data
+                .refresh_token
+                .as_deref()
+                .ok_or("No refresh token")?
+                .to_string();
+            (refresh_token, token_data.obtained_at)
+        };
 
         let payload = serde_json::json!({
             "refresh_token": refresh_token,
             "client_id": self.client_id,
             "client_secret": self.client_secret,
-            "obtained_at": token_data.obtained_at,
+            "obtained_at": obtained_at,
         });
 
         self.store().save(&payload.to_string())
@@ -215,7 +222,7 @@ impl GeminiProvider {
 
         self.client_id = Some(client_id);
         self.client_secret = Some(client_secret);
-        self.token_data = Some(TokenData {
+        *self.token_data.lock().unwrap() = Some(TokenData {
             access_token: String::new(),
             refresh_token: Some(refresh_token),
             expires_in: 0,
@@ -225,14 +232,18 @@ impl GeminiProvider {
         Ok(true)
     }
 
-    async fn refresh_access_token(&mut self) -> TokenRefresh {
+    async fn refresh_access_token(&self) -> TokenRefresh {
         // Missing local material is a definitive failure (nothing to retry with).
+        // Copy the refresh token out under the lock; the guard drops before the
+        // HTTP await (a std MutexGuard held across .await would not compile).
         let refresh_token = match self
             .token_data
+            .lock()
+            .unwrap()
             .as_ref()
-            .and_then(|t| t.refresh_token.as_ref())
+            .and_then(|t| t.refresh_token.clone())
         {
-            Some(rt) => rt.clone(),
+            Some(rt) => rt,
             None => return TokenRefresh::Invalid,
         };
         let client_id = match &self.client_id {
@@ -275,11 +286,14 @@ impl GeminiProvider {
                     }
                     let expires_in = data.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(0);
 
-                    if let Some(td) = &mut self.token_data {
-                        td.access_token = access_token;
-                        td.expires_in = expires_in;
-                        td.obtained_at = now_millis();
-                    }
+                    {
+                        let mut guard = self.token_data.lock().unwrap();
+                        if let Some(td) = guard.as_mut() {
+                            td.access_token = access_token;
+                            td.expires_in = expires_in;
+                            td.obtained_at = now_millis();
+                        }
+                    } // drop the guard before save_token re-locks
                     let _ = self.save_token();
                     return TokenRefresh::Ok;
                 }
@@ -305,12 +319,20 @@ impl GeminiProvider {
         }
     }
 
-    async fn get_valid_token(&mut self) -> Option<String> {
-        let td = self.token_data.as_ref()?;
-        if td.is_expired() && self.refresh_access_token().await != TokenRefresh::Ok {
+    async fn get_valid_token(&self) -> Option<String> {
+        // Read expiry under the lock, drop the guard before the refresh await.
+        let expired = {
+            let guard = self.token_data.lock().unwrap();
+            guard.as_ref()?.is_expired()
+        };
+        if expired && self.refresh_access_token().await != TokenRefresh::Ok {
             return None;
         }
-        self.token_data.as_ref().map(|t| t.access_token.clone())
+        self.token_data
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|t| t.access_token.clone())
     }
 
     fn delete_config(&self) {
@@ -519,7 +541,7 @@ impl AIProvider for GeminiProvider {
 
         match result {
             Ok(Ok(token_data)) => {
-                self.token_data = Some(token_data);
+                *self.token_data.lock().unwrap() = Some(token_data);
                 if let Err(e) = self.save_token() {
                     log::error!("[gemini] Failed to save token: {e}");
                 }
@@ -590,25 +612,25 @@ impl AIProvider for GeminiProvider {
 
     fn get_auth_status(&self) -> AuthStatus {
         AuthStatus {
-            authenticated: self.token_data.is_some(),
+            authenticated: self.token_data.lock().unwrap().is_some(),
             account_info: None,
         }
     }
 
     fn logout(&mut self) {
         log::info!("[gemini] Logout");
-        self.token_data = None;
+        *self.token_data.lock().unwrap() = None;
         self.client_id = None;
         self.client_secret = None;
         self.history.clear_all();
-        for (_, token) in self.cancel_tokens.drain() {
+        for (_, token) in self.cancel_tokens.lock().unwrap().drain() {
             token.cancel();
         }
         self.delete_config();
     }
 
     async fn send_message(
-        &mut self,
+        &self,
         app: &AppHandle,
         session_id: &str,
         message: &str,
@@ -672,6 +694,8 @@ impl AIProvider for GeminiProvider {
         // lock so Stop can cancel mid-stream) and keep a local copy so logout()
         // can cancel every in-flight stream.
         self.cancel_tokens
+            .lock()
+            .unwrap()
             .insert(session_id.to_string(), cancel_token.clone());
 
         let url = format!(
@@ -708,7 +732,7 @@ impl AIProvider for GeminiProvider {
                     },
                 );
                 self.history.pop_trailing_user(&sid);
-                self.cancel_tokens.remove(&sid);
+                self.cancel_tokens.lock().unwrap().remove(&sid);
                 return Ok(());
             }
         };
@@ -732,7 +756,7 @@ impl AIProvider for GeminiProvider {
             // Drop the user message pushed before the request so the history
             // stays consistent for retry (mirror vertexai's pop-on-error).
             self.history.pop_trailing_user(&sid);
-            self.cancel_tokens.remove(&sid);
+            self.cancel_tokens.lock().unwrap().remove(&sid);
             return Ok(());
         }
 
@@ -829,15 +853,11 @@ impl AIProvider for GeminiProvider {
             );
         }
 
-        self.cancel_tokens.remove(&sid);
+        self.cancel_tokens.lock().unwrap().remove(&sid);
         Ok(())
     }
 
-    async fn classify_command(
-        &mut self,
-        command: &str,
-        model: &str,
-    ) -> Result<CommandVerdict, String> {
+    async fn classify_command(&self, command: &str, model: &str) -> Result<CommandVerdict, String> {
         if !is_valid_model(model) {
             return Err("Invalid model name.".into());
         }
@@ -889,11 +909,11 @@ impl AIProvider for GeminiProvider {
         parse_verdict(content)
     }
 
-    fn clear_history(&mut self, session_id: &str) {
+    fn clear_history(&self, session_id: &str) {
         self.history.clear(session_id);
     }
 
-    async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
+    async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
         // Refresh an expired access token first (mirrors send_message). Reading
         // the cached token without refreshing made an expired token look like
         // "no models", surfacing as a spurious model-list error until restart.

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -250,11 +251,11 @@ fn format_user_error_message(err_msg: &str, model: &str) -> String {
 // ---------------------------------------------------------------------------
 
 pub struct VertexAIProvider {
-    token_data: Option<TokenData>,
+    token_data: Mutex<Option<TokenData>>,
     refresh_data: Option<RefreshData>,
     config: Option<VertexConfig>,
     history: ChatHistoryStore,
-    cancel_tokens: HashMap<String, CancellationToken>,
+    cancel_tokens: Mutex<HashMap<String, CancellationToken>>,
     app_data_dir: PathBuf,
     http_client: reqwest::Client,
 }
@@ -262,11 +263,11 @@ pub struct VertexAIProvider {
 impl VertexAIProvider {
     pub fn new(app_data_dir: PathBuf) -> Self {
         Self {
-            token_data: None,
+            token_data: Mutex::new(None),
             refresh_data: None,
             config: None,
             history: ChatHistoryStore::new(MAX_HISTORY_MESSAGES),
-            cancel_tokens: HashMap::new(),
+            cancel_tokens: Mutex::new(HashMap::new()),
             app_data_dir,
             http_client: reqwest::Client::builder()
                 .connect_timeout(std::time::Duration::from_secs(30))
@@ -436,7 +437,7 @@ impl VertexAIProvider {
         self.store().delete();
     }
 
-    async fn refresh_token(&mut self) -> Option<String> {
+    async fn refresh_token(&self) -> Option<String> {
         let refresh_data = self.refresh_data.as_ref()?;
 
         let result = match refresh_data {
@@ -498,7 +499,7 @@ impl VertexAIProvider {
                     }
                     let expires_in = data.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(0);
 
-                    self.token_data = Some(TokenData {
+                    *self.token_data.lock().unwrap() = Some(TokenData {
                         access_token: access_token.clone(),
                         expires_at: now_millis() + expires_in.saturating_sub(60) * 1000,
                     });
@@ -517,11 +518,18 @@ impl VertexAIProvider {
         }
     }
 
-    async fn get_valid_token(&mut self) -> Option<String> {
-        if let Some(td) = &self.token_data {
-            if !td.is_expired() {
-                return Some(td.access_token.clone());
+    async fn get_valid_token(&self) -> Option<String> {
+        // Read the cached token under the lock; drop the guard before the refresh
+        // await (a std MutexGuard held across .await would not compile).
+        let cached = {
+            let guard = self.token_data.lock().unwrap();
+            match guard.as_ref() {
+                Some(td) if !td.is_expired() => Some(td.access_token.clone()),
+                _ => None,
             }
+        };
+        if cached.is_some() {
+            return cached;
         }
         self.refresh_token().await
     }
@@ -1123,6 +1131,8 @@ impl AIProvider for VertexAIProvider {
     fn get_auth_status(&self) -> AuthStatus {
         let authenticated = self
             .token_data
+            .lock()
+            .unwrap()
             .as_ref()
             .map(|td| !td.is_expired())
             .unwrap_or(false);
@@ -1134,11 +1144,11 @@ impl AIProvider for VertexAIProvider {
 
     fn logout(&mut self) {
         log::info!("[vertexai] Logout");
-        self.token_data = None;
+        *self.token_data.lock().unwrap() = None;
         self.refresh_data = None;
         self.config = None;
         self.history.clear_all();
-        for (_, token) in self.cancel_tokens.drain() {
+        for (_, token) in self.cancel_tokens.lock().unwrap().drain() {
             token.cancel();
         }
         self.delete_config();
@@ -1154,7 +1164,7 @@ impl AIProvider for VertexAIProvider {
     }
 
     async fn send_message(
-        &mut self,
+        &self,
         app: &AppHandle,
         session_id: &str,
         message: &str,
@@ -1209,6 +1219,8 @@ impl AIProvider for VertexAIProvider {
         // Use the command-supplied token (registered outside the service lock so
         // Stop can cancel mid-stream); keep a local copy for logout() to cancel.
         self.cancel_tokens
+            .lock()
+            .unwrap()
             .insert(session_id.to_string(), cancel_token.clone());
 
         // Route based on publisher
@@ -1287,15 +1299,11 @@ impl AIProvider for VertexAIProvider {
             }
         }
 
-        self.cancel_tokens.remove(&sid);
+        self.cancel_tokens.lock().unwrap().remove(&sid);
         Ok(())
     }
 
-    async fn classify_command(
-        &mut self,
-        command: &str,
-        model: &str,
-    ) -> Result<CommandVerdict, String> {
+    async fn classify_command(&self, command: &str, model: &str) -> Result<CommandVerdict, String> {
         if !is_valid_model(model) {
             return Err("Invalid model name.".into());
         }
@@ -1379,11 +1387,11 @@ impl AIProvider for VertexAIProvider {
         parse_verdict(content)
     }
 
-    fn clear_history(&mut self, session_id: &str) {
+    fn clear_history(&self, session_id: &str) {
         self.history.clear(session_id);
     }
 
-    async fn list_locations(&mut self) -> Result<Vec<String>, String> {
+    async fn list_locations(&self) -> Result<Vec<String>, String> {
         // Refresh an expired access token first (list_locations is &mut self now)
         // so region lookups don't silently return empty after the token expires.
         let token = match self.get_valid_token().await {
@@ -1443,7 +1451,7 @@ impl AIProvider for VertexAIProvider {
         Ok(locations)
     }
 
-    async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
+    async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
         // Refresh an expired access token first (mirrors send_message) so an
         // expired token doesn't masquerade as "no models" and surface a spurious
         // "Failed to retrieve the AI model list" error until the app is restarted.

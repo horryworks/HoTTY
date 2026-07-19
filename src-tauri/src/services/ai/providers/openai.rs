@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -68,7 +69,7 @@ fn fallback_models() -> Vec<ModelInfo> {
 pub struct OpenAIProvider {
     api_key: Option<String>,
     history: ChatHistoryStore,
-    cancel_tokens: HashMap<String, CancellationToken>,
+    cancel_tokens: Mutex<HashMap<String, CancellationToken>>,
     app_data_dir: PathBuf,
     http_client: reqwest::Client,
 }
@@ -78,7 +79,7 @@ impl OpenAIProvider {
         Self {
             api_key: None,
             history: ChatHistoryStore::new(MAX_HISTORY_MESSAGES),
-            cancel_tokens: HashMap::new(),
+            cancel_tokens: Mutex::new(HashMap::new()),
             app_data_dir,
             http_client: reqwest::Client::builder()
                 .connect_timeout(std::time::Duration::from_secs(30))
@@ -189,14 +190,14 @@ impl AIProvider for OpenAIProvider {
         self.api_key = None;
         self.history.clear_all();
         // Cancel any in-flight requests
-        for (_, token) in self.cancel_tokens.drain() {
+        for (_, token) in self.cancel_tokens.lock().unwrap().drain() {
             token.cancel();
         }
         self.delete_config();
     }
 
     async fn send_message(
-        &mut self,
+        &self,
         app: &AppHandle,
         session_id: &str,
         message: &str,
@@ -248,6 +249,8 @@ impl AIProvider for OpenAIProvider {
         // Use the command-supplied token (registered outside the service lock so
         // Stop can cancel mid-stream); keep a local copy for logout() to cancel.
         self.cancel_tokens
+            .lock()
+            .unwrap()
             .insert(session_id.to_string(), cancel_token.clone());
 
         let body = serde_json::json!({
@@ -286,7 +289,7 @@ impl AIProvider for OpenAIProvider {
                     },
                 );
                 self.history.pop_trailing_user(&sid);
-                self.cancel_tokens.remove(&sid);
+                self.cancel_tokens.lock().unwrap().remove(&sid);
                 return Ok(());
             }
         };
@@ -310,7 +313,7 @@ impl AIProvider for OpenAIProvider {
             // Drop the user message pushed before the request so the history
             // stays consistent for retry (mirror vertexai's pop-on-error).
             self.history.pop_trailing_user(&sid);
-            self.cancel_tokens.remove(&sid);
+            self.cancel_tokens.lock().unwrap().remove(&sid);
             return Ok(());
         }
 
@@ -408,15 +411,11 @@ impl AIProvider for OpenAIProvider {
             );
         }
 
-        self.cancel_tokens.remove(&sid);
+        self.cancel_tokens.lock().unwrap().remove(&sid);
         Ok(())
     }
 
-    async fn classify_command(
-        &mut self,
-        command: &str,
-        model: &str,
-    ) -> Result<CommandVerdict, String> {
+    async fn classify_command(&self, command: &str, model: &str) -> Result<CommandVerdict, String> {
         if !is_valid_model(model) {
             return Err("Invalid model name.".into());
         }
@@ -462,11 +461,11 @@ impl AIProvider for OpenAIProvider {
         parse_verdict(content)
     }
 
-    fn clear_history(&mut self, session_id: &str) {
+    fn clear_history(&self, session_id: &str) {
         self.history.clear(session_id);
     }
 
-    async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
+    async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
         let api_key = match &self.api_key {
             Some(k) => k,
             None => return Ok(fallback_models()),

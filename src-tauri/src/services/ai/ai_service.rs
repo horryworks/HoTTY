@@ -81,7 +81,7 @@ impl AIService {
     // -- Chat -----------------------------------------------------------------
 
     pub async fn send_message(
-        &mut self,
+        &self,
         app: &AppHandle,
         session_id: &str,
         message: &str,
@@ -89,11 +89,10 @@ impl AIService {
         system_instruction: Option<&str>,
         cancel_token: CancellationToken,
     ) -> Result<(), String> {
-        let id = self.active_provider_id.clone();
         let provider = self
             .registry
-            .get_mut(&id)
-            .ok_or_else(|| format!("AI provider '{}' not found", id))?;
+            .get(&self.active_provider_id)
+            .ok_or_else(|| format!("AI provider '{}' not found", self.active_provider_id))?;
         provider
             .send_message(
                 app,
@@ -108,35 +107,33 @@ impl AIService {
 
     /// One-shot command-safety classification via the active provider.
     pub async fn classify_command(
-        &mut self,
+        &self,
         command: &str,
         model: &str,
     ) -> Result<crate::services::ai::classifier::CommandVerdict, String> {
-        let id = self.active_provider_id.clone();
         let provider = self
             .registry
-            .get_mut(&id)
-            .ok_or_else(|| format!("AI provider '{}' not found", id))?;
+            .get(&self.active_provider_id)
+            .ok_or_else(|| format!("AI provider '{}' not found", self.active_provider_id))?;
         provider.classify_command(command, model).await
     }
 
-    pub fn clear_history(&mut self, session_id: &str) {
+    pub fn clear_history(&self, session_id: &str) {
         // A tab's history can live in a non-active provider (opened under provider
         // A, then switched to B). Clear the session in ALL providers so closing a
         // tab or starting a new chat never strands a conversation in memory.
-        for provider in self.registry.iter_mut() {
+        for provider in self.registry.iter() {
             provider.clear_history(session_id);
         }
     }
 
     // -- Models & locations ---------------------------------------------------
 
-    pub async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
-        let id = self.active_provider_id.clone();
+    pub async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
         let provider = self
             .registry
-            .get_mut(&id)
-            .ok_or_else(|| format!("AI provider '{id}' not found"))?;
+            .get(&self.active_provider_id)
+            .ok_or_else(|| format!("AI provider '{}' not found", self.active_provider_id))?;
         provider.list_models().await
     }
 
@@ -147,12 +144,11 @@ impl AIService {
         }
     }
 
-    pub async fn list_locations(&mut self) -> Result<Vec<String>, String> {
-        let id = self.active_provider_id.clone();
+    pub async fn list_locations(&self) -> Result<Vec<String>, String> {
         let provider = self
             .registry
-            .get_mut(&id)
-            .ok_or_else(|| format!("AI provider '{id}' not found"))?;
+            .get(&self.active_provider_id)
+            .ok_or_else(|| format!("AI provider '{}' not found", self.active_provider_id))?;
         provider.list_locations().await
     }
 }
@@ -205,7 +201,7 @@ mod tests {
         }
         fn logout(&mut self) {}
         async fn send_message(
-            &mut self,
+            &self,
             _app: &AppHandle,
             _session_id: &str,
             _message: &str,
@@ -215,8 +211,8 @@ mod tests {
         ) -> Result<(), String> {
             Ok(())
         }
-        fn clear_history(&mut self, _session_id: &str) {}
-        async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
+        fn clear_history(&self, _session_id: &str) {}
+        async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
             Ok(vec![])
         }
     }

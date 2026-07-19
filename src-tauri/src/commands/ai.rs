@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 
 use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::{AIService, AuthStatus, CommandVerdict, ModelInfo};
@@ -15,16 +15,41 @@ use crate::services::path_safety::{is_sensitive_path, is_unc_path};
 /// (a newer send for the same session may have replaced it while it streamed).
 static SEND_GEN: AtomicU64 = AtomicU64::new(0);
 
-/// Managed state holding the AI service behind an async-aware mutex.
+/// Managed state holding the AI service behind an async-aware read/write lock.
 pub struct AIServiceState {
-    pub service: Mutex<AIService>,
+    /// The AI service behind an `RwLock`. Read-shaped operations (chat send,
+    /// classify, list models/locations, clear history, auth status) take `.read()`
+    /// and run CONCURRENTLY — a send from one tab no longer serializes every other
+    /// AI operation behind one exclusive lock. Write operations (auth, logout,
+    /// provider/region switch) take `.write()`; because those per-session mutations
+    /// are now interior-mutable, `send_message` et al. need only `&self`.
+    pub service: RwLock<AIService>,
     /// In-flight stream cancellation tokens, keyed by `session_id` (value carries
     /// the owning send's generation id). Kept in a SEPARATE (fast, non-async) mutex
-    /// so `ai_chat_cancel` can interrupt a stream WITHOUT waiting on `service`,
-    /// which the streaming `send_message` holds for its entire duration. Without
-    /// this, Stop and the stream watchdog were dead (they queued behind the very
-    /// stream they were trying to cancel).
+    /// so `ai_chat_cancel` can interrupt a stream WITHOUT waiting on `service`.
+    /// Also drained by `cancel_all_inflight` before a `.write()` so a rare state
+    /// change never stalls behind a long-running read-held stream.
     pub cancels: StdMutex<HashMap<String, (u64, CancellationToken)>>,
+}
+
+/// Cancel every in-flight stream. Called before acquiring the service WRITE lock:
+/// tokio's `RwLock` is write-preferring, so a queued writer blocks not only on the
+/// active read-held stream(s) but also stalls all NEW reads (sends) until it
+/// acquires. Writes are rare, user-initiated state changes (auth / logout /
+/// provider or region switch), so cancelling active streams to let the change
+/// take effect promptly — instead of hanging up to the stream backstop — is the
+/// right trade-off. (Logout/provider-switch want streams stopped anyway.)
+fn cancel_all_inflight(state: &AIServiceState) {
+    let mut cancels = state.cancels.lock().unwrap();
+    let n = cancels.len();
+    for (_, (_, token)) in cancels.drain() {
+        token.cancel();
+    }
+    if n > 0 {
+        log::debug!(
+            "[ai] cancel_all_inflight: cancelled {n} in-flight stream(s) before a write op"
+        );
+    }
 }
 
 /// Managed state: set of service-account key file paths approved via the
@@ -155,7 +180,8 @@ pub async fn ai_auth_start(
     credentials: Value,
 ) -> Result<bool, String> {
     validate_service_account_key(&credentials, &approved_keys).await?;
-    let mut service = state.service.lock().await;
+    cancel_all_inflight(&state);
+    let mut service = state.service.write().await;
     service.authenticate(&app, credentials).await
 }
 
@@ -173,13 +199,14 @@ pub async fn ai_auth_auto(
         .path()
         .app_data_dir()
         .map_err(|e| format!("Failed to resolve app data directory: {e}"))?;
-    let mut service = state.service.lock().await;
+    cancel_all_inflight(&state);
+    let mut service = state.service.write().await;
     service.auto_auth(&app_data_dir, credentials).await
 }
 
 #[tauri::command]
 pub async fn ai_auth_status(state: State<'_, AIServiceState>) -> Result<AuthStatus, String> {
-    let service = state.service.lock().await;
+    let service = state.service.read().await;
     Ok(service.get_auth_status())
 }
 
@@ -188,7 +215,8 @@ pub async fn ai_auth_logout(
     app: AppHandle,
     state: State<'_, AIServiceState>,
 ) -> Result<(), String> {
-    let mut service = state.service.lock().await;
+    cancel_all_inflight(&state);
+    let mut service = state.service.write().await;
     service.logout();
     crate::services::ai::ai_provider::emit_auth_logout(&app);
     Ok(())
@@ -211,8 +239,9 @@ pub async fn ai_chat_send(
     validate_message(&message)?;
 
     // Register a cancellation token OUTSIDE the service lock before streaming, so
-    // ai_chat_cancel (Stop / watchdog) can interrupt this stream while we hold the
-    // service lock for its whole duration.
+    // ai_chat_cancel (Stop / watchdog) can interrupt this stream without touching
+    // the service lock. The stream itself holds only a READ lock, so concurrent
+    // sends from other tabs/windows run in parallel rather than serializing.
     let gen = SEND_GEN.fetch_add(1, Ordering::Relaxed);
     let cancel_token = CancellationToken::new();
     {
@@ -225,7 +254,8 @@ pub async fn ai_chat_send(
 
     // Backstop deadline guard: cancels the same token if the stream outlives the
     // frontend watchdog (e.g. the UI crashed), so send_message unwinds gracefully
-    // and releases the service lock instead of wedging the AI subsystem.
+    // and releases its read lock instead of blocking writes (auth/logout/switch),
+    // which — under tokio's write-preferring RwLock — would then stall new sends.
     let deadline_token = cancel_token.clone();
     let deadline_guard = tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(STREAM_DEADLINE_SECS)).await;
@@ -234,7 +264,7 @@ pub async fn ai_chat_send(
     });
 
     let result = {
-        let mut service = state.service.lock().await;
+        let service = state.service.read().await;
         service
             .send_message(
                 &app,
@@ -285,7 +315,9 @@ pub async fn ai_chat_clear(
     session_id: String,
 ) -> Result<(), String> {
     validate_session_id(&session_id)?;
-    let mut service = state.service.lock().await;
+    // Read lock: clear_history is interior-mutable, so New Chat / tab close never
+    // blocks (or is blocked by) an in-flight stream.
+    let service = state.service.read().await;
     service.clear_history(&session_id);
     Ok(())
 }
@@ -300,13 +332,14 @@ pub async fn ai_classify_command(
     model: String,
 ) -> Result<CommandVerdict, String> {
     validate_command(&command)?;
-    // Acquire the service lock INSIDE the timeout so the 12s bound also covers
-    // waiting for the lock — otherwise a long-running chat stream holding the lock
-    // could block classification indefinitely and stall the auto-exec gate.
+    // Read lock: classification now runs CONCURRENTLY with in-flight streams
+    // (both are read-shaped), so it no longer queues behind a send. The 12s
+    // timeout still bounds a hung provider, and acquiring the lock inside it keeps
+    // the guarantee even against a pending writer.
     match tokio::time::timeout(
         std::time::Duration::from_secs(CLASSIFY_TIMEOUT_SECS),
         async {
-            let mut service = state.service.lock().await;
+            let service = state.service.read().await;
             service.classify_command(&command, &model).await
         },
     )
@@ -323,13 +356,13 @@ pub async fn ai_classify_command(
 
 #[tauri::command]
 pub async fn ai_list_models(state: State<'_, AIServiceState>) -> Result<Vec<ModelInfo>, String> {
-    let mut service = state.service.lock().await;
+    let service = state.service.read().await;
     service.list_models().await
 }
 
 #[tauri::command]
 pub async fn ai_list_locations(state: State<'_, AIServiceState>) -> Result<Vec<String>, String> {
-    let mut service = state.service.lock().await;
+    let service = state.service.read().await;
     service.list_locations().await
 }
 
@@ -342,7 +375,8 @@ pub async fn ai_set_provider(
     state: State<'_, AIServiceState>,
     provider_id: String,
 ) -> Result<(), String> {
-    let mut service = state.service.lock().await;
+    cancel_all_inflight(&state);
+    let mut service = state.service.write().await;
     service.set_active_provider(&provider_id)
 }
 
@@ -351,7 +385,8 @@ pub async fn ai_set_location(
     state: State<'_, AIServiceState>,
     location: String,
 ) -> Result<(), String> {
-    let mut service = state.service.lock().await;
+    cancel_all_inflight(&state);
+    let mut service = state.service.write().await;
     service.set_location(&location);
     Ok(())
 }

@@ -93,12 +93,15 @@ pub trait AIProvider: Send + Sync {
 
     /// Send a chat message and stream the response via `ai-chat-response` events.
     ///
-    /// `cancel_token` is created and owned by the command layer and also held in a
-    /// registry outside the service lock, so `ai_chat_cancel` can interrupt this
-    /// stream WITHOUT waiting on the (stream-held) service mutex. Providers must
-    /// select on `cancel_token.cancelled()` in their stream loop.
+    /// `&self` (not `&mut self`): all per-session mutable state — chat history,
+    /// cancel tokens, OAuth token cache — is interior-mutable, so concurrent sends
+    /// (different tabs/windows) run under a shared read lock instead of serializing
+    /// on one exclusive lock. `cancel_token` is created and owned by the command
+    /// layer and also held in a registry outside the service lock, so
+    /// `ai_chat_cancel` can interrupt this stream. Providers must select on
+    /// `cancel_token.cancelled()` in their stream loop.
     async fn send_message(
-        &mut self,
+        &self,
         app: &AppHandle,
         session_id: &str,
         message: &str,
@@ -116,32 +119,33 @@ pub trait AIProvider: Send + Sync {
     /// that don't implement it degrade gracefully (the frontend falls back to
     /// requiring manual execution).
     async fn classify_command(
-        &mut self,
+        &self,
         _command: &str,
         _model: &str,
     ) -> Result<crate::services::ai::classifier::CommandVerdict, String> {
         Err("command classification is not supported by this provider".into())
     }
 
-    /// Clear the conversation history for the given session.
-    fn clear_history(&mut self, session_id: &str);
+    /// Clear the conversation history for the given session. `&self`: the history
+    /// store is interior-mutable, so clearing never needs an exclusive lock.
+    fn clear_history(&self, session_id: &str);
 
     /// List available models for this provider.
     ///
-    /// Takes `&mut self` so OAuth-token providers (Vertex AI, Gemini) can
-    /// refresh an expired access token before listing — mirroring
-    /// `send_message`. Without this, an expired/not-yet-refreshed token made
-    /// `list_models` return an empty list, which the UI surfaced as a spurious
-    /// "Failed to retrieve the AI model list" error until the app was restarted.
-    async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String>;
+    /// `&self`: OAuth-token providers (Vertex AI, Gemini) refresh an expired
+    /// access token through the interior-mutable token cache, so listing does not
+    /// need an exclusive lock and never blocks (or is blocked by) an in-flight
+    /// stream. Without a refresh, an expired token made `list_models` return an
+    /// empty list, surfaced as a spurious "Failed to retrieve the AI model list".
+    async fn list_models(&self) -> Result<Vec<ModelInfo>, String>;
 
     /// Set the deployment location/region (Vertex AI). Default is a no-op.
+    /// Stays `&mut self` — it mutates plain provider config, not per-session state.
     fn set_location(&mut self, _location: &str) {}
 
     /// List available locations/regions. Default returns an empty list.
-    ///
-    /// `&mut self` for the same token-refresh reason as [`list_models`].
-    async fn list_locations(&mut self) -> Result<Vec<String>, String> {
+    /// `&self` for the same interior-mutable token-refresh reason as [`list_models`].
+    async fn list_locations(&self) -> Result<Vec<String>, String> {
         Ok(vec![])
     }
 }
