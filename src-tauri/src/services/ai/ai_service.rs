@@ -120,15 +120,6 @@ impl AIService {
         provider.classify_command(command, model).await
     }
 
-    pub fn cancel_message(&mut self, session_id: &str) {
-        // Session ids (paneId::tabId) are unique across providers, and a stream
-        // may be owned by a provider the user has since switched away from. Cancel
-        // in EVERY provider so Stop works after a provider switch mid-stream.
-        for provider in self.registry.iter_mut() {
-            provider.cancel_message(session_id);
-        }
-    }
-
     pub fn clear_history(&mut self, session_id: &str) {
         // A tab's history can live in a non-active provider (opened under provider
         // A, then switched to B). Clear the session in ALL providers so closing a
@@ -224,7 +215,6 @@ mod tests {
         ) -> Result<(), String> {
             Ok(())
         }
-        fn cancel_message(&mut self, _session_id: &str) {}
         fn clear_history(&mut self, _session_id: &str) {}
         async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
             Ok(vec![])

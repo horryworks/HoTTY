@@ -6,11 +6,13 @@ import './ExecutionModeBar.css';
 interface ExecutionModeBarProps {
     paused: boolean;
     onPausedChange: (paused: boolean) => void;
+    /** Deep-link to Settings → AI, where the classifier/whitelist/blacklist live. */
+    onOpenSettings?: () => void;
 }
 
 const DEFAULT_MAX_WHEN_LIMITED = 5;
 
-export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPausedChange }) => {
+export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPausedChange, onOpenSettings }) => {
     const { t } = useTranslation();
     const commandExecutionMode = useSettingsStore(s => s.commandExecutionMode);
     const maxConsecutiveAutoExecutions = useSettingsStore(s => s.maxConsecutiveAutoExecutions);
@@ -184,6 +186,19 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
                                         <span>{t('aiChat.executionMode.pauseAutoExecution')}</span>
                                     </>
                                 )}
+                            </button>
+                        </>
+                    )}
+
+                    {onOpenSettings && (
+                        <>
+                            <div className="execution-mode-popover-divider" />
+                            <button
+                                type="button"
+                                className="execution-mode-popover-settings-link"
+                                onClick={() => { setPopoverOpen(false); onOpenSettings(); }}
+                            >
+                                {t('aiChat.executionMode.moreSafetySettings')}
                             </button>
                         </>
                     )}

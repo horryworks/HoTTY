@@ -127,7 +127,7 @@ describe('AIChatPane model-list retry with backoff', () => {
         // Second attempt succeeded → models available, banner never shown.
         expect(tauriService.aiListModels).toHaveBeenCalledTimes(2);
         expect(screen.queryByText(BANNER)).toBeNull();
-        expect(screen.getByText('Select a model in the header to send messages')).toBeTruthy();
+        expect(screen.getByText('Open AI settings below the message box to choose a model')).toBeTruthy();
     });
 
     it('recovers when the fetch rejects (network error) then succeeds', async () => {
@@ -145,7 +145,7 @@ describe('AIChatPane model-list retry with backoff', () => {
         await flush();
 
         expect(screen.queryByText(BANNER)).toBeNull();
-        expect(screen.getByText('Select a model in the header to send messages')).toBeTruthy();
+        expect(screen.getByText('Open AI settings below the message box to choose a model')).toBeTruthy();
     });
 
     it('shows the banner only after every retry is exhausted', async () => {

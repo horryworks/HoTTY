@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 
-// Regression cover for the "Select a model in the header…" hint: it must NOT
+// Regression cover for the "Open AI settings…to choose a model" hint: it must NOT
 // flash while the model list is still loading (the previously-used model
 // auto-selects a moment later), and must NOT show when loading fails (that
 // case has its own error banner). It SHOULD show once loading finishes with
@@ -64,7 +64,7 @@ const { AIChatPane } = await import('./AIChatPane');
 const { tauriService } = await import('../../services/tauriService');
 const { useAiAuthStore } = await import('../../stores/aiAuthStore');
 
-const HINT = 'Select a model in the header to send messages';
+const HINT = 'Open AI settings below the message box to choose a model';
 
 // chatState with no persisted model → selectedModel starts 'Unspecified'.
 // No pendingMessage on the tab, so the send effect stays a no-op.

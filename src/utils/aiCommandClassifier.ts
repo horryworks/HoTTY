@@ -107,6 +107,40 @@ async function aiDecision(command: string, opts: DecideOptions): Promise<AutoExe
     return { autoExec, reason: verdict.reason, source: 'ai', confidence: verdict.confidence };
 }
 
+// ── Static-only classification (no AI, synchronous) ──────────────────────────
+
+/**
+ * Run only the free, synchronous safety tiers (blacklist → structural-danger →
+ * whitelist) and never call the AI. Used to surface a verdict badge in
+ * `ask-before-execute` mode — where nothing auto-runs, but the user should still
+ * see a 🛑 blacklist warning or ✅ whitelist reassurance before clicking Run.
+ *
+ * Mirrors the non-AI prefix of {@link decideAutoExec}; kept as a separate pure
+ * function so ask-mode rendering stays synchronous and token-free.
+ */
+export function classifyStatic(
+    command: string,
+    opts: { whitelist: string[]; blacklist: string[] },
+): AutoExecDecision {
+    const blk = matchBlacklist(command, opts.blacklist);
+    if (blk.matched) {
+        return {
+            autoExec: false,
+            reason: blk.entry ? `matches blacklist entry "${blk.entry}"` : 'blacklisted',
+            source: 'blacklist',
+        };
+    }
+    const danger = structuralDanger(command);
+    if (danger.danger) {
+        return { autoExec: false, reason: danger.reason, source: 'ask' };
+    }
+    const c = classifyCommand(command, opts.whitelist);
+    if (c.safe) {
+        return { autoExec: true, reason: c.reason || 'whitelisted', source: 'whitelist' };
+    }
+    return { autoExec: false, reason: c.reason, source: 'ask' };
+}
+
 // ── Decision ─────────────────────────────────────────────────────────────────
 
 export async function decideAutoExec(

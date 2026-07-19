@@ -123,9 +123,6 @@ pub trait AIProvider: Send + Sync {
         Err("command classification is not supported by this provider".into())
     }
 
-    /// Cancel an in-flight message for the given session.
-    fn cancel_message(&mut self, session_id: &str);
-
     /// Clear the conversation history for the given session.
     fn clear_history(&mut self, session_id: &str);
 

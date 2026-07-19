@@ -28,6 +28,32 @@ pub fn finalize_assistant_content(full_response: &str, cancelled: bool) -> Strin
     }
 }
 
+/// Default cap on the number of messages kept per session in a provider's
+/// in-memory chat history. Interim guard against unbounded growth; the real
+/// bound is the model's context window. Kept generous so normal sessions are
+/// never trimmed.
+pub const MAX_HISTORY_MESSAGES: usize = 200;
+
+/// Trim a chat history in place so it holds at most `max_messages`, dropping the
+/// oldest turns first. Messages are removed in **pairs** from the front so the
+/// user/assistant alternation the chat APIs require is preserved (removing an
+/// even number keeps the parity of the first message). `max_messages == 0` means
+/// "no cap". Call this right after committing the assistant turn.
+pub fn cap_history<T>(history: &mut Vec<T>, max_messages: usize) {
+    if max_messages == 0 || history.len() <= max_messages {
+        return;
+    }
+    let mut remove = history.len() - max_messages;
+    if remove % 2 != 0 {
+        remove += 1; // round up to an even count to keep alternation parity
+    }
+    if remove >= history.len() {
+        history.clear();
+    } else {
+        history.drain(0..remove);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -52,5 +78,37 @@ mod tests {
             finalize_assistant_content("", true),
             "[cancelled before response]"
         );
+    }
+
+    #[test]
+    fn cap_history_noop_when_under_or_at_limit() {
+        let mut h = vec![1, 2, 3, 4];
+        cap_history(&mut h, 4);
+        assert_eq!(h, vec![1, 2, 3, 4]);
+        cap_history(&mut h, 10);
+        assert_eq!(h, vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn cap_history_zero_means_no_cap() {
+        let mut h = vec![1, 2, 3, 4, 5, 6];
+        cap_history(&mut h, 0);
+        assert_eq!(h, vec![1, 2, 3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn cap_history_trims_oldest_in_even_pairs() {
+        // 6 messages, cap 4 -> remove 2 from the front.
+        let mut h = vec![1, 2, 3, 4, 5, 6];
+        cap_history(&mut h, 4);
+        assert_eq!(h, vec![3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn cap_history_rounds_odd_removal_up_to_keep_parity() {
+        // 6 messages, cap 3 -> raw removal 3 (odd) rounds to 4, leaving 2.
+        let mut h = vec![1, 2, 3, 4, 5, 6];
+        cap_history(&mut h, 3);
+        assert_eq!(h, vec![5, 6]);
     }
 }

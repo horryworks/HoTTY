@@ -20,11 +20,13 @@ export const aiChat = {
     maxConsecutiveRunsHint: 'Tras esta cantidad de ejecuciones automáticas seguidas, los comandos requieren confirmación manual.',
     resumeAutoExecution: 'Reanudar ejecución automática',
     pauseAutoExecution: 'Pausar ejecución automática',
+    moreSafetySettings: 'Más ajustes de seguridad…',
   },
   tabStrip: {
     ariaLabel: 'Pestañas de chat de IA',
     closeTab: 'Cerrar {{title}}',
     addTab: 'Añadir pestaña',
+    tabN: 'Pestaña {{n}}',
   },
   outputBlock: {
     label: 'Salida del terminal',
@@ -81,7 +83,7 @@ export const aiChat = {
     sendTitleStreaming: 'Transmitiendo…',
     sendTitle: 'Enviar',
     // Sugerencias y estado
-    selectModelHint: 'Seleccione un modelo en el encabezado para enviar mensajes',
+    selectModelHint: 'Abra la configuración de IA debajo del cuadro de mensaje para elegir un modelo',
     tokenReceiving: 'Recibiendo · {{tokens}} tokens',
     tokenWaiting: 'Esperando respuesta…',
     tokenInOut: '{{in}} entrada / {{out}} salida tokens',
@@ -91,7 +93,17 @@ export const aiChat = {
     newChatConfirmTitle: '¿Iniciar un nuevo chat?',
     newChatConfirmMessage: 'La conversación actual se borrará. Esto no se puede deshacer.',
     newChatConfirmButton: 'Iniciar nuevo chat',
-    modelNotSelected: 'No se ha seleccionado un modelo de IA. Seleccione un modelo en el menú desplegable de la parte superior derecha de la pantalla.',
+    modelNotSelected: 'No se ha seleccionado un modelo de IA. Abra la configuración de IA debajo del cuadro de mensaje y elija uno.',
+    suggestionGenericCapabilities: '¿En qué puedes ayudarme?',
+    suggestionGenericExplainCommand: 'Explica un comando de shell que te indique',
+    suggestionGenericTroubleshoot: 'Ayúdame a resolver un problema de conexión',
+    stop: 'Detener',
+    resizeInput: 'Cambiar el tamaño del área de entrada',
+    copyMessage: 'Copiar mensaje',
+    cancelledSuffix: ' [cancelado]',
+    errorMessage: 'Error: {{message}}',
+    streamIdleTimeout: 'El flujo de IA estuvo inactivo {{seconds}} s: solicitud cancelada',
+    streamHardcapTimeout: 'El flujo de IA superó el límite de {{seconds}} s: solicitud cancelada',
   },
   message: {
     // Bloque de ejecución en el terminal

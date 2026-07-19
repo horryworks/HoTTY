@@ -3,7 +3,7 @@ import { useTranslation, Trans } from 'react-i18next';
 import { marked } from 'marked';
 import { getTransparentColor } from '../../utils/colorUtils';
 import { sanitizeHtml, externalLinkFromClick } from '../../utils/htmlUtils';
-import { decideAutoExec, type AutoExecDecision } from '../../utils/aiCommandClassifier';
+import { decideAutoExec, classifyStatic, type AutoExecDecision } from '../../utils/aiCommandClassifier';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { aiProviderLabelKey } from '../../constants/aiProviders';
 import { calcAICost, formatAICost } from '../../constants/aiPricing';
@@ -65,25 +65,39 @@ interface AIChatPaneProps {
 }
 
 // ── AI Icon Component ──
-const AIIcon: React.FC<{ size?: number; className?: string }> = ({ size = 24, className = '' }) => (
-    <svg
-        width={size}
-        height={size}
-        viewBox="0 0 24 24"
-        fill="none"
-        className={className}
-        style={{ flexShrink: 0 }}
-    >
-        <path d="M12 2L14.8 9.2L22 12L14.8 14.8L12 22L9.2 14.8L2 12L9.2 9.2L12 2Z" fill="url(#ai-gradient)" />
-        <defs>
-            <linearGradient id="ai-gradient" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-                <stop stopColor="var(--provider-gemini-1)" />
-                <stop offset="0.5" stopColor="var(--provider-gemini-2)" />
-                <stop offset="1" stopColor="var(--provider-gemini-3)" />
-            </linearGradient>
-        </defs>
-    </svg>
-);
+// The spark tints to the active provider so the pane's icon reflects who is
+// answering: Gemini keeps its 3-stop brand gradient; the other providers fill
+// with their single brand color (existing theme vars). Falls back to the Gemini
+// gradient for unknown/undefined providers.
+const SPARK_PATH = 'M12 2L14.8 9.2L22 12L14.8 14.8L12 22L9.2 14.8L2 12L9.2 9.2L12 2Z';
+const PROVIDER_SOLID_VAR: Record<string, string> = {
+    openai: 'provider-openai',
+    anthropic: 'provider-anthropic',
+    vertexai: 'provider-vertex-ai',
+};
+const AIIcon: React.FC<{ size?: number; className?: string; provider?: string }> = ({ size = 24, className = '', provider }) => {
+    const solidVar = provider ? PROVIDER_SOLID_VAR[provider] : undefined;
+    const svgProps = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', className, style: { flexShrink: 0 } as React.CSSProperties };
+    if (solidVar) {
+        return (
+            <svg {...svgProps}>
+                <path d={SPARK_PATH} fill={`var(--${solidVar})`} />
+            </svg>
+        );
+    }
+    return (
+        <svg {...svgProps}>
+            <path d={SPARK_PATH} fill="url(#ai-gradient)" />
+            <defs>
+                <linearGradient id="ai-gradient" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="var(--provider-gemini-1)" />
+                    <stop offset="0.5" stopColor="var(--provider-gemini-2)" />
+                    <stop offset="1" stopColor="var(--provider-gemini-3)" />
+                </linearGradient>
+            </defs>
+        </svg>
+    );
+};
 
 // ── Per-command safety verdict note ──
 // Always rendered under an execute block (in auto-execute-safe mode) so the user
@@ -303,6 +317,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     onOpenSettings,
 }) => {
     const { t } = useTranslation();
+    // Always-current `t` for the once-subscribed response listener effect (whose dep
+    // array deliberately excludes t so it doesn't re-subscribe on every render).
+    const tRef = useRef(t);
+    tRef.current = t;
     // Derive active tab from chatState (Phase 1: tabs[] + activeTabId, single linkedSessionId per tab)
     const activeTab = chatState ? getActiveTab(chatState) : undefined;
     const activeTabId = activeTab?.id;
@@ -815,7 +833,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         if (!targetTabId) return;
         tauriService.aiChatCancel(aiBackendSessionId(paneId, targetTabId)).catch(() => {});
         const partial = streamingByTabRef.current.get(targetTabId) ?? '';
-        const body = streamTimeoutMessage(partial, ms, kind);
+        const reason = tRef.current(
+            kind === 'idle' ? 'aiChat.pane.streamIdleTimeout' : 'aiChat.pane.streamHardcapTimeout',
+            { seconds: Math.round(ms / 1000) },
+        );
+        const body = streamTimeoutMessage(partial, ms, kind, reason);
         setMessagesByTab(prev => {
             const next = new Map(prev);
             const cur = prev.get(targetTabId) ?? [];
@@ -896,7 +918,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 setMessagesByTab(prev => {
                     const next = new Map(prev);
                     const cur = prev.get(targetTabId) ?? [];
-                    next.set(targetTabId, [...cur, { role: 'model', content: `Error: ${data.content}` }]);
+                    next.set(targetTabId, [...cur, { role: 'model', content: tRef.current('aiChat.pane.errorMessage', { message: data.content }) }]);
                     return next;
                 });
                 setStreamingForTab(targetTabId, '');
@@ -1347,7 +1369,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 setMessagesByTab(prev => {
                     const next = new Map(prev);
                     const cur = prev.get(targetTabId) ?? [];
-                    next.set(targetTabId, [...cur, { role: 'model', content: partial + ' [cancelled]' }]);
+                    next.set(targetTabId, [...cur, { role: 'model', content: partial + t('aiChat.pane.cancelledSuffix') }]);
                     return next;
                 });
             }
@@ -1397,7 +1419,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             <div className="ai-chat-header">
                 <div className="ai-chat-header-left">
                     <div className="ai-chat-logo">
-                        <AIIcon size={24} />
+                        <AIIcon size={24} provider={activeAiProvider} />
                     </div>
                     {isAuthenticated && (
                         <button
@@ -1484,7 +1506,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             {!isAuthenticated ? (
                 <div className="ai-chat-unauth-state">
                     <div className="ai-chat-empty-icon">
-                        <AIIcon size={56} />
+                        <AIIcon size={56} provider={activeAiProvider} />
                     </div>
                     {isAuthLoading ? (
                         // Silent re-auth in flight (startup / provider switch) — don't
@@ -1510,11 +1532,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 </div>
             ) : (
                 <div className="ai-chat-body">
-                    <div className="ai-chat-messages" ref={scrollContainerRef}>
+                    <div className="ai-chat-messages" ref={scrollContainerRef} aria-live="polite" aria-busy={isStreaming}>
                         {messages.length === 0 && !streamingContent && !isStreaming && (
                             <div className="ai-chat-empty-state">
                                 <div className="ai-chat-empty-icon">
-                                    <AIIcon size={56} />
+                                    <AIIcon size={56} provider={activeAiProvider} />
                                 </div>
                                 <h2 className="ai-chat-empty-title">{t('aiChat.pane.emptyTitle')}</h2>
                                 {lastTargetSessionId ? (
@@ -1537,11 +1559,18 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     </div>
                                 )}
                                 <div className="ai-chat-empty-suggestions">
-                                    {[
+                                    {(lastTargetSessionId ? [
+                                        // A terminal is linked — offer output-focused prompts.
                                         'aiChat.pane.suggestionOutputMeaning',
                                         'aiChat.pane.suggestionFindIssues',
                                         'aiChat.pane.suggestionExplainLast',
-                                    ].map((promptKey) => {
+                                    ] : [
+                                        // Nothing linked — generic prompts that don't assume
+                                        // terminal output exists.
+                                        'aiChat.pane.suggestionGenericCapabilities',
+                                        'aiChat.pane.suggestionGenericExplainCommand',
+                                        'aiChat.pane.suggestionGenericTroubleshoot',
+                                    ]).map((promptKey) => {
                                         const prompt = t(promptKey);
                                         return (
                                         <button
@@ -1578,7 +1607,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             // blockKey-keyed tab refs (a command's identity is its
                             // message index + text, so the same command in two messages
                             // is tracked independently). Declined/auto-executed apply in
-                            // any mode; verdicts/classifying only in auto-execute-safe.
+                            // any mode. In auto-execute-safe mode verdicts come from the
+                            // async classifier refs; in ask mode they come from the free
+                            // synchronous static tiers (blacklist/whitelist only).
                             if (msg.role === 'model' && activeTabId) {
                                 const autoExecMode = commandExecutionMode === 'auto-execute-safe';
                                 const decMap = autoExecMode ? decisionsByTabRef.current.get(activeTabId) : undefined;
@@ -1591,9 +1622,20 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                 declinedCommands = new Set<string>();
                                 for (const cmd of extractExecuteCommands(msg.content)) {
                                     const bk = `${idx}:${cmd}`;
-                                    const d = decMap?.get(bk);
-                                    if (d) verdictByCommand.set(cmd, d);
-                                    if (clsSet?.has(bk)) classifyingCommands.add(cmd);
+                                    if (autoExecMode) {
+                                        const d = decMap?.get(bk);
+                                        if (d) verdictByCommand.set(cmd, d);
+                                        if (clsSet?.has(bk)) classifyingCommands.add(cmd);
+                                    } else {
+                                        // ask-before-execute mode: nothing auto-runs, but still
+                                        // surface the free static safety signal (🛑 blacklist /
+                                        // ✅ whitelist) so a dangerous command is never shown with
+                                        // no warning. No AI call, no tokens — synchronous.
+                                        const sv = classifyStatic(cmd, { whitelist: whitelistCommands, blacklist: blacklistCommands });
+                                        if (sv.source === 'blacklist' || sv.source === 'whitelist') {
+                                            verdictByCommand.set(cmd, sv);
+                                        }
+                                    }
                                     if (autoSet?.has(bk)) autoExecutedCommands.add(cmd);
                                     if (declSet?.has(bk)) declinedCommands.add(cmd);
                                 }
@@ -1601,7 +1643,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             return (
                             <div key={idx} className={`ai-chat-message ai-chat-message-${msg.role}`}>
                                 <div className="ai-chat-message-avatar">
-                                    {msg.role === 'user' ? '\u{1F464}' : <AIIcon size={18} />}
+                                    {msg.role === 'user' ? '\u{1F464}' : <AIIcon size={18} provider={activeAiProvider} />}
                                 </div>
                                 <div className={`ai-chat-message-content ${msg.role === 'model' ? 'ai-chat-markdown' : ''}`}>
                                     {msg.role === 'model' ? (
@@ -1627,12 +1669,26 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                             : <pre>{msg.content}</pre>;
                                     })()}
                                 </div>
+                                {msg.role === 'model' && (
+                                    <button
+                                        type="button"
+                                        className="ai-chat-msg-copy-btn"
+                                        title={t('aiChat.pane.copyMessage')}
+                                        aria-label={t('aiChat.pane.copyMessage')}
+                                        onClick={() => { void navigator.clipboard?.writeText(msg.content).catch(() => {}); }}
+                                    >
+                                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                        </svg>
+                                    </button>
+                                )}
                             </div>
                             );
                         })}
                         {streamingContent && (
                             <div className="ai-chat-message ai-chat-message-model">
-                                <div className="ai-chat-message-avatar"><AIIcon size={18} /></div>
+                                <div className="ai-chat-message-avatar"><AIIcon size={18} provider={activeAiProvider} /></div>
                                 <div className="ai-chat-message-content ai-chat-markdown streaming">
                                     <MessageContent
                                         content={streamingContent}
@@ -1647,7 +1703,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                         )}
                         {isStreaming && !streamingContent && (
                             <div className="ai-chat-message ai-chat-message-model">
-                                <div className="ai-chat-message-avatar"><AIIcon size={18} /></div>
+                                <div className="ai-chat-message-avatar"><AIIcon size={18} provider={activeAiProvider} /></div>
                                 <div className="ai-chat-message-content">
                                     <span className="ai-chat-thinking">
                                         {t('aiChat.pane.thinking')}
@@ -1661,7 +1717,21 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                         <div ref={messagesEndRef} />
                     </div>
 
-                    <div className="ai-chat-resize-handle" onMouseDown={(e) => {
+                    <div
+                        className="ai-chat-resize-handle"
+                        role="separator"
+                        aria-orientation="horizontal"
+                        aria-label={t('aiChat.pane.resizeInput')}
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                const base = textareaHeight > 0 ? textareaHeight : (textareaRef.current?.offsetHeight || 40);
+                                const delta = e.key === 'ArrowUp' ? 20 : -20;
+                                setTextareaHeight(Math.min(500, Math.max(20, base + delta)));
+                            }
+                        }}
+                        onMouseDown={(e) => {
                         e.preventDefault();
                         const startY = e.clientY;
                         const startHeight = textareaHeight > 0 ? textareaHeight : (textareaRef.current?.offsetHeight || 40);
@@ -1795,12 +1865,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         handleCancel();
                                     }
                                 }}
+                                onOpenSettings={onOpenSettings}
                             />
-                            {isStreaming && <button className="ai-chat-cancel-btn" onClick={handleCancel}>&#x25A0;</button>}
+                            {isStreaming && <button className="ai-chat-cancel-btn" onClick={handleCancel} title={t('aiChat.pane.stop')} aria-label={t('aiChat.pane.stop')}>&#x25A0;</button>}
                             <button
                                 className="ai-chat-send-btn"
                                 onClick={handleSend}
                                 disabled={!inputText.trim() || streamingTabIds.size > 0 || selectedModel === 'Unspecified'}
+                                aria-label={t('aiChat.pane.sendTitle')}
                                 title={
                                     selectedModel === 'Unspecified'
                                         ? t('aiChat.pane.sendTitleSelectModel')

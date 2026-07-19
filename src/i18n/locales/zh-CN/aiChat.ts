@@ -22,11 +22,13 @@ export const aiChat = {
     maxConsecutiveRunsHint: '连续自动运行达到此次数后，命令需要手动确认。',
     resumeAutoExecution: '恢复自动执行',
     pauseAutoExecution: '暂停自动执行',
+    moreSafetySettings: '更多安全设置…',
   },
   tabStrip: {
     ariaLabel: 'AI 聊天标签页',
     closeTab: '关闭 {{title}}',
     addTab: '添加标签页',
+    tabN: '标签页 {{n}}',
   },
   outputBlock: {
     label: '终端输出',
@@ -83,7 +85,7 @@ export const aiChat = {
     sendTitleStreaming: '正在流式传输…',
     sendTitle: '发送',
     // Hints & status
-    selectModelHint: '在标题栏中选择一个模型以发送消息',
+    selectModelHint: '打开消息框下方的 AI 设置以选择模型',
     tokenReceiving: '正在接收 · {{tokens}} 个 token',
     tokenWaiting: '正在等待响应…',
     tokenInOut: '{{in}} 输入 / {{out}} 输出 token',
@@ -93,7 +95,17 @@ export const aiChat = {
     newChatConfirmTitle: '开始新的聊天？',
     newChatConfirmMessage: '当前对话将被清除。此操作无法撤销。',
     newChatConfirmButton: '开始新聊天',
-    modelNotSelected: '未选择 AI 模型。请从屏幕右上角的下拉菜单中选择一个模型。',
+    modelNotSelected: '未选择 AI 模型。请打开消息框下方的 AI 设置并选择一个模型。',
+    suggestionGenericCapabilities: '你能帮我做什么？',
+    suggestionGenericExplainCommand: '解释我给你的一条 shell 命令',
+    suggestionGenericTroubleshoot: '帮我排查连接问题',
+    stop: '停止',
+    resizeInput: '调整输入区域大小',
+    copyMessage: '复制消息',
+    cancelledSuffix: ' [已取消]',
+    errorMessage: '错误：{{message}}',
+    streamIdleTimeout: 'AI 响应空闲 {{seconds}} 秒 — 请求已取消',
+    streamHardcapTimeout: 'AI 响应超过 {{seconds}} 秒上限 — 请求已取消',
   },
   message: {
     // Run-in-terminal execute block

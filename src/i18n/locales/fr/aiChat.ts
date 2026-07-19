@@ -22,11 +22,13 @@ export const aiChat = {
     maxConsecutiveRunsHint: "Après ce nombre d'exécutions automatiques d'affilée, les commandes nécessitent une confirmation manuelle.",
     resumeAutoExecution: "Reprendre l'exécution automatique",
     pauseAutoExecution: "Suspendre l'exécution automatique",
+    moreSafetySettings: 'Plus de paramètres de sécurité…',
   },
   tabStrip: {
     ariaLabel: 'Onglets de chat IA',
     closeTab: 'Fermer {{title}}',
     addTab: 'Ajouter un onglet',
+    tabN: 'Onglet {{n}}',
   },
   outputBlock: {
     label: 'Sortie du terminal',
@@ -83,7 +85,7 @@ export const aiChat = {
     sendTitleStreaming: 'Diffusion en cours…',
     sendTitle: 'Envoyer',
     // Hints & status
-    selectModelHint: "Sélectionnez un modèle dans l'en-tête pour envoyer des messages",
+    selectModelHint: "Ouvrez les paramètres d'IA sous la zone de message pour choisir un modèle",
     tokenReceiving: 'Réception · {{tokens}} jetons',
     tokenWaiting: 'En attente de la réponse…',
     tokenInOut: '{{in}} entrants / {{out}} sortants jetons',
@@ -93,7 +95,17 @@ export const aiChat = {
     newChatConfirmTitle: 'Démarrer un nouveau chat ?',
     newChatConfirmMessage: 'La conversation actuelle sera effacée. Cette action est irréversible.',
     newChatConfirmButton: 'Démarrer un nouveau chat',
-    modelNotSelected: "Aucun modèle d'IA sélectionné. Veuillez sélectionner un modèle dans la liste déroulante en haut à droite de l'écran.",
+    modelNotSelected: "Aucun modèle d'IA sélectionné. Ouvrez les paramètres d'IA sous la zone de message et choisissez-en un.",
+    suggestionGenericCapabilities: "En quoi peux-tu m'aider ?",
+    suggestionGenericExplainCommand: 'Explique une commande shell que je te donne',
+    suggestionGenericTroubleshoot: 'Aide-moi à résoudre un problème de connexion',
+    stop: 'Arrêter',
+    resizeInput: 'Redimensionner la zone de saisie',
+    copyMessage: 'Copier le message',
+    cancelledSuffix: ' [annulé]',
+    errorMessage: 'Erreur : {{message}}',
+    streamIdleTimeout: "Le flux d'IA est resté inactif pendant {{seconds}} s — requête annulée",
+    streamHardcapTimeout: "Le flux d'IA a dépassé la limite de {{seconds}} s — requête annulée",
   },
   message: {
     // Run-in-terminal execute block

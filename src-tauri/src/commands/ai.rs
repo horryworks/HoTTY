@@ -282,10 +282,15 @@ pub async fn ai_classify_command(
     model: String,
 ) -> Result<CommandVerdict, String> {
     validate_command(&command)?;
-    let mut service = state.service.lock().await;
+    // Acquire the service lock INSIDE the timeout so the 12s bound also covers
+    // waiting for the lock — otherwise a long-running chat stream holding the lock
+    // could block classification indefinitely and stall the auto-exec gate.
     match tokio::time::timeout(
         std::time::Duration::from_secs(CLASSIFY_TIMEOUT_SECS),
-        service.classify_command(&command, &model),
+        async {
+            let mut service = state.service.lock().await;
+            service.classify_command(&command, &model).await
+        },
     )
     .await
     {

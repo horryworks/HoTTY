@@ -110,7 +110,6 @@ mod tests {
         ) -> Result<(), String> {
             Ok(())
         }
-        fn cancel_message(&mut self, _session_id: &str) {}
         fn clear_history(&mut self, _session_id: &str) {}
         async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
             Ok(vec![])

@@ -121,15 +121,18 @@ export function aiBackendSessionId(paneId: string, tabId?: string | null): strin
   return tabId ? `${paneId}::${tabId}` : paneId;
 }
 
-/** Build a short title from a tab's linked session, falling back to "Tab N". */
+/**
+ * Build a short title from a tab's linked session. Returns '' when there is no
+ * linked/named session so the renderer (TabStrip) can substitute a localized
+ * "Tab N" fallback — keeping the ordinal fallback out of this non-i18n module.
+ */
 function deriveTabTitle(
   linkedSessionId: string | undefined,
   sessions: Map<string, SessionRecord>,
-  ordinal: number,
 ): string {
-  if (!linkedSessionId) return `Tab ${ordinal}`;
+  if (!linkedSessionId) return '';
   const name = sessions.get(linkedSessionId)?.displayName;
-  if (!name) return `Tab ${ordinal}`;
+  if (!name) return '';
   return name.length > 12 ? `${name.slice(0, 11)}…` : name;
 }
 
@@ -152,7 +155,8 @@ export function createDefaultAiChatState(
     tabs: [{
       id: tabId,
       ordinal: 1,
-      title: initialTitle ?? (initialLinkSessionId ? 'Linked' : 'Tab 1'),
+      // Empty title => TabStrip renders the localized "Tab N" fallback.
+      title: initialTitle ?? '',
       linkedSessionId: initialLinkSessionId,
       linkBindingKey: initialLinkSessionId ? initialBindingKey : undefined,
     }],
@@ -295,7 +299,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       const existing = prev.get(aiSessionId) ?? createDefaultAiChatState();
       const ordinals = existing.tabs.map(t => t.ordinal);
       const newOrdinal = ordinals.length > 0 ? Math.max(...ordinals) + 1 : 1;
-      const title = deriveTabTitle(initialLinkSessionId, sessionsRef.current, newOrdinal);
+      const title = deriveTabTitle(initialLinkSessionId, sessionsRef.current);
       const linkedRec = initialLinkSessionId ? sessionsRef.current.get(initialLinkSessionId) : undefined;
       const newTab: ChatTab = {
         id: newTabId,
@@ -366,7 +370,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       if (!existing) return prev;
       const updatedTabs = existing.tabs.map(t => {
         if (t.id !== tabId) return t;
-        const newTitle = deriveTabTitle(linkedSessionId, sessionsRef.current, t.ordinal);
+        const newTitle = deriveTabTitle(linkedSessionId, sessionsRef.current);
         // Track a config-derived binding key so the tab can auto-rebind after a
         // reconnect (which mints a new session id). On link: derive from the
         // session. On unlink: clear it, UNLESS the caller asks to retain it

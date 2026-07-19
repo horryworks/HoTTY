@@ -20,11 +20,13 @@ export const aiChat = {
     maxConsecutiveRunsHint: '連續自動執行達到此次數後，指令將需要手動確認。',
     resumeAutoExecution: '繼續自動執行',
     pauseAutoExecution: '暫停自動執行',
+    moreSafetySettings: '更多安全設定…',
   },
   tabStrip: {
     ariaLabel: 'AI 聊天分頁',
     closeTab: '關閉 {{title}}',
     addTab: '新增分頁',
+    tabN: '分頁 {{n}}',
   },
   outputBlock: {
     label: '終端機輸出',
@@ -81,7 +83,7 @@ export const aiChat = {
     sendTitleStreaming: '串流中…',
     sendTitle: '傳送',
     // 提示與狀態
-    selectModelHint: '在標頭選取模型以傳送訊息',
+    selectModelHint: '開啟訊息框下方的 AI 設定以選取模型',
     tokenReceiving: '正在接收 · {{tokens}} 個權杖',
     tokenWaiting: '正在等待回應…',
     tokenInOut: '輸入 {{in}} 個／輸出 {{out}} 個權杖',
@@ -91,7 +93,17 @@ export const aiChat = {
     newChatConfirmTitle: '要開始新聊天嗎？',
     newChatConfirmMessage: '目前的對話將會被清除。此動作無法復原。',
     newChatConfirmButton: '開始新聊天',
-    modelNotSelected: '尚未選取 AI 模型。請從畫面右上角的下拉式選單選取模型。',
+    modelNotSelected: '尚未選取 AI 模型。請開啟訊息框下方的 AI 設定並選取一個模型。',
+    suggestionGenericCapabilities: '你能幫我做什麼？',
+    suggestionGenericExplainCommand: '解釋我給你的一條 shell 命令',
+    suggestionGenericTroubleshoot: '幫我排解連線問題',
+    stop: '停止',
+    resizeInput: '調整輸入區域大小',
+    copyMessage: '複製訊息',
+    cancelledSuffix: ' [已取消]',
+    errorMessage: '錯誤：{{message}}',
+    streamIdleTimeout: 'AI 回應閒置 {{seconds}} 秒 — 請求已取消',
+    streamHardcapTimeout: 'AI 回應超過 {{seconds}} 秒上限 — 請求已取消',
   },
   message: {
     // 在終端機中執行的執行區塊

@@ -23,11 +23,13 @@ export const aiChat = {
     maxConsecutiveRunsHint: 'После такого числа автозапусков подряд команды потребуют ручного подтверждения.',
     resumeAutoExecution: 'Возобновить автовыполнение',
     pauseAutoExecution: 'Приостановить автовыполнение',
+    moreSafetySettings: 'Другие настройки безопасности…',
   },
   tabStrip: {
     ariaLabel: 'Вкладки ИИ-чата',
     closeTab: 'Закрыть {{title}}',
     addTab: 'Добавить вкладку',
+    tabN: 'Вкладка {{n}}',
   },
   outputBlock: {
     label: 'Вывод терминала',
@@ -84,7 +86,7 @@ export const aiChat = {
     sendTitleStreaming: 'Потоковая передача…',
     sendTitle: 'Отправить',
     // Подсказки и статус
-    selectModelHint: 'Выберите модель в заголовке, чтобы отправлять сообщения',
+    selectModelHint: 'Откройте настройки ИИ под полем сообщения, чтобы выбрать модель',
     tokenReceiving: 'Приём · {{tokens}} токенов',
     tokenWaiting: 'Ожидание ответа…',
     tokenInOut: '{{in}} вход / {{out}} выход токенов',
@@ -94,7 +96,17 @@ export const aiChat = {
     newChatConfirmTitle: 'Начать новый чат?',
     newChatConfirmMessage: 'Текущий разговор будет очищен. Это нельзя отменить.',
     newChatConfirmButton: 'Начать новый чат',
-    modelNotSelected: 'Модель ИИ не выбрана. Выберите модель из раскрывающегося списка в правом верхнем углу экрана.',
+    modelNotSelected: 'Модель ИИ не выбрана. Откройте настройки ИИ под полем сообщения и выберите модель.',
+    suggestionGenericCapabilities: 'Чем ты можешь помочь?',
+    suggestionGenericExplainCommand: 'Объясни команду оболочки, которую я укажу',
+    suggestionGenericTroubleshoot: 'Помоги устранить проблему с подключением',
+    stop: 'Остановить',
+    resizeInput: 'Изменить размер поля ввода',
+    copyMessage: 'Копировать сообщение',
+    cancelledSuffix: ' [отменено]',
+    errorMessage: 'Ошибка: {{message}}',
+    streamIdleTimeout: 'Поток ИИ простаивал {{seconds}} с — запрос отменён',
+    streamHardcapTimeout: 'Поток ИИ превысил лимит {{seconds}} с — запрос отменён',
   },
   message: {
     // Блок выполнения «выполнить в терминале»

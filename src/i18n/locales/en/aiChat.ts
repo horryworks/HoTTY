@@ -22,11 +22,13 @@ export const aiChat = {
     maxConsecutiveRunsHint: 'After this many auto-runs in a row, commands require manual confirmation.',
     resumeAutoExecution: 'Resume auto-execution',
     pauseAutoExecution: 'Pause auto-execution',
+    moreSafetySettings: 'More safety settings…',
   },
   tabStrip: {
     ariaLabel: 'AI Chat tabs',
     closeTab: 'Close {{title}}',
     addTab: 'Add tab',
+    tabN: 'Tab {{n}}',
   },
   outputBlock: {
     label: 'Terminal output',
@@ -42,7 +44,7 @@ export const aiChat = {
     linkNone: 'Not linked',
     linkThisWindow: 'This window',
     linkOtherWindow: 'Window: {{label}}',
-    linkedChipTitleStale: 'Link to {{name}} is {{status}}. Reconnect the terminal and press Watch to re-link.',
+    linkedChipTitleStale: 'Link to {{name}} is {{status}}. Reconnect the terminal and press AI Watch to re-link.',
     linkedChipTitle: 'Linked to {{name}}. Click to focus.',
     linkedChipAriaStale: 'Linked terminal {{name}} is {{status}}',
     linkedChipAria: 'Linked terminal: {{name}}',
@@ -83,7 +85,7 @@ export const aiChat = {
     sendTitleStreaming: 'Streaming…',
     sendTitle: 'Send',
     // Hints & status
-    selectModelHint: 'Select a model in the header to send messages',
+    selectModelHint: 'Open AI settings below the message box to choose a model',
     tokenReceiving: 'Receiving · {{tokens}} tokens',
     tokenWaiting: 'Waiting for response…',
     tokenInOut: '{{in}} in / {{out}} out tokens',
@@ -93,7 +95,19 @@ export const aiChat = {
     newChatConfirmTitle: 'Start a new chat?',
     newChatConfirmMessage: 'The current conversation will be cleared. This cannot be undone.',
     newChatConfirmButton: 'Start new chat',
-    modelNotSelected: 'AI model not selected. Please select a model from the dropdown at the top right of the screen.',
+    modelNotSelected: 'AI model not selected. Open AI settings below the message box and choose one.',
+    // Generic empty-state suggestions (shown when no terminal is linked)
+    suggestionGenericCapabilities: 'What can you help me with?',
+    suggestionGenericExplainCommand: 'Explain a shell command I give you',
+    suggestionGenericTroubleshoot: 'Help me troubleshoot a connection issue',
+    // A11y labels & transcript strings
+    stop: 'Stop',
+    resizeInput: 'Resize input area',
+    copyMessage: 'Copy message',
+    cancelledSuffix: ' [cancelled]',
+    errorMessage: 'Error: {{message}}',
+    streamIdleTimeout: 'AI stream idle for {{seconds}}s — request cancelled',
+    streamHardcapTimeout: 'AI stream exceeded {{seconds}}s limit — request cancelled',
   },
   message: {
     // Run-in-terminal execute block

@@ -21,7 +21,7 @@ use crate::services::ai::classifier::{
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
-use crate::services::ai::streaming::finalize_assistant_content;
+use crate::services::ai::streaming::{cap_history, finalize_assistant_content, MAX_HISTORY_MESSAGES};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -837,6 +837,7 @@ impl AIProvider for GeminiProvider {
                 role: "model".into(),
                 content,
             });
+            cap_history(history, MAX_HISTORY_MESSAGES);
         }
 
         if !cancel_token.is_cancelled() && !stream_errored {
@@ -909,12 +910,6 @@ impl AIProvider for GeminiProvider {
 
         let content = extract_first_text(&data).ok_or("classification response had no content")?;
         parse_verdict(content)
-    }
-
-    fn cancel_message(&mut self, session_id: &str) {
-        if let Some(token) = self.cancel_tokens.remove(session_id) {
-            token.cancel();
-        }
     }
 
     fn clear_history(&mut self, session_id: &str) {

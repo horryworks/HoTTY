@@ -241,3 +241,23 @@
     color: var(--color-warning);
     border-color: var(--color-warning);
 }
+
+.execution-mode-popover-settings-link {
+    display: block;
+    width: 100%;
+    padding: 4px 4px;
+    border: none;
+    background: transparent;
+    color: var(--accent-color);
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 2px);
+    text-align: left;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: color 0.1s, background-color 0.1s;
+}
+
+.execution-mode-popover-settings-link:hover {
+    color: var(--accent-hover);
+    background: var(--bg-tertiary);
+}

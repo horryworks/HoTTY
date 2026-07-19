@@ -22,11 +22,13 @@ export const aiChat = {
     maxConsecutiveRunsHint: '이 횟수만큼 연속으로 자동 실행한 후에는 명령에 수동 확인이 필요합니다.',
     resumeAutoExecution: '자동 실행 재개',
     pauseAutoExecution: '자동 실행 일시 중지',
+    moreSafetySettings: '추가 안전 설정…',
   },
   tabStrip: {
     ariaLabel: 'AI 채팅 탭',
     closeTab: '{{title}} 닫기',
     addTab: '탭 추가',
+    tabN: '탭 {{n}}',
   },
   outputBlock: {
     label: '터미널 출력',
@@ -83,7 +85,7 @@ export const aiChat = {
     sendTitleStreaming: '스트리밍 중…',
     sendTitle: '보내기',
     // Hints & status
-    selectModelHint: '메시지를 보내려면 헤더에서 모델을 선택하세요',
+    selectModelHint: '메시지 입력창 아래의 AI 설정에서 모델을 선택하세요',
     tokenReceiving: '수신 중 · {{tokens}} 토큰',
     tokenWaiting: '응답을 기다리는 중…',
     tokenInOut: '입력 {{in}} / 출력 {{out}} 토큰',
@@ -93,7 +95,17 @@ export const aiChat = {
     newChatConfirmTitle: '새 채팅을 시작하시겠습니까?',
     newChatConfirmMessage: '현재 대화가 지워집니다. 이 작업은 되돌릴 수 없습니다.',
     newChatConfirmButton: '새 채팅 시작',
-    modelNotSelected: 'AI 모델이 선택되지 않았습니다. 화면 오른쪽 상단의 드롭다운에서 모델을 선택하세요.',
+    modelNotSelected: 'AI 모델이 선택되지 않았습니다. 메시지 입력창 아래의 AI 설정에서 모델을 선택하세요.',
+    suggestionGenericCapabilities: '무엇을 도와줄 수 있나요?',
+    suggestionGenericExplainCommand: '내가 알려주는 셸 명령을 설명해줘',
+    suggestionGenericTroubleshoot: '연결 문제 해결을 도와줘',
+    stop: '중지',
+    resizeInput: '입력 영역 크기 조절',
+    copyMessage: '메시지 복사',
+    cancelledSuffix: ' [취소됨]',
+    errorMessage: '오류: {{message}}',
+    streamIdleTimeout: 'AI 응답이 {{seconds}}초 동안 멈춰 요청을 취소했습니다',
+    streamHardcapTimeout: 'AI 응답이 제한 시간 {{seconds}}초를 초과해 요청을 취소했습니다',
   },
   message: {
     // Run-in-terminal execute block

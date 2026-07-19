@@ -20,11 +20,23 @@ type StreamTimeoutKind = 'idle' | 'hardcap';
 /**
  * Build the model-message body shown when a stream is force-cancelled by a timeout.
  * Any partial text already received is preserved above the error note.
+ *
+ * Pass a pre-localized `reason` (already containing the elapsed seconds) to render
+ * it in the user's UI language; omit it for the English fallback used by tests and
+ * any non-React caller.
  */
-export function streamTimeoutMessage(partial: string, ms: number, kind: StreamTimeoutKind): string {
+export function streamTimeoutMessage(
+    partial: string,
+    ms: number,
+    kind: StreamTimeoutKind,
+    reason?: string,
+): string {
+    if (reason !== undefined) {
+        return partial ? `${partial}\n\n[${reason}]` : reason;
+    }
     const secs = Math.round(ms / 1000);
-    const reason = kind === 'idle'
+    const fallback = kind === 'idle'
         ? `AI stream idle for ${secs}s — request cancelled`
         : `AI stream exceeded ${secs}s limit — request cancelled`;
-    return partial ? `${partial}\n\n[Error: ${reason}]` : `Error: ${reason}`;
+    return partial ? `${partial}\n\n[Error: ${fallback}]` : `Error: ${fallback}`;
 }

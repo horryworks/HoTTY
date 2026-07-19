@@ -19,6 +19,8 @@ export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect,
             <div className="ai-chat-tab-strip-list">
                 {tabs.map((tab) => {
                     const active = tab.id === activeTabId;
+                    // Empty title (unlinked/unnamed tab) => localized "Tab N" fallback.
+                    const displayTitle = tab.title || t('aiChat.tabStrip.tabN', { n: tab.ordinal });
                     return (
                         <div
                             key={tab.id}
@@ -33,14 +35,14 @@ export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect,
                                     onSelect(tab.id);
                                 }
                             }}
-                            title={tab.title}
+                            title={displayTitle}
                         >
-                            <span className="ai-chat-tab-title">{tab.title}</span>
+                            <span className="ai-chat-tab-title">{displayTitle}</span>
                             {canClose && (
                                 <button
                                     type="button"
                                     className="ai-chat-tab-close"
-                                    aria-label={t('aiChat.tabStrip.closeTab', { title: tab.title })}
+                                    aria-label={t('aiChat.tabStrip.closeTab', { title: displayTitle })}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onClose(tab.id);

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { decideAutoExec, _clearVerdictCache, type DecideOptions } from './aiCommandClassifier';
+import { decideAutoExec, classifyStatic, _clearVerdictCache, type DecideOptions } from './aiCommandClassifier';
 import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from './commandLists';
 import { tauriService } from '../services/tauriService';
 
@@ -170,5 +170,41 @@ describe('decideAutoExec', () => {
             await decideAutoExec('some-tool --status', baseOpts({ providerId: 'openai' }));
             expect(mockClassify).toHaveBeenCalledTimes(2);
         });
+    });
+});
+
+describe('classifyStatic (synchronous, no AI — used for ask-mode badges)', () => {
+    const lists = { whitelist: DEFAULT_WHITELIST, blacklist: DEFAULT_BLACKLIST };
+
+    it('flags a blacklisted command as blacklist (never calls the AI)', () => {
+        const d = classifyStatic('sudo rm -rf /', lists);
+        expect(d.source).toBe('blacklist');
+        expect(d.autoExec).toBe(false);
+        expect(mockClassify).not.toHaveBeenCalled();
+    });
+
+    it('marks a whitelisted read-only command as whitelist', () => {
+        const d = classifyStatic('ls -la', lists);
+        expect(d.source).toBe('whitelist');
+        expect(d.autoExec).toBe(true);
+    });
+
+    it('returns ask for a structurally dangerous command (command substitution)', () => {
+        // Command substitution trips the structural-danger floor before the
+        // whitelist fast-path can approve the otherwise read-only `echo`.
+        const d = classifyStatic('echo $(whoami)', lists);
+        expect(d.source).toBe('ask');
+        expect(d.autoExec).toBe(false);
+    });
+
+    it('returns ask for an unknown, non-listed command', () => {
+        const d = classifyStatic('some-unknown-tool --status', lists);
+        expect(d.source).toBe('ask');
+        expect(d.autoExec).toBe(false);
+    });
+
+    it('a custom blacklist entry overrides the whitelist', () => {
+        const d = classifyStatic('ls -la', { whitelist: DEFAULT_WHITELIST, blacklist: ['ls'] });
+        expect(d.source).toBe('blacklist');
     });
 });

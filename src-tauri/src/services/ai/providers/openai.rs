@@ -18,7 +18,7 @@ use crate::services::ai::classifier::{
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
-use crate::services::ai::streaming::finalize_assistant_content;
+use crate::services::ai::streaming::{cap_history, finalize_assistant_content, MAX_HISTORY_MESSAGES};
 use crate::services::ai::validation::{is_valid_api_key, is_valid_model};
 
 // ---------------------------------------------------------------------------
@@ -424,6 +424,7 @@ impl AIProvider for OpenAIProvider {
                 role: "assistant".into(),
                 content,
             });
+            cap_history(history, MAX_HISTORY_MESSAGES);
         }
 
         if !cancel_token.is_cancelled() && !stream_errored {
@@ -490,12 +491,6 @@ impl AIProvider for OpenAIProvider {
         let content =
             extract_message_content(&data).ok_or("classification response had no content")?;
         parse_verdict(content)
-    }
-
-    fn cancel_message(&mut self, session_id: &str) {
-        if let Some(token) = self.cancel_tokens.remove(session_id) {
-            token.cancel();
-        }
     }
 
     fn clear_history(&mut self, session_id: &str) {

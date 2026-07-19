@@ -238,7 +238,7 @@ describe('TabBar', () => {
     render(
       <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onSelect={onSelect} onToggleWatch={onToggleWatch} />
     );
-    fireEvent.click(screen.getByLabelText('Start AI monitoring'));
+    fireEvent.click(screen.getByLabelText('Start AI Watch'));
     expect(onToggleWatch).toHaveBeenCalledWith('s-1');
     expect(onSelect).not.toHaveBeenCalled();
   });
@@ -343,7 +343,7 @@ describe('TabBar', () => {
       />,
     );
     fireEvent.contextMenu(screen.getByText('Session s-1'));
-    expect(screen.getByText('Watch with AI')).toBeTruthy();
+    expect(screen.getByText('AI Watch')).toBeTruthy();
     expect(screen.getByText('Save to Host Tree…')).toBeTruthy();
     expect(screen.queryByText('Add Bookmark…')).toBeNull();
   });
@@ -368,7 +368,7 @@ describe('TabBar', () => {
       <TabBar {...defaultProps} tabItems={off} visibleTabIds={['s-1']} onToggleWatch={() => {}} />,
     );
     fireEvent.contextMenu(screen.getByText('Session s-1'));
-    expect(screen.getByText('Watch with AI')).toBeTruthy();
+    expect(screen.getByText('AI Watch')).toBeTruthy();
     expect(screen.queryByText('Stop AI Watch')).toBeNull();
     fireEvent.keyDown(document, { key: 'Escape' });
 
@@ -378,7 +378,7 @@ describe('TabBar', () => {
     );
     fireEvent.contextMenu(screen.getByText('Session s-1'));
     expect(screen.getByText('Stop AI Watch')).toBeTruthy();
-    expect(screen.queryByText('Watch with AI')).toBeNull();
+    expect(screen.queryByText('AI Watch')).toBeNull();
   });
 
   it('clicking the Watch item calls onToggleWatch and closes the menu', () => {
@@ -388,9 +388,9 @@ describe('TabBar', () => {
       <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onToggleWatch={onToggleWatch} />,
     );
     fireEvent.contextMenu(screen.getByText('Session s-1'));
-    fireEvent.click(screen.getByText('Watch with AI'));
+    fireEvent.click(screen.getByText('AI Watch'));
     expect(onToggleWatch).toHaveBeenCalledWith('s-1');
-    expect(screen.queryByText('Watch with AI')).toBeNull();
+    expect(screen.queryByText('AI Watch')).toBeNull();
   });
 
   it('non-SSH/Telnet session tab shows Watch but NOT Save to Host Tree', () => {
@@ -405,7 +405,7 @@ describe('TabBar', () => {
       />,
     );
     fireEvent.contextMenu(screen.getByText('Session s-1'));
-    expect(screen.getByText('Watch with AI')).toBeTruthy();
+    expect(screen.getByText('AI Watch')).toBeTruthy();
     expect(screen.queryByText('Save to Host Tree…')).toBeNull();
   });
 
@@ -445,7 +445,7 @@ describe('TabBar', () => {
     );
     fireEvent.contextMenu(screen.getByText('Web'));
     expect(screen.getByText('Add Bookmark…')).toBeTruthy();
-    expect(screen.queryByText('Watch with AI')).toBeNull();
+    expect(screen.queryByText('AI Watch')).toBeNull();
     expect(screen.queryByText('Save to Host Tree…')).toBeNull();
     fireEvent.click(screen.getByText('Add Bookmark…'));
     expect(onBookmark).toHaveBeenCalledWith('wb-1');
