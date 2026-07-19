@@ -21,7 +21,8 @@ use crate::services::ai::classifier::{
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
-use crate::services::ai::streaming::{cap_history, finalize_assistant_content, MAX_HISTORY_MESSAGES};
+use crate::services::ai::history::ChatHistoryStore;
+use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -79,23 +80,6 @@ fn now_millis() -> u64 {
 // Chat message type
 // ---------------------------------------------------------------------------
 
-#[derive(Clone)]
-struct ChatMessage {
-    role: String,
-    content: String,
-}
-
-/// Drop a trailing `user` message from a chat history. Called on hard errors
-/// (HTTP failure or mid-stream error) so the user/assistant alternation stays
-/// consistent for the next request — otherwise the failed turn's user message
-/// would linger and the retry would push a second consecutive user message.
-fn pop_trailing_user(history: Option<&mut Vec<ChatMessage>>) {
-    if let Some(h) = history {
-        if matches!(h.last(), Some(m) if m.role == "user") {
-            h.pop();
-        }
-    }
-}
 
 /// Minimal `application/x-www-form-urlencoded` value decoder for the OAuth callback
 /// query string (avoids pulling in the `url` crate). Decodes `%XX` escapes and `+`
@@ -145,7 +129,7 @@ pub struct GeminiProvider {
     token_data: Option<TokenData>,
     client_id: Option<String>,
     client_secret: Option<String>,
-    chat_histories: HashMap<String, Vec<ChatMessage>>,
+    history: ChatHistoryStore,
     cancel_tokens: HashMap<String, CancellationToken>,
     app_data_dir: PathBuf,
     http_client: reqwest::Client,
@@ -168,7 +152,7 @@ impl GeminiProvider {
             token_data: None,
             client_id: None,
             client_secret: None,
-            chat_histories: HashMap::new(),
+            history: ChatHistoryStore::new(MAX_HISTORY_MESSAGES),
             cancel_tokens: HashMap::new(),
             app_data_dir,
             http_client: reqwest::Client::builder()
@@ -616,7 +600,7 @@ impl AIProvider for GeminiProvider {
         self.token_data = None;
         self.client_id = None;
         self.client_secret = None;
-        self.chat_histories.clear();
+        self.history.clear_all();
         for (_, token) in self.cancel_tokens.drain() {
             token.cancel();
         }
@@ -661,22 +645,17 @@ impl AIProvider for GeminiProvider {
             }
         };
 
-        let history = self
-            .chat_histories
-            .entry(session_id.to_string())
-            .or_default();
-        history.push(ChatMessage {
-            role: "user".into(),
-            content: message.to_string(),
-        });
+        self.history.push(session_id, "user", message);
 
-        // Build Gemini request body
-        let contents: Vec<Value> = history
-            .iter()
+        // Build Gemini request body from the current history snapshot
+        let contents: Vec<Value> = self
+            .history
+            .snapshot(session_id)
+            .into_iter()
             .map(|msg| {
                 serde_json::json!({
-                    "role": &msg.role,
-                    "parts": [{"text": &msg.content}]
+                    "role": msg.role,
+                    "parts": [{"text": msg.content}]
                 })
             })
             .collect();
@@ -730,7 +709,7 @@ impl AIProvider for GeminiProvider {
                         usage_metadata: None,
                     },
                 );
-                pop_trailing_user(self.chat_histories.get_mut(&sid));
+                self.history.pop_trailing_user(&sid);
                 self.cancel_tokens.remove(&sid);
                 return Ok(());
             }
@@ -754,7 +733,7 @@ impl AIProvider for GeminiProvider {
             );
             // Drop the user message pushed before the request so the history
             // stays consistent for retry (mirror vertexai's pop-on-error).
-            pop_trailing_user(self.chat_histories.get_mut(&sid));
+            self.history.pop_trailing_user(&sid);
             self.cancel_tokens.remove(&sid);
             return Ok(());
         }
@@ -828,16 +807,12 @@ impl AIProvider for GeminiProvider {
             // request rather than committing a partial assistant turn — that
             // would corrupt the alternation and resend a truncated reply as
             // context on the next request.
-            pop_trailing_user(self.chat_histories.get_mut(&sid));
-        } else if let Some(history) = self.chat_histories.get_mut(&sid) {
+            self.history.pop_trailing_user(&sid);
+        } else {
             // Normal completion or cancel: close out the assistant turn so the
             // user/assistant alternation stays consistent for the next request.
-            let content = finalize_assistant_content(&full_response, cancel_token.is_cancelled());
-            history.push(ChatMessage {
-                role: "model".into(),
-                content,
-            });
-            cap_history(history, MAX_HISTORY_MESSAGES);
+            self.history
+                .finalize_assistant(&sid, "model", &full_response, cancel_token.is_cancelled());
         }
 
         if !cancel_token.is_cancelled() && !stream_errored {
@@ -913,7 +888,7 @@ impl AIProvider for GeminiProvider {
     }
 
     fn clear_history(&mut self, session_id: &str) {
-        self.chat_histories.remove(session_id);
+        self.history.clear(session_id);
     }
 
     async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
@@ -1004,36 +979,6 @@ mod hex {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn pop_trailing_user_drops_only_trailing_user() {
-        let mut h = vec![
-            ChatMessage {
-                role: "user".into(),
-                content: "q1".into(),
-            },
-            ChatMessage {
-                role: "model".into(),
-                content: "a1".into(),
-            },
-            ChatMessage {
-                role: "user".into(),
-                content: "q2".into(),
-            },
-        ];
-        // Trailing user (failed turn) is dropped.
-        pop_trailing_user(Some(&mut h));
-        assert_eq!(h.len(), 2);
-        assert_eq!(h.last().unwrap().role, "model");
-        // Now trailing is a model turn — must NOT be popped.
-        pop_trailing_user(Some(&mut h));
-        assert_eq!(h.len(), 2);
-        // Empty / None are no-ops.
-        let mut empty: Vec<ChatMessage> = Vec::new();
-        pop_trailing_user(Some(&mut empty));
-        assert!(empty.is_empty());
-        pop_trailing_user(None);
-    }
 
     #[test]
     fn valid_credentials() {

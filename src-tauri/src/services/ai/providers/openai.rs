@@ -17,8 +17,9 @@ use crate::services::ai::classifier::{
     CLASSIFIER_SYSTEM_PROMPT,
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
+use crate::services::ai::history::ChatHistoryStore;
 use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
-use crate::services::ai::streaming::{cap_history, finalize_assistant_content, MAX_HISTORY_MESSAGES};
+use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
 use crate::services::ai::validation::{is_valid_api_key, is_valid_model};
 
 // ---------------------------------------------------------------------------
@@ -26,29 +27,6 @@ use crate::services::ai::validation::{is_valid_api_key, is_valid_model};
 // ---------------------------------------------------------------------------
 
 const CONFIG_FILE_NAME: &str = "openai_config.json";
-
-// ---------------------------------------------------------------------------
-// Chat message type
-// ---------------------------------------------------------------------------
-
-#[derive(Clone)]
-struct ChatMessage {
-    role: String,
-    content: String,
-}
-
-/// Drop a trailing `user` message from a chat history. Called on hard errors
-/// (HTTP failure or mid-stream error) so the user/assistant alternation that
-/// OpenAI's chat-completions API requires stays consistent for the next
-/// request — otherwise the failed turn's user message would linger and the
-/// retry would send two consecutive user messages.
-fn pop_trailing_user(history: Option<&mut Vec<ChatMessage>>) {
-    if let Some(h) = history {
-        if matches!(h.last(), Some(m) if m.role == "user") {
-            h.pop();
-        }
-    }
-}
 
 /// Extract the assistant message content from a non-streaming chat-completions
 /// response body. Pulled out so the classification parsing path is unit-testable.
@@ -88,7 +66,7 @@ fn fallback_models() -> Vec<ModelInfo> {
 
 pub struct OpenAIProvider {
     api_key: Option<String>,
-    chat_histories: HashMap<String, Vec<ChatMessage>>,
+    history: ChatHistoryStore,
     cancel_tokens: HashMap<String, CancellationToken>,
     app_data_dir: PathBuf,
     http_client: reqwest::Client,
@@ -98,7 +76,7 @@ impl OpenAIProvider {
     pub fn new(app_data_dir: PathBuf) -> Self {
         Self {
             api_key: None,
-            chat_histories: HashMap::new(),
+            history: ChatHistoryStore::new(MAX_HISTORY_MESSAGES),
             cancel_tokens: HashMap::new(),
             app_data_dir,
             http_client: reqwest::Client::builder()
@@ -208,7 +186,7 @@ impl AIProvider for OpenAIProvider {
     fn logout(&mut self) {
         log::info!("[openai] Logout");
         self.api_key = None;
-        self.chat_histories.clear();
+        self.history.clear_all();
         // Cancel any in-flight requests
         for (_, token) in self.cancel_tokens.drain() {
             token.cancel();
@@ -255,22 +233,15 @@ impl AIProvider for OpenAIProvider {
         };
 
         // Add user message to history
-        let history = self
-            .chat_histories
-            .entry(session_id.to_string())
-            .or_default();
-        history.push(ChatMessage {
-            role: "user".into(),
-            content: message.to_string(),
-        });
+        self.history.push(session_id, "user", message);
 
-        // Build messages array
+        // Build messages array from the current history snapshot
         let mut messages: Vec<serde_json::Value> = Vec::new();
         if let Some(sys) = system_instruction {
             messages.push(serde_json::json!({"role": "system", "content": sys}));
         }
-        for msg in history.iter() {
-            messages.push(serde_json::json!({"role": &msg.role, "content": &msg.content}));
+        for msg in self.history.snapshot(session_id) {
+            messages.push(serde_json::json!({"role": msg.role, "content": msg.content}));
         }
 
         // Use the command-supplied token (registered outside the service lock so
@@ -315,7 +286,7 @@ impl AIProvider for OpenAIProvider {
                         usage_metadata: None,
                     },
                 );
-                pop_trailing_user(self.chat_histories.get_mut(&sid));
+                self.history.pop_trailing_user(&sid);
                 self.cancel_tokens.remove(&sid);
                 return Ok(());
             }
@@ -340,7 +311,7 @@ impl AIProvider for OpenAIProvider {
             log::error!("[openai] {err_msg}");
             // Drop the user message pushed before the request so the history
             // stays consistent for retry (mirror vertexai's pop-on-error).
-            pop_trailing_user(self.chat_histories.get_mut(&sid));
+            self.history.pop_trailing_user(&sid);
             self.cancel_tokens.remove(&sid);
             return Ok(());
         }
@@ -415,16 +386,12 @@ impl AIProvider for OpenAIProvider {
             // Hard error mid-stream: drop the user message rather than commit a
             // partial assistant turn — a truncated/empty assistant message would
             // break OpenAI's strict user/assistant alternation on the next send.
-            pop_trailing_user(self.chat_histories.get_mut(&sid));
-        } else if let Some(history) = self.chat_histories.get_mut(&sid) {
+            self.history.pop_trailing_user(&sid);
+        } else {
             // Normal completion or cancel: close out the assistant turn to
             // preserve the alternation OpenAI's chat completions API expects.
-            let content = finalize_assistant_content(&full_response, cancel_token.is_cancelled());
-            history.push(ChatMessage {
-                role: "assistant".into(),
-                content,
-            });
-            cap_history(history, MAX_HISTORY_MESSAGES);
+            self.history
+                .finalize_assistant(&sid, "assistant", &full_response, cancel_token.is_cancelled());
         }
 
         if !cancel_token.is_cancelled() && !stream_errored {
@@ -494,7 +461,7 @@ impl AIProvider for OpenAIProvider {
     }
 
     fn clear_history(&mut self, session_id: &str) {
-        self.chat_histories.remove(session_id);
+        self.history.clear(session_id);
     }
 
     async fn list_models(&mut self) -> Result<Vec<ModelInfo>, String> {
@@ -572,34 +539,6 @@ impl AIProvider for OpenAIProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn pop_trailing_user_drops_only_trailing_user() {
-        let mut h = vec![
-            ChatMessage {
-                role: "user".into(),
-                content: "q1".into(),
-            },
-            ChatMessage {
-                role: "assistant".into(),
-                content: "a1".into(),
-            },
-            ChatMessage {
-                role: "user".into(),
-                content: "q2".into(),
-            },
-        ];
-        pop_trailing_user(Some(&mut h));
-        assert_eq!(h.len(), 2);
-        assert_eq!(h.last().unwrap().role, "assistant");
-        // Trailing assistant must NOT be popped.
-        pop_trailing_user(Some(&mut h));
-        assert_eq!(h.len(), 2);
-        let mut empty: Vec<ChatMessage> = Vec::new();
-        pop_trailing_user(Some(&mut empty));
-        assert!(empty.is_empty());
-        pop_trailing_user(None);
-    }
 
     #[test]
     fn valid_api_keys() {

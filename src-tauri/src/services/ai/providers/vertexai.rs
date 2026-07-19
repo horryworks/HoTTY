@@ -18,7 +18,8 @@ use crate::services::ai::classifier::{
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
 use crate::services::ai::sse::{parse_sse_line, SseBuffer, SseLine};
-use crate::services::ai::streaming::{cap_history, finalize_assistant_content, MAX_HISTORY_MESSAGES};
+use crate::services::ai::history::{ChatHistoryStore, ChatMessage};
+use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
 use crate::services::path_safety::is_unc_path;
 
 // ---------------------------------------------------------------------------
@@ -151,12 +152,6 @@ struct VertexConfig {
     auth_type: String, // "adc" or "service_account"
 }
 
-#[derive(Clone)]
-struct ChatMessage {
-    role: String,
-    content: String,
-}
-
 // ---------------------------------------------------------------------------
 // JWT creation for service accounts
 // ---------------------------------------------------------------------------
@@ -258,7 +253,7 @@ pub struct VertexAIProvider {
     token_data: Option<TokenData>,
     refresh_data: Option<RefreshData>,
     config: Option<VertexConfig>,
-    chat_histories: HashMap<String, Vec<ChatMessage>>,
+    history: ChatHistoryStore,
     cancel_tokens: HashMap<String, CancellationToken>,
     app_data_dir: PathBuf,
     http_client: reqwest::Client,
@@ -270,7 +265,7 @@ impl VertexAIProvider {
             token_data: None,
             refresh_data: None,
             config: None,
-            chat_histories: HashMap::new(),
+            history: ChatHistoryStore::new(MAX_HISTORY_MESSAGES),
             cancel_tokens: HashMap::new(),
             app_data_dir,
             http_client: reqwest::Client::builder()
@@ -1142,7 +1137,7 @@ impl AIProvider for VertexAIProvider {
         self.token_data = None;
         self.refresh_data = None;
         self.config = None;
-        self.chat_histories.clear();
+        self.history.clear_all();
         for (_, token) in self.cancel_tokens.drain() {
             token.cancel();
         }
@@ -1209,14 +1204,7 @@ impl AIProvider for VertexAIProvider {
             }
         };
 
-        let history = self
-            .chat_histories
-            .entry(session_id.to_string())
-            .or_default();
-        history.push(ChatMessage {
-            role: "user".into(),
-            content: message.to_string(),
-        });
+        self.history.push(session_id, "user", message);
 
         // Use the command-supplied token (registered outside the service lock so
         // Stop can cancel mid-stream); keep a local copy for logout() to cancel.
@@ -1232,7 +1220,7 @@ impl AIProvider for VertexAIProvider {
         let publisher = model_path.split('/').nth(1).unwrap_or("google");
 
         let sid = session_id.to_string();
-        let history_snapshot: Vec<ChatMessage> = history.clone();
+        let history_snapshot: Vec<ChatMessage> = self.history.snapshot(session_id);
 
         let result = if publisher == "anthropic" {
             self.call_anthropic_api(
@@ -1262,15 +1250,8 @@ impl AIProvider for VertexAIProvider {
             Ok((full_response, usage_metadata)) => {
                 // Always close out the assistant turn so user/model alternation
                 // stays consistent for the next request, even on cancel.
-                if let Some(history) = self.chat_histories.get_mut(&sid) {
-                    let content =
-                        finalize_assistant_content(&full_response, cancel_token.is_cancelled());
-                    history.push(ChatMessage {
-                        role: "model".into(),
-                        content,
-                    });
-                    cap_history(history, MAX_HISTORY_MESSAGES);
-                }
+                self.history
+                    .finalize_assistant(&sid, "model", &full_response, cancel_token.is_cancelled());
                 if !cancel_token.is_cancelled() {
                     emit_chat_response(
                         app,
@@ -1298,11 +1279,7 @@ impl AIProvider for VertexAIProvider {
                 }
                 // On error, also pop the user message that was pushed before
                 // the request so the history stays consistent for retry.
-                if let Some(history) = self.chat_histories.get_mut(&sid) {
-                    if matches!(history.last(), Some(m) if m.role == "user") {
-                        history.pop();
-                    }
-                }
+                self.history.pop_trailing_user(&sid);
             }
         }
 
@@ -1399,7 +1376,7 @@ impl AIProvider for VertexAIProvider {
     }
 
     fn clear_history(&mut self, session_id: &str) {
-        self.chat_histories.remove(session_id);
+        self.history.clear(session_id);
     }
 
     async fn list_locations(&mut self) -> Result<Vec<String>, String> {
