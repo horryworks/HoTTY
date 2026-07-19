@@ -1,9 +1,18 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useReducer, useCallback, useMemo } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { marked } from 'marked';
 import { getTransparentColor } from '../../utils/colorUtils';
 import { sanitizeHtml, externalLinkFromClick } from '../../utils/htmlUtils';
 import { decideAutoExec, classifyStatic, type AutoExecDecision } from '../../utils/aiCommandClassifier';
+import {
+    autoExecReducer,
+    emptyAutoExecState,
+    hasBlock,
+    getBlock,
+    collectMessageDecorations,
+    type AutoExecState,
+    type AutoExecAction,
+} from '../../utils/autoExecReducer';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { aiProviderLabelKey } from '../../constants/aiProviders';
 import { calcAICost, formatAICost } from '../../constants/aiPricing';
@@ -351,37 +360,28 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // "New chat" resets the message indices to 0,1,2…, so a pane-global set would
     // mistake the new chat's first command for one already processed and suppress it.
     const [consecutiveAutoExecCount, setConsecutiveAutoExecCount] = useState(0);
-    const autoExecutedByTabRef = useRef(new Map<string, Set<string>>());
-    const autoExecProcessedByTabRef = useRef(new Map<string, Set<string>>());
-    // Commands the user explicitly declined ("Don't Execute"), tracked per tab and
-    // keyed by command text (mirrors autoExecutedByTabRef). Drives the "Declined"
-    // badge and lets the auto-exec async bail if a command is declined mid-classify.
-    const declinedByTabRef = useRef(new Map<string, Set<string>>());
-    const getTabSet = useCallback((map: Map<string, Set<string>>, tabId: string) => {
-        let set = map.get(tabId);
-        if (!set) { set = new Set<string>(); map.set(tabId, set); }
-        return set;
+    // Per-tab auto-execute tracking (reserve → classify → execute/decline, one entry
+    // per command block keyed by `${messageIndex}:${command}`). ONE immutable reducer
+    // replaces the five parallel per-tab refs the pane used to juggle
+    // (processed / executed / declined / decisions / classifying) plus the
+    // `decisionsVersion` re-render counter — see utils/autoExecReducer. Keying a block
+    // by messageIndex+command (not bare command text) keeps the same command in two
+    // messages tracked independently; per-tab scoping is why "New chat" (which restarts
+    // message indices at 0) must clear the tab so a stale key can't shadow the new
+    // conversation's first command.
+    //
+    // `autoExecStateRef` mirrors the state SYNCHRONOUSLY so the stream-complete effect
+    // can reserve a block and the async classifier can re-check "declined" before the
+    // reducer's committed state is available (refs mutate in place; useReducer doesn't).
+    // Every mutation goes through `applyAutoExec`, which updates the ref AND dispatches,
+    // keeping the render-time state and the synchronous ref in lockstep.
+    const [autoExecState, dispatchAutoExec] = useReducer(autoExecReducer, emptyAutoExecState);
+    const autoExecStateRef = useRef<AutoExecState>(autoExecState);
+    const applyAutoExec = useCallback((action: AutoExecAction) => {
+        autoExecStateRef.current = autoExecReducer(autoExecStateRef.current, action);
+        dispatchAutoExec(action);
     }, []);
     const [autoExecPaused, setAutoExecPaused] = useState(false);
-    // NOTE: autoExecutedByTabRef / declinedByTabRef are keyed by blockKey
-    // (`${messageIndex}:${command}`), NOT bare command text — otherwise the same
-    // command appearing in two messages would mislabel the later block (badge shown,
-    // Run/Decline hidden) or retroactively flip an earlier one. The per-message sets
-    // fed to MessageContent are built in the messages.map below.
-
-    // Per-command safety verdicts (and in-flight "classifying" markers), tracked
-    // per tab and keyed by `${messageIndex}:${command}` so the UI can show WHY
-    // each command was (or wasn't) auto-executed. `decisionsVersion` bumps to
-    // force a re-render when these refs mutate (refs alone don't trigger one).
-    const decisionsByTabRef = useRef(new Map<string, Map<string, AutoExecDecision>>());
-    const classifyingByTabRef = useRef(new Map<string, Set<string>>());
-    const [decisionsVersion, setDecisionsVersion] = useState(0);
-    const bumpDecisions = useCallback(() => setDecisionsVersion(v => v + 1), []);
-    const getTabMap = useCallback((map: Map<string, Map<string, AutoExecDecision>>, tabId: string) => {
-        let m = map.get(tabId);
-        if (!m) { m = new Map<string, AutoExecDecision>(); map.set(tabId, m); }
-        return m;
-    }, []);
 
     // Per-tab chat state (Phase 1: messages stored locally keyed by tabId so tab switch
     // swaps history without losing in-flight conversations).
@@ -759,11 +759,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // Now that every per-tab tracking ref exists, wire the forward handle used by
     // the provider-switch and logout effects (declared above these refs).
     resetAllTabTrackingRef.current = () => {
-        autoExecProcessedByTabRef.current.clear();
-        autoExecutedByTabRef.current.clear();
-        declinedByTabRef.current.clear();
-        decisionsByTabRef.current.clear();
-        classifyingByTabRef.current.clear();
+        applyAutoExec({ type: 'resetAll' });
         kickedForDeviceRef.current.clear();
         lastSessionForDeviceRef.current.clear();
     };
@@ -964,11 +960,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         const pruneMap = (m: Map<string, unknown>) => {
             for (const id of [...m.keys()]) if (!liveIds.has(id)) m.delete(id);
         };
-        pruneMap(autoExecutedByTabRef.current as Map<string, unknown>);
-        pruneMap(autoExecProcessedByTabRef.current as Map<string, unknown>);
-        pruneMap(declinedByTabRef.current as Map<string, unknown>);
-        pruneMap(decisionsByTabRef.current as Map<string, unknown>);
-        pruneMap(classifyingByTabRef.current as Map<string, unknown>);
+        applyAutoExec({ type: 'prune', liveTabIds: liveIds });
         pruneMap(kickedForDeviceRef.current as Map<string, unknown>);
         pruneMap(lastSessionForDeviceRef.current as Map<string, unknown>);
         const dropClosed = <T,>(prev: Map<string, T>): Map<string, T> => {
@@ -985,7 +977,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             for (const id of [...next]) if (!liveIds.has(id)) { next.delete(id); changed = true; }
             return changed ? next : prev;
         });
-    }, [tabIdsKey]);
+    }, [tabIdsKey, applyAutoExec]);
 
     // ── Auto-execute safe commands ──
     // Assigned later; the effect calls it via ref (forward reference). Runs a
@@ -1015,17 +1007,15 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
 
             const command = commands[commands.length - 1];
             const blockKey = `${tabMessages.length - 1}:${command}`;
-            const processedSet = getTabSet(autoExecProcessedByTabRef.current, tabId);
             // Reserve the block BEFORE the await so a re-render during classification
             // can't fire a second, duplicate classification/run for the same command.
-            if (processedSet.has(blockKey)) continue;
-            processedSet.add(blockKey);
+            // `reserve` marks it "classifying" and no-ops if already reserved; the
+            // synchronous ref mirror preserves the pre-reducer guard's timing.
+            if (hasBlock(autoExecStateRef.current, tabId, blockKey)) continue;
+            applyAutoExec({ type: 'reserve', tabId, blockKey, command });
 
             let aborted = false;
             aborters.push(() => { aborted = true; });
-            const classifyingSet = getTabSet(classifyingByTabRef.current, tabId);
-            classifyingSet.add(blockKey);
-            bumpDecisions();
 
             (async () => {
                 let decision: AutoExecDecision;
@@ -1044,28 +1034,27 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 if (aborted) {
                     // Un-stick the "🔍 Checking safety…" marker and un-reserve the
                     // block so it isn't pinned spinner-forever with no verdict.
-                    classifyingSet.delete(blockKey);
-                    processedSet.delete(blockKey);
-                    bumpDecisions();
+                    applyAutoExec({ type: 'abort', tabId, blockKey });
                     return;
                 }
 
-                classifyingSet.delete(blockKey);
-                getTabMap(decisionsByTabRef.current, tabId).set(blockKey, decision);
-                bumpDecisions();
+                // Record the verdict (classifying → classified). If the user declined
+                // during the await, the block is already "declined" and `decide` leaves
+                // that status intact — the guard below then bails without auto-running.
+                applyAutoExec({ type: 'decide', tabId, blockKey, decision });
 
                 if (!decision.autoExec) return;
                 // Re-validate run preconditions against the LATEST state (they may
                 // have changed while classification was in flight). Declined is keyed
                 // by blockKey so declining THIS block doesn't shadow the same command
                 // elsewhere.
-                if (getTabSet(declinedByTabRef.current, tabId).has(blockKey)) return;
+                if (getBlock(autoExecStateRef.current, tabId, blockKey)?.status === 'declined') return;
                 if (autoExecPausedRef.current) return;
                 if (!resolveTabTarget(tabId).live) return; // this tab's link, not active
                 if (maxConsecutiveAutoExecutions > 0
                     && consecutiveAutoExecCountRef.current >= maxConsecutiveAutoExecutions) return;
 
-                getTabSet(autoExecutedByTabRef.current, tabId).add(blockKey);
+                applyAutoExec({ type: 'execute', tabId, blockKey });
                 setConsecutiveAutoExecCount(prev => prev + 1);
                 handleRunCommandForTabRef.current(tabId, command);
             })();
@@ -1219,9 +1208,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // THIS block never mislabels the same command in another message.
     const handleDeclineCommand = (messageIndex: number, command: string) => {
         if (!activeTabId) return;
-        getTabSet(declinedByTabRef.current, activeTabId).add(`${messageIndex}:${command}`);
+        // Terminal "declined" state → the block shows the Declined badge and any
+        // in-flight classify for it bails instead of auto-running (decline wins).
+        applyAutoExec({ type: 'decline', tabId: activeTabId, blockKey: `${messageIndex}:${command}`, command });
         setConsecutiveAutoExecCount(0); // a human intervened — reset the auto-run streak
-        bumpDecisions();                // re-render so the block shows the Declined badge
         onEnqueuePending?.(activeTabId, declinedNote(command.trim()));
     };
 
@@ -1307,15 +1297,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             if (streamingForTabIdRef.current === activeTabId) streamingForTabIdRef.current = null;
             // Reset this tab's auto-exec tracking so the new conversation's first
             // command isn't suppressed by a stale blockKey (message indices restart
-            // at 0) and the "Auto-executed" badge doesn't linger from the old chat.
-            autoExecProcessedByTabRef.current.delete(activeTabId);
-            autoExecutedByTabRef.current.delete(activeTabId);
-            declinedByTabRef.current.delete(activeTabId);
-            // Drop stale per-command verdicts so they don't reappear against the
-            // new conversation's commands (which restart at message index 0).
-            decisionsByTabRef.current.delete(activeTabId);
-            classifyingByTabRef.current.delete(activeTabId);
-            bumpDecisions();
+            // at 0), stale per-command verdicts don't reappear, and the
+            // "Auto-executed" badge doesn't linger from the old chat.
+            applyAutoExec({ type: 'clearTab', tabId: activeTabId });
             setConsecutiveAutoExecCount(0);
             // Cancel any in-flight client-side sleep delay for this tab: clearing
             // sleepDelay invalidates the token its timer checks, so it no-ops.
@@ -1594,50 +1578,37 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             </div>
                         )}
                         {messages.map((msg, idx) => {
-                            // Build the per-command verdict/classifying lookups for this
-                            // model message from the tab-scoped decision refs. Reading
-                            // `decisionsVersion` here keeps the lookups fresh as the async
-                            // classifier resolves. Only meaningful in auto-execute-safe mode.
-                            void decisionsVersion;
+                            // Build the per-command badge/verdict lookups for this model
+                            // message from the auto-exec reducer state (reading `autoExecState`
+                            // here is what keeps the lookups fresh as the async classifier
+                            // resolves). A command's identity is its message index + text, so
+                            // the same command in two messages is tracked independently.
                             let verdictByCommand: Map<string, AutoExecDecision> | undefined;
                             let classifyingCommands: Set<string> | undefined;
                             let autoExecutedCommands: Set<string> | undefined;
                             let declinedCommands: Set<string> | undefined;
-                            // Build the per-message badge/verdict lookups from the
-                            // blockKey-keyed tab refs (a command's identity is its
-                            // message index + text, so the same command in two messages
-                            // is tracked independently). Declined/auto-executed apply in
-                            // any mode. In auto-execute-safe mode verdicts come from the
-                            // async classifier refs; in ask mode they come from the free
-                            // synchronous static tiers (blacklist/whitelist only).
                             if (msg.role === 'model' && activeTabId) {
-                                const autoExecMode = commandExecutionMode === 'auto-execute-safe';
-                                const decMap = autoExecMode ? decisionsByTabRef.current.get(activeTabId) : undefined;
-                                const clsSet = autoExecMode ? classifyingByTabRef.current.get(activeTabId) : undefined;
-                                const autoSet = autoExecutedByTabRef.current.get(activeTabId);
-                                const declSet = declinedByTabRef.current.get(activeTabId);
-                                verdictByCommand = new Map<string, AutoExecDecision>();
-                                classifyingCommands = new Set<string>();
-                                autoExecutedCommands = new Set<string>();
-                                declinedCommands = new Set<string>();
-                                for (const cmd of extractExecuteCommands(msg.content)) {
-                                    const bk = `${idx}:${cmd}`;
-                                    if (autoExecMode) {
-                                        const d = decMap?.get(bk);
-                                        if (d) verdictByCommand.set(cmd, d);
-                                        if (clsSet?.has(bk)) classifyingCommands.add(cmd);
-                                    } else {
-                                        // ask-before-execute mode: nothing auto-runs, but still
-                                        // surface the free static safety signal (🛑 blacklist /
-                                        // ✅ whitelist) so a dangerous command is never shown with
-                                        // no warning. No AI call, no tokens — synchronous.
+                                const commands = extractExecuteCommands(msg.content);
+                                const dec = collectMessageDecorations(autoExecState, activeTabId, idx, commands);
+                                // Declined / auto-executed badges apply in any mode.
+                                autoExecutedCommands = dec.autoExecuted;
+                                declinedCommands = dec.declined;
+                                if (commandExecutionMode === 'auto-execute-safe') {
+                                    // Verdict + "checking safety" markers come from the async classifier.
+                                    classifyingCommands = dec.classifying;
+                                    verdictByCommand = dec.verdicts;
+                                } else {
+                                    // ask-before-execute mode: nothing auto-runs, but still
+                                    // surface the free static safety signal (🛑 blacklist /
+                                    // ✅ whitelist) so a dangerous command is never shown with
+                                    // no warning. No AI call, no tokens — synchronous.
+                                    verdictByCommand = new Map<string, AutoExecDecision>();
+                                    for (const cmd of commands) {
                                         const sv = classifyStatic(cmd, { whitelist: whitelistCommands, blacklist: blacklistCommands });
                                         if (sv.source === 'blacklist' || sv.source === 'whitelist') {
                                             verdictByCommand.set(cmd, sv);
                                         }
                                     }
-                                    if (autoSet?.has(bk)) autoExecutedCommands.add(cmd);
-                                    if (declSet?.has(bk)) declinedCommands.add(cmd);
                                 }
                             }
                             return (
