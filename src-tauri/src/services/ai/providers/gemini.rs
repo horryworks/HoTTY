@@ -874,7 +874,12 @@ impl AIProvider for GeminiProvider {
 
         let response = match response {
             Ok(r) if r.status().is_success() => r,
-            Ok(r) => return Err(format!("Gemini model list request failed: HTTP {}", r.status())),
+            Ok(r) => {
+                return Err(format!(
+                    "Gemini model list request failed: HTTP {}",
+                    r.status()
+                ))
+            }
             Err(e) => return Err(format!("Gemini model list request failed: {e}")),
         };
 

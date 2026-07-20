@@ -33,7 +33,7 @@ export interface ChatMessage {
 }
 
 /** Running token/cost totals for one tab (cost is null until a priced model reports usage). */
-export interface TabTokens {
+interface TabTokens {
     input: number;
     output: number;
     cost: number | null;
