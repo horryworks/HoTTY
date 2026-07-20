@@ -32,6 +32,13 @@ export interface ChatMessage {
     content: string;
 }
 
+/** Running token/cost totals for one tab (cost is null until a priced model reports usage). */
+export interface TabTokens {
+    input: number;
+    output: number;
+    cost: number | null;
+}
+
 interface UseChatStreamOptions {
     paneId: string;
     /** The tab currently shown, used to derive the active-tab views/helpers. */
@@ -69,17 +76,16 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
         onStreamCompleteRef.current = onStreamComplete;
     });
 
-    // Token accounting (from `done` events); priced against the model at completion.
-    const [totalInputTokens, setTotalInputTokens] = useState(0);
-    const [totalOutputTokens, setTotalOutputTokens] = useState(0);
-    const [totalCost, setTotalCost] = useState<number | null>(null);
-    const resetTokens = useCallback(() => {
-        setTotalInputTokens(0);
-        setTotalOutputTokens(0);
-        setTotalCost(null);
-    }, []);
+    // Token accounting (from `done` events), tracked PER TAB and priced against the
+    // model at completion — so a tab switch shows that tab's running total and "New
+    // chat" resets only the active tab's counter (not the whole pane's).
+    const [tokensByTab, setTokensByTab] = useState<Map<string, TabTokens>>(() => new Map());
 
     // ── Active-tab views + helpers ──
+    const activeTokens = activeTabId ? tokensByTab.get(activeTabId) : undefined;
+    const totalInputTokens = activeTokens?.input ?? 0;
+    const totalOutputTokens = activeTokens?.output ?? 0;
+    const totalCost = activeTokens?.cost ?? null;
     const messages = useMemo<ChatMessage[]>(
         () => (activeTabId ? (messagesByTab.get(activeTabId) ?? []) : []),
         [activeTabId, messagesByTab],
@@ -204,10 +210,17 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
                 if (data.usageMetadata) {
                     const inTokens = data.usageMetadata.promptTokenCount || 0;
                     const outTokens = data.usageMetadata.candidatesTokenCount || 0;
-                    setTotalInputTokens(prev => prev + inTokens);
-                    setTotalOutputTokens(prev => prev + outTokens);
                     const responseCost = calcAICost(inTokens, outTokens, selectedModelRef.current);
-                    if (responseCost !== null) setTotalCost(prev => (prev ?? 0) + responseCost);
+                    setTokensByTab(prev => {
+                        const next = new Map(prev);
+                        const cur = prev.get(targetTabId) ?? { input: 0, output: 0, cost: null };
+                        next.set(targetTabId, {
+                            input: cur.input + inTokens,
+                            output: cur.output + outTokens,
+                            cost: responseCost !== null ? (cur.cost ?? 0) + responseCost : cur.cost,
+                        });
+                        return next;
+                    });
                 }
             } else if (data.responseType === 'error') {
                 clearStreamWatchdog();
@@ -251,8 +264,8 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
         setStreamingByTab(new Map());
         setStreamingTabIds(new Set());
         streamingForTabIdRef.current = null;
-        resetTokens();
-    }, [clearStreamWatchdog, resetTokens]);
+        setTokensByTab(new Map());
+    }, [clearStreamWatchdog]);
     const pruneStreams = useCallback((liveIds: Set<string>) => {
         const dropClosed = <T,>(prev: Map<string, T>): Map<string, T> => {
             let changed = false;
@@ -262,6 +275,7 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
         };
         setMessagesByTab(dropClosed);
         setStreamingByTab(dropClosed);
+        setTokensByTab(dropClosed);
         setStreamingTabIds((prev) => {
             let changed = false;
             const next = new Set(prev);
@@ -273,6 +287,8 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
         if (streamingForTabIdRef.current === tabId) clearStreamWatchdog();
         setMessagesByTab(prev => { const next = new Map(prev); next.delete(tabId); return next; });
         setStreamingByTab(prev => { const next = new Map(prev); next.delete(tabId); return next; });
+        // "New chat" also zeroes this tab's token/cost counter.
+        setTokensByTab(prev => { if (!prev.has(tabId)) return prev; const next = new Map(prev); next.delete(tabId); return next; });
         setStreamingTabIds(prev => {
             if (!prev.has(tabId)) return prev;
             const next = new Set(prev); next.delete(tabId); return next;
@@ -289,7 +305,7 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
         messages, streamingContent, isStreaming,
         setStreamingForTab, markStreaming, setStreamingContent, setIsStreaming, setMessages,
         armStreamWatchdog, clearStreamWatchdog,
-        totalInputTokens, totalOutputTokens, totalCost, resetTokens,
+        totalInputTokens, totalOutputTokens, totalCost,
         resetAllStreams, pruneStreams, clearTabStream,
     };
 }

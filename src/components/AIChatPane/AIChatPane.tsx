@@ -440,7 +440,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         messages, streamingContent, isStreaming,
         setStreamingForTab, markStreaming, setStreamingContent, setIsStreaming, setMessages,
         armStreamWatchdog, clearStreamWatchdog,
-        totalInputTokens, totalOutputTokens, totalCost, resetTokens,
+        totalInputTokens, totalOutputTokens, totalCost,
         resetAllStreams, pruneStreams, clearTabStream,
     } = useChatStream({
         paneId,
@@ -1210,7 +1210,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // sleepDelay invalidates the token its timer checks, so it no-ops.
             onUpdateTabById?.(activeTabId, { sleepDelay: null });
         }
-        resetTokens();
         tauriService.aiChatClear(aiBackendSessionId(paneId, activeTabId)).catch(() => {});
     };
     // Stable handle so the Network Expert auto-kickoff effect can start a fresh chat
