@@ -1,5 +1,39 @@
 # Release Notes
 
+## v2.0.11
+
+A major **AI Chat** release: parallel conversations that no longer block each other, safer command review with a cancellable auto-run countdown, reworked terminal linking, per-tab token accounting, and clearer errors — plus accessibility and naming polish.
+
+### New Features
+
+- **Auto-run countdown.** In *auto-execute-safe* mode, a command the safety classifier judges safe now waits out a short, cancellable countdown before it runs, so you can stop it first. Set the grace period in **Settings → AI → Auto-run countdown** (default 3 seconds, range 0–10; 0 runs immediately). A **Cancel** button appears during the countdown, and pausing auto-execution — or leaving auto-execute-safe mode — stops any pending countdowns.
+
+### Improvements
+
+- **Concurrent AI Chat.** A response streaming in one tab no longer blocks every other AI action — a second tab's send, the model-list fetch, command-safety checks, even **New Chat**. Conversations and background safety classification now run in parallel, and **Stop**, provider switch and logout take effect immediately instead of queuing behind the stream.
+- **Change the model, persona or response language mid-response.** These selectors are no longer locked while a reply streams; they apply to your next message. (The Vertex AI region selector stays locked during a stream — changing it reloads the model list and cancels the response.)
+- **Safety verdicts now appear in "Ask before execute" mode, not just auto mode.** A blacklisted command is flagged with a 🛑 badge and a whitelisted one with a ✅ badge *before* you press Run. The check is instant and makes no AI call.
+- **Reworked chat-tab terminal linking.** The **+** opens a new *unlinked* (general) chat tab instead of inheriting the last-focused terminal. A linked tab shows the terminal name (click to jump to it) plus an explicit **unlink** button; an unlinked tab shows a **"Link a terminal"** picker (this window or another) so you can attach it anytime. Closing the last chat tab closes the AI Chat pane.
+- **AI Chat tab strip restyled** to match the main tab bar — colours, the accent-coloured active tab, and the circular × — tabs are always closeable, and the **+** sits immediately to the right of the last tab.
+- **Per-tab token & cost accounting.** Token and cost totals are tracked per chat tab; switching tabs shows that tab's running total, and **New chat** resets only the active tab's counter.
+- **Clearer AI error messages.** When a request to OpenAI, Anthropic or Gemini fails, the chat names the actual cause — authentication failure, quota / rate limit, model not found, or a provider outage — with a short provider detail, instead of a generic message.
+- **"AI Watch" is now the single name for terminal monitoring** across the tab button, right-click menu and tooltips (**Start AI Watch** / **Stop AI Watch**).
+- **AI Chat accessibility.** Stop and Send are labelled for screen readers, streaming replies are announced, the input area resizes from the keyboard (focus the divider, then ↑/↓), and every reply has a copy button.
+- **The AI Chat message icon reflects the active provider's brand colour** instead of always showing the Gemini gradient.
+- **Smarter empty state and a settings shortcut** — starter suggestions no longer assume terminal output exists when nothing is linked, and the execution-mode popover gains a **More safety settings…** link to Settings → AI.
+- **More of the AI Chat is translated** — cancellation, stream-timeout and error text, and tab labels now follow your UI language.
+
+### Performance
+
+- **AI conversation history is now bounded per tab**, so a very long chat can't grow HoTTY's memory without limit.
+
+### Bug Fixes
+
+- **AI model-list load failures are no longer masked.** When the model list can't be fetched (expired sign-in, network error, server rejection), AI Chat surfaces the retry + error banner instead of silently showing a hardcoded fallback list.
+- **Fixed a stale "select a model" hint** that pointed to a dropdown that no longer exists; it now points to the AI settings button below the message box.
+- **AI command-safety checks no longer stall behind a long reply** — the classification that gates auto-execution has its own timeout.
+- **A stalled AI response can no longer wedge the AI features** — a backstop timeout releases a hung stream so other AI actions keep working.
+
 ## v2.0.11-beta3
 
 Polishes **AI Chat** tabs and terminal linking, adds a cancellable countdown before a command auto-runs, and makes model-list load failures visible instead of masked.
