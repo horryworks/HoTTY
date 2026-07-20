@@ -45,11 +45,27 @@ pub struct TokenUsage {
     pub total_token_count: Option<u32>,
 }
 
+/// The kind of streamed `ai-chat-response` event. Serializes to the exact
+/// camelCase strings the frontend discriminates on (`"chunk"` | `"done"` |
+/// `"error"`), so replacing the former stringly-typed `response_type: String`
+/// with this enum changes nothing on the wire — it only makes the Rust side
+/// typo-proof and exhaustive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ChatResponseKind {
+    /// A streamed content delta.
+    Chunk,
+    /// Terminal success; `usage_metadata` carries final token counts when known.
+    Done,
+    /// Terminal failure; `content` is a user-facing error message.
+    Error,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatResponseData {
     pub session_id: String,
-    pub response_type: String,
+    pub response_type: ChatResponseKind,
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage_metadata: Option<TokenUsage>,
@@ -254,7 +270,7 @@ mod tests {
     fn chat_response_data_serializes() {
         let data = ChatResponseData {
             session_id: "s1".into(),
-            response_type: "chunk".into(),
+            response_type: ChatResponseKind::Chunk,
             content: "hello".into(),
             usage_metadata: None,
         };
@@ -268,7 +284,7 @@ mod tests {
     fn chat_response_data_with_usage() {
         let data = ChatResponseData {
             session_id: "s1".into(),
-            response_type: "done".into(),
+            response_type: ChatResponseKind::Done,
             content: "full response".into(),
             usage_metadata: Some(TokenUsage {
                 prompt_token_count: Some(100),

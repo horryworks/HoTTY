@@ -14,7 +14,7 @@
 use std::sync::Mutex;
 use std::task::Poll;
 
-use app_lib::services::ai::ai_provider::ChatResponseData;
+use app_lib::services::ai::ai_provider::{ChatResponseData, ChatResponseKind};
 use app_lib::services::ai::sse::{
     run_anthropic_sse_stream, run_google_sse_stream, run_openai_sse_stream, ChatSink,
 };
@@ -35,7 +35,7 @@ impl CollectingSink {
             .lock()
             .unwrap()
             .iter()
-            .filter(|d| d.response_type == "chunk")
+            .filter(|d| d.response_type == ChatResponseKind::Chunk)
             .map(|d| d.content.clone())
             .collect()
     }

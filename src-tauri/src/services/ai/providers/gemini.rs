@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{
     emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, AuthType,
-    ChatResponseData, ModelInfo,
+    ChatResponseData, ChatResponseKind, ModelInfo,
 };
 use crate::services::ai::classifier::{
     build_user_prompt, extract_gemini_text, gemini_response_schema, parse_verdict, CommandVerdict,
@@ -626,7 +626,7 @@ impl AIProvider for GeminiProvider {
                 app,
                 ChatResponseData {
                     session_id: session_id.to_string(),
-                    response_type: "error".into(),
+                    response_type: ChatResponseKind::Error,
                     content: "Invalid model name.".into(),
                     usage_metadata: None,
                 },
@@ -641,7 +641,7 @@ impl AIProvider for GeminiProvider {
                     app,
                     ChatResponseData {
                         session_id: session_id.to_string(),
-                        response_type: "error".into(),
+                        response_type: ChatResponseKind::Error,
                         content: "Authentication expired. Please sign in again.".into(),
                         usage_metadata: None,
                     },
@@ -709,7 +709,7 @@ impl AIProvider for GeminiProvider {
                     &app_clone,
                     ChatResponseData {
                         session_id: sid.clone(),
-                        response_type: "error".into(),
+                        response_type: ChatResponseKind::Error,
                         content: describe_transport_error("Gemini"),
                         usage_metadata: None,
                     },
@@ -731,7 +731,7 @@ impl AIProvider for GeminiProvider {
                 &app_clone,
                 ChatResponseData {
                     session_id: sid.clone(),
-                    response_type: "error".into(),
+                    response_type: ChatResponseKind::Error,
                     content: describe_http_error("Gemini", status, &error_body),
                     usage_metadata: None,
                 },
@@ -765,7 +765,7 @@ impl AIProvider for GeminiProvider {
                         &app_clone,
                         ChatResponseData {
                             session_id: sid.clone(),
-                            response_type: "done".into(),
+                            response_type: ChatResponseKind::Done,
                             content: outcome.full_response,
                             usage_metadata: outcome.usage,
                         },
@@ -782,7 +782,7 @@ impl AIProvider for GeminiProvider {
                     &app_clone,
                     ChatResponseData {
                         session_id: sid.clone(),
-                        response_type: "error".into(),
+                        response_type: ChatResponseKind::Error,
                         content: describe_transport_error("Gemini"),
                         usage_metadata: None,
                     },

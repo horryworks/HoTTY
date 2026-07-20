@@ -160,13 +160,27 @@ describe('appTypes', () => {
     expect(node.children?.[0]?.entry?.protocol).toBe('telnet');
   });
 
-  it('AIChatResponseData.usageMetadata is optional', () => {
-    const data: AIChatResponseData = {
+  it('AIChatResponseData is a discriminated union with usageMetadata only on the done event', () => {
+    const chunk: AIChatResponseData = {
       sessionId: 's',
       responseType: 'chunk',
       content: 'hello',
     };
-    expect(data.usageMetadata).toBeUndefined();
+    const done: AIChatResponseData = {
+      sessionId: 's',
+      responseType: 'done',
+      content: '',
+      usageMetadata: { totalTokenCount: 5 },
+    };
+    // A done event may omit usageMetadata (optional on that variant).
+    const doneNoUsage: AIChatResponseData = {
+      sessionId: 's',
+      responseType: 'done',
+      content: '',
+    };
+    expect(chunk.responseType).toBe('chunk');
+    expect(done.responseType === 'done' && done.usageMetadata?.totalTokenCount).toBe(5);
+    expect(doneNoUsage.responseType === 'done' && doneNoUsage.usageMetadata).toBeUndefined();
   });
 
   it('PersonaDefinition carries id, label and systemPrompt', () => {

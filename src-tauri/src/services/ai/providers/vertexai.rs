@@ -10,7 +10,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{
     emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, AuthType,
-    ChatResponseData, ModelInfo, TokenUsage,
+    ChatResponseData, ChatResponseKind, ModelInfo, TokenUsage,
 };
 use crate::services::ai::classifier::{
     anthropic_verdict_tool, build_user_prompt, extract_gemini_text, gemini_response_schema,
@@ -1025,7 +1025,7 @@ impl AIProvider for VertexAIProvider {
                 app,
                 ChatResponseData {
                     session_id: session_id.to_string(),
-                    response_type: "error".into(),
+                    response_type: ChatResponseKind::Error,
                     content: "Invalid model name.".into(),
                     usage_metadata: None,
                 },
@@ -1038,7 +1038,7 @@ impl AIProvider for VertexAIProvider {
                 app,
                 ChatResponseData {
                     session_id: session_id.to_string(),
-                    response_type: "error".into(),
+                    response_type: ChatResponseKind::Error,
                     content: "Not authenticated. Please connect to Vertex AI.".into(),
                     usage_metadata: None,
                 },
@@ -1053,7 +1053,7 @@ impl AIProvider for VertexAIProvider {
                     app,
                     ChatResponseData {
                         session_id: session_id.to_string(),
-                        response_type: "error".into(),
+                        response_type: ChatResponseKind::Error,
                         content: "Authentication expired. Please reconnect to Vertex AI.".into(),
                         usage_metadata: None,
                     },
@@ -1121,7 +1121,7 @@ impl AIProvider for VertexAIProvider {
                         app,
                         ChatResponseData {
                             session_id: sid.clone(),
-                            response_type: "done".into(),
+                            response_type: ChatResponseKind::Done,
                             content: full_response,
                             usage_metadata,
                         },
@@ -1135,7 +1135,7 @@ impl AIProvider for VertexAIProvider {
                         app,
                         ChatResponseData {
                             session_id: sid.clone(),
-                            response_type: "error".into(),
+                            response_type: ChatResponseKind::Error,
                             content: format_user_error_message(&err_msg, model),
                             usage_metadata: None,
                         },

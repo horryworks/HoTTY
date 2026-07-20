@@ -567,12 +567,16 @@ interface AITokenUsage {
   totalTokenCount?: number;
 }
 
-export interface AIChatResponseData {
-  sessionId: string;
-  responseType: string;
-  content: string;
-  usageMetadata?: AITokenUsage;
-}
+/**
+ * `ai-chat-response` event payload — a discriminated union keyed on
+ * `responseType` (mirrors the Rust `ChatResponseKind` enum). `usageMetadata`
+ * (final token counts) only appears on the terminal `'done'` event; `content`
+ * is a delta on `'chunk'` and a user-facing message on `'error'`.
+ */
+export type AIChatResponseData =
+  | { sessionId: string; responseType: 'chunk'; content: string }
+  | { sessionId: string; responseType: 'done'; content: string; usageMetadata?: AITokenUsage }
+  | { sessionId: string; responseType: 'error'; content: string };
 
 export interface AIAuthResultPayload {
   /** Provider id that produced this result — lets the UI ignore a late result

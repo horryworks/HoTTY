@@ -10,7 +10,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{
     emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, AuthType,
-    ChatResponseData, ModelInfo,
+    ChatResponseData, ChatResponseKind, ModelInfo,
 };
 use crate::services::ai::classifier::{
     build_user_prompt, openai_response_format, parse_verdict, CommandVerdict,
@@ -209,7 +209,7 @@ impl AIProvider for OpenAIProvider {
                 app,
                 ChatResponseData {
                     session_id: session_id.to_string(),
-                    response_type: "error".into(),
+                    response_type: ChatResponseKind::Error,
                     content: "Invalid model name.".into(),
                     usage_metadata: None,
                 },
@@ -224,7 +224,7 @@ impl AIProvider for OpenAIProvider {
                     app,
                     ChatResponseData {
                         session_id: session_id.to_string(),
-                        response_type: "error".into(),
+                        response_type: ChatResponseKind::Error,
                         content: "Not authenticated. Please provide an OpenAI API key.".into(),
                         usage_metadata: None,
                     },
@@ -282,7 +282,7 @@ impl AIProvider for OpenAIProvider {
                     &app_clone,
                     ChatResponseData {
                         session_id: sid.clone(),
-                        response_type: "error".into(),
+                        response_type: ChatResponseKind::Error,
                         content: describe_transport_error("OpenAI"),
                         usage_metadata: None,
                     },
@@ -304,7 +304,7 @@ impl AIProvider for OpenAIProvider {
                 &app_clone,
                 ChatResponseData {
                     session_id: sid.clone(),
-                    response_type: "error".into(),
+                    response_type: ChatResponseKind::Error,
                     content: describe_http_error("OpenAI", status, &error_body),
                     usage_metadata: None,
                 },
@@ -338,7 +338,7 @@ impl AIProvider for OpenAIProvider {
                         &app_clone,
                         ChatResponseData {
                             session_id: sid.clone(),
-                            response_type: "done".into(),
+                            response_type: ChatResponseKind::Done,
                             content: outcome.full_response,
                             usage_metadata: outcome.usage,
                         },
@@ -355,7 +355,7 @@ impl AIProvider for OpenAIProvider {
                     &app_clone,
                     ChatResponseData {
                         session_id: sid.clone(),
-                        response_type: "error".into(),
+                        response_type: ChatResponseKind::Error,
                         content: describe_transport_error("OpenAI"),
                         usage_metadata: None,
                     },

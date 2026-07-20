@@ -2,7 +2,7 @@ use futures::StreamExt;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
-use crate::services::ai::ai_provider::{ChatResponseData, TokenUsage};
+use crate::services::ai::ai_provider::{ChatResponseData, ChatResponseKind, TokenUsage};
 
 /// Parsed SSE (Server-Sent Events) line.
 #[derive(Debug, PartialEq)]
@@ -126,7 +126,7 @@ pub struct StreamOutcome {
 fn chunk_event(session_id: &str, text: &str) -> ChatResponseData {
     ChatResponseData {
         session_id: session_id.to_string(),
-        response_type: "chunk".into(),
+        response_type: ChatResponseKind::Chunk,
         content: text.to_string(),
         usage_metadata: None,
     }
