@@ -1322,69 +1322,89 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             <span>{t('aiChat.pane.newChat')}</span>
                         </button>
                     )}
-                    {isAuthenticated && lastTargetSessionId && (
-                        <button
-                            type="button"
-                            className={`ai-chat-linked-chip${linkedStale ? ' ai-chat-linked-chip-stale' : ''}`}
-                            onClick={() => {
-                                tauriService.focusWindow().catch(() => {});
-                                window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: lastTargetSessionId } }));
-                            }}
-                            onMouseEnter={() => {
-                                window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: lastTargetSessionId, highlighted: true } }));
-                            }}
-                            onMouseLeave={() => {
-                                window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: lastTargetSessionId, highlighted: false } }));
-                            }}
-                            title={linkedStale
-                                ? t('aiChat.pane.linkedChipTitleStale', { name: lastTargetSessionTitle || t('aiChat.pane.terminalFallback'), status: lastTargetStatus ?? t('aiChat.pane.statusDisconnected') })
-                                : t('aiChat.pane.linkedChipTitle', { name: lastTargetSessionTitle || t('aiChat.pane.terminalFallback') })}
-                            aria-label={linkedStale
-                                ? t('aiChat.pane.linkedChipAriaStale', { name: lastTargetSessionTitle || t('aiChat.pane.unknownTerminal'), status: lastTargetStatus ?? t('aiChat.pane.statusDisconnected') })
-                                : t('aiChat.pane.linkedChipAria', { name: lastTargetSessionTitle || t('aiChat.pane.unknownTerminal') })}
-                        >
-                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                            </svg>
-                            <span className="ai-chat-linked-chip-name">
-                                {lastTargetSessionTitle || t('aiChat.pane.terminalFallback')}{linkedStale ? t('aiChat.pane.disconnectedSuffix') : ''}
-                            </span>
-                        </button>
-                    )}
-                    {isAuthenticated && (linkableSessions?.length ?? 0) > 0 && (
-                        <select
-                            className="ai-chat-link-select"
-                            value={lastTargetSessionId ?? ''}
-                            title={t('aiChat.pane.linkPickerTitle')}
-                            aria-label={t('aiChat.pane.linkPickerTitle')}
-                            onMouseDown={() => onRefreshSessions?.()}
-                            onFocus={() => onRefreshSessions?.()}
-                            onChange={(e) => onLinkSession?.(e.target.value || undefined)}
-                        >
-                            <option value="">{t('aiChat.pane.linkNone')}</option>
-                            {/* Keep the current (possibly now-gone) link selectable so the
-                                control stays consistent and React doesn't warn. */}
-                            {lastTargetSessionId && !linkableById.has(lastTargetSessionId) && (
-                                <option value={lastTargetSessionId}>
-                                    {lastTargetSessionTitle || lastTargetSessionId}
-                                </option>
+                    {/* Unified link control (2.7b②): one pill showing the linked terminal.
+                        Clicking the NAME jumps to that terminal; clicking the caret opens
+                        the re-link picker (a transparent native <select> overlaid on it),
+                        so the terminal name is shown once instead of a chip + a duplicate
+                        select. */}
+                    {isAuthenticated && (lastTargetSessionId || (linkableSessions?.length ?? 0) > 0) && (
+                        <div className={`ai-chat-link${linkedStale ? ' ai-chat-link-stale' : ''}`}>
+                            {lastTargetSessionId ? (
+                                <button
+                                    type="button"
+                                    className={`ai-chat-linked-chip${linkedStale ? ' ai-chat-linked-chip-stale' : ''}`}
+                                    onClick={() => {
+                                        tauriService.focusWindow().catch(() => {});
+                                        window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: lastTargetSessionId } }));
+                                    }}
+                                    onMouseEnter={() => {
+                                        window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: lastTargetSessionId, highlighted: true } }));
+                                    }}
+                                    onMouseLeave={() => {
+                                        window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: lastTargetSessionId, highlighted: false } }));
+                                    }}
+                                    title={linkedStale
+                                        ? t('aiChat.pane.linkedChipTitleStale', { name: lastTargetSessionTitle || t('aiChat.pane.terminalFallback'), status: lastTargetStatus ?? t('aiChat.pane.statusDisconnected') })
+                                        : t('aiChat.pane.linkedChipTitle', { name: lastTargetSessionTitle || t('aiChat.pane.terminalFallback') })}
+                                    aria-label={linkedStale
+                                        ? t('aiChat.pane.linkedChipAriaStale', { name: lastTargetSessionTitle || t('aiChat.pane.unknownTerminal'), status: lastTargetStatus ?? t('aiChat.pane.statusDisconnected') })
+                                        : t('aiChat.pane.linkedChipAria', { name: lastTargetSessionTitle || t('aiChat.pane.unknownTerminal') })}
+                                >
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                    </svg>
+                                    <span className="ai-chat-linked-chip-name">
+                                        {lastTargetSessionTitle || t('aiChat.pane.terminalFallback')}{linkedStale ? t('aiChat.pane.disconnectedSuffix') : ''}
+                                    </span>
+                                </button>
+                            ) : (
+                                <span className="ai-chat-link-none">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                    </svg>
+                                    <span className="ai-chat-linked-chip-name">{t('aiChat.pane.linkNone')}</span>
+                                </span>
                             )}
-                            {linkGroups.local.length > 0 && (
-                                <optgroup label={t('aiChat.pane.linkThisWindow')}>
-                                    {linkGroups.local.map((s) => (
-                                        <option key={s.sessionId} value={s.sessionId}>{s.displayName}</option>
+                            <div className="ai-chat-link-picker">
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <path d="M6 9l6 6 6-6" />
+                                </svg>
+                                <select
+                                    className="ai-chat-link-select"
+                                    value={lastTargetSessionId ?? ''}
+                                    title={t('aiChat.pane.linkPickerTitle')}
+                                    aria-label={t('aiChat.pane.linkPickerTitle')}
+                                    onMouseDown={() => onRefreshSessions?.()}
+                                    onFocus={() => onRefreshSessions?.()}
+                                    onChange={(e) => onLinkSession?.(e.target.value || undefined)}
+                                >
+                                    <option value="">{t('aiChat.pane.linkNone')}</option>
+                                    {/* Keep the current (possibly now-gone) link selectable so the
+                                        control stays consistent and React doesn't warn. */}
+                                    {lastTargetSessionId && !linkableById.has(lastTargetSessionId) && (
+                                        <option value={lastTargetSessionId}>
+                                            {lastTargetSessionTitle || lastTargetSessionId}
+                                        </option>
+                                    )}
+                                    {linkGroups.local.length > 0 && (
+                                        <optgroup label={t('aiChat.pane.linkThisWindow')}>
+                                            {linkGroups.local.map((s) => (
+                                                <option key={s.sessionId} value={s.sessionId}>{s.displayName}</option>
+                                            ))}
+                                        </optgroup>
+                                    )}
+                                    {linkGroups.remote.map(([label, list]) => (
+                                        <optgroup key={label} label={t('aiChat.pane.linkOtherWindow', { label })}>
+                                            {list.map((s) => (
+                                                <option key={s.sessionId} value={s.sessionId}>{s.displayName}</option>
+                                            ))}
+                                        </optgroup>
                                     ))}
-                                </optgroup>
-                            )}
-                            {linkGroups.remote.map(([label, list]) => (
-                                <optgroup key={label} label={t('aiChat.pane.linkOtherWindow', { label })}>
-                                    {list.map((s) => (
-                                        <option key={s.sessionId} value={s.sessionId}>{s.displayName}</option>
-                                    ))}
-                                </optgroup>
-                            ))}
-                        </select>
+                                </select>
+                            </div>
+                        </div>
                     )}
                 </div>
                 {isAuthenticated && (

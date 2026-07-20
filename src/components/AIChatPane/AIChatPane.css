@@ -125,63 +125,98 @@
     flex-shrink: 0;
 }
 
-.ai-chat-linked-chip {
+/* Unified link control: one accent pill holding the terminal name (click = jump to
+   terminal) and a caret that opens the re-link picker (a transparent <select>
+   overlaid on it). Replaces the old separate chip + link <select>. */
+.ai-chat-link {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
     max-width: 220px;
-    padding: 3px 10px;
+    min-width: 0;
     background: color-mix(in srgb, var(--accent-color) 10%, transparent);
     color: var(--accent-color);
     border: 1px solid color-mix(in srgb, var(--accent-color) 40%, transparent);
     border-radius: 999px;
-    cursor: pointer;
     font-family: var(--ui-font-family);
     font-size: calc(var(--font-size-base) - 2px);
     transition: background-color 0.1s, border-color 0.1s;
 }
 
-.ai-chat-linked-chip:hover {
+.ai-chat-link:hover {
     background: color-mix(in srgb, var(--accent-color) 20%, transparent);
     border-color: var(--accent-color);
 }
 
-/* Cross-window link picker (select any session, incl. other windows'). */
-.ai-chat-link-select {
-    max-width: 150px;
-    padding: 3px 6px;
-    color: var(--text-secondary);
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    font-family: var(--ui-font-family);
-    font-size: calc(var(--font-size-base) - 2px);
-    cursor: pointer;
-    outline: none;
-    transition: border-color 0.1s;
-}
-
-.ai-chat-link-select:hover {
-    border-color: var(--accent-color);
-}
-
 /* Stale link: the watched terminal is disconnected / reconnecting / gone. */
-.ai-chat-linked-chip-stale {
+.ai-chat-link-stale {
     background: color-mix(in srgb, var(--color-warning) 12%, transparent);
     color: var(--color-warning);
     border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
 }
 
-.ai-chat-linked-chip-stale:hover {
+.ai-chat-link-stale:hover {
     background: color-mix(in srgb, var(--color-warning) 22%, transparent);
     border-color: var(--color-warning);
+}
+
+/* Name (click = jump to terminal) and the unlinked placeholder — borderless so
+   they blend into the pill. `.ai-chat-linked-chip` keeps its name for reuse/tests. */
+.ai-chat-linked-chip,
+.ai-chat-link-none {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    padding: 3px 4px 3px 10px;
+    background: none;
+    border: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.ai-chat-link-none {
+    cursor: default;
+    opacity: 0.85;
+}
+
+.ai-chat-linked-chip:hover {
+    filter: brightness(1.15);
 }
 
 .ai-chat-linked-chip-name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 180px;
+    max-width: 140px;
+}
+
+/* Re-link picker: a caret with a transparent native <select> overlaid for
+   keyboard/a11y and the native dropdown, so only the caret is visible. */
+.ai-chat-link-picker {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px 3px 5px;
+    cursor: pointer;
+    border-left: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+}
+
+.ai-chat-link-picker svg {
+    pointer-events: none;
+}
+
+.ai-chat-link-select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    opacity: 0;
+    cursor: pointer;
+    appearance: none;
 }
 
 /* ── Not-signed-in state (sign-in lives in Settings → AI) ── */
