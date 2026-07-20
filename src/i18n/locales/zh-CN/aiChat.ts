@@ -87,7 +87,7 @@ export const aiChat = {
     sendTitleStreaming: '正在流式传输…',
     sendTitle: '发送',
     // Hints & status
-    selectModelHint: '在顶部标题栏的模型选择器中选择一个模型以开始',
+    selectModelHint: '打开消息框下方的 AI 设置以选择模型',
     tokenReceiving: '正在接收 · {{tokens}} 个 token',
     tokenWaiting: '正在等待响应…',
     tokenInOut: '{{in}} 输入 / {{out}} 输出 token',
@@ -97,7 +97,7 @@ export const aiChat = {
     newChatConfirmTitle: '开始新的聊天？',
     newChatConfirmMessage: '当前对话将被清除。此操作无法撤销。',
     newChatConfirmButton: '开始新聊天',
-    modelNotSelected: '未选择 AI 模型。请在顶部标题栏的模型选择器中选择一个。',
+    modelNotSelected: '未选择 AI 模型。请打开消息框下方的 AI 设置并选择一个模型。',
     suggestionGenericCapabilities: '你能帮我做什么？',
     suggestionGenericExplainCommand: '解释我给你的一条 shell 命令',
     suggestionGenericTroubleshoot: '帮我排查连接问题',

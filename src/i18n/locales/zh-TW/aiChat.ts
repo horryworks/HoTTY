@@ -85,7 +85,7 @@ export const aiChat = {
     sendTitleStreaming: '串流中…',
     sendTitle: '傳送',
     // 提示與狀態
-    selectModelHint: '在頂部標題列的模型選擇器中選取一個模型以開始',
+    selectModelHint: '開啟訊息框下方的 AI 設定以選取模型',
     tokenReceiving: '正在接收 · {{tokens}} 個權杖',
     tokenWaiting: '正在等待回應…',
     tokenInOut: '輸入 {{in}} 個／輸出 {{out}} 個權杖',
@@ -95,7 +95,7 @@ export const aiChat = {
     newChatConfirmTitle: '要開始新聊天嗎？',
     newChatConfirmMessage: '目前的對話將會被清除。此動作無法復原。',
     newChatConfirmButton: '開始新聊天',
-    modelNotSelected: '尚未選取 AI 模型。請在頂部標題列的模型選擇器中選取一個。',
+    modelNotSelected: '尚未選取 AI 模型。請開啟訊息框下方的 AI 設定並選取一個模型。',
     suggestionGenericCapabilities: '你能幫我做什麼？',
     suggestionGenericExplainCommand: '解釋我給你的一條 shell 命令',
     suggestionGenericTroubleshoot: '幫我排解連線問題',

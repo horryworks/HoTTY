@@ -1411,42 +1411,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                         </div>
                     )}
                 </div>
-                {isAuthenticated && (
-                    <div className="ai-chat-header-right">
-                        <select
-                            className="ai-chat-header-select"
-                            value={selectedModel}
-                            title={t('aiChat.pane.labelModel')}
-                            aria-label={t('aiChat.pane.labelModel')}
-                            onChange={(e) => {
-                                const model = e.target.value;
-                                setSelectedModel(model);
-                                localStorage.setItem(STORAGE_KEYS.AI_SELECTED_MODEL, model);
-                                localStorage.setItem(STORAGE_KEYS.AI_SELECTED_MODEL_PER_PROVIDER(activeAiProvider), model);
-                                onChatStateChange?.({ selectedModel: model });
-                            }}
-                            // Changing the model applies to the NEXT message; the in-flight
-                            // stream keeps its own model, so this is safe mid-response.
-                            disabled={isLoadingModels}
-                        >
-                            {selectedModel === 'Unspecified' && <option value="Unspecified">{isLoadingModels ? t('aiChat.pane.modelLoading') : t('aiChat.pane.modelSelectPlaceholder')}</option>}
-                            {availableModels.map(m => (
-                                <option key={m.name} value={m.name}>{m.displayName}</option>
-                            ))}
-                        </select>
-                        <select
-                            className="ai-chat-header-select"
-                            value={selectedExpertise}
-                            title={t('aiChat.pane.labelPersona')}
-                            aria-label={t('aiChat.pane.labelPersona')}
-                            onChange={(e) => setSelectedExpertise(e.target.value)}
-                        >
-                            {aiPersonas?.map(persona => (
-                                <option key={persona.id} value={persona.label}>{persona.label}</option>
-                            ))}
-                        </select>
-                    </div>
-                )}
             </div>
 
             {!isAuthenticated ? (
@@ -1713,20 +1677,53 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         <circle cx="12" cy="12" r="3" />
                                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                                     </svg>
+                                    <span className="ai-chat-settings-btn-label">{selectedModel === 'Unspecified' ? t('aiChat.pane.settingsButtonSelectModel') : (availableModels.find(m => m.name === selectedModel)?.displayName || selectedModel)}</span>
                                 </button>
                                 {settingsOpen && (
                                     <div ref={settingsPopoverRef} className="ai-chat-settings-popover" role="dialog" aria-label={t('aiChat.pane.settingsPopoverAriaLabel')}>
-                                        {/* Model + Persona now live in the header; the popover keeps the
-                                            secondary settings and the persona-prompt viewer. */}
+                                        <div className="ai-chat-settings-popover-section">
+                                            <label className="ai-chat-settings-popover-label">{t('aiChat.pane.labelModel')}</label>
+                                            <select
+                                                className="ai-chat-settings-popover-select"
+                                                value={selectedModel}
+                                                onChange={(e) => {
+                                                    const model = e.target.value;
+                                                    setSelectedModel(model);
+                                                    localStorage.setItem(STORAGE_KEYS.AI_SELECTED_MODEL, model);
+                                                    localStorage.setItem(STORAGE_KEYS.AI_SELECTED_MODEL_PER_PROVIDER(activeAiProvider), model);
+                                                    onChatStateChange?.({ selectedModel: model });
+                                                }}
+                                                // Changing the model applies to the NEXT message; the
+                                                // in-flight stream keeps its own model, so this is safe
+                                                // mid-response (important for the auto-exec loop).
+                                                disabled={isLoadingModels}
+                                            >
+                                                {selectedModel === 'Unspecified' && <option value="Unspecified">{isLoadingModels ? t('aiChat.pane.modelLoading') : t('aiChat.pane.modelSelectPlaceholder')}</option>}
+                                                {availableModels.map(m => (
+                                                    <option key={m.name} value={m.name}>{m.displayName}</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                         <div className="ai-chat-settings-popover-section">
                                             <label className="ai-chat-settings-popover-label">{t('aiChat.pane.labelPersona')}</label>
-                                            <button
-                                                type="button"
-                                                className="ai-chat-settings-popover-link-btn"
-                                                onClick={() => { setSettingsOpen(false); setShowPromptModal(true); }}
-                                            >
-                                                {t('aiChat.pane.viewPrompt')}
-                                            </button>
+                                            <div className="ai-chat-settings-popover-persona-row">
+                                                <select
+                                                    className="ai-chat-settings-popover-select"
+                                                    value={selectedExpertise}
+                                                    onChange={(e) => setSelectedExpertise(e.target.value)}
+                                                >
+                                                    {aiPersonas?.map(persona => (
+                                                        <option key={persona.id} value={persona.label}>{persona.label}</option>
+                                                    ))}
+                                                </select>
+                                                <button
+                                                    type="button"
+                                                    className="ai-chat-settings-popover-link-btn"
+                                                    onClick={() => { setSettingsOpen(false); setShowPromptModal(true); }}
+                                                >
+                                                    {t('aiChat.pane.viewPrompt')}
+                                                </button>
+                                            </div>
                                         </div>
                                         <div className="ai-chat-settings-popover-section">
                                             <label className="ai-chat-settings-popover-label">{t('aiChat.pane.labelLanguage')}</label>

@@ -64,7 +64,7 @@ const { AIChatPane } = await import('./AIChatPane');
 const { tauriService } = await import('../../services/tauriService');
 const { useAiAuthStore } = await import('../../stores/aiAuthStore');
 
-const HINT = 'Choose a model from the selector in the header to start';
+const HINT = 'Open AI settings below the message box to choose a model';
 
 // chatState with no persisted model → selectedModel starts 'Unspecified'.
 // No pendingMessage on the tab, so the send effect stays a no-op.

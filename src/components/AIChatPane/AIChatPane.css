@@ -24,40 +24,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    /* Yield horizontal space to the header-right controls on a narrow pane. */
     min-width: 0;
-    flex-shrink: 1;
-}
-
-/* Model + Persona quick-selectors, relocated from the bottom settings popover to
-   the previously-empty header right. */
-.ai-chat-header-right {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-}
-
-.ai-chat-header-select {
-    max-width: 150px;
-    padding: 3px 22px 3px 8px;
-    font-size: calc(var(--font-size-base) - 2px);
-    background: var(--input-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-primary);
-    cursor: pointer;
-    text-overflow: ellipsis;
-    transition: border-color 0.2s;
-}
-
-.ai-chat-header-select:hover:not(:disabled) {
-    border-color: var(--accent-color);
-}
-
-.ai-chat-header-select:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
 }
 
 .ai-chat-logo {

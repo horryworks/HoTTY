@@ -88,7 +88,7 @@ export const aiChat = {
     sendTitleStreaming: 'Потоковая передача…',
     sendTitle: 'Отправить',
     // Подсказки и статус
-    selectModelHint: 'Выберите модель в селекторе в заголовке, чтобы начать',
+    selectModelHint: 'Откройте настройки ИИ под полем сообщения, чтобы выбрать модель',
     tokenReceiving: 'Приём · {{tokens}} токенов',
     tokenWaiting: 'Ожидание ответа…',
     tokenInOut: '{{in}} вход / {{out}} выход токенов',
@@ -98,7 +98,7 @@ export const aiChat = {
     newChatConfirmTitle: 'Начать новый чат?',
     newChatConfirmMessage: 'Текущий разговор будет очищен. Это нельзя отменить.',
     newChatConfirmButton: 'Начать новый чат',
-    modelNotSelected: 'Модель ИИ не выбрана. Выберите её в селекторе модели в заголовке.',
+    modelNotSelected: 'Модель ИИ не выбрана. Откройте настройки ИИ под полем сообщения и выберите модель.',
     suggestionGenericCapabilities: 'Чем ты можешь помочь?',
     suggestionGenericExplainCommand: 'Объясни команду оболочки, которую я укажу',
     suggestionGenericTroubleshoot: 'Помоги устранить проблему с подключением',
