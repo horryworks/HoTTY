@@ -1,5 +1,23 @@
 # Release Notes
 
+## v2.0.11-beta3
+
+Polishes **AI Chat** tabs and terminal linking, adds a cancellable countdown before a command auto-runs, and makes model-list load failures visible instead of masked.
+
+### New Features
+
+- **Auto-run countdown.** In *auto-execute-safe* mode, a command the safety classifier judges safe now waits out a short, cancellable countdown before it runs, so you can stop it first. Set the grace period in **Settings → AI → Auto-run countdown** (default 3 seconds, range 0–10; 0 runs immediately as before). A **Cancel** button appears on the command during the countdown, and pausing auto-execution — or switching out of auto-execute-safe mode — stops any pending countdowns.
+
+### Improvements
+
+- **Reworked chat-tab terminal linking.** The **+** now opens a new *unlinked* (general) chat tab instead of silently inheriting the last-focused terminal. A linked tab shows a single control — the terminal name (click to jump to it) plus an explicit **unlink** button — instead of a name chip next to a duplicate picker. An unlinked tab shows a **"Link a terminal"** picker (this window or another) so you can attach it at any time. Closing the last remaining chat tab now closes the whole AI Chat pane.
+- **AI Chat tab strip restyled** to match the main tab bar — colours, the accent-coloured active tab, and the circular × close — tabs are always closeable, and the **+** sits immediately to the right of the last tab.
+- **Per-tab token & cost accounting.** Token and cost totals are now tracked per chat tab: switching tabs shows that tab's running total, and **New chat** resets only the active tab's counter instead of the whole pane's.
+
+### Bug Fixes
+
+- **AI model-list load failures are no longer masked.** When the model list can't be fetched (expired sign-in, network error, server rejection), AI Chat now surfaces the retry + error banner instead of silently showing a hardcoded fallback list — which could otherwise leave you picking a model that then fails to send.
+
 ## v2.0.11-beta2
 
 Makes **AI Chat** concurrent: a streaming response no longer blocks everything else, and you can change the model, persona or language mid-response.
