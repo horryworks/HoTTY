@@ -119,3 +119,43 @@ describe('AIChatPane link control (state-dependent)', () => {
         expect(onLinkSession).toHaveBeenCalledWith('sess-1');
     });
 });
+
+describe('AIChatPane tab close', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        act(() => useAiAuthStore.setState({ isAuthenticated: false, isAuthLoading: false, authError: null }));
+    });
+
+    it('closing the LAST tab closes the whole pane (onClosePane), not the tab', async () => {
+        const onCloseTab = vi.fn();
+        const onClosePane = vi.fn();
+        render(makePane({
+            chatState: { selectedModel: 'gemini-pro', systemInstruction: 'x', activeTabId: 't1', tabs: [{ id: 't1', title: 'Tab 1', ordinal: 1 }] },
+            onCloseTab,
+            onClosePane,
+        }));
+        await act(async () => { useAiAuthStore.setState({ isAuthenticated: true }); });
+
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Close Tab 1' })); });
+        expect(onClosePane).toHaveBeenCalledTimes(1);
+        expect(onCloseTab).not.toHaveBeenCalled();
+    });
+
+    it('closing a tab when others remain closes just that conversation (onCloseTab)', async () => {
+        const onCloseTab = vi.fn();
+        const onClosePane = vi.fn();
+        render(makePane({
+            chatState: {
+                selectedModel: 'gemini-pro', systemInstruction: 'x', activeTabId: 't1',
+                tabs: [{ id: 't1', title: 'Tab 1', ordinal: 1 }, { id: 't2', title: 'Tab 2', ordinal: 2 }],
+            },
+            onCloseTab,
+            onClosePane,
+        }));
+        await act(async () => { useAiAuthStore.setState({ isAuthenticated: true }); });
+
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Close Tab 2' })); });
+        expect(onCloseTab).toHaveBeenCalledWith('t2');
+        expect(onClosePane).not.toHaveBeenCalled();
+    });
+});

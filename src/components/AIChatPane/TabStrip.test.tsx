@@ -76,17 +76,21 @@ describe('TabStrip', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it('hides close buttons when only one tab is present', () => {
+  it('shows a close button even with one tab (closing the last tab closes the pane)', () => {
+    const onClose = vi.fn();
     render(
       <TabStrip
         tabs={[makeTab('only', 'Only', 1)]}
         activeTabId="only"
         onSelect={() => {}}
-        onClose={() => {}}
+        onClose={onClose}
         onAdd={() => {}}
       />
     );
-    expect(screen.queryAllByLabelText(/Close/)).toHaveLength(0);
+    const closeButtons = screen.getAllByLabelText(/Close/);
+    expect(closeButtons).toHaveLength(1);
+    fireEvent.click(closeButtons[0]);
+    expect(onClose).toHaveBeenCalledWith('only');
   });
 
   it('calls onAdd when the + button is clicked', () => {

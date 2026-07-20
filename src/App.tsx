@@ -1319,6 +1319,7 @@ function App() {
               // pass the session id explicitly (e.g. terminal "Watch with AI").
               onAddTab={(initialLink) => addTab(featureInfo.id, initialLink)}
               onCloseTab={(tabId) => closeTab(featureInfo.id, tabId)}
+              onClosePane={() => handleCloseTab(featureInfo.id)}
               onSelectTab={(tabId) => setActiveTab(featureInfo.id, tabId)}
               onFlashSessionPane={flashSessionPane}
               sessions={sessions}

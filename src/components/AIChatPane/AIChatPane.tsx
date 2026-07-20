@@ -49,6 +49,8 @@ interface AIChatPaneProps {
     onDequeuePending?: (tabId: string) => void;
     onAddTab?: (initialLinkSessionId?: string) => void;
     onCloseTab?: (tabId: string) => void;
+    /** Close the whole AI Chat pane (used when the last remaining tab is closed). */
+    onClosePane?: () => void;
     onSelectTab?: (tabId: string) => void;
     onFlashSessionPane?: (sessionId: string) => void;
     sessions?: Map<string, SessionRecord>;
@@ -348,6 +350,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     ensureConsent,
     onAddTab,
     onCloseTab,
+    onClosePane,
     onSelectTab,
     onFlashSessionPane,
     sessions,
@@ -1292,7 +1295,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                         const linkedId = chatState.tabs.find((t) => t.id === id)?.linkedSessionId;
                         if (linkedId) onFlashSessionPane?.(linkedId);
                     }}
-                    onClose={(id) => onCloseTab?.(id)}
+                    onClose={(id) => {
+                        // Closing the last remaining tab closes the whole pane
+                        // (browser-style); otherwise just close that conversation.
+                        if ((chatState?.tabs.length ?? 0) <= 1) onClosePane?.();
+                        else onCloseTab?.(id);
+                    }}
                     onAdd={() => onAddTab?.()}
                 />
             )}

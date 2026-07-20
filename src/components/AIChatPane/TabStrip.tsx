@@ -13,7 +13,6 @@ interface TabStripProps {
 
 export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect, onClose, onAdd }) => {
     const { t } = useTranslation();
-    const canClose = tabs.length > 1;
     return (
         <div className="ai-chat-tab-strip" role="tablist" aria-label={t('aiChat.tabStrip.ariaLabel')}>
             <div className="ai-chat-tab-strip-list">
@@ -38,32 +37,34 @@ export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect,
                             title={displayTitle}
                         >
                             <span className="ai-chat-tab-title">{displayTitle}</span>
-                            {canClose && (
-                                <button
-                                    type="button"
-                                    className="ai-chat-tab-close"
-                                    aria-label={t('aiChat.tabStrip.closeTab', { title: displayTitle })}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onClose(tab.id);
-                                    }}
-                                >
-                                    ×
-                                </button>
-                            )}
+                            {/* Always closeable. Closing the last tab closes the whole
+                                pane (handled by the parent's onClose). */}
+                            <button
+                                type="button"
+                                className="ai-chat-tab-close"
+                                aria-label={t('aiChat.tabStrip.closeTab', { title: displayTitle })}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onClose(tab.id);
+                                }}
+                            >
+                                ×
+                            </button>
                         </div>
                     );
                 })}
+                {/* The + sits immediately to the right of the last tab (left-aligned)
+                    and scrolls with the list. */}
+                <button
+                    type="button"
+                    className="ai-chat-tab-add"
+                    aria-label={t('aiChat.tabStrip.addTab')}
+                    title={t('aiChat.tabStrip.addTab')}
+                    onClick={onAdd}
+                >
+                    +
+                </button>
             </div>
-            <button
-                type="button"
-                className="ai-chat-tab-add"
-                aria-label={t('aiChat.tabStrip.addTab')}
-                title={t('aiChat.tabStrip.addTab')}
-                onClick={onAdd}
-            >
-                +
-            </button>
         </div>
     );
 };
