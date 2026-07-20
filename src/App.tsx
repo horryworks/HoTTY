@@ -1314,10 +1314,10 @@ function App() {
               onEnqueuePending={(tabId, message) => enqueuePendingMessage(featureInfo.id, tabId, message)}
               onDequeuePending={(tabId) => dequeuePendingMessage(featureInfo.id, tabId)}
               ensureConsent={ensureAiConsent}
-              onAddTab={(initialLink) => {
-                const linkId = initialLink ?? lastTerminalSessionId ?? undefined;
-                addTab(featureInfo.id, linkId);
-              }}
+              // The bare "+" opens an UNLINKED tab (general chat); it no longer
+              // inherits the last-focused terminal. Callers that want a linked tab
+              // pass the session id explicitly (e.g. terminal "Watch with AI").
+              onAddTab={(initialLink) => addTab(featureInfo.id, initialLink)}
               onCloseTab={(tabId) => closeTab(featureInfo.id, tabId)}
               onSelectTab={(tabId) => setActiveTab(featureInfo.id, tabId)}
               onFlashSessionPane={flashSessionPane}

@@ -42,6 +42,8 @@ export const aiChat = {
     newChatTitle: '새 채팅 시작',
     linkPickerTitle: '이 채팅을 터미널에 연결',
     linkNone: '연결 안 됨',
+    linkTerminal: '터미널 연결',
+    unlinkTitle: '터미널 연결 해제',
     linkThisWindow: '이 창',
     linkOtherWindow: '창: {{label}}',
     linkedChipTitleStale: '{{name}}에 대한 링크가 {{status}}입니다. 터미널을 다시 연결하고 Watch를 눌러 다시 링크하세요.',

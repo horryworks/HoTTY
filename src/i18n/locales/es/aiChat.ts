@@ -40,6 +40,8 @@ export const aiChat = {
     newChatTitle: 'Iniciar un nuevo chat',
     linkPickerTitle: 'Vincular este chat a una terminal',
     linkNone: 'Sin vincular',
+    linkTerminal: 'Vincular un terminal',
+    unlinkTitle: 'Desvincular terminal',
     linkThisWindow: 'Esta ventana',
     linkOtherWindow: 'Ventana: {{label}}',
     linkedChipTitleStale: 'El enlace con {{name}} está {{status}}. Vuelva a conectar el terminal y pulse Monitorear para volver a enlazar.',

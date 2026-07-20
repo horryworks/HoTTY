@@ -42,6 +42,8 @@ export const aiChat = {
     newChatTitle: 'Démarrer un nouveau chat',
     linkPickerTitle: 'Lier ce chat à un terminal',
     linkNone: 'Non lié',
+    linkTerminal: 'Lier un terminal',
+    unlinkTitle: 'Dissocier le terminal',
     linkThisWindow: 'Cette fenêtre',
     linkOtherWindow: 'Fenêtre : {{label}}',
     linkedChipTitleStale: 'Le lien vers {{name}} est {{status}}. Reconnectez le terminal et appuyez sur Surveiller pour relier.',

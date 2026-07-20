@@ -42,6 +42,8 @@ export const aiChat = {
     newChatTitle: '开始新的聊天',
     linkPickerTitle: '将此聊天链接到终端',
     linkNone: '未链接',
+    linkTerminal: '关联终端',
+    unlinkTitle: '取消关联终端',
     linkThisWindow: '此窗口',
     linkOtherWindow: '窗口：{{label}}',
     linkedChipTitleStale: '到 {{name}} 的链接{{status}}。请重新连接终端并按“监视”以重新链接。',

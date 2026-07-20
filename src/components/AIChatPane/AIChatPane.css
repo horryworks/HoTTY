@@ -159,10 +159,9 @@
     border-color: var(--color-warning);
 }
 
-/* Name (click = jump to terminal) and the unlinked placeholder — borderless so
-   they blend into the pill. `.ai-chat-linked-chip` keeps its name for reuse/tests. */
-.ai-chat-linked-chip,
-.ai-chat-link-none {
+/* Name (click = jump to terminal), borderless so it blends into the pill.
+   `.ai-chat-linked-chip` keeps its name for reuse/tests. */
+.ai-chat-linked-chip {
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -173,11 +172,6 @@
     color: inherit;
     font: inherit;
     cursor: pointer;
-}
-
-.ai-chat-link-none {
-    cursor: default;
-    opacity: 0.85;
 }
 
 .ai-chat-linked-chip:hover {
@@ -191,19 +185,64 @@
     max-width: 140px;
 }
 
-/* Re-link picker: a caret with a transparent native <select> overlaid for
-   keyboard/a11y and the native dropdown, so only the caret is visible. */
-.ai-chat-link-picker {
+/* Explicit "unlink" (broken-chain) button on the linked pill. Muted by default;
+   turns warning-coloured on hover to signal it detaches the terminal. */
+.ai-chat-link-unlink {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 9px 3px 6px;
+    background: none;
+    border: none;
+    border-left: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+    color: inherit;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.1s, color 0.1s;
+}
+
+.ai-chat-link-unlink:hover {
+    opacity: 1;
+    color: var(--color-warning);
+}
+
+.ai-chat-link-unlink svg {
+    pointer-events: none;
+}
+
+/* Unlinked tab: a dashed "Link a terminal" pill whose whole area is the picker
+   (a transparent native <select> overlaid), so a "+"-opened blank tab can be
+   attached to a terminal (this window or another). */
+.ai-chat-link-attach {
     position: relative;
     display: inline-flex;
     align-items: center;
-    padding: 3px 8px 3px 5px;
+    gap: 5px;
+    max-width: 180px;
+    padding: 3px 8px 3px 10px;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    border: 1px dashed var(--border-color);
+    border-radius: 999px;
     cursor: pointer;
-    border-left: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 2px);
+    transition: color 0.1s, border-color 0.1s;
 }
 
-.ai-chat-link-picker svg {
+.ai-chat-link-attach:hover {
+    color: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+.ai-chat-link-attach-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ai-chat-link-attach svg {
     pointer-events: none;
+    flex-shrink: 0;
 }
 
 .ai-chat-link-select {

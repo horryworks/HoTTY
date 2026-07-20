@@ -37,6 +37,8 @@ export const aiChat = {
     newChatTitle: '新しいチャットを開始',
     linkPickerTitle: 'このチャットを端末にリンク',
     linkNone: 'リンクなし',
+    linkTerminal: '端末をリンク',
+    unlinkTitle: '端末とのリンクを解除',
     linkThisWindow: 'このウィンドウ',
     linkOtherWindow: 'ウィンドウ: {{label}}',
     linkedChipTitleStale: '{{name}} へのリンクは {{status}} です。端末を再接続して「AI監視」を押すと再リンクします。',

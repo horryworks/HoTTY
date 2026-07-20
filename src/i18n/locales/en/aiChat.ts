@@ -42,6 +42,8 @@ export const aiChat = {
     newChatTitle: 'Start a new chat',
     linkPickerTitle: 'Link this chat to a terminal',
     linkNone: 'Not linked',
+    linkTerminal: 'Link a terminal',
+    unlinkTitle: 'Unlink terminal',
     linkThisWindow: 'This window',
     linkOtherWindow: 'Window: {{label}}',
     linkedChipTitleStale: 'Link to {{name}} is {{status}}. Reconnect the terminal and press AI Watch to re-link.',

@@ -40,6 +40,8 @@ export const aiChat = {
     newChatTitle: '開始新聊天',
     linkPickerTitle: '將此聊天連結到終端機',
     linkNone: '未連結',
+    linkTerminal: '關聯終端',
+    unlinkTitle: '取消關聯終端',
     linkThisWindow: '此視窗',
     linkOtherWindow: '視窗：{{label}}',
     linkedChipTitleStale: '與 {{name}} 的連結為 {{status}}。請重新連線終端機並按「監看」以重新連結。',

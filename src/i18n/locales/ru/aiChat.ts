@@ -43,6 +43,8 @@ export const aiChat = {
     newChatTitle: 'Начать новый чат',
     linkPickerTitle: 'Привязать этот чат к терминалу',
     linkNone: 'Не привязано',
+    linkTerminal: 'Привязать терминал',
+    unlinkTitle: 'Отвязать терминал',
     linkThisWindow: 'Это окно',
     linkOtherWindow: 'Окно: {{label}}',
     linkedChipTitleStale: 'Связь с {{name}}: {{status}}. Переподключите терминал и нажмите «Наблюдать», чтобы восстановить связь.',
