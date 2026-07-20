@@ -1054,6 +1054,21 @@
     font-style: italic;
 }
 
+/* ── Auto-run pre-execution countdown ── */
+/* An accent border marks a block that is about to auto-run so the imminent action
+   is visible at a glance; the countdown text uses the accent colour to match. */
+.ai-execute-block.ai-execute-scheduled {
+    border-color: var(--accent-color);
+}
+
+.ai-execute-countdown {
+    padding: 4px 12px 6px;
+    font-size: calc(var(--font-size-base) - 2px);
+    line-height: 1.4;
+    color: var(--accent-color);
+    font-weight: 600;
+}
+
 .ai-chat-markdown ul,
 .ai-chat-markdown ol {
     margin: 2px 0;

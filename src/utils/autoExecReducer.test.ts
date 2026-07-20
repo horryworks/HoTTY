@@ -151,6 +151,76 @@ describe('autoExecReducer — execute', () => {
     });
 });
 
+describe('autoExecReducer — schedule / cancelSchedule', () => {
+    it('advances classified → scheduled with runAt', () => {
+        const s = run(
+            { type: 'reserve', tabId: TAB, blockKey: BK, command: 'display version' },
+            { type: 'decide', tabId: TAB, blockKey: BK, decision: decision() },
+            { type: 'schedule', tabId: TAB, blockKey: BK, runAt: 1000 },
+        );
+        expect(getBlock(s, TAB, BK)?.status).toBe('scheduled');
+        expect(getBlock(s, TAB, BK)?.runAt).toBe(1000);
+    });
+
+    it('does not schedule a block still classifying', () => {
+        const s1 = run({ type: 'reserve', tabId: TAB, blockKey: BK, command: 'display version' });
+        const s2 = autoExecReducer(s1, { type: 'schedule', tabId: TAB, blockKey: BK, runAt: 1000 });
+        expect(s2).toBe(s1);
+        expect(getBlock(s2, TAB, BK)?.status).toBe('classifying');
+    });
+
+    it('does not schedule a declined block', () => {
+        const s = run(
+            { type: 'decline', tabId: TAB, blockKey: BK, command: 'display version' },
+            { type: 'schedule', tabId: TAB, blockKey: BK, runAt: 1000 },
+        );
+        expect(getBlock(s, TAB, BK)?.status).toBe('declined');
+    });
+
+    it('cancelSchedule reverts scheduled → classified, clears runAt, keeps the verdict', () => {
+        const d = decision();
+        const s = run(
+            { type: 'reserve', tabId: TAB, blockKey: BK, command: 'display version' },
+            { type: 'decide', tabId: TAB, blockKey: BK, decision: d },
+            { type: 'schedule', tabId: TAB, blockKey: BK, runAt: 1000 },
+            { type: 'cancelSchedule', tabId: TAB, blockKey: BK },
+        );
+        expect(getBlock(s, TAB, BK)?.status).toBe('classified');
+        expect(getBlock(s, TAB, BK)?.runAt).toBeUndefined();
+        expect(getBlock(s, TAB, BK)?.decision).toEqual(d);
+    });
+
+    it('cancelSchedule is a no-op when the block is not scheduled', () => {
+        const s1 = run(
+            { type: 'reserve', tabId: TAB, blockKey: BK, command: 'display version' },
+            { type: 'decide', tabId: TAB, blockKey: BK, decision: decision() },
+        );
+        const s2 = autoExecReducer(s1, { type: 'cancelSchedule', tabId: TAB, blockKey: BK });
+        expect(s2).toBe(s1);
+    });
+
+    it('execute fires a scheduled block → executed and clears runAt', () => {
+        const s = run(
+            { type: 'reserve', tabId: TAB, blockKey: BK, command: 'display version' },
+            { type: 'decide', tabId: TAB, blockKey: BK, decision: decision() },
+            { type: 'schedule', tabId: TAB, blockKey: BK, runAt: 1000 },
+            { type: 'execute', tabId: TAB, blockKey: BK },
+        );
+        expect(getBlock(s, TAB, BK)?.status).toBe('executed');
+        expect(getBlock(s, TAB, BK)?.runAt).toBeUndefined();
+    });
+
+    it('decline on a scheduled block wins (→ declined)', () => {
+        const s = run(
+            { type: 'reserve', tabId: TAB, blockKey: BK, command: 'display version' },
+            { type: 'decide', tabId: TAB, blockKey: BK, decision: decision() },
+            { type: 'schedule', tabId: TAB, blockKey: BK, runAt: 1000 },
+            { type: 'decline', tabId: TAB, blockKey: BK, command: 'display version' },
+        );
+        expect(getBlock(s, TAB, BK)?.status).toBe('declined');
+    });
+});
+
 describe('autoExecReducer — decline', () => {
     it('creates a declined block for a never-reserved command (ask-mode decline)', () => {
         const s = run({ type: 'decline', tabId: TAB, blockKey: BK, command: 'display version' });
@@ -276,6 +346,18 @@ describe('collectMessageDecorations', () => {
         expect(d.verdicts.get('display version')).toEqual(dExec);
         expect(d.verdicts.get('save config')).toEqual(dClassified);
         expect(d.verdicts.has('reboot')).toBe(false);
+    });
+
+    it('surfaces a scheduled block as scheduled (runAt), not as a verdict', () => {
+        const s = run(
+            { type: 'reserve', tabId: TAB, blockKey: '1:display version', command: 'display version' },
+            { type: 'decide', tabId: TAB, blockKey: '1:display version', decision: decision() },
+            { type: 'schedule', tabId: TAB, blockKey: '1:display version', runAt: 4242 },
+        );
+        const d = collectMessageDecorations(s, TAB, 1, ['display version']);
+        expect(d.scheduled.get('display version')).toBe(4242);
+        expect(d.verdicts.has('display version')).toBe(false);
+        expect(d.autoExecuted.size).toBe(0);
     });
 
     it('scopes lookups to the given message index (blockKey collision across messages)', () => {

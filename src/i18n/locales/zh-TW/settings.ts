@@ -215,6 +215,9 @@ export const settings = {
     aiConfidenceThreshold: 'AI 信心門檻：{{percent}}%',
     aiConfidenceThresholdHelp:
       '自動執行被判定為唯讀的指令所需的最低 AI 信心度。低於此值時，指令會等待手動執行。值越高越謹慎。預設值：70%。',
+    autoExecCountdown: '自動執行倒數（秒）',
+    autoExecCountdownHelp:
+      '在「安全自動執行」模式下，判定為安全的指令會在等待這些秒數後再執行，讓你能及時取消。0 表示立即執行。最大 10。預設：3。',
     deviceResponseTimeout: '裝置回應逾時（秒）',
     deviceResponseTimeoutHelp:
       '若裝置在指令後的這麼多秒內未產生新輸出，系統會告知 AI 裝置已停止回應，以便迴圈得以繼續。0 會停用閒置偵測。預設值：10。',

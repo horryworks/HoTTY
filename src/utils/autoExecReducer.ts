@@ -13,13 +13,20 @@
  * is scoped per tab and cleared per tab on New chat / tab close.
  *
  * A single block advances through at most these display states:
- *   reserve  → classifying               (AI verdict in flight — "Checking safety…")
- *   decide   → classified                (verdict recorded; Run/Decline + verdict note)
- *   execute  → executed                  (auto-ran — "Auto-executed" badge, terminal)
- *   decline  → declined                  (user chose "Don't Execute" — terminal)
- *   abort    → (removed)                 (classification cancelled before it resolved)
+ *   reserve       → classifying          (AI verdict in flight — "Checking safety…")
+ *   decide        → classified           (verdict recorded; Run/Decline + verdict note)
+ *   schedule      → scheduled            (safe verdict; auto-run countdown ticking)
+ *   cancelSchedule→ classified           (user cancelled the countdown → manual again)
+ *   execute       → executed             (auto-ran — "Auto-executed" badge, terminal)
+ *   decline       → declined             (user chose "Don't Execute" — terminal)
+ *   abort         → (removed)            (classification cancelled before it resolved)
  *
- * `executed` and `declined` are terminal: a late `decide`/`execute` never
+ * `scheduled` is the pre-execution grace window: a command the classifier judged
+ * safe waits out a user-configurable countdown (`runAt`) before auto-running, so a
+ * human can cancel it. `execute` fires when the countdown elapses; `cancelSchedule`
+ * reverts it to `classified` (manual Run/Decline) if the user hits Cancel.
+ *
+ * `executed` and `declined` are terminal: a late `decide`/`execute`/`schedule` never
  * overrides them, which is what makes "decline wins the classify race" hold.
  * `decline` may also arrive for a block that was never reserved (ask-before-execute
  * mode declines a command the AI classifier never saw), so it creates the entry.
@@ -30,7 +37,7 @@ import type { AutoExecDecision } from './aiCommandClassifier';
 // Re-exported so reducer consumers get the verdict type without a second import.
 export type { AutoExecDecision } from './aiCommandClassifier';
 
-export type AutoExecStatus = 'classifying' | 'classified' | 'executed' | 'declined';
+export type AutoExecStatus = 'classifying' | 'classified' | 'scheduled' | 'executed' | 'declined';
 
 export interface AutoExecBlock {
     /** The command text this block tracks (the `command` half of the blockKey). */
@@ -38,6 +45,8 @@ export interface AutoExecBlock {
     readonly status: AutoExecStatus;
     /** The safety verdict, once classification has resolved. */
     readonly decision?: AutoExecDecision;
+    /** Epoch-ms deadline at which a `scheduled` block auto-runs (drives the countdown). */
+    readonly runAt?: number;
 }
 
 /** Per-tab (`tabId`) map of `blockKey` → block. */
@@ -52,6 +61,10 @@ export type AutoExecAction =
     /** Record the resolved verdict. Advances classifying → classified; a
      *  terminal (executed/declined) block keeps its status but stores the verdict. */
     | { type: 'decide'; tabId: string; blockKey: string; decision: AutoExecDecision }
+    /** Start the pre-execution countdown for a safe block (classified → scheduled). */
+    | { type: 'schedule'; tabId: string; blockKey: string; runAt: number }
+    /** Cancel a running countdown, reverting to manual (scheduled → classified). */
+    | { type: 'cancelSchedule'; tabId: string; blockKey: string }
     /** Mark a block auto-executed. No-op if the block was already declined. */
     | { type: 'execute'; tabId: string; blockKey: string }
     /** Mark a block declined by the user. Terminal; creates the block if absent. */
@@ -144,12 +157,30 @@ export function autoExecReducer(state: AutoExecState, action: AutoExecAction): A
                 return blocks;
             });
 
+        case 'schedule':
+            return withTab(state, action.tabId, (blocks) => {
+                const block = blocks.get(action.blockKey);
+                // Only a freshly-classified block enters the countdown; never resurrect
+                // a terminal (executed/declined) or re-arm one already scheduled.
+                if (!block || block.status !== 'classified') return blocks;
+                blocks.set(action.blockKey, { ...block, status: 'scheduled', runAt: action.runAt });
+                return blocks;
+            });
+
+        case 'cancelSchedule':
+            return withTab(state, action.tabId, (blocks) => {
+                const block = blocks.get(action.blockKey);
+                if (!block || block.status !== 'scheduled') return blocks;
+                blocks.set(action.blockKey, { ...block, status: 'classified', runAt: undefined });
+                return blocks;
+            });
+
         case 'execute':
             return withTab(state, action.tabId, (blocks) => {
                 const block = blocks.get(action.blockKey);
-                // Execute follows decide; a declined block must not flip to executed.
+                // Execute follows decide/schedule; a declined block must not flip to executed.
                 if (!block || block.status === 'declined' || block.status === 'executed') return blocks;
-                blocks.set(action.blockKey, { ...block, status: 'executed' });
+                blocks.set(action.blockKey, { ...block, status: 'executed', runAt: undefined });
                 return blocks;
             });
 
@@ -206,8 +237,10 @@ export interface MessageDecorations {
     declined: Set<string>;
     /** Commands whose classification is in flight → "Checking safety…". */
     classifying: Set<string>;
-    /** Command → resolved verdict (for the verdict note; declined blocks omitted
-     *  because the UI hides the note for declined commands). */
+    /** Command → auto-run deadline (epoch ms) for a block in its countdown window. */
+    scheduled: Map<string, number>;
+    /** Command → resolved verdict (for the verdict note; declined/scheduled blocks
+     *  omitted because the UI shows a badge / countdown for those instead). */
     verdicts: Map<string, AutoExecDecision>;
 }
 
@@ -227,6 +260,7 @@ export function collectMessageDecorations(
         autoExecuted: new Set(),
         declined: new Set(),
         classifying: new Set(),
+        scheduled: new Map(),
         verdicts: new Map(),
     };
     const blocks = state.get(tabId);
@@ -244,6 +278,9 @@ export function collectMessageDecorations(
                 break;
             case 'classifying':
                 decorations.classifying.add(command);
+                break;
+            case 'scheduled':
+                if (block.runAt !== undefined) decorations.scheduled.set(command, block.runAt);
                 break;
             case 'classified':
                 if (block.decision) decorations.verdicts.set(command, block.decision);

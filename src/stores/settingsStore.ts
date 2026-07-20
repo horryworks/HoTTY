@@ -117,6 +117,9 @@ interface SettingsState {
   /** User-managed blacklist (ask before execute). Seeded from DEFAULT_BLACKLIST. */
   blacklistCommands: string[];
   maxConsecutiveAutoExecutions: number;
+  /** Grace-period (seconds) before an auto-execute-safe command actually runs, so
+   *  the user can cancel it. 0 = run immediately (no countdown). Clamped to 0–10. */
+  aiAutoExecCountdownSecs: number;
   /** How auto-execution safety is decided (whitelist vs AI vs hybrid). */
   classifierStrategy: ClassifierStrategy;
   /** Minimum AI confidence required to auto-execute a command judged read-only. */
@@ -192,6 +195,7 @@ const DEFAULTS: SettingsState = {
   whitelistCommands: [...DEFAULT_WHITELIST],
   blacklistCommands: [...DEFAULT_BLACKLIST],
   maxConsecutiveAutoExecutions: 5,
+  aiAutoExecCountdownSecs: 3,
   // Hybrid (managed whitelist/blacklist + AI for the gray zone) is the default
   // for all users; the v15 migration switches existing users to it too.
   classifierStrategy: 'hybrid',
@@ -213,7 +217,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 23,
+      version: 24,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -326,6 +330,10 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           const legacy = (state as Record<string, unknown>).fixedTerminalSizeDefault;
           state.fixedTerminalSizeMode ??= legacy === true ? 'on' : DEFAULTS.fixedTerminalSizeMode;
           delete (state as Record<string, unknown>).fixedTerminalSizeDefault;
+        }
+        if (version < 24) {
+          // New auto-execute pre-run countdown — default to a 3s grace period.
+          state.aiAutoExecCountdownSecs ??= DEFAULTS.aiAutoExecCountdownSecs;
         }
         return state as SettingsState;
       },

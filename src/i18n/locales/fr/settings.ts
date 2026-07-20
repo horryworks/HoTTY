@@ -215,6 +215,9 @@ export const settings = {
     aiConfidenceThreshold: "Seuil de confiance de l'IA : {{percent}}%",
     aiConfidenceThresholdHelp:
       "Confiance minimale de l'IA requise pour exécuter automatiquement une commande jugée en lecture seule. En dessous, la commande attend une exécution manuelle. Plus élevé = plus prudent. Par défaut : 70%.",
+    autoExecCountdown: 'Compte à rebours avant exécution (secondes)',
+    autoExecCountdownHelp:
+      "En mode exécution automatique sécurisée, attend ce nombre de secondes avant d'exécuter une commande jugée sûre, afin que vous puissiez l'annuler. 0 exécute immédiatement. Maximum 10. Par défaut : 3.",
     deviceResponseTimeout: "Délai de réponse de l'appareil (secondes)",
     deviceResponseTimeoutHelp:
       "Si l'appareil ne produit aucune nouvelle sortie pendant ce nombre de secondes après une commande, l'IA est informée que l'appareil a cessé de répondre afin que la boucle puisse continuer. 0 désactive la détection d'inactivité. Par défaut : 10.",

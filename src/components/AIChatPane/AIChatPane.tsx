@@ -169,6 +169,26 @@ const SleepCountdown: React.FC<{ delay: NonNullable<ChatTab['sleepDelay']> }> = 
     );
 };
 
+// Live "⏳ Auto-running in Ns…" indicator shown on an auto-execute-safe command
+// while it waits out the pre-execution grace period (see the auto-exec effect's
+// countdown). Purely a display: the pane's timer is what actually fires the run.
+const AutoRunCountdown: React.FC<{ runAt: number }> = ({ runAt }) => {
+    const { t } = useTranslation();
+    const compute = () => Math.max(0, Math.ceil((runAt - Date.now()) / 1000));
+    const [remaining, setRemaining] = useState(compute);
+    useEffect(() => {
+        setRemaining(compute());
+        const id = setInterval(() => setRemaining(compute()), 250);
+        return () => clearInterval(id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [runAt]);
+    return (
+        <div className="ai-execute-countdown">
+            {t('aiChat.message.autoRunCountdown', { seconds: Math.max(1, remaining) })}
+        </div>
+    );
+};
+
 // ── Message Content Component with Execution Support ──
 const MessageContent: React.FC<{
     content: string;
@@ -180,11 +200,15 @@ const MessageContent: React.FC<{
     targetLive?: boolean;
     autoExecutedCommands?: Set<string>;
     declinedCommands?: Set<string>;
+    /** command → auto-run deadline (epoch ms) for blocks in the pre-run countdown. */
+    scheduledCommands?: Map<string, number>;
+    /** Cancel a scheduled auto-run (reverts the block to manual Run/Decline). */
+    onCancelScheduled?: (command: string) => void;
     verdictByCommand?: Map<string, AutoExecDecision>;
     classifyingCommands?: Set<string>;
     limitReached?: boolean;
     sleepDelay?: ChatTab['sleepDelay'];
-}> = ({ content, onRun, onDecline, onHoverTarget, targetTitle, targetId, targetLive = true, autoExecutedCommands, declinedCommands, verdictByCommand, classifyingCommands, limitReached, sleepDelay }) => {
+}> = ({ content, onRun, onDecline, onHoverTarget, targetTitle, targetId, targetLive = true, autoExecutedCommands, declinedCommands, scheduledCommands, onCancelScheduled, verdictByCommand, classifyingCommands, limitReached, sleepDelay }) => {
     const { t } = useTranslation();
     const parts = segmentMessageContent(content);
     const targetLabel = targetId
@@ -218,8 +242,10 @@ const MessageContent: React.FC<{
                     const command = part.command;
                     const wasAutoExecuted = autoExecutedCommands?.has(command);
                     const wasDeclined = declinedCommands?.has(command);
+                    const scheduledAt = scheduledCommands?.get(command);
+                    const isScheduled = scheduledAt !== undefined;
                     return (
-                        <div key={part.key} className={`ai-execute-block${wasAutoExecuted ? ' ai-execute-auto' : ''}${wasDeclined ? ' ai-execute-declined' : ''}`}>
+                        <div key={part.key} className={`ai-execute-block${wasAutoExecuted ? ' ai-execute-auto' : ''}${wasDeclined ? ' ai-execute-declined' : ''}${isScheduled ? ' ai-execute-scheduled' : ''}`}>
                             <pre><code>{command}</code></pre>
                             <div className="ai-execute-actions">
                                 {wasDeclined ? (
@@ -236,6 +262,18 @@ const MessageContent: React.FC<{
                                         </svg>
                                         {t('aiChat.message.autoExecuted')}
                                     </span>
+                                ) : isScheduled ? (
+                                    // Grace window before an auto-run: offer a single Cancel that
+                                    // stops the run and reverts the block to manual Run/Decline.
+                                    <button
+                                        className="ai-decline-btn"
+                                        onClick={() => onCancelScheduled?.(command)}
+                                    >
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                                            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                                        </svg>
+                                        {t('aiChat.message.autoRunCancel')}
+                                    </button>
                                 ) : (
                                     <>
                                         <button
@@ -265,7 +303,9 @@ const MessageContent: React.FC<{
                                 {targetLabel}
                             </div>
                             {!wasDeclined && (
-                                sleepDelay && sleepDelay.command === command ? (
+                                isScheduled ? (
+                                    <AutoRunCountdown runAt={scheduledAt} />
+                                ) : sleepDelay && sleepDelay.command === command ? (
                                     <SleepCountdown delay={sleepDelay} />
                                 ) : (
                                     <VerdictNote
@@ -274,7 +314,7 @@ const MessageContent: React.FC<{
                                     />
                                 )
                             )}
-                            {!wasAutoExecuted && !wasDeclined && limitReached && (
+                            {!wasAutoExecuted && !wasDeclined && !isScheduled && limitReached && (
                                 <div className="ai-execute-paused-banner">{t('aiChat.message.autoExecPaused')}</div>
                             )}
                         </div>
@@ -350,6 +390,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const whitelistCommands = useSettingsStore(s => s.whitelistCommands);
     const blacklistCommands = useSettingsStore(s => s.blacklistCommands);
     const maxConsecutiveAutoExecutions = useSettingsStore(s => s.maxConsecutiveAutoExecutions);
+    const aiAutoExecCountdownSecs = useSettingsStore(s => s.aiAutoExecCountdownSecs);
     const classifierStrategy = useSettingsStore(s => s.classifierStrategy);
     const aiClassifyConfidenceThreshold = useSettingsStore(s => s.aiClassifyConfidenceThreshold);
     const aiDataConsentAccepted = useSettingsStore(s => s.aiDataConsentAccepted);
@@ -506,6 +547,49 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     autoExecPausedRef.current = autoExecPaused;
     const consecutiveAutoExecCountRef = useRef(consecutiveAutoExecCount);
     consecutiveAutoExecCountRef.current = consecutiveAutoExecCount;
+    // Mirrors read AFTER the classify await / by the pre-run countdown timer, which
+    // fire later than the effect that closed over them.
+    const maxConsecutiveAutoExecutionsRef = useRef(maxConsecutiveAutoExecutions);
+    maxConsecutiveAutoExecutionsRef.current = maxConsecutiveAutoExecutions;
+    const aiAutoExecCountdownSecsRef = useRef(aiAutoExecCountdownSecs);
+    aiAutoExecCountdownSecsRef.current = aiAutoExecCountdownSecs;
+
+    // In-flight pre-run countdown timers, keyed by `${tabId} ${blockKey}`. A
+    // scheduled auto-run waits out the grace period here before firing; the block's
+    // reducer state (status 'scheduled', runAt) drives the on-screen countdown. These
+    // must be cleared whenever the owning conversation goes away (New chat / tab close /
+    // provider switch / logout / unmount) or the user cancels, so a stale timer can't
+    // fire a command into a torn-down or repurposed tab.
+    const countdownTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+    const countdownTimerKey = (tabId: string, blockKey: string) => `${tabId} ${blockKey}`;
+    const clearCountdownTimer = useCallback((tabId: string, blockKey: string) => {
+        const key = countdownTimerKey(tabId, blockKey);
+        const timer = countdownTimersRef.current.get(key);
+        if (timer) { clearTimeout(timer); countdownTimersRef.current.delete(key); }
+    }, []);
+    const clearTabCountdownTimers = useCallback((tabId: string) => {
+        const prefix = `${tabId} `;
+        for (const [key, timer] of countdownTimersRef.current) {
+            if (key.startsWith(prefix)) { clearTimeout(timer); countdownTimersRef.current.delete(key); }
+        }
+    }, []);
+    const clearAllCountdownTimers = useCallback(() => {
+        for (const timer of countdownTimersRef.current.values()) clearTimeout(timer);
+        countdownTimersRef.current.clear();
+    }, []);
+    // Stop every pending auto-run countdown, reverting each block to manual. Used when
+    // the user pauses auto-exec or switches out of auto-execute-safe mode.
+    const cancelAllScheduled = useCallback(() => {
+        const snapshot = autoExecStateRef.current;
+        for (const [tabId, blocks] of snapshot) {
+            for (const [blockKey, block] of blocks) {
+                if (block.status === 'scheduled') {
+                    clearCountdownTimer(tabId, blockKey);
+                    applyAutoExec({ type: 'cancelSchedule', tabId, blockKey });
+                }
+            }
+        }
+    }, [applyAutoExec, clearCountdownTimer]);
 
     // Guards against re-opening the consent modal on every effect re-run while a
     // pending message is parked awaiting consent (the send loop below). Cleared
@@ -759,6 +843,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // Now that every per-tab tracking ref exists, wire the forward handle used by
     // the provider-switch and logout effects (declared above these refs).
     resetAllTabTrackingRef.current = () => {
+        clearAllCountdownTimers();
         applyAutoExec({ type: 'resetAll' });
         kickedForDeviceRef.current.clear();
         lastSessionForDeviceRef.current.clear();
@@ -961,6 +1046,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             for (const id of [...m.keys()]) if (!liveIds.has(id)) m.delete(id);
         };
         applyAutoExec({ type: 'prune', liveTabIds: liveIds });
+        // Drop any pending countdown timers owned by tabs that just closed (timer key
+        // is `${tabId} ${blockKey}`; a tab id never contains a space).
+        for (const [key, timer] of [...countdownTimersRef.current]) {
+            const tabId = key.slice(0, key.indexOf(' '));
+            if (!liveIds.has(tabId)) { clearTimeout(timer); countdownTimersRef.current.delete(key); }
+        }
         pruneMap(kickedForDeviceRef.current as Map<string, unknown>);
         pruneMap(lastSessionForDeviceRef.current as Map<string, unknown>);
         const dropClosed = <T,>(prev: Map<string, T>): Map<string, T> => {
@@ -1054,9 +1145,37 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 if (maxConsecutiveAutoExecutions > 0
                     && consecutiveAutoExecCountRef.current >= maxConsecutiveAutoExecutions) return;
 
-                applyAutoExec({ type: 'execute', tabId, blockKey });
-                setConsecutiveAutoExecCount(prev => prev + 1);
-                handleRunCommandForTabRef.current(tabId, command);
+                // Grace period: rather than run immediately, arm a cancellable
+                // countdown so the user can stop a safe auto-run before it fires.
+                // 0s (or an unset/invalid value) preserves the old immediate behaviour.
+                const rawCountdown = aiAutoExecCountdownSecsRef.current;
+                const countdownSecs = Number.isFinite(rawCountdown) ? Math.max(0, Math.min(10, rawCountdown)) : 0;
+                if (countdownSecs <= 0) {
+                    applyAutoExec({ type: 'execute', tabId, blockKey });
+                    setConsecutiveAutoExecCount(prev => prev + 1);
+                    handleRunCommandForTabRef.current(tabId, command);
+                    return;
+                }
+                const runAt = Date.now() + countdownSecs * 1000;
+                applyAutoExec({ type: 'schedule', tabId, blockKey, runAt });
+                const key = countdownTimerKey(tabId, blockKey);
+                const timer = setTimeout(() => {
+                    countdownTimersRef.current.delete(key);
+                    // Re-validate against the LATEST state — the countdown may have been
+                    // cancelled/declined/cleared, the link dropped, auto-exec paused, or
+                    // the streak cap reached while it ran.
+                    if (getBlock(autoExecStateRef.current, tabId, blockKey)?.status !== 'scheduled') return;
+                    if (autoExecPausedRef.current || !resolveTabTarget(tabId).live
+                        || (maxConsecutiveAutoExecutionsRef.current > 0
+                            && consecutiveAutoExecCountRef.current >= maxConsecutiveAutoExecutionsRef.current)) {
+                        applyAutoExec({ type: 'cancelSchedule', tabId, blockKey });
+                        return;
+                    }
+                    applyAutoExec({ type: 'execute', tabId, blockKey });
+                    setConsecutiveAutoExecCount(prev => prev + 1);
+                    handleRunCommandForTabRef.current(tabId, command);
+                }, countdownSecs * 1000);
+                countdownTimersRef.current.set(key, timer);
             })();
         }
 
@@ -1068,8 +1187,20 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         if (commandExecutionMode === 'ask-before-execute') {
             setAutoExecPaused(false);
             setConsecutiveAutoExecCount(0);
+            // Nothing auto-runs in ask mode → stop any in-flight countdowns.
+            cancelAllScheduled();
         }
-    }, [commandExecutionMode]);
+    }, [commandExecutionMode, cancelAllScheduled]);
+
+    // Pausing auto-exec must also stop pending countdowns (each reverts to a manual
+    // Run/Decline) — otherwise a scheduled command would still fire after Pause.
+    useEffect(() => {
+        if (autoExecPaused) cancelAllScheduled();
+    }, [autoExecPaused, cancelAllScheduled]);
+
+    // Belt-and-braces: clear every countdown timer on unmount so a fired timer can't
+    // touch a torn-down pane.
+    useEffect(() => clearAllCountdownTimers, [clearAllCountdownTimers]);
 
     // ── Load models when authenticated ──
     // An empty/failed fetch retries with backoff (MODEL_LOAD_RETRY_DELAYS_MS)
@@ -1215,6 +1346,17 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         onEnqueuePending?.(activeTabId, declinedNote(command.trim()));
     };
 
+    // Cancel a pending auto-run countdown: stop the timer and revert the block to a
+    // manual Run/Decline (the command is NOT sent, and the model is not notified —
+    // unlike Decline, the user hasn't rejected the command, only the automatic run).
+    const handleCancelScheduled = (messageIndex: number, command: string) => {
+        if (!activeTabId) return;
+        const blockKey = `${messageIndex}:${command}`;
+        clearCountdownTimer(activeTabId, blockKey);
+        applyAutoExec({ type: 'cancelSchedule', tabId: activeTabId, blockKey });
+        setConsecutiveAutoExecCount(0); // a human intervened — reset the auto-run streak
+    };
+
     const handleHoverTarget = (isHovering: boolean) => {
         if (!lastTargetSessionId) return;
         window.dispatchEvent(new CustomEvent('hotty-highlight-session', {
@@ -1299,6 +1441,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // command isn't suppressed by a stale blockKey (message indices restart
             // at 0), stale per-command verdicts don't reappear, and the
             // "Auto-executed" badge doesn't linger from the old chat.
+            clearTabCountdownTimers(activeTabId);
             applyAutoExec({ type: 'clearTab', tabId: activeTabId });
             setConsecutiveAutoExecCount(0);
             // Cancel any in-flight client-side sleep delay for this tab: clearing
@@ -1587,6 +1730,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             let classifyingCommands: Set<string> | undefined;
                             let autoExecutedCommands: Set<string> | undefined;
                             let declinedCommands: Set<string> | undefined;
+                            let scheduledCommands: Map<string, number> | undefined;
                             if (msg.role === 'model' && activeTabId) {
                                 const commands = extractExecuteCommands(msg.content);
                                 const dec = collectMessageDecorations(autoExecState, activeTabId, idx, commands);
@@ -1594,9 +1738,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                 autoExecutedCommands = dec.autoExecuted;
                                 declinedCommands = dec.declined;
                                 if (commandExecutionMode === 'auto-execute-safe') {
-                                    // Verdict + "checking safety" markers come from the async classifier.
+                                    // Verdict + "checking safety" markers + the pre-run countdown
+                                    // all come from the async classifier path.
                                     classifyingCommands = dec.classifying;
                                     verdictByCommand = dec.verdicts;
+                                    scheduledCommands = dec.scheduled;
                                 } else {
                                     // ask-before-execute mode: nothing auto-runs, but still
                                     // surface the free static safety signal (🛑 blacklist /
@@ -1628,6 +1774,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                             targetLive={linkedLive}
                                             autoExecutedCommands={autoExecutedCommands}
                                             declinedCommands={declinedCommands}
+                                            scheduledCommands={scheduledCommands}
+                                            onCancelScheduled={(cmd) => handleCancelScheduled(idx, cmd)}
                                             verdictByCommand={verdictByCommand}
                                             classifyingCommands={classifyingCommands}
                                             limitReached={commandExecutionMode === 'auto-execute-safe' && maxConsecutiveAutoExecutions > 0 && consecutiveAutoExecCount >= maxConsecutiveAutoExecutions}

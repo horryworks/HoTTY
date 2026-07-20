@@ -215,6 +215,9 @@ export const settings = {
     aiConfidenceThreshold: 'Umbral de confianza de la IA: {{percent}}%',
     aiConfidenceThresholdHelp:
       'Confianza mínima de la IA requerida para ejecutar automáticamente un comando juzgado como de solo lectura. Por debajo de esto, el comando espera una ejecución manual. Más alto = más cauteloso. Predeterminado: 70%.',
+    autoExecCountdown: 'Cuenta atrás antes de ejecutar (segundos)',
+    autoExecCountdownHelp:
+      'En el modo de ejecución automática segura, espera estos segundos antes de ejecutar un comando considerado seguro, para que puedas cancelarlo. 0 lo ejecuta de inmediato. Máximo 10. Predeterminado: 3.',
     deviceResponseTimeout: 'Tiempo de espera de respuesta del dispositivo (segundos)',
     deviceResponseTimeoutHelp:
       'Si el dispositivo no produce nueva salida durante esta cantidad de segundos tras un comando, se informa a la IA de que el dispositivo dejó de responder para que el bucle pueda continuar. 0 desactiva la detección de inactividad. Predeterminado: 10.',

@@ -121,6 +121,8 @@ export const aiChat = {
     autoExecPaused: 'Автовыполнение приостановлено (достигнут лимит). Нажмите «Выполнить», чтобы продолжить.',
     sleepWaiting: '⏳ Ожидание {{seconds}} с…',
     sleepWaitingCapped: '⏳ Ожидание {{seconds}} с… (ограничено)',
+    autoRunCountdown: '⏳ Автозапуск через {{seconds}} с…',
+    autoRunCancel: 'Отмена',
     // Вердикт безопасности по каждой команде
     checkingSafety: '🔍 Проверка безопасности…',
     verdictBlacklist: '🛑 В чёрном списке',

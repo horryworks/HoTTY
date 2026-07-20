@@ -216,6 +216,9 @@ export const settings = {
     aiConfidenceThreshold: 'AI Confidence Threshold: {{percent}}%',
     aiConfidenceThresholdHelp:
       'Minimum AI confidence required to auto-execute a command judged read-only. Below this, the command waits for a manual Run. Higher = more cautious. Default: 70%.',
+    autoExecCountdown: 'Auto-run countdown (seconds)',
+    autoExecCountdownHelp:
+      'In auto-execute-safe mode, wait this many seconds before running a command judged safe, so you can cancel it first. 0 runs immediately. Max 10. Default: 3.',
     deviceResponseTimeout: 'Device Response Timeout (seconds)',
     deviceResponseTimeoutHelp:
       'If the device produces no new output for this many seconds after a command, the AI is told the device stopped responding so the loop can continue. 0 disables idle detection. Default: 10.',

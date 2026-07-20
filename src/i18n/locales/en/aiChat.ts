@@ -122,6 +122,8 @@ export const aiChat = {
     autoExecPaused: 'Auto-execution paused (limit reached). Click Run to continue.',
     sleepWaiting: '⏳ Waiting {{seconds}}s…',
     sleepWaitingCapped: '⏳ Waiting {{seconds}}s… (capped)',
+    autoRunCountdown: '⏳ Auto-running in {{seconds}}s…',
+    autoRunCancel: 'Cancel',
     // Per-command safety verdict
     checkingSafety: '🔍 Checking safety…',
     verdictBlacklist: '🛑 Blacklisted',

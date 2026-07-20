@@ -120,6 +120,8 @@ export const aiChat = {
     autoExecPaused: '자동 실행 일시 중지됨 (한도 도달). 계속하려면 실행을 클릭하세요.',
     sleepWaiting: '⏳ {{seconds}}초 대기 중…',
     sleepWaitingCapped: '⏳ {{seconds}}초 대기 중… (제한됨)',
+    autoRunCountdown: '⏳ {{seconds}}초 후 자동 실행…',
+    autoRunCancel: '취소',
     // Per-command safety verdict
     checkingSafety: '🔍 안전성 확인 중…',
     verdictBlacklist: '🛑 블랙리스트',

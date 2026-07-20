@@ -369,6 +369,24 @@ export function AISettingsTab() {
         </div>
       )}
 
+      {/* Auto-execute pre-run countdown (grace period before a safe command runs) */}
+      <div className="settings-group">
+        <label>
+          {t('settings.ai.autoExecCountdown')}
+          <HelpTooltip text={t('settings.ai.autoExecCountdownHelp')} />
+        </label>
+        <input
+          type="number"
+          min={0}
+          max={10}
+          value={settings.aiAutoExecCountdownSecs}
+          onChange={(e) => {
+            const parsed = parseInt(e.target.value, 10);
+            update('aiAutoExecCountdownSecs', Number.isFinite(parsed) ? Math.max(0, Math.min(10, parsed)) : 0);
+          }}
+        />
+      </div>
+
       {/* Device Response Timeout */}
       <div className="settings-group">
         <label>

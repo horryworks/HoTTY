@@ -118,6 +118,8 @@ export const aiChat = {
     autoExecPaused: 'Ejecución automática en pausa (límite alcanzado). Haga clic en Ejecutar para continuar.',
     sleepWaiting: '⏳ Esperando {{seconds}}s…',
     sleepWaitingCapped: '⏳ Esperando {{seconds}}s… (limitado)',
+    autoRunCountdown: '⏳ Ejecución automática en {{seconds}}s…',
+    autoRunCancel: 'Cancelar',
     // Veredicto de seguridad por comando
     checkingSafety: '🔍 Comprobando seguridad…',
     verdictBlacklist: '🛑 En lista negra',

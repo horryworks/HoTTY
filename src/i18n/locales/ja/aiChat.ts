@@ -115,6 +115,8 @@ export const aiChat = {
     autoExecPaused: '自動実行を一時停止しました（上限に到達）。「実行」をクリックして続行してください。',
     sleepWaiting: '⏳ {{seconds}}秒 待機中…',
     sleepWaitingCapped: '⏳ {{seconds}}秒 待機中…（上限あり）',
+    autoRunCountdown: '⏳ {{seconds}}秒後に自動実行…',
+    autoRunCancel: 'キャンセル',
     // コマンドごとの安全性判定
     checkingSafety: '🔍 安全性を確認中…',
     verdictBlacklist: '🛑 ブラックリスト',

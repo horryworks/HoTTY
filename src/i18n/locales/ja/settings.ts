@@ -216,6 +216,9 @@ export const settings = {
     aiConfidenceThreshold: 'AI信頼度のしきい値: {{percent}}%',
     aiConfidenceThresholdHelp:
       '読み取り専用と判断されたコマンドを自動実行するために必要な最小 AI 信頼度。これを下回ると、コマンドは手動の実行を待ちます。高いほど慎重になります。デフォルト: 70%。',
+    autoExecCountdown: '自動実行までのカウントダウン（秒）',
+    autoExecCountdownHelp:
+      '自動実行（安全）モードで、安全と判定されたコマンドを実行する前にこの秒数だけ待機し、その間にキャンセルできます。0 で即時実行。最大10。既定: 3。',
     deviceResponseTimeout: 'デバイス応答タイムアウト（秒）',
     deviceResponseTimeoutHelp:
       'コマンド後にデバイスがこの秒数の間新しい出力を生成しない場合、ループを継続できるように、デバイスが応答を停止したことが AI に伝えられます。0 でアイドル検出を無効にします。デフォルト: 10。',

@@ -120,6 +120,8 @@ export const aiChat = {
     autoExecPaused: "Exécution automatique suspendue (limite atteinte). Cliquez sur Exécuter pour continuer.",
     sleepWaiting: '⏳ Attente {{seconds}} s…',
     sleepWaitingCapped: '⏳ Attente {{seconds}} s… (plafonné)',
+    autoRunCountdown: '⏳ Exécution automatique dans {{seconds}} s…',
+    autoRunCancel: 'Annuler',
     // Per-command safety verdict
     checkingSafety: '🔍 Vérification de la sûreté…',
     verdictBlacklist: '🛑 En liste noire',

@@ -215,6 +215,9 @@ export const settings = {
     aiConfidenceThreshold: 'AI 신뢰도 임계값: {{percent}}%',
     aiConfidenceThresholdHelp:
       '읽기 전용으로 판단된 명령을 자동 실행하는 데 필요한 최소 AI 신뢰도입니다. 이 값 미만이면 명령이 수동 실행을 기다립니다. 높을수록 더 신중합니다. 기본값: 70%.',
+    autoExecCountdown: '자동 실행 카운트다운(초)',
+    autoExecCountdownHelp:
+      '안전 자동 실행 모드에서 안전하다고 판단된 명령을 실행하기 전에 이 초만큼 대기하여 취소할 수 있습니다. 0은 즉시 실행합니다. 최대 10. 기본값: 3.',
     deviceResponseTimeout: '장치 응답 시간 초과 (초)',
     deviceResponseTimeoutHelp:
       '명령 실행 후 이 초 동안 장치에서 새 출력이 생성되지 않으면, 루프를 계속할 수 있도록 AI에게 장치가 응답을 멈췄다고 알립니다. 0이면 유휴 감지를 사용 안 함으로 설정합니다. 기본값: 10.',

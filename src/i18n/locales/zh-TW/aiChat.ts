@@ -118,6 +118,8 @@ export const aiChat = {
     autoExecPaused: '自動執行已暫停（已達上限）。按一下「執行」以繼續。',
     sleepWaiting: '⏳ 等待 {{seconds}} 秒…',
     sleepWaitingCapped: '⏳ 等待 {{seconds}} 秒…（已限制上限）',
+    autoRunCountdown: '⏳ {{seconds}} 秒後自動執行…',
+    autoRunCancel: '取消',
     // 各指令的安全判定
     checkingSafety: '🔍 正在檢查安全性…',
     verdictBlacklist: '🛑 列入黑名單',
