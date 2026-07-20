@@ -855,9 +855,13 @@ impl AIProvider for GeminiProvider {
         // Refresh an expired access token first (mirrors send_message). Reading
         // the cached token without refreshing made an expired token look like
         // "no models", surfacing as a spurious model-list error until restart.
+        // A genuine failure (token refresh failed, transport error, non-2xx) returns
+        // Err so the frontend's retry+banner engages instead of masking it as "no
+        // models". A successful-but-empty response stays Ok (the frontend treats an
+        // empty list as retry-worthy too).
         let token = match self.get_valid_token().await {
             Some(t) if !t.is_empty() => t,
-            _ => return Ok(vec![]),
+            _ => return Err("Gemini access token unavailable — sign in again".to_string()),
         };
 
         let response = self
@@ -870,7 +874,8 @@ impl AIProvider for GeminiProvider {
 
         let response = match response {
             Ok(r) if r.status().is_success() => r,
-            _ => return Ok(vec![]),
+            Ok(r) => return Err(format!("Gemini model list request failed: HTTP {}", r.status())),
+            Err(e) => return Err(format!("Gemini model list request failed: {e}")),
         };
 
         let data: Value = response

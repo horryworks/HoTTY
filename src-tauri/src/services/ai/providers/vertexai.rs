@@ -1300,16 +1300,17 @@ impl AIProvider for VertexAIProvider {
 
     async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
         // Refresh an expired access token first (mirrors send_message) so an
-        // expired token doesn't masquerade as "no models" and surface a spurious
-        // "Failed to retrieve the AI model list" error until the app is restarted.
+        // expired token doesn't masquerade as "no models". A genuine failure (token
+        // refresh failed, no config) returns Err so the frontend's retry+banner
+        // engages instead of masking it; a reachable-but-empty catalog stays Ok.
         let token = match self.get_valid_token().await {
             Some(t) => t,
-            None => return Ok(vec![]),
+            None => return Err("Vertex AI access token unavailable — sign in again".to_string()),
         };
 
         let config = match &self.config {
             Some(c) => c,
-            None => return Ok(vec![]),
+            None => return Err("Vertex AI is not configured".to_string()),
         };
 
         let publishers = ["google", "anthropic", "meta", "mistral-ai", "cohere"];

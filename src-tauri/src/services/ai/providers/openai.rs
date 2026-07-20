@@ -419,9 +419,13 @@ impl AIProvider for OpenAIProvider {
     }
 
     async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
+        // A genuine failure (no key, transport error, non-2xx) returns Err so the
+        // frontend's retry+banner engages instead of silently masking it with the
+        // fallback list. The curated fallback is kept ONLY for a reachable API that
+        // returns an unexpectedly empty/unparseable list (see the end of this fn).
         let api_key = match &self.api_key {
             Some(k) => k,
-            None => return Ok(fallback_models()),
+            None => return Err("OpenAI API key not configured".to_string()),
         };
 
         let response = self
@@ -436,13 +440,16 @@ impl AIProvider for OpenAIProvider {
             Ok(r) => r,
             Err(e) => {
                 log::warn!("[openai] listModels error: {e}");
-                return Ok(fallback_models());
+                return Err(format!("OpenAI model list request failed: {e}"));
             }
         };
 
         if !response.status().is_success() {
             log::warn!("[openai] listModels failed: {}", response.status());
-            return Ok(fallback_models());
+            return Err(format!(
+                "OpenAI model list request failed: HTTP {}",
+                response.status()
+            ));
         }
 
         let data: Value = response
