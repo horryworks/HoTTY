@@ -85,7 +85,7 @@ export const aiChat = {
     sendTitleStreaming: 'Streaming…',
     sendTitle: 'Send',
     // Hints & status
-    selectModelHint: 'Open AI settings below the message box to choose a model',
+    selectModelHint: 'Choose a model from the selector in the header to start',
     tokenReceiving: 'Receiving · {{tokens}} tokens',
     tokenWaiting: 'Waiting for response…',
     tokenInOut: '{{in}} in / {{out}} out tokens',
@@ -95,7 +95,7 @@ export const aiChat = {
     newChatConfirmTitle: 'Start a new chat?',
     newChatConfirmMessage: 'The current conversation will be cleared. This cannot be undone.',
     newChatConfirmButton: 'Start new chat',
-    modelNotSelected: 'AI model not selected. Open AI settings below the message box and choose one.',
+    modelNotSelected: 'AI model not selected. Choose one from the model selector in the header.',
     // Generic empty-state suggestions (shown when no terminal is linked)
     suggestionGenericCapabilities: 'What can you help me with?',
     suggestionGenericExplainCommand: 'Explain a shell command I give you',

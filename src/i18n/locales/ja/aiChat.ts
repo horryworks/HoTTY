@@ -80,7 +80,7 @@ export const aiChat = {
     sendTitleStreaming: '送信中…',
     sendTitle: '送信',
     // ヒント・ステータス
-    selectModelHint: 'メッセージ入力欄の下にある AI 設定からモデルを選択してください',
+    selectModelHint: 'ヘッダーのモデル選択からモデルを選んでください',
     tokenReceiving: '受信中 · {{tokens}} トークン',
     tokenWaiting: '応答を待っています…',
     tokenInOut: '入力 {{in}} / 出力 {{out}} トークン',
@@ -90,7 +90,7 @@ export const aiChat = {
     newChatConfirmTitle: '新しいチャットを開始しますか？',
     newChatConfirmMessage: '現在の会話はクリアされます。この操作は取り消せません。',
     newChatConfirmButton: '新しいチャットを開始',
-    modelNotSelected: 'AI モデルが選択されていません。メッセージ入力欄の下にある AI 設定からモデルを選択してください。',
+    modelNotSelected: 'AI モデルが選択されていません。ヘッダーのモデル選択からモデルを選んでください。',
     suggestionGenericCapabilities: '何を手伝ってもらえますか？',
     suggestionGenericExplainCommand: '入力したシェルコマンドを説明して',
     suggestionGenericTroubleshoot: '接続の問題のトラブルシューティングを手伝って',

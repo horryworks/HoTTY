@@ -83,7 +83,7 @@ export const aiChat = {
     sendTitleStreaming: 'Transmitiendo…',
     sendTitle: 'Enviar',
     // Sugerencias y estado
-    selectModelHint: 'Abra la configuración de IA debajo del cuadro de mensaje para elegir un modelo',
+    selectModelHint: 'Elija un modelo en el selector de la cabecera para empezar',
     tokenReceiving: 'Recibiendo · {{tokens}} tokens',
     tokenWaiting: 'Esperando respuesta…',
     tokenInOut: '{{in}} entrada / {{out}} salida tokens',
@@ -93,7 +93,7 @@ export const aiChat = {
     newChatConfirmTitle: '¿Iniciar un nuevo chat?',
     newChatConfirmMessage: 'La conversación actual se borrará. Esto no se puede deshacer.',
     newChatConfirmButton: 'Iniciar nuevo chat',
-    modelNotSelected: 'No se ha seleccionado un modelo de IA. Abra la configuración de IA debajo del cuadro de mensaje y elija uno.',
+    modelNotSelected: 'No se ha seleccionado un modelo de IA. Elíjalo en el selector de modelo de la cabecera.',
     suggestionGenericCapabilities: '¿En qué puedes ayudarme?',
     suggestionGenericExplainCommand: 'Explica un comando de shell que te indique',
     suggestionGenericTroubleshoot: 'Ayúdame a resolver un problema de conexión',

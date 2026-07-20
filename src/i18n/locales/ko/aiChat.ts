@@ -85,7 +85,7 @@ export const aiChat = {
     sendTitleStreaming: '스트리밍 중…',
     sendTitle: '보내기',
     // Hints & status
-    selectModelHint: '메시지 입력창 아래의 AI 설정에서 모델을 선택하세요',
+    selectModelHint: '헤더의 모델 선택기에서 모델을 선택하세요',
     tokenReceiving: '수신 중 · {{tokens}} 토큰',
     tokenWaiting: '응답을 기다리는 중…',
     tokenInOut: '입력 {{in}} / 출력 {{out}} 토큰',
@@ -95,7 +95,7 @@ export const aiChat = {
     newChatConfirmTitle: '새 채팅을 시작하시겠습니까?',
     newChatConfirmMessage: '현재 대화가 지워집니다. 이 작업은 되돌릴 수 없습니다.',
     newChatConfirmButton: '새 채팅 시작',
-    modelNotSelected: 'AI 모델이 선택되지 않았습니다. 메시지 입력창 아래의 AI 설정에서 모델을 선택하세요.',
+    modelNotSelected: 'AI 모델이 선택되지 않았습니다. 헤더의 모델 선택기에서 모델을 선택하세요.',
     suggestionGenericCapabilities: '무엇을 도와줄 수 있나요?',
     suggestionGenericExplainCommand: '내가 알려주는 셸 명령을 설명해줘',
     suggestionGenericTroubleshoot: '연결 문제 해결을 도와줘',
