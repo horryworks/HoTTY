@@ -44,6 +44,8 @@ export const aiChat = {
     linkNone: 'Non lié',
     linkTerminal: 'Lier un terminal',
     unlinkTitle: 'Dissocier le terminal',
+    addTerminal: 'Surveiller un terminal',
+    linkedChipRemove: 'Arrêter de surveiller {{name}}',
     linkThisWindow: 'Cette fenêtre',
     linkOtherWindow: 'Fenêtre : {{label}}',
     linkedChipTitleStale: 'Le lien vers {{name}} est {{status}}. Reconnectez le terminal et appuyez sur Surveiller pour relier.',
@@ -62,6 +64,7 @@ export const aiChat = {
     // Empty state
     emptyTitle: 'Comment puis-je aider ?',
     emptyLinkedTo: 'Lié à <0>{{name}}</0>',
+    emptyWatching: 'Surveillance de <0>{{names}}</0>',
     emptyNoTerminal: 'Aucun terminal lié pour l\'instant — ouvrez une session pour activer l\'exécution de commandes',
     suggestionOutputMeaning: 'Que signifie cette sortie de terminal ?',
     suggestionFindIssues: 'Trouver des problèmes dans la sortie récente',

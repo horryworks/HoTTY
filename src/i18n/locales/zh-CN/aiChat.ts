@@ -44,6 +44,8 @@ export const aiChat = {
     linkNone: '未链接',
     linkTerminal: '关联终端',
     unlinkTitle: '取消关联终端',
+    addTerminal: '监视终端',
+    linkedChipRemove: '停止监视 {{name}}',
     linkThisWindow: '此窗口',
     linkOtherWindow: '窗口：{{label}}',
     linkedChipTitleStale: '到 {{name}} 的链接{{status}}。请重新连接终端并按“监视”以重新链接。',
@@ -62,6 +64,7 @@ export const aiChat = {
     // Empty state
     emptyTitle: '我能帮您做什么？',
     emptyLinkedTo: '已链接到 <0>{{name}}</0>',
+    emptyWatching: '正在监视 <0>{{names}}</0>',
     emptyNoTerminal: '尚未链接终端 — 打开一个会话以启用命令执行',
     suggestionOutputMeaning: '此终端输出是什么意思？',
     suggestionFindIssues: '在最近的输出中查找问题',

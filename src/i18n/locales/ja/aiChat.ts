@@ -39,6 +39,8 @@ export const aiChat = {
     linkNone: 'リンクなし',
     linkTerminal: '端末をリンク',
     unlinkTitle: '端末とのリンクを解除',
+    addTerminal: '端末を監視に追加',
+    linkedChipRemove: '{{name}} の監視をやめる',
     linkThisWindow: 'このウィンドウ',
     linkOtherWindow: 'ウィンドウ: {{label}}',
     linkedChipTitleStale: '{{name}} へのリンクは {{status}} です。端末を再接続して「AI監視」を押すと再リンクします。',
@@ -57,6 +59,7 @@ export const aiChat = {
     // 空の状態
     emptyTitle: 'どのようなお手伝いをしましょうか？',
     emptyLinkedTo: '<0>{{name}}</0> にリンク済み',
+    emptyWatching: '<0>{{names}}</0> を監視中',
     emptyNoTerminal: 'まだ端末がリンクされていません — セッションを開くとコマンド実行が有効になります',
     suggestionOutputMeaning: 'この端末の出力はどういう意味ですか？',
     suggestionFindIssues: '最近の出力に問題がないか確認してください',

@@ -4,7 +4,7 @@ import { TabStrip } from './TabStrip';
 import type { ChatTab } from '../../hooks/useAiChat';
 
 function makeTab(id: string, title: string, ordinal: number): ChatTab {
-  return { id, title, ordinal };
+  return { id, title, ordinal, linkedSessions: [] };
 }
 
 describe('TabStrip', () => {

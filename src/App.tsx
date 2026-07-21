@@ -216,7 +216,9 @@ function App() {
     closeTab,
     removeAiChatState,
     setActiveTab,
-    setTabLink,
+    addTabLink,
+    removeTabLink,
+    rebindTabLink,
     sendMessage: aiSendMessage,
     askAi,
   } = useAiChat({
@@ -250,7 +252,9 @@ function App() {
       addTab,
       closeTab,
       setActiveTab,
-      setTabLink,
+      addTabLink,
+      removeTabLink,
+      rebindTabLink,
     },
   });
   const {
@@ -717,20 +721,23 @@ function App() {
               terminalBackground={terminalBackground}
               linkableSessions={linkableSessions}
               onRefreshSessions={refreshCrossWindowSessions}
-              onLinkSession={(sid) => {
+              // Add a terminal to the active tab's watched set (the header "+"
+              // picker). Adding streams that terminal's output to the AI, so gate
+              // the first add on the data-sharing consent (same as enabling Watch).
+              onAddLink={(sid) => {
                 const st = aiChatStates.get(featureInfo.id);
                 const activeTab = st ? getActiveTab(st) : undefined;
                 if (!activeTab) return;
-                // Unlinking egresses nothing; link first-time gates on data-sharing
-                // consent (linking a live terminal streams its output to the AI,
-                // same as enabling Watch — see runToggleWatch).
-                if (sid === undefined) {
-                  setTabLink(featureInfo.id, activeTab.id, undefined);
-                  return;
-                }
                 void consent.ensureAiConsent().then((ok) => {
-                  if (ok) setTabLink(featureInfo.id, activeTab.id, sid);
+                  if (ok) addTabLink(featureInfo.id, activeTab.id, sid);
                 });
+              }}
+              // Remove a watched terminal (chip ×). Egresses nothing → no consent.
+              onRemoveLink={(sid) => {
+                const st = aiChatStates.get(featureInfo.id);
+                const activeTab = st ? getActiveTab(st) : undefined;
+                if (!activeTab) return;
+                removeTabLink(featureInfo.id, activeTab.id, sid);
               }}
               onOpenSettings={() => openSettings('ai')}
             />

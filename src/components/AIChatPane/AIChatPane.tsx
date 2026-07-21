@@ -16,11 +16,12 @@ import {
 import { STORAGE_KEYS } from '../../constants/storage';
 import { aiProviderLabelKey } from '../../constants/aiProviders';
 import { formatAICost } from '../../constants/aiPricing';
-import { buildExecutionRules, languageDirective, AUTO_LANGUAGE, NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP } from '../../constants/aiPrompts';
+import { buildExecutionRules, languageDirective, AUTO_LANGUAGE, NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP, buildWatchTargetsBlock } from '../../constants/aiPrompts';
 import { ExecutionModeBar } from './ExecutionModeBar';
 import { TerminalOutputBlock } from './TerminalOutputBlock';
 import { parseTerminalOutputMessage, notConnectedNote, declinedNote } from './terminalOutputUtils';
-import { segmentMessageContent, extractExecuteCommands } from './executeBlockUtils';
+import { segmentMessageContent, extractExecuteCommands, extractExecuteBlocks } from './executeBlockUtils';
+import { buildAliasEntries, resolveAlias } from '../../utils/terminalAlias';
 import { SystemPromptModal } from '../SystemPromptModal/SystemPromptModal';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -29,6 +30,19 @@ import { tauriService } from '../../services/tauriService';
 import { logError } from '../../utils/logger';
 import type { AiChatState, ChatTab } from '../../hooks/useAiChat';
 import { getActiveTab, aiBackendSessionId } from '../../hooks/useAiChat';
+
+/**
+ * The single terminal an AI-issued command runs on for a tab (Phase 2a): the
+ * last-focused watched terminal if it is still watched, else the first watched.
+ * Phase 2b lets the AI override this per-command via a `target=` tag.
+ */
+function execTargetOf(tab: ChatTab | undefined): string | undefined {
+    const list = tab?.linkedSessions ?? [];
+    if (list.length === 0) return undefined;
+    const focused = tab?.lastFocusedWatchId;
+    if (focused && list.some((w) => w.sessionId === focused)) return focused;
+    return list[0]?.sessionId;
+}
 import type { SessionRecord } from '../../hooks/useSessionManager';
 import type { PersonaDefinition, AIModelInfo, LinkableSession, ChatImage } from '../../types/appTypes';
 import { TabStrip } from './TabStrip';
@@ -86,8 +100,10 @@ interface AIChatPaneProps {
     terminalBackground?: string;
     /** Sessions selectable in the link picker (this window + other windows). */
     linkableSessions?: LinkableSession[];
-    /** Link the active tab to a session (any window) or unlink (undefined). */
-    onLinkSession?: (sessionId: string | undefined) => void;
+    /** Add a terminal to the active tab's watched set (header "+" picker). */
+    onAddLink?: (sessionId: string) => void;
+    /** Remove a watched terminal from the active tab's set (chip ×). */
+    onRemoveLink?: (sessionId: string) => void;
     /** Refresh the cross-window session list (called when the picker opens). */
     onRefreshSessions?: () => void;
     /** Open the Settings modal on the AI tab (sign-in lives there). */
@@ -215,12 +231,16 @@ const AutoRunCountdown: React.FC<{ runAt: number }> = ({ runAt }) => {
 // ── Message Content Component with Execution Support ──
 const MessageContent: React.FC<{
     content: string;
-    onRun?: (cmd: string) => void;
+    onRun?: (cmd: string, target?: string) => void;
     onDecline?: (cmd: string) => void;
     onHoverTarget?: (hovered: boolean) => void;
     targetTitle?: string;
     targetId?: string;
     targetLive?: boolean;
+    /** Resolve an execute block's `target=<alias>` to the terminal it will run on,
+     *  so the label under each block shows the AUTO-DETECTED target (Phase 2). When
+     *  omitted, the block falls back to the single targetTitle/targetId/targetLive. */
+    resolveBlockTarget?: (alias?: string) => { title?: string; id?: string; live: boolean };
     autoExecutedCommands?: Set<string>;
     declinedCommands?: Set<string>;
     /** command → auto-run deadline (epoch ms) for blocks in the pre-run countdown. */
@@ -231,14 +251,19 @@ const MessageContent: React.FC<{
     classifyingCommands?: Set<string>;
     limitReached?: boolean;
     sleepDelay?: ChatTab['sleepDelay'];
-}> = ({ content, onRun, onDecline, onHoverTarget, targetTitle, targetId, targetLive = true, autoExecutedCommands, declinedCommands, scheduledCommands, onCancelScheduled, verdictByCommand, classifyingCommands, limitReached, sleepDelay }) => {
+}> = ({ content, onRun, onDecline, onHoverTarget, targetTitle, targetId, targetLive = true, resolveBlockTarget, autoExecutedCommands, declinedCommands, scheduledCommands, onCancelScheduled, verdictByCommand, classifyingCommands, limitReached, sleepDelay }) => {
     const { t } = useTranslation();
     const parts = segmentMessageContent(content);
-    const targetLabel = targetId
-        ? (targetLive
-            ? <span className="ai-run-target">{t('aiChat.message.target', { title: targetTitle || t('aiChat.message.unnamedTerminal') })}</span>
-            : <span className="ai-run-target ai-run-target-stale">{t('aiChat.message.targetStale', { title: targetTitle || t('aiChat.message.unnamedTerminal') })}</span>)
-        : <span className="ai-run-target no-target">{t('aiChat.message.noTarget')}</span>;
+    // The run-target label for one block, resolved from its own `target=` alias when
+    // present (auto-detected), else the tab's single exec target.
+    const renderTargetLabel = (blockTarget?: string) => {
+        const bt = resolveBlockTarget ? resolveBlockTarget(blockTarget) : { title: targetTitle, id: targetId, live: targetLive };
+        return bt.id
+            ? (bt.live
+                ? <span className="ai-run-target">{t('aiChat.message.target', { title: bt.title || t('aiChat.message.unnamedTerminal') })}</span>
+                : <span className="ai-run-target ai-run-target-stale">{t('aiChat.message.targetStale', { title: bt.title || t('aiChat.message.unnamedTerminal') })}</span>)
+            : <span className="ai-run-target no-target">{t('aiChat.message.noTarget')}</span>;
+    };
 
     return (
         <>
@@ -256,7 +281,7 @@ const MessageContent: React.FC<{
                                     </svg>
                                     {t('aiChat.message.runInTerminal')}
                                 </button>
-                                {targetLabel}
+                                {renderTargetLabel(part.target)}
                             </div>
                         </div>
                     );
@@ -301,7 +326,7 @@ const MessageContent: React.FC<{
                                     <>
                                         <button
                                             className="ai-run-btn"
-                                            onClick={() => onRun?.(command)}
+                                            onClick={() => onRun?.(command, part.target)}
                                             onMouseEnter={() => onHoverTarget?.(true)}
                                             onMouseLeave={() => onHoverTarget?.(false)}
                                         >
@@ -323,7 +348,7 @@ const MessageContent: React.FC<{
                                         )}
                                     </>
                                 )}
-                                {targetLabel}
+                                {renderTargetLabel(part.target)}
                             </div>
                             {!wasDeclined && (
                                 isScheduled ? (
@@ -387,12 +412,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     aiPersonas,
     terminalBackground,
     linkableSessions,
-    onLinkSession,
+    onAddLink,
+    onRemoveLink,
     onRefreshSessions,
     onOpenSettings,
 }) => {
     const { t } = useTranslation();
-    // Derive active tab from chatState (Phase 1: tabs[] + activeTabId, single linkedSessionId per tab)
+    // Derive active tab from chatState (Phase 2: tabs[] + activeTabId; each tab
+    // watches a SET of terminals — activeTab.linkedSessions).
     const activeTab = chatState ? getActiveTab(chatState) : undefined;
     const activeTabId = activeTab?.id;
     // Auth state is window-global (owned by useAiAuthOwner, mounted in App);
@@ -524,13 +551,30 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         return m;
     }, [linkableSessions]);
 
-    // Group selectable sessions for the link picker: this window's own, then one
-    // group per other window.
-    const linkGroups = useMemo(() => groupLinkableSessions(linkableSessions), [linkableSessions]);
+    // Group selectable sessions for the "+" add picker: this window's own, then one
+    // group per other window, EXCLUDING terminals the active tab already watches so
+    // the picker only offers new ones.
+    const watchedIdSet = useMemo(
+        () => new Set((activeTab?.linkedSessions ?? []).map((w) => w.sessionId)),
+        [activeTab?.linkedSessions],
+    );
+    const addLinkGroups = useMemo(
+        () => groupLinkableSessions((linkableSessions ?? []).filter((ls) => !watchedIdSet.has(ls.sessionId))),
+        [linkableSessions, watchedIdSet],
+    );
 
-    // Target session info derived from the active tab. Prefer the local session
-    // record; fall back to the cross-window linkable list for remote links.
-    const lastTargetSessionId = activeTab?.linkedSessionId;
+    // Terminals the active tab watches (rendered as a chip row in the header).
+    const watchedTerminals = activeTab?.linkedSessions ?? [];
+    // Comma-joined watched-terminal names for the empty state.
+    const watchedNamesLabel = watchedTerminals
+        .map((w) => sessions?.get(w.sessionId)?.displayName ?? linkableById.get(w.sessionId)?.displayName ?? t('aiChat.pane.terminalFallback'))
+        .join(', ');
+
+    // Execute-target info derived from the active tab: the ONE terminal an AI
+    // command runs on (execTargetOf — last-focused, else first watched). Drives the
+    // run-target label, Network-Expert device identity, and the empty-state check.
+    // Prefer the local session record; fall back to the cross-window linkable list.
+    const lastTargetSessionId = execTargetOf(activeTab);
     const lastTargetSessionTitle = lastTargetSessionId
         ? (sessions?.get(lastTargetSessionId)?.displayName ?? linkableById.get(lastTargetSessionId)?.displayName)
         : undefined;
@@ -543,7 +587,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         ? (sessions?.get(lastTargetSessionId)?.status ?? linkableById.get(lastTargetSessionId)?.status)
         : undefined;
     const linkedLive = lastTargetStatus === 'connected';
-    const linkedStale = !!lastTargetSessionId && !linkedLive;
+    // Config-derived identity of the exec target (survives reconnect) — used by the
+    // Network-Expert kickoff to detect same-device reconnects.
+    const execTargetBindingKey = (activeTab?.linkedSessions ?? []).find((w) => w.sessionId === lastTargetSessionId)?.bindingKey;
 
     // Mirrors of values the async auto-exec effect must re-check AFTER its await
     // (state captured at effect-run time may be stale by the time classification
@@ -563,14 +609,38 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     linkableByIdRef.current = linkableById;
     const activeTabIdRef = useRef(activeTabId);
     activeTabIdRef.current = activeTabId;
-    /** Resolve a tab's linked session id + live-ness (this window or another). */
-    const resolveTabTarget = useCallback((tabId: string) => {
+    /** Resolve a tab's execute-target session id + live-ness (this window or
+     *  another). When the AI tagged its execute fence with `target=<alias>`, that
+     *  alias (resolved against the tab's watched terminals) wins; otherwise it
+     *  falls back to the tab's exec target (last-focused, else first watched). The
+     *  auto-exec continuation can complete on a background tab, so it resolves
+     *  per-tab rather than from the active tab. */
+    const resolveTabTarget = useCallback((tabId: string, preferredAlias?: string) => {
         const tab = chatStateRef.current?.tabs.find((t) => t.id === tabId);
-        const sid = tab?.linkedSessionId;
+        let sid: string | undefined;
+        if (preferredAlias) {
+            const entries = buildAliasEntries((tab?.linkedSessions ?? []).map((w) => {
+                const rec = sessionsRef.current?.get(w.sessionId);
+                const ls = linkableByIdRef.current.get(w.sessionId);
+                return { sessionId: w.sessionId, displayName: rec?.displayName ?? ls?.displayName ?? w.sessionId, status: rec?.status ?? ls?.status };
+            }));
+            sid = resolveAlias(entries, preferredAlias);
+        }
+        if (!sid) sid = execTargetOf(tab);
         if (!sid) return { sid: undefined as string | undefined, live: false, status: undefined as string | undefined };
         const status = sessionsRef.current?.get(sid)?.status ?? linkableByIdRef.current.get(sid)?.status;
         return { sid, live: status === 'connected', status };
     }, []);
+    /** Resolve an execute block's `target=` alias to a display target for the label
+     *  under it (active tab). Passed to MessageContent so each block shows the
+     *  terminal it will actually run on. */
+    const resolveBlockTarget = useCallback((alias?: string) => {
+        const { sid, live } = resolveTabTarget(activeTabIdRef.current ?? '', alias);
+        const title = sid
+            ? (sessionsRef.current?.get(sid)?.displayName ?? linkableByIdRef.current.get(sid)?.displayName)
+            : undefined;
+        return { title, id: sid, live };
+    }, [resolveTabTarget]);
     const autoExecPausedRef = useRef(autoExecPaused);
     autoExecPausedRef.current = autoExecPaused;
     const consecutiveAutoExecCountRef = useRef(consecutiveAutoExecCount);
@@ -772,6 +842,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
 
         const sysInstr = chatState.systemInstruction || localSystemInstruction;
         onChatStateChange?.({ systemInstruction: sysInstr });
+        // Append the watched-terminal alias list (per dispatched tab) so a reply to
+        // auto-exec output / kickoff can route via `target=<alias>`. Not stored — the
+        // stored instruction stays persona+rules+lang; the dynamic list is send-only.
+        const targetsBlock = buildWatchTargetsBlock(buildAliasEntries((tab.linkedSessions ?? []).map((w) => {
+            const rec = sessions?.get(w.sessionId);
+            const ls = linkableById.get(w.sessionId);
+            return { sessionId: w.sessionId, displayName: rec?.displayName ?? ls?.displayName ?? w.sessionId, status: rec?.status ?? ls?.status };
+        })));
         // Remove the head of the queue we're dispatching from.
         if (isHuman) onDequeuePendingUser?.(tab.id);
         else onDequeuePending?.(tab.id);
@@ -804,7 +882,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         markStreaming(tab.id, true);
         setStreamingForTab(tab.id, '');
         armStreamWatchdog();
-        tauriService.aiChatSend(aiBackendSessionId(paneId, tab.id), pm, selectedModel, sysInstr, pmImages).catch((err) => {
+        tauriService.aiChatSend(aiBackendSessionId(paneId, tab.id), pm, selectedModel, sysInstr + targetsBlock, pmImages).catch((err) => {
             logError('AI', 'aiChatSend invoke failed', err);
             clearStreamWatchdog();
             markStreaming(tab.id, false);
@@ -857,8 +935,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         if (!lastTargetSessionId || !linkedLive) return;   // need a live linked target right now
 
         // Stable device identity (survives reconnect); fall back to the session id
-        // only if a binding key was never recorded for this link.
-        const device = activeTab?.linkBindingKey ?? lastTargetSessionId;
+        // only if a binding key was never recorded for this link. Uses the exec
+        // target's binding key (the terminal a Network-Expert command would run on).
+        const device = execTargetBindingKey ?? lastTargetSessionId;
         const kickedFor = kickedForDeviceRef.current.get(activeTabId);
 
         if (kickedFor === device) {
@@ -884,7 +963,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     }, [
         isNetworkExpert, isAuthenticated, selectedModel, activeTabId, lastTargetSessionId,
         linkedLive, messages.length, isStreaming, activeTab?.pendingMessages?.length,
-        activeTab?.linkBindingKey, onEnqueuePending,
+        execTargetBindingKey, onEnqueuePending,
     ]);
 
 
@@ -929,7 +1008,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // Assigned later; the effect calls it via ref (forward reference). Runs a
     // command on a SPECIFIC tab's linked session (auto-exec can complete on a
     // background tab), not the active tab.
-    const handleRunCommandForTabRef = useRef<(tabId: string, cmd: string) => void>(() => {});
+    const handleRunCommandForTabRef = useRef<(tabId: string, cmd: string, target?: string) => void>(() => {});
     // Auto-execute, fired by useChatStream's onStreamComplete when a tab's stream
     // ends (replacing the old streamingTabIds Set-diff). Runs post-commit, so the
     // completed model message is already in `tabMessages`. Classifies that message's
@@ -943,10 +1022,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         if (commandExecutionMode !== 'auto-execute-safe') return;
         const lastMsg = tabMessages[tabMessages.length - 1];
         if (!lastMsg || lastMsg.role !== 'model') return;
-        const commands = extractExecuteCommands(lastMsg.content);
-        if (commands.length === 0) return;
+        const blocks = extractExecuteBlocks(lastMsg.content);
+        if (blocks.length === 0) return;
 
-        const command = commands[commands.length - 1];
+        const { command, target } = blocks[blocks.length - 1];
         const blockKey = `${tabMessages.length - 1}:${command}`;
         // Reserve the block BEFORE the await so a re-render during classification
         // can't fire a second, duplicate classification/run for the same command.
@@ -982,7 +1061,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // elsewhere.
             if (getBlock(autoExecStateRef.current, tabId, blockKey)?.status === 'declined') return;
             if (autoExecPausedRef.current) return;
-            if (!resolveTabTarget(tabId).live) return; // this tab's link, not active
+            if (!resolveTabTarget(tabId, target).live) return; // this tab's resolved target, not active
             if (maxConsecutiveAutoExecutionsRef.current > 0
                 && consecutiveAutoExecCountRef.current >= maxConsecutiveAutoExecutionsRef.current) return;
 
@@ -994,7 +1073,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             if (countdownSecs <= 0) {
                 applyAutoExec({ type: 'execute', tabId, blockKey });
                 setConsecutiveAutoExecCount(prev => prev + 1);
-                handleRunCommandForTabRef.current(tabId, command);
+                handleRunCommandForTabRef.current(tabId, command, target);
                 return;
             }
             const runAt = Date.now() + countdownSecs * 1000;
@@ -1006,7 +1085,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 // cancelled/declined/cleared, the link dropped, auto-exec paused, or
                 // the streak cap reached while it ran.
                 if (getBlock(autoExecStateRef.current, tabId, blockKey)?.status !== 'scheduled') return;
-                if (autoExecPausedRef.current || !resolveTabTarget(tabId).live
+                if (autoExecPausedRef.current || !resolveTabTarget(tabId, target).live
                     || (maxConsecutiveAutoExecutionsRef.current > 0
                         && consecutiveAutoExecCountRef.current >= maxConsecutiveAutoExecutionsRef.current)) {
                     applyAutoExec({ type: 'cancelSchedule', tabId, blockKey });
@@ -1014,7 +1093,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 }
                 applyAutoExec({ type: 'execute', tabId, blockKey });
                 setConsecutiveAutoExecCount(prev => prev + 1);
-                handleRunCommandForTabRef.current(tabId, command);
+                handleRunCommandForTabRef.current(tabId, command, target);
             }, countdownSecs * 1000);
             countdownTimersRef.current.set(key, timer);
         })();
@@ -1142,8 +1221,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // Run a command on a SPECIFIC tab's linked session. Used both by the manual
     // Run button (for the active tab) and by auto-exec (which can complete on a
     // background tab whose linked session differs from the active one).
-    const handleRunCommandForTab = (tabId: string, command: string) => {
-        const { sid, live, status } = resolveTabTarget(tabId);
+    const handleRunCommandForTab = (tabId: string, command: string, target?: string) => {
+        const { sid, live, status } = resolveTabTarget(tabId, target);
         if (!sid) return;
         const cleanCmd = command.trim();
         // Fail loudly when the linked terminal isn't live. Without this, sending to
@@ -1165,9 +1244,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         }
     };
     handleRunCommandForTabRef.current = handleRunCommandForTab;
-    const handleRunCommand = (command: string) => {
+    const handleRunCommand = (command: string, target?: string) => {
         if (!activeTabId) return;
-        handleRunCommandForTab(activeTabId, command);
+        handleRunCommandForTab(activeTabId, command, target);
     };
 
     // "Don't Execute": the user declines a suggested command. The app deterministically
@@ -1442,7 +1521,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     activeTabId={chatState.activeTabId}
                     onSelect={(id) => {
                         onSelectTab?.(id);
-                        const linkedId = chatState.tabs.find((t) => t.id === id)?.linkedSessionId;
+                        // Flash the tab's primary watched terminal's pane.
+                        const linkedId = chatState.tabs.find((t) => t.id === id)?.linkedSessions[0]?.sessionId;
                         if (linkedId) onFlashSessionPane?.(linkedId);
                     }}
                     onClose={(id) => {
@@ -1480,92 +1560,99 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             <span>{t('aiChat.pane.newChat')}</span>
                         </button>
                     )}
-                    {/* Link control (2.7b②), state-dependent:
-                        - LINKED tab   → chip (click = jump to the terminal, stale = disconnected)
-                          + an explicit "unlink" (broken-chain) button. No re-link picker,
-                          so the terminal name shows once and a mid-conversation switch can't
-                          silently reset context.
-                        - UNLINKED tab → a "Link a terminal" picker so a "+"-opened blank tab
-                          can be attached to a terminal (this window or another). */}
-                    {isAuthenticated && lastTargetSessionId && (
-                        <div className={`ai-chat-link${linkedStale ? ' ai-chat-link-stale' : ''}`}>
-                            <button
-                                type="button"
-                                className={`ai-chat-linked-chip${linkedStale ? ' ai-chat-linked-chip-stale' : ''}`}
-                                onClick={() => {
-                                    tauriService.focusWindow().catch(() => {});
-                                    window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: lastTargetSessionId } }));
-                                }}
-                                onMouseEnter={() => {
-                                    window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: lastTargetSessionId, highlighted: true } }));
-                                }}
-                                onMouseLeave={() => {
-                                    window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: lastTargetSessionId, highlighted: false } }));
-                                }}
-                                title={linkedStale
-                                    ? t('aiChat.pane.linkedChipTitleStale', { name: lastTargetSessionTitle || t('aiChat.pane.terminalFallback'), status: lastTargetStatus ?? t('aiChat.pane.statusDisconnected') })
-                                    : t('aiChat.pane.linkedChipTitle', { name: lastTargetSessionTitle || t('aiChat.pane.terminalFallback') })}
-                                aria-label={linkedStale
-                                    ? t('aiChat.pane.linkedChipAriaStale', { name: lastTargetSessionTitle || t('aiChat.pane.unknownTerminal'), status: lastTargetStatus ?? t('aiChat.pane.statusDisconnected') })
-                                    : t('aiChat.pane.linkedChipAria', { name: lastTargetSessionTitle || t('aiChat.pane.unknownTerminal') })}
-                            >
-                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                                </svg>
-                                <span className="ai-chat-linked-chip-name">
-                                    {lastTargetSessionTitle || t('aiChat.pane.terminalFallback')}{linkedStale ? t('aiChat.pane.disconnectedSuffix') : ''}
-                                </span>
-                            </button>
-                            <button
-                                type="button"
-                                className="ai-chat-link-unlink"
-                                title={t('aiChat.pane.unlinkTitle')}
-                                aria-label={t('aiChat.pane.unlinkTitle')}
-                                onClick={() => onLinkSession?.(undefined)}
-                            >
-                                {/* broken-chain (link-off) icon */}
-                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
-                                    <path d="M17 7h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1 0 1.43-.98 2.63-2.31 2.98l1.46 1.46C20.88 15.61 22 13.95 22 12c0-2.76-2.24-5-5-5zm-1 4h-2.19l2 2H16v-2zM2 4.27l3.11 3.11C3.29 8.12 2 9.91 2 12c0 2.76 2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1 0-1.59 1.21-2.9 2.76-3.07L8.73 11H8v2h2.73L13 15.27V17h1.73l4.01 4.01 1.41-1.41L3.41 2.86 2 4.27z" />
-                                </svg>
-                            </button>
-                        </div>
-                    )}
-                    {isAuthenticated && !lastTargetSessionId && (linkableSessions?.length ?? 0) > 0 && (
-                        <div className="ai-chat-link-attach">
-                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                            </svg>
-                            <span className="ai-chat-link-attach-label">{t('aiChat.pane.linkTerminal')}</span>
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="M6 9l6 6 6-6" />
-                            </svg>
-                            <select
-                                className="ai-chat-link-select"
-                                value=""
-                                title={t('aiChat.pane.linkTerminal')}
-                                aria-label={t('aiChat.pane.linkTerminal')}
-                                onMouseDown={() => onRefreshSessions?.()}
-                                onFocus={() => onRefreshSessions?.()}
-                                onChange={(e) => onLinkSession?.(e.target.value || undefined)}
-                            >
-                                <option value="" disabled>{t('aiChat.pane.linkTerminal')}</option>
-                                {linkGroups.local.length > 0 && (
-                                    <optgroup label={t('aiChat.pane.linkThisWindow')}>
-                                        {linkGroups.local.map((s) => (
-                                            <option key={s.sessionId} value={s.sessionId}>{s.displayName}</option>
+                    {/* Watched-terminal control (Phase 2): a wrapping ROW of chips —
+                        one per watched terminal (click = jump to it, × = remove,
+                        greyed when disconnected) — followed by a "+" picker to watch
+                        another terminal (this window or another), excluding those
+                        already watched. Adding/removing terminals here is symmetric
+                        with the terminal tab's "AI Watch" toggle. */}
+                    {isAuthenticated && (watchedTerminals.length > 0 || addLinkGroups.local.length + addLinkGroups.remote.length > 0) && (
+                        <div className="ai-chat-link-row">
+                            {watchedTerminals.map((w) => {
+                                const name = sessions?.get(w.sessionId)?.displayName ?? linkableById.get(w.sessionId)?.displayName;
+                                const status = sessions?.get(w.sessionId)?.status ?? linkableById.get(w.sessionId)?.status;
+                                const stale = status !== 'connected';
+                                const label = name || t('aiChat.pane.terminalFallback');
+                                return (
+                                    <div key={w.sessionId} className={`ai-chat-link${stale ? ' ai-chat-link-stale' : ''}`}>
+                                        <button
+                                            type="button"
+                                            className={`ai-chat-linked-chip${stale ? ' ai-chat-linked-chip-stale' : ''}`}
+                                            onClick={() => {
+                                                tauriService.focusWindow().catch(() => {});
+                                                window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: w.sessionId } }));
+                                            }}
+                                            onMouseEnter={() => {
+                                                window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: w.sessionId, highlighted: true } }));
+                                            }}
+                                            onMouseLeave={() => {
+                                                window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: w.sessionId, highlighted: false } }));
+                                            }}
+                                            title={stale
+                                                ? t('aiChat.pane.linkedChipTitleStale', { name: label, status: status ?? t('aiChat.pane.statusDisconnected') })
+                                                : t('aiChat.pane.linkedChipTitle', { name: label })}
+                                            aria-label={stale
+                                                ? t('aiChat.pane.linkedChipAriaStale', { name: label, status: status ?? t('aiChat.pane.statusDisconnected') })
+                                                : t('aiChat.pane.linkedChipAria', { name: label })}
+                                        >
+                                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                            </svg>
+                                            <span className="ai-chat-linked-chip-name">
+                                                {label}{stale ? t('aiChat.pane.disconnectedSuffix') : ''}
+                                            </span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="ai-chat-link-unlink"
+                                            title={t('aiChat.pane.linkedChipRemove', { name: label })}
+                                            aria-label={t('aiChat.pane.linkedChipRemove', { name: label })}
+                                            onClick={() => onRemoveLink?.(w.sessionId)}
+                                        >
+                                            {/* broken-chain (link-off) icon */}
+                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                                                <path d="M17 7h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1 0 1.43-.98 2.63-2.31 2.98l1.46 1.46C20.88 15.61 22 13.95 22 12c0-2.76-2.24-5-5-5zm-1 4h-2.19l2 2H16v-2zM2 4.27l3.11 3.11C3.29 8.12 2 9.91 2 12c0 2.76 2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1 0-1.59 1.21-2.9 2.76-3.07L8.73 11H8v2h2.73L13 15.27V17h1.73l4.01 4.01 1.41-1.41L3.41 2.86 2 4.27z" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                            {(addLinkGroups.local.length + addLinkGroups.remote.length) > 0 && (
+                                <div className="ai-chat-link-attach ai-chat-link-add">
+                                    {/* plus icon */}
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <line x1="12" y1="5" x2="12" y2="19" />
+                                        <line x1="5" y1="12" x2="19" y2="12" />
+                                    </svg>
+                                    <span className="ai-chat-link-attach-label">{t('aiChat.pane.addTerminal')}</span>
+                                    <select
+                                        className="ai-chat-link-select"
+                                        value=""
+                                        title={t('aiChat.pane.addTerminal')}
+                                        aria-label={t('aiChat.pane.addTerminal')}
+                                        onMouseDown={() => onRefreshSessions?.()}
+                                        onFocus={() => onRefreshSessions?.()}
+                                        onChange={(e) => { if (e.target.value) onAddLink?.(e.target.value); }}
+                                    >
+                                        <option value="" disabled>{t('aiChat.pane.addTerminal')}</option>
+                                        {addLinkGroups.local.length > 0 && (
+                                            <optgroup label={t('aiChat.pane.linkThisWindow')}>
+                                                {addLinkGroups.local.map((s) => (
+                                                    <option key={s.sessionId} value={s.sessionId}>{s.displayName}</option>
+                                                ))}
+                                            </optgroup>
+                                        )}
+                                        {addLinkGroups.remote.map(([label, list]) => (
+                                            <optgroup key={label} label={t('aiChat.pane.linkOtherWindow', { label })}>
+                                                {list.map((s) => (
+                                                    <option key={s.sessionId} value={s.sessionId}>{s.displayName}</option>
+                                                ))}
+                                            </optgroup>
                                         ))}
-                                    </optgroup>
-                                )}
-                                {linkGroups.remote.map(([label, list]) => (
-                                    <optgroup key={label} label={t('aiChat.pane.linkOtherWindow', { label })}>
-                                        {list.map((s) => (
-                                            <option key={s.sessionId} value={s.sessionId}>{s.displayName}</option>
-                                        ))}
-                                    </optgroup>
-                                ))}
-                            </select>
+                                    </select>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -1607,7 +1694,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     <AIIcon size={56} provider={activeAiProvider} />
                                 </div>
                                 <h2 className="ai-chat-empty-title">{t('aiChat.pane.emptyTitle')}</h2>
-                                {lastTargetSessionId ? (
+                                {watchedTerminals.length > 0 ? (
                                     <div className="ai-chat-empty-target">
                                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
@@ -1615,9 +1702,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         </svg>
                                         <span>
                                             <Trans
-                                                i18nKey="aiChat.pane.emptyLinkedTo"
-                                                values={{ name: lastTargetSessionTitle || t('aiChat.pane.terminalFallback') }}
-                                                components={[<strong key="name" />]}
+                                                i18nKey="aiChat.pane.emptyWatching"
+                                                values={{ names: watchedNamesLabel || t('aiChat.pane.terminalFallback') }}
+                                                components={[<strong key="names" />]}
                                             />
                                         </span>
                                     </div>
@@ -1707,12 +1794,13 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     {msg.role === 'model' ? (
                                         <MessageContent
                                             content={msg.content}
-                                            onRun={(cmd) => { setConsecutiveAutoExecCount(0); handleRunCommand(cmd); }}
+                                            onRun={(cmd, target) => { setConsecutiveAutoExecCount(0); handleRunCommand(cmd, target); }}
                                             onDecline={(cmd) => handleDeclineCommand(idx, cmd)}
                                             onHoverTarget={handleHoverTarget}
                                             targetTitle={lastTargetSessionTitle}
                                             targetId={lastTargetSessionId}
                                             targetLive={linkedLive}
+                                            resolveBlockTarget={resolveBlockTarget}
                                             autoExecutedCommands={autoExecutedCommands}
                                             declinedCommands={declinedCommands}
                                             scheduledCommands={scheduledCommands}
@@ -1773,6 +1861,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         targetTitle={lastTargetSessionTitle}
                                         targetId={lastTargetSessionId}
                                         targetLive={linkedLive}
+                                        resolveBlockTarget={resolveBlockTarget}
                                     />
                                 </div>
                             </div>

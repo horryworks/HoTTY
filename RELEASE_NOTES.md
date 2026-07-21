@@ -1,5 +1,18 @@
 # Release Notes
 
+## v2.0.12-beta3
+
+One AI Chat conversation can now watch several terminals at once, and AI-suggested commands are routed to the right terminal automatically.
+
+### New Features
+
+- **Watch several terminals in one AI Chat.** An AI Chat tab can now watch multiple terminals at the same time, so the AI reasons across all of them at once — ideal for a problem that spans, say, a web server and a database. Turn on **AI Watch** on a terminal to add it to your active conversation, or use the **+** beside the terminal chips in the AI Chat header to add any open terminal (including one running in another window). Each watched terminal appears as a chip — click it to jump to that terminal, or its **×** to stop watching it; a disconnected terminal greys out and re-links itself automatically when it reconnects. When you send a message, the recent output of every watched terminal is included, labelled per terminal. Start a separate conversation with its own set of terminals using **+ New chat** in the tab strip.
+- **Commands run on the right terminal automatically.** When several terminals are watched and the AI suggests a command, it is routed to the terminal the AI intends — you still confirm before it runs (and see which terminal it will run on), but you never have to choose the destination yourself. Each run still targets exactly one terminal; ask again to act on another. With a single watched terminal, nothing changes.
+
+### Improvements
+
+- **AI Watch now builds one conversation instead of one tab per terminal.** Turning on **AI Watch** on another terminal adds it to the terminals your active chat is already watching, rather than opening a separate tab each time. Use **+ New chat** when you want a fresh, independent conversation.
+
 ## v2.0.12-beta2
 
 Send images to the AI in AI Chat — paste a screenshot, drop an image file, or attach one with the new button.

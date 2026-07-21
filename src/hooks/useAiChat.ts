@@ -3,10 +3,11 @@ import type { PersonaDefinition, ChatImage } from '../types/appTypes';
 import type { SessionRecord } from './useSessionManager';
 import type { FeaturePaneInfo } from '../utils/paneTypes';
 import { STORAGE_KEYS } from '../constants/storage';
-import { buildExecutionRules, languageDirective } from '../constants/aiPrompts';
+import { buildExecutionRules, languageDirective, watchedOutputSection, buildWatchTargetsBlock } from '../constants/aiPrompts';
 import { tauriService } from '../services/tauriService';
 import { sessionBindingKey } from '../utils/sessionBindingKey';
 import { redactSecrets } from '../utils/redaction';
+import { buildAliasEntries } from '../utils/terminalAlias';
 
 // -- Types --
 
@@ -21,24 +22,41 @@ export interface PendingUserMessage {
 }
 
 /**
+ * One terminal watched by a chat tab. `sessionId` is the ephemeral live-session
+ * id (minted anew on every (re)connect); `bindingKey` is the config-derived
+ * identity (see `sessionBindingKey`), stable across disconnect+reconnect, kept so
+ * an orphaned entry can auto-rebind to a reconnected session with the same target.
+ */
+export interface WatchedTerminal {
+  sessionId: string;
+  bindingKey?: string;
+}
+
+/**
  * One conversation tab inside the (singleton) AI Chat pane.
- * Phase 1: each tab has at most one linked terminal session (multi-link is Phase 2).
+ * Phase 2: a tab watches a SET of terminals (`linkedSessions`). Output from all of
+ * them is aggregated into the conversation; each AI-issued command still runs on a
+ * single terminal (declared by the AI via `target=`, else the last-focused one).
  */
 export interface ChatTab {
   id: string;
-  /** Auto-derived from linkedSessionId; updated on link change. */
+  /** Auto-derived from linkedSessions; updated on link change. */
   title: string;
   /** Stable counter used for "Tab N" titles when no link is set. */
   ordinal: number;
-  linkedSessionId?: string;
   /**
-   * Config-derived identity of the linked terminal (see `sessionBindingKey`),
-   * stable across disconnect+reconnect. Set whenever the tab links to a session
-   * and RETAINED when the session is removed so the tab can auto-rebind to a
-   * reconnected session with the same target. Cleared on explicit unlink
-   * (Watch toggle-off).
+   * Terminals this tab watches, in insertion order. Empty = unlinked. Entries for
+   * disconnected terminals are KEPT (greyed in the UI, excluded from new
+   * drains/executes) so the per-entry `bindingKey` can auto-rebind on reconnect;
+   * they are dropped only by explicit user removal (chip ×, Watch toggle-off).
    */
-  linkBindingKey?: string;
+  linkedSessions: WatchedTerminal[];
+  /**
+   * The watched terminal a command falls back to when the AI does not tag its
+   * execute block with `target=` and more than one terminal is watched (the
+   * most-recently added/focused one). Reset when it leaves the set.
+   */
+  lastFocusedWatchId?: string;
   /**
    * FIFO queue of machine-generated messages waiting to be dispatched to the AI
    * (Network-Expert kickoff, terminal-output envelopes, decline / not-connected
@@ -119,7 +137,12 @@ interface UseAiChatReturn {
   /** Remove an entire pane's chat state + free its per-tab backend histories. */
   removeAiChatState: (aiSessionId: string) => void;
   setActiveTab: (aiSessionId: string, tabId: string) => void;
-  setTabLink: (aiSessionId: string, tabId: string, linkedSessionId: string | undefined, opts?: { retainBindingKey?: boolean }) => void;
+  /** Add a terminal to a tab's watched set (and mark it the default execute target). */
+  addTabLink: (aiSessionId: string, tabId: string, sessionId: string) => void;
+  /** Remove a terminal from a tab's watched set (explicit user unlink). */
+  removeTabLink: (aiSessionId: string, tabId: string, sessionId: string) => void;
+  /** Swap a dead entry's session id in place on reconnect (auto-rebind). */
+  rebindTabLink: (aiSessionId: string, tabId: string, bindingKey: string, newSessionId: string) => void;
   sendMessage: (aiSessionId: string, text: string, images?: ChatImage[]) => Promise<void>;
   askAi: (selection: string, question: string, targetSessionId?: string) => Promise<void>;
 }
@@ -129,6 +152,25 @@ interface UseAiChatReturn {
 export function getActiveTab(state: AiChatState | undefined): ChatTab | undefined {
   if (!state) return undefined;
   return state.tabs.find(t => t.id === state.activeTabId);
+}
+
+// -- Watched-terminal selectors (pure; exported for reuse & tests) --
+
+/** The session ids a tab watches, in insertion order. */
+export function tabSessionIds(tab: ChatTab | undefined): string[] {
+  return (tab?.linkedSessions ?? []).map(w => w.sessionId);
+}
+
+/** Whether a tab currently watches `sessionId`. */
+export function tabHasSession(tab: ChatTab | undefined, sessionId: string): boolean {
+  return (tab?.linkedSessions ?? []).some(w => w.sessionId === sessionId);
+}
+
+/** The tab's primary (first) watched session id, or undefined when unlinked.
+ *  Used wherever a single representative link is still needed (title flash,
+ *  Network-Expert device identity, the active-tab "watching" indicator). */
+export function firstLinkedSessionId(tab: ChatTab | undefined): string | undefined {
+  return (tab?.linkedSessions ?? [])[0]?.sessionId;
 }
 
 /**
@@ -146,18 +188,25 @@ export function aiBackendSessionId(paneId: string, tabId?: string | null): strin
 }
 
 /**
- * Build a short title from a tab's linked session. Returns '' when there is no
- * linked/named session so the renderer (TabStrip) can substitute a localized
- * "Tab N" fallback — keeping the ordinal fallback out of this non-i18n module.
+ * Build a short title from a tab's watched terminals. Returns '' when the set is
+ * empty / unnamed so the renderer (TabStrip) can substitute a localized "Tab N"
+ * fallback — keeping the ordinal fallback out of this non-i18n module. With one
+ * terminal it's the (truncated) name; with several it's "<primary> +N".
  */
 function deriveTabTitle(
-  linkedSessionId: string | undefined,
+  linkedSessions: WatchedTerminal[],
   sessions: Map<string, SessionRecord>,
 ): string {
-  if (!linkedSessionId) return '';
-  const name = sessions.get(linkedSessionId)?.displayName;
+  const primaryId = linkedSessions[0]?.sessionId;
+  if (!primaryId) return '';
+  const name = sessions.get(primaryId)?.displayName;
   if (!name) return '';
-  return name.length > 12 ? `${name.slice(0, 11)}…` : name;
+  const extra = linkedSessions.length - 1;
+  const suffix = extra > 0 ? ` +${extra}` : '';
+  // Keep the total compact: budget the name so name+suffix stays ~12 chars.
+  const budget = 12 - suffix.length;
+  const shown = name.length > budget ? `${name.slice(0, Math.max(1, budget - 1))}…` : name;
+  return `${shown}${suffix}`;
 }
 
 function makeTabId(): string {
@@ -181,8 +230,10 @@ export function createDefaultAiChatState(
       ordinal: 1,
       // Empty title => TabStrip renders the localized "Tab N" fallback.
       title: initialTitle ?? '',
-      linkedSessionId: initialLinkSessionId,
-      linkBindingKey: initialLinkSessionId ? initialBindingKey : undefined,
+      linkedSessions: initialLinkSessionId
+        ? [{ sessionId: initialLinkSessionId, bindingKey: initialBindingKey }]
+        : [],
+      lastFocusedWatchId: initialLinkSessionId,
     }],
   };
 }
@@ -353,14 +404,17 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       const existing = prev.get(aiSessionId) ?? createDefaultAiChatState();
       const ordinals = existing.tabs.map(t => t.ordinal);
       const newOrdinal = ordinals.length > 0 ? Math.max(...ordinals) + 1 : 1;
-      const title = deriveTabTitle(initialLinkSessionId, sessionsRef.current);
       const linkedRec = initialLinkSessionId ? sessionsRef.current.get(initialLinkSessionId) : undefined;
+      const linkedSessions: WatchedTerminal[] = initialLinkSessionId
+        ? [{ sessionId: initialLinkSessionId, bindingKey: linkedRec ? sessionBindingKey(linkedRec) : undefined }]
+        : [];
+      const title = deriveTabTitle(linkedSessions, sessionsRef.current);
       const newTab: ChatTab = {
         id: newTabId,
         ordinal: newOrdinal,
         title,
-        linkedSessionId: initialLinkSessionId,
-        linkBindingKey: linkedRec ? sessionBindingKey(linkedRec) : undefined,
+        linkedSessions,
+        lastFocusedWatchId: initialLinkSessionId,
       };
       next.set(aiSessionId, {
         ...existing,
@@ -417,41 +471,82 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     });
   }, []);
 
-  const setTabLink = useCallback((aiSessionId: string, tabId: string, linkedSessionId: string | undefined, opts?: { retainBindingKey?: boolean }) => {
+  // -- Watched-set mutators (replace the single-link setTabLink) --
+
+  /** Reduce a tab's watched set with `mutate`, recomputing its derived title. */
+  const mutateTabLinks = useCallback((
+    aiSessionId: string,
+    tabId: string,
+    mutate: (tab: ChatTab) => ChatTab,
+  ) => {
     setAiChatStates((prev) => {
-      const next = new Map(prev);
       const existing = prev.get(aiSessionId);
       if (!existing) return prev;
+      let changed = false;
       const updatedTabs = existing.tabs.map(t => {
         if (t.id !== tabId) return t;
-        const newTitle = deriveTabTitle(linkedSessionId, sessionsRef.current);
-        // Track a config-derived binding key so the tab can auto-rebind after a
-        // reconnect (which mints a new session id). On link: derive from the
-        // session. On unlink: clear it, UNLESS the caller asks to retain it
-        // (session removed out from under a still-watching tab → keep the key
-        // so a reconnect can re-link automatically).
-        let linkBindingKey = t.linkBindingKey;
-        if (linkedSessionId) {
-          const rec = sessionsRef.current.get(linkedSessionId);
-          if (rec) linkBindingKey = sessionBindingKey(rec);
-        } else if (!opts?.retainBindingKey) {
-          linkBindingKey = undefined;
-        }
-        return { ...t, linkedSessionId, title: newTitle, linkBindingKey };
+        const mutated = mutate(t);
+        if (mutated === t) return t;
+        changed = true;
+        return { ...mutated, title: deriveTabTitle(mutated.linkedSessions, sessionsRef.current) };
       });
+      if (!changed) return prev;
+      const next = new Map(prev);
       next.set(aiSessionId, { ...existing, tabs: updatedTabs });
       return next;
     });
   }, []);
 
+  /** Add a terminal to a tab's watched set (no-op if already present) and mark it
+   *  the last-focused (default execute target). */
+  const addTabLink = useCallback((aiSessionId: string, tabId: string, sessionId: string) => {
+    mutateTabLinks(aiSessionId, tabId, (t) => {
+      const already = t.linkedSessions.some(w => w.sessionId === sessionId);
+      const rec = sessionsRef.current.get(sessionId);
+      const bindingKey = rec ? sessionBindingKey(rec) : undefined;
+      const linkedSessions = already
+        ? t.linkedSessions
+        : [...t.linkedSessions, { sessionId, bindingKey }];
+      return { ...t, linkedSessions, lastFocusedWatchId: sessionId };
+    });
+  }, [mutateTabLinks]);
+
+  /** Remove a terminal from a tab's watched set (explicit user unlink). */
+  const removeTabLink = useCallback((aiSessionId: string, tabId: string, sessionId: string) => {
+    mutateTabLinks(aiSessionId, tabId, (t) => {
+      if (!t.linkedSessions.some(w => w.sessionId === sessionId)) return t;
+      const linkedSessions = t.linkedSessions.filter(w => w.sessionId !== sessionId);
+      const lastFocusedWatchId = t.lastFocusedWatchId === sessionId
+        ? linkedSessions[0]?.sessionId
+        : t.lastFocusedWatchId;
+      return { ...t, linkedSessions, lastFocusedWatchId };
+    });
+  }, [mutateTabLinks]);
+
+  /** Swap a dead entry's ephemeral `sessionId` in place (auto-rebind on reconnect).
+   *  Matches the entry by its stable `bindingKey`; keeps insertion order and the
+   *  conversation intact. Updates `lastFocusedWatchId` if it pointed at the old id. */
+  const rebindTabLink = useCallback((aiSessionId: string, tabId: string, bindingKey: string, newSessionId: string) => {
+    mutateTabLinks(aiSessionId, tabId, (t) => {
+      const idx = t.linkedSessions.findIndex(w => w.bindingKey === bindingKey);
+      if (idx < 0) return t;
+      const oldId = t.linkedSessions[idx].sessionId;
+      if (oldId === newSessionId) return t;
+      const linkedSessions = t.linkedSessions.map((w, i) =>
+        i === idx ? { ...w, sessionId: newSessionId } : w);
+      const lastFocusedWatchId = t.lastFocusedWatchId === oldId ? newSessionId : t.lastFocusedWatchId;
+      return { ...t, linkedSessions, lastFocusedWatchId };
+    });
+  }, [mutateTabLinks]);
+
   const updateAiChatStateRef = useRef(updateAiChatState);
   const updateActiveTabRef = useRef(updateActiveTab);
-  const setTabLinkRef = useRef(setTabLink);
+  const addTabLinkRef = useRef(addTabLink);
   const enqueuePendingMessageRef = useRef(enqueuePendingMessage);
   useEffect(() => {
     updateAiChatStateRef.current = updateAiChatState;
     updateActiveTabRef.current = updateActiveTab;
-    setTabLinkRef.current = setTabLink;
+    addTabLinkRef.current = addTabLink;
     enqueuePendingMessageRef.current = enqueuePendingMessage;
   });
 
@@ -479,8 +574,10 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     if (isAiPane && !targetSessionId) {
       const chatState = aiChatStatesRef.current.get(activeTermId);
       const activeTab = getActiveTab(chatState);
-      if (activeTab?.linkedSessionId) {
-        activeTermId = activeTab.linkedSessionId;
+      // Prefer the active tab's last-focused watched terminal, else its primary.
+      const preferred = activeTab?.lastFocusedWatchId ?? firstLinkedSessionId(activeTab);
+      if (preferred) {
+        activeTermId = preferred;
       }
     }
 
@@ -504,20 +601,34 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     // Gate the first send to a third-party AI provider on the data-sharing consent.
     if (!(await ensureAiConsentRef.current())) return;
 
-    const terminalId = activeTab.linkedSessionId;
+    // Aggregate the watched-terminal scrollback: drain each LIVE watched terminal's
+    // buffer (read-once) and prepend one labeled section per terminal, so the AI
+    // reasons across every terminal this tab watches. Skip stale (disconnected)
+    // and empty buffers. A machine-generated command-output envelope is never
+    // re-wrapped (it already carries its own terminal context).
     let prependedContext = '';
-
-    if (terminalId && !text.startsWith('Terminal Output (Command:')) {
-      const buffer = await takeWatchBufferRef.current(terminalId);
-      if (buffer) {
+    if (!text.startsWith('Terminal Output (Command:')) {
+      const currentSessions = sessionsRef.current;
+      for (const w of activeTab.linkedSessions) {
+        if (currentSessions.get(w.sessionId)?.status !== 'connected') continue;
+        const buffer = await takeWatchBufferRef.current(w.sessionId);
+        if (!buffer) continue;
+        const name = currentSessions.get(w.sessionId)?.displayName || w.sessionId;
         // Redact secrets before this scrollback egresses to the third-party AI.
-        prependedContext = `[Watched Terminal Output (Linked)]\n${redactSecrets(buffer)}\n================\n`;
+        prependedContext += `${watchedOutputSection(name)}\n${redactSecrets(buffer)}\n================\n`;
       }
     }
 
     const finalMessage = prependedContext + text;
     const selectedModel = chatState.selectedModel || 'Unspecified';
-    const systemInstruction = chatState.systemInstruction || 'You are a helpful assistant.';
+    // Append the watched-terminal alias list at send time (per sending tab) so the
+    // AI can route a command via `target=<alias>`. Empty for 0–1 watched terminals,
+    // leaving the single-watch prompt unchanged.
+    const aliasEntries = buildAliasEntries(activeTab.linkedSessions.map((w) => {
+      const rec = sessionsRef.current.get(w.sessionId);
+      return { sessionId: w.sessionId, displayName: rec?.displayName || w.sessionId, status: rec?.status };
+    }));
+    const systemInstruction = (chatState.systemInstruction || 'You are a helpful assistant.') + buildWatchTargetsBlock(aliasEntries);
 
     const prepInfo = `useai-send-prep ${JSON.stringify({
       aiSessionId,
@@ -547,7 +658,8 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     if (activeSession) {
       const buffer = await takeWatchBufferRef.current(activeTermId);
       if (buffer) {
-        prependedContext = `[Watched Terminal Output]\n${redactSecrets(buffer)}\n================\n`;
+        const name = activeSession.displayName || activeTermId;
+        prependedContext = `${watchedOutputSection(name)}\n${redactSecrets(buffer)}\n================\n`;
       }
     }
 
@@ -584,8 +696,10 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       updateAiChatStateRef.current(aiPaneId, existingState);
     } else if (activeSession) {
       const activeTab = getActiveTab(existingState);
-      if (activeTab && activeTab.linkedSessionId !== activeTermId) {
-        setTabLinkRef.current(aiPaneId, activeTab.id, activeTermId);
+      // Ensure the target is watched by the active tab WITHOUT clobbering the other
+      // terminals it already watches (Ask AI adds, never replaces).
+      if (activeTab && !tabHasSession(activeTab, activeTermId)) {
+        addTabLinkRef.current(aiPaneId, activeTab.id, activeTermId);
       }
     }
 
@@ -614,7 +728,9 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     closeTab,
     removeAiChatState,
     setActiveTab,
-    setTabLink,
+    addTabLink,
+    removeTabLink,
+    rebindTabLink,
     sendMessage,
     askAi,
   };

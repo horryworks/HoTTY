@@ -14,6 +14,8 @@ import type { SessionRecord } from './useSessionManager';
 import {
   getActiveTab,
   createDefaultAiChatState,
+  tabHasSession,
+  firstLinkedSessionId,
   type AiChatState,
   type ChatTab,
 } from './useAiChat';
@@ -24,7 +26,7 @@ import { parseLeadingSleep, clampDelay, syntheticDelayMessage, type SleepDelayPa
 import { sessionBindingKey } from '../utils/sessionBindingKey';
 import { redactSecrets } from '../utils/redaction';
 import { selectAutoRebinds, type RebindSession, type RebindOrphanTab } from '../utils/autoRebind';
-import { decideWatchRouting } from '../utils/watchRouting';
+import { decideWatchToggle } from '../utils/watchRouting';
 import { notConnectedNote } from '../components/AIChatPane/terminalOutputUtils';
 import { IS_TAURI } from '../utils/windowLabel';
 
@@ -59,7 +61,9 @@ export interface OrchestratorAiChatApi {
   addTab: (aiSessionId: string, initialLinkSessionId?: string) => string;
   closeTab: (aiSessionId: string, tabId: string) => void;
   setActiveTab: (aiSessionId: string, tabId: string) => void;
-  setTabLink: (aiSessionId: string, tabId: string, linkedSessionId: string | undefined, opts?: { retainBindingKey?: boolean }) => void;
+  addTabLink: (aiSessionId: string, tabId: string, sessionId: string) => void;
+  removeTabLink: (aiSessionId: string, tabId: string, sessionId: string) => void;
+  rebindTabLink: (aiSessionId: string, tabId: string, bindingKey: string, newSessionId: string) => void;
 }
 
 export interface UseAiOrchestratorOptions {
@@ -188,8 +192,11 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
   // scheduled by an earlier render.
   const createAiChatPaneRef = useRef(createAiChatPane);
   const aiChatStatesRef = useRef(aiChatStates);
-  const setTabLinkRef = useRef(aiChat.setTabLink);
+  const addTabLinkRef = useRef(aiChat.addTabLink);
+  const removeTabLinkRef = useRef(aiChat.removeTabLink);
+  const rebindTabLinkRef = useRef(aiChat.rebindTabLink);
   const updateAiChatStateRef = useRef(aiChat.updateAiChatState);
+  const updateTabByIdRef = useRef(aiChat.updateTabById);
   const addTabRef = useRef(aiChat.addTab);
   const setActiveTabRef = useRef(aiChat.setActiveTab);
   const closeTabRef = useRef(aiChat.closeTab);
@@ -199,37 +206,26 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
   useEffect(() => {
     createAiChatPaneRef.current = createAiChatPane;
     aiChatStatesRef.current = aiChatStates;
-    setTabLinkRef.current = aiChat.setTabLink;
+    addTabLinkRef.current = aiChat.addTabLink;
+    removeTabLinkRef.current = aiChat.removeTabLink;
+    rebindTabLinkRef.current = aiChat.rebindTabLink;
     updateAiChatStateRef.current = aiChat.updateAiChatState;
+    updateTabByIdRef.current = aiChat.updateTabById;
     addTabRef.current = aiChat.addTab;
     setActiveTabRef.current = aiChat.setActiveTab;
     closeTabRef.current = aiChat.closeTab;
   });
 
-  // Close (or unlink, if last) any AI Chat tabs linked to this session across
-  // all AI panes. Used by both the auto-close (handleSessionRemoved) and the
-  // manual-close (App's handleCloseTab) paths so the two stay in sync.
+  // Keep-stale on session removal (Phase 2): a watched terminal that goes away is
+  // NOT dropped from any tab's watched set. Its entry is retained (greyed in the
+  // UI, excluded from new drains/executes) so the per-entry binding key can
+  // auto-rebind when a session to the same target reconnects, and the tab's
+  // conversation is preserved. Explicit removal (chip ×, Watch toggle-off) is the
+  // only path that drops an entry. Kept as a named no-op so App's manual-close
+  // wiring and handleSessionRemoved stay stable.
   const removeAiChatTabsForSession = useCallback((sessionId: string) => {
-    const states = aiChatStatesRef.current;
-    if (!states) return;
-    for (const [aiPaneId, st] of states.entries()) {
-      const linkedTabs = st.tabs.filter((t) => t.linkedSessionId === sessionId);
-      if (linkedTabs.length === 0) continue;
-      // Track the pane's tab count as we go (the state snapshot is stale after the
-      // first close). Close each linked tab while the pane will still have another
-      // tab left; UNLINK the one that would otherwise be the last (keeps the pane
-      // usable and — with retainBindingKey — auto-rebindable on reconnect). Deciding
-      // from the stale snapshot length wrongly closed+wiped the survivor's history.
-      let remaining = st.tabs.length;
-      for (const tab of linkedTabs) {
-        if (remaining > 1) {
-          closeTabRef.current?.(aiPaneId, tab.id);
-          remaining--;
-        } else {
-          setTabLinkRef.current?.(aiPaneId, tab.id, undefined, { retainBindingKey: true });
-        }
-      }
-    }
+    // Keep-stale: intentionally does not mutate tab state (see rationale above).
+    void sessionId;
   }, []);
 
   const handleSessionRemoved = useCallback((id: string) => {
@@ -251,12 +247,19 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
   // Reads aiChatStates via ref so this only fires on terminal selection change,
   // not on every chat-state mutation.
   useEffect(() => {
-    if (!lastTerminalSessionId) return;
+    const sid = lastTerminalSessionId;
+    if (!sid) return;
     const states = aiChatStatesRef.current;
     if (!states) return;
     for (const [aiPaneId, state] of states.entries()) {
-      const matchingTab = state.tabs.find(t => t.linkedSessionId === lastTerminalSessionId);
-      if (matchingTab && matchingTab.id !== state.activeTabId) {
+      const matchingTab: ChatTab | undefined = state.tabs.find((t: ChatTab) => tabHasSession(t, sid));
+      if (!matchingTab) continue;
+      // Focusing a watched terminal makes it that tab's default execute target
+      // (used when the AI omits target= and several terminals are watched).
+      if (matchingTab.lastFocusedWatchId !== sid) {
+        updateTabByIdRef.current?.(aiPaneId, matchingTab.id, { lastFocusedWatchId: sid });
+      }
+      if (matchingTab.id !== state.activeTabId) {
         setActiveTabRef.current?.(aiPaneId, matchingTab.id);
       }
     }
@@ -275,11 +278,11 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     const allLinked = new Set<string>();
     for (const state of aiChatStates.values()) {
       for (const tab of state.tabs) {
-        if (tab.linkedSessionId) allLinked.add(tab.linkedSessionId);
+        for (const w of tab.linkedSessions) allLinked.add(w.sessionId);
       }
-      const activeTab = getActiveTab(state);
-      if (activeTab?.linkedSessionId && activeDerived === null) {
-        activeDerived = activeTab.linkedSessionId;
+      const activePrimary = firstLinkedSessionId(getActiveTab(state));
+      if (activePrimary && activeDerived === null) {
+        activeDerived = activePrimary;
       }
     }
     // Toggle backend capture for sessions that became (un)linked. Only the diff
@@ -321,13 +324,21 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     }
     if (connected.length === 0) return;
 
+    const connectedIds = new Set(connected.map((s) => s.id));
     const states = aiChatStatesRef.current;
     const linkedIds = new Set<string>();
+    // A tab may hold several watched terminals; each DEAD entry (its session id is
+    // no longer connected) that still carries a binding key is an orphan awaiting
+    // reconnect. Live entries are excluded as rebind targets to avoid double-links.
     const orphanTabs: RebindOrphanTab[] = [];
     for (const [paneId, st] of states.entries()) {
       for (const tab of st.tabs) {
-        if (tab.linkedSessionId) linkedIds.add(tab.linkedSessionId);
-        else if (tab.linkBindingKey) orphanTabs.push({ paneId, tabId: tab.id, key: tab.linkBindingKey });
+        for (const w of tab.linkedSessions) {
+          linkedIds.add(w.sessionId);
+          if (!connectedIds.has(w.sessionId) && w.bindingKey) {
+            orphanTabs.push({ paneId, tabId: tab.id, key: w.bindingKey });
+          }
+        }
       }
     }
     if (orphanTabs.length === 0) return;
@@ -338,7 +349,9 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     for (const r of rebinds) {
       // setWatching(true) in the derived-links effect gives the rebound session a
       // fresh buffer; don't clear here (would race an in-flight command's output).
-      setTabLinkRef.current?.(r.paneId, r.tabId, r.sessionId);
+      const key = connected.find((s) => s.id === r.sessionId)?.key;
+      if (!key) continue;
+      rebindTabLinkRef.current?.(r.paneId, r.tabId, key, r.sessionId);
       aiExecLog('info', 'auto-rebind', { paneId: r.paneId, tabId: r.tabId, sessionId: r.sessionId });
     }
   }, [sessions]);
@@ -370,14 +383,10 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     return () => { unlisten?.(); };
   }, []);
 
-  // "AI Monitor" toggle for the singleton AI Chat pane. Smart tab routing:
-  //   1. Some tab is already linked to this session
-  //        - that tab is active        → unlink it (toggle off)
-  //        - that tab is not active    → switch to it
-  //   2. Active tab has no link        → link it to this session (in-place)
-  //   3. Active tab has a different link → create a new tab linked to this session
-  // This way, AI Monitor on multiple terminals naturally produces one tab per
-  // terminal without overwriting existing links.
+  // "AI Watch" toggle for the singleton AI Chat pane (Phase 2). Adds the terminal
+  // to the ACTIVE tab's watched set, or removes it if already watched — so a chat
+  // can watch several terminals at once. A separate conversation is still a
+  // separate TAB (tab-strip "+"); this toggle never spawns one.
   const runToggleWatch = useCallback((sessionId: string) => {
     const aiPaneId = createAiChatPaneRef.current?.();
     if (!aiPaneId) return;
@@ -390,36 +399,20 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     };
 
     const state = aiChatStatesRef.current.get(aiPaneId);
-    const session = sessions.get(sessionId);
-
-    // Cold start: no state yet → seed with default tab linked to this session.
-    if (!state) {
-      const seed = createDefaultAiChatState(sessionId, session?.displayName);
-      updateAiChatStateRef.current?.(aiPaneId, seed);
-      focusPane();
-      return;
-    }
-
-    // Route the watched session onto a tab. A link to a session that is gone or
-    // not connected (e.g. the watched SSH dropped) is treated like "no link", so
-    // the active tab relinks in place instead of spawning a confusing second tab
-    // still pointed at the dead session (see decideWatchRouting).
-    const isLive = (id: string) => sessions.get(id)?.status === 'connected';
-    const routing = decideWatchRouting(sessionId, state.tabs, state.activeTabId, isLive);
-    switch (routing.action) {
-      case 'unlink':
-        setTabLinkRef.current?.(aiPaneId, routing.tabId, undefined);
-        focusPane();
-        return;
-      case 'switch':
-        setActiveTabRef.current?.(aiPaneId, routing.tabId);
-        focusPane();
-        return;
-      case 'relink':
-        setTabLinkRef.current?.(aiPaneId, routing.tabId, sessionId);
+    const toggle = decideWatchToggle(sessionId, getActiveTab(state));
+    switch (toggle.action) {
+      case 'create': {
+        // Cold start: no state yet → seed a default tab watching this session.
+        const session = sessions.get(sessionId);
+        const seed = createDefaultAiChatState(sessionId, session?.displayName);
+        updateAiChatStateRef.current?.(aiPaneId, seed);
         break;
-      case 'new-tab':
-        addTabRef.current?.(aiPaneId, sessionId);
+      }
+      case 'add':
+        addTabLinkRef.current?.(aiPaneId, toggle.tabId, sessionId);
+        break;
+      case 'remove':
+        removeTabLinkRef.current?.(aiPaneId, toggle.tabId, sessionId);
         break;
     }
     // NOTE: don't clear the backend buffer here — a fresh buffer for a newly

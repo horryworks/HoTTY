@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 
-// 2.7b② rethink: the header link control is state-dependent — a LINKED tab shows
-// the chip + an explicit unlink button; an UNLINKED tab shows a "Link a terminal"
-// picker so a "+"-opened blank tab can be attached. There is no re-link dropdown
-// on a linked tab (no silent mid-conversation context switch).
+// Phase 2: the header shows a ROW of watched-terminal chips (each with a remove ×)
+// followed by a "+" picker that watches ANOTHER terminal, excluding those already
+// watched. Adding calls onAddLink(id); removing a chip calls onRemoveLink(id).
 const h = vi.hoisted(() => ({
     settings: {
         activeAiProvider: 'gemini',
@@ -70,53 +69,58 @@ describe('AIChatPane link control (state-dependent)', () => {
         act(() => useAiAuthStore.setState({ isAuthenticated: false, isAuthLoading: false, authError: null }));
     });
 
-    it('a LINKED tab shows the chip + an unlink button; unlink calls onLinkSession(undefined)', async () => {
-        const onLinkSession = vi.fn();
+    it('renders a chip per watched terminal; the chip × calls onRemoveLink(id)', async () => {
+        const onRemoveLink = vi.fn();
         render(makePane({
             chatState: {
                 selectedModel: 'gemini-pro',
                 systemInstruction: 'x',
                 activeTabId: 't1',
-                tabs: [{ id: 't1', title: 'Local USG', ordinal: 1, linkedSessionId: 'sess-1' }],
+                tabs: [{ id: 't1', title: 'Local USG', ordinal: 1, linkedSessions: [{ sessionId: 'sess-1' }] }],
             },
-            onLinkSession,
+            onRemoveLink,
         }));
         await act(async () => { useAiAuthStore.setState({ isAuthenticated: true }); });
 
-        // Chip present with the terminal name.
-        const chip = document.querySelector('.ai-chat-linked-chip');
-        expect(chip?.textContent).toContain('Local USG');
-        // No "Link a terminal" picker on a linked tab.
-        expect(screen.queryByRole('combobox', { name: 'Link a terminal' })).toBeNull();
+        // One chip with the terminal name.
+        const chips = document.querySelectorAll('.ai-chat-linked-chip');
+        expect(chips.length).toBe(1);
+        expect(chips[0].textContent).toContain('Local USG');
+        // No "+" picker: no OTHER sessions to add (linkableSessions omitted).
+        expect(screen.queryByRole('combobox', { name: 'Watch a terminal' })).toBeNull();
 
-        // Unlink detaches via onLinkSession(undefined).
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Unlink terminal' })); });
-        expect(onLinkSession).toHaveBeenCalledWith(undefined);
+        // Removing the chip detaches via onRemoveLink(id).
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop watching Local USG' })); });
+        expect(onRemoveLink).toHaveBeenCalledWith('sess-1');
     });
 
-    it('an UNLINKED tab shows the "Link a terminal" picker; choosing a session links it', async () => {
-        const onLinkSession = vi.fn();
+    it('shows the "+" picker (excluding watched); choosing a session calls onAddLink(id)', async () => {
+        const onAddLink = vi.fn();
         render(makePane({
             chatState: {
                 selectedModel: 'gemini-pro',
                 systemInstruction: 'x',
                 activeTabId: 't1',
-                tabs: [{ id: 't1', title: 'Tab 1', ordinal: 1 }], // no linkedSessionId → unlinked
+                // Already watching sess-1; the picker must exclude it and offer sess-2.
+                tabs: [{ id: 't1', title: 'Local USG', ordinal: 1, linkedSessions: [{ sessionId: 'sess-1' }] }],
             },
             linkableSessions: [
                 { sessionId: 'sess-1', displayName: 'Local USG', ownerLabel: 'This window', isLocal: true, status: 'connected' },
+                { sessionId: 'sess-2', displayName: 'Core SW', ownerLabel: 'This window', isLocal: true, status: 'connected' },
             ],
-            onLinkSession,
+            onAddLink,
         }));
         await act(async () => { useAiAuthStore.setState({ isAuthenticated: true }); });
 
-        // No chip (nothing linked); the attach picker is shown instead.
-        expect(document.querySelector('.ai-chat-linked-chip')).toBeNull();
-        const picker = screen.getByRole('combobox', { name: 'Link a terminal' });
+        const picker = screen.getByRole('combobox', { name: 'Watch a terminal' }) as HTMLSelectElement;
         expect(picker).toBeTruthy();
+        // The already-watched sess-1 is excluded; only sess-2 is offered.
+        const values = Array.from(picker.querySelectorAll('option')).map((o) => (o as HTMLOptionElement).value);
+        expect(values).toContain('sess-2');
+        expect(values).not.toContain('sess-1');
 
-        await act(async () => { fireEvent.change(picker, { target: { value: 'sess-1' } }); });
-        expect(onLinkSession).toHaveBeenCalledWith('sess-1');
+        await act(async () => { fireEvent.change(picker, { target: { value: 'sess-2' } }); });
+        expect(onAddLink).toHaveBeenCalledWith('sess-2');
     });
 });
 

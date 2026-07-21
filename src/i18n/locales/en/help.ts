@@ -215,7 +215,7 @@ export const help = {
     aiChatIntro:
       'Click <0><1></1></0> (Features) in the tab bar → <2>"AI Chat"</2> to open the AI Chat pane. Inside it, the tab strip at the top lets you keep multiple parallel conversations — use <3>+ New chat</3> to start a fresh tab. Type your question and press <4>Ctrl + Enter</4> to send.',
     linkedTerminal:
-      '<0>Linked terminal:</0> When you start AI Monitor on a terminal, the AI Chat pane links a tab to that terminal automatically — toggling AI Monitor on additional terminals creates a new tab per terminal so output streams stay separated. The currently linked terminal is shown as a chip next to the input. Clicking a tab also briefly highlights its linked terminal pane so you can see which session it belongs to at a glance.',
+      '<0>Watched terminals:</0> Starting AI Watch on a terminal adds it to your active AI Chat tab — toggle it on several terminals and one conversation watches them all at once. Each watched terminal appears as a chip next to the input; click a chip to jump to that terminal, its × to stop watching it, or the + beside the chips to add another (a disconnected terminal greys out and re-links automatically when it reconnects). When several terminals are watched, the AI routes each command to the right one; otherwise it runs on the terminal you used most recently. Use + New chat in the tab strip for a separate conversation with its own set of terminals.',
     streamWatchdog:
       '<0>Stream watchdog:</0> If an AI provider stops sending data mid-response (network drop, hung backend), the in-flight request is automatically cancelled after 3 minutes of silence and an error message appears in the chat — no more stuck "streaming" states.',
     attachImages:

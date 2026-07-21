@@ -44,6 +44,8 @@ export const aiChat = {
     linkNone: '연결 안 됨',
     linkTerminal: '터미널 연결',
     unlinkTitle: '터미널 연결 해제',
+    addTerminal: '터미널 감시 추가',
+    linkedChipRemove: '{{name}} 감시 중지',
     linkThisWindow: '이 창',
     linkOtherWindow: '창: {{label}}',
     linkedChipTitleStale: '{{name}}에 대한 링크가 {{status}}입니다. 터미널을 다시 연결하고 Watch를 눌러 다시 링크하세요.',
@@ -62,6 +64,7 @@ export const aiChat = {
     // Empty state
     emptyTitle: '무엇을 도와드릴까요?',
     emptyLinkedTo: '<0>{{name}}</0>에 연결됨',
+    emptyWatching: '<0>{{names}}</0> 감시 중',
     emptyNoTerminal: '아직 연결된 터미널이 없습니다 — 명령 실행을 사용하려면 세션을 여세요',
     suggestionOutputMeaning: '이 터미널 출력은 무슨 의미인가요?',
     suggestionFindIssues: '최근 출력에서 문제를 찾아주세요',

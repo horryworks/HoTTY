@@ -27,6 +27,32 @@
     min-width: 0;
 }
 
+/* Phase 2: a single-line row of watched-terminal chips followed by the "+" add
+   picker. Scrolls horizontally within the fixed-height header when many terminals
+   are watched, so the 48px header stays intact (the terminal remains the star). */
+.ai-chat-link-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 0 1 auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.ai-chat-link-row > * {
+    flex-shrink: 0;
+}
+
+.ai-chat-link-row::-webkit-scrollbar {
+    height: 4px;
+}
+
+.ai-chat-link-row::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 2px;
+}
+
 .ai-chat-logo {
     display: flex;
     align-items: center;
@@ -199,6 +225,11 @@
 .ai-chat-link-attach:hover {
     color: var(--accent-color);
     border-color: var(--accent-color);
+}
+
+/* Compact "+" add affordance sitting after the watched-terminal chips. */
+.ai-chat-link-add {
+    max-width: 160px;
 }
 
 .ai-chat-link-attach-label {

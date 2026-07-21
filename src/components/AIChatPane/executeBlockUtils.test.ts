@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { segmentMessageContent, extractExecuteCommands, type ContentPart } from './executeBlockUtils';
+import { segmentMessageContent, extractExecuteCommands, extractExecuteBlocks, type ContentPart } from './executeBlockUtils';
 
 // Triple-backtick fence, kept in a constant to avoid backtick juggling in test strings.
 const F = '```';
@@ -87,6 +87,57 @@ describe('segmentMessageContent', () => {
                 expect(parts.every((p) => p.kind === 'markdown')).toBe(true);
             }
         });
+    });
+});
+
+describe('target= routing (Phase 2 multi-watch)', () => {
+    it('parses target=<alias> off the fence info line and keeps it OUT of the command', () => {
+        const content = `${F}execute target=web-01\ntail -f /var/log/app.log\n${F}`;
+        const exec = segmentMessageContent(content).find((p) => p.kind === 'execute') as
+            Extract<ContentPart, { kind: 'execute' }>;
+        expect(exec).toBeDefined();
+        expect(exec.command).toBe('tail -f /var/log/app.log'); // classifier & PTY see the bare command
+        expect(exec.target).toBe('web-01');
+    });
+
+    it('parses target= from the inline-execute fallback (empty language tag)', () => {
+        const content = `${F}\nexecute target=db-02\nSELECT 1;\n${F}`;
+        const exec = segmentMessageContent(content).find((p) => p.kind === 'execute') as
+            Extract<ContentPart, { kind: 'execute' }>;
+        expect(exec.command).toBe('SELECT 1;');
+        expect(exec.target).toBe('db-02');
+    });
+
+    it('leaves target undefined when the fence has no target= attribute', () => {
+        const content = `${F}execute\nuptime\n${F}`;
+        const exec = segmentMessageContent(content).find((p) => p.kind === 'execute') as
+            Extract<ContentPart, { kind: 'execute' }>;
+        expect(exec.command).toBe('uptime');
+        expect(exec.target).toBeUndefined();
+    });
+
+    it('carries target= through a streaming (unclosed) execute-pending block', () => {
+        const content = `${F}execute target=web-01\ntail -f log`;
+        const pending = segmentMessageContent(content).find((p) => p.kind === 'execute-pending') as
+            Extract<ContentPart, { kind: 'execute-pending' }>;
+        expect(pending).toBeDefined();
+        expect(pending.command).toBe('tail -f log');
+        expect(pending.target).toBe('web-01');
+    });
+});
+
+describe('extractExecuteBlocks', () => {
+    it('returns each completed block with its command and optional target', () => {
+        const content = `${F}execute target=web-01\nls\n${F}\n\n${F}execute\npwd\n${F}`;
+        expect(extractExecuteBlocks(content)).toEqual([
+            { command: 'ls', target: 'web-01' },
+            { command: 'pwd', target: undefined },
+        ]);
+    });
+
+    it('excludes pending (unclosed) blocks', () => {
+        const content = `${F}execute target=a\nls\n${F}\n\n${F}execute target=b\npwd`;
+        expect(extractExecuteBlocks(content)).toEqual([{ command: 'ls', target: 'a' }]);
     });
 });
 

@@ -108,7 +108,7 @@ const baseProps = {
         selectedModel: 'gemini-pro',
         systemInstruction: 'You are a helpful assistant.',
         activeTabId: 't1',
-        tabs: [{ id: 't1', title: 'Local USG', ordinal: 1, linkedSessionId: 'sess-1' }],
+        tabs: [{ id: 't1', title: 'Local USG', ordinal: 1, linkedSessions: [{ sessionId: 'sess-1' }] }],
     },
     sessions: new Map([['sess-1', { id: 'sess-1', displayName: 'Local USG', status: 'connected' }]]),
     onEnqueuePending: h.onEnqueuePending,
@@ -178,6 +178,50 @@ describe('AIChatPane auto-execute after New chat', () => {
         await sendAndComplete('check quic again');
         expect(h.onRunCommand).toHaveBeenCalledTimes(2);
         expect(h.onRunCommand).toHaveBeenLastCalledWith('sess-1', 'display version', 't1');
+    });
+});
+
+describe('AIChatPane auto-execute target= routing (multi-watch)', () => {
+    const twoSessions = () => new Map([
+        ['sess-1', { id: 'sess-1', displayName: 'Device A', status: 'connected' }],
+        ['sess-2', { id: 'sess-2', displayName: 'Device B', status: 'connected' }],
+    ]);
+    beforeEach(() => {
+        h.onRunCommand.mockClear();
+        h.onAiChatResponseCb.current = null;
+        localStorage.clear();
+    });
+
+    it('routes an AI-declared target=<alias> command to the NAMED watched terminal', async () => {
+        renderPane({
+            onRunCommand: h.onRunCommand,
+            sessions: twoSessions(),
+            chatState: {
+                ...baseProps.chatState,
+                tabs: [{ id: 't1', title: 'Device A +1', ordinal: 1, linkedSessions: [{ sessionId: 'sess-1' }, { sessionId: 'sess-2' }] }],
+            },
+        });
+        await authenticate();
+
+        // The model targets Device B (alias 'device-b') with a safe command.
+        await sendAndComplete('check b', 'On it.\n\n```execute target=device-b\nshow clock\n```');
+        expect(h.onRunCommand).toHaveBeenCalledTimes(1);
+        expect(h.onRunCommand).toHaveBeenLastCalledWith('sess-2', 'show clock', 't1');
+    });
+
+    it('falls back to the last-focused watched terminal when target= is omitted', async () => {
+        renderPane({
+            onRunCommand: h.onRunCommand,
+            sessions: twoSessions(),
+            chatState: {
+                ...baseProps.chatState,
+                tabs: [{ id: 't1', title: 'Device A +1', ordinal: 1, linkedSessions: [{ sessionId: 'sess-1' }, { sessionId: 'sess-2' }], lastFocusedWatchId: 'sess-2' }],
+            },
+        });
+        await authenticate();
+
+        await sendAndComplete('check', 'On it.\n\n```execute\nshow clock\n```');
+        expect(h.onRunCommand).toHaveBeenLastCalledWith('sess-2', 'show clock', 't1');
     });
 });
 
@@ -272,7 +316,7 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
         ]);
         const stateA = {
             ...baseProps.chatState,
-            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessionId: 'sess-1', linkBindingKey: 'ssh:@dev-a:22' }],
+            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessions: [{ sessionId: 'sess-1', bindingKey: 'ssh:@dev-a:22' }] }],
         };
         const { rerender } = render(makePane({
             aiPersonas: networkExpertPersonas,
@@ -286,7 +330,7 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
         // Re-link the active tab to a different device (different binding key).
         const stateB = {
             ...baseProps.chatState,
-            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessionId: 'sess-2', title: 'Device B', linkBindingKey: 'ssh:@dev-b:22' }],
+            tabs: [{ ...baseProps.chatState.tabs[0], title: 'Device B', linkedSessions: [{ sessionId: 'sess-2', bindingKey: 'ssh:@dev-b:22' }] }],
         };
         await act(async () => {
             rerender(makePane({
@@ -304,7 +348,7 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
     it('does NOT re-prep on reconnect to the SAME device when the conversation is empty', async () => {
         const stateA = {
             ...baseProps.chatState,
-            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessionId: 'sess-1', linkBindingKey: 'ssh:@dev-a:22' }],
+            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessions: [{ sessionId: 'sess-1', bindingKey: 'ssh:@dev-a:22' }] }],
         };
         const { rerender } = render(makePane({
             aiPersonas: networkExpertPersonas,
@@ -320,7 +364,7 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
         // is nothing to preserve and no re-prep should fire.
         const stateReconnected = {
             ...baseProps.chatState,
-            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessionId: 'sess-9', linkBindingKey: 'ssh:@dev-a:22' }],
+            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessions: [{ sessionId: 'sess-9', bindingKey: 'ssh:@dev-a:22' }] }],
         };
         await act(async () => {
             rerender(makePane({
@@ -336,7 +380,7 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
     it('re-disables paging (no New chat) on reconnect to the SAME device mid-conversation', async () => {
         const stateA = {
             ...baseProps.chatState,
-            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessionId: 'sess-1', linkBindingKey: 'ssh:@dev-a:22' }],
+            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessions: [{ sessionId: 'sess-1', bindingKey: 'ssh:@dev-a:22' }] }],
         };
         const { rerender } = render(makePane({
             aiPersonas: networkExpertPersonas,
@@ -353,7 +397,7 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
         // Reconnect: same device (same binding key), new session id.
         const stateReconnected = {
             ...baseProps.chatState,
-            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessionId: 'sess-9', linkBindingKey: 'ssh:@dev-a:22' }],
+            tabs: [{ ...baseProps.chatState.tabs[0], linkedSessions: [{ sessionId: 'sess-9', bindingKey: 'ssh:@dev-a:22' }] }],
         };
         await act(async () => {
             rerender(makePane({
@@ -623,7 +667,7 @@ describe('AIChatPane send while a response is streaming', () => {
             systemInstruction: 'You are a helpful assistant.',
             activeTabId: 't1',
             tabs: [{
-                id: 't1', title: 'Local USG', ordinal: 1, linkedSessionId: 'sess-1',
+                id: 't1', title: 'Local USG', ordinal: 1, linkedSessions: [{ sessionId: 'sess-1' }],
                 pendingUserMessages: [{ text: 'human turn' }],
                 pendingMessages: ['machine turn'],
             }],

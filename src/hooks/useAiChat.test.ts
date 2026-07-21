@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useAiChat, getActiveTab, createDefaultAiChatState, aiBackendSessionId } from './useAiChat';
+import { useAiChat, getActiveTab, createDefaultAiChatState, aiBackendSessionId, tabHasSession, tabSessionIds, firstLinkedSessionId } from './useAiChat';
 import type { SessionRecord } from './useSessionManager';
 import type { FeaturePaneInfo } from '../utils/paneTypes';
 import type { PersonaDefinition } from '../types/appTypes';
@@ -138,7 +138,7 @@ describe('useAiChat', () => {
     expect(state?.tabs.length).toBe(1);
   });
 
-  it('setTabLink updates linked session and refreshes title', () => {
+  it('addTabLink adds a terminal to the watched set and refreshes the title', () => {
     const sessions = new Map<string, SessionRecord>();
     sessions.set('s1', makeSessionRecord('s1', { displayName: 'Router1' }));
 
@@ -148,18 +148,86 @@ describe('useAiChat', () => {
     act(() => {
       result.current.updateAiChatState('ai-1', createDefaultAiChatState());
     });
-
-    const state1 = result.current.aiChatStates.get('ai-1');
-    const tabId = state1!.activeTabId;
+    const tabId = result.current.aiChatStates.get('ai-1')!.activeTabId;
 
     act(() => {
-      result.current.setTabLink('ai-1', tabId, 's1');
+      result.current.addTabLink('ai-1', tabId, 's1');
     });
 
-    const state2 = result.current.aiChatStates.get('ai-1');
-    const tab = state2!.tabs.find(t => t.id === tabId);
-    expect(tab?.linkedSessionId).toBe('s1');
+    const tab = result.current.aiChatStates.get('ai-1')!.tabs.find(t => t.id === tabId);
+    expect(tabSessionIds(tab)).toEqual(['s1']);
     expect(tab?.title).toBe('Router1');
+    expect(tab?.lastFocusedWatchId).toBe('s1');
+  });
+
+  it('addTabLink accumulates several terminals (multi-watch) and dedupes; title shows "+N"', () => {
+    const sessions = new Map<string, SessionRecord>();
+    sessions.set('s1', makeSessionRecord('s1', { displayName: 'Router1' }));
+    sessions.set('s2', makeSessionRecord('s2', { displayName: 'Switch2' }));
+
+    const opts = makeDefaultOptions({ sessions });
+    const { result } = renderHook(() => useAiChat(opts));
+
+    act(() => { result.current.updateAiChatState('ai-1', createDefaultAiChatState()); });
+    const tabId = result.current.aiChatStates.get('ai-1')!.activeTabId;
+
+    act(() => {
+      result.current.addTabLink('ai-1', tabId, 's1');
+      result.current.addTabLink('ai-1', tabId, 's2');
+      result.current.addTabLink('ai-1', tabId, 's1'); // duplicate → no-op
+    });
+
+    const tab = result.current.aiChatStates.get('ai-1')!.tabs.find(t => t.id === tabId);
+    expect(tabSessionIds(tab)).toEqual(['s1', 's2']);
+    expect(tab?.title).toBe('Router1 +1');
+  });
+
+  it('removeTabLink drops one terminal and re-points lastFocusedWatchId', () => {
+    const sessions = new Map<string, SessionRecord>();
+    sessions.set('s1', makeSessionRecord('s1', { displayName: 'Router1' }));
+    sessions.set('s2', makeSessionRecord('s2', { displayName: 'Switch2' }));
+
+    const opts = makeDefaultOptions({ sessions });
+    const { result } = renderHook(() => useAiChat(opts));
+
+    act(() => { result.current.updateAiChatState('ai-1', createDefaultAiChatState()); });
+    const tabId = result.current.aiChatStates.get('ai-1')!.activeTabId;
+
+    act(() => {
+      result.current.addTabLink('ai-1', tabId, 's1');
+      result.current.addTabLink('ai-1', tabId, 's2'); // lastFocused = s2
+    });
+    act(() => {
+      result.current.removeTabLink('ai-1', tabId, 's2');
+    });
+
+    const tab = result.current.aiChatStates.get('ai-1')!.tabs.find(t => t.id === tabId);
+    expect(tabSessionIds(tab)).toEqual(['s1']);
+    expect(tabHasSession(tab, 's2')).toBe(false);
+    // lastFocused pointed at the removed s2 → falls back to the remaining first.
+    expect(tab?.lastFocusedWatchId).toBe('s1');
+  });
+
+  it('rebindTabLink swaps a dead entry\'s session id in place (auto-rebind), keeping order', () => {
+    const sessions = new Map<string, SessionRecord>();
+    sessions.set('s-old', makeSessionRecord('s-old', { displayName: 'Router1' }));
+
+    const opts = makeDefaultOptions({ sessions });
+    const { result } = renderHook(() => useAiChat(opts));
+
+    act(() => { result.current.updateAiChatState('ai-1', createDefaultAiChatState()); });
+    const tabId = result.current.aiChatStates.get('ai-1')!.activeTabId;
+
+    act(() => { result.current.addTabLink('ai-1', tabId, 's-old'); });
+    const key = result.current.aiChatStates.get('ai-1')!.tabs
+      .find(t => t.id === tabId)!.linkedSessions[0].bindingKey!;
+    expect(key).toBeTruthy();
+
+    act(() => { result.current.rebindTabLink('ai-1', tabId, key, 's-new'); });
+
+    const tab = result.current.aiChatStates.get('ai-1')!.tabs.find(t => t.id === tabId);
+    expect(firstLinkedSessionId(tab)).toBe('s-new');
+    expect(tab?.linkedSessions[0].bindingKey).toBe(key);
   });
 
   it('updateTabById updates a non-active tab in place (cross-tab result delivery)', () => {
@@ -444,6 +512,51 @@ describe('useAiChat', () => {
       'Be helpful.',
       undefined,
     );
+  });
+
+  it('sendMessage aggregates watch buffers from EVERY watched terminal, labeled by name, skipping stale/empty', async () => {
+    const { tauriService } = await import('../services/tauriService');
+
+    const sessions = new Map<string, SessionRecord>();
+    sessions.set('s1', makeSessionRecord('s1', { displayName: 'web-01' }));
+    sessions.set('s2', makeSessionRecord('s2', { displayName: 'db-02' }));
+    sessions.set('s3', makeSessionRecord('s3', { displayName: 'edge-03', status: 'disconnected' }));
+
+    // Per-terminal buffers: s1 has output, s2 empty (skipped), s3 stale (not drained).
+    const takeWatchBuffer = vi.fn(async (id: string) => (id === 's1' ? 'web output' : id === 's2' ? '' : 'edge output'));
+
+    const opts = makeDefaultOptions({ sessions, takeWatchBuffer });
+    const { result } = renderHook(() => useAiChat(opts));
+
+    act(() => {
+      result.current.updateAiChatState('ai-1', {
+        ...createDefaultAiChatState('s1', 'web-01'),
+        selectedModel: 'gpt-4o',
+        systemInstruction: 'Be helpful.',
+      });
+    });
+    const tabId = getActiveTab(result.current.aiChatStates.get('ai-1'))!.id;
+    act(() => {
+      result.current.addTabLink('ai-1', tabId, 's2');
+      result.current.addTabLink('ai-1', tabId, 's3');
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('ai-1', 'What happened?');
+    });
+
+    // Live terminals drained; stale s3 skipped entirely.
+    expect(takeWatchBuffer).toHaveBeenCalledWith('s1');
+    expect(takeWatchBuffer).toHaveBeenCalledWith('s2');
+    expect(takeWatchBuffer).not.toHaveBeenCalledWith('s3');
+    const sent = (tauriService.aiChatSend as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+    const finalMessage = sent[1] as string;
+    expect(finalMessage).toContain('[Watched Terminal Output: web-01]');
+    expect(finalMessage).toContain('web output');
+    // s2 had an empty buffer → no section for it; s3 stale → no section.
+    expect(finalMessage).not.toContain('db-02');
+    expect(finalMessage).not.toContain('edge-03');
+    expect(finalMessage).toContain('What happened?');
   });
 
   it('sendMessage aborts without sending when consent is declined', async () => {

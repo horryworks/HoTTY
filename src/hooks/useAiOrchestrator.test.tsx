@@ -25,12 +25,18 @@ const PANE = 'ai-pane-1';
 const TAB = 'tab-1';
 const SID = 'sess-1';
 
-function makeStates(linkedSessionId: string | undefined = SID): Map<string, AiChatState> {
+// Pass `null` for an active tab that watches NOTHING (note: passing `undefined`
+// would trigger the SID default, so the "empty" case must use null explicitly).
+function makeStates(linkedSessionId: string | null = SID): Map<string, AiChatState> {
   return new Map<string, AiChatState>([[PANE, {
     selectedModel: '',
     systemInstruction: 'You are a helpful assistant.',
     activeTabId: TAB,
-    tabs: [{ id: TAB, ordinal: 1, title: '', linkedSessionId }],
+    tabs: [{
+      id: TAB, ordinal: 1, title: '',
+      linkedSessions: linkedSessionId ? [{ sessionId: linkedSessionId }] : [],
+      lastFocusedWatchId: linkedSessionId ?? undefined,
+    }],
   } as unknown as AiChatState]]);
 }
 
@@ -54,7 +60,9 @@ function makeAiChat(states: Map<string, AiChatState>): OrchestratorAiChatApi {
     addTab: vi.fn(),
     closeTab: vi.fn(),
     setActiveTab: vi.fn(),
-    setTabLink: vi.fn(),
+    addTabLink: vi.fn(),
+    removeTabLink: vi.fn(),
+    rebindTabLink: vi.fn(),
   } as unknown as OrchestratorAiChatApi;
 }
 
@@ -223,19 +231,44 @@ describe('useAiOrchestrator — watch toggle + session removal', () => {
     expect(aiChat.updateAiChatState).toHaveBeenCalledWith(
       PANE,
       expect.objectContaining({
-        tabs: expect.arrayContaining([expect.objectContaining({ linkedSessionId: SID })]),
+        tabs: expect.arrayContaining([
+          expect.objectContaining({
+            linkedSessions: expect.arrayContaining([expect.objectContaining({ sessionId: SID })]),
+          }),
+        ]),
       }),
     );
   });
 
-  it('handleSessionRemoved unlinks the last linked tab and evicts the watch buffer', () => {
+  it('toggleWatch ADDS the session to the active tab when it is not already watched', async () => {
+    const aiChat = makeAiChat(makeStates(null)); // active tab watches nothing
+    const { result } = renderHook(() => useAiOrchestrator(makeOptions({ aiChat })));
+
+    await act(async () => { result.current.toggleWatch(SID); });
+
+    expect(aiChat.addTabLink).toHaveBeenCalledWith(PANE, TAB, SID);
+    expect(aiChat.removeTabLink).not.toHaveBeenCalled();
+  });
+
+  it('toggleWatch REMOVES the session when the active tab already watches it (toggle off)', async () => {
+    const aiChat = makeAiChat(makeStates(SID)); // active tab already watches SID
+    const { result } = renderHook(() => useAiOrchestrator(makeOptions({ aiChat })));
+
+    await act(async () => { result.current.toggleWatch(SID); });
+
+    expect(aiChat.removeTabLink).toHaveBeenCalledWith(PANE, TAB, SID);
+    expect(aiChat.addTabLink).not.toHaveBeenCalled();
+  });
+
+  it('handleSessionRemoved keeps the watched entry (keep-stale) but evicts the watch buffer', () => {
     const aiChat = makeAiChat(makeStates());
     const { result } = renderHook(() => useAiOrchestrator(makeOptions({ aiChat })));
 
     act(() => { result.current.handleSessionRemoved(SID); });
 
-    // Last remaining tab is UNLINKED (retaining its binding key), not closed.
-    expect(aiChat.setTabLink).toHaveBeenCalledWith(PANE, TAB, undefined, { retainBindingKey: true });
+    // Keep-stale: the tab's watched set is NOT mutated (the entry is retained,
+    // greyed, for auto-rebind on reconnect). Only the backend buffer is dropped.
+    expect(aiChat.removeTabLink).not.toHaveBeenCalled();
     expect(aiChat.closeTab).not.toHaveBeenCalled();
     expect(tv.setWatching).toHaveBeenCalledWith(SID, false, 0);
   });

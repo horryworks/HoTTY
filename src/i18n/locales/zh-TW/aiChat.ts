@@ -42,6 +42,8 @@ export const aiChat = {
     linkNone: '未連結',
     linkTerminal: '關聯終端',
     unlinkTitle: '取消關聯終端',
+    addTerminal: '監視終端機',
+    linkedChipRemove: '停止監視 {{name}}',
     linkThisWindow: '此視窗',
     linkOtherWindow: '視窗：{{label}}',
     linkedChipTitleStale: '與 {{name}} 的連結為 {{status}}。請重新連線終端機並按「監看」以重新連結。',
@@ -60,6 +62,7 @@ export const aiChat = {
     // 空白狀態
     emptyTitle: '需要什麼協助嗎？',
     emptyLinkedTo: '已連結至 <0>{{name}}</0>',
+    emptyWatching: '正在監視 <0>{{names}}</0>',
     emptyNoTerminal: '尚未連結終端機 — 請開啟工作階段以啟用指令執行',
     suggestionOutputMeaning: '這段終端機輸出代表什麼意思？',
     suggestionFindIssues: '找出最近輸出中的任何問題',

@@ -75,7 +75,7 @@ const baseProps = {
         selectedModel: 'gemini-pro',
         systemInstruction: 'You are a helpful assistant.',
         activeTabId: 't1',
-        tabs: [{ id: 't1', title: 'USG', ordinal: 1, linkedSessionId: 'sess-1' }],
+        tabs: [{ id: 't1', title: 'USG', ordinal: 1, linkedSessions: [{ sessionId: 'sess-1' }] }],
     },
     sessions: new Map([['sess-1', { id: 'sess-1', displayName: 'USG', status: 'connected' }]]),
     ensureConsent: vi.fn().mockResolvedValue(true),

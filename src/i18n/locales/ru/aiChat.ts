@@ -45,6 +45,8 @@ export const aiChat = {
     linkNone: 'Не привязано',
     linkTerminal: 'Привязать терминал',
     unlinkTitle: 'Отвязать терминал',
+    addTerminal: 'Наблюдать за терминалом',
+    linkedChipRemove: 'Прекратить наблюдение за {{name}}',
     linkThisWindow: 'Это окно',
     linkOtherWindow: 'Окно: {{label}}',
     linkedChipTitleStale: 'Связь с {{name}}: {{status}}. Переподключите терминал и нажмите «Наблюдать», чтобы восстановить связь.',
@@ -63,6 +65,7 @@ export const aiChat = {
     // Пустое состояние
     emptyTitle: 'Чем я могу помочь?',
     emptyLinkedTo: 'Связано с <0>{{name}}</0>',
+    emptyWatching: 'Наблюдение за <0>{{names}}</0>',
     emptyNoTerminal: 'Терминал ещё не связан — откройте сессию, чтобы включить выполнение команд',
     suggestionOutputMeaning: 'Что означает этот вывод терминала?',
     suggestionFindIssues: 'Найди проблемы в недавнем выводе',

@@ -44,6 +44,8 @@ export const aiChat = {
     linkNone: 'Not linked',
     linkTerminal: 'Link a terminal',
     unlinkTitle: 'Unlink terminal',
+    addTerminal: 'Watch a terminal',
+    linkedChipRemove: 'Stop watching {{name}}',
     linkThisWindow: 'This window',
     linkOtherWindow: 'Window: {{label}}',
     linkedChipTitleStale: 'Link to {{name}} is {{status}}. Reconnect the terminal and press AI Watch to re-link.',
@@ -62,6 +64,7 @@ export const aiChat = {
     // Empty state
     emptyTitle: 'How can I help?',
     emptyLinkedTo: 'Linked to <0>{{name}}</0>',
+    emptyWatching: 'Watching <0>{{names}}</0>',
     emptyNoTerminal: 'No terminal linked yet — open a session to enable command execution',
     suggestionOutputMeaning: 'What does this terminal output mean?',
     suggestionFindIssues: 'Find any issues in the recent output',
