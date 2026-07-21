@@ -548,12 +548,23 @@ impl VertexAIProvider {
             model_path,
         );
 
+        // Each turn's `parts` carries a text part (only when non-empty, so
+        // image-only turns stay valid) plus one `inline_data` part per image.
         let contents: Vec<Value> = history
             .iter()
             .map(|msg| {
+                let mut parts: Vec<Value> = Vec::new();
+                if !msg.content.is_empty() {
+                    parts.push(serde_json::json!({"text": &msg.content}));
+                }
+                for img in &msg.images {
+                    parts.push(serde_json::json!({
+                        "inline_data": {"mime_type": &img.mime_type, "data": &img.data_base64}
+                    }));
+                }
                 serde_json::json!({
                     "role": &msg.role,
-                    "parts": [{"text": &msg.content}]
+                    "parts": parts
                 })
             })
             .collect();
@@ -620,7 +631,9 @@ impl VertexAIProvider {
             model_path,
         );
 
-        // Anthropic uses 'assistant' instead of 'model' for the AI role
+        // Anthropic uses 'assistant' instead of 'model' for the AI role. `content`
+        // stays a plain string for text-only turns (byte-identical to before); only
+        // a user turn with images becomes an array of content blocks.
         let messages: Vec<Value> = history
             .iter()
             .map(|msg| {
@@ -629,7 +642,25 @@ impl VertexAIProvider {
                 } else {
                     &msg.role
                 };
-                serde_json::json!({"role": role, "content": &msg.content})
+                if msg.images.is_empty() {
+                    serde_json::json!({"role": role, "content": &msg.content})
+                } else {
+                    let mut content: Vec<Value> = Vec::new();
+                    if !msg.content.is_empty() {
+                        content.push(serde_json::json!({"type": "text", "text": &msg.content}));
+                    }
+                    for img in &msg.images {
+                        content.push(serde_json::json!({
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": &img.mime_type,
+                                "data": &img.data_base64
+                            }
+                        }));
+                    }
+                    serde_json::json!({"role": role, "content": content})
+                }
             })
             .collect();
 
@@ -1018,6 +1049,7 @@ impl AIProvider for VertexAIProvider {
         message: &str,
         model: &str,
         system_instruction: Option<&str>,
+        images: Vec<crate::services::ai::history::ChatImage>,
         cancel_token: CancellationToken,
     ) -> Result<(), String> {
         if !is_valid_model(model) {
@@ -1062,7 +1094,7 @@ impl AIProvider for VertexAIProvider {
             }
         };
 
-        self.history.push(session_id, "user", message);
+        self.history.push_user(session_id, message, images);
 
         // Use the command-supplied token (registered outside the service lock so
         // Stop can cancel mid-stream); keep a local copy for logout() to cancel.

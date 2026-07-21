@@ -106,6 +106,13 @@ export const aiChat = {
     stop: 'Arrêter',
     resizeInput: 'Redimensionner la zone de saisie',
     copyMessage: 'Copier le message',
+    // Image attachments
+    attachImage: 'Joindre une image',
+    removeImage: 'Supprimer l\'image',
+    imageAlt: 'Image jointe',
+    imageTooLarge: 'Image trop volumineuse (max. 5 Mo)',
+    imageTypeUnsupported: 'Type d\'image non pris en charge (PNG, JPEG, WebP, GIF)',
+    tooManyImages: 'Trop d\'images (max. 5)',
     cancelledSuffix: ' [annulé]',
     errorMessage: 'Erreur : {{message}}',
     streamIdleTimeout: "Le flux d'IA est resté inactif pendant {{seconds}} s — requête annulée",

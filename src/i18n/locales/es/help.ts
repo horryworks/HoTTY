@@ -218,6 +218,8 @@ export const help = {
       '<0>Terminal enlazado:</0> cuando inicia el Monitor de IA en un terminal, el panel de chat de IA enlaza una pestaña a ese terminal automáticamente — al activar el Monitor de IA en terminales adicionales se crea una nueva pestaña por terminal para que los flujos de salida permanezcan separados. El terminal enlazado actualmente se muestra como una etiqueta junto a la entrada. Al hacer clic en una pestaña también se resalta brevemente su panel de terminal enlazado para que pueda ver a qué sesión pertenece de un vistazo.',
     streamWatchdog:
       '<0>Vigilante de transmisión:</0> si un proveedor de IA deja de enviar datos a mitad de una respuesta (caída de red, backend colgado), la solicitud en curso se cancela automáticamente tras 3 minutos de silencio y aparece un mensaje de error en el chat — se acabaron los estados de "transmisión" atascados.',
+    attachImages:
+      '<0>Adjuntar imágenes:</0> Pega una imagen (Ctrl + V), arrastra archivos de imagen al cuadro de mensaje o usa el botón de clip para enviar capturas a la IA. Se admiten PNG, JPEG, WebP y GIF (hasta 5 imágenes, 5 MB cada una). El modelo seleccionado debe admitir imágenes.',
     askAiHeading: 'Preguntar a la IA (clic derecho)',
     askAiBody:
       'Seleccione texto en el terminal (o haga clic en un <0>Marcador de terminal</0> para seleccionar un bloque de salida completo), luego haga clic derecho y escriba su pregunta en el cuadro <1>"Preguntar a la IA"</1> — pulse Enter para enviar. HoTTY abre el chat de IA con su pregunta y el texto seleccionado.',

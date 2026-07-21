@@ -114,6 +114,7 @@ mod tests {
             _message: &str,
             _model: &str,
             _system_instruction: Option<&str>,
+            _images: Vec<crate::services::ai::history::ChatImage>,
             _cancel_token: tokio_util::sync::CancellationToken,
         ) -> Result<(), String> {
             Ok(())

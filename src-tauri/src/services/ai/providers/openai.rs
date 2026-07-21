@@ -202,6 +202,7 @@ impl AIProvider for OpenAIProvider {
         message: &str,
         model: &str,
         system_instruction: Option<&str>,
+        images: Vec<crate::services::ai::history::ChatImage>,
         cancel_token: CancellationToken,
     ) -> Result<(), String> {
         if !is_valid_model(model) {
@@ -234,15 +235,33 @@ impl AIProvider for OpenAIProvider {
         };
 
         // Add user message to history
-        self.history.push(session_id, "user", message);
+        self.history.push_user(session_id, message, images);
 
-        // Build messages array from the current history snapshot
+        // Build messages array from the current history snapshot. `content` stays a
+        // plain string for every text-only turn (byte-identical to before); only a
+        // user turn that actually has images becomes an array of typed content parts.
         let mut messages: Vec<serde_json::Value> = Vec::new();
         if let Some(sys) = system_instruction {
             messages.push(serde_json::json!({"role": "system", "content": sys}));
         }
         for msg in self.history.snapshot(session_id) {
-            messages.push(serde_json::json!({"role": msg.role, "content": msg.content}));
+            if msg.images.is_empty() {
+                messages.push(serde_json::json!({"role": msg.role, "content": msg.content}));
+            } else {
+                let mut content: Vec<serde_json::Value> = Vec::new();
+                if !msg.content.is_empty() {
+                    content.push(serde_json::json!({"type": "text", "text": msg.content}));
+                }
+                for img in &msg.images {
+                    content.push(serde_json::json!({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": format!("data:{};base64,{}", img.mime_type, img.data_base64)
+                        }
+                    }));
+                }
+                messages.push(serde_json::json!({"role": msg.role, "content": content}));
+            }
         }
 
         // Use the command-supplied token (registered outside the service lock so

@@ -106,6 +106,13 @@ export const aiChat = {
     stop: '중지',
     resizeInput: '입력 영역 크기 조절',
     copyMessage: '메시지 복사',
+    // Image attachments
+    attachImage: '이미지 첨부',
+    removeImage: '이미지 제거',
+    imageAlt: '첨부된 이미지',
+    imageTooLarge: '이미지가 너무 큼 (최대 5MB)',
+    imageTypeUnsupported: '지원되지 않는 이미지 형식 (PNG, JPEG, WebP, GIF)',
+    tooManyImages: '이미지가 너무 많음 (최대 5개)',
     cancelledSuffix: ' [취소됨]',
     errorMessage: '오류: {{message}}',
     streamIdleTimeout: 'AI 응답이 {{seconds}}초 동안 멈춰 요청을 취소했습니다',

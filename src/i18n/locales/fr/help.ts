@@ -218,6 +218,8 @@ export const help = {
       '<0>Terminal lié :</0> lorsque vous démarrez la Surveillance IA sur un terminal, le volet de chat IA lie automatiquement un onglet à ce terminal — activer la Surveillance IA sur d\'autres terminaux crée un nouvel onglet par terminal afin que les flux de sortie restent séparés. Le terminal actuellement lié est affiché sous forme de pastille à côté de la zone de saisie. Cliquer sur un onglet met aussi brièvement en surbrillance son volet de terminal lié afin que vous voyiez d\'un coup d\'œil à quelle session il appartient.',
     streamWatchdog:
       '<0>Chien de garde du flux :</0> si un fournisseur d\'IA cesse d\'envoyer des données au milieu d\'une réponse (coupure réseau, backend bloqué), la requête en cours est automatiquement annulée après 3 minutes de silence et un message d\'erreur apparaît dans le chat — finis les états « diffusion » bloqués.',
+    attachImages:
+      '<0>Joindre des images :</0> Collez une image (Ctrl + V), déposez des fichiers image sur la zone de message ou utilisez le bouton trombone pour envoyer des captures à l\'IA. PNG, JPEG, WebP et GIF sont pris en charge (jusqu\'à 5 images, 5 Mo chacune). Le modèle sélectionné doit prendre en charge les images.',
     askAiHeading: 'Demander à l\'IA (clic droit)',
     askAiBody:
       'Sélectionnez du texte dans le terminal (ou cliquez sur un <0>Marqueur de terminal</0> pour sélectionner tout un bloc de sortie), puis faites un clic droit et saisissez votre question dans le champ <1>« Demander à l\'IA »</1> — appuyez sur Entrée pour envoyer. HoTTY ouvre le chat IA avec votre question et le texte sélectionné.',

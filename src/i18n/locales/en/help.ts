@@ -218,6 +218,8 @@ export const help = {
       '<0>Linked terminal:</0> When you start AI Monitor on a terminal, the AI Chat pane links a tab to that terminal automatically — toggling AI Monitor on additional terminals creates a new tab per terminal so output streams stay separated. The currently linked terminal is shown as a chip next to the input. Clicking a tab also briefly highlights its linked terminal pane so you can see which session it belongs to at a glance.',
     streamWatchdog:
       '<0>Stream watchdog:</0> If an AI provider stops sending data mid-response (network drop, hung backend), the in-flight request is automatically cancelled after 3 minutes of silence and an error message appears in the chat — no more stuck "streaming" states.',
+    attachImages:
+      '<0>Attach images:</0> Paste an image (Ctrl + V), drop image files onto the message box, or use the paperclip button to send screenshots to the AI. PNG, JPEG, WebP and GIF are supported (up to 5 images, 5 MB each). The selected model must support image input.',
     askAiHeading: 'Ask AI (Right-Click)',
     askAiBody:
       'Select text in the terminal (or click a <0>Terminal Marker</0> to select a whole output block), then right-click and type your question in the <1>"Ask AI"</1> box — press Enter to send. HoTTY opens the AI chat with your question and the selected text.',

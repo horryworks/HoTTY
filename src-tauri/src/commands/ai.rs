@@ -3,11 +3,13 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
+use crate::services::ai::history::ChatImage;
 use crate::services::ai::{AIService, AuthStatus, CommandVerdict, ModelInfo};
 use crate::services::path_safety::{is_sensitive_path, is_unc_path};
 
@@ -168,6 +170,45 @@ fn validate_message(message: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Max attached images per chat message.
+const MAX_IMAGES_PER_MESSAGE: usize = 5;
+/// Max decoded bytes per image (5 MiB) — the common denominator that stays under
+/// every provider's per-image limit.
+const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
+/// MIME types every target provider (Gemini/Vertex/OpenAI/Anthropic) accepts.
+const ALLOWED_IMAGE_MIME_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+
+/// Validate user-attached images before they enter history / a provider request.
+/// Enforces the count cap, the MIME allow-list, base64 well-formedness, and the
+/// per-image byte cap. The base64 is decoded ONLY to validate (well-formedness +
+/// true size); the decoded bytes are discarded — the original base64 string is
+/// forwarded to providers unchanged.
+fn validate_images(images: &[ChatImage]) -> Result<(), String> {
+    if images.len() > MAX_IMAGES_PER_MESSAGE {
+        return Err(format!(
+            "too many images: {} (maximum {})",
+            images.len(),
+            MAX_IMAGES_PER_MESSAGE
+        ));
+    }
+    for img in images {
+        let mime = img.mime_type.to_ascii_lowercase();
+        if !ALLOWED_IMAGE_MIME_TYPES.contains(&mime.as_str()) {
+            return Err(format!("unsupported image type: {}", img.mime_type));
+        }
+        let decoded = BASE64
+            .decode(img.data_base64.as_bytes())
+            .map_err(|_| "image data is not valid base64".to_string())?;
+        if decoded.len() > MAX_IMAGE_BYTES {
+            return Err(format!(
+                "image exceeds maximum size of {} bytes",
+                MAX_IMAGE_BYTES
+            ));
+        }
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Authentication commands
 // ---------------------------------------------------------------------------
@@ -234,9 +275,17 @@ pub async fn ai_chat_send(
     message: String,
     model: String,
     system_instruction: Option<String>,
+    images: Option<Vec<ChatImage>>,
 ) -> Result<(), String> {
     validate_session_id(&session_id)?;
-    validate_message(&message)?;
+    let images = images.unwrap_or_default();
+    // An image-only send (no text) is allowed; otherwise the text must be valid.
+    if message.is_empty() && !images.is_empty() {
+        // ok: image(s) present, empty message permitted
+    } else {
+        validate_message(&message)?;
+    }
+    validate_images(&images)?;
 
     // Register a cancellation token OUTSIDE the service lock before streaming, so
     // ai_chat_cancel (Stop / watchdog) can interrupt this stream without touching
@@ -272,6 +321,7 @@ pub async fn ai_chat_send(
                 &message,
                 &model,
                 system_instruction.as_deref(),
+                images,
                 cancel_token,
             )
             .await
@@ -479,6 +529,74 @@ mod tests {
     fn validate_command_at_limit() {
         let cmd = "a".repeat(MAX_COMMAND_LENGTH);
         assert!(validate_command(&cmd).is_ok());
+    }
+
+    fn img(mime: &str, bytes: usize) -> ChatImage {
+        ChatImage {
+            mime_type: mime.to_string(),
+            data_base64: BASE64.encode(vec![0u8; bytes]),
+        }
+    }
+
+    #[test]
+    fn validate_images_accepts_allowed_types() {
+        for mime in ["image/png", "image/jpeg", "image/webp", "image/gif"] {
+            assert!(
+                validate_images(&[img(mime, 32)]).is_ok(),
+                "{mime} should pass"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_images_accepts_mixed_case_mime() {
+        assert!(validate_images(&[img("IMAGE/PNG", 16)]).is_ok());
+    }
+
+    #[test]
+    fn validate_images_empty_is_ok() {
+        assert!(validate_images(&[]).is_ok());
+    }
+
+    #[test]
+    fn validate_images_rejects_unsupported_type() {
+        assert!(validate_images(&[img("image/svg+xml", 16)]).is_err());
+        assert!(validate_images(&[img("application/pdf", 16)]).is_err());
+    }
+
+    #[test]
+    fn validate_images_rejects_over_size() {
+        assert!(validate_images(&[img("image/png", MAX_IMAGE_BYTES + 1)]).is_err());
+    }
+
+    #[test]
+    fn validate_images_accepts_at_size_limit() {
+        assert!(validate_images(&[img("image/png", MAX_IMAGE_BYTES)]).is_ok());
+    }
+
+    #[test]
+    fn validate_images_rejects_bad_base64() {
+        let bad = ChatImage {
+            mime_type: "image/png".to_string(),
+            data_base64: "not valid base64!!!".to_string(),
+        };
+        assert!(validate_images(&[bad]).is_err());
+    }
+
+    #[test]
+    fn validate_images_rejects_over_count() {
+        let imgs: Vec<ChatImage> = (0..MAX_IMAGES_PER_MESSAGE + 1)
+            .map(|_| img("image/png", 8))
+            .collect();
+        assert!(validate_images(&imgs).is_err());
+    }
+
+    #[test]
+    fn validate_images_accepts_at_count_limit() {
+        let imgs: Vec<ChatImage> = (0..MAX_IMAGES_PER_MESSAGE)
+            .map(|_| img("image/png", 8))
+            .collect();
+        assert!(validate_images(&imgs).is_ok());
     }
 
     #[tokio::test]

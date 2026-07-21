@@ -697,7 +697,7 @@ function App() {
               onUpdateTabById={(tabId, partial) => updateTabById(featureInfo.id, tabId, partial)}
               onEnqueuePending={(tabId, message) => enqueuePendingMessage(featureInfo.id, tabId, message)}
               onDequeuePending={(tabId) => dequeuePendingMessage(featureInfo.id, tabId)}
-              onEnqueuePendingUser={(tabId, message) => enqueuePendingUserMessage(featureInfo.id, tabId, message)}
+              onEnqueuePendingUser={(tabId, message, images) => enqueuePendingUserMessage(featureInfo.id, tabId, message, images)}
               onDequeuePendingUser={(tabId) => dequeuePendingUserMessage(featureInfo.id, tabId)}
               ensureConsent={consent.ensureAiConsent}
               // The bare "+" opens an UNLINKED tab (general chat); it no longer
@@ -712,7 +712,7 @@ function App() {
               onRunCommand={(targetId, cmd, originatingTabId) =>
                 aiOrch.onRunCommand(targetId, cmd, originatingTabId, featureInfo.id)
               }
-              onSendMessage={(text) => aiSendMessage(featureInfo.id, text)}
+              onSendMessage={(text, images) => aiSendMessage(featureInfo.id, text, images)}
               aiPersonas={aiPersonas}
               terminalBackground={terminalBackground}
               linkableSessions={linkableSessions}

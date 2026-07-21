@@ -80,6 +80,7 @@ impl AIService {
 
     // -- Chat -----------------------------------------------------------------
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn send_message(
         &self,
         app: &AppHandle,
@@ -87,6 +88,7 @@ impl AIService {
         message: &str,
         model: &str,
         system_instruction: Option<&str>,
+        images: Vec<crate::services::ai::history::ChatImage>,
         cancel_token: CancellationToken,
     ) -> Result<(), String> {
         let provider = self
@@ -100,6 +102,7 @@ impl AIService {
                 message,
                 model,
                 system_instruction,
+                images,
                 cancel_token,
             )
             .await
@@ -207,6 +210,7 @@ mod tests {
             _message: &str,
             _model: &str,
             _system_instruction: Option<&str>,
+            _images: Vec<crate::services::ai::history::ChatImage>,
             _cancel_token: tokio_util::sync::CancellationToken,
         ) -> Result<(), String> {
             Ok(())

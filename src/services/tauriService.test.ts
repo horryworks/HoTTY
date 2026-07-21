@@ -574,6 +574,7 @@ describe('tauriService AI commands', () => {
       message: 'hello',
       model: 'gpt-4o',
       systemInstruction: 'Be helpful',
+      images: null,
     });
   });
 
@@ -585,6 +586,32 @@ describe('tauriService AI commands', () => {
       message: 'hello',
       model: 'gpt-4o',
       systemInstruction: null,
+      images: null,
+    });
+  });
+
+  it('aiChatSend forwards images when provided', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    const images = [{ mimeType: 'image/png', dataBase64: 'AAAA' }];
+    await tauriService.aiChatSend('s1', 'look', 'gpt-4o', undefined, images);
+    expect(mockInvoke).toHaveBeenCalledWith('ai_chat_send', {
+      sessionId: 's1',
+      message: 'look',
+      model: 'gpt-4o',
+      systemInstruction: null,
+      images,
+    });
+  });
+
+  it('aiChatSend sends null images for an empty array', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await tauriService.aiChatSend('s1', 'hello', 'gpt-4o', 'Be helpful', []);
+    expect(mockInvoke).toHaveBeenCalledWith('ai_chat_send', {
+      sessionId: 's1',
+      message: 'hello',
+      model: 'gpt-4o',
+      systemInstruction: 'Be helpful',
+      images: null,
     });
   });
 

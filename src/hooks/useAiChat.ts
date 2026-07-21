@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { PersonaDefinition } from '../types/appTypes';
+import type { PersonaDefinition, ChatImage } from '../types/appTypes';
 import type { SessionRecord } from './useSessionManager';
 import type { FeaturePaneInfo } from '../utils/paneTypes';
 import { STORAGE_KEYS } from '../constants/storage';
@@ -9,6 +9,16 @@ import { sessionBindingKey } from '../utils/sessionBindingKey';
 import { redactSecrets } from '../utils/redaction';
 
 // -- Types --
+
+/**
+ * A human-typed message queued while a response was streaming. Carries the text
+ * plus any attached images so a paste-and-send mid-stream isn't downgraded to
+ * text-only when the queue drains.
+ */
+export interface PendingUserMessage {
+  text: string;
+  images?: ChatImage[];
+}
 
 /**
  * One conversation tab inside the (singleton) AI Chat pane.
@@ -45,8 +55,9 @@ export interface ChatTab {
    * reaches the model as its NEXT thinking turn, ahead of machine-generated
    * envelopes (e.g. auto-exec terminal output). FIFO preserves the user's typing
    * order across multiple queued sends. Enqueue via `enqueuePendingUserMessage`.
+   * Each entry carries optional image attachments (see `PendingUserMessage`).
    */
-  pendingUserMessages?: string[];
+  pendingUserMessages?: PendingUserMessage[];
   /**
    * Active client-side sleep delay for an AI-issued command (see App.tsx
    * scheduleSleepDelay). Drives the "⏳ Waiting Ns…" indicator on the matching
@@ -99,8 +110,8 @@ interface UseAiChatReturn {
   enqueuePendingMessage: (aiSessionId: string, tabId: string, message: string) => void;
   /** Drop the first message from a tab's pending-send queue (after dispatch). */
   dequeuePendingMessage: (aiSessionId: string, tabId: string) => void;
-  /** Append a human-typed message to a tab's priority (user) send queue. */
-  enqueuePendingUserMessage: (aiSessionId: string, tabId: string, message: string) => void;
+  /** Append a human-typed message (with optional images) to a tab's priority (user) send queue. */
+  enqueuePendingUserMessage: (aiSessionId: string, tabId: string, message: string, images?: ChatImage[]) => void;
   /** Drop the first message from a tab's priority (user) send queue (after dispatch). */
   dequeuePendingUserMessage: (aiSessionId: string, tabId: string) => void;
   addTab: (aiSessionId: string, initialLinkSessionId?: string) => string;
@@ -109,7 +120,7 @@ interface UseAiChatReturn {
   removeAiChatState: (aiSessionId: string) => void;
   setActiveTab: (aiSessionId: string, tabId: string) => void;
   setTabLink: (aiSessionId: string, tabId: string, linkedSessionId: string | undefined, opts?: { retainBindingKey?: boolean }) => void;
-  sendMessage: (aiSessionId: string, text: string) => Promise<void>;
+  sendMessage: (aiSessionId: string, text: string, images?: ChatImage[]) => Promise<void>;
   askAi: (selection: string, question: string, targetSessionId?: string) => Promise<void>;
 }
 
@@ -294,14 +305,15 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     });
   }, []);
 
-  const enqueuePendingUserMessage = useCallback((aiSessionId: string, tabId: string, message: string) => {
+  const enqueuePendingUserMessage = useCallback((aiSessionId: string, tabId: string, message: string, images?: ChatImage[]) => {
     setAiChatStates((prev) => {
       const next = new Map(prev);
       const existing = prev.get(aiSessionId);
       if (!existing) return prev;
       if (!existing.tabs.find(t => t.id === tabId)) return prev;
+      const entry: PendingUserMessage = images && images.length > 0 ? { text: message, images } : { text: message };
       const updatedTabs = existing.tabs.map(t =>
-        t.id === tabId ? { ...t, pendingUserMessages: [...(t.pendingUserMessages ?? []), message] } : t
+        t.id === tabId ? { ...t, pendingUserMessages: [...(t.pendingUserMessages ?? []), entry] } : t
       );
       next.set(aiSessionId, { ...existing, tabs: updatedTabs });
       return next;
@@ -483,7 +495,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
   }, []);
 
   // -- sendMessage --
-  const sendMessage = useCallback(async (aiSessionId: string, text: string) => {
+  const sendMessage = useCallback(async (aiSessionId: string, text: string, images?: ChatImage[]) => {
     const chatState = aiChatStatesRef.current.get(aiSessionId);
     if (!chatState) return;
     const activeTab = getActiveTab(chatState);
@@ -511,12 +523,13 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       aiSessionId,
       tabId: activeTab.id,
       finalMessageLen: finalMessage.length,
+      imageCount: images?.length ?? 0,
       hasWatchPrefix: prependedContext.length > 0,
     })}`;
     console.debug(`[AIExec/info] ${prepInfo}`);
     tauriService.logDebug('info', 'AIExec', prepInfo)?.catch(() => {});
 
-    tauriService.aiChatSend(aiBackendSessionId(aiSessionId, activeTab.id), finalMessage, selectedModel, systemInstruction);
+    tauriService.aiChatSend(aiBackendSessionId(aiSessionId, activeTab.id), finalMessage, selectedModel, systemInstruction, images);
   }, []);
 
   // -- askAi --

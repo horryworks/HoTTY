@@ -107,6 +107,13 @@ export const aiChat = {
     stop: 'Остановить',
     resizeInput: 'Изменить размер поля ввода',
     copyMessage: 'Копировать сообщение',
+    // Image attachments
+    attachImage: 'Прикрепить изображение',
+    removeImage: 'Удалить изображение',
+    imageAlt: 'Прикреплённое изображение',
+    imageTooLarge: 'Изображение слишком большое (макс. 5 МБ)',
+    imageTypeUnsupported: 'Неподдерживаемый тип изображения (PNG, JPEG, WebP, GIF)',
+    tooManyImages: 'Слишком много изображений (макс. 5)',
     cancelledSuffix: ' [отменено]',
     errorMessage: 'Ошибка: {{message}}',
     streamIdleTimeout: 'Поток ИИ простаивал {{seconds}} с — запрос отменён',

@@ -26,10 +26,13 @@ import { logError } from '../utils/logger';
 import { calcAICost } from '../constants/aiPricing';
 import { aiBackendSessionId } from './useAiChat';
 import { streamTimeoutMessage, STREAM_IDLE_TIMEOUT_MS, STREAM_HARD_CAP_MS } from '../components/AIChatPane/streamWatchdog';
+import type { ChatImage } from '../types/appTypes';
 
 export interface ChatMessage {
     role: 'user' | 'model';
     content: string;
+    /** Image attachments on a user turn (input-only; assistant turns never have them). */
+    images?: ChatImage[];
 }
 
 /** Running token/cost totals for one tab (cost is null until a priced model reports usage). */

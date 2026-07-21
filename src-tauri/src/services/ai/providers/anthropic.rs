@@ -197,6 +197,7 @@ impl AIProvider for AnthropicProvider {
         message: &str,
         model: &str,
         system_instruction: Option<&str>,
+        images: Vec<crate::services::ai::history::ChatImage>,
         cancel_token: CancellationToken,
     ) -> Result<(), String> {
         if !is_valid_model(model) {
@@ -229,14 +230,36 @@ impl AIProvider for AnthropicProvider {
         };
 
         // Add user message to history
-        self.history.push(session_id, "user", message);
+        self.history.push_user(session_id, message, images);
 
-        // Build request body (Anthropic format) from the current history snapshot
+        // Build request body (Anthropic format) from the current history snapshot.
+        // `content` stays a plain string for every text-only turn (byte-identical to
+        // before); only a user turn with images becomes an array of content blocks.
         let messages: Vec<serde_json::Value> = self
             .history
             .snapshot(session_id)
             .into_iter()
-            .map(|msg| serde_json::json!({"role": msg.role, "content": msg.content}))
+            .map(|msg| {
+                if msg.images.is_empty() {
+                    serde_json::json!({"role": msg.role, "content": msg.content})
+                } else {
+                    let mut content: Vec<serde_json::Value> = Vec::new();
+                    if !msg.content.is_empty() {
+                        content.push(serde_json::json!({"type": "text", "text": msg.content}));
+                    }
+                    for img in &msg.images {
+                        content.push(serde_json::json!({
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": img.mime_type,
+                                "data": img.data_base64
+                            }
+                        }));
+                    }
+                    serde_json::json!({"role": msg.role, "content": content})
+                }
+            })
             .collect();
 
         let mut body = serde_json::json!({

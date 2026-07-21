@@ -108,6 +108,13 @@ export const aiChat = {
     stop: 'Stop',
     resizeInput: 'Resize input area',
     copyMessage: 'Copy message',
+    // Image attachments
+    attachImage: 'Attach image',
+    removeImage: 'Remove image',
+    imageAlt: 'Attached image',
+    imageTooLarge: 'Image too large (max 5 MB)',
+    imageTypeUnsupported: 'Unsupported image type (PNG, JPEG, WebP, GIF)',
+    tooManyImages: 'Too many images (max 5)',
     cancelledSuffix: ' [cancelled]',
     errorMessage: 'Error: {{message}}',
     streamIdleTimeout: 'AI stream idle for {{seconds}}s — request cancelled',

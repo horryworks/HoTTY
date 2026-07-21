@@ -610,7 +610,7 @@ describe('AIChatPane send while a response is streaming', () => {
         await act(async () => { fireEvent.change(textarea, { target: { value: 'follow-up' } }); });
         await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
 
-        expect(h.onEnqueuePendingUser).toHaveBeenCalledWith('t1', 'follow-up');
+        expect(h.onEnqueuePendingUser).toHaveBeenCalledWith('t1', 'follow-up', undefined);
         // No second backend send (a same-session send would supersede the live stream).
         expect(tauriService.aiChatSend).toHaveBeenCalledTimes(1);
         // Input cleared after queuing.
@@ -624,7 +624,7 @@ describe('AIChatPane send while a response is streaming', () => {
             activeTabId: 't1',
             tabs: [{
                 id: 't1', title: 'Local USG', ordinal: 1, linkedSessionId: 'sess-1',
-                pendingUserMessages: ['human turn'],
+                pendingUserMessages: [{ text: 'human turn' }],
                 pendingMessages: ['machine turn'],
             }],
         };
@@ -634,7 +634,7 @@ describe('AIChatPane send while a response is streaming', () => {
 
         // The auto-send loop must pick the human message first, ahead of the machine one.
         expect(tauriService.aiChatSend).toHaveBeenCalledTimes(1);
-        expect(tauriService.aiChatSend).toHaveBeenCalledWith('ai-1::t1', 'human turn', 'gemini-pro', expect.anything());
+        expect(tauriService.aiChatSend).toHaveBeenCalledWith('ai-1::t1', 'human turn', 'gemini-pro', expect.anything(), undefined);
         expect(h.onDequeuePendingUser).toHaveBeenCalledWith('t1');
         // The machine queue is left untouched this round (only one stream at a time).
         expect(h.onDequeuePending).not.toHaveBeenCalled();
@@ -650,7 +650,7 @@ describe('AIChatPane send while a response is streaming', () => {
         await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
         expect(tauriService.aiChatSend).toHaveBeenCalledTimes(1);
-        expect(tauriService.aiChatSend).toHaveBeenCalledWith('ai-1::t1', 'hello', 'gemini-pro', expect.anything());
+        expect(tauriService.aiChatSend).toHaveBeenCalledWith('ai-1::t1', 'hello', 'gemini-pro', expect.anything(), undefined);
         // A first (non-streaming) send does NOT go through the priority queue.
         expect(h.onEnqueuePendingUser).not.toHaveBeenCalled();
     });
@@ -697,7 +697,7 @@ describe('AIChatPane pending message waits for model auto-selection', () => {
         await act(async () => { await Promise.resolve(); });
 
         expect(tauriService.aiChatSend).toHaveBeenCalledWith(
-            'ai-1::t1', 'analyze this', 'gemini-3.5-flash', expect.any(String),
+            'ai-1::t1', 'analyze this', 'gemini-3.5-flash', expect.any(String), undefined,
         );
         expect(screen.queryByText(/AI model not selected/)).toBeNull();
     });
@@ -756,7 +756,7 @@ describe('AIChatPane cancel never leaks machine text into the human prompt texta
 
         // The pending envelope was dispatched → the tab is streaming, Stop shows.
         expect(tauriService.aiChatSend).toHaveBeenCalledWith(
-            'ai-1::t1', ENVELOPE, 'gemini-pro', expect.any(String),
+            'ai-1::t1', ENVELOPE, 'gemini-pro', expect.any(String), undefined,
         );
         const stop = document.querySelector('.ai-chat-cancel-btn');
         expect(stop).toBeTruthy();
@@ -831,5 +831,87 @@ describe('AIChatPane routes per-tab (paneId::tabId) response events', () => {
         await act(async () => { await Promise.resolve(); });
 
         expect(screen.getByText('ROUTED VIA COMPOSITE KEY')).toBeTruthy();
+    });
+});
+
+describe('AIChatPane image attachments', () => {
+    beforeEach(() => {
+        h.onEnqueuePendingUser.mockClear();
+        vi.mocked(tauriService.aiChatSend).mockClear();
+        h.onAiChatResponseCb.current = null;
+        h.onAiAuthResultCb.current = null;
+        localStorage.clear();
+    });
+
+    // A tiny PNG-typed File; the bytes are arbitrary (base64 of [1,2,3,4] = "AQIDBA==").
+    const makePng = () => new File([new Uint8Array([1, 2, 3, 4])], 'shot.png', { type: 'image/png' });
+
+    // Simulate a clipboard paste carrying one image file, then flush the async
+    // FileReader so pendingImages settles.
+    async function pasteImage(textarea: Element, file: File) {
+        await act(async () => {
+            fireEvent.paste(textarea, {
+                clipboardData: { items: [{ kind: 'file', type: file.type, getAsFile: () => file }] },
+            });
+        });
+        // FileReader.readAsDataURL resolves on a macrotask — flush a real timer.
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    }
+
+    it('pastes an image → shows a thumbnail → sends it as an image-only message', async () => {
+        renderPane({});
+        await authenticate();
+        const textarea = screen.getByPlaceholderText('Type a message...');
+
+        await pasteImage(textarea, makePng());
+        // The pending-attachment thumbnail is rendered.
+        expect(document.querySelector('.ai-chat-thumb-img')).toBeTruthy();
+
+        // Enter with no text but an attached image is a valid (image-only) send.
+        await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+        expect(tauriService.aiChatSend).toHaveBeenCalledTimes(1);
+        const call = vi.mocked(tauriService.aiChatSend).mock.calls[0];
+        expect(call[1]).toBe('');                                  // empty message text
+        expect(call[4]).toEqual([{ mimeType: 'image/png', dataBase64: 'AQIDBA==' }]);
+        // Pending strip cleared after the send.
+        expect(document.querySelector('.ai-chat-thumb-img')).toBeNull();
+    });
+
+    it('removes a pending image via its × button before sending', async () => {
+        renderPane({});
+        await authenticate();
+        const textarea = screen.getByPlaceholderText('Type a message...');
+
+        await pasteImage(textarea, makePng());
+        expect(document.querySelector('.ai-chat-thumb-img')).toBeTruthy();
+
+        await act(async () => {
+            fireEvent.click(document.querySelector('.ai-chat-thumb-remove')!);
+        });
+        expect(document.querySelector('.ai-chat-thumb-img')).toBeNull();
+    });
+
+    it('queues the attached image when a send happens while streaming', async () => {
+        renderPane({});
+        await authenticate();
+        const textarea = screen.getByPlaceholderText('Type a message...');
+
+        // Start a stream (no `done`, so it stays live).
+        await act(async () => { fireEvent.change(textarea, { target: { value: 'first' } }); });
+        await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+        expect(tauriService.aiChatSend).toHaveBeenCalledTimes(1);
+
+        // Paste an image and send while streaming → it must go to the priority queue
+        // (with its images), not open a second backend stream.
+        await pasteImage(textarea, makePng());
+        await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
+
+        expect(h.onEnqueuePendingUser).toHaveBeenCalledWith(
+            't1', '', [{ mimeType: 'image/png', dataBase64: 'AQIDBA==' }],
+        );
+        expect(tauriService.aiChatSend).toHaveBeenCalledTimes(1);
     });
 });

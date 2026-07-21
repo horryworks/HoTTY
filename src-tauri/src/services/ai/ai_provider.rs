@@ -116,6 +116,7 @@ pub trait AIProvider: Send + Sync {
     /// layer and also held in a registry outside the service lock, so
     /// `ai_chat_cancel` can interrupt this stream. Providers must select on
     /// `cancel_token.cancelled()` in their stream loop.
+    #[allow(clippy::too_many_arguments)]
     async fn send_message(
         &self,
         app: &AppHandle,
@@ -123,6 +124,7 @@ pub trait AIProvider: Send + Sync {
         message: &str,
         model: &str,
         system_instruction: Option<&str>,
+        images: Vec<crate::services::ai::history::ChatImage>,
         cancel_token: CancellationToken,
     ) -> Result<(), String>;
 

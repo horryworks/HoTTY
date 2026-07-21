@@ -59,6 +59,7 @@ import type {
   AIModelInfo,
   AIChatResponseData,
   AIAuthResultPayload,
+  ChatImage,
   CommandVerdict,
   UpdateInfo,
 } from '../types/appTypes';
@@ -767,18 +768,27 @@ export const tauriService = {
     message: string,
     model: string,
     systemInstruction?: string,
+    images?: ChatImage[],
   ): Promise<void> {
     const messageLen = message.length;
+    const imageCount = images?.length ?? 0;
     const hasWatchPrefix = message.startsWith('[Watched Terminal Output')
       || message.startsWith('Terminal Output (Command:');
-    const sendInfo = `send-to-ai ${JSON.stringify({ paneId: sessionId, messageLen, hasWatchPrefix })}`;
+    // Log counts only — never the base64 image bytes.
+    const sendInfo = `send-to-ai ${JSON.stringify({ paneId: sessionId, messageLen, imageCount, hasWatchPrefix })}`;
     console.debug(`[AIExec/info] ${sendInfo}`);
     Promise.resolve(invoke('log_debug', { level: 'info', category: 'AIExec', message: redactSensitive(sendInfo) })).catch(() => {});
     try {
-      await invoke('ai_chat_send', { sessionId, message, model, systemInstruction: systemInstruction ?? null });
+      await invoke('ai_chat_send', {
+        sessionId,
+        message,
+        model,
+        systemInstruction: systemInstruction ?? null,
+        images: images && images.length > 0 ? images : null,
+      });
     } catch (e) {
       const errStr = typeof e === 'string' ? e : e instanceof Error ? e.message : String(e);
-      const rejInfo = `ai-send-rejected ${JSON.stringify({ messageLen, error: errStr })}`;
+      const rejInfo = `ai-send-rejected ${JSON.stringify({ messageLen, imageCount, error: errStr })}`;
       console.warn(`[AIExec/warn] ${rejInfo}`);
       Promise.resolve(invoke('log_debug', { level: 'warn', category: 'AIExec', message: redactSensitive(rejInfo) })).catch(() => {});
       throw e;

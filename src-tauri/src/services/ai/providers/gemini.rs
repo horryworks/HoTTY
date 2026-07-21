@@ -619,6 +619,7 @@ impl AIProvider for GeminiProvider {
         message: &str,
         model: &str,
         system_instruction: Option<&str>,
+        images: Vec<crate::services::ai::history::ChatImage>,
         cancel_token: CancellationToken,
     ) -> Result<(), String> {
         if !is_valid_model(model) {
@@ -650,17 +651,28 @@ impl AIProvider for GeminiProvider {
             }
         };
 
-        self.history.push(session_id, "user", message);
+        self.history.push_user(session_id, message, images);
 
-        // Build Gemini request body from the current history snapshot
+        // Build Gemini request body from the current history snapshot. Each turn's
+        // `parts` carries a text part (only when non-empty, so image-only turns stay
+        // valid) followed by one `inline_data` part per attached image.
         let contents: Vec<Value> = self
             .history
             .snapshot(session_id)
             .into_iter()
             .map(|msg| {
+                let mut parts: Vec<Value> = Vec::new();
+                if !msg.content.is_empty() {
+                    parts.push(serde_json::json!({"text": msg.content}));
+                }
+                for img in &msg.images {
+                    parts.push(serde_json::json!({
+                        "inline_data": {"mime_type": img.mime_type, "data": img.data_base64}
+                    }));
+                }
                 serde_json::json!({
                     "role": msg.role,
-                    "parts": [{"text": msg.content}]
+                    "parts": parts
                 })
             })
             .collect();

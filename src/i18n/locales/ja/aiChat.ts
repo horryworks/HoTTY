@@ -101,6 +101,13 @@ export const aiChat = {
     stop: '停止',
     resizeInput: '入力欄のサイズを変更',
     copyMessage: 'メッセージをコピー',
+    // Image attachments
+    attachImage: '画像を添付',
+    removeImage: '画像を削除',
+    imageAlt: '添付画像',
+    imageTooLarge: '画像が大きすぎます（最大5MB）',
+    imageTypeUnsupported: '未対応の画像形式です（PNG、JPEG、WebP、GIF）',
+    tooManyImages: '画像が多すぎます（最大5枚）',
     cancelledSuffix: ' [キャンセル済み]',
     errorMessage: 'エラー: {{message}}',
     streamIdleTimeout: 'AI 応答が {{seconds}} 秒間停止したため、リクエストをキャンセルしました',

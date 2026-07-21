@@ -213,18 +213,20 @@ describe('useAiChat', () => {
     act(() => { result.current.updateAiChatState('ai-1', createDefaultAiChatState()); });
     const tabId = result.current.aiChatStates.get('ai-1')!.activeTabId;
 
+    const img = [{ mimeType: 'image/png', dataBase64: 'AAAA' }];
     act(() => {
       result.current.enqueuePendingMessage('ai-1', tabId, 'machine');
       result.current.enqueuePendingUserMessage('ai-1', tabId, 'human-1');
-      result.current.enqueuePendingUserMessage('ai-1', tabId, 'human-2');
+      result.current.enqueuePendingUserMessage('ai-1', tabId, 'human-2', img);
     });
     const tab0 = () => result.current.aiChatStates.get('ai-1')!.tabs[0];
-    expect(tab0().pendingUserMessages).toEqual(['human-1', 'human-2']);
+    // Each priority entry carries its text plus any attached images.
+    expect(tab0().pendingUserMessages).toEqual([{ text: 'human-1' }, { text: 'human-2', images: img }]);
     // Separate queues — the machine queue is untouched by user enqueues.
     expect(tab0().pendingMessages).toEqual(['machine']);
 
     act(() => { result.current.dequeuePendingUserMessage('ai-1', tabId); });
-    expect(tab0().pendingUserMessages).toEqual(['human-2']);
+    expect(tab0().pendingUserMessages).toEqual([{ text: 'human-2', images: img }]);
     expect(tab0().pendingMessages).toEqual(['machine']);
   });
 
@@ -389,7 +391,7 @@ describe('useAiChat', () => {
 
     // Session id is scoped to the active tab so each tab keeps its own history.
     const tabId = getActiveTab(result.current.aiChatStates.get('ai-1'))!.id;
-    expect(tauriService.aiChatSend).toHaveBeenCalledWith(`ai-1::${tabId}`, 'Hello', 'gpt-4o', 'Be helpful.');
+    expect(tauriService.aiChatSend).toHaveBeenCalledWith(`ai-1::${tabId}`, 'Hello', 'gpt-4o', 'Be helpful.', undefined);
   });
 
   it('sendMessage does nothing without chat state', async () => {
@@ -440,6 +442,7 @@ describe('useAiChat', () => {
       expect.stringContaining('Watched Terminal Output'),
       'gpt-4o',
       'Be helpful.',
+      undefined,
     );
   });
 
@@ -500,10 +503,10 @@ describe('useAiChat', () => {
     // Each send used its own tab-scoped key → the backend keeps two separate
     // conversation histories, so the new tab starts clean.
     expect(tauriService.aiChatSend).toHaveBeenNthCalledWith(
-      1, `ai-1::${firstTabId}`, 'from tab one', 'gpt-4o', 'Be helpful.',
+      1, `ai-1::${firstTabId}`, 'from tab one', 'gpt-4o', 'Be helpful.', undefined,
     );
     expect(tauriService.aiChatSend).toHaveBeenNthCalledWith(
-      2, `ai-1::${secondTabId}`, 'from tab two', 'gpt-4o', 'Be helpful.',
+      2, `ai-1::${secondTabId}`, 'from tab two', 'gpt-4o', 'Be helpful.', undefined,
     );
   });
 });

@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.12-beta2
+
+Send images to the AI in AI Chat — paste a screenshot, drop an image file, or attach one with the new button.
+
+### New Features
+
+- **Attach images to AI Chat.** You can now include images in a message to the AI. Paste an image straight from the clipboard (Ctrl + V), drag image files onto the message box, or click the new paperclip button to pick files. Attached images appear as thumbnails you can remove before sending, and are shown inline in the conversation once sent. Supported on vision-capable models across Gemini, Vertex AI, OpenAI and Anthropic; PNG, JPEG, WebP and GIF are accepted (up to 5 images per message, 5 MB each). Each image is kept in that conversation's history, so you can ask follow-up questions about it.
+
 ## v2.0.12-beta1
 
 AI Chat no longer locks the message box while a reply is streaming — you can type and send your next message right away.

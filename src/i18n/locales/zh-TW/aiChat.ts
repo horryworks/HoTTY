@@ -104,6 +104,13 @@ export const aiChat = {
     stop: '停止',
     resizeInput: '調整輸入區域大小',
     copyMessage: '複製訊息',
+    // Image attachments
+    attachImage: '附加圖片',
+    removeImage: '移除圖片',
+    imageAlt: '附加的圖片',
+    imageTooLarge: '圖片過大（最大 5 MB）',
+    imageTypeUnsupported: '不支援的圖片類型（PNG、JPEG、WebP、GIF）',
+    tooManyImages: '圖片過多（最多 5 張）',
     cancelledSuffix: ' [已取消]',
     errorMessage: '錯誤：{{message}}',
     streamIdleTimeout: 'AI 回應閒置 {{seconds}} 秒 — 請求已取消',

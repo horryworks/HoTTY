@@ -30,12 +30,34 @@ import { logError } from '../../utils/logger';
 import type { AiChatState, ChatTab } from '../../hooks/useAiChat';
 import { getActiveTab, aiBackendSessionId } from '../../hooks/useAiChat';
 import type { SessionRecord } from '../../hooks/useSessionManager';
-import type { PersonaDefinition, AIModelInfo, LinkableSession } from '../../types/appTypes';
+import type { PersonaDefinition, AIModelInfo, LinkableSession, ChatImage } from '../../types/appTypes';
 import { TabStrip } from './TabStrip';
 import { groupLinkableSessions } from './linkPicker';
 import { MODEL_LOAD_RETRY_DELAYS_MS } from './modelLoadRetry';
 import { useChatStream, type ChatMessage } from '../../hooks/useChatStream';
 import './AIChatPane.css';
+
+// ── Image-attachment limits (mirror the Rust validation in commands/ai.rs) ──
+// Client-side caps give fast feedback; the backend re-validates authoritatively.
+const IMAGE_ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5 MiB per image (decoded)
+const IMAGE_MAX_COUNT = 5; // per message
+
+/** Read a File into a `{ mimeType, dataBase64 }` (base64 WITHOUT the data: prefix). */
+function fileToChatImage(file: File): Promise<ChatImage> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error ?? new Error('read failed'));
+        reader.onload = () => {
+            const result = typeof reader.result === 'string' ? reader.result : '';
+            // result is `data:<mime>;base64,<data>` — strip the prefix.
+            const comma = result.indexOf(',');
+            const dataBase64 = comma >= 0 ? result.slice(comma + 1) : '';
+            resolve({ mimeType: file.type, dataBase64 });
+        };
+        reader.readAsDataURL(file);
+    });
+}
 
 interface AIChatPaneProps {
     paneId: string;
@@ -48,7 +70,7 @@ interface AIChatPaneProps {
     /** Drop the first message from a tab's pending-send queue (after dispatch). */
     onDequeuePending?: (tabId: string) => void;
     /** Append a human-typed message (sent while streaming) to a tab's priority queue. */
-    onEnqueuePendingUser?: (tabId: string, message: string) => void;
+    onEnqueuePendingUser?: (tabId: string, message: string, images?: ChatImage[]) => void;
     /** Drop the first message from a tab's priority (user) queue (after dispatch). */
     onDequeuePendingUser?: (tabId: string) => void;
     onAddTab?: (initialLinkSessionId?: string) => void;
@@ -59,7 +81,7 @@ interface AIChatPaneProps {
     onFlashSessionPane?: (sessionId: string) => void;
     sessions?: Map<string, SessionRecord>;
     onRunCommand?: (sessionId: string, command: string, originatingTabId: string) => void;
-    onSendMessage?: (text: string) => void;
+    onSendMessage?: (text: string, images?: ChatImage[]) => void;
     aiPersonas: PersonaDefinition[];
     terminalBackground?: string;
     /** Sessions selectable in the link picker (this window + other windows). */
@@ -425,6 +447,16 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const [autoExecPaused, setAutoExecPaused] = useState(false);
 
     const [inputText, setInputText] = useState('');
+    // Images the user has attached but not yet sent (per-window, ephemeral — like
+    // inputText). Cleared on send. Populated by paste / drag-drop / the attach button.
+    const [pendingImages, setPendingImages] = useState<ChatImage[]>([]);
+    // Transient message shown when an attachment is rejected (too large / wrong type /
+    // over the count cap). Cleared when the user attaches or sends successfully.
+    const [attachError, setAttachError] = useState<string | null>(null);
+    // Set inside a setState updater (where we can see the current count) when a batch
+    // would exceed the count cap; read/cleared right after to surface the message.
+    const rejectedTooMany = useRef(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [selectedModel, setSelectedModel] = useState(chatState?.selectedModel || 'Unspecified');
     const selectedModelRef = useRef(selectedModel);
     selectedModelRef.current = selectedModel;
@@ -702,10 +734,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
 
         // Resolve the next message to send: priority (user) queues first, in tab
         // order, then machine queues. isHuman drives lastSentWasHumanRef below.
-        let target: { tab: ChatTab; message: string; isHuman: boolean } | undefined;
+        // Human entries carry optional images; machine entries are plain strings.
+        let target: { tab: ChatTab; message: string; images?: ChatImage[]; isHuman: boolean } | undefined;
         for (const tab of chatState.tabs) {
             const uq = tab.pendingUserMessages;
-            if (uq && uq.length > 0) { target = { tab, message: uq[0], isHuman: true }; break; }
+            if (uq && uq.length > 0) { target = { tab, message: uq[0].text, images: uq[0].images, isHuman: true }; break; }
         }
         if (!target) {
             for (const tab of chatState.tabs) {
@@ -714,7 +747,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             }
         }
         if (!target) return;
-        const { tab, message: pm, isHuman } = target;
+        const { tab, message: pm, images: pmImages, isHuman } = target;
 
         // A freshly-created pane (e.g. opened via Ask AI) hasn't resolved its
         // model yet — the model list loads and auto-selects asynchronously.
@@ -749,7 +782,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 const cur = prev.get(tab.id) ?? [];
                 next.set(tab.id, [
                     ...cur,
-                    { role: 'user', content: pm },
+                    { role: 'user', content: pm, images: pmImages },
                     { role: 'model', content: t('aiChat.pane.modelNotSelected') },
                 ]);
                 return next;
@@ -760,7 +793,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         setMessagesByTab((prev) => {
             const next = new Map(prev);
             const cur = prev.get(tab.id) ?? [];
-            next.set(tab.id, [...cur, { role: 'user', content: pm }]);
+            next.set(tab.id, [...cur, { role: 'user', content: pm, images: pmImages }]);
             return next;
         });
         lastSentTextRef.current = pm;
@@ -771,7 +804,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         markStreaming(tab.id, true);
         setStreamingForTab(tab.id, '');
         armStreamWatchdog();
-        tauriService.aiChatSend(aiBackendSessionId(paneId, tab.id), pm, selectedModel, sysInstr).catch((err) => {
+        tauriService.aiChatSend(aiBackendSessionId(paneId, tab.id), pm, selectedModel, sysInstr, pmImages).catch((err) => {
             logError('AI', 'aiChatSend invoke failed', err);
             clearStreamWatchdog();
             markStreaming(tab.id, false);
@@ -1169,9 +1202,90 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         }));
     };
 
+    // Ingest image files (from paste / drop / the attach button) into pendingImages,
+    // filtering to the allowed MIME types and enforcing the per-image size and total
+    // count caps client-side (fast feedback; the backend re-validates). Returns the
+    // number of images actually accepted so the paste handler knows whether to
+    // preventDefault (so a text paste is left untouched).
+    const addFiles = useCallback(async (files: File[] | FileList): Promise<number> => {
+        setAttachError(null);
+        const all = Array.from(files);
+        const candidates = all.filter(
+            (f) => f.type && IMAGE_ALLOWED_MIME_TYPES.includes(f.type.toLowerCase())
+        );
+        if (candidates.length === 0) {
+            // Something was dropped/selected but nothing was an accepted image type.
+            if (all.length > 0) setAttachError(t('aiChat.pane.imageTypeUnsupported'));
+            return 0;
+        }
+
+        const accepted: ChatImage[] = [];
+        let rejectedType = false;
+        let rejectedSize = false;
+        for (const file of candidates) {
+            if (file.size > IMAGE_MAX_BYTES) { rejectedSize = true; continue; }
+            try {
+                accepted.push(await fileToChatImage(file));
+            } catch {
+                rejectedType = true;
+            }
+        }
+        if (accepted.length > 0) {
+            setPendingImages((prev) => {
+                const room = Math.max(0, IMAGE_MAX_COUNT - prev.length);
+                if (accepted.length > room) rejectedTooMany.current = true;
+                return [...prev, ...accepted.slice(0, room)];
+            });
+        }
+        if (rejectedSize) setAttachError(t('aiChat.pane.imageTooLarge'));
+        else if (rejectedType) setAttachError(t('aiChat.pane.imageTypeUnsupported'));
+        else if (rejectedTooMany.current) { setAttachError(t('aiChat.pane.tooManyImages')); rejectedTooMany.current = false; }
+        return accepted.length;
+    }, [t]);
+
+    const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+        const imageFiles: File[] = [];
+        for (const item of Array.from(e.clipboardData.items)) {
+            if (item.kind === 'file' && item.type.toLowerCase().startsWith('image/')) {
+                const file = item.getAsFile();
+                if (file) imageFiles.push(file);
+            }
+        }
+        if (imageFiles.length > 0) {
+            // Consume the paste so an image doesn't also dump its (empty) text into the box.
+            e.preventDefault();
+            void addFiles(imageFiles);
+        }
+    };
+
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        if (e.dataTransfer?.files?.length) {
+            e.preventDefault();
+            void addFiles(e.dataTransfer.files);
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        // Allow dropping files onto the input area.
+        if (Array.from(e.dataTransfer?.types ?? []).includes('Files')) {
+            e.preventDefault();
+        }
+    };
+
+    const removePendingImage = (idx: number) => {
+        setPendingImages((prev) => prev.filter((_, i) => i !== idx));
+    };
+
+    const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files?.length) void addFiles(e.target.files);
+        // Reset so selecting the same file again re-fires onChange.
+        e.target.value = '';
+    };
+
     const handleSend = () => {
         const text = inputText.trim();
-        if (!text || selectedModel === 'Unspecified') return;
+        const imagesToSend = pendingImages;
+        if ((!text && imagesToSend.length === 0) || selectedModel === 'Unspecified') return;
 
         // A response is still streaming somewhere in this pane (only one in-flight
         // stream per pane — a single streamingForTabIdRef). Don't dispatch directly:
@@ -1182,28 +1296,31 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         // for a session that's mid-stream, and the loop re-checks consent anyway.
         if (streamingTabIds.size > 0) {
             if (activeTabId) {
-                onEnqueuePendingUser?.(activeTabId, text);
+                onEnqueuePendingUser?.(activeTabId, text, imagesToSend.length > 0 ? imagesToSend : undefined);
                 setInputText('');
+                setPendingImages([]);
             }
             return;
         }
 
         const dispatch = () => {
             setConsecutiveAutoExecCount(0);
-            setMessages(prev => [...prev, { role: 'user', content: text }]);
+            setMessages(prev => [...prev, { role: 'user', content: text, images: imagesToSend.length > 0 ? imagesToSend : undefined }]);
             lastSentTextRef.current = text;
             lastSentWasHumanRef.current = true;
             setInputText('');
+            setPendingImages([]);
             // Capture which tab owns this stream so chunks land in the right tab even after a tab switch.
             streamingForTabIdRef.current = activeTabId ?? null;
             setIsStreaming(true);
             setStreamingContent('');
             armStreamWatchdog();
 
+            const images = imagesToSend.length > 0 ? imagesToSend : undefined;
             if (onSendMessage) {
-                onSendMessage(text);
+                onSendMessage(text, images);
             } else {
-                tauriService.aiChatSend(aiBackendSessionId(paneId, activeTabId), text, selectedModel, localSystemInstruction).catch((err) => {
+                tauriService.aiChatSend(aiBackendSessionId(paneId, activeTabId), text, selectedModel, localSystemInstruction, images).catch((err) => {
                     logError('AI', 'aiChatSend invoke failed', err);
                     clearStreamWatchdog();
                     setIsStreaming(false);
@@ -1607,9 +1724,25 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         />
                                     ) : (() => {
                                         const parsed = parseTerminalOutputMessage(msg.content);
-                                        return parsed
-                                            ? <TerminalOutputBlock cmd={parsed.cmd} output={parsed.output} />
-                                            : <pre>{msg.content}</pre>;
+                                        return (
+                                            <>
+                                                {msg.images && msg.images.length > 0 && (
+                                                    <div className="ai-chat-message-images">
+                                                        {msg.images.map((img, i) => (
+                                                            <img
+                                                                key={i}
+                                                                className="ai-chat-message-image"
+                                                                src={`data:${img.mimeType};base64,${img.dataBase64}`}
+                                                                alt={t('aiChat.pane.imageAlt')}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {msg.content && (parsed
+                                                    ? <TerminalOutputBlock cmd={parsed.cmd} output={parsed.output} />
+                                                    : <pre>{msg.content}</pre>)}
+                                            </>
+                                        );
                                     })()}
                                 </div>
                                 {msg.role === 'model' && (
@@ -1690,12 +1823,43 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                         document.addEventListener('mouseup', onMouseUp);
                     }} />
 
-                    <div className="ai-chat-input-area">
+                    <div className="ai-chat-input-area" onDrop={handleDrop} onDragOver={handleDragOver}>
                         {(activeTab?.pendingUserMessages?.length ?? 0) > 0 && (
                             <div className="ai-chat-queued-pill" role="status">
                                 {t('aiChat.pane.queuedCount', { count: activeTab!.pendingUserMessages!.length })}
                             </div>
                         )}
+                        {attachError && (
+                            <div className="ai-chat-attach-error" role="alert">{attachError}</div>
+                        )}
+                        {pendingImages.length > 0 && (
+                            <div className="ai-chat-attach-strip">
+                                {pendingImages.map((img, i) => (
+                                    <div key={i} className="ai-chat-thumb">
+                                        <img
+                                            className="ai-chat-thumb-img"
+                                            src={`data:${img.mimeType};base64,${img.dataBase64}`}
+                                            alt={t('aiChat.pane.imageAlt')}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="ai-chat-thumb-remove"
+                                            title={t('aiChat.pane.removeImage')}
+                                            aria-label={t('aiChat.pane.removeImage')}
+                                            onClick={() => removePendingImage(i)}
+                                        >×</button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/gif"
+                            multiple
+                            style={{ display: 'none' }}
+                            onChange={handleFileInputChange}
+                        />
                         <textarea
                             ref={textareaRef}
                             className="ai-chat-textarea"
@@ -1704,6 +1868,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             value={inputText}
                             onChange={(e) => setInputText(e.target.value)}
                             onKeyDown={handleKeyDown}
+                            onPaste={handlePaste}
                             placeholder={selectedModel === 'Unspecified' ? t('aiChat.pane.inputPlaceholderSelectModel') : t('aiChat.pane.inputPlaceholder')}
                         />
                         <div className="ai-chat-input-toolbar">
@@ -1815,16 +1980,28 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                 }}
                                 onOpenSettings={onOpenSettings}
                             />
+                            <button
+                                type="button"
+                                className="ai-chat-attach-btn"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={pendingImages.length >= IMAGE_MAX_COUNT}
+                                title={t('aiChat.pane.attachImage')}
+                                aria-label={t('aiChat.pane.attachImage')}
+                            >
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                                </svg>
+                            </button>
                             {isStreaming && <button className="ai-chat-cancel-btn" onClick={handleCancel} title={t('aiChat.pane.stop')} aria-label={t('aiChat.pane.stop')}>&#x25A0;</button>}
                             <button
                                 className="ai-chat-send-btn"
                                 onClick={handleSend}
-                                disabled={!inputText.trim() || selectedModel === 'Unspecified'}
+                                disabled={(!inputText.trim() && pendingImages.length === 0) || selectedModel === 'Unspecified'}
                                 aria-label={t('aiChat.pane.sendTitle')}
                                 title={
                                     selectedModel === 'Unspecified'
                                         ? t('aiChat.pane.sendTitleSelectModel')
-                                        : !inputText.trim()
+                                        : (!inputText.trim() && pendingImages.length === 0)
                                         ? t('aiChat.pane.sendTitleEmpty')
                                         : streamingTabIds.size > 0
                                         ? t('aiChat.pane.sendTitleQueue')

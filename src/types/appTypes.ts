@@ -561,6 +561,17 @@ export interface AIModelInfo {
   displayName: string;
 }
 
+/**
+ * An image attachment on an outgoing AI-chat user message. `dataBase64` is raw
+ * standard-alphabet base64 (NO `data:` URL prefix); the `mimeType` (e.g.
+ * `image/png`) is prepended when a `data:` URL is needed for display. Mirrors the
+ * Rust `ChatImage` deserialize target in `services/ai/history.rs`.
+ */
+export interface ChatImage {
+  mimeType: string;
+  dataBase64: string;
+}
+
 interface AITokenUsage {
   promptTokenCount?: number;
   candidatesTokenCount?: number;
