@@ -11,6 +11,8 @@ const h = vi.hoisted(() => ({
     onUpdateTabById: vi.fn(),
     onEnqueuePending: vi.fn(),
     onDequeuePending: vi.fn(),
+    onEnqueuePendingUser: vi.fn(),
+    onDequeuePendingUser: vi.fn(),
     ensureConsent: vi.fn().mockResolvedValue(true),
     settings: {
         activeAiProvider: 'gemini',
@@ -111,6 +113,8 @@ const baseProps = {
     sessions: new Map([['sess-1', { id: 'sess-1', displayName: 'Local USG', status: 'connected' }]]),
     onEnqueuePending: h.onEnqueuePending,
     onDequeuePending: h.onDequeuePending,
+    onEnqueuePendingUser: h.onEnqueuePendingUser,
+    onDequeuePendingUser: h.onDequeuePendingUser,
     ensureConsent: h.ensureConsent,
 };
 
@@ -571,6 +575,84 @@ describe('AIChatPane "Don\'t Execute" (decline)', () => {
 
         expect(h.onRunCommand).not.toHaveBeenCalled();
         expect(screen.getByText('Declined')).toBeTruthy();
+    });
+});
+
+describe('AIChatPane send while a response is streaming', () => {
+    beforeEach(() => {
+        h.onRunCommand.mockClear();
+        h.onEnqueuePending.mockClear();
+        h.onDequeuePending.mockClear();
+        h.onEnqueuePendingUser.mockClear();
+        h.onDequeuePendingUser.mockClear();
+        vi.mocked(tauriService.aiChatSend).mockClear();
+        h.onAiChatResponseCb.current = null;
+        h.onAiAuthResultCb.current = null;
+        localStorage.clear();
+    });
+
+    it('keeps the input enabled and queues a mid-stream send onto the priority (user) queue', async () => {
+        renderPane({ onRunCommand: h.onRunCommand });
+        await authenticate();
+
+        const textarea = screen.getByPlaceholderText('Type a message...') as HTMLTextAreaElement;
+
+        // First send — starts streaming. No `done` is fired, so the stream stays live.
+        await act(async () => { fireEvent.change(textarea, { target: { value: 'first question' } }); });
+        await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); }); // flush consent .then → dispatch
+
+        expect(tauriService.aiChatSend).toHaveBeenCalledTimes(1);
+        // The input must NOT be locked while the AI is responding.
+        expect(textarea.disabled).toBe(false);
+
+        // Second send WHILE streaming — must queue (priority), not open a 2nd stream.
+        await act(async () => { fireEvent.change(textarea, { target: { value: 'follow-up' } }); });
+        await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
+
+        expect(h.onEnqueuePendingUser).toHaveBeenCalledWith('t1', 'follow-up');
+        // No second backend send (a same-session send would supersede the live stream).
+        expect(tauriService.aiChatSend).toHaveBeenCalledTimes(1);
+        // Input cleared after queuing.
+        expect(textarea.value).toBe('');
+    });
+
+    it('dispatches a queued user message BEFORE a machine pending message (priority)', async () => {
+        const chatState = {
+            selectedModel: 'gemini-pro',
+            systemInstruction: 'You are a helpful assistant.',
+            activeTabId: 't1',
+            tabs: [{
+                id: 't1', title: 'Local USG', ordinal: 1, linkedSessionId: 'sess-1',
+                pendingUserMessages: ['human turn'],
+                pendingMessages: ['machine turn'],
+            }],
+        };
+        renderPane({ onRunCommand: h.onRunCommand, chatState });
+        await authenticate();
+        await act(async () => { await Promise.resolve(); });
+
+        // The auto-send loop must pick the human message first, ahead of the machine one.
+        expect(tauriService.aiChatSend).toHaveBeenCalledTimes(1);
+        expect(tauriService.aiChatSend).toHaveBeenCalledWith('ai-1::t1', 'human turn', 'gemini-pro', expect.anything());
+        expect(h.onDequeuePendingUser).toHaveBeenCalledWith('t1');
+        // The machine queue is left untouched this round (only one stream at a time).
+        expect(h.onDequeuePending).not.toHaveBeenCalled();
+    });
+
+    it('still dispatches directly (no queue) when nothing is streaming — regression', async () => {
+        renderPane({ onRunCommand: h.onRunCommand });
+        await authenticate();
+
+        const textarea = screen.getByPlaceholderText('Type a message...') as HTMLTextAreaElement;
+        await act(async () => { fireEvent.change(textarea, { target: { value: 'hello' } }); });
+        await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+        expect(tauriService.aiChatSend).toHaveBeenCalledTimes(1);
+        expect(tauriService.aiChatSend).toHaveBeenCalledWith('ai-1::t1', 'hello', 'gemini-pro', expect.anything());
+        // A first (non-streaming) send does NOT go through the priority queue.
+        expect(h.onEnqueuePendingUser).not.toHaveBeenCalled();
     });
 });
 

@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.12-beta1
+
+AI Chat no longer locks the message box while a reply is streaming — you can type and send your next message right away.
+
+### Improvements
+
+- **Type and send during an AI response.** The AI Chat input is no longer disabled while a reply is streaming. A message you send mid-response is queued and then handed to the model as its next turn the moment the current reply finishes — ahead of any automatic follow-ups (such as auto-run command output), so your message is what the AI considers next. A small "queued" indicator appears while a message is waiting, and multiple queued messages are sent in the order you typed them.
+
 ## v2.0.11
 
 A major **AI Chat** release: parallel conversations that no longer block each other, safer command review with a cancellable auto-run countdown, reworked terminal linking, per-tab token accounting, and clearer errors — plus accessibility and naming polish.

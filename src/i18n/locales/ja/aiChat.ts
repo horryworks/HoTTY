@@ -80,6 +80,8 @@ export const aiChat = {
     sendTitleSelectModel: '先にモデルを選択してください',
     sendTitleEmpty: '先にメッセージを入力してください',
     sendTitleStreaming: '送信中…',
+    sendTitleQueue: '回答完了後に送信',
+    queuedCount: '送信待ち: {{count}} 件',
     sendTitle: '送信',
     // ヒント・ステータス
     selectModelHint: 'メッセージ入力欄の下にある AI 設定からモデルを選択してください',

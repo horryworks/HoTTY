@@ -86,6 +86,8 @@ export const aiChat = {
     sendTitleSelectModel: 'Сначала выберите модель',
     sendTitleEmpty: 'Сначала введите сообщение',
     sendTitleStreaming: 'Потоковая передача…',
+    sendTitleQueue: 'Отправить после текущего ответа',
+    queuedCount: 'В очереди: {{count}}',
     sendTitle: 'Отправить',
     // Подсказки и статус
     selectModelHint: 'Откройте настройки ИИ под полем сообщения, чтобы выбрать модель',

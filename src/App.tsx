@@ -210,6 +210,8 @@ function App() {
     updateTabById,
     enqueuePendingMessage,
     dequeuePendingMessage,
+    enqueuePendingUserMessage,
+    dequeuePendingUserMessage,
     addTab,
     closeTab,
     removeAiChatState,
@@ -695,6 +697,8 @@ function App() {
               onUpdateTabById={(tabId, partial) => updateTabById(featureInfo.id, tabId, partial)}
               onEnqueuePending={(tabId, message) => enqueuePendingMessage(featureInfo.id, tabId, message)}
               onDequeuePending={(tabId) => dequeuePendingMessage(featureInfo.id, tabId)}
+              onEnqueuePendingUser={(tabId, message) => enqueuePendingUserMessage(featureInfo.id, tabId, message)}
+              onDequeuePendingUser={(tabId) => dequeuePendingUserMessage(featureInfo.id, tabId)}
               ensureConsent={consent.ensureAiConsent}
               // The bare "+" opens an UNLINKED tab (general chat); it no longer
               // inherits the last-focused terminal. Callers that want a linked tab

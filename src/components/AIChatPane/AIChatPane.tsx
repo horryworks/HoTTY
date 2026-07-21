@@ -47,6 +47,10 @@ interface AIChatPaneProps {
     onEnqueuePending?: (tabId: string, message: string) => void;
     /** Drop the first message from a tab's pending-send queue (after dispatch). */
     onDequeuePending?: (tabId: string) => void;
+    /** Append a human-typed message (sent while streaming) to a tab's priority queue. */
+    onEnqueuePendingUser?: (tabId: string, message: string) => void;
+    /** Drop the first message from a tab's priority (user) queue (after dispatch). */
+    onDequeuePendingUser?: (tabId: string) => void;
     onAddTab?: (initialLinkSessionId?: string) => void;
     onCloseTab?: (tabId: string) => void;
     /** Close the whole AI Chat pane (used when the last remaining tab is closed). */
@@ -347,6 +351,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     onUpdateTabById,
     onEnqueuePending,
     onDequeuePending,
+    onEnqueuePendingUser,
+    onDequeuePendingUser,
     ensureConsent,
     onAddTab,
     onCloseTab,
@@ -680,82 +686,97 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     }, [messages, streamingContent, isStreaming]);
 
     // ── Auto-send pending messages for ANY tab (one stream at a time per pane) ──
-    // Scans every tab for a queued pending message; dispatches the first tab's
-    // head-of-queue that isn't currently streaming. Results that arrive on a
-    // non-active tab still trigger the next request, so the loop keeps running
-    // across tab switches. Double-dispatch is prevented structurally: dispatching
-    // dequeues the message AND marks the tab streaming (both batched), so the next
-    // effect run bails on the streaming guard — no de-dup-by-text needed.
+    // Picks the next queued message to dispatch when nothing is streaming. HUMAN
+    // messages (pendingUserMessages — typed by the user while a response was still
+    // streaming) win over machine-generated ones (pendingMessages) across all tabs,
+    // so a user's message reaches the model as its NEXT thinking turn ahead of e.g.
+    // auto-exec terminal output. Results that arrive on a non-active tab still
+    // trigger the next request, so the loop keeps running across tab switches.
+    // Double-dispatch is prevented structurally: dispatching dequeues the message
+    // AND marks the tab streaming (both batched), so the next effect run bails on
+    // the streaming guard — no de-dup-by-text needed.
     useEffect(() => {
         if (!isAuthenticated || !chatState) return;
         // Only one in-flight stream per pane (single streamingForTabIdRef).
         if (streamingTabIds.size > 0) return;
 
+        // Resolve the next message to send: priority (user) queues first, in tab
+        // order, then machine queues. isHuman drives lastSentWasHumanRef below.
+        let target: { tab: ChatTab; message: string; isHuman: boolean } | undefined;
         for (const tab of chatState.tabs) {
-            const queue = tab.pendingMessages;
-            if (!queue || queue.length === 0) continue;
-            const pm = queue[0];
-
-            // A freshly-created pane (e.g. opened via Ask AI) hasn't resolved its
-            // model yet — the model list loads and auto-selects asynchronously.
-            // Leave the queue intact until the model settles; this effect re-runs
-            // when selectedModel / availableModels / modelLoadError change.
-            if (selectedModel === 'Unspecified' && availableModels.length === 0 && !modelLoadError) {
-                return;
+            const uq = tab.pendingUserMessages;
+            if (uq && uq.length > 0) { target = { tab, message: uq[0], isHuman: true }; break; }
+        }
+        if (!target) {
+            for (const tab of chatState.tabs) {
+                const mq = tab.pendingMessages;
+                if (mq && mq.length > 0) { target = { tab, message: mq[0], isHuman: false }; break; }
             }
+        }
+        if (!target) return;
+        const { tab, message: pm, isHuman } = target;
 
-            // Data-sharing consent gate: machine-generated pending messages
-            // (kickoff, terminal-output envelopes, decline/not-connected notes)
-            // egress terminal data to the provider just like a manual send, so
-            // they must clear the same consent. Park the queue (don't dequeue)
-            // and prompt once; the effect re-runs when consent flips accepted.
-            if (!aiDataConsentAccepted) {
-                if (!consentPromptShownRef.current) {
-                    consentPromptShownRef.current = true;
-                    void ensureConsent?.().finally(() => { consentPromptShownRef.current = false; });
-                }
-                return;
+        // A freshly-created pane (e.g. opened via Ask AI) hasn't resolved its
+        // model yet — the model list loads and auto-selects asynchronously.
+        // Leave the queue intact until the model settles; this effect re-runs
+        // when selectedModel / availableModels / modelLoadError change.
+        if (selectedModel === 'Unspecified' && availableModels.length === 0 && !modelLoadError) {
+            return;
+        }
+
+        // Data-sharing consent gate: pending messages (human sends queued mid-stream,
+        // plus machine kickoff / terminal-output envelopes / decline notes) egress
+        // terminal data to the provider just like a manual send, so they must clear
+        // the same consent. Park the queue (don't dequeue) and prompt once; the
+        // effect re-runs when consent flips accepted.
+        if (!aiDataConsentAccepted) {
+            if (!consentPromptShownRef.current) {
+                consentPromptShownRef.current = true;
+                void ensureConsent?.().finally(() => { consentPromptShownRef.current = false; });
             }
+            return;
+        }
 
-            const sysInstr = chatState.systemInstruction || localSystemInstruction;
-            onChatStateChange?.({ systemInstruction: sysInstr });
-            // Remove the head of the queue now that we're dispatching it.
-            onDequeuePending?.(tab.id);
+        const sysInstr = chatState.systemInstruction || localSystemInstruction;
+        onChatStateChange?.({ systemInstruction: sysInstr });
+        // Remove the head of the queue we're dispatching from.
+        if (isHuman) onDequeuePendingUser?.(tab.id);
+        else onDequeuePending?.(tab.id);
 
-            if (selectedModel === 'Unspecified') {
-                setMessagesByTab((prev) => {
-                    const next = new Map(prev);
-                    const cur = prev.get(tab.id) ?? [];
-                    next.set(tab.id, [
-                        ...cur,
-                        { role: 'user', content: pm },
-                        { role: 'model', content: t('aiChat.pane.modelNotSelected') },
-                    ]);
-                    return next;
-                });
-                continue;
-            }
-
+        if (selectedModel === 'Unspecified') {
             setMessagesByTab((prev) => {
                 const next = new Map(prev);
                 const cur = prev.get(tab.id) ?? [];
-                next.set(tab.id, [...cur, { role: 'user', content: pm }]);
+                next.set(tab.id, [
+                    ...cur,
+                    { role: 'user', content: pm },
+                    { role: 'model', content: t('aiChat.pane.modelNotSelected') },
+                ]);
                 return next;
             });
-            lastSentTextRef.current = pm;
-            lastSentWasHumanRef.current = false;
-            streamingForTabIdRef.current = tab.id;
-            markStreaming(tab.id, true);
-            setStreamingForTab(tab.id, '');
-            armStreamWatchdog();
-            tauriService.aiChatSend(aiBackendSessionId(paneId, tab.id), pm, selectedModel, sysInstr).catch((err) => {
-                logError('AI', 'aiChatSend invoke failed', err);
-                clearStreamWatchdog();
-                markStreaming(tab.id, false);
-                streamingForTabIdRef.current = null;
-            });
-            break;
+            return;
         }
+
+        setMessagesByTab((prev) => {
+            const next = new Map(prev);
+            const cur = prev.get(tab.id) ?? [];
+            next.set(tab.id, [...cur, { role: 'user', content: pm }]);
+            return next;
+        });
+        lastSentTextRef.current = pm;
+        // Human-queued sends restore to the textarea on Stop (edit/resend), just
+        // like a direct manual send; machine messages must never land there.
+        lastSentWasHumanRef.current = isHuman;
+        streamingForTabIdRef.current = tab.id;
+        markStreaming(tab.id, true);
+        setStreamingForTab(tab.id, '');
+        armStreamWatchdog();
+        tauriService.aiChatSend(aiBackendSessionId(paneId, tab.id), pm, selectedModel, sysInstr).catch((err) => {
+            logError('AI', 'aiChatSend invoke failed', err);
+            clearStreamWatchdog();
+            markStreaming(tab.id, false);
+            streamingForTabIdRef.current = null;
+        });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatState, isAuthenticated, streamingTabIds, paneId, selectedModel, availableModels, modelLoadError, aiDataConsentAccepted]);
 
@@ -1150,10 +1171,22 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
 
     const handleSend = () => {
         const text = inputText.trim();
-        // Block while ANY tab in this pane is streaming (only one in-flight stream
-        // per pane — a single streamingForTabIdRef). Guarding on the active tab's
-        // isStreaming alone let a send from a second tab hijack the first's stream.
-        if (!text || streamingTabIds.size > 0 || selectedModel === 'Unspecified') return;
+        if (!text || selectedModel === 'Unspecified') return;
+
+        // A response is still streaming somewhere in this pane (only one in-flight
+        // stream per pane — a single streamingForTabIdRef). Don't dispatch directly:
+        // a second send on the same backend session would supersede/cancel the live
+        // stream. Instead queue the message on the ACTIVE tab's PRIORITY (user) queue
+        // so the auto-send loop hands it to the model as its next thinking turn,
+        // ahead of any machine-generated pending messages. Consent is already granted
+        // for a session that's mid-stream, and the loop re-checks consent anyway.
+        if (streamingTabIds.size > 0) {
+            if (activeTabId) {
+                onEnqueuePendingUser?.(activeTabId, text);
+                setInputText('');
+            }
+            return;
+        }
 
         const dispatch = () => {
             setConsecutiveAutoExecCount(0);
@@ -1658,6 +1691,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     }} />
 
                     <div className="ai-chat-input-area">
+                        {(activeTab?.pendingUserMessages?.length ?? 0) > 0 && (
+                            <div className="ai-chat-queued-pill" role="status">
+                                {t('aiChat.pane.queuedCount', { count: activeTab!.pendingUserMessages!.length })}
+                            </div>
+                        )}
                         <textarea
                             ref={textareaRef}
                             className="ai-chat-textarea"
@@ -1667,7 +1705,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             onChange={(e) => setInputText(e.target.value)}
                             onKeyDown={handleKeyDown}
                             placeholder={selectedModel === 'Unspecified' ? t('aiChat.pane.inputPlaceholderSelectModel') : t('aiChat.pane.inputPlaceholder')}
-                            disabled={isStreaming}
                         />
                         <div className="ai-chat-input-toolbar">
                             <div className="ai-chat-settings-wrap">
@@ -1782,15 +1819,15 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             <button
                                 className="ai-chat-send-btn"
                                 onClick={handleSend}
-                                disabled={!inputText.trim() || streamingTabIds.size > 0 || selectedModel === 'Unspecified'}
+                                disabled={!inputText.trim() || selectedModel === 'Unspecified'}
                                 aria-label={t('aiChat.pane.sendTitle')}
                                 title={
                                     selectedModel === 'Unspecified'
                                         ? t('aiChat.pane.sendTitleSelectModel')
                                         : !inputText.trim()
                                         ? t('aiChat.pane.sendTitleEmpty')
-                                        : isStreaming
-                                        ? t('aiChat.pane.sendTitleStreaming')
+                                        : streamingTabIds.size > 0
+                                        ? t('aiChat.pane.sendTitleQueue')
                                         : t('aiChat.pane.sendTitle')
                                 }
                             >&#x27A4;</button>

@@ -85,6 +85,8 @@ export const aiChat = {
     sendTitleSelectModel: "Sélectionnez d'abord un modèle",
     sendTitleEmpty: "Saisissez d'abord un message",
     sendTitleStreaming: 'Diffusion en cours…',
+    sendTitleQueue: 'Envoyer après la réponse en cours',
+    queuedCount: '{{count}} en attente',
     sendTitle: 'Envoyer',
     // Hints & status
     selectModelHint: "Ouvrez les paramètres d'IA sous la zone de message pour choisir un modèle",

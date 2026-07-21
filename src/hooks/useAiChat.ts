@@ -39,6 +39,15 @@ export interface ChatTab {
    */
   pendingMessages?: string[];
   /**
+   * FIFO queue of HUMAN-typed messages the user sent while a response was still
+   * streaming (input is no longer locked mid-response). Kept separate from — and
+   * dispatched with priority OVER — `pendingMessages` so a message the user types
+   * reaches the model as its NEXT thinking turn, ahead of machine-generated
+   * envelopes (e.g. auto-exec terminal output). FIFO preserves the user's typing
+   * order across multiple queued sends. Enqueue via `enqueuePendingUserMessage`.
+   */
+  pendingUserMessages?: string[];
+  /**
    * Active client-side sleep delay for an AI-issued command (see App.tsx
    * scheduleSleepDelay). Drives the "⏳ Waiting Ns…" indicator on the matching
    * execute block. `token` is a monotonic id used to abort a stale delay if the
@@ -90,6 +99,10 @@ interface UseAiChatReturn {
   enqueuePendingMessage: (aiSessionId: string, tabId: string, message: string) => void;
   /** Drop the first message from a tab's pending-send queue (after dispatch). */
   dequeuePendingMessage: (aiSessionId: string, tabId: string) => void;
+  /** Append a human-typed message to a tab's priority (user) send queue. */
+  enqueuePendingUserMessage: (aiSessionId: string, tabId: string, message: string) => void;
+  /** Drop the first message from a tab's priority (user) send queue (after dispatch). */
+  dequeuePendingUserMessage: (aiSessionId: string, tabId: string) => void;
   addTab: (aiSessionId: string, initialLinkSessionId?: string) => string;
   closeTab: (aiSessionId: string, tabId: string) => void;
   /** Remove an entire pane's chat state + free its per-tab backend histories. */
@@ -275,6 +288,35 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       if (!tab || !tab.pendingMessages || tab.pendingMessages.length === 0) return prev;
       const updatedTabs = existing.tabs.map(t =>
         t.id === tabId ? { ...t, pendingMessages: t.pendingMessages!.slice(1) } : t
+      );
+      next.set(aiSessionId, { ...existing, tabs: updatedTabs });
+      return next;
+    });
+  }, []);
+
+  const enqueuePendingUserMessage = useCallback((aiSessionId: string, tabId: string, message: string) => {
+    setAiChatStates((prev) => {
+      const next = new Map(prev);
+      const existing = prev.get(aiSessionId);
+      if (!existing) return prev;
+      if (!existing.tabs.find(t => t.id === tabId)) return prev;
+      const updatedTabs = existing.tabs.map(t =>
+        t.id === tabId ? { ...t, pendingUserMessages: [...(t.pendingUserMessages ?? []), message] } : t
+      );
+      next.set(aiSessionId, { ...existing, tabs: updatedTabs });
+      return next;
+    });
+  }, []);
+
+  const dequeuePendingUserMessage = useCallback((aiSessionId: string, tabId: string) => {
+    setAiChatStates((prev) => {
+      const next = new Map(prev);
+      const existing = prev.get(aiSessionId);
+      if (!existing) return prev;
+      const tab = existing.tabs.find(t => t.id === tabId);
+      if (!tab || !tab.pendingUserMessages || tab.pendingUserMessages.length === 0) return prev;
+      const updatedTabs = existing.tabs.map(t =>
+        t.id === tabId ? { ...t, pendingUserMessages: t.pendingUserMessages!.slice(1) } : t
       );
       next.set(aiSessionId, { ...existing, tabs: updatedTabs });
       return next;
@@ -553,6 +595,8 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     updateTabById,
     enqueuePendingMessage,
     dequeuePendingMessage,
+    enqueuePendingUserMessage,
+    dequeuePendingUserMessage,
     addTab,
     closeTab,
     removeAiChatState,

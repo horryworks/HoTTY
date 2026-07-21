@@ -83,6 +83,8 @@ export const aiChat = {
     sendTitleSelectModel: '請先選取模型',
     sendTitleEmpty: '請先輸入訊息',
     sendTitleStreaming: '串流中…',
+    sendTitleQueue: '目前回覆完成後傳送',
+    queuedCount: '排隊中 {{count}}',
     sendTitle: '傳送',
     // 提示與狀態
     selectModelHint: '開啟訊息框下方的 AI 設定以選取模型',

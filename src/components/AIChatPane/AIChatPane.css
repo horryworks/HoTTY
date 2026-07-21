@@ -493,6 +493,21 @@
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-color) 30%, transparent);
 }
 
+/* Small badge shown while the user has messages queued to send after the
+   current streaming response completes (typed/sent mid-response). */
+.ai-chat-queued-pill {
+    align-self: flex-start;
+    padding: 2px 8px;
+    border-radius: 8px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 3px);
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
 .ai-chat-input-toolbar {
     display: flex;
     align-items: center;

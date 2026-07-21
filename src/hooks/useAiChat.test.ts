@@ -207,6 +207,27 @@ describe('useAiChat', () => {
     expect(result.current.aiChatStates.get('ai-1')!.tabs[0].pendingMessages).toEqual(['second']);
   });
 
+  it('priority (user) queue enqueues FIFO, dequeues from the front, and is kept separate from the machine queue', () => {
+    const opts = makeDefaultOptions();
+    const { result } = renderHook(() => useAiChat(opts));
+    act(() => { result.current.updateAiChatState('ai-1', createDefaultAiChatState()); });
+    const tabId = result.current.aiChatStates.get('ai-1')!.activeTabId;
+
+    act(() => {
+      result.current.enqueuePendingMessage('ai-1', tabId, 'machine');
+      result.current.enqueuePendingUserMessage('ai-1', tabId, 'human-1');
+      result.current.enqueuePendingUserMessage('ai-1', tabId, 'human-2');
+    });
+    const tab0 = () => result.current.aiChatStates.get('ai-1')!.tabs[0];
+    expect(tab0().pendingUserMessages).toEqual(['human-1', 'human-2']);
+    // Separate queues — the machine queue is untouched by user enqueues.
+    expect(tab0().pendingMessages).toEqual(['machine']);
+
+    act(() => { result.current.dequeuePendingUserMessage('ai-1', tabId); });
+    expect(tab0().pendingUserMessages).toEqual(['human-2']);
+    expect(tab0().pendingMessages).toEqual(['machine']);
+  });
+
   it('updateTabById / enqueue is a no-op if the tab id does not exist', () => {
     const opts = makeDefaultOptions();
     const { result } = renderHook(() => useAiChat(opts));

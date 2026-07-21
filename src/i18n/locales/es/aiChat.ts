@@ -83,6 +83,8 @@ export const aiChat = {
     sendTitleSelectModel: 'Seleccione primero un modelo',
     sendTitleEmpty: 'Escriba primero un mensaje',
     sendTitleStreaming: 'Transmitiendo…',
+    sendTitleQueue: 'Enviar tras la respuesta actual',
+    queuedCount: '{{count}} en cola',
     sendTitle: 'Enviar',
     // Sugerencias y estado
     selectModelHint: 'Abra la configuración de IA debajo del cuadro de mensaje para elegir un modelo',

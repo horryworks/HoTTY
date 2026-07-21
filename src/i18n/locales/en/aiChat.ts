@@ -85,6 +85,8 @@ export const aiChat = {
     sendTitleSelectModel: 'Select a model first',
     sendTitleEmpty: 'Type a message first',
     sendTitleStreaming: 'Streaming…',
+    sendTitleQueue: 'Send after current reply',
+    queuedCount: '{{count}} queued',
     sendTitle: 'Send',
     // Hints & status
     selectModelHint: 'Open AI settings below the message box to choose a model',
