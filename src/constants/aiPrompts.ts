@@ -58,6 +58,17 @@ export const NETWORK_EXPERT_RECONNECT_PREP =
     'The terminal session was just reconnected, so paging is likely re-enabled. Re-run ONLY the paging-disable command for this device (the equivalent of Cisco `terminal length 0`). Do NOT run show version again and do NOT answer anything else — just that one command, then wait for my question.';
 
 /**
+ * Append a routing directive to a Network-Expert kickoff / reconnect-prep message
+ * so that, when a chat watches SEVERAL terminals, the start-of-session protocol
+ * runs on ONE specific terminal (named by its alias) and its execute blocks are
+ * tagged `target=<alias>`. Used only for multi-watch (≥2 terminals); a single
+ * watched terminal uses the bare message.
+ */
+export function withTargetDirective(message: string, alias: string): string {
+    return `${message}\n\n[Apply this ONLY to the watched terminal aliased "${alias}": identify/act on that terminal and tag every execute block with target=${alias}. Ignore the other watched terminals for now.]`;
+}
+
+/**
  * Build the language directive appended to an AI system instruction.
  *
  * Returns an empty string for `English` (the model's default) and for `Auto`

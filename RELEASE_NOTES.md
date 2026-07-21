@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.12-beta4
+
+Fixes the Network Expert persona so it identifies every terminal a chat watches, not just the first.
+
+### Bug Fixes
+
+- **Network Expert now preps every watched terminal.** When an AI Chat using the **Network Expert** persona watches several terminals, the start-of-session protocol (identify the device, then disable paging) now runs on each watched device in turn, with each command routed to the correct terminal — previously only the first terminal was identified. Adding another terminal to the conversation no longer risks clearing the existing chat, and a reconnected device re-disables paging on its own terminal.
+
 ## v2.0.12-beta3
 
 One AI Chat conversation can now watch several terminals at once, and AI-suggested commands are routed to the right terminal automatically.

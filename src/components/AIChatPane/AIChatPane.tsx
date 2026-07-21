@@ -16,7 +16,7 @@ import {
 import { STORAGE_KEYS } from '../../constants/storage';
 import { aiProviderLabelKey } from '../../constants/aiProviders';
 import { formatAICost } from '../../constants/aiPricing';
-import { buildExecutionRules, languageDirective, AUTO_LANGUAGE, NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP, buildWatchTargetsBlock } from '../../constants/aiPrompts';
+import { buildExecutionRules, languageDirective, AUTO_LANGUAGE, NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP, buildWatchTargetsBlock, withTargetDirective } from '../../constants/aiPrompts';
 import { ExecutionModeBar } from './ExecutionModeBar';
 import { TerminalOutputBlock } from './TerminalOutputBlock';
 import { parseTerminalOutputMessage, notConnectedNote, declinedNote } from './terminalOutputUtils';
@@ -587,9 +587,13 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         ? (sessions?.get(lastTargetSessionId)?.status ?? linkableById.get(lastTargetSessionId)?.status)
         : undefined;
     const linkedLive = lastTargetStatus === 'connected';
-    // Config-derived identity of the exec target (survives reconnect) — used by the
-    // Network-Expert kickoff to detect same-device reconnects.
-    const execTargetBindingKey = (activeTab?.linkedSessions ?? []).find((w) => w.sessionId === lastTargetSessionId)?.bindingKey;
+    // Compact signal that changes whenever the active tab's watched SET or any
+    // watched terminal's liveness changes — drives the Network-Expert auto-kickoff
+    // to (re-)evaluate each watched device without depending on the whole `sessions`
+    // map identity. `sid:1` = connected, `sid:0` = not.
+    const watchLivenessKey = watchedTerminals
+        .map((w) => `${w.sessionId}:${(sessions?.get(w.sessionId)?.status ?? linkableById.get(w.sessionId)?.status) === 'connected' ? '1' : '0'}`)
+        .join(',');
 
     // Mirrors of values the async auto-exec effect must re-check AFTER its await
     // (state captured at effect-run time may be stale by the time classification
@@ -891,79 +895,91 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatState, isAuthenticated, streamingTabIds, paneId, selectedModel, availableModels, modelLoadError, aiDataConsentAccepted]);
 
-    // ── Auto-kickoff: Network Expert start-of-session protocol ──
-    // When a Network Expert chat has a LIVE linked terminal, inject the kickoff as
-    // the active tab's pending message so the mandatory protocol (device ID → paging
-    // disable) runs WITHOUT the user typing a first message. Requires auth + a model
-    // so the auto-send loop can actually dispatch it.
+    // ── Auto-kickoff: Network Expert start-of-session protocol (multi-device) ──
+    // When a Network Expert chat WATCHES one or more LIVE terminals, inject the
+    // start-of-session protocol (device ID → paging disable) as a pending message —
+    // once PER watched device — WITHOUT the user typing a first message. Requires
+    // auth + a model so the auto-send loop can dispatch it.
     //
-    // kickedForDeviceRef tracks, per tab, the DEVICE the current conversation was
-    // kicked for — keyed on the config-derived binding key (host/port/user, serial
-    // port, …), NOT the session id. A reconnect mints a new session id for the SAME
-    // device, so keying on the binding key is what tells a true device switch apart
-    // from a reconnect. lastSessionForDeviceRef remembers the session id we last
-    // acted on so a same-device reconnect (id changed, key unchanged) is detectable.
-    // Behavior:
-    //   - First live link, empty conversation → full kickoff in place.
-    //   - Link changes to a DIFFERENT device → clear the old conversation AND its
-    //     backend history (auto "New chat") first, then full kickoff, so the old
-    //     device's output can't pollute the new device's context.
-    //   - Reconnect to the SAME device (new session id, same binding key) DURING an
-    //     ongoing conversation → keep the chat, inject only a lightweight paging
-    //     re-disable (the model still knows the vendor from context). An empty
-    //     conversation needs nothing — the persona protocol re-preps on the user's
-    //     next message.
-    //   - Same link re-render / tab re-show → no-op.
-    //   - A conversation the user typed into on a device we never managed is left
-    //     untouched (we never hijack a manual chat).
-    const kickedForDeviceRef = useRef<Map<string, string>>(new Map());
-    const lastSessionForDeviceRef = useRef<Map<string, string>>(new Map());
+    // kickedForDeviceRef tracks, per tab, a Map of DEVICE → the session id we last
+    // acted on. The device key is the config-derived binding key (host/port/user,
+    // serial port, …) when known, else the session id — stable across a reconnect
+    // (which mints a new session id for the SAME device), so a reconnect (id changed,
+    // key unchanged) is told apart from a genuinely new device.
+    //
+    // One pending message is enqueued per effect run; the pending/stream guards gate
+    // the next device, so devices are prepped SEQUENTIALLY (never colliding on one
+    // backend session). Each message is TARGETED at its terminal via `target=<alias>`
+    // when several are watched, so the command lands on the right one. Adding a
+    // terminal is ADDITIVE — never treated as a device "switch" that clears the
+    // conversation (multi-watch keeps every device's context).
+    // Behavior per watched device:
+    //   - Never kicked → full kickoff (skipped only when the user already typed into
+    //     an otherwise-unkicked chat — we never hijack a manual conversation).
+    //   - Same device, new session id (reconnect) mid-conversation → lightweight
+    //     paging re-disable; an empty conversation just updates tracking.
+    const kickedForDeviceRef = useRef<Map<string, Map<string, string>>>(new Map());
     // Now that every per-tab tracking ref exists, wire the forward handle used by
     // the provider-switch and logout effects (declared above these refs).
     resetAllTabTrackingRef.current = () => {
         clearAllCountdownTimers();
         applyAutoExec({ type: 'resetAll' });
         kickedForDeviceRef.current.clear();
-        lastSessionForDeviceRef.current.clear();
     };
-    const performNewChatRef = useRef<() => void>(() => {});
     useEffect(() => {
         if (!isNetworkExpert) return;
         if (!isAuthenticated || selectedModel === 'Unspecified') return;
         if (!activeTabId || isStreaming) return;
-        if (activeTab?.pendingMessages?.length) return;
-        if (!lastTargetSessionId || !linkedLive) return;   // need a live linked target right now
+        if (activeTab?.pendingMessages?.length) return;   // one kickoff in flight at a time
+        const watched = activeTab?.linkedSessions ?? [];
+        if (watched.length === 0) return;
 
-        // Stable device identity (survives reconnect); fall back to the session id
-        // only if a binding key was never recorded for this link. Uses the exec
-        // target's binding key (the terminal a Network-Expert command would run on).
-        const device = execTargetBindingKey ?? lastTargetSessionId;
-        const kickedFor = kickedForDeviceRef.current.get(activeTabId);
+        // Aliases so a per-device message can name its terminal (target=<alias>); the
+        // SAME builder feeds the system-prompt alias list, so the two agree.
+        const aliasEntries = buildAliasEntries(watched.map((w) => {
+            const rec = sessions?.get(w.sessionId);
+            const ls = linkableById.get(w.sessionId);
+            return { sessionId: w.sessionId, displayName: rec?.displayName ?? ls?.displayName ?? w.sessionId, status: rec?.status ?? ls?.status };
+        }));
+        const multi = watched.length >= 2;
 
-        if (kickedFor === device) {
-            // Same device we already kicked. Only react to a SESSION id change, i.e.
-            // a reconnect (new SSH session ⇒ paging reset).
-            if (lastSessionForDeviceRef.current.get(activeTabId) === lastTargetSessionId) return;
-            lastSessionForDeviceRef.current.set(activeTabId, lastTargetSessionId);
-            if (messages.length === 0) return;             // nothing to preserve; persona re-preps on next msg
-            setConsecutiveAutoExecCount(0);
-            onEnqueuePending?.(activeTabId, NETWORK_EXPERT_RECONNECT_PREP);
-            return;
+        let kicked = kickedForDeviceRef.current.get(activeTabId);
+        if (!kicked) { kicked = new Map(); kickedForDeviceRef.current.set(activeTabId, kicked); }
+
+        for (let i = 0; i < watched.length; i++) {
+            const w = watched[i];
+            const status = sessions?.get(w.sessionId)?.status ?? linkableById.get(w.sessionId)?.status;
+            if (status !== 'connected') continue;          // only prep LIVE terminals
+            const deviceId = w.bindingKey ?? w.sessionId;
+            const alias = aliasEntries[i]?.alias;
+            const prevSession = kicked.get(deviceId);
+
+            if (prevSession === undefined) {
+                // Never kicked this device. Don't hijack a chat the user started
+                // manually (messages exist but nothing was ever auto-kicked here).
+                if (messages.length > 0 && kicked.size === 0) return;
+                kicked.set(deviceId, w.sessionId);
+                setConsecutiveAutoExecCount(0);
+                onEnqueuePending?.(activeTabId, multi && alias ? withTargetDirective(NETWORK_EXPERT_KICKOFF, alias) : NETWORK_EXPERT_KICKOFF);
+                return;                                    // one device per run — the queue drains, then re-run
+            }
+            if (prevSession !== w.sessionId) {
+                // Same device, new session id → reconnect. Remember the new id; only
+                // re-prep paging when there is a conversation to preserve.
+                kicked.set(deviceId, w.sessionId);
+                if (messages.length === 0) return;
+                setConsecutiveAutoExecCount(0);
+                onEnqueuePending?.(activeTabId, multi && alias ? withTargetDirective(NETWORK_EXPERT_RECONNECT_PREP, alias) : NETWORK_EXPERT_RECONNECT_PREP);
+                return;
+            }
         }
-
-        // Different device (or first link).
-        const isSwitch = kickedFor !== undefined;          // managed a different device before
-        if (messages.length > 0 && !isSwitch) return;      // don't hijack a manual same-device chat
-        if (messages.length > 0) performNewChatRef.current(); // genuine device switch → fresh context first
-
-        kickedForDeviceRef.current.set(activeTabId, device);
-        lastSessionForDeviceRef.current.set(activeTabId, lastTargetSessionId);
-        setConsecutiveAutoExecCount(0);
-        onEnqueuePending?.(activeTabId, NETWORK_EXPERT_KICKOFF);
+    // sessions/linkableById are read inside but re-runs are driven by the compact
+    // watchLivenessKey + the watched set; matches the pattern used by the send loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
-        isNetworkExpert, isAuthenticated, selectedModel, activeTabId, lastTargetSessionId,
-        linkedLive, messages.length, isStreaming, activeTab?.pendingMessages?.length,
-        execTargetBindingKey, onEnqueuePending,
+        isNetworkExpert, isAuthenticated, selectedModel, activeTabId,
+        activeTab?.linkedSessions, watchLivenessKey, messages.length, isStreaming,
+        activeTab?.pendingMessages?.length, onEnqueuePending,
     ]);
 
 
@@ -1000,7 +1016,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             if (!liveIds.has(tabId)) { clearTimeout(timer); countdownTimersRef.current.delete(key); }
         }
         pruneMap(kickedForDeviceRef.current as Map<string, unknown>);
-        pruneMap(lastSessionForDeviceRef.current as Map<string, unknown>);
         pruneStreams(liveIds);
     }, [tabIdsKey, applyAutoExec, pruneStreams]);
 
@@ -1444,9 +1459,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         }
         tauriService.aiChatClear(aiBackendSessionId(paneId, activeTabId)).catch(() => {});
     };
-    // Stable handle so the Network Expert auto-kickoff effect can start a fresh chat
-    // on a device switch without taking performNewChat as a (churning) dependency.
-    performNewChatRef.current = performNewChat;
 
     const handleNewChatClick = () => {
         if (messages.length > 0 || streamingContent) {

@@ -309,6 +309,55 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
         expect(h.onEnqueuePending).toHaveBeenCalledWith('t1', NETWORK_EXPERT_KICKOFF);
     });
 
+    it('TARGETS the first watched device when a Network Expert chat watches SEVERAL terminals', async () => {
+        const twoSessions = new Map([
+            ['sess-1', { id: 'sess-1', displayName: 'Device A', status: 'connected' }],
+            ['sess-2', { id: 'sess-2', displayName: 'Device B', status: 'connected' }],
+        ]);
+        renderPane({
+            aiPersonas: networkExpertPersonas,
+            onUpdateTabById: h.onUpdateTabById,
+            sessions: twoSessions,
+            chatState: {
+                ...baseProps.chatState,
+                tabs: [{ id: 't1', title: 'Device A +1', ordinal: 1, linkedSessions: [{ sessionId: 'sess-1' }, { sessionId: 'sess-2' }] }],
+            },
+        });
+        await authenticate();
+
+        // Multi-watch → the kickoff is TARGETED at the first device's alias (device-a),
+        // wrapping the standard kickoff, so the identify command runs on THAT terminal
+        // (not the bare generic kickoff that would fall back to one terminal).
+        expect(h.onEnqueuePending).toHaveBeenCalledTimes(1);
+        const [tabId, msg] = h.onEnqueuePending.mock.calls[0];
+        expect(tabId).toBe('t1');
+        expect(msg).toContain('target=device-a');
+        expect(msg).toContain(NETWORK_EXPERT_KICKOFF);
+    });
+
+    it('skips a DISCONNECTED watched terminal and kicks the live one, targeted', async () => {
+        const mixedSessions = new Map([
+            ['sess-1', { id: 'sess-1', displayName: 'Device A', status: 'disconnected' }],
+            ['sess-2', { id: 'sess-2', displayName: 'Device B', status: 'connected' }],
+        ]);
+        renderPane({
+            aiPersonas: networkExpertPersonas,
+            onUpdateTabById: h.onUpdateTabById,
+            sessions: mixedSessions,
+            chatState: {
+                ...baseProps.chatState,
+                tabs: [{ id: 't1', title: 'Device A +1', ordinal: 1, linkedSessions: [{ sessionId: 'sess-1' }, { sessionId: 'sess-2' }] }],
+            },
+        });
+        await authenticate();
+
+        // Device A is offline → skipped; the live Device B is kicked, targeted at its alias.
+        expect(h.onEnqueuePending).toHaveBeenCalledTimes(1);
+        const [, msg] = h.onEnqueuePending.mock.calls[0];
+        expect(msg).toContain('target=device-b');
+        expect(msg).not.toContain('target=device-a');
+    });
+
     it('re-runs the kickoff when the chat is re-linked to a DIFFERENT device', async () => {
         const twoSessions = new Map([
             ['sess-1', { id: 'sess-1', displayName: 'Device A', status: 'connected' }],
