@@ -19,6 +19,8 @@ export const chrome = {
     fixedTerminalSize: 'Ancho fijo ({{cols}})',
     watchAi: 'Monitorear con IA',
     stopWatchAi: 'Detener monitoreo de IA',
+    watchInTitle: 'Monitorear en',
+    watchInNew: 'Nueva conversación',
     bookmark: 'Añadir marcador…',
   },
   appSidebar: {

@@ -36,3 +36,35 @@ export function decideWatchToggle(
         ? { action: 'remove', tabId: activeTab.id }
         : { action: 'add', tabId: activeTab.id };
 }
+
+/**
+ * Plan for the "Watch in ▸" picker (shown when 2+ conversations exist, so the
+ * destination is explicit). SINGLE-OWNER: a terminal is watched by at most one
+ * conversation, so choosing a destination MOVES it there.
+ *
+ *  - target = a conversation that already owns it  → toggle OFF (pure remove).
+ *  - target = a different conversation             → move (remove from its current
+ *                                                    owner, add to target).
+ *  - target = 'new'                                → move into a fresh conversation.
+ *
+ * `removeFrom` lists every conversation currently holding the session (normally
+ * ≤1 given the invariant; more only if a stale duplicate slipped through). `addTo`
+ * is the destination tab id, `'new'`, or `null` when the click was a toggle-off.
+ */
+export interface WatchInPlan {
+    removeFrom: string[];
+    addTo: string | 'new' | null;
+}
+
+export function planWatchIn(
+    sessionId: string,
+    tabs: WatchTabLike[],
+    target: string | 'new',
+): WatchInPlan {
+    const ownerIds = tabs
+        .filter((t) => t.linkedSessions.some((w) => w.sessionId === sessionId))
+        .map((t) => t.id);
+    if (target === 'new') return { removeFrom: ownerIds, addTo: 'new' };
+    if (ownerIds.includes(target)) return { removeFrom: [target], addTo: null };
+    return { removeFrom: ownerIds, addTo: target };
+}

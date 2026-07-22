@@ -182,6 +182,36 @@ describe('useAiChat', () => {
     expect(tab?.title).toBe('Router1 +1');
   });
 
+  it('addTabLink enforces single-owner: adding to another tab MOVES the terminal off the first', () => {
+    const sessions = new Map<string, SessionRecord>();
+    sessions.set('s1', makeSessionRecord('s1', { displayName: 'Router1' }));
+    sessions.set('s2', makeSessionRecord('s2', { displayName: 'Switch2' }));
+
+    const opts = makeDefaultOptions({ sessions });
+    const { result } = renderHook(() => useAiChat(opts));
+
+    act(() => { result.current.updateAiChatState('ai-1', createDefaultAiChatState()); });
+    const tabA = result.current.aiChatStates.get('ai-1')!.activeTabId;
+    let tabB = '';
+    act(() => { tabB = result.current.addTab('ai-1'); });
+
+    act(() => {
+      result.current.addTabLink('ai-1', tabA, 's1');
+      result.current.addTabLink('ai-1', tabA, 's2');
+    });
+    // Move s1 into tab B — single-owner means it must leave tab A.
+    act(() => { result.current.addTabLink('ai-1', tabB, 's1'); });
+
+    const a = result.current.aiChatStates.get('ai-1')!.tabs.find(t => t.id === tabA);
+    const b = result.current.aiChatStates.get('ai-1')!.tabs.find(t => t.id === tabB);
+    expect(tabSessionIds(a)).toEqual(['s2']);      // s1 removed from A
+    expect(tabSessionIds(b)).toEqual(['s1']);      // s1 now owned by B
+    expect(a?.lastFocusedWatchId).toBe('s2');      // A repointed off the moved s1
+    expect(b?.lastFocusedWatchId).toBe('s1');
+    expect(a?.title).toBe('Switch2');              // both titles recomputed
+    expect(b?.title).toBe('Router1');
+  });
+
   it('removeTabLink drops one terminal and re-points lastFocusedWatchId', () => {
     const sessions = new Map<string, SessionRecord>();
     sessions.set('s1', makeSessionRecord('s1', { displayName: 'Router1' }));

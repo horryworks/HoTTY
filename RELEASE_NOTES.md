@@ -1,5 +1,21 @@
 # Release Notes
 
+## v2.0.12-beta5
+
+AI Chat now color-codes each conversation and lets you choose which one watches a terminal — and every watched terminal lights up, not just one.
+
+### New Features
+
+- **Choose which conversation watches a terminal.** When you have two or more AI Chat conversations open, clicking a terminal's **AI Watch** button now opens a small picker so you pick which conversation should watch it — or start a new conversation — instead of it silently joining whichever chat happened to be active. A terminal belongs to one conversation at a time: choosing a different conversation moves it there, and choosing its current one stops watching. With a single conversation, **AI Watch** stays one click as before.
+
+### Improvements
+
+- **Color-coded conversations.** Each AI Chat conversation now has its own color. Every terminal it watches lights its **AI Watch** button and tab underline in that color, and the conversation's tab and its header chips share the same color — so you can tell at a glance which conversation is watching which terminals. The colors are editable in the Custom Theme editor.
+
+### Bug Fixes
+
+- **Every watched terminal now lights up.** When one conversation watched several terminals, only a single terminal's **AI Watch** button turned green; now every watched terminal is highlighted, each in its conversation's color.
+
 ## v2.0.12-beta4
 
 Fixes the Network Expert persona so it identifies every terminal a chat watches, not just the first.

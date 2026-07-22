@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUiOverlayStore } from '../../stores/uiOverlayStore';
-import { type TabItem } from './tabBarHelpers';
+import { type TabItem, type ConversationSummary } from './tabBarHelpers';
+import { conversationColorVar } from '../../utils/conversationColor';
 import './TabBar.css';
 
 interface TabBarProps {
@@ -13,6 +14,10 @@ interface TabBarProps {
   onNew: () => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
   onToggleWatch?: (id: string) => void;
+  /** AI Chat conversations (of the singleton pane) for the "Watch in ▸" picker. */
+  conversations?: ConversationSummary[];
+  /** Route a terminal into a specific conversation (or 'new'); single-owner move. */
+  onWatchInConversation?: (sessionId: string, target: string | 'new') => void;
   onSaveToHostTree?: (id: string) => void;
   onToggleFixedSize?: (id: string) => void;
   onBookmark?: (id: string) => void;
@@ -39,6 +44,15 @@ interface ContextMenuState {
   y: number;
 }
 
+interface WatchMenuState {
+  /** Terminal session the "Watch in ▸" picker is acting on. */
+  sessionId: string;
+  /** The conversation tab currently watching it, if any (marked as owner). */
+  ownerTabId?: string;
+  x: number;
+  y: number;
+}
+
 export function TabBar({
   tabItems,
   activeTabId,
@@ -48,6 +62,8 @@ export function TabBar({
   onNew,
   onReorder,
   onToggleWatch,
+  conversations = [],
+  onWatchInConversation,
   onSaveToHostTree,
   onToggleFixedSize,
   onBookmark,
@@ -64,8 +80,10 @@ export function TabBar({
   const [dragOverSide, setDragOverSide] = useState<DragOverSide>(null);
   const [showFeaturesMenu, setShowFeaturesMenu] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [watchMenu, setWatchMenu] = useState<WatchMenuState | null>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const watchMenuRef = useRef<HTMLDivElement>(null);
 
   const visibleSet = new Set(visibleTabIds);
 
@@ -102,6 +120,25 @@ export function TabBar({
       document.removeEventListener('keydown', handleKey);
     };
   }, [contextMenu]);
+
+  // Close the "Watch in ▸" picker on outside click or Esc (mirrors the context menu).
+  useEffect(() => {
+    if (!watchMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (watchMenuRef.current && !watchMenuRef.current.contains(e.target as Node)) {
+        setWatchMenu(null);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setWatchMenu(null);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [watchMenu]);
 
   const handleDragStart = (index: number, itemId: string) => (e: React.DragEvent) => {
     setDragSourceIndex(index);
@@ -159,11 +196,21 @@ export function TabBar({
             dragOverIndex === i && dragOverSide
               ? ` drag-over-${dragOverSide}`
               : '';
+          // Paint a watched terminal in its owning conversation's color. Exposed as
+          // `--tab-watch-color`, consumed by the watch-dot fill and the linked bar.
+          const watchColor =
+            item.isWatching && item.watchColorIndex != null
+              ? conversationColorVar(item.watchColorIndex)
+              : undefined;
+          const tabStyle = watchColor
+            ? ({ '--tab-watch-color': watchColor } as React.CSSProperties)
+            : undefined;
           return (
             <div
               key={item.id}
               data-session-id={item.id}
               draggable
+              style={tabStyle}
               className={`tab${isActive ? ' active active-pane-tab' : ''}${
                 item.status === 'error' ? ' error' : ''
               }${item.status === 'connecting' ? ' connecting' : ''}${
@@ -216,23 +263,25 @@ export function TabBar({
                   title={item.isWatching ? t('chrome.tabBar.aiMonitorActive') : t('chrome.tabBar.aiMonitorStart')}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onToggleWatch(item.id);
+                    // With 2+ conversations the destination is ambiguous, so open the
+                    // "Watch in ▸" picker instead of silently attaching to the active
+                    // one. With 0–1 conversations, one-click toggle as before.
+                    if (conversations.length >= 2 && onWatchInConversation) {
+                      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      setWatchMenu({ sessionId: item.id, ownerTabId: item.watchOwnerTabId, x: r.left, y: r.bottom + 2 });
+                    } else {
+                      onToggleWatch(item.id);
+                    }
                   }}
                   aria-label={item.isWatching ? t('chrome.tabBar.aiMonitorStopAria') : t('chrome.tabBar.aiMonitorStartAria')}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10"
-                      fill={item.isWatching ? 'url(#ai-glow-gradient)' : 'currentColor'}
+                      fill={item.isWatching ? 'var(--tab-watch-color, var(--success-color, #4ade80))' : 'currentColor'}
                       opacity={item.isWatching ? 1 : 0.7} />
                     <circle cx="12" cy="12" r="6"
-                      fill={item.isWatching ? 'var(--accent-light, #42a5f5)' : 'currentColor'}
-                      opacity={item.isWatching ? 0.9 : 0.4} />
-                    <defs>
-                      <linearGradient id="ai-glow-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="var(--success-color, #4ade80)" />
-                        <stop offset="100%" stopColor="var(--accent-color, #007acc)" />
-                      </linearGradient>
-                    </defs>
+                      fill={item.isWatching ? 'var(--tab-watch-color, var(--accent-light, #42a5f5))' : 'currentColor'}
+                      opacity={item.isWatching ? 0.9 : 0.45} />
                   </svg>
                 </button>
               )}
@@ -437,6 +486,50 @@ export function TabBar({
               {t('chrome.tabBar.bookmark')}
             </div>
           )}
+        </div>
+      )}
+
+      {watchMenu && onWatchInConversation && (
+        <div
+          ref={watchMenuRef}
+          className="tab-watch-menu"
+          style={{ top: watchMenu.y, left: watchMenu.x }}
+          role="menu"
+        >
+          <div className="tab-watch-menu-title">{t('chrome.tabBar.watchInTitle')}</div>
+          {conversations.map((c) => {
+            const isOwner = c.id === watchMenu.ownerTabId;
+            return (
+              <div
+                key={c.id}
+                className={`tab-watch-menu-item${isOwner ? ' owner' : ''}`}
+                role="menuitemradio"
+                aria-checked={isOwner}
+                onClick={() => {
+                  onWatchInConversation(watchMenu.sessionId, c.id);
+                  setWatchMenu(null);
+                }}
+              >
+                <span
+                  className="tab-watch-menu-dot"
+                  style={{ background: conversationColorVar(c.colorIndex) }}
+                />
+                <span className="tab-watch-menu-label">{c.title}</span>
+                {isOwner && <span className="tab-watch-menu-check">✓</span>}
+              </div>
+            );
+          })}
+          <div
+            className="tab-watch-menu-item tab-watch-menu-new"
+            role="menuitem"
+            onClick={() => {
+              onWatchInConversation(watchMenu.sessionId, 'new');
+              setWatchMenu(null);
+            }}
+          >
+            <span className="tab-watch-menu-dot tab-watch-menu-plus" aria-hidden="true">+</span>
+            <span className="tab-watch-menu-label">{t('chrome.tabBar.watchInNew')}</span>
+          </div>
         </div>
       )}
     </div>

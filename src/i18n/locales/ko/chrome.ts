@@ -20,6 +20,8 @@ export const chrome = {
     fixedTerminalSize: '너비 고정 ({{cols}})',
     watchAi: 'AI로 모니터링',
     stopWatchAi: 'AI 모니터링 중지',
+    watchInTitle: '모니터링할 대화',
+    watchInNew: '새 대화',
     bookmark: '북마크 추가…',
   },
   appSidebar: {

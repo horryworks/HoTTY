@@ -51,11 +51,34 @@ describe('buildTabItems', () => {
     expect(result[1].id).toBe('s1');
   });
 
-  it('marks watching session', () => {
+  it('marks a watched session from the map and threads its color index + owner', () => {
     const sessions = [makeSession('s1'), makeSession('s2')];
-    const result = buildTabItems(sessions, [], ['s1', 's2'], 's2');
+    const watched = new Map([['s2', { tabId: 't1', colorIndex: 1 }]]);
+    const result = buildTabItems(sessions, [], ['s1', 's2'], watched);
     expect(result[0].isWatching).toBe(false);
+    expect(result[0].watchColorIndex).toBeUndefined();
     expect(result[1].isWatching).toBe(true);
+    expect(result[1].watchColorIndex).toBe(1);
+    expect(result[1].watchOwnerTabId).toBe('t1');
+  });
+
+  it('lights up EVERY watched session (multi-watch), each in its own color', () => {
+    const sessions = [makeSession('s1'), makeSession('s2'), makeSession('s3')];
+    const watched = new Map([
+      ['s1', { tabId: 't1', colorIndex: 0 }],
+      ['s3', { tabId: 't2', colorIndex: 1 }],
+    ]);
+    const result = buildTabItems(sessions, [], ['s1', 's2', 's3'], watched);
+    expect(result.map((r) => r.isWatching)).toEqual([true, false, true]);
+    expect(result[0].watchColorIndex).toBe(0);
+    expect(result[2].watchColorIndex).toBe(1);
+  });
+
+  it('treats an empty map as nothing watched', () => {
+    const sessions = [makeSession('s1')];
+    const result = buildTabItems(sessions, [], ['s1'], new Map());
+    expect(result[0].isWatching).toBe(false);
+    expect(result[0].watchColorIndex).toBeUndefined();
   });
 
   it('skips IDs not in sessions or features', () => {

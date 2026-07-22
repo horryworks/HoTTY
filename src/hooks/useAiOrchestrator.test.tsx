@@ -273,3 +273,69 @@ describe('useAiOrchestrator — watch toggle + session removal', () => {
     expect(tv.setWatching).toHaveBeenCalledWith(SID, false, 0);
   });
 });
+
+// Two-conversation state: TAB (ordinal 1) watches SID; a second empty tab exists.
+function makeTwoTabStates(): Map<string, AiChatState> {
+  return new Map<string, AiChatState>([[PANE, {
+    selectedModel: '', systemInstruction: '', activeTabId: TAB,
+    tabs: [
+      { id: TAB, ordinal: 1, title: '', linkedSessions: [{ sessionId: SID }], lastFocusedWatchId: SID },
+      { id: 'tab-2', ordinal: 2, title: '', linkedSessions: [], lastFocusedWatchId: undefined },
+    ],
+  } as unknown as AiChatState]]);
+}
+
+describe('useAiOrchestrator — watchedSessions map + "Watch in" routing', () => {
+  it('exposes watchedSessions mapping each watched session to its owner tab + color slot', () => {
+    const aiChat = makeAiChat(makeStates(SID)); // TAB (ordinal 1) watches SID
+    const { result } = renderHook(() => useAiOrchestrator(makeOptions({ aiChat })));
+
+    expect(result.current.watchedSessions.get(SID)).toEqual({ tabId: TAB, colorIndex: 0 });
+  });
+
+  it('watchInConversation gates on consent (no link mutation on decline)', async () => {
+    const ensureConsent = vi.fn().mockResolvedValue(false);
+    const aiChat = makeAiChat(makeTwoTabStates());
+    const { result } = renderHook(() => useAiOrchestrator(makeOptions({ ensureConsent, aiChat })));
+
+    await act(async () => { result.current.watchInConversation(SID, 'tab-2'); });
+
+    expect(ensureConsent).toHaveBeenCalledTimes(1);
+    expect(aiChat.addTabLink).not.toHaveBeenCalled();
+    expect(aiChat.removeTabLink).not.toHaveBeenCalled();
+  });
+
+  it('watchInConversation MOVES a terminal to another conversation (remove old, add + activate target)', async () => {
+    const aiChat = makeAiChat(makeTwoTabStates());
+    const { result } = renderHook(() => useAiOrchestrator(makeOptions({ aiChat })));
+
+    await act(async () => { result.current.watchInConversation(SID, 'tab-2'); });
+
+    expect(aiChat.removeTabLink).toHaveBeenCalledWith(PANE, TAB, SID);
+    expect(aiChat.addTabLink).toHaveBeenCalledWith(PANE, 'tab-2', SID);
+    expect(aiChat.setActiveTab).toHaveBeenCalledWith(PANE, 'tab-2');
+  });
+
+  it('watchInConversation toggles OFF when targeting the current owner (remove only)', async () => {
+    const aiChat = makeAiChat(makeTwoTabStates());
+    const { result } = renderHook(() => useAiOrchestrator(makeOptions({ aiChat })));
+
+    await act(async () => { result.current.watchInConversation(SID, TAB); });
+
+    expect(aiChat.removeTabLink).toHaveBeenCalledWith(PANE, TAB, SID);
+    expect(aiChat.addTabLink).not.toHaveBeenCalled();
+  });
+
+  it('watchInConversation "new" seeds a fresh conversation and moves the terminal into it', async () => {
+    const aiChat = makeAiChat(makeTwoTabStates());
+    aiChat.addTab = vi.fn(() => 'tab-new') as OrchestratorAiChatApi['addTab'];
+    const { result } = renderHook(() => useAiOrchestrator(makeOptions({ aiChat })));
+
+    await act(async () => { result.current.watchInConversation(SID, 'new'); });
+
+    expect(aiChat.removeTabLink).toHaveBeenCalledWith(PANE, TAB, SID); // left old owner
+    expect(aiChat.addTab).toHaveBeenCalledWith(PANE);
+    expect(aiChat.addTabLink).toHaveBeenCalledWith(PANE, 'tab-new', SID);
+    expect(aiChat.setActiveTab).toHaveBeenCalledWith(PANE, 'tab-new');
+  });
+});

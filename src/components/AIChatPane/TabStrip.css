@@ -51,6 +51,21 @@
     color: var(--text-on-accent);
 }
 
+/* Conversation color chip (matches this conversation's watched terminal tabs &
+   header chips), so the terminal↔conversation ownership is legible at a glance. */
+.ai-chat-tab-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--conv-color, var(--accent-color));
+}
+
+/* On the accent-colored active tab, ring the dot so it stays distinct. */
+.ai-chat-tab.active .ai-chat-tab-dot {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-on-accent) 60%, transparent);
+}
+
 .ai-chat-tab-title {
     overflow: hidden;
     text-overflow: ellipsis;

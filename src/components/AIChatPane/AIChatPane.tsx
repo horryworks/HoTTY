@@ -22,6 +22,7 @@ import { TerminalOutputBlock } from './TerminalOutputBlock';
 import { parseTerminalOutputMessage, notConnectedNote, declinedNote } from './terminalOutputUtils';
 import { segmentMessageContent, extractExecuteCommands, extractExecuteBlocks } from './executeBlockUtils';
 import { buildAliasEntries, resolveAlias } from '../../utils/terminalAlias';
+import { conversationColorIndex, conversationColorVar } from '../../utils/conversationColor';
 import { SystemPromptModal } from '../SystemPromptModal/SystemPromptModal';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -422,6 +423,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // watches a SET of terminals — activeTab.linkedSessions).
     const activeTab = chatState ? getActiveTab(chatState) : undefined;
     const activeTabId = activeTab?.id;
+    // This conversation's color (matches its watched terminal tabs & conversation
+    // tab). Applied to the header chips so the ownership color chain is legible.
+    const activeConvColor = activeTab
+        ? conversationColorVar(conversationColorIndex(activeTab.ordinal))
+        : undefined;
     // Auth state is window-global (owned by useAiAuthOwner, mounted in App);
     // the pane is a pure consumer. Sign-in lives in Settings → AI.
     const isAuthenticated = useAiAuthStore((s) => s.isAuthenticated);
@@ -1586,7 +1592,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                 const stale = status !== 'connected';
                                 const label = name || t('aiChat.pane.terminalFallback');
                                 return (
-                                    <div key={w.sessionId} className={`ai-chat-link${stale ? ' ai-chat-link-stale' : ''}`}>
+                                    <div
+                                        key={w.sessionId}
+                                        className={`ai-chat-link${stale ? ' ai-chat-link-stale' : ''}`}
+                                        style={activeConvColor ? ({ '--accent-color': activeConvColor } as React.CSSProperties) : undefined}
+                                    >
                                         <button
                                             type="button"
                                             className={`ai-chat-linked-chip${stale ? ' ai-chat-linked-chip-stale' : ''}`}

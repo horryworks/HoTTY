@@ -20,6 +20,8 @@ export const chrome = {
     fixedTerminalSize: 'Fixed width ({{cols}})',
     watchAi: 'AI Watch',
     stopWatchAi: 'Stop AI Watch',
+    watchInTitle: 'Watch in',
+    watchInNew: 'New conversation',
     bookmark: 'Add Bookmark…',
   },
   appSidebar: {

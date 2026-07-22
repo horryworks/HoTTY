@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChatTab } from '../../hooks/useAiChat';
+import { conversationColorIndex, conversationColorVar } from '../../utils/conversationColor';
 import './TabStrip.css';
 
 interface TabStripProps {
@@ -20,6 +21,8 @@ export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect,
                     const active = tab.id === activeTabId;
                     // Empty title (unlinked/unnamed tab) => localized "Tab N" fallback.
                     const displayTitle = tab.title || t('aiChat.tabStrip.tabN', { n: tab.ordinal });
+                    // Per-conversation color (matches its watched terminal tabs & chips).
+                    const convColor = conversationColorVar(conversationColorIndex(tab.ordinal));
                     return (
                         <div
                             key={tab.id}
@@ -27,6 +30,7 @@ export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect,
                             aria-selected={active}
                             tabIndex={active ? 0 : -1}
                             className={`ai-chat-tab${active ? ' active' : ''}`}
+                            style={{ '--conv-color': convColor } as React.CSSProperties}
                             onClick={() => onSelect(tab.id)}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' || e.key === ' ') {
@@ -36,6 +40,7 @@ export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect,
                             }}
                             title={displayTitle}
                         >
+                            <span className="ai-chat-tab-dot" aria-hidden="true" />
                             <span className="ai-chat-tab-title">{displayTitle}</span>
                             {/* Always closeable. Closing the last tab closes the whole
                                 pane (handled by the parent's onClose). */}

@@ -4,7 +4,8 @@ import { Sidebar } from './components/Sidebar/Sidebar';
 import { sidebarPaneId } from './components/Sidebar/sidebarHelpers';
 import { AppSidebar } from './components/AppSidebar/AppSidebar';
 import { TabBar } from './components/TabBar/TabBar';
-import { buildTabItems } from './components/TabBar/tabBarHelpers';
+import { buildTabItems, type ConversationSummary } from './components/TabBar/tabBarHelpers';
+import { conversationColorIndex } from './utils/conversationColor';
 import { TerminalView } from './components/Terminal/Terminal';
 import { ConnectingOverlay } from './components/ConnectingOverlay/ConnectingOverlay';
 import { LogViewerPane } from './components/LogViewerPane/LogViewerPane';
@@ -261,10 +262,12 @@ function App() {
     watchingSessionId,
     setWatchingSessionId,
     watchingSessionIdsRef,
+    watchedSessions,
     crossWindowSessions,
     refreshCrossWindowSessions,
     removeAiChatTabsForSession,
     toggleWatch,
+    watchInConversation,
     openAiChatPane,
     clearRunCommandIntervals,
   } = aiOrch;
@@ -392,7 +395,19 @@ function App() {
 
   const featurePanesList: FeaturePaneInfo[] = Array.from(featurePanes.values());
 
-  const tabItems = buildTabItems(orderedSessions, featurePanesList, sessionOrder, watchingSessionId);
+  const tabItems = buildTabItems(orderedSessions, featurePanesList, sessionOrder, watchedSessions);
+
+  // Conversations of the singleton AI Chat pane, for the terminal tab's "Watch in ▸"
+  // picker. Titles are resolved here (with the "Tab N" fallback) so TabBar needs no
+  // aiChat i18n; the color matches each conversation's tab and its watched terminals.
+  const aiChatPaneId = featurePanesList.find((f) => f.type === 'ai-chat')?.id;
+  const aiConversations: ConversationSummary[] = aiChatPaneId
+    ? (aiChatStates.get(aiChatPaneId)?.tabs ?? []).map((tab) => ({
+        id: tab.id,
+        title: tab.title || t('aiChat.tabStrip.tabN', { n: tab.ordinal }),
+        colorIndex: conversationColorIndex(tab.ordinal),
+      }))
+    : [];
 
   const visibleTabIds: string[] = [
     ...gridPaneIds(layoutMode),
@@ -769,6 +784,8 @@ function App() {
             onNew={handleNewConnectionClick}
             onReorder={reorderSessionInStore}
             onToggleWatch={toggleWatch}
+            conversations={aiConversations}
+            onWatchInConversation={watchInConversation}
             onSaveToHostTree={(id) => setSaveToTreeSessionId(id)}
             onToggleFixedSize={(id) => {
               const rec = sessionsRef.current.get(id);

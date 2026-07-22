@@ -20,6 +20,8 @@ export const chrome = {
     fixedTerminalSize: 'Фиксированная ширина ({{cols}})',
     watchAi: 'Наблюдать с ИИ',
     stopWatchAi: 'Остановить ИИ-наблюдение',
+    watchInTitle: 'Наблюдать в',
+    watchInNew: 'Новый разговор',
     bookmark: 'Добавить закладку…',
   },
   appSidebar: {

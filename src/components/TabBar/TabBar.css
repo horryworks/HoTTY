@@ -290,18 +290,20 @@
   animation: ai-glow-pulse 1.5s infinite ease-in-out;
 }
 
+/* Pulse color follows the owning conversation (`--tab-watch-color`, set inline on
+   the watched tab); falls back to the legacy green for other pulse users. */
 @keyframes ai-glow-pulse {
   0% {
     transform: scale(1);
-    box-shadow: 0 0 2px color-mix(in srgb, var(--success-color) 40%, transparent);
+    box-shadow: 0 0 2px color-mix(in srgb, var(--tab-watch-color, var(--success-color)) 40%, transparent);
   }
   50% {
     transform: scale(1.1);
-    box-shadow: 0 0 8px color-mix(in srgb, var(--success-color) 80%, transparent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--tab-watch-color, var(--success-color)) 80%, transparent);
   }
   100% {
     transform: scale(1);
-    box-shadow: 0 0 2px color-mix(in srgb, var(--success-color) 40%, transparent);
+    box-shadow: 0 0 2px color-mix(in srgb, var(--tab-watch-color, var(--success-color)) 40%, transparent);
   }
 }
 
@@ -313,7 +315,9 @@
   animation: ai-glow-pulse 1.5s infinite ease-in-out;
 }
 
-/* ── Gemini Rainbow Bar ── */
+/* ── Watched-tab underline bar ── */
+/* Solid conversation color for a watched terminal tab (`--tab-watch-color`, set
+   inline); falls back to the rainbow gradient if no conversation color is present. */
 .tab.gemini-linked-tab::before {
   content: '';
   position: absolute;
@@ -321,7 +325,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: var(--gemini-rainbow);
+  background: var(--tab-watch-color, var(--gemini-rainbow));
   z-index: 5;
 }
 
@@ -397,4 +401,80 @@
 
 .tab-context-menu-item:hover {
   background-color: var(--bg-primary);
+}
+
+/* ── "Watch in ▸" picker (opens from a tab's AI Watch button at 2+ conversations) ── */
+.tab-watch-menu {
+  position: fixed;
+  background-color: var(--sidebar-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px;
+  min-width: 180px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px var(--modal-shadow);
+  font-family: var(--ui-font-family);
+}
+
+.tab-watch-menu-title {
+  padding: 4px 10px 6px;
+  color: var(--text-secondary);
+  font-size: calc(var(--font-size-base) - 3px);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tab-watch-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: calc(var(--font-size-base) - 1px);
+  white-space: nowrap;
+}
+
+.tab-watch-menu-item:hover {
+  background-color: var(--bg-primary);
+}
+
+.tab-watch-menu-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tab-watch-menu-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.tab-watch-menu-item.owner .tab-watch-menu-label {
+  font-weight: 600;
+}
+
+.tab-watch-menu-check {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.tab-watch-menu-new {
+  margin-top: 2px;
+  border-top: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.tab-watch-menu-plus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  color: var(--text-secondary);
+  font-size: calc(var(--font-size-base) + 2px);
+  line-height: 1;
 }

@@ -497,19 +497,59 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     });
   }, []);
 
-  /** Add a terminal to a tab's watched set (no-op if already present) and mark it
-   *  the last-focused (default execute target). */
+  /**
+   * Add a terminal to a tab's watched set and mark it the last-focused (default
+   * execute target). Enforces SINGLE-OWNER within the (singleton) pane: the
+   * session is removed from every OTHER conversation tab that held it, so a
+   * terminal is watched by at most one conversation. This keeps its color /
+   * ownership unambiguous and means the read-once watch buffer is never contended
+   * by two conversations. Titles/`lastFocusedWatchId` are recomputed for every
+   * changed tab (both the gaining tab and any losing tab). No-op if the session is
+   * already the target tab's last-focused link and no other tab holds it.
+   */
   const addTabLink = useCallback((aiSessionId: string, tabId: string, sessionId: string) => {
-    mutateTabLinks(aiSessionId, tabId, (t) => {
-      const already = t.linkedSessions.some(w => w.sessionId === sessionId);
+    setAiChatStates((prev) => {
+      const existing = prev.get(aiSessionId);
+      if (!existing) return prev;
       const rec = sessionsRef.current.get(sessionId);
       const bindingKey = rec ? sessionBindingKey(rec) : undefined;
-      const linkedSessions = already
-        ? t.linkedSessions
-        : [...t.linkedSessions, { sessionId, bindingKey }];
-      return { ...t, linkedSessions, lastFocusedWatchId: sessionId };
+      let changed = false;
+      const updatedTabs = existing.tabs.map((t) => {
+        if (t.id === tabId) {
+          if (t.linkedSessions.some((w) => w.sessionId === sessionId)) {
+            // Already watched here — just (re)mark it last-focused.
+            if (t.lastFocusedWatchId === sessionId) return t;
+            changed = true;
+            return { ...t, lastFocusedWatchId: sessionId };
+          }
+          changed = true;
+          const linkedSessions = [...t.linkedSessions, { sessionId, bindingKey }];
+          return {
+            ...t,
+            linkedSessions,
+            lastFocusedWatchId: sessionId,
+            title: deriveTabTitle(linkedSessions, sessionsRef.current),
+          };
+        }
+        // A different conversation: drop the session if it held it (move).
+        if (!t.linkedSessions.some((w) => w.sessionId === sessionId)) return t;
+        changed = true;
+        const linkedSessions = t.linkedSessions.filter((w) => w.sessionId !== sessionId);
+        const lastFocusedWatchId =
+          t.lastFocusedWatchId === sessionId ? linkedSessions[0]?.sessionId : t.lastFocusedWatchId;
+        return {
+          ...t,
+          linkedSessions,
+          lastFocusedWatchId,
+          title: deriveTabTitle(linkedSessions, sessionsRef.current),
+        };
+      });
+      if (!changed) return prev;
+      const next = new Map(prev);
+      next.set(aiSessionId, { ...existing, tabs: updatedTabs });
+      return next;
     });
-  }, [mutateTabLinks]);
+  }, []);
 
   /** Remove a terminal from a tab's watched set (explicit user unlink). */
   const removeTabLink = useCallback((aiSessionId: string, tabId: string, sessionId: string) => {

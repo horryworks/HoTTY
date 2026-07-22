@@ -511,9 +511,9 @@ describe('buildTabItems', () => {
     expect(items).toHaveLength(0);
   });
 
-  it('sets isWatching based on watchingSessionId', () => {
+  it('sets isWatching from the watched-sessions map', () => {
     const sessions = [makeSession('s-1'), makeSession('s-2')];
-    const items = buildTabItems(sessions, [], ['s-1', 's-2'], 's-2');
+    const items = buildTabItems(sessions, [], ['s-1', 's-2'], new Map([['s-2', { tabId: 't1', colorIndex: 0 }]]));
     expect(items[0].isWatching).toBe(false);
     expect(items[1].isWatching).toBe(true);
   });
@@ -528,9 +528,78 @@ describe('buildTabItems', () => {
     expect(items[1].isAiTab).toBe(false);
   });
 
-  it('sets isWatching to false for all when watchingSessionId is null', () => {
+  it('sets isWatching to false for all when the watched map is empty', () => {
     const sessions = [makeSession('s-1')];
-    const items = buildTabItems(sessions, [], ['s-1'], null);
+    const items = buildTabItems(sessions, [], ['s-1'], new Map());
     expect(items[0].isWatching).toBe(false);
+  });
+});
+
+describe('TabBar — "Watch in ▸" picker', () => {
+  const conversations = [
+    { id: 'c1', title: 'Chat 1', colorIndex: 0 },
+    { id: 'c2', title: 'Chat 2', colorIndex: 1 },
+  ];
+
+  it('one-click toggles watch when there are 0–1 conversations (no picker)', () => {
+    const onToggleWatch = vi.fn();
+    const onWatchInConversation = vi.fn();
+    render(
+      <TabBar
+        {...defaultProps}
+        tabItems={[makeTabItem('s-1')]}
+        visibleTabIds={['s-1']}
+        onToggleWatch={onToggleWatch}
+        onWatchInConversation={onWatchInConversation}
+        conversations={[conversations[0]]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /start ai watch/i }));
+    expect(onToggleWatch).toHaveBeenCalledWith('s-1');
+    expect(onWatchInConversation).not.toHaveBeenCalled();
+    expect(screen.queryByText('Watch in')).toBeNull();
+  });
+
+  it('opens the picker (not one-click) when 2+ conversations exist', () => {
+    const onToggleWatch = vi.fn();
+    const onWatchInConversation = vi.fn();
+    render(
+      <TabBar
+        {...defaultProps}
+        tabItems={[makeTabItem('s-1')]}
+        visibleTabIds={['s-1']}
+        onToggleWatch={onToggleWatch}
+        onWatchInConversation={onWatchInConversation}
+        conversations={conversations}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /start ai watch/i }));
+    expect(onToggleWatch).not.toHaveBeenCalled();
+    expect(screen.getByText('Watch in')).toBeTruthy();
+    expect(screen.getByText('Chat 1')).toBeTruthy();
+    expect(screen.getByText('Chat 2')).toBeTruthy();
+    expect(screen.getByText('New conversation')).toBeTruthy();
+  });
+
+  it('routes a conversation pick and "New conversation" to onWatchInConversation', () => {
+    const onWatchInConversation = vi.fn();
+    render(
+      <TabBar
+        {...defaultProps}
+        tabItems={[makeTabItem('s-1', { isWatching: true, watchColorIndex: 0, watchOwnerTabId: 'c1' })]}
+        visibleTabIds={['s-1']}
+        onToggleWatch={() => {}}
+        onWatchInConversation={onWatchInConversation}
+        conversations={conversations}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /ai watch/i }));
+    fireEvent.click(screen.getByText('Chat 2'));
+    expect(onWatchInConversation).toHaveBeenCalledWith('s-1', 'c2');
+
+    // Re-open and pick New conversation.
+    fireEvent.click(screen.getByRole('button', { name: /ai watch/i }));
+    fireEvent.click(screen.getByText('New conversation'));
+    expect(onWatchInConversation).toHaveBeenCalledWith('s-1', 'new');
   });
 });

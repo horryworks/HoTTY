@@ -26,7 +26,8 @@ import { parseLeadingSleep, clampDelay, syntheticDelayMessage, type SleepDelayPa
 import { sessionBindingKey } from '../utils/sessionBindingKey';
 import { redactSecrets } from '../utils/redaction';
 import { selectAutoRebinds, type RebindSession, type RebindOrphanTab } from '../utils/autoRebind';
-import { decideWatchToggle } from '../utils/watchRouting';
+import { decideWatchToggle, planWatchIn } from '../utils/watchRouting';
+import { conversationColorIndex } from '../utils/conversationColor';
 import { notConnectedNote } from '../components/AIChatPane/terminalOutputUtils';
 import { IS_TAURI } from '../utils/windowLabel';
 
@@ -81,12 +82,40 @@ export interface UseAiOrchestratorOptions {
   aiChat: OrchestratorAiChatApi;
 }
 
+/** Which conversation owns a watched session, and its color slot (single-owner). */
+export interface WatchedSessionInfo {
+  /** The conversation tab (within the singleton AI pane) that watches this session. */
+  tabId: string;
+  /** Palette slot [0,5] for the owning conversation's color (from its ordinal). */
+  colorIndex: number;
+}
+
+/** Content-compare two watched-session maps so identical derivations don't re-render. */
+function sameWatchedMap(
+  a: ReadonlyMap<string, WatchedSessionInfo>,
+  b: ReadonlyMap<string, WatchedSessionInfo>,
+): boolean {
+  if (a.size !== b.size) return false;
+  for (const [k, v] of a) {
+    const w = b.get(k);
+    if (!w || w.tabId !== v.tabId || w.colorIndex !== v.colorIndex) return false;
+  }
+  return true;
+}
+
 export interface UseAiOrchestratorReturn {
   /** Active tab's linked session — drives the upper TabBar "watching" indicator. */
   watchingSessionId: string | null;
   setWatchingSessionId: Dispatch<SetStateAction<string | null>>;
   /** Union of every tab's link across all panes (what capture is keyed on). */
   watchingSessionIdsRef: RefObject<Set<string>>;
+  /**
+   * Per-session → owning conversation + color slot, for painting every watched
+   * terminal tab in its conversation's color (single-owner) and for resolving the
+   * current owner in the "Watch in ▸" picker. Render state (re-derived from tab
+   * links), unlike the capture-diff `watchingSessionIdsRef`.
+   */
+  watchedSessions: ReadonlyMap<string, WatchedSessionInfo>;
   /** This window's own + other windows' live sessions, for the link picker. */
   crossWindowSessions: SessionInfo[];
   refreshCrossWindowSessions: () => void;
@@ -94,8 +123,11 @@ export interface UseAiOrchestratorReturn {
   handleSessionRemoved: (id: string) => void;
   /** Close/unlink every AI tab linked to a session (manual terminal close path). */
   removeAiChatTabsForSession: (id: string) => void;
-  /** "AI Monitor" TabBar toggle (consent-gated). */
+  /** "AI Monitor" TabBar toggle (consent-gated) — 0–1 conversations one-click path. */
   toggleWatch: (sessionId?: string) => void;
+  /** "Watch in ▸" picker routing (consent-gated): move a terminal into a specific
+   *  conversation, its 'new' conversation, or toggle it off its current owner. */
+  watchInConversation: (sessionId: string, target: string | 'new') => void;
   /** Open (or focus) the singleton AI Chat pane. */
   openAiChatPane: () => void;
   /** Run an AI-issued command against a target session (funnels sleep + watch). */
@@ -141,6 +173,14 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
   // checked before polling so in-flight commands keep capturing across tab
   // switches.
   const watchingSessionIdsRef = useRef<Set<string>>(new Set());
+
+  // Render state: every watched session → its owning conversation tab + color
+  // slot (single-owner). Re-derived from tab links in the same effect that diffs
+  // capture. Drives per-conversation coloring of watched terminal tabs and the
+  // owner lookup in the "Watch in ▸" picker.
+  const [watchedSessions, setWatchedSessions] = useState<ReadonlyMap<string, WatchedSessionInfo>>(
+    () => new Map(),
+  );
 
   // Sessions across ALL windows (cross-window AI linking). `list_all_sessions`
   // is authoritative for existence + liveness (it only returns connected
@@ -276,9 +316,17 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
   useEffect(() => {
     let activeDerived: string | null = null;
     const allLinked = new Set<string>();
+    // Owner map: single-owner is enforced at write time (addTabLink), so each
+    // session appears in one tab; if a stale duplicate ever slips through, the
+    // first tab in iteration order wins (deterministic).
+    const owners = new Map<string, WatchedSessionInfo>();
     for (const state of aiChatStates.values()) {
       for (const tab of state.tabs) {
-        for (const w of tab.linkedSessions) allLinked.add(w.sessionId);
+        const colorIndex = conversationColorIndex(tab.ordinal);
+        for (const w of tab.linkedSessions) {
+          allLinked.add(w.sessionId);
+          if (!owners.has(w.sessionId)) owners.set(w.sessionId, { tabId: tab.id, colorIndex });
+        }
       }
       const activePrimary = firstLinkedSessionId(getActiveTab(state));
       if (activePrimary && activeDerived === null) {
@@ -298,6 +346,7 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     }
     watchingSessionIdsRef.current = allLinked;
     setWatchingSessionId((prevId) => (prevId === activeDerived ? prevId : activeDerived));
+    setWatchedSessions((prev) => (sameWatchedMap(prev, owners) ? prev : owners));
   }, [aiChatStates]);
 
   // Re-issue the buffer cap to already-watched sessions when the setting changes
@@ -428,6 +477,43 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     if (!sessionId) return;
     void ensureConsent().then((ok) => { if (ok) runToggleWatch(sessionId); });
   }, [ensureConsent, runToggleWatch]);
+
+  // "Watch in ▸" picker routing (shown from a terminal tab when 2+ conversations
+  // exist, so the destination is explicit). SINGLE-OWNER: moving a terminal into a
+  // conversation removes it from its previous owner; picking its current owner
+  // toggles it off; 'new' seeds a fresh conversation. The gaining conversation is
+  // activated so the user lands on the chat they targeted.
+  const runWatchInConversation = useCallback((sessionId: string, target: string | 'new') => {
+    const aiPaneId = createAiChatPaneRef.current?.();
+    if (!aiPaneId) return;
+    const state = aiChatStatesRef.current.get(aiPaneId);
+    if (!state) return;
+
+    const plan = planWatchIn(sessionId, state.tabs, target);
+    for (const tid of plan.removeFrom) removeTabLinkRef.current?.(aiPaneId, tid, sessionId);
+    let activateTabId: string | undefined;
+    if (plan.addTo === 'new') {
+      const newTabId = addTabRef.current?.(aiPaneId);
+      if (newTabId) {
+        addTabLinkRef.current?.(aiPaneId, newTabId, sessionId);
+        activateTabId = newTabId;
+      }
+    } else if (plan.addTo) {
+      addTabLinkRef.current?.(aiPaneId, plan.addTo, sessionId);
+      activateTabId = plan.addTo;
+    }
+    if (activateTabId) setActiveTabRef.current?.(aiPaneId, activateTabId);
+
+    // Focus the AI Chat pane so the destination change is visible.
+    const alloc = usePaneStore.getState().paneAllocations;
+    const paneEntry = Object.entries(alloc).find(([, sid]) => sid === aiPaneId);
+    if (paneEntry) setActivePaneId(paneEntry[0]);
+  }, [setActivePaneId]);
+
+  const watchInConversation = useCallback((sessionId: string, target: string | 'new') => {
+    if (!sessionId) return;
+    void ensureConsent().then((ok) => { if (ok) runWatchInConversation(sessionId, target); });
+  }, [ensureConsent, runWatchInConversation]);
 
   // Open (or focus) the singleton AI Chat pane. Routes through createAiChatPane so
   // the Features menu can't spawn a SECOND AI pane — a duplicate would fight over
@@ -746,11 +832,13 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     watchingSessionId,
     setWatchingSessionId,
     watchingSessionIdsRef,
+    watchedSessions,
     crossWindowSessions,
     refreshCrossWindowSessions,
     handleSessionRemoved,
     removeAiChatTabsForSession,
     toggleWatch,
+    watchInConversation,
     openAiChatPane,
     onRunCommand: onRunCommandImpl,
     clearRunCommandIntervals,

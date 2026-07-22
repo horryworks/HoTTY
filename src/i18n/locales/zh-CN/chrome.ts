@@ -20,6 +20,8 @@ export const chrome = {
     fixedTerminalSize: '固定宽度 ({{cols}})',
     watchAi: '使用 AI 监控',
     stopWatchAi: '停止 AI 监控',
+    watchInTitle: '监控到',
+    watchInNew: '新对话',
     bookmark: '添加书签…',
   },
   appSidebar: {
