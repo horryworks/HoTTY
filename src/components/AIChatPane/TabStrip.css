@@ -66,6 +66,31 @@
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-on-accent) 60%, transparent);
 }
 
+/* Replaces the dot while this conversation has an in-flight AI response, so a
+   background tab streaming in parallel is visible without switching to it. Uses
+   the conversation color so ownership stays legible. */
+.ai-chat-tab-spinner {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1.5px solid color-mix(in srgb, var(--conv-color, var(--accent-color)) 35%, transparent);
+    border-top-color: var(--conv-color, var(--accent-color));
+    animation: ai-chat-tab-spin 0.7s linear infinite;
+    box-sizing: border-box;
+}
+
+/* On the accent-colored active tab, tint the spinner to the on-accent color so it
+   reads against the filled background. */
+.ai-chat-tab.active .ai-chat-tab-spinner {
+    border-color: color-mix(in srgb, var(--text-on-accent) 35%, transparent);
+    border-top-color: var(--text-on-accent);
+}
+
+@keyframes ai-chat-tab-spin {
+    to { transform: rotate(360deg); }
+}
+
 .ai-chat-tab-title {
     overflow: hidden;
     text-overflow: ellipsis;

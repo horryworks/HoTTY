@@ -1,6 +1,12 @@
 // Diálogos modales — confirmación, guardar/descartar, pegar, clave de host SSH,
 // prompt del sistema, Preguntar a la IA, inicio de VM IAP y Guardar en árbol de hosts.
 export const dialogs = {
+  unsavedEditors: {
+    title: 'Cambios sin guardar',
+    bodyOne: 'Tienes {{count}} pestaña del editor de texto sin guardar. ¿Cerrar de todos modos y descartar los cambios?',
+    bodyMany: 'Tienes {{count}} pestañas del editor de texto sin guardar. ¿Cerrar de todos modos y descartar los cambios?',
+    discardQuit: 'Descartar y salir',
+  },
   confirm: {
     title: 'Confirmar',
     // Etiqueta predeterminada del botón de confirmación cuando quien lo invoca no la pasa.

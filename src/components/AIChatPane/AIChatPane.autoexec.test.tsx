@@ -142,7 +142,7 @@ async function sendAndComplete(text: string, content: string = MODEL_CONTENT) {
     // The classifier runs asynchronously after `done`; awaiting the act flushes
     // the microtask so the auto-exec (or its verdict) settles before assertions.
     await act(async () => {
-        h.onAiChatResponseCb.current?.({ sessionId: 'ai-1', responseType: 'done', content });
+        h.onAiChatResponseCb.current?.({ sessionId: 'ai-1::t1', responseType: 'done', content });
     });
     await act(async () => { await Promise.resolve(); });
 }
@@ -907,7 +907,7 @@ describe('AIChatPane routes per-tab (paneId::tabId) response events', () => {
         await authenticate();
         await act(async () => { await Promise.resolve(); });
 
-        // Send a message so the tab owns the in-flight stream (streamingForTabIdRef = 't1').
+        // Send a message so tab t1 is streaming (tracked per-tab in streamingTabIds).
         const textarea = screen.getByPlaceholderText('Type a message...');
         await act(async () => { fireEvent.change(textarea, { target: { value: 'hello' } }); });
         await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });

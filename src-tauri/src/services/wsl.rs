@@ -9,8 +9,8 @@ use tokio::task::JoinHandle;
 
 use super::session_service::{
     abort_all, emit_session_data, emit_session_error, emit_session_status, encoding_for,
-    humanize_pty_error, humanize_spawn_error, join_or_abort, SessionError, SessionService,
-    DISCONNECT_DRAIN_MS,
+    humanize_pty_error, humanize_read_error, humanize_spawn_error, join_or_abort, SessionError,
+    SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -256,7 +256,7 @@ impl SessionService for WslSession {
                     Err(e) => {
                         log::error!("wsl {sid}: read error: {e}");
                         log_mgr.stop_logging(&sid).await;
-                        emit_session_error(&app_r, &sid, format!("read error: {e}"));
+                        emit_session_error(&app_r, &sid, humanize_read_error(&e));
                         emit_session_status(&app_r, &sid, "disconnected");
                         break;
                     }

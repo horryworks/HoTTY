@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useAiChat, getActiveTab, createDefaultAiChatState, aiBackendSessionId, tabHasSession, tabSessionIds, firstLinkedSessionId } from './useAiChat';
+import { useAiChat, getActiveTab, createDefaultAiChatState, aiBackendSessionId, tabHasSession, firstLinkedSessionId } from './useAiChat';
 import type { SessionRecord } from './useSessionManager';
 import type { FeaturePaneInfo } from '../utils/paneTypes';
 import type { PersonaDefinition } from '../types/appTypes';
@@ -155,7 +155,7 @@ describe('useAiChat', () => {
     });
 
     const tab = result.current.aiChatStates.get('ai-1')!.tabs.find(t => t.id === tabId);
-    expect(tabSessionIds(tab)).toEqual(['s1']);
+    expect((tab?.linkedSessions ?? []).map(w => w.sessionId)).toEqual(['s1']);
     expect(tab?.title).toBe('Router1');
     expect(tab?.lastFocusedWatchId).toBe('s1');
   });
@@ -178,7 +178,7 @@ describe('useAiChat', () => {
     });
 
     const tab = result.current.aiChatStates.get('ai-1')!.tabs.find(t => t.id === tabId);
-    expect(tabSessionIds(tab)).toEqual(['s1', 's2']);
+    expect((tab?.linkedSessions ?? []).map(w => w.sessionId)).toEqual(['s1', 's2']);
     expect(tab?.title).toBe('Router1 +1');
   });
 
@@ -204,8 +204,8 @@ describe('useAiChat', () => {
 
     const a = result.current.aiChatStates.get('ai-1')!.tabs.find(t => t.id === tabA);
     const b = result.current.aiChatStates.get('ai-1')!.tabs.find(t => t.id === tabB);
-    expect(tabSessionIds(a)).toEqual(['s2']);      // s1 removed from A
-    expect(tabSessionIds(b)).toEqual(['s1']);      // s1 now owned by B
+    expect((a?.linkedSessions ?? []).map(w => w.sessionId)).toEqual(['s2']);      // s1 removed from A
+    expect((b?.linkedSessions ?? []).map(w => w.sessionId)).toEqual(['s1']);      // s1 now owned by B
     expect(a?.lastFocusedWatchId).toBe('s2');      // A repointed off the moved s1
     expect(b?.lastFocusedWatchId).toBe('s1');
     expect(a?.title).toBe('Switch2');              // both titles recomputed
@@ -232,7 +232,7 @@ describe('useAiChat', () => {
     });
 
     const tab = result.current.aiChatStates.get('ai-1')!.tabs.find(t => t.id === tabId);
-    expect(tabSessionIds(tab)).toEqual(['s1']);
+    expect((tab?.linkedSessions ?? []).map(w => w.sessionId)).toEqual(['s1']);
     expect(tabHasSession(tab, 's2')).toBe(false);
     // lastFocused pointed at the removed s2 → falls back to the remaining first.
     expect(tab?.lastFocusedWatchId).toBe('s1');

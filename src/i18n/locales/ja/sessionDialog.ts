@@ -3,6 +3,7 @@
 // プロトコル別フィールド（SSH / シリアル / WSL / Git Bash）・
 // 入力検証メッセージ・変更破棄の確認をまとめています。
 export const sessionDialog = {
+  defaultSessionName: '{{protocol}} セッション',
   title: '新規セッション',
   tabs: {
     sourceAriaLabel: '接続元',

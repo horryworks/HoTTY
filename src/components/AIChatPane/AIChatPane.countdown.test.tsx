@@ -94,7 +94,7 @@ async function sendAndComplete(text: string, content: string = MODEL_CONTENT) {
     await act(async () => { fireEvent.change(textarea, { target: { value: text } }); });
     await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
     await act(async () => {
-        h.onAiChatResponseCb.current?.({ sessionId: 'ai-1', responseType: 'done', content });
+        h.onAiChatResponseCb.current?.({ sessionId: 'ai-1::t1', responseType: 'done', content });
     });
     // Flush the classify microtask chain (whitelist verdict → schedule).
     await act(async () => { await Promise.resolve(); });

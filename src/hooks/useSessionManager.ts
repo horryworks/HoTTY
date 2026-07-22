@@ -6,6 +6,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { TERMINAL_SEQUENCES } from '../constants/terminalSequences';
 import { resolveFixedSize } from '../utils/fixedTerminalSize';
 import { logError } from '../utils/logger';
+import i18n from '../i18n';
 import type {
   ProtocolId,
   SessionRecordStatus,
@@ -433,7 +434,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       // string, the tab strip would render a blank label which is unfriendly.
       // Derive something readable from the protocol so the tab is always
       // identifiable.
-      const displayName = (req.displayName ?? '').trim() || `${req.protocol} session`;
+      const displayName = (req.displayName ?? '').trim() || i18n.t('sessionDialog.defaultSessionName', { protocol: req.protocol });
       const rec: SessionRecord = {
         id,
         displayName,

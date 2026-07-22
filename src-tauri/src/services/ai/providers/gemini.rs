@@ -11,8 +11,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{
-    emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, AuthType,
-    ChatResponseData, ChatResponseKind, ModelInfo,
+    emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, ChatResponseData,
+    ChatResponseKind, ModelInfo,
 };
 use crate::services::ai::classifier::{
     build_user_prompt, extract_gemini_text, gemini_response_schema, parse_verdict, CommandVerdict,
@@ -327,14 +327,6 @@ impl GeminiProvider {
 impl AIProvider for GeminiProvider {
     fn id(&self) -> &str {
         "gemini"
-    }
-
-    fn display_name(&self) -> &str {
-        "Google AI Studio (Gemini)"
-    }
-
-    fn auth_type(&self) -> AuthType {
-        AuthType::OAuth2
     }
 
     async fn authenticate(&mut self, app: &AppHandle, credentials: Value) -> Result<bool, String> {

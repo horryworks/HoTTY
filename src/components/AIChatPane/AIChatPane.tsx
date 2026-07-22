@@ -446,6 +446,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const blacklistCommands = useSettingsStore(s => s.blacklistCommands);
     const maxConsecutiveAutoExecutions = useSettingsStore(s => s.maxConsecutiveAutoExecutions);
     const aiAutoExecCountdownSecs = useSettingsStore(s => s.aiAutoExecCountdownSecs);
+    // How many conversation tabs may stream at once in this pane (extra sends queue).
+    // `?? 3` guards a store that predates this setting (or a test mock that omits it)
+    // so `slots` math never goes NaN.
+    const maxConcurrentStreams = useSettingsStore(s => s.maxConcurrentStreams) ?? 3;
     const classifierStrategy = useSettingsStore(s => s.classifierStrategy);
     const aiClassifyConfidenceThreshold = useSettingsStore(s => s.aiClassifyConfidenceThreshold);
     const aiDataConsentAccepted = useSettingsStore(s => s.aiDataConsentAccepted);
@@ -455,7 +459,21 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // are only unique within a single conversation. Clearing a tab's messages on
     // "New chat" resets the message indices to 0,1,2…, so a pane-global set would
     // mistake the new chat's first command for one already processed and suppress it.
-    const [consecutiveAutoExecCount, setConsecutiveAutoExecCount] = useState(0);
+    // Consecutive auto-execute streak, tracked PER TAB (keyed by tab id) so parallel
+    // auto-exec on two tabs can't consume/reset each other's
+    // `maxConsecutiveAutoExecutions` budget. The active tab's value drives the
+    // render-time `limitReached`; the async auto-exec continuation reads/writes a
+    // SPECIFIC tab's entry via the ref mirror (getAutoExecCount / setAutoExecCountForTab).
+    const [autoExecCountByTab, setAutoExecCountByTab] = useState<Map<string, number>>(() => new Map());
+    const setAutoExecCountForTab = useCallback((tabId: string, updater: number | ((prev: number) => number)) => {
+        setAutoExecCountByTab((prev) => {
+            const cur = prev.get(tabId) ?? 0;
+            const v = typeof updater === 'function' ? (updater as (p: number) => number)(cur) : updater;
+            if (v === cur) return prev;
+            const next = new Map(prev); next.set(tabId, v); return next;
+        });
+    }, []);
+    const resetAutoExecCountForTab = useCallback((tabId: string) => setAutoExecCountForTab(tabId, 0), [setAutoExecCountForTab]);
     // Per-tab auto-execute tracking (reserve → classify → execute/decline, one entry
     // per command block keyed by `${messageIndex}:${command}`). ONE immutable reducer
     // replaces the five parallel per-tab refs the pane used to juggle
@@ -510,7 +528,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const streamCompleteHandlerRef = useRef<(tabId: string, messages: ChatMessage[]) => void>(() => {});
     const {
         setMessagesByTab,
-        streamingByTab, streamingTabIds, streamingForTabIdRef,
+        streamingByTab, streamingTabIds,
         messages, streamingContent, isStreaming,
         setStreamingForTab, markStreaming, setStreamingContent, setIsStreaming, setMessages,
         armStreamWatchdog, clearStreamWatchdog,
@@ -653,8 +671,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     }, [resolveTabTarget]);
     const autoExecPausedRef = useRef(autoExecPaused);
     autoExecPausedRef.current = autoExecPaused;
-    const consecutiveAutoExecCountRef = useRef(consecutiveAutoExecCount);
-    consecutiveAutoExecCountRef.current = consecutiveAutoExecCount;
+    const autoExecCountByTabRef = useRef(autoExecCountByTab);
+    autoExecCountByTabRef.current = autoExecCountByTab;
+    // A specific tab's current streak (read after the classify await / by the pre-run
+    // countdown timer, which fire later than the effect that closed over them).
+    const getAutoExecCount = useCallback((tabId: string) => autoExecCountByTabRef.current.get(tabId) ?? 0, []);
     // Mirrors read AFTER the classify await / by the pre-run countdown timer, which
     // fire later than the effect that closed over them.
     const maxConsecutiveAutoExecutionsRef = useRef(maxConsecutiveAutoExecutions);
@@ -711,12 +732,15 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const lastSentTextRef = useRef('');
-    // True only when the last dispatched message was typed by a human (handleSend).
-    // Auto-execute feedback (terminal-output envelopes, kickoff/decline notes sent
-    // via pendingMessage) sets it false so a Stop/pause cancel never restores that
-    // machine text into the human prompt textarea.
-    const lastSentWasHumanRef = useRef(false);
+    // Last dispatched text PER TAB (keyed by tab id): Stop restores the owning tab's
+    // own last human message into the textarea. Per-tab so a second concurrent stream
+    // can't overwrite the first tab's value before its Stop is pressed.
+    const lastSentTextRef = useRef<Map<string, string>>(new Map());
+    // Per tab: true only when that tab's last dispatched message was typed by a human
+    // (handleSend). Auto-execute feedback (terminal-output envelopes, kickoff/decline
+    // notes sent via pendingMessage) sets it false so a Stop/pause cancel never
+    // restores that machine text into the human prompt textarea.
+    const lastSentWasHumanRef = useRef<Map<string, boolean>>(new Map());
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     // Model list
@@ -797,42 +821,26 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         }
     }, [messages, streamingContent, isStreaming]);
 
-    // ── Auto-send pending messages for ANY tab (one stream at a time per pane) ──
-    // Picks the next queued message to dispatch when nothing is streaming. HUMAN
-    // messages (pendingUserMessages — typed by the user while a response was still
-    // streaming) win over machine-generated ones (pendingMessages) across all tabs,
-    // so a user's message reaches the model as its NEXT thinking turn ahead of e.g.
-    // auto-exec terminal output. Results that arrive on a non-active tab still
-    // trigger the next request, so the loop keeps running across tab switches.
-    // Double-dispatch is prevented structurally: dispatching dequeues the message
-    // AND marks the tab streaming (both batched), so the next effect run bails on
-    // the streaming guard — no de-dup-by-text needed.
+    // ── Auto-send pending messages, up to `maxConcurrentStreams` in flight ──
+    // Dispatches queued messages to IDLE tabs, filling the pane's free stream slots
+    // (cap − currently-streaming). HUMAN messages (pendingUserMessages — typed while a
+    // response was still streaming) win over machine-generated ones (pendingMessages)
+    // across all tabs, so a user's message reaches the model as its NEXT thinking turn
+    // ahead of e.g. auto-exec terminal output. Results that arrive on a non-active tab
+    // still re-run this loop, so it keeps draining across tab switches. Double-dispatch
+    // is prevented structurally: dispatching dequeues the message AND marks the tab
+    // streaming (both committed), so the next run's slot count / streaming set exclude
+    // it; within a single run a local `dispatched` set caps one message per tab.
     useEffect(() => {
         if (!isAuthenticated || !chatState) return;
-        // Only one in-flight stream per pane (single streamingForTabIdRef).
-        if (streamingTabIds.size > 0) return;
+        const slots = Math.max(0, maxConcurrentStreams - streamingTabIds.size);
+        if (slots === 0) return;
 
-        // Resolve the next message to send: priority (user) queues first, in tab
-        // order, then machine queues. isHuman drives lastSentWasHumanRef below.
-        // Human entries carry optional images; machine entries are plain strings.
-        let target: { tab: ChatTab; message: string; images?: ChatImage[]; isHuman: boolean } | undefined;
-        for (const tab of chatState.tabs) {
-            const uq = tab.pendingUserMessages;
-            if (uq && uq.length > 0) { target = { tab, message: uq[0].text, images: uq[0].images, isHuman: true }; break; }
-        }
-        if (!target) {
-            for (const tab of chatState.tabs) {
-                const mq = tab.pendingMessages;
-                if (mq && mq.length > 0) { target = { tab, message: mq[0], isHuman: false }; break; }
-            }
-        }
-        if (!target) return;
-        const { tab, message: pm, images: pmImages, isHuman } = target;
-
-        // A freshly-created pane (e.g. opened via Ask AI) hasn't resolved its
-        // model yet — the model list loads and auto-selects asynchronously.
-        // Leave the queue intact until the model settles; this effect re-runs
-        // when selectedModel / availableModels / modelLoadError change.
+        // A freshly-created pane (e.g. opened via Ask AI) hasn't resolved its model
+        // yet — the model list loads and auto-selects asynchronously. Leave the queues
+        // intact until it settles; this effect re-runs on selectedModel / availableModels
+        // / modelLoadError change. (`Unspecified` WITH a loaded list is handled per-pick
+        // below as "no model chosen".)
         if (selectedModel === 'Unspecified' && availableModels.length === 0 && !modelLoadError) {
             return;
         }
@@ -840,66 +848,96 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         // Data-sharing consent gate: pending messages (human sends queued mid-stream,
         // plus machine kickoff / terminal-output envelopes / decline notes) egress
         // terminal data to the provider just like a manual send, so they must clear
-        // the same consent. Park the queue (don't dequeue) and prompt once; the
-        // effect re-runs when consent flips accepted.
+        // the same consent. Park the queues (don't dequeue) and prompt once; the effect
+        // re-runs when consent flips accepted.
         if (!aiDataConsentAccepted) {
-            if (!consentPromptShownRef.current) {
+            const hasQueued = chatState.tabs.some(
+                (tb) => (tb.pendingUserMessages?.length ?? 0) > 0 || (tb.pendingMessages?.length ?? 0) > 0,
+            );
+            if (hasQueued && !consentPromptShownRef.current) {
                 consentPromptShownRef.current = true;
                 void ensureConsent?.().finally(() => { consentPromptShownRef.current = false; });
             }
             return;
         }
 
+        // Select up to `slots` picks: user queues first (tab order), then machine
+        // queues. One pick per idle tab (a tab already streaming, or already picked
+        // this run, is skipped). Human entries carry optional images; machine entries
+        // are plain strings.
+        const dispatched = new Set<string>(streamingTabIds);
+        const picks: { tab: ChatTab; message: string; images?: ChatImage[]; isHuman: boolean }[] = [];
+        const consider = (human: boolean) => {
+            for (const tab of chatState.tabs) {
+                if (picks.length >= slots) break;
+                if (dispatched.has(tab.id)) continue;
+                if (human) {
+                    const uq = tab.pendingUserMessages;
+                    if (!uq || uq.length === 0) continue;
+                    picks.push({ tab, message: uq[0].text, images: uq[0].images, isHuman: true });
+                } else {
+                    const mq = tab.pendingMessages;
+                    if (!mq || mq.length === 0) continue;
+                    picks.push({ tab, message: mq[0], isHuman: false });
+                }
+                dispatched.add(tab.id);
+            }
+        };
+        consider(true);
+        consider(false);
+        if (picks.length === 0) return;
+
         const sysInstr = chatState.systemInstruction || localSystemInstruction;
         onChatStateChange?.({ systemInstruction: sysInstr });
-        // Append the watched-terminal alias list (per dispatched tab) so a reply to
-        // auto-exec output / kickoff can route via `target=<alias>`. Not stored — the
-        // stored instruction stays persona+rules+lang; the dynamic list is send-only.
-        const targetsBlock = buildWatchTargetsBlock(buildAliasEntries((tab.linkedSessions ?? []).map((w) => {
-            const rec = sessions?.get(w.sessionId);
-            const ls = linkableById.get(w.sessionId);
-            return { sessionId: w.sessionId, displayName: rec?.displayName ?? ls?.displayName ?? w.sessionId, status: rec?.status ?? ls?.status };
-        })));
-        // Remove the head of the queue we're dispatching from.
-        if (isHuman) onDequeuePendingUser?.(tab.id);
-        else onDequeuePending?.(tab.id);
 
-        if (selectedModel === 'Unspecified') {
+        for (const { tab, message: pm, images: pmImages, isHuman } of picks) {
+            // Append the watched-terminal alias list (per dispatched tab) so a reply to
+            // auto-exec output / kickoff can route via `target=<alias>`. Not stored —
+            // the stored instruction stays persona+rules+lang; the list is send-only.
+            const targetsBlock = buildWatchTargetsBlock(buildAliasEntries((tab.linkedSessions ?? []).map((w) => {
+                const rec = sessions?.get(w.sessionId);
+                const ls = linkableById.get(w.sessionId);
+                return { sessionId: w.sessionId, displayName: rec?.displayName ?? ls?.displayName ?? w.sessionId, status: rec?.status ?? ls?.status };
+            })));
+            // Remove the head of the queue we're dispatching from.
+            if (isHuman) onDequeuePendingUser?.(tab.id);
+            else onDequeuePending?.(tab.id);
+
+            if (selectedModel === 'Unspecified') {
+                setMessagesByTab((prev) => {
+                    const next = new Map(prev);
+                    const cur = prev.get(tab.id) ?? [];
+                    next.set(tab.id, [
+                        ...cur,
+                        { role: 'user', content: pm, images: pmImages },
+                        { role: 'model', content: t('aiChat.pane.modelNotSelected') },
+                    ]);
+                    return next;
+                });
+                continue;
+            }
+
             setMessagesByTab((prev) => {
                 const next = new Map(prev);
                 const cur = prev.get(tab.id) ?? [];
-                next.set(tab.id, [
-                    ...cur,
-                    { role: 'user', content: pm, images: pmImages },
-                    { role: 'model', content: t('aiChat.pane.modelNotSelected') },
-                ]);
+                next.set(tab.id, [...cur, { role: 'user', content: pm, images: pmImages }]);
                 return next;
             });
-            return;
+            lastSentTextRef.current.set(tab.id, pm);
+            // Human-queued sends restore to the textarea on Stop (edit/resend), just
+            // like a direct manual send; machine messages must never land there.
+            lastSentWasHumanRef.current.set(tab.id, isHuman);
+            markStreaming(tab.id, true);
+            setStreamingForTab(tab.id, '');
+            armStreamWatchdog(tab.id);
+            tauriService.aiChatSend(aiBackendSessionId(paneId, tab.id), pm, selectedModel, sysInstr + targetsBlock, pmImages).catch((err) => {
+                logError('AI', 'aiChatSend invoke failed', err);
+                clearStreamWatchdog(tab.id);
+                markStreaming(tab.id, false);
+            });
         }
-
-        setMessagesByTab((prev) => {
-            const next = new Map(prev);
-            const cur = prev.get(tab.id) ?? [];
-            next.set(tab.id, [...cur, { role: 'user', content: pm, images: pmImages }]);
-            return next;
-        });
-        lastSentTextRef.current = pm;
-        // Human-queued sends restore to the textarea on Stop (edit/resend), just
-        // like a direct manual send; machine messages must never land there.
-        lastSentWasHumanRef.current = isHuman;
-        streamingForTabIdRef.current = tab.id;
-        markStreaming(tab.id, true);
-        setStreamingForTab(tab.id, '');
-        armStreamWatchdog();
-        tauriService.aiChatSend(aiBackendSessionId(paneId, tab.id), pm, selectedModel, sysInstr + targetsBlock, pmImages).catch((err) => {
-            logError('AI', 'aiChatSend invoke failed', err);
-            clearStreamWatchdog();
-            markStreaming(tab.id, false);
-            streamingForTabIdRef.current = null;
-        });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chatState, isAuthenticated, streamingTabIds, paneId, selectedModel, availableModels, modelLoadError, aiDataConsentAccepted]);
+    }, [chatState, isAuthenticated, streamingTabIds, paneId, selectedModel, availableModels, modelLoadError, aiDataConsentAccepted, maxConcurrentStreams]);
 
     // ── Auto-kickoff: Network Expert start-of-session protocol (multi-device) ──
     // When a Network Expert chat WATCHES one or more LIVE terminals, inject the
@@ -965,7 +1003,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 // manually (messages exist but nothing was ever auto-kicked here).
                 if (messages.length > 0 && kicked.size === 0) return;
                 kicked.set(deviceId, w.sessionId);
-                setConsecutiveAutoExecCount(0);
+                resetAutoExecCountForTab(activeTabId);
                 onEnqueuePending?.(activeTabId, multi && alias ? withTargetDirective(NETWORK_EXPERT_KICKOFF, alias) : NETWORK_EXPERT_KICKOFF);
                 return;                                    // one device per run — the queue drains, then re-run
             }
@@ -974,7 +1012,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 // re-prep paging when there is a conversation to preserve.
                 kicked.set(deviceId, w.sessionId);
                 if (messages.length === 0) return;
-                setConsecutiveAutoExecCount(0);
+                resetAutoExecCountForTab(activeTabId);
                 onEnqueuePending?.(activeTabId, multi && alias ? withTargetDirective(NETWORK_EXPERT_RECONNECT_PREP, alias) : NETWORK_EXPERT_RECONNECT_PREP);
                 return;
             }
@@ -1022,6 +1060,16 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             if (!liveIds.has(tabId)) { clearTimeout(timer); countdownTimersRef.current.delete(key); }
         }
         pruneMap(kickedForDeviceRef.current as Map<string, unknown>);
+        // Per-tab refs the send loop / Stop restore keep for each conversation.
+        pruneMap(lastSentTextRef.current as Map<string, unknown>);
+        pruneMap(lastSentWasHumanRef.current as Map<string, unknown>);
+        // Drop closed tabs' auto-exec streak counters (state, so it re-renders).
+        setAutoExecCountByTab((prev) => {
+            let changed = false;
+            const next = new Map(prev);
+            for (const id of [...next.keys()]) if (!liveIds.has(id)) { next.delete(id); changed = true; }
+            return changed ? next : prev;
+        });
         pruneStreams(liveIds);
     }, [tabIdsKey, applyAutoExec, pruneStreams]);
 
@@ -1084,7 +1132,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             if (autoExecPausedRef.current) return;
             if (!resolveTabTarget(tabId, target).live) return; // this tab's resolved target, not active
             if (maxConsecutiveAutoExecutionsRef.current > 0
-                && consecutiveAutoExecCountRef.current >= maxConsecutiveAutoExecutionsRef.current) return;
+                && getAutoExecCount(tabId) >= maxConsecutiveAutoExecutionsRef.current) return;
 
             // Grace period: rather than run immediately, arm a cancellable
             // countdown so the user can stop a safe auto-run before it fires.
@@ -1093,7 +1141,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             const countdownSecs = Number.isFinite(rawCountdown) ? Math.max(0, Math.min(10, rawCountdown)) : 0;
             if (countdownSecs <= 0) {
                 applyAutoExec({ type: 'execute', tabId, blockKey });
-                setConsecutiveAutoExecCount(prev => prev + 1);
+                setAutoExecCountForTab(tabId, prev => prev + 1);
                 handleRunCommandForTabRef.current(tabId, command, target);
                 return;
             }
@@ -1108,12 +1156,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 if (getBlock(autoExecStateRef.current, tabId, blockKey)?.status !== 'scheduled') return;
                 if (autoExecPausedRef.current || !resolveTabTarget(tabId, target).live
                     || (maxConsecutiveAutoExecutionsRef.current > 0
-                        && consecutiveAutoExecCountRef.current >= maxConsecutiveAutoExecutionsRef.current)) {
+                        && getAutoExecCount(tabId) >= maxConsecutiveAutoExecutionsRef.current)) {
                     applyAutoExec({ type: 'cancelSchedule', tabId, blockKey });
                     return;
                 }
                 applyAutoExec({ type: 'execute', tabId, blockKey });
-                setConsecutiveAutoExecCount(prev => prev + 1);
+                setAutoExecCountForTab(tabId, prev => prev + 1);
                 handleRunCommandForTabRef.current(tabId, command, target);
             }, countdownSecs * 1000);
             countdownTimersRef.current.set(key, timer);
@@ -1124,7 +1172,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     useEffect(() => {
         if (commandExecutionMode === 'ask-before-execute') {
             setAutoExecPaused(false);
-            setConsecutiveAutoExecCount(0);
+            setAutoExecCountByTab(new Map());   // nothing auto-runs → clear every tab's streak
             // Nothing auto-runs in ask mode → stop any in-flight countdowns.
             cancelAllScheduled();
         }
@@ -1280,7 +1328,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         // Terminal "declined" state → the block shows the Declined badge and any
         // in-flight classify for it bails instead of auto-running (decline wins).
         applyAutoExec({ type: 'decline', tabId: activeTabId, blockKey: `${messageIndex}:${command}`, command });
-        setConsecutiveAutoExecCount(0); // a human intervened — reset the auto-run streak
+        resetAutoExecCountForTab(activeTabId); // a human intervened — reset the auto-run streak
         onEnqueuePending?.(activeTabId, declinedNote(command.trim()));
     };
 
@@ -1292,7 +1340,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         const blockKey = `${messageIndex}:${command}`;
         clearCountdownTimer(activeTabId, blockKey);
         applyAutoExec({ type: 'cancelSchedule', tabId: activeTabId, blockKey });
-        setConsecutiveAutoExecCount(0); // a human intervened — reset the auto-run streak
+        resetAutoExecCountForTab(activeTabId); // a human intervened — reset the auto-run streak
     };
 
     const handleHoverTarget = (isHovering: boolean) => {
@@ -1387,14 +1435,16 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         const imagesToSend = pendingImages;
         if ((!text && imagesToSend.length === 0) || selectedModel === 'Unspecified') return;
 
-        // A response is still streaming somewhere in this pane (only one in-flight
-        // stream per pane — a single streamingForTabIdRef). Don't dispatch directly:
-        // a second send on the same backend session would supersede/cancel the live
-        // stream. Instead queue the message on the ACTIVE tab's PRIORITY (user) queue
-        // so the auto-send loop hands it to the model as its next thinking turn,
-        // ahead of any machine-generated pending messages. Consent is already granted
-        // for a session that's mid-stream, and the loop re-checks consent anyway.
-        if (streamingTabIds.size > 0) {
+        // Queue (don't dispatch directly) when THIS tab is already mid-stream — a second
+        // send on the same backend session would supersede/cancel the live stream — OR
+        // when the pane is at its concurrent-stream cap (a slot will free and the
+        // auto-send loop dispatches it). The message goes on the ACTIVE tab's PRIORITY
+        // (user) queue so it reaches the model as its next thinking turn, ahead of any
+        // machine-generated pending messages. Consent is already granted for a session
+        // that's mid-stream, and the loop re-checks consent anyway.
+        const activeStreaming = activeTabId ? streamingTabIds.has(activeTabId) : false;
+        const atCap = streamingTabIds.size >= maxConcurrentStreams;
+        if (activeStreaming || atCap) {
             if (activeTabId) {
                 onEnqueuePendingUser?.(activeTabId, text, imagesToSend.length > 0 ? imagesToSend : undefined);
                 setInputText('');
@@ -1404,17 +1454,17 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         }
 
         const dispatch = () => {
-            setConsecutiveAutoExecCount(0);
+            if (activeTabId) resetAutoExecCountForTab(activeTabId);
             setMessages(prev => [...prev, { role: 'user', content: text, images: imagesToSend.length > 0 ? imagesToSend : undefined }]);
-            lastSentTextRef.current = text;
-            lastSentWasHumanRef.current = true;
+            if (activeTabId) {
+                lastSentTextRef.current.set(activeTabId, text);
+                lastSentWasHumanRef.current.set(activeTabId, true);
+            }
             setInputText('');
             setPendingImages([]);
-            // Capture which tab owns this stream so chunks land in the right tab even after a tab switch.
-            streamingForTabIdRef.current = activeTabId ?? null;
-            setIsStreaming(true);
+            setIsStreaming(true);   // marks the ACTIVE tab streaming (per-tab in useChatStream)
             setStreamingContent('');
-            armStreamWatchdog();
+            if (activeTabId) armStreamWatchdog(activeTabId);
 
             const images = imagesToSend.length > 0 ? imagesToSend : undefined;
             if (onSendMessage) {
@@ -1422,9 +1472,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             } else {
                 tauriService.aiChatSend(aiBackendSessionId(paneId, activeTabId), text, selectedModel, localSystemInstruction, images).catch((err) => {
                     logError('AI', 'aiChatSend invoke failed', err);
-                    clearStreamWatchdog();
+                    if (activeTabId) clearStreamWatchdog(activeTabId);
                     setIsStreaming(false);
-                    streamingForTabIdRef.current = null;
                 });
             }
         };
@@ -1458,7 +1507,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // "Auto-executed" badge doesn't linger from the old chat.
             clearTabCountdownTimers(activeTabId);
             applyAutoExec({ type: 'clearTab', tabId: activeTabId });
-            setConsecutiveAutoExecCount(0);
+            resetAutoExecCountForTab(activeTabId);
             // Cancel any in-flight client-side sleep delay for this tab: clearing
             // sleepDelay invalidates the token its timer checks, so it no-ops.
             onUpdateTabById?.(activeTabId, { sleepDelay: null });
@@ -1494,31 +1543,30 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     }, [settingsOpen]);
 
     const handleCancel = () => {
-        clearStreamWatchdog();
-        // Cancel on the tab that owns the in-flight stream (per-tab backend session),
-        // and append its partial content + [cancelled] to that same tab.
-        const targetTabId = streamingForTabIdRef.current ?? activeTabId ?? null;
+        // Stop is shown only when the ACTIVE tab is streaming (isStreaming is
+        // active-tab scoped), so it cancels the active tab's own stream. Other tabs
+        // keep streaming — their Stop appears when they become active.
+        const targetTabId = activeTabId ?? null;
+        if (!targetTabId) return;
+        clearStreamWatchdog(targetTabId);
         tauriService.aiChatCancel(aiBackendSessionId(paneId, targetTabId)).catch(() => {});
-        if (targetTabId) {
-            const partial = streamingByTab.get(targetTabId) ?? '';
-            if (partial) {
-                setMessagesByTab(prev => {
-                    const next = new Map(prev);
-                    const cur = prev.get(targetTabId) ?? [];
-                    next.set(targetTabId, [...cur, { role: 'model', content: partial + t('aiChat.pane.cancelledSuffix') }]);
-                    return next;
-                });
-            }
-            setStreamingForTab(targetTabId, '');
-            markStreaming(targetTabId, false);
+        const partial = streamingByTab.get(targetTabId) ?? '';
+        if (partial) {
+            setMessagesByTab(prev => {
+                const next = new Map(prev);
+                const cur = prev.get(targetTabId) ?? [];
+                next.set(targetTabId, [...cur, { role: 'model', content: partial + t('aiChat.pane.cancelledSuffix') }]);
+                return next;
+            });
         }
-        streamingForTabIdRef.current = null;
+        setStreamingForTab(targetTabId, '');
+        markStreaming(targetTabId, false);
         // Only restore a HUMAN-typed message for editing/resend. Auto-execute
         // feedback (terminal-output envelopes, kickoff/decline notes) must never
         // land in the human prompt textarea, and any text the user was typing
         // during the stream is left untouched.
-        if (lastSentWasHumanRef.current) {
-            setInputText(lastSentTextRef.current);
+        if (lastSentWasHumanRef.current.get(targetTabId)) {
+            setInputText(lastSentTextRef.current.get(targetTabId) ?? '');
             setTimeout(() => {
                 const ta = textareaRef.current;
                 if (ta) {
@@ -1550,6 +1598,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                         else onCloseTab?.(id);
                     }}
                     onAdd={() => onAddTab?.()}
+                    streamingTabIds={streamingTabIds}
                 />
             )}
             {modelLoadError && (
@@ -1816,7 +1865,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     {msg.role === 'model' ? (
                                         <MessageContent
                                             content={msg.content}
-                                            onRun={(cmd, target) => { setConsecutiveAutoExecCount(0); handleRunCommand(cmd, target); }}
+                                            onRun={(cmd, target) => { if (activeTabId) resetAutoExecCountForTab(activeTabId); handleRunCommand(cmd, target); }}
                                             onDecline={(cmd) => handleDeclineCommand(idx, cmd)}
                                             onHoverTarget={handleHoverTarget}
                                             targetTitle={lastTargetSessionTitle}
@@ -1829,7 +1878,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                             onCancelScheduled={(cmd) => handleCancelScheduled(idx, cmd)}
                                             verdictByCommand={verdictByCommand}
                                             classifyingCommands={classifyingCommands}
-                                            limitReached={commandExecutionMode === 'auto-execute-safe' && maxConsecutiveAutoExecutions > 0 && consecutiveAutoExecCount >= maxConsecutiveAutoExecutions}
+                                            limitReached={commandExecutionMode === 'auto-execute-safe' && maxConsecutiveAutoExecutions > 0 && (activeTabId ? (autoExecCountByTab.get(activeTabId) ?? 0) : 0) >= maxConsecutiveAutoExecutions}
                                             sleepDelay={activeTab?.sleepDelay}
                                         />
                                     ) : (() => {
@@ -2114,7 +2163,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         ? t('aiChat.pane.sendTitleSelectModel')
                                         : (!inputText.trim() && pendingImages.length === 0)
                                         ? t('aiChat.pane.sendTitleEmpty')
-                                        : streamingTabIds.size > 0
+                                        : (isStreaming || streamingTabIds.size >= maxConcurrentStreams)
                                         ? t('aiChat.pane.sendTitleQueue')
                                         : t('aiChat.pane.sendTitle')
                                 }

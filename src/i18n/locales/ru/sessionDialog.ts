@@ -3,6 +3,7 @@
 // специфичные для протоколов группы полей (SSH / Serial / WSL / Git Bash),
 // сообщения проверки и подтверждение отмены изменений.
 export const sessionDialog = {
+  defaultSessionName: 'Сеанс {{protocol}}',
   title: 'Новая сессия',
   tabs: {
     sourceAriaLabel: 'Источник подключения',

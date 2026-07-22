@@ -8,8 +8,8 @@ use tauri::AppHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{
-    emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, AuthType,
-    ChatResponseData, ChatResponseKind, ModelInfo,
+    emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, ChatResponseData,
+    ChatResponseKind, ModelInfo,
 };
 use crate::services::ai::classifier::{
     anthropic_verdict_tool, build_user_prompt, parse_anthropic_tool_verdict, CommandVerdict,
@@ -105,14 +105,6 @@ impl AnthropicProvider {
 impl AIProvider for AnthropicProvider {
     fn id(&self) -> &str {
         "anthropic"
-    }
-
-    fn display_name(&self) -> &str {
-        "Anthropic (Claude)"
-    }
-
-    fn auth_type(&self) -> AuthType {
-        AuthType::ApiKey
     }
 
     async fn authenticate(&mut self, app: &AppHandle, credentials: Value) -> Result<bool, String> {

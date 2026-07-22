@@ -218,6 +218,9 @@ export const settings = {
     autoExecCountdown: '자동 실행 카운트다운(초)',
     autoExecCountdownHelp:
       '안전 자동 실행 모드에서 안전하다고 판단된 명령을 실행하기 전에 이 초만큼 대기하여 취소할 수 있습니다. 0은 즉시 실행합니다. 최대 10. 기본값: 3.',
+    concurrentStreams: '병렬 AI 채팅 응답',
+    concurrentStreamsHelp:
+      '한 패널에서 동시에 응답을 받을 수 있는 AI 채팅 탭 수입니다. 초과 전송은 대기열에 들어가 응답이 끝나면 시작됩니다. 1은 한 번에 하나씩(기존 동작). 제공자가 속도를 제한하면(예: Gemini 무료 등급) 낮추세요. 최대 8. 기본값: 3.',
     deviceResponseTimeout: '장치 응답 시간 초과 (초)',
     deviceResponseTimeoutHelp:
       '명령 실행 후 이 초 동안 장치에서 새 출력이 생성되지 않으면, 루프를 계속할 수 있도록 AI에게 장치가 응답을 멈췄다고 알립니다. 0이면 유휴 감지를 사용 안 함으로 설정합니다. 기본값: 10.',

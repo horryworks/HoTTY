@@ -244,6 +244,44 @@ pub fn humanize_io_error(err: &std::io::Error, timeout_secs: Option<u32>) -> Str
     }
 }
 
+/// Convert a raw `std::io::Error` from a *mid-session* read failure into a
+/// short, human-friendly string. Unlike [`humanize_io_error`] — a connect-time
+/// helper that takes `timeout_secs` and renders connect-specific labels like
+/// "Connection refused" / "Host not found" — an established session only fails
+/// when the peer or transport goes away, so this maps those cases to
+/// "Connection reset" / "Connection lost" and keeps the raw `os error NNNNN`
+/// off the tab tooltip. Anything unrecognized falls back behind a readable
+/// prefix so no failure is silently swallowed.
+pub fn humanize_read_error(err: &std::io::Error) -> String {
+    use std::io::ErrorKind;
+    match err.kind() {
+        ErrorKind::ConnectionReset => "Connection reset".to_string(),
+        ErrorKind::ConnectionAborted | ErrorKind::BrokenPipe | ErrorKind::UnexpectedEof => {
+            "Connection lost".to_string()
+        }
+        ErrorKind::TimedOut => "Connection timed out".to_string(),
+        _ => {
+            // Windows surfaces several teardown races as `Uncategorized` with a
+            // raw message rather than a typed ErrorKind (e.g. os error 995 "The
+            // I/O operation has been aborted", broken/closing pipes). Map the
+            // common ones so the user sees a short label instead of the raw text.
+            let lower = err.to_string().to_ascii_lowercase();
+            if lower.contains("reset") {
+                "Connection reset".to_string()
+            } else if lower.contains("aborted")
+                || lower.contains("broken pipe")
+                || lower.contains("pipe is being closed")
+                || lower.contains("pipe has been ended")
+                || lower.contains("has been closed")
+            {
+                "Connection lost".to_string()
+            } else {
+                format!("Connection lost: {err}")
+            }
+        }
+    }
+}
+
 /// Convert a failure to *start* an external program (a PTY `spawn_command` or a
 /// `tokio` `Command::spawn`) into a short, human-friendly string. Like
 /// [`humanize_io_error`], this is an ADR-005 translation point: it keeps the raw
@@ -604,6 +642,42 @@ mod tests {
 
     fn io(kind: std::io::ErrorKind, msg: &str) -> std::io::Error {
         std::io::Error::new(kind, msg)
+    }
+
+    // -- humanize_read_error tests --
+
+    #[test]
+    fn humanize_read_error_connection_reset() {
+        assert_eq!(
+            humanize_read_error(&io(std::io::ErrorKind::ConnectionReset, "reset by peer")),
+            "Connection reset"
+        );
+    }
+
+    #[test]
+    fn humanize_read_error_broken_pipe_is_connection_lost() {
+        assert_eq!(
+            humanize_read_error(&io(std::io::ErrorKind::BrokenPipe, "broken pipe")),
+            "Connection lost"
+        );
+    }
+
+    #[test]
+    fn humanize_read_error_windows_aborted_falls_through_to_string_match() {
+        // os error 995 surfaces as Uncategorized/Other with this message on Windows.
+        let e = io(
+            std::io::ErrorKind::Other,
+            "The I/O operation has been aborted because of either a thread exit or an application request",
+        );
+        assert_eq!(humanize_read_error(&e), "Connection lost");
+    }
+
+    #[test]
+    fn humanize_read_error_unknown_keeps_readable_prefix() {
+        assert_eq!(
+            humanize_read_error(&io(std::io::ErrorKind::Other, "weird failure")),
+            "Connection lost: weird failure"
+        );
     }
 
     #[test]

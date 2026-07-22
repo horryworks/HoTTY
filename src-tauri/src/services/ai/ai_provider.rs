@@ -9,16 +9,6 @@ use tokio_util::sync::CancellationToken;
 // Shared types
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum AuthType {
-    #[serde(rename = "oauth2")]
-    OAuth2,
-    ServiceAccount,
-    ApiKey,
-    Adc,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthStatus {
@@ -88,12 +78,6 @@ pub struct AuthResultPayload {
 pub trait AIProvider: Send + Sync {
     /// Unique provider identifier (e.g. "openai", "anthropic").
     fn id(&self) -> &str;
-
-    /// Human-readable display name.
-    fn display_name(&self) -> &str;
-
-    /// Authentication mechanism used by this provider.
-    fn auth_type(&self) -> AuthType;
 
     /// Start an interactive authentication flow.
     async fn authenticate(&mut self, app: &AppHandle, credentials: Value) -> Result<bool, String>;
@@ -212,18 +196,6 @@ pub fn emit_auth_logout(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn auth_type_serializes_as_snake_case() {
-        assert_eq!(
-            serde_json::to_string(&AuthType::ApiKey).unwrap(),
-            r#""api_key""#
-        );
-        assert_eq!(
-            serde_json::to_string(&AuthType::OAuth2).unwrap(),
-            r#""oauth2""#
-        );
-    }
 
     #[test]
     fn auth_status_serializes_camel_case() {

@@ -22,8 +22,8 @@ use super::iap_tunnel::{
 };
 use super::session_service::{
     abort_all, emit_session_data, emit_session_error, emit_session_status, emit_to_owner,
-    encoding_for, humanize_pty_error, humanize_spawn_error, join_or_abort, SessionError,
-    SessionService, DISCONNECT_DRAIN_MS,
+    encoding_for, humanize_pty_error, humanize_read_error, humanize_spawn_error, join_or_abort,
+    SessionError, SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -1549,7 +1549,7 @@ impl SessionService for GcloudIapSession {
                             "gcloud-iap[ssh pid={ssh_pid}] {sid}: PTY read error after {total_bytes} bytes: {e}"
                         );
                         log_mgr.stop_logging(&sid).await;
-                        emit_session_error(&app_r, &sid, format!("read error: {e}"));
+                        emit_session_error(&app_r, &sid, humanize_read_error(&e));
                         emit_session_status(&app_r, &sid, "disconnected");
                         break;
                     }

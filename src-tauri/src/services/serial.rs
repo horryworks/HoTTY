@@ -9,7 +9,7 @@ use tokio::task::JoinHandle;
 
 use super::session_service::{
     abort_all, emit_session_data, emit_session_error, emit_session_status, encoding_for,
-    join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
+    humanize_read_error, join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -311,7 +311,7 @@ impl SessionService for SerialSession {
                     Err(e) => {
                         log::error!("serial {sid}: read error: {e}");
                         log_mgr.stop_logging(&sid).await;
-                        emit_session_error(&app_r, &sid, format!("read error: {e}"));
+                        emit_session_error(&app_r, &sid, humanize_read_error(&e));
                         emit_session_status(&app_r, &sid, "disconnected");
                         break;
                     }

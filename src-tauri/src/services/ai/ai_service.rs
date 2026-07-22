@@ -163,7 +163,7 @@ impl AIService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::ai::ai_provider::{AIProvider, AuthStatus, AuthType, ModelInfo};
+    use crate::services::ai::ai_provider::{AIProvider, AuthStatus, ModelInfo};
     use crate::services::ai::provider_registry::AIProviderRegistry;
     use async_trait::async_trait;
 
@@ -175,12 +175,6 @@ mod tests {
     impl AIProvider for StubProvider {
         fn id(&self) -> &str {
             &self.provider_id
-        }
-        fn display_name(&self) -> &str {
-            "Stub"
-        }
-        fn auth_type(&self) -> AuthType {
-            AuthType::ApiKey
         }
         async fn authenticate(
             &mut self,

@@ -64,7 +64,7 @@ impl AIProviderRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::ai::ai_provider::{AuthStatus, AuthType, ModelInfo};
+    use crate::services::ai::ai_provider::{AuthStatus, ModelInfo};
     use async_trait::async_trait;
     use serde_json::Value;
     use std::path::Path;
@@ -72,19 +72,12 @@ mod tests {
 
     struct MockProvider {
         id: String,
-        name: String,
     }
 
     #[async_trait]
     impl AIProvider for MockProvider {
         fn id(&self) -> &str {
             &self.id
-        }
-        fn display_name(&self) -> &str {
-            &self.name
-        }
-        fn auth_type(&self) -> AuthType {
-            AuthType::ApiKey
         }
         async fn authenticate(
             &mut self,
@@ -128,10 +121,7 @@ mod tests {
     #[test]
     fn register_and_get() {
         let mut reg = AIProviderRegistry::new();
-        reg.register(Box::new(MockProvider {
-            id: "test".into(),
-            name: "Test Provider".into(),
-        }));
+        reg.register(Box::new(MockProvider { id: "test".into() }));
         assert!(reg.get("test").is_some());
         assert!(reg.get("nonexistent").is_none());
     }
@@ -139,10 +129,7 @@ mod tests {
     #[test]
     fn contains_works() {
         let mut reg = AIProviderRegistry::new();
-        reg.register(Box::new(MockProvider {
-            id: "a".into(),
-            name: "A".into(),
-        }));
+        reg.register(Box::new(MockProvider { id: "a".into() }));
         assert!(reg.contains("a"));
         assert!(!reg.contains("b"));
     }
@@ -150,10 +137,7 @@ mod tests {
     #[test]
     fn get_mut_works() {
         let mut reg = AIProviderRegistry::new();
-        reg.register(Box::new(MockProvider {
-            id: "m".into(),
-            name: "M".into(),
-        }));
+        reg.register(Box::new(MockProvider { id: "m".into() }));
         assert!(reg.get_mut("m").is_some());
         assert!(reg.get_mut("x").is_none());
     }

@@ -30,6 +30,7 @@ export const aiChat = {
     closeTab: 'Закрыть {{title}}',
     addTab: 'Добавить вкладку',
     tabN: 'Вкладка {{n}}',
+    tabStreaming: '{{title}} — получение ответа…',
   },
   outputBlock: {
     label: 'Вывод терминала',

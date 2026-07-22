@@ -218,6 +218,9 @@ export const settings = {
     autoExecCountdown: '自動執行倒數（秒）',
     autoExecCountdownHelp:
       '在「安全自動執行」模式下，判定為安全的指令會在等待這些秒數後再執行，讓你能及時取消。0 表示立即執行。最大 10。預設：3。',
+    concurrentStreams: 'AI 聊天並行回覆數',
+    concurrentStreamsHelp:
+      '一個窗格中可同時接收回覆的 AI 聊天分頁數量。超出的傳送會排入佇列，並在回覆完成後開始。1 表示嚴格一次一個（舊行為）。若你的供應商有速率限制（如 Gemini 免費層），請調低。最大 8。預設：3。',
     deviceResponseTimeout: '裝置回應逾時（秒）',
     deviceResponseTimeoutHelp:
       '若裝置在指令後的這麼多秒內未產生新輸出，系統會告知 AI 裝置已停止回應，以便迴圈得以繼續。0 會停用閒置偵測。預設值：10。',

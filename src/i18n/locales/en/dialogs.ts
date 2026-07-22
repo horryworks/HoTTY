@@ -1,6 +1,12 @@
 // Modal dialogs — confirmation, save/discard, paste, SSH host key, system prompt,
 // Ask AI, IAP VM start, and Save-to-Host-Tree. Grouped one key block per dialog.
 export const dialogs = {
+  unsavedEditors: {
+    title: 'Unsaved changes',
+    bodyOne: 'You have {{count}} unsaved text editor tab. Close anyway and discard changes?',
+    bodyMany: 'You have {{count}} unsaved text editor tabs. Close anyway and discard changes?',
+    discardQuit: 'Discard & Quit',
+  },
   confirm: {
     title: 'Confirm',
     // Default confirm-button label when a caller does not pass one.

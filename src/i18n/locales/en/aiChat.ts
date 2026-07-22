@@ -29,6 +29,7 @@ export const aiChat = {
     closeTab: 'Close {{title}}',
     addTab: 'Add tab',
     tabN: 'Tab {{n}}',
+    tabStreaming: '{{title}} — receiving response…',
   },
   outputBlock: {
     label: 'Terminal output',

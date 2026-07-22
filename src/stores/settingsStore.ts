@@ -120,6 +120,12 @@ interface SettingsState {
   /** Grace-period (seconds) before an auto-execute-safe command actually runs, so
    *  the user can cancel it. 0 = run immediately (no countdown). Clamped to 0–10. */
   aiAutoExecCountdownSecs: number;
+  /** How many AI Chat conversation tabs may stream a response at the SAME time
+   *  within one pane. Extra sends queue and dispatch as slots free up. 1 = the old
+   *  strictly-serial behaviour (one stream at a time). Kept modest by default to
+   *  avoid provider rate-limit (429) pressure and simultaneous token cost. Clamped
+   *  to 1–8. */
+  maxConcurrentStreams: number;
   /** How auto-execution safety is decided (whitelist vs AI vs hybrid). */
   classifierStrategy: ClassifierStrategy;
   /** Minimum AI confidence required to auto-execute a command judged read-only. */
@@ -196,6 +202,7 @@ const DEFAULTS: SettingsState = {
   blacklistCommands: [...DEFAULT_BLACKLIST],
   maxConsecutiveAutoExecutions: 5,
   aiAutoExecCountdownSecs: 3,
+  maxConcurrentStreams: 3,
   // Hybrid (managed whitelist/blacklist + AI for the gray zone) is the default
   // for all users; the v15 migration switches existing users to it too.
   classifierStrategy: 'hybrid',
@@ -217,7 +224,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 24,
+      version: 25,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -334,6 +341,10 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
         if (version < 24) {
           // New auto-execute pre-run countdown — default to a 3s grace period.
           state.aiAutoExecCountdownSecs ??= DEFAULTS.aiAutoExecCountdownSecs;
+        }
+        if (version < 25) {
+          // New AI Chat concurrent-stream cap — default 3 parallel streams/pane.
+          state.maxConcurrentStreams ??= DEFAULTS.maxConcurrentStreams;
         }
         return state as SettingsState;
       },

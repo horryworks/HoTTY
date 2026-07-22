@@ -9,8 +9,8 @@ use tauri::AppHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{
-    emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, AuthType,
-    ChatResponseData, ChatResponseKind, ModelInfo,
+    emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, ChatResponseData,
+    ChatResponseKind, ModelInfo,
 };
 use crate::services::ai::classifier::{
     build_user_prompt, openai_response_format, parse_verdict, CommandVerdict,
@@ -112,14 +112,6 @@ impl OpenAIProvider {
 impl AIProvider for OpenAIProvider {
     fn id(&self) -> &str {
         "openai"
-    }
-
-    fn display_name(&self) -> &str {
-        "OpenAI"
-    }
-
-    fn auth_type(&self) -> AuthType {
-        AuthType::ApiKey
     }
 
     async fn authenticate(&mut self, app: &AppHandle, credentials: Value) -> Result<bool, String> {

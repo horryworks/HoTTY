@@ -11,8 +11,8 @@ use tokio::task::JoinHandle;
 use super::jumpbox::{establish_tunnel, JumpboxConfig, JumpboxHandler};
 use super::session_service::{
     abort_all, emit_session_data, emit_session_error, emit_session_pty_size, emit_session_status,
-    encoding_for, humanize_io_error, join_or_abort, resolve_initial_pty_size, SessionError,
-    SessionService, DISCONNECT_DRAIN_MS,
+    encoding_for, humanize_io_error, humanize_read_error, join_or_abort, resolve_initial_pty_size,
+    SessionError, SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // --- Telnet protocol constants -----------------------------------------
@@ -435,7 +435,7 @@ impl SessionService for TelnetSession {
                     Ok(n) => n,
                     Err(e) => {
                         log::error!("telnet {sid}: read error: {e}");
-                        emit_session_error(&app_r, &sid, format!("Connection lost: {e}"));
+                        emit_session_error(&app_r, &sid, humanize_read_error(&e));
                         emit_session_status(&app_r, &sid, "disconnected");
                         break;
                     }

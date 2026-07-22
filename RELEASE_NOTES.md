@@ -1,5 +1,24 @@
 # Release Notes
 
+## v2.0.12
+
+**AI Chat** grows from watching a single terminal to watching many: one conversation can now monitor several terminals at once — colour-coded, with each suggested command routed to the right one — plus you can attach images and keep typing while the AI is still replying.
+
+### New Features
+
+- **Watch several terminals in one AI Chat.** An AI Chat conversation can now watch multiple terminals at the same time and reason across all of them at once — ideal for a problem that spans, say, a web server and a database. Turn on **AI Watch** on a terminal to add it to your active conversation, or use the **+** beside the terminal chips in the AI Chat header to add any open terminal (including one running in another window). Each watched terminal appears as a chip — click it to jump there, or its **×** to stop watching; a disconnected terminal greys out and re-links itself when it reconnects. Every watched terminal's recent output is included (labelled per terminal) when you send a message. Turning on **AI Watch** now grows your active conversation instead of opening a new tab per terminal; use **+ New chat** for a fresh, independent conversation with its own set of terminals.
+- **Commands run on the right terminal automatically.** When several terminals are watched and the AI suggests a command, it is routed to the terminal the AI intends — you still confirm before it runs (and see which terminal it will target), but you never have to pick the destination. Each run targets exactly one terminal. With a single watched terminal, nothing changes.
+- **Choose which conversation watches a terminal.** With two or more AI Chat conversations open, clicking a terminal's **AI Watch** button opens a small picker so you choose which conversation watches it — or start a new one. A terminal belongs to one conversation at a time: choosing a different conversation moves it there, and choosing its current one stops watching. With a single conversation, **AI Watch** stays one click as before.
+- **Attach images to AI Chat.** Include images in a message to the AI — paste straight from the clipboard (Ctrl + V), drag image files onto the message box, or click the paperclip button to pick files. Attached images appear as thumbnails you can remove before sending, then inline in the conversation once sent. Supported on vision-capable models across Gemini, Vertex AI, OpenAI and Anthropic; PNG, JPEG, WebP and GIF are accepted (up to 5 images per message, 5 MB each). Each image is kept in that conversation's history, so you can ask follow-up questions about it.
+- **Parallel AI Chat replies.** Multiple AI Chat conversation tabs in one pane can now stream their replies at the same time instead of strictly one at a time; extra sends queue and start as slots free up. Set the limit in **Settings → AI → Parallel AI Chat replies** (default 3, range 1–8; set it to 1 to keep the old one-at-a-time behaviour, e.g. if your provider rate-limits like the Gemini free tier).
+
+### Improvements
+
+- **Colour-coded conversations.** Each AI Chat conversation now has its own colour. Every terminal it watches lights its **AI Watch** button and tab underline in that colour, and the conversation's tab and header chips share the same colour — so you can tell at a glance which conversation is watching which terminals. The colours are editable in the Custom Theme editor.
+- **Type and send during an AI response.** The AI Chat input is no longer disabled while a reply is streaming. A message you send mid-response is queued and handed to the model as its next turn the moment the current reply finishes — ahead of any automatic follow-ups (such as auto-run command output), so your message is what the AI considers next. A small "queued" indicator appears while a message waits, and multiple queued messages are sent in the order you typed them.
+- **Network Expert preps every watched device.** When an AI Chat using the **Network Expert** persona watches several terminals, its start-of-session protocol — identify the device, then disable paging — now runs on each watched device in turn, with each command routed to the correct terminal, and a reconnected device re-disables paging on its own terminal.
+- **Clearer disconnect messages.** When a connection drops mid-session (Serial, WSL, Local, Telnet, or IAP), HoTTY now shows a plain "Connection reset" / "Connection lost" message instead of a raw read error with an OS error code.
+
 ## v2.0.12-beta5
 
 AI Chat now color-codes each conversation and lets you choose which one watches a terminal — and every watched terminal lights up, not just one.

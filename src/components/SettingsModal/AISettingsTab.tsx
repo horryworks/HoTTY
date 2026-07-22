@@ -387,6 +387,24 @@ export function AISettingsTab() {
         />
       </div>
 
+      {/* Concurrent AI Chat streams per pane (1 = strictly serial) */}
+      <div className="settings-group">
+        <label>
+          {t('settings.ai.concurrentStreams')}
+          <HelpTooltip text={t('settings.ai.concurrentStreamsHelp')} />
+        </label>
+        <input
+          type="number"
+          min={1}
+          max={8}
+          value={settings.maxConcurrentStreams}
+          onChange={(e) => {
+            const parsed = parseInt(e.target.value, 10);
+            update('maxConcurrentStreams', Number.isFinite(parsed) ? Math.max(1, Math.min(8, parsed)) : 1);
+          }}
+        />
+      </div>
+
       {/* Device Response Timeout */}
       <div className="settings-group">
         <label>

@@ -29,6 +29,7 @@ export const aiChat = {
     closeTab: '关闭 {{title}}',
     addTab: '添加标签页',
     tabN: '标签页 {{n}}',
+    tabStreaming: '{{title}} — 正在接收响应…',
   },
   outputBlock: {
     label: '终端输出',

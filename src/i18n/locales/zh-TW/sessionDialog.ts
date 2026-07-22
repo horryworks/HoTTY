@@ -2,6 +2,7 @@
 // 連線表單欄位／標籤／預留位置、各通訊協定專屬的欄位群組（SSH／序列埠／WSL／
 // Git Bash）、驗證訊息，以及捨棄變更的確認。
 export const sessionDialog = {
+  defaultSessionName: '{{protocol}} 工作階段',
   title: '新工作階段',
   tabs: {
     sourceAriaLabel: '連線來源',

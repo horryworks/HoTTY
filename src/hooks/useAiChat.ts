@@ -156,11 +156,6 @@ export function getActiveTab(state: AiChatState | undefined): ChatTab | undefine
 
 // -- Watched-terminal selectors (pure; exported for reuse & tests) --
 
-/** The session ids a tab watches, in insertion order. */
-export function tabSessionIds(tab: ChatTab | undefined): string[] {
-  return (tab?.linkedSessions ?? []).map(w => w.sessionId);
-}
-
 /** Whether a tab currently watches `sessionId`. */
 export function tabHasSession(tab: ChatTab | undefined, sessionId: string): boolean {
   return (tab?.linkedSessions ?? []).some(w => w.sessionId === sessionId);

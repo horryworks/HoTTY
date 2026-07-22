@@ -4,8 +4,10 @@
  *   - per-tab transcripts (`messagesByTab`) and per-tab in-flight partials
  *     (`streamingByTab`) / streaming flags (`streamingTabIds`),
  *   - the single `ai-chat-response` listener that routes chunk/done/error events
- *     to the owning tab,
- *   - the two-timer stream watchdog (idle + hard cap),
+ *     to the owning tab purely by parsing the per-tab session id (`paneId::tabId`),
+ *     so MULTIPLE tabs can stream concurrently without their events colliding,
+ *   - a PER-TAB stream watchdog (each streaming tab owns its own idle + hard-cap
+ *     timer pair, keyed by tab id, so one tab's timeout never disturbs another),
  *   - stream-completion detection.
  *
  * Instead of the pane diffing `streamingTabIds` itself to notice a finished
@@ -13,10 +15,11 @@
  * callback (fired post-commit, so the final message is already in `messages`).
  * Token usage from a `done` event is surfaced via `onUsage`.
  *
- * The returned helpers deliberately keep the same names/shapes the pane used
- * locally (`setMessagesByTab`, `markStreaming`, `armStreamWatchdog`,
- * `streamingForTabIdRef`, …) so the pane's many mutation sites (send loop, new
- * chat, cancel, provider switch, logout, prune) need no changes.
+ * The returned helpers keep the same names the pane used locally
+ * (`setMessagesByTab`, `markStreaming`, `armStreamWatchdog`, …). `armStreamWatchdog`
+ * / `clearStreamWatchdog` now take a `tabId` (the watchdog is per-tab); there is no
+ * longer a single "current stream" ref — ownership is fully expressed by the per-tab
+ * `streamingTabIds` set plus the session-id routing.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -66,8 +69,6 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
     const streamingByTabRef = useRef(streamingByTab);
     const streamingTabIdsRef = useRef(streamingTabIds);
     const messagesByTabRef = useRef(messagesByTab);
-    // Which tab owns the in-flight stream (chunks route here across tab switches).
-    const streamingForTabIdRef = useRef<string | null>(null);
     const onStreamCompleteRef = useRef(onStreamComplete);
     // One post-commit sync for every latest-value mirror. Declared before the
     // completion effect so that effect reads the freshly-synced refs.
@@ -133,22 +134,33 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
         });
     }, [activeTabId]);
 
-    // ── Watchdog (idle + hard cap) ──
-    // idle: re-armed on every chunk; fires after silence. hard cap: armed once per
-    // stream, not reset by chunks, so a runaway provider is still cancelled. Both
-    // read the partial from a ref so this logic never depends on streamingByTab
-    // state — keeping armStreamWatchdog stable (the listener subscribes once).
-    const streamIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const streamHardCapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const clearStreamWatchdog = useCallback(() => {
-        if (streamIdleTimerRef.current) { clearTimeout(streamIdleTimerRef.current); streamIdleTimerRef.current = null; }
-        if (streamHardCapTimerRef.current) { clearTimeout(streamHardCapTimerRef.current); streamHardCapTimerRef.current = null; }
+    // ── Watchdog (idle + hard cap), PER TAB ──
+    // Each streaming tab owns its OWN idle+hard-cap timer pair (keyed by tab id), so
+    // concurrent streams are watch-dogged independently — one tab timing out never
+    // touches another. idle: re-armed on every chunk; fires after silence. hard cap:
+    // armed once per stream, not reset by chunks, so a runaway provider is still
+    // cancelled. The partial is read from a ref so this logic never depends on
+    // streamingByTab state — keeping armStreamWatchdog stable (the listener
+    // subscribes once).
+    type StreamTimers = { idle: ReturnType<typeof setTimeout> | null; hardCap: ReturnType<typeof setTimeout> | null };
+    const streamWatchdogsRef = useRef<Map<string, StreamTimers>>(new Map());
+    const clearStreamWatchdog = useCallback((tabId: string) => {
+        const w = streamWatchdogsRef.current.get(tabId);
+        if (!w) return;
+        if (w.idle) clearTimeout(w.idle);
+        if (w.hardCap) clearTimeout(w.hardCap);
+        streamWatchdogsRef.current.delete(tabId);
     }, []);
-    const finalizeStuckStream = useCallback((ms: number, kind: 'idle' | 'hardcap') => {
-        const targetTabId = streamingForTabIdRef.current;
-        if (!targetTabId) return;
-        tauriService.aiChatCancel(aiBackendSessionId(paneId, targetTabId)).catch(() => {});
-        const partial = streamingByTabRef.current.get(targetTabId) ?? '';
+    const clearAllStreamWatchdogs = useCallback(() => {
+        for (const w of streamWatchdogsRef.current.values()) {
+            if (w.idle) clearTimeout(w.idle);
+            if (w.hardCap) clearTimeout(w.hardCap);
+        }
+        streamWatchdogsRef.current.clear();
+    }, []);
+    const finalizeStuckStream = useCallback((tabId: string, ms: number, kind: 'idle' | 'hardcap') => {
+        tauriService.aiChatCancel(aiBackendSessionId(paneId, tabId)).catch(() => {});
+        const partial = streamingByTabRef.current.get(tabId) ?? '';
         const reason = tRef.current(
             kind === 'idle' ? 'aiChat.pane.streamIdleTimeout' : 'aiChat.pane.streamHardcapTimeout',
             { seconds: Math.round(ms / 1000) },
@@ -156,25 +168,28 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
         const body = streamTimeoutMessage(partial, ms, kind, reason);
         setMessagesByTab(prev => {
             const next = new Map(prev);
-            const cur = prev.get(targetTabId) ?? [];
-            next.set(targetTabId, [...cur, { role: 'model', content: body }]);
+            const cur = prev.get(tabId) ?? [];
+            next.set(tabId, [...cur, { role: 'model', content: body }]);
             return next;
         });
-        setStreamingForTab(targetTabId, '');
-        markStreaming(targetTabId, false);
-        streamingForTabIdRef.current = null;
-        clearStreamWatchdog();
+        setStreamingForTab(tabId, '');
+        markStreaming(tabId, false);
+        clearStreamWatchdog(tabId);
     }, [paneId, setStreamingForTab, markStreaming, clearStreamWatchdog]);
-    const armStreamWatchdog = useCallback(() => {
-        if (streamIdleTimerRef.current) clearTimeout(streamIdleTimerRef.current);
-        streamIdleTimerRef.current = setTimeout(() => {
-            streamIdleTimerRef.current = null;
-            finalizeStuckStream(STREAM_IDLE_TIMEOUT_MS, 'idle');
+    const armStreamWatchdog = useCallback((tabId: string) => {
+        let w = streamWatchdogsRef.current.get(tabId);
+        if (!w) { w = { idle: null, hardCap: null }; streamWatchdogsRef.current.set(tabId, w); }
+        if (w.idle) clearTimeout(w.idle);
+        w.idle = setTimeout(() => {
+            const cur = streamWatchdogsRef.current.get(tabId);
+            if (cur) cur.idle = null;
+            finalizeStuckStream(tabId, STREAM_IDLE_TIMEOUT_MS, 'idle');
         }, STREAM_IDLE_TIMEOUT_MS);
-        if (!streamHardCapTimerRef.current) {
-            streamHardCapTimerRef.current = setTimeout(() => {
-                streamHardCapTimerRef.current = null;
-                finalizeStuckStream(STREAM_HARD_CAP_MS, 'hardcap');
+        if (!w.hardCap) {
+            w.hardCap = setTimeout(() => {
+                const cur = streamWatchdogsRef.current.get(tabId);
+                if (cur) cur.hardCap = null;
+                finalizeStuckStream(tabId, STREAM_HARD_CAP_MS, 'hardcap');
             }, STREAM_HARD_CAP_MS);
         }
     }, [finalizeStuckStream]);
@@ -186,21 +201,22 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
 
         tauriService.onAiChatResponse((data) => {
             if (cancelled) return;
-            // Session ids are per-tab (`paneId::tabId`); accept any belonging to this
-            // pane. The bare paneId is still accepted for back-compat.
-            if (data.sessionId !== paneId && !data.sessionId.startsWith(`${paneId}::`)) return;
-            const targetTabId = data.sessionId.startsWith(`${paneId}::`)
-                ? data.sessionId.slice(paneId.length + 2)
-                : streamingForTabIdRef.current;
+            // Every real send uses a per-tab session id (`paneId::tabId`); route each
+            // chunk/done/error to its owning tab by parsing the tab id out of it. This
+            // is what lets concurrent streams from different tabs interleave on the one
+            // event channel without colliding. A bare paneId (legacy, no send path
+            // emits it anymore) can't be routed to a specific tab, so it is ignored.
+            if (!data.sessionId.startsWith(`${paneId}::`)) return;
+            const targetTabId = data.sessionId.slice(paneId.length + 2);
             if (!targetTabId) return;
             // Drop late events for a tab that is no longer streaming.
             if (!streamingTabIdsRef.current.has(targetTabId)) return;
 
             if (data.responseType === 'chunk') {
                 setStreamingForTab(targetTabId, prev => prev + data.content);
-                armStreamWatchdog();
+                armStreamWatchdog(targetTabId);
             } else if (data.responseType === 'done') {
-                clearStreamWatchdog();
+                clearStreamWatchdog(targetTabId);
                 setMessagesByTab(prev => {
                     const next = new Map(prev);
                     const cur = prev.get(targetTabId) ?? [];
@@ -209,7 +225,6 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
                 });
                 setStreamingForTab(targetTabId, '');
                 markStreaming(targetTabId, false);
-                if (streamingForTabIdRef.current === targetTabId) streamingForTabIdRef.current = null;
                 if (data.usageMetadata) {
                     const inTokens = data.usageMetadata.promptTokenCount || 0;
                     const outTokens = data.usageMetadata.candidatesTokenCount || 0;
@@ -226,7 +241,7 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
                     });
                 }
             } else if (data.responseType === 'error') {
-                clearStreamWatchdog();
+                clearStreamWatchdog(targetTabId);
                 setMessagesByTab(prev => {
                     const next = new Map(prev);
                     const cur = prev.get(targetTabId) ?? [];
@@ -235,14 +250,13 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
                 });
                 setStreamingForTab(targetTabId, '');
                 markStreaming(targetTabId, false);
-                if (streamingForTabIdRef.current === targetTabId) streamingForTabIdRef.current = null;
             }
         }).then(fn => {
             if (cancelled) { fn(); } else { unlisten = fn; }
         }).catch(e => logError('AI', 'Response listener setup failed', e));
 
-        return () => { cancelled = true; unlisten?.(); clearStreamWatchdog(); };
-    }, [paneId, selectedModelRef, setStreamingForTab, markStreaming, armStreamWatchdog, clearStreamWatchdog]);
+        return () => { cancelled = true; unlisten?.(); clearAllStreamWatchdogs(); };
+    }, [paneId, selectedModelRef, setStreamingForTab, markStreaming, armStreamWatchdog, clearStreamWatchdog, clearAllStreamWatchdogs]);
 
     // ── Stream-completion detection ──
     // Fire onStreamComplete for every tab that just left `streamingTabIds` (done,
@@ -262,14 +276,18 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
 
     // ── Bulk lifecycle ops ──
     const resetAllStreams = useCallback(() => {
-        clearStreamWatchdog();
+        clearAllStreamWatchdogs();
         setMessagesByTab(new Map());
         setStreamingByTab(new Map());
         setStreamingTabIds(new Set());
-        streamingForTabIdRef.current = null;
         setTokensByTab(new Map());
-    }, [clearStreamWatchdog]);
+    }, [clearAllStreamWatchdogs]);
     const pruneStreams = useCallback((liveIds: Set<string>) => {
+        // A closed tab may still hold a live watchdog timer — clear it so it can't
+        // fire into (or cancel a backend session for) a tab that no longer exists.
+        for (const tabId of [...streamWatchdogsRef.current.keys()]) {
+            if (!liveIds.has(tabId)) clearStreamWatchdog(tabId);
+        }
         const dropClosed = <T,>(prev: Map<string, T>): Map<string, T> => {
             let changed = false;
             const next = new Map(prev);
@@ -285,9 +303,9 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
             for (const id of [...prev]) if (!liveIds.has(id)) { next.delete(id); changed = true; }
             return changed ? next : prev;
         });
-    }, []);
+    }, [clearStreamWatchdog]);
     const clearTabStream = useCallback((tabId: string) => {
-        if (streamingForTabIdRef.current === tabId) clearStreamWatchdog();
+        clearStreamWatchdog(tabId);
         setMessagesByTab(prev => { const next = new Map(prev); next.delete(tabId); return next; });
         setStreamingByTab(prev => { const next = new Map(prev); next.delete(tabId); return next; });
         // "New chat" also zeroes this tab's token/cost counter.
@@ -296,14 +314,13 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
             if (!prev.has(tabId)) return prev;
             const next = new Set(prev); next.delete(tabId); return next;
         });
-        if (streamingForTabIdRef.current === tabId) streamingForTabIdRef.current = null;
     }, [clearStreamWatchdog]);
 
     return {
         messagesByTab, setMessagesByTab,
         streamingByTab, setStreamingByTab,
         streamingTabIds, setStreamingTabIds,
-        streamingByTabRef, streamingTabIdsRef, streamingForTabIdRef,
+        streamingByTabRef, streamingTabIdsRef,
         messagesByTabRef,
         messages, streamingContent, isStreaming,
         setStreamingForTab, markStreaming, setStreamingContent, setIsStreaming, setMessages,

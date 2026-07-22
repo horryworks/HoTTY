@@ -27,6 +27,7 @@ export const aiChat = {
     closeTab: '關閉 {{title}}',
     addTab: '新增分頁',
     tabN: '分頁 {{n}}',
+    tabStreaming: '{{title}} — 正在接收回應…',
   },
   outputBlock: {
     label: '終端機輸出',

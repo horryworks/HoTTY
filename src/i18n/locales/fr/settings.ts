@@ -218,6 +218,9 @@ export const settings = {
     autoExecCountdown: 'Compte à rebours avant exécution (secondes)',
     autoExecCountdownHelp:
       "En mode exécution automatique sécurisée, attend ce nombre de secondes avant d'exécuter une commande jugée sûre, afin que vous puissiez l'annuler. 0 exécute immédiatement. Maximum 10. Par défaut : 3.",
+    concurrentStreams: 'Réponses de chat IA en parallèle',
+    concurrentStreamsHelp:
+      "Combien d'onglets de conversation IA peuvent recevoir une réponse en même temps dans un volet. Les envois supplémentaires sont mis en file d'attente et démarrent à la fin des réponses. 1 = strictement une à la fois. Réduisez si votre fournisseur limite le débit (p. ex. l'offre gratuite de Gemini). Maximum 8. Par défaut : 3.",
     deviceResponseTimeout: "Délai de réponse de l'appareil (secondes)",
     deviceResponseTimeoutHelp:
       "Si l'appareil ne produit aucune nouvelle sortie pendant ce nombre de secondes après une commande, l'IA est informée que l'appareil a cessé de répondre afin que la boucle puisse continuer. 0 désactive la détection d'inactivité. Par défaut : 10.",

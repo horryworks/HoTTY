@@ -218,6 +218,9 @@ export const settings = {
     autoExecCountdown: 'Cuenta atrás antes de ejecutar (segundos)',
     autoExecCountdownHelp:
       'En el modo de ejecución automática segura, espera estos segundos antes de ejecutar un comando considerado seguro, para que puedas cancelarlo. 0 lo ejecuta de inmediato. Máximo 10. Predeterminado: 3.',
+    concurrentStreams: 'Respuestas de chat de IA en paralelo',
+    concurrentStreamsHelp:
+      'Cuántas pestañas de chat de IA pueden recibir una respuesta a la vez en un panel. Los envíos adicionales se ponen en cola y empiezan cuando terminan las respuestas. 1 = estrictamente de una en una. Redúcelo si tu proveedor limita la tasa (p. ej., el nivel gratuito de Gemini). Máximo 8. Predeterminado: 3.',
     deviceResponseTimeout: 'Tiempo de espera de respuesta del dispositivo (segundos)',
     deviceResponseTimeoutHelp:
       'Si el dispositivo no produce nueva salida durante esta cantidad de segundos tras un comando, se informa a la IA de que el dispositivo dejó de responder para que el bucle pueda continuar. 0 desactiva la detección de inactividad. Predeterminado: 10.',

@@ -29,6 +29,7 @@ export const aiChat = {
     closeTab: '{{title}} 닫기',
     addTab: '탭 추가',
     tabN: '탭 {{n}}',
+    tabStreaming: '{{title}} — 응답 수신 중…',
   },
   outputBlock: {
     label: '터미널 출력',

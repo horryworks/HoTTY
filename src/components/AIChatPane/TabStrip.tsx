@@ -10,15 +10,19 @@ interface TabStripProps {
     onSelect: (tabId: string) => void;
     onClose: (tabId: string) => void;
     onAdd: () => void;
+    /** Tabs with an in-flight AI response — shown with a spinner so a background
+     *  conversation streaming in parallel is visible without switching to it. */
+    streamingTabIds?: Set<string>;
 }
 
-export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect, onClose, onAdd }) => {
+export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect, onClose, onAdd, streamingTabIds }) => {
     const { t } = useTranslation();
     return (
         <div className="ai-chat-tab-strip" role="tablist" aria-label={t('aiChat.tabStrip.ariaLabel')}>
             <div className="ai-chat-tab-strip-list">
                 {tabs.map((tab) => {
                     const active = tab.id === activeTabId;
+                    const streaming = streamingTabIds?.has(tab.id) ?? false;
                     // Empty title (unlinked/unnamed tab) => localized "Tab N" fallback.
                     const displayTitle = tab.title || t('aiChat.tabStrip.tabN', { n: tab.ordinal });
                     // Per-conversation color (matches its watched terminal tabs & chips).
@@ -28,8 +32,9 @@ export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect,
                             key={tab.id}
                             role="tab"
                             aria-selected={active}
+                            aria-busy={streaming}
                             tabIndex={active ? 0 : -1}
-                            className={`ai-chat-tab${active ? ' active' : ''}`}
+                            className={`ai-chat-tab${active ? ' active' : ''}${streaming ? ' streaming' : ''}`}
                             style={{ '--conv-color': convColor } as React.CSSProperties}
                             onClick={() => onSelect(tab.id)}
                             onKeyDown={(e) => {
@@ -38,9 +43,11 @@ export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect,
                                     onSelect(tab.id);
                                 }
                             }}
-                            title={displayTitle}
+                            title={streaming ? t('aiChat.tabStrip.tabStreaming', { title: displayTitle }) : displayTitle}
                         >
-                            <span className="ai-chat-tab-dot" aria-hidden="true" />
+                            {streaming
+                                ? <span className="ai-chat-tab-spinner" aria-hidden="true" />
+                                : <span className="ai-chat-tab-dot" aria-hidden="true" />}
                             <span className="ai-chat-tab-title">{displayTitle}</span>
                             {/* Always closeable. Closing the last tab closes the whole
                                 pane (handled by the parent's onClose). */}

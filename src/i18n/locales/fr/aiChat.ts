@@ -29,6 +29,7 @@ export const aiChat = {
     closeTab: 'Fermer {{title}}',
     addTab: 'Ajouter un onglet',
     tabN: 'Onglet {{n}}',
+    tabStreaming: '{{title}} — réception de la réponse…',
   },
   outputBlock: {
     label: 'Sortie du terminal',

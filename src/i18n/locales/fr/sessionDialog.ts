@@ -3,6 +3,7 @@
 // protocol-specific field groups (SSH / Serial / WSL / Git Bash), validation
 // messages, and the discard-changes confirmation.
 export const sessionDialog = {
+  defaultSessionName: 'Session {{protocol}}',
   title: 'Nouvelle session',
   tabs: {
     sourceAriaLabel: 'Source de connexion',

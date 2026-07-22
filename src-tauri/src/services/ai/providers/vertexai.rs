@@ -9,8 +9,8 @@ use tauri::AppHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{
-    emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, AuthType,
-    ChatResponseData, ChatResponseKind, ModelInfo, TokenUsage,
+    emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, ChatResponseData,
+    ChatResponseKind, ModelInfo, TokenUsage,
 };
 use crate::services::ai::classifier::{
     anthropic_verdict_tool, build_user_prompt, extract_gemini_text, gemini_response_schema,
@@ -769,14 +769,6 @@ impl VertexAIProvider {
 impl AIProvider for VertexAIProvider {
     fn id(&self) -> &str {
         "vertexai"
-    }
-
-    fn display_name(&self) -> &str {
-        "Google Cloud Vertex AI"
-    }
-
-    fn auth_type(&self) -> AuthType {
-        AuthType::Adc
     }
 
     async fn authenticate(&mut self, app: &AppHandle, credentials: Value) -> Result<bool, String> {

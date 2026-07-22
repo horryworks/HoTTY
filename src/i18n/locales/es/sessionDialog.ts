@@ -3,6 +3,7 @@
 // formulario, los grupos de campos por protocolo (SSH / Serie / WSL / Git Bash),
 // los mensajes de validación y la confirmación de descarte de cambios.
 export const sessionDialog = {
+  defaultSessionName: 'Sesión {{protocol}}',
   title: 'Nueva sesión',
   tabs: {
     sourceAriaLabel: 'Origen de la conexión',

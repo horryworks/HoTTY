@@ -24,6 +24,7 @@ export const aiChat = {
     closeTab: '{{title}} を閉じる',
     addTab: 'タブを追加',
     tabN: 'タブ {{n}}',
+    tabStreaming: '{{title}} — 応答を受信中…',
   },
   outputBlock: {
     label: '端末の出力',

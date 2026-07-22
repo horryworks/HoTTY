@@ -198,7 +198,7 @@ function App() {
     const id = makeFeaturePaneId('ai-chat');
     setFeaturePanes((prev) => {
       const next = new Map(prev);
-      next.set(id, { id, type: 'ai-chat', displayName: 'AI Chat' });
+      next.set(id, { id, type: 'ai-chat', displayName: getFeatureDisplayName('ai-chat') });
       return next;
     });
     addSessionToStore(id);
@@ -331,9 +331,13 @@ function App() {
       preventDefault();
       const proceed = await tauriService.confirmDialog(
         count === 1
-          ? 'You have 1 unsaved text editor tab. Close anyway and discard changes?'
-          : `You have ${count} unsaved text editor tabs. Close anyway and discard changes?`,
-        { title: 'Unsaved changes', okLabel: 'Discard & Quit', cancelLabel: 'Cancel' },
+          ? i18n.t('dialogs.unsavedEditors.bodyOne', { count })
+          : i18n.t('dialogs.unsavedEditors.bodyMany', { count }),
+        {
+          title: i18n.t('dialogs.unsavedEditors.title'),
+          okLabel: i18n.t('dialogs.unsavedEditors.discardQuit'),
+          cancelLabel: i18n.t('common.cancel'),
+        },
       );
       if (proceed) {
         closing = true;
@@ -597,7 +601,7 @@ function App() {
 
     // No existing editor — create a new one
     const id = makeFeaturePaneId('text-editor');
-    const filename = filePath.split(/[\\/]/).pop() || 'Untitled';
+    const filename = filePath.split(/[\\/]/).pop() || i18n.t('panes.textEditor.untitled');
     setFeaturePanes((prev) => {
       const next = new Map(prev);
       next.set(id, { id, type: 'text-editor', displayName: filename });
