@@ -1,5 +1,15 @@
 # Release Notes
 
+## v2.0.13-beta2
+
+**The New Connection dialog now waits with you.** Starting a connection keeps the dialog open with a Connecting indicator instead of dropping you straight into an empty pane — and if it fails, the reason is shown right there so you can fix the details and retry (or Cancel) without losing what you typed. The terminal opens only once the session is actually connected.
+
+### Improvements
+
+- **In-dialog connection progress.** When you connect from the New Session dialog, it now stays open showing a "Connecting…" indicator with a **Cancel** button, and the terminal pane appears only once the session reaches connected — a failed or cancelled attempt never leaves a dead tab in the grid. If the connection fails, the plain-English reason (e.g. authentication failed, host not found) is shown inline and your form is preserved so you can adjust and retry immediately. **Esc** or the **✕** button cancels an in-progress attempt and returns you to the editable form.
+- **Confirm before stopping a GCP VM.** Stopping an instance from the GCP tab now asks for confirmation first, naming the VM in the prompt, so a stray click can't stop the wrong machine. Starting a VM is unchanged.
+- **AI Chat image-attach button moved.** The image-attach (paperclip) button now sits to the right of the model button in the AI Chat input, grouping it with the other send-row controls.
+
 ## v2.0.13-beta1
 
 **Google Cloud IAP connections are fixed and more reliable.** Logging in to a VM over IAP had been failing with `Permission denied (publickey)` since v2.0.3-beta4 because HoTTY guessed the wrong Linux account; it now asks gcloud directly. VM start/stop status is also no longer lost when you close the New Connection dialog, and connecting is noticeably faster.

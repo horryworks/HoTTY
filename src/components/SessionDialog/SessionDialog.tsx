@@ -55,6 +55,19 @@ interface SessionDialogProps {
      */
     onConnect: (payload: ConnectSubmitPayload) => string | null | void;
     /**
+     * Called once a session initiated via `onConnect` reaches 'connected'.
+     * The host reveals + activates the pane, closes the dialog, and focuses
+     * the terminal. The dialog stays open until this fires (or the attempt
+     * fails / is cancelled), so the user waits inside the dialog.
+     */
+    onConnected?: (sessionId: string) => void;
+    /**
+     * Called when the user cancels an in-progress connection. The host tears
+     * down the never-revealed session (disconnects the backend / cancels a
+     * pending host-key prompt). The dialog itself stays open and editable.
+     */
+    onCancelConnect?: (sessionId: string) => void;
+    /**
      * Sessions map from the host app. Used to observe the status of sessions
      * initiated via `onConnect` so the dialog can react to 'connected'
      * vs 'error'/'disconnected' transitions. Optional — when omitted the
@@ -82,6 +95,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     open: isOpen,
     onClose,
     onConnect,
+    onConnected,
+    onCancelConnect,
     sessions,
     onOpenBookmark,
 }) => {
@@ -96,6 +111,15 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
     const [isDecrypting, setIsDecrypting] = useState(false);
 
+    // Connection-in-progress tracking. While a session initiated from this
+    // dialog is negotiating, `connectingSessionId` holds its id and the form
+    // shows a "connecting" state (Connect → spinner, Cancel visible). On
+    // failure the humanized reason is captured into `connectError` and shown
+    // inline while the form stays editable for retry.
+    const [connectingSessionId, setConnectingSessionId] = useState<string | null>(null);
+    const [connectError, setConnectError] = useState<string | null>(null);
+    const isConnecting = connectingSessionId !== null;
+
     // Ref to the connection form for programmatic submission
     const formRef = useRef<HTMLFormElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -103,6 +127,12 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     useEffect(() => {
         selectedHostIdRef.current = selectedHostId;
     }, [selectedHostId]);
+    // Mirror into a ref so the document-level keydown handler (which is only
+    // re-subscribed on isOpen/onClose changes) always sees the live value.
+    const connectingSessionIdRef = useRef<string | null>(null);
+    useEffect(() => {
+        connectingSessionIdRef.current = connectingSessionId;
+    }, [connectingSessionId]);
 
     // --- Panel divider resize ---
     const [treePanelWidth, setTreePanelWidth] = useState(380);
@@ -277,12 +307,33 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     // so the user can fix credentials and retry.
     const initiatedSessionsRef = useRef<Map<string, boolean>>(new Map());
 
+    // Set true once the active connecting session has been observed in the
+    // `sessions` map at least once; guards the "record vanished" failure branch
+    // against the brief window before the parent propagates the new record.
+    const connectingSeenRef = useRef(false);
+
     const dispatchConnect = useCallback((payload: ConnectSubmitPayload, keepFormOnConnect = false) => {
         const result = onConnect(payload);
         if (typeof result === 'string' && result.length > 0) {
             initiatedSessionsRef.current.set(result, keepFormOnConnect);
+            // Enter the in-dialog "connecting" state; the watch effect drives the
+            // rest (close + focus on 'connected', inline error on failure).
+            connectingSeenRef.current = false;
+            setConnectError(null);
+            setConnectingSessionId(result);
         }
     }, [onConnect]);
+
+    // Abort an in-progress connection: ask the host to tear down the
+    // never-revealed session, then return the form to an editable state.
+    // The dialog itself stays open (the user can fix and retry, or close).
+    const handleCancelConnect = useCallback(() => {
+        const id = connectingSessionIdRef.current;
+        if (!id) return;
+        onCancelConnect?.(id);
+        initiatedSessionsRef.current.delete(id);
+        setConnectingSessionId(null);
+    }, [onCancelConnect]);
 
     // Available jumpbox hosts
     const jumpboxHosts = useMemo(() =>
@@ -294,13 +345,21 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     useEffect(() => {
         if (!isOpen) return;
         const handler = (e: KeyboardEvent) => {
-            if (document.querySelector('.host-edit-modal-overlay, .confirm-modal-overlay')) return;
+            // Ignore keys while a nested modal is up — including the SSH host-key
+            // prompt, which can appear over this dialog mid-connect.
+            if (document.querySelector('.host-edit-modal-overlay, .confirm-modal-overlay, .ssh-host-key-overlay')) return;
+            const connecting = connectingSessionIdRef.current !== null;
             if (e.key === 'Escape') {
                 e.preventDefault();
-                onClose();
+                // While connecting, Esc cancels the attempt (dialog stays open);
+                // otherwise it closes the dialog.
+                if (connecting) handleCancelConnect();
+                else onClose();
                 return;
             }
             if (e.key !== 'Enter') return;
+            // Don't re-submit while a connection is already in progress.
+            if (connecting) return;
             const active = document.activeElement;
             const container = containerRef.current;
             if (!container) return;
@@ -316,7 +375,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             document.removeEventListener('keydown', handler);
             clearDecryptedCache();
         };
-    }, [isOpen, onClose]);
+    }, [isOpen, onClose, handleCancelConnect]);
 
     // --- Async data loading per protocol ---
     useEffect(() => {
@@ -401,21 +460,57 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     // ('error'/'disconnected') stop tracking but always preserve user input.
     useEffect(() => {
         if (!sessions) return;
+        /* eslint-disable react-hooks/set-state-in-effect */
+
+        // Drive the in-dialog connecting/error UI for the active attempt.
+        const activeId = connectingSessionId;
+        if (activeId) {
+            const rec = sessions.get(activeId);
+            if (rec) connectingSeenRef.current = true;
+            const status = rec?.status;
+            if (status === 'connected') {
+                // Established: hand off to the host (reveal pane + close + focus).
+                setConnectError(null);
+                setConnectingSessionId(null);
+                onConnected?.(activeId);
+            } else if (status === 'error' || status === 'disconnected') {
+                // Failed: show the humanized reason inline; keep the form editable.
+                setConnectError(rec?.errorMessage || t('sessionDialog.connectFailedGeneric'));
+                setConnectingSessionId(null);
+            } else if (!rec && connectingSeenRef.current) {
+                // The record vanished (e.g. externally closed) before we saw a
+                // terminal status — surface a generic failure rather than
+                // spinning forever. The `seen` guard avoids the brief pre-propagation window.
+                setConnectError(t('sessionDialog.connectFailedGeneric'));
+                setConnectingSessionId(null);
+            }
+        }
+
+        // Keep-form-on-connect reset semantics (independent of the UI above).
         for (const [id, keepForm] of Array.from(initiatedSessionsRef.current)) {
             const status = sessions.get(id)?.status;
             if (status === 'connected') {
                 if (!keepForm) {
-                    /* eslint-disable react-hooks/set-state-in-effect */
                     setNewConnectionDraft(null);
                     resetForm();
-                    /* eslint-enable react-hooks/set-state-in-effect */
                 }
                 initiatedSessionsRef.current.delete(id);
             } else if (status === 'error' || status === 'disconnected') {
                 initiatedSessionsRef.current.delete(id);
             }
         }
-    }, [sessions, resetForm]);
+        /* eslint-enable react-hooks/set-state-in-effect */
+    }, [sessions, resetForm, connectingSessionId, onConnected, t]);
+
+    // Clear transient connection state when the dialog closes so a stale
+    // "connecting" spinner or error message never bleeds into the next open.
+    useEffect(() => {
+        if (isOpen) return;
+        /* eslint-disable react-hooks/set-state-in-effect */
+        setConnectingSessionId(null);
+        setConnectError(null);
+        /* eslint-enable react-hooks/set-state-in-effect */
+    }, [isOpen]);
 
     // --- Select a host from the tree ---
     const handleSelectHost = async (node: HostTreeNode) => {
@@ -832,6 +927,12 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        // A connection is already in progress — ignore re-submits (Enter key,
+        // double-click) until it resolves or is cancelled.
+        if (connectingSessionIdRef.current !== null) return;
+        // Clear any prior failure so a fresh attempt starts with a clean slate.
+        setConnectError(null);
+
         // Front-end validation. Catches obvious mistakes (empty host, bad
         // port, CRLF injection) before the backend has to.
         const validationError = ((): string | null => {
@@ -1091,7 +1192,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 />
                 <button
                     className="session-dialog-close"
-                    onClick={onClose}
+                    onClick={() => { if (isConnecting) handleCancelConnect(); else onClose(); }}
                 >{'\u2715'}</button>
 
                 <h2 style={{ marginTop: 0, paddingRight: '20px', marginBottom: '10px' }}>{t('sessionDialog.title')}</h2>
@@ -1172,6 +1273,25 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 </>
                             )}
                         </div>
+                        {(isConnecting || connectError) && (
+                            <div
+                                className={`connect-status${connectError ? ' connect-status-error' : ''}`}
+                                aria-live="assertive"
+                                role={connectError ? 'alert' : undefined}
+                            >
+                                {isConnecting ? (
+                                    <>
+                                        <span className="connect-spinner" aria-hidden="true" />
+                                        <span>{t('sessionDialog.connecting')}</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="connect-status-label">{t('sessionDialog.connectFailed')}</span>
+                                        <span className="connect-status-reason">{connectError}</span>
+                                    </>
+                                )}
+                            </div>
+                        )}
                         <form ref={formRef} onSubmit={handleSubmit}>
                             <fieldset disabled={isDecrypting} style={{ border: 'none', padding: 0, margin: 0 }}>
                                 {/* Display Name (only when a host is selected) */}
@@ -1466,12 +1586,21 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                         {t('common.save')}
                                     </button>
                                 )}
+                                {isConnecting && (
+                                    <button
+                                        type="button"
+                                        className="btn-secondary"
+                                        onClick={handleCancelConnect}
+                                    >
+                                        {t('common.cancel')}
+                                    </button>
+                                )}
                                 <button
                                     type="submit"
                                     className="btn-primary"
-                                    disabled={!canSubmit || isDecrypting || (protocol === 'git-bash' && gitBashPath === '')}
+                                    disabled={!canSubmit || isDecrypting || isConnecting || (protocol === 'git-bash' && gitBashPath === '')}
                                 >
-                                    {t('sessionDialog.connect')}
+                                    {isConnecting ? t('sessionDialog.connecting') : t('sessionDialog.connect')}
                                 </button>
                             </div>
                         </form>

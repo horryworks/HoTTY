@@ -514,6 +514,141 @@ describe('SessionDialog', () => {
     });
   });
 
+  describe('In-dialog connect lifecycle (wait / success / failure / cancel)', () => {
+    // Fill a New Connection SSH form enough that Connect is enabled.
+    const fillNewSsh = async (container: HTMLElement, host = '10.0.0.100', user = 'root') => {
+      const hostInput = container.querySelector('input[placeholder="example.com"]') as HTMLInputElement;
+      await act(async () => { fireEvent.change(hostInput, { target: { value: host } }); });
+      const usernameInput = container.querySelectorAll('input[type="text"]')[1] as HTMLInputElement;
+      await act(async () => { fireEvent.change(usernameInput, { target: { value: user } }); });
+    };
+
+    it('enters the connecting state and disables Connect while the attempt is in progress', async () => {
+      const onConnect = vi.fn().mockReturnValue('sess-c1');
+      const sessions = makeSessions([['sess-c1', 'connecting']]);
+      const { container } = render(<SessionDialog {...defaultProps} onConnect={onConnect} sessions={sessions} />);
+      await fillNewSsh(container);
+      await act(async () => { fireEvent.click(screen.getByText('Connect')); });
+      expect(onConnect).toHaveBeenCalledTimes(1);
+      // Connecting indicator visible; Connect button shows the connecting label and is disabled.
+      expect(container.querySelector('.connect-status')).toBeTruthy();
+      const submit = container.querySelector('.btn-primary') as HTMLButtonElement;
+      expect(submit.textContent).toContain('Connecting');
+      expect(submit.disabled).toBe(true);
+      // A Cancel button is offered.
+      expect(screen.getByText('Cancel')).toBeTruthy();
+    });
+
+    it('calls onConnected when the initiated session becomes connected', async () => {
+      const onConnect = vi.fn().mockReturnValue('sess-ok');
+      const onConnected = vi.fn();
+      let sessions = makeSessions([['sess-ok', 'connecting']]);
+      const { container, rerender } = render(
+        <SessionDialog {...defaultProps} onConnect={onConnect} onConnected={onConnected} sessions={sessions} />,
+      );
+      await fillNewSsh(container);
+      await act(async () => { fireEvent.click(screen.getByText('Connect')); });
+      sessions = makeSessions([['sess-ok', 'connected']]);
+      await act(async () => {
+        rerender(<SessionDialog {...defaultProps} onConnect={onConnect} onConnected={onConnected} sessions={sessions} />);
+      });
+      expect(onConnected).toHaveBeenCalledWith('sess-ok');
+    });
+
+    it('shows the failure reason inline and preserves the form when the session errors', async () => {
+      const onConnect = vi.fn().mockReturnValue('sess-bad');
+      const onConnected = vi.fn();
+      let sessions = makeSessions([['sess-bad', 'connecting']]);
+      const { container, rerender } = render(
+        <SessionDialog {...defaultProps} onConnect={onConnect} onConnected={onConnected} sessions={sessions} />,
+      );
+      await fillNewSsh(container, '203.0.113.9', 'admin');
+      await act(async () => { fireEvent.click(screen.getByText('Connect')); });
+      // Backend reports failure with a humanized reason on the session record.
+      sessions = new Map([['sess-bad', {
+        id: 'sess-bad', status: 'error', errorMessage: 'Password authentication failed',
+      } as unknown as SessionRecord]]);
+      await act(async () => {
+        rerender(<SessionDialog {...defaultProps} onConnect={onConnect} onConnected={onConnected} sessions={sessions} />);
+      });
+      // Reason shown inline; onConnected NOT called; form retained; Connect re-enabled.
+      expect(container.querySelector('.connect-status-error')).toBeTruthy();
+      expect(screen.getByText('Password authentication failed')).toBeTruthy();
+      expect(onConnected).not.toHaveBeenCalled();
+      expect((container.querySelector('input[placeholder="example.com"]') as HTMLInputElement).value).toBe('203.0.113.9');
+      expect((container.querySelector('.btn-primary') as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('falls back to a generic reason when the failed record carries no message', async () => {
+      const onConnect = vi.fn().mockReturnValue('sess-generic');
+      let sessions = makeSessions([['sess-generic', 'connecting']]);
+      const { container, rerender } = render(<SessionDialog {...defaultProps} onConnect={onConnect} sessions={sessions} />);
+      await fillNewSsh(container);
+      await act(async () => { fireEvent.click(screen.getByText('Connect')); });
+      sessions = makeSessions([['sess-generic', 'error']]);
+      await act(async () => {
+        rerender(<SessionDialog {...defaultProps} onConnect={onConnect} sessions={sessions} />);
+      });
+      expect(container.querySelector('.connect-status-error')?.textContent).toContain('Connection failed');
+    });
+
+    it('Cancel aborts the in-progress connection and returns to an editable form', async () => {
+      const onConnect = vi.fn().mockReturnValue('sess-cancel');
+      const onCancelConnect = vi.fn();
+      const sessions = makeSessions([['sess-cancel', 'connecting']]);
+      const { container } = render(
+        <SessionDialog {...defaultProps} onConnect={onConnect} onCancelConnect={onCancelConnect} sessions={sessions} />,
+      );
+      await fillNewSsh(container);
+      await act(async () => { fireEvent.click(screen.getByText('Connect')); });
+      expect(container.querySelector('.connect-status')).toBeTruthy();
+      await act(async () => { fireEvent.click(screen.getByText('Cancel')); });
+      expect(onCancelConnect).toHaveBeenCalledWith('sess-cancel');
+      // Back to editable: connecting indicator gone, Connect enabled.
+      expect(container.querySelector('.connect-status')).toBeNull();
+      const submit = container.querySelector('.btn-primary') as HTMLButtonElement;
+      expect(submit.textContent).toContain('Connect');
+      expect(submit.disabled).toBe(false);
+    });
+
+    it('Escape cancels the attempt instead of closing the dialog while connecting', async () => {
+      const onConnect = vi.fn().mockReturnValue('sess-esc');
+      const onClose = vi.fn();
+      const onCancelConnect = vi.fn();
+      const sessions = makeSessions([['sess-esc', 'connecting']]);
+      const { container } = render(
+        <SessionDialog {...defaultProps} onConnect={onConnect} onClose={onClose} onCancelConnect={onCancelConnect} sessions={sessions} />,
+      );
+      await fillNewSsh(container);
+      await act(async () => { fireEvent.click(screen.getByText('Connect')); });
+      await act(async () => { fireEvent.keyDown(document, { key: 'Escape' }); });
+      expect(onCancelConnect).toHaveBeenCalledWith('sess-esc');
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('the ✕ button cancels the attempt instead of closing while connecting', async () => {
+      const onConnect = vi.fn().mockReturnValue('sess-x');
+      const onClose = vi.fn();
+      const onCancelConnect = vi.fn();
+      const sessions = makeSessions([['sess-x', 'connecting']]);
+      const { container } = render(
+        <SessionDialog {...defaultProps} onConnect={onConnect} onClose={onClose} onCancelConnect={onCancelConnect} sessions={sessions} />,
+      );
+      await fillNewSsh(container);
+      await act(async () => { fireEvent.click(screen.getByText('Connect')); });
+      await act(async () => { fireEvent.click(screen.getByText('✕')); });
+      expect(onCancelConnect).toHaveBeenCalledWith('sess-x');
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('Escape closes the dialog when no connection is in progress', async () => {
+      const onClose = vi.fn();
+      render(<SessionDialog {...defaultProps} onClose={onClose} />);
+      await act(async () => { fireEvent.keyDown(document, { key: 'Escape' }); });
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('Google Cloud IAP protocol (removed — handled by GCP tab)', () => {
     it('protocol selector does NOT include a Google Cloud IAP option', () => {
       render(<SessionDialog {...defaultProps} />);

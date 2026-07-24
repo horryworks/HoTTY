@@ -85,6 +85,9 @@ export const sessionDialog = {
   saveTitleDirty: 'このホストへの変更を保存',
   saveTitleClean: '保存する変更はありません',
   connect: '接続',
+  connecting: '接続中…',
+  connectFailed: '接続に失敗しました',
+  connectFailedGeneric: '接続に失敗しました。',
   browseKeyTitle: '秘密鍵ファイルを選択',
   validation: {
     hostRequired: 'ホストは必須です。',

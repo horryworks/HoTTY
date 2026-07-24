@@ -84,6 +84,9 @@ export const sessionDialog = {
   saveTitleDirty: '將變更儲存至此主機',
   saveTitleClean: '沒有可儲存的變更',
   connect: '連線',
+  connecting: '連線中…',
+  connectFailed: '連線失敗',
+  connectFailedGeneric: '連線失敗。',
   browseKeyTitle: '選取私密金鑰檔案',
   validation: {
     hostRequired: '主機為必填項目。',

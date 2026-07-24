@@ -85,6 +85,9 @@ export const sessionDialog = {
   saveTitleDirty: 'Guardar cambios en este host',
   saveTitleClean: 'No hay cambios para guardar',
   connect: 'Conectar',
+  connecting: 'Conectando…',
+  connectFailed: 'Error de conexión',
+  connectFailedGeneric: 'Error de conexión.',
   browseKeyTitle: 'Seleccionar archivo de clave privada',
   validation: {
     hostRequired: 'El host es obligatorio.',

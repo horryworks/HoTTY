@@ -85,6 +85,9 @@ export const sessionDialog = {
   saveTitleDirty: '保存对此主机的更改',
   saveTitleClean: '没有需要保存的更改',
   connect: '连接',
+  connecting: '连接中…',
+  connectFailed: '连接失败',
+  connectFailedGeneric: '连接失败。',
   browseKeyTitle: '选择私钥文件',
   validation: {
     hostRequired: '主机为必填项。',

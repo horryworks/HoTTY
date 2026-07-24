@@ -85,6 +85,9 @@ export const sessionDialog = {
   saveTitleDirty: 'Сохранить изменения для этого хоста',
   saveTitleClean: 'Нет изменений для сохранения',
   connect: 'Подключиться',
+  connecting: 'Подключение…',
+  connectFailed: 'Ошибка подключения',
+  connectFailedGeneric: 'Не удалось подключиться.',
   browseKeyTitle: 'Выбрать файл закрытого ключа',
   validation: {
     hostRequired: 'Укажите хост.',

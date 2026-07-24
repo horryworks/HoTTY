@@ -85,6 +85,9 @@ export const sessionDialog = {
   saveTitleDirty: '이 호스트에 변경 사항 저장',
   saveTitleClean: '저장할 변경 사항 없음',
   connect: '연결',
+  connecting: '연결 중…',
+  connectFailed: '연결 실패',
+  connectFailedGeneric: '연결에 실패했습니다.',
   browseKeyTitle: '개인 키 파일 선택',
   validation: {
     hostRequired: '호스트는 필수입니다.',

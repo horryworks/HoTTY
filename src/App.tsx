@@ -425,16 +425,34 @@ function App() {
   const handleNewConnectionClick = () => setConnectOpen(true);
 
   const handleConnectSubmit = (payload: ConnectSubmitPayload): string => {
-    setConnectOpen(false);
-    // openSession returns the id synchronously; the connect attempt runs in the
-    // background. Adding the tab to the pane store now makes the connecting
-    // state visible immediately, so the user gets feedback while the backend
-    // negotiates the connection. The id is returned so SessionDialog can
-    // watch the resulting session and clear the New Connection draft only on
-    // a verified 'connected' status (auth failures preserve the form).
-    const id = openSession(payload);
+    // Start the connection but keep the dialog open and DON'T reveal a pane yet.
+    // openSession returns the id synchronously and runs the connect in the
+    // background; SessionDialog watches the resulting session and shows an
+    // in-dialog "connecting" state. The pane is created only once the session
+    // reaches 'connected' (handleSessionConnected) — a failed or cancelled
+    // attempt never puts a tab in the grid. The id is returned so the dialog
+    // can track this session's lifecycle.
+    return openSession(payload);
+  };
+
+  // Called by SessionDialog once a dialog-initiated session is established:
+  // reveal + activate its pane, close the dialog, and focus the terminal.
+  // addSessionToStore already marks the new pane active; the queueMicrotask
+  // focus is belt-and-suspenders alongside TerminalXtermHost's active-effect.
+  const handleSessionConnected = (id: string) => {
     addSessionToStore(id);
-    return id;
+    setConnectOpen(false);
+    // The revealed pane's TerminalXtermHost opens + focuses the terminal via its
+    // own mount effects; this extra focus is belt-and-suspenders and guarded
+    // because the xterm may not be open()'d yet when the microtask runs.
+    queueMicrotask(() => { try { sessions.get(id)?.term.focus(); } catch { /* not yet open — the pane's active-effect will focus it */ } });
+  };
+
+  // Called by SessionDialog when the user cancels an in-progress connection:
+  // tear down the never-revealed session (disconnects the backend and cancels
+  // any pending host-key prompt). The dialog stays open and editable.
+  const handleCancelConnect = (id: string) => {
+    void closeSession(id);
   };
 
   const handleSelectTab = (id: string) => {
@@ -859,6 +877,8 @@ function App() {
         open={connectOpen}
         onClose={() => setConnectOpen(false)}
         onConnect={handleConnectSubmit}
+        onConnected={handleSessionConnected}
+        onCancelConnect={handleCancelConnect}
         sessions={sessions}
         onOpenBookmark={handleOpenBookmark}
       />

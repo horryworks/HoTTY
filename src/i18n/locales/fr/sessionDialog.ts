@@ -85,6 +85,9 @@ export const sessionDialog = {
   saveTitleDirty: 'Enregistrer les modifications de cet hôte',
   saveTitleClean: 'Aucune modification à enregistrer',
   connect: 'Se connecter',
+  connecting: 'Connexion…',
+  connectFailed: 'Échec de la connexion',
+  connectFailedGeneric: 'Échec de la connexion.',
   browseKeyTitle: 'Sélectionner le fichier de clé privée',
   validation: {
     hostRequired: "L'hôte est requis.",
