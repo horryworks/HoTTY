@@ -42,7 +42,7 @@ export const help = {
     gcpIap:
       '<0>Google Cloud IAP：</0>通过 Identity-Aware Proxy 连接到 Google Compute Engine 虚拟机，无需将虚拟机暴露到公共互联网。在“新建会话”对话框中打开 <1>GCP</1> 标签页，即可浏览您有权访问的所有项目中的全部 GCE 实例 — 按项目分组，并带有实时状态（🟢 RUNNING / 🔴 stopped / 🟡 transitioning）— 然后双击某个实例即可连接。窗格还提供按钮以直接<2>启动</2>或<3>停止</3>实例，以及<4>刷新</4>操作来重新查询您的项目和实例。一个<5>搜索框</5>会在您输入时按项目或实例名称筛选列表。上次已知的列表会在<6>启动时立即显示</6>并在后台重新验证，因此您无需在每次打开窗格时都等待完整查询。如果您双击一个已停止的虚拟机，HoTTY 会在启动前提示（或在已保存的 IAP 主机上配置时自动启动）。<7>无需 SSH 用户名、密码或私钥</7> — HoTTY 将连接委托给 <8>gcloud compute ssh --tunnel-through-iap</8>，由它代您处理 IAP 隧道、OS Login 映射、自动 SSH 密钥生成（<9>~/.ssh/google_compute_engine</9>）、密钥注册和身份验证。需要 Google Cloud SDK 并已完成 <10>gcloud auth login</10>。',
     gcpSshUser:
-      '<0>SSH 用户（通常留空）:</0> HoTTY 通过询问 gcloud 自动判定要登录的 Linux 账号，因此 GCP 标签页中的 <1>SSH user</1> 输入框通常留空即可。仅当虚拟机接受的账号与自动判定结果不同时才需填写——此时连接会以 <2>Permission denied (publickey)</2> 失败，错误信息中会显示尝试过的账号名。请注意，HoTTY 只读取 gcloud 的判定结果，不会更改 Google 侧的任何设置，因此在从未注册过 SSH 密钥的电脑上，仍需运行一次 <3>gcloud compute ssh &lt;instance&gt; --tunnel-through-iap</3> 来注册密钥。',
+      '<0>SSH 用户（通常留空）:</0> HoTTY 通过询问 gcloud 自动判定要登录的 Linux 账号，因此 GCP 标签页中的 <1>SSH user</1> 输入框通常留空即可。仅当虚拟机接受的账号与自动判定结果不同时才需填写——此时连接会以 <2>Permission denied (publickey)</2> 失败，错误信息中会显示尝试过的账号名。在从未注册过 SSH 密钥的电脑上，HoTTY 现在会在首次连接时自动将密钥注册到实例（或项目）的元数据中，因此无需再手动运行 <3>gcloud compute ssh &lt;instance&gt; --tunnel-through-iap</3>。',
     gcpFiltering:
       '<0>GCP 访问感知筛选：</0>GCP 窗格会在项目和实例级别探测 <1>iap.tunnelInstances.accessViaIAP</1>（通过 <2>gcloud projects test-iam-permissions</2>），并隐藏您没有 IAP 隧道权限的虚拟机。窗格标题中的 🔒 计数按钮可让您重新切换显示这些隐藏的实例；没有 OS Login 权限的实例仍会显示，但会带有 🔑 警告标志，因为 SSH 仍可能通过元数据密钥工作。当 IAM 探测本身失败时（网络波动、已删除的项目），实例将保持可见，以免可访问的虚拟机被意外隐藏。',
     updateNotifications:

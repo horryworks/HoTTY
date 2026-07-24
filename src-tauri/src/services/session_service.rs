@@ -373,6 +373,13 @@ struct SessionStatusPayload {
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+struct IapConnectProgressPayload {
+    session_id: String,
+    phase: String,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct SessionErrorPayload {
     session_id: String,
     error: String,
@@ -404,6 +411,23 @@ pub fn emit_session_status(app: &AppHandle, session_id: &str, status: &str) {
         SessionStatusPayload {
             session_id: session_id.to_string(),
             status: status.to_string(),
+        },
+    );
+}
+
+/// Emit a coarse connect-phase label for the GCP/IAP pre-flight so the New
+/// Session dialog can show live progress instead of a frozen-looking spinner
+/// during the ~30-45s account-resolution / key-enrollment / tunnel startup.
+/// `phase` is a stable key (`resolving` | `enrolling` | `tunnel` |
+/// `authenticating`) the frontend maps to a localized string.
+pub fn emit_iap_connect_progress(app: &AppHandle, session_id: &str, phase: &str) {
+    emit_targeted(
+        app,
+        session_id,
+        "iap-connect-progress",
+        IapConnectProgressPayload {
+            session_id: session_id.to_string(),
+            phase: phase.to_string(),
         },
     );
 }

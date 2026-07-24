@@ -85,6 +85,12 @@ export const sessionDialog = {
   saveTitleClean: '沒有可儲存的變更',
   connect: '連線',
   connecting: '連線中…',
+  iapPhase: {
+    resolving: '正在偵測 SSH 帳戶…',
+    enrolling: '正在註冊 SSH 金鑰（本機首次）…',
+    tunnel: '正在啟動 IAP 通道…',
+    authenticating: '正在驗證…',
+  },
   connectFailed: '連線失敗',
   connectFailedGeneric: '連線失敗。',
   browseKeyTitle: '選取私密金鑰檔案',

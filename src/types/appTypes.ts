@@ -69,6 +69,16 @@ export interface SessionStatusPayload {
 }
 
 /**
+ * Coarse connect-phase label emitted during the GCP/IAP pre-flight so the New
+ * Session dialog can show live progress instead of a frozen-looking spinner.
+ * `phase` is a stable key: 'resolving' | 'enrolling' | 'tunnel' | 'authenticating'.
+ */
+export interface IapConnectProgressPayload {
+  sessionId: string;
+  phase: string;
+}
+
+/**
  * The terminal size actually baked into the initial pty allocation (SSH pty-req /
  * Telnet initial NAWS), reported once per connect. A fixed-size session pins its
  * grid to this width — the device latched it and ignores later window-change.

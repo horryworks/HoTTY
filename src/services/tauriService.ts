@@ -19,6 +19,7 @@ import type {
   GcloudIapConnectionConfig,
   SessionDataPayload,
   SessionStatusPayload,
+  IapConnectProgressPayload,
   SessionPtySizePayload,
   SessionErrorPayload,
   SessionInfo,
@@ -729,6 +730,15 @@ export const tauriService = {
 
   onSessionStatus(cb: (p: SessionStatusPayload) => void): Promise<UnlistenFn> {
     return listen<SessionStatusPayload>('session-status', (e) => cb(e.payload));
+  },
+
+  /** Coarse GCP/IAP connect-phase progress for the New Session dialog spinner. */
+  onIapConnectProgress(
+    cb: (p: IapConnectProgressPayload) => void
+  ): Promise<UnlistenFn> {
+    return listen<IapConnectProgressPayload>('iap-connect-progress', (e) =>
+      cb(e.payload)
+    );
   },
 
   onSessionPtySize(cb: (p: SessionPtySizePayload) => void): Promise<UnlistenFn> {

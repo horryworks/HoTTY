@@ -15,6 +15,9 @@ const makeSessions = (entries: Array<[string, SessionRecordStatus]>): Map<string
   return m;
 };
 
+/** Captured `iap-connect-progress` callback so tests can push connect-phase events. */
+let emitIapProgress: ((p: { sessionId: string; phase: string }) => void) | null = null;
+
 // Mock tauriService
 vi.mock('../../services/tauriService', () => ({
   tauriService: {
@@ -27,6 +30,12 @@ vi.mock('../../services/tauriService', () => ({
     gceIapListProjects: vi.fn(),
     gceIapListZones: vi.fn(),
     gceIapListInstances: vi.fn(),
+    onIapConnectProgress: (cb: (p: { sessionId: string; phase: string }) => void) => {
+      emitIapProgress = cb;
+      return Promise.resolve(() => {
+        emitIapProgress = null;
+      });
+    },
     openExternal: vi.fn(),
     logDebug: vi.fn(),
     listSerialPorts: vi.fn().mockResolvedValue([]),
@@ -54,6 +63,7 @@ describe('SessionDialog', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
+    emitIapProgress = null;
     // Tests assume the dialog opens on the Hosts tab; reset the persisted store
     // (which other tests / cases may have switched) and the bookmark tree.
     useSidebarLayoutStore.setState({ activeSidebarTab: 'hosts' });
@@ -537,6 +547,34 @@ describe('SessionDialog', () => {
       expect(submit.disabled).toBe(true);
       // A Cancel button is offered.
       expect(screen.getByText('Cancel')).toBeTruthy();
+    });
+
+    it('renders the connect indicator at dialog level (outside the Hosts form-panel) so it shows on every tab', async () => {
+      // Regression: the GCP tab connect looked frozen because the "Connecting…"
+      // spinner + Cancel lived inside .form-panel, which only renders on Hosts.
+      const onConnect = vi.fn().mockReturnValue('sess-dlg');
+      const sessions = makeSessions([['sess-dlg', 'connecting']]);
+      const { container } = render(<SessionDialog {...defaultProps} onConnect={onConnect} sessions={sessions} />);
+      await fillNewSsh(container);
+      await act(async () => { fireEvent.click(screen.getByText('Connect')); });
+      const banner = container.querySelector('.connect-status-dialog');
+      expect(banner).toBeTruthy();
+      // Must NOT be nested in the Hosts-only form panel (that was the bug).
+      expect(banner!.closest('.form-panel')).toBeNull();
+      expect(screen.getByText('Cancel')).toBeTruthy();
+    });
+
+    it('shows the IAP connect-phase label from iap-connect-progress next to the spinner', async () => {
+      const onConnect = vi.fn().mockReturnValue('sess-phase');
+      const sessions = makeSessions([['sess-phase', 'connecting']]);
+      const { container } = render(<SessionDialog {...defaultProps} onConnect={onConnect} sessions={sessions} />);
+      await fillNewSsh(container);
+      await act(async () => { fireEvent.click(screen.getByText('Connect')); });
+      // Default generic label before any phase event.
+      expect(container.querySelector('.connect-status-text')?.textContent).toContain('Connecting');
+      // Backend reports the key-enrollment phase for this session.
+      await act(async () => { emitIapProgress?.({ sessionId: 'sess-phase', phase: 'enrolling' }); });
+      expect(container.querySelector('.connect-status-text')?.textContent).toContain('Registering SSH key');
     });
 
     it('calls onConnected when the initiated session becomes connected', async () => {

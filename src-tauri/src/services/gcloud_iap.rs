@@ -21,9 +21,9 @@ use super::iap_tunnel::{
     is_valid_zone, InstanceStatus, PreConnectAction, WaitEvent,
 };
 use super::session_service::{
-    abort_all, emit_session_data, emit_session_error, emit_session_status, emit_to_owner,
-    encoding_for, humanize_pty_error, humanize_read_error, humanize_spawn_error, join_or_abort,
-    SessionError, SessionService, DISCONNECT_DRAIN_MS,
+    abort_all, emit_iap_connect_progress, emit_session_data, emit_session_error,
+    emit_session_status, emit_to_owner, encoding_for, humanize_pty_error, humanize_read_error,
+    humanize_spawn_error, join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -535,46 +535,57 @@ fn mask_quoted_spans(line: &str) -> String {
 /// conventional key path via `ensure_ssh_key()`.
 pub(crate) fn parse_dry_run_ssh_command(stdout: &str) -> Option<(String, Option<PathBuf>)> {
     // gcloud may print warnings (NumPy advice, updater notices) before the
-    // command itself; the command is always the last non-empty line.
-    let line = stdout.lines().rev().find(|l| !l.trim().is_empty())?;
-    let masked = mask_quoted_spans(line);
-    let tokens: Vec<&str> = masked.split_whitespace().collect();
+    // command, and on some builds prints the `start-iap-tunnel` ProxyCommand
+    // subprocess on its OWN last line — so the ssh command is NOT reliably the
+    // last non-empty line (this is what broke username detection on gcloud
+    // 530.x). Scan every line, last-first (the real ssh command is near the
+    // end), and take the first whose final token is a valid `user@host`.
+    for line in stdout.lines().rev() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let masked = mask_quoted_spans(line);
+        let tokens: Vec<&str> = masked.split_whitespace().collect();
 
-    // `user@host` is the final positional argument.
-    let last = tokens.last()?;
-    let (user, _host) = last.rsplit_once('@')?;
-    if !is_valid_ssh_username(user) {
-        return None;
+        // `user@host` is the final positional argument of the ssh command line.
+        let Some(last) = tokens.last() else { continue };
+        let Some((user, _host)) = last.rsplit_once('@') else {
+            continue;
+        };
+        if !is_valid_ssh_username(user) {
+            continue;
+        }
+
+        // Found the ssh command line. `-i <path>` — read the identity file from
+        // the *unmasked* line so a path containing spaces (which gcloud quotes)
+        // survives. Fall back to the masked token when the value is unquoted.
+        let key = extract_identity_file(line)
+            .or_else(|| {
+                tokens
+                    .iter()
+                    .position(|t| *t == "-i")
+                    .and_then(|i| tokens.get(i + 1))
+                    .map(|p| PathBuf::from(*p))
+            })
+            .filter(|p| {
+                // On Windows gcloud emits a PuTTY/plink command line when PuTTY is
+                // installed, pointing `-i` at the `.ppk` copy of the key. We always
+                // spawn OpenSSH's ssh.exe, which cannot read PuTTY format and fails
+                // with `Permission denied (publickey)`. Drop it so the caller keeps
+                // the OpenSSH key (same material, no extension).
+                let is_putty = p.extension().is_some_and(|e| e.eq_ignore_ascii_case("ppk"));
+                if is_putty {
+                    log::info!(
+                        "gcloud-iap: ignoring PuTTY-format key {p:?} from --dry-run; \
+                         ssh.exe needs the OpenSSH key"
+                    );
+                }
+                !is_putty
+            });
+
+        return Some((user.to_string(), key));
     }
-
-    // `-i <path>` — read the identity file from the *unmasked* line so a path
-    // containing spaces (which gcloud quotes) survives. Fall back to the masked
-    // token when the value is unquoted.
-    let key = extract_identity_file(line)
-        .or_else(|| {
-            tokens
-                .iter()
-                .position(|t| *t == "-i")
-                .and_then(|i| tokens.get(i + 1))
-                .map(|p| PathBuf::from(*p))
-        })
-        .filter(|p| {
-            // On Windows gcloud emits a PuTTY/plink command line when PuTTY is
-            // installed, pointing `-i` at the `.ppk` copy of the key. We always
-            // spawn OpenSSH's ssh.exe, which cannot read PuTTY format and fails
-            // with `Permission denied (publickey)`. Drop it so the caller keeps
-            // the OpenSSH key (same material, no extension).
-            let is_putty = p.extension().is_some_and(|e| e.eq_ignore_ascii_case("ppk"));
-            if is_putty {
-                log::info!(
-                    "gcloud-iap: ignoring PuTTY-format key {p:?} from --dry-run; \
-                     ssh.exe needs the OpenSSH key"
-                );
-            }
-            !is_putty
-        });
-
-    Some((user.to_string(), key))
+    None
 }
 
 /// Pull the value following `-i` out of a raw ssh command line, honoring a
@@ -671,10 +682,11 @@ pub(crate) fn sanitize_terminal_output(raw: &str) -> String {
 pub(crate) fn explain_ssh_failure(output: &str, user: &str) -> Option<String> {
     if output.contains("Permission denied (publickey") {
         return Some(format!(
-            "SSH rejected the login name '{user}'. The VM did not accept this account — \
-             it is most likely provisioned under a different one. Set the SSH user \
-             explicitly in New Connection → GCP, or run \
-             `gcloud compute ssh <instance> --tunnel-through-iap` once to register your key."
+            "SSH rejected the login name '{user}'. HoTTY tried to register this \
+             machine's key with the VM automatically; if it still fails, the VM is \
+             likely provisioned under a different account, or you lack permission to \
+             update its metadata. Set the SSH user explicitly in New Connection → GCP, \
+             or run `gcloud compute ssh <instance> --tunnel-through-iap` once."
         ));
     }
     if output.contains("Too many authentication failures") {
@@ -836,6 +848,51 @@ fn fallback_local_username() -> String {
         .unwrap_or_else(|_| "user".to_string())
 }
 
+/// The active gcloud account email (e.g. `alice.smith@example.com`). Cheap
+/// — reads local gcloud config, no network. `None` if unset/unreadable.
+async fn active_account_email() -> Option<String> {
+    let args = vec![
+        "config".to_string(),
+        "get-value".to_string(),
+        "account".to_string(),
+    ];
+    let out = run_gcloud_capture(&args, Duration::from_secs(10))
+        .await
+        .ok()?;
+    let email = out.trim();
+    if email.is_empty() || email.eq_ignore_ascii_case("(unset)") {
+        None
+    } else {
+        Some(email.to_string())
+    }
+}
+
+/// Derive a POSIX-ish login name from a gcloud account email the way a metadata
+/// SSH setup is typically named: the local-part, lowercased, with any character
+/// outside `[a-z0-9_-]` replaced by `_` (e.g. `Alice.Smith@example.com` →
+/// `alice_smith`). `None` when the result isn't a valid ssh username
+/// (e.g. it would start with a digit). Preferred over the raw OS login on a
+/// corporate machine whose login is an opaque AD id like `12345678`.
+fn username_from_email(email: &str) -> Option<String> {
+    let local = email.split('@').next()?.to_ascii_lowercase();
+    let mut name: String = local
+        .chars()
+        .map(|c| {
+            if c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    name.truncate(32);
+    if is_valid_ssh_username(&name) {
+        Some(name)
+    } else {
+        None
+    }
+}
+
 /// The ssh identity for one connection, plus which tier produced it. `source` is
 /// logged next to any ssh failure so a bug report says how the name was chosen
 /// without needing to reproduce the resolution.
@@ -943,6 +1000,25 @@ async fn resolve_ssh_identity(config: &GcloudIapConfig, default_key: PathBuf) ->
             };
         }
         log::warn!("gcloud-iap: OS Login is on but the POSIX profile lookup failed");
+    }
+
+    // OS Login off. Prefer a name derived from the gcloud ACCOUNT email over the
+    // raw local OS login: on a corporate PC the OS login is an opaque AD id (e.g.
+    // `12345678`) that is a poor Linux account and rarely what metadata SSH is
+    // provisioned under, whereas the email-derived form is. Because `connect()`
+    // enrolls the key under whatever name we return here, either is self-consistent.
+    if let Some(email) = active_account_email().await {
+        if let Some(user) = username_from_email(&email) {
+            log::info!(
+                "gcloud-iap: OS Login is off; using account-derived username '{user}' (from {email}, resolved in {:?})",
+                phase.elapsed()
+            );
+            return SshIdentity {
+                user,
+                key_path: default_key,
+                source: "email",
+            };
+        }
     }
 
     let user = fallback_local_username();
@@ -1099,6 +1175,131 @@ async fn push_key_to_oslogin(pub_path: &Path) -> Result<(), SessionError> {
     // prior `gcloud compute ssh` run) takes over.
     let _ = run_gcloud_capture(&args, Duration::from_secs(10)).await;
     Ok(())
+}
+
+/// In-process record of `project/instance` pairs whose metadata SSH key we've
+/// already confirmed present or just enrolled this run, so reconnects don't
+/// re-probe or re-enroll. Cleared on app restart (cheap to rebuild).
+fn enrolled_cache() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    use std::sync::OnceLock;
+    static CACHE: OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+    CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
+}
+
+/// The base64 body (second field) of an OpenSSH public-key line — the stable,
+/// unique part used to test whether a key is already in `ssh-keys` metadata.
+fn ssh_pubkey_body(pubkey: &str) -> Option<&str> {
+    pubkey.split_whitespace().nth(1)
+}
+
+/// Is our public key already present in the VM's instance- or project-level
+/// `ssh-keys` metadata? Best-effort: any describe error → `false` (the caller
+/// then attempts enrollment, itself best-effort).
+async fn metadata_has_ssh_key(config: &GcloudIapConfig, key_body: &str) -> bool {
+    let inst_args = instance_oslogin_describe_args(&config.project, &config.zone, &config.instance);
+    if let Ok(out) = run_gcloud_capture(&inst_args, Duration::from_secs(10)).await {
+        if extract_metadata_value(&out, "metadata", "ssh-keys")
+            .is_some_and(|v| v.contains(key_body))
+        {
+            return true;
+        }
+    }
+    let proj_args = project_oslogin_describe_args(&config.project);
+    if let Ok(out) = run_gcloud_capture(&proj_args, Duration::from_secs(10)).await {
+        if extract_metadata_value(&out, "commonInstanceMetadata", "ssh-keys")
+            .is_some_and(|v| v.contains(key_body))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Build the args for the metadata-enrollment `gcloud compute ssh`. Passing
+/// `{user}@{instance}` makes gcloud register the key under the SAME name HoTTY
+/// will connect as (connect-user == enrolled-user); `--command=true` makes it a
+/// no-op login. Extracted (pure) for the metacharacter-safety unit test.
+fn enroll_ssh_args(user: &str, project: &str, zone: &str, instance: &str) -> Vec<String> {
+    vec![
+        "compute".to_string(),
+        "ssh".to_string(),
+        format!("{user}@{instance}"),
+        format!("--zone={zone}"),
+        format!("--project={project}"),
+        "--tunnel-through-iap".to_string(),
+        "--command=true".to_string(),
+        "--quiet".to_string(),
+    ]
+}
+
+/// Register this machine's SSH public key in the VM/project metadata by
+/// delegating to a real `gcloud compute ssh …@… --command=true`. gcloud does the
+/// correct read-modify-write of `ssh-keys` (preserving other users' keys and
+/// honoring `block-project-ssh-keys` + IAM) — reimplementing that here would risk
+/// clobbering shared metadata. Best-effort: a failure (e.g. no setMetadata
+/// permission) is logged; the caller's own ssh then tries and `explain_ssh_failure`
+/// guides the user if it still fails.
+async fn enroll_metadata_ssh_key(config: &GcloudIapConfig, user: &str) {
+    let args = enroll_ssh_args(user, &config.project, &config.zone, &config.instance);
+    // Generous deadline: this opens its own IAP tunnel, so it is much slower than
+    // the read-only describes.
+    match run_gcloud_capture(&args, Duration::from_secs(90)).await {
+        Ok(_) => log::info!(
+            "gcloud-iap: metadata ssh-key enrollment via `gcloud compute ssh` succeeded for '{user}'"
+        ),
+        Err(e) => {
+            log::warn!("gcloud-iap: metadata ssh-key enrollment failed (non-fatal): {e}")
+        }
+    }
+}
+
+/// For OS-Login-off VMs, ensure this machine's public key is in the VM metadata
+/// before we ssh — gcloud only auto-registers metadata keys during a real
+/// `gcloud compute ssh`, and HoTTY runs its own ssh, so a fresh machine
+/// otherwise always hits `Permission denied (publickey)`. Lazy: skips when the
+/// key is already present or we handled this VM earlier in the run.
+async fn ensure_metadata_key_enrolled(
+    app: &AppHandle,
+    session_id: &str,
+    config: &GcloudIapConfig,
+    user: &str,
+    priv_key_path: &Path,
+) {
+    let cache_key = format!("{}/{}", config.project, config.instance);
+    if enrolled_cache()
+        .lock()
+        .map(|c| c.contains(&cache_key))
+        .unwrap_or(false)
+    {
+        return;
+    }
+    let pub_path = priv_key_path.with_extension("pub");
+    let pubkey = match std::fs::read_to_string(&pub_path) {
+        Ok(s) => s,
+        Err(e) => {
+            log::warn!("gcloud-iap: cannot read pubkey {pub_path:?} for enrollment check: {e}");
+            return;
+        }
+    };
+    let Some(key_body) = ssh_pubkey_body(&pubkey) else {
+        log::warn!("gcloud-iap: pubkey {pub_path:?} has no base64 body; skipping enrollment");
+        return;
+    };
+    if metadata_has_ssh_key(config, key_body).await {
+        log::info!("gcloud-iap: ssh key already in VM metadata; skipping enrollment");
+        if let Ok(mut c) = enrolled_cache().lock() {
+            c.insert(cache_key);
+        }
+        return;
+    }
+    log::info!(
+        "gcloud-iap: ssh key not in VM metadata — registering (first time from this machine) for '{user}'"
+    );
+    emit_iap_connect_progress(app, session_id, "enrolling");
+    enroll_metadata_ssh_key(config, user).await;
+    if let Ok(mut c) = enrolled_cache().lock() {
+        c.insert(cache_key);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1714,13 +1915,24 @@ impl SessionService for GcloudIapSession {
             );
         }
         // --- Resolve the SSH identity (login name + identity file) ---
+        emit_iap_connect_progress(&app, &session_id, "resolving");
         let identity = resolve_ssh_identity(&self.config, priv_key_path).await;
         let user = identity.user;
-        let priv_key_str = identity
-            .key_path
+        let source = identity.source;
+        let key_path = identity.key_path;
+        let priv_key_str = key_path
             .to_str()
             .ok_or_else(|| SessionError::ConnectionFailed("non-UTF8 key path".into()))?
             .to_string();
+
+        // For OS-Login-off VMs, ensure this machine's public key is in the VM
+        // metadata before we ssh — gcloud only auto-registers it during a real
+        // `gcloud compute ssh`, so a fresh machine otherwise always hits
+        // `Permission denied (publickey)`. Skipped when OS Login is on (the key
+        // was already pushed to the account profile during resolution).
+        if source != "oslogin" {
+            ensure_metadata_key_enrolled(&app, &session_id, &self.config, &user, &key_path).await;
+        }
 
         // --- Pre-flight: ensure the VM is RUNNING (start or wait if needed) ---
         if let Err(e) = ensure_vm_running(&app, &session_id, &self.config).await {
@@ -1730,6 +1942,7 @@ impl SessionService for GcloudIapSession {
         }
 
         // --- Start the IAP tunnel ---
+        emit_iap_connect_progress(&app, &session_id, "tunnel");
         log::info!(
             "gcloud-iap: invoking start_iap_tunnel (pre-tunnel elapsed={:?})",
             connect_start.elapsed()
@@ -1742,6 +1955,8 @@ impl SessionService for GcloudIapSession {
             &session_id,
             format!("IAP tunnel ready on 127.0.0.1:{port}. Connecting via ssh...\r\n"),
         );
+
+        emit_iap_connect_progress(&app, &session_id, "authenticating");
 
         // --- Build the ssh.exe command for the PTY ---
         let argv = build_ssh_argv(&user, port, &priv_key_str, &self.config.instance);
@@ -2331,6 +2546,81 @@ mod tests {
             assert!(
                 parse_dry_run_ssh_command(junk).is_none(),
                 "expected None for {junk:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_dry_run_scans_past_a_trailing_start_iap_tunnel_line() {
+        // Regression, gcloud 530.x on Windows: `--dry-run` printed the real ssh
+        // command AND, on its OWN last line, the `start-iap-tunnel` ProxyCommand
+        // subprocess (no trailing `user@host`). The old last-line-only parser
+        // returned None and fell back to the wrong local username; the scan must
+        // reach past that line to the ssh command.
+        let out = concat!(
+            "ssh.exe -t -i C:\\Users\\me\\.ssh\\google_compute_engine ",
+            "-o StrictHostKeyChecking=no horry@compute.123456789\n",
+            "\"C:\\g\\python.exe\" \"-S\" \"C:\\g\\gcloud.py\" compute start-iap-tunnel dev-horry 22 --listen-on-stdin\n"
+        );
+        let (user, key) = parse_dry_run_ssh_command(out).unwrap();
+        assert_eq!(user, "horry");
+        assert_eq!(
+            key.unwrap(),
+            PathBuf::from(r"C:\Users\me\.ssh\google_compute_engine")
+        );
+    }
+
+    #[test]
+    fn username_from_email_derives_posix_local_part() {
+        assert_eq!(
+            username_from_email("alice.smith@example.com").as_deref(),
+            Some("alice_smith")
+        );
+        // Case-folded and sanitized.
+        assert_eq!(
+            username_from_email("Alice.Smith@EXAMPLE.com").as_deref(),
+            Some("alice_smith")
+        );
+        // Already-clean local part passes through.
+        assert_eq!(
+            username_from_email("horry@example.com").as_deref(),
+            Some("horry")
+        );
+    }
+
+    #[test]
+    fn username_from_email_rejects_invalid_ssh_names() {
+        // Local part starting with a digit is not a valid POSIX login.
+        assert_eq!(username_from_email("1horry@example.com"), None);
+        // Empty local part.
+        assert_eq!(username_from_email("@example.com"), None);
+    }
+
+    #[test]
+    fn ssh_pubkey_body_returns_base64_field() {
+        let pk = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI comment@host\n";
+        assert_eq!(ssh_pubkey_body(pk), Some("AAAAC3NzaC1lZDI1NTE5AAAAI"));
+        assert_eq!(ssh_pubkey_body(""), None);
+    }
+
+    #[test]
+    fn enroll_ssh_args_register_under_connect_user_through_iap() {
+        let args = enroll_ssh_args("alice_smith", "proj-1", "us-central1-a", "dev-horry");
+        assert_eq!(args[0], "compute");
+        assert_eq!(args[1], "ssh");
+        // Registered under the SAME name HoTTY connects as.
+        assert_eq!(args[2], "alice_smith@dev-horry");
+        assert!(args.contains(&"--zone=us-central1-a".to_string()));
+        assert!(args.contains(&"--project=proj-1".to_string()));
+        assert!(args.contains(&"--tunnel-through-iap".to_string()));
+        assert!(args.contains(&"--command=true".to_string()));
+        assert!(args.contains(&"--quiet".to_string()));
+        // Must survive run_gcloud_capture's cmd.exe metacharacter guard.
+        const FORBIDDEN: &[char] = &['"', '%', '^', '&', '|', '<', '>', '\n', '\r'];
+        for a in &args {
+            assert!(
+                !a.chars().any(|c| FORBIDDEN.contains(&c)),
+                "forbidden character in arg {a:?}"
             );
         }
     }

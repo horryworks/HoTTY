@@ -23,7 +23,8 @@ use commands::host_tree::{
 use commands::iap_tunnel::{
     gce_iap_check_auth, gce_iap_check_gcloud, gce_iap_get_cache, gce_iap_list_instances,
     gce_iap_list_projects, gce_iap_list_vm_actions, gce_iap_list_zones, gce_iap_refresh_cache,
-    gce_iap_respond_vm_start, gce_iap_run_auth_login, gce_iap_start_instance, gce_iap_stop_instance,
+    gce_iap_respond_vm_start, gce_iap_run_auth_login, gce_iap_start_instance,
+    gce_iap_stop_instance,
 };
 use commands::licenses::get_third_party_licenses;
 use commands::log_viewer::{confirm_log_dir, list_log_files, read_log_file};

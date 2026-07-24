@@ -86,6 +86,12 @@ export const sessionDialog = {
   saveTitleClean: '저장할 변경 사항 없음',
   connect: '연결',
   connecting: '연결 중…',
+  iapPhase: {
+    resolving: 'SSH 계정 확인 중…',
+    enrolling: 'SSH 키 등록 중(이 PC에서 처음)…',
+    tunnel: 'IAP 터널 시작 중…',
+    authenticating: '인증 중…',
+  },
   connectFailed: '연결 실패',
   connectFailedGeneric: '연결에 실패했습니다.',
   browseKeyTitle: '개인 키 파일 선택',

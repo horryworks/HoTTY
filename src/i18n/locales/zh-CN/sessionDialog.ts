@@ -86,6 +86,12 @@ export const sessionDialog = {
   saveTitleClean: '没有需要保存的更改',
   connect: '连接',
   connecting: '连接中…',
+  iapPhase: {
+    resolving: '正在检测 SSH 账户…',
+    enrolling: '正在注册 SSH 密钥（本机首次）…',
+    tunnel: '正在启动 IAP 隧道…',
+    authenticating: '正在验证…',
+  },
   connectFailed: '连接失败',
   connectFailedGeneric: '连接失败。',
   browseKeyTitle: '选择私钥文件',

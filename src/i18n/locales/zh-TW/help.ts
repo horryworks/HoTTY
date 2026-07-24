@@ -41,7 +41,7 @@ export const help = {
     gcpIap:
       '<0>Google Cloud IAP：</0>透過 Identity-Aware Proxy 連線至 Google Compute Engine VM，無需將 VM 暴露於公開網際網路。在「新工作階段」對話方塊中開啟 <1>GCP</1> 分頁，即可瀏覽您有權存取的每個專案中的所有 GCE 執行個體 — 依專案分組，並顯示即時狀態（🟢 執行中 / 🔴 已停止 / 🟡 轉換中）— 然後連按兩下執行個體即可連線。此窗格還有可直接 <2>啟動</2> 或 <3>停止</3> 執行個體的按鈕，以及可重新查詢專案與執行個體的 <4>重新整理</4> 動作。<5>搜尋方塊</5> 會在您輸入時依專案或執行個體名稱篩選清單。<6>啟動時會立即顯示</6> 最後已知的清單，並在背景重新驗證，因此您不必每次開啟窗格時都等待完整查詢。若您連按兩下已停止的 VM，HoTTY 會在啟動前提示（若在已儲存的 IAP 主機上設定，則會自動啟動）。<7>不需要 SSH 使用者名稱、密碼或私密金鑰</7> — HoTTY 會將連線委派給 <8>gcloud compute ssh --tunnel-through-iap</8>，由它代您處理 IAP 通道、OS Login 對應、自動 SSH 金鑰產生（<9>~/.ssh/google_compute_engine</9>）、金鑰註冊與驗證。需要 Google Cloud SDK 並已完成 <10>gcloud auth login</10>。',
     gcpSshUser:
-      '<0>SSH 使用者（通常留空）:</0> HoTTY 會透過詢問 gcloud 自動判定要登入的 Linux 帳號，因此 GCP 分頁中的 <1>SSH user</1> 欄位通常留空即可。僅當虛擬機器接受的帳號與自動判定結果不同時才需填寫——此時連線會以 <2>Permission denied (publickey)</2> 失敗，錯誤訊息中會顯示嘗試過的帳號名稱。請注意，HoTTY 只讀取 gcloud 的判定結果，不會變更 Google 端的任何設定，因此在從未註冊過 SSH 金鑰的電腦上，仍需執行一次 <3>gcloud compute ssh &lt;instance&gt; --tunnel-through-iap</3> 來註冊金鑰。',
+      '<0>SSH 使用者（通常留空）:</0> HoTTY 會透過詢問 gcloud 自動判定要登入的 Linux 帳號，因此 GCP 分頁中的 <1>SSH user</1> 欄位通常留空即可。僅當虛擬機器接受的帳號與自動判定結果不同時才需填寫——此時連線會以 <2>Permission denied (publickey)</2> 失敗，錯誤訊息中會顯示嘗試過的帳號名稱。在從未註冊過 SSH 金鑰的電腦上，HoTTY 現在會在首次連線時自動將金鑰註冊到執行個體（或專案）的中繼資料中，因此無需再手動執行 <3>gcloud compute ssh &lt;instance&gt; --tunnel-through-iap</3>。',
     gcpFiltering:
       '<0>GCP 存取感知篩選：</0>GCP 窗格會在專案與執行個體層級探測 <1>iap.tunnelInstances.accessViaIAP</1>（透過 <2>gcloud projects test-iam-permissions</2>），並隱藏您沒有 IAP 通道權限的 VM。窗格標頭中的 🔒 計數按鈕可讓您將隱藏的執行個體切換回顯示；沒有 OS Login 權限的執行個體仍會顯示，但會出現 🔑 警告符號，因為 SSH 仍可能透過中繼資料金鑰運作。當 IAM 探測本身失敗時（網路中斷、專案已刪除），執行個體會維持顯示，以免可存取的 VM 被意外隱藏。',
     updateNotifications:

@@ -86,6 +86,12 @@ export const sessionDialog = {
   saveTitleClean: 'Нет изменений для сохранения',
   connect: 'Подключиться',
   connecting: 'Подключение…',
+  iapPhase: {
+    resolving: 'Определение учётной записи SSH…',
+    enrolling: 'Регистрация ключа SSH (впервые на этом ПК)…',
+    tunnel: 'Запуск IAP-туннеля…',
+    authenticating: 'Аутентификация…',
+  },
   connectFailed: 'Ошибка подключения',
   connectFailedGeneric: 'Не удалось подключиться.',
   browseKeyTitle: 'Выбрать файл закрытого ключа',

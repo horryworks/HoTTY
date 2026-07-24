@@ -119,6 +119,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const [connectingSessionId, setConnectingSessionId] = useState<string | null>(null);
     const [connectError, setConnectError] = useState<string | null>(null);
     const isConnecting = connectingSessionId !== null;
+    // Coarse GCP/IAP pre-flight phase (resolving/enrolling/tunnel/authenticating)
+    // shown next to the connecting spinner. Null for non-IAP connects.
+    const [iapPhase, setIapPhase] = useState<string | null>(null);
 
     // Ref to the connection form for programmatic submission
     const formRef = useRef<HTMLFormElement>(null);
@@ -320,6 +323,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             // rest (close + focus on 'connected', inline error on failure).
             connectingSeenRef.current = false;
             setConnectError(null);
+            setIapPhase(null);
             setConnectingSessionId(result);
         }
     }, [onConnect]);
@@ -509,8 +513,33 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         /* eslint-disable react-hooks/set-state-in-effect */
         setConnectingSessionId(null);
         setConnectError(null);
+        setIapPhase(null);
         /* eslint-enable react-hooks/set-state-in-effect */
     }, [isOpen]);
+
+    // Subscribe to GCP/IAP connect-phase progress so the connecting spinner shows
+    // a live phase label ("Registering SSH key…", "Starting IAP tunnel…", …)
+    // instead of a static "Connecting…" during the long IAP pre-flight.
+    useEffect(() => {
+        let unlisten: undefined | (() => void);
+        let cancelled = false;
+        (async () => {
+            const un = await tauriService.onIapConnectProgress((p) => {
+                if (p.sessionId === connectingSessionIdRef.current) {
+                    setIapPhase(p.phase);
+                }
+            });
+            if (cancelled) {
+                un();
+                return;
+            }
+            unlisten = un;
+        })();
+        return () => {
+            cancelled = true;
+            if (unlisten) unlisten();
+        };
+    }, []);
 
     // --- Select a host from the tree ---
     const handleSelectHost = async (node: HostTreeNode) => {
@@ -1231,6 +1260,45 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 </button>
                             )}
                         </div>
+                        {/* Dialog-level connect status — rendered outside the tab
+                            content so the "Connecting…" spinner + Cancel appear no
+                            matter which tab (Hosts / GCP / Web) started the connect. */}
+                        {(isConnecting || connectError) && (
+                            <div
+                                className={`connect-status connect-status-dialog${connectError ? ' connect-status-error' : ''}`}
+                                aria-live="assertive"
+                                role={connectError ? 'alert' : undefined}
+                            >
+                                {isConnecting ? (
+                                    <>
+                                        <span className="connect-spinner" aria-hidden="true" />
+                                        <span className="connect-status-text">
+                                            {iapPhase === 'resolving'
+                                                ? t('sessionDialog.iapPhase.resolving')
+                                                : iapPhase === 'enrolling'
+                                                    ? t('sessionDialog.iapPhase.enrolling')
+                                                    : iapPhase === 'tunnel'
+                                                        ? t('sessionDialog.iapPhase.tunnel')
+                                                        : iapPhase === 'authenticating'
+                                                            ? t('sessionDialog.iapPhase.authenticating')
+                                                            : t('sessionDialog.connecting')}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            className="btn-secondary connect-cancel-btn"
+                                            onClick={handleCancelConnect}
+                                        >
+                                            {t('common.cancel')}
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="connect-status-label">{t('sessionDialog.connectFailed')}</span>
+                                        <span className="connect-status-reason">{connectError}</span>
+                                    </>
+                                )}
+                            </div>
+                        )}
                         {activeSidebarTab === 'hosts' || (activeSidebarTab === 'web' && !webEnabled) ? (
                             <div className="hosts-tab-content">
                                 <div className="hosts-tab-tree" style={{ width: treePanelWidth, flexShrink: 0 }}>
@@ -1273,25 +1341,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 </>
                             )}
                         </div>
-                        {(isConnecting || connectError) && (
-                            <div
-                                className={`connect-status${connectError ? ' connect-status-error' : ''}`}
-                                aria-live="assertive"
-                                role={connectError ? 'alert' : undefined}
-                            >
-                                {isConnecting ? (
-                                    <>
-                                        <span className="connect-spinner" aria-hidden="true" />
-                                        <span>{t('sessionDialog.connecting')}</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <span className="connect-status-label">{t('sessionDialog.connectFailed')}</span>
-                                        <span className="connect-status-reason">{connectError}</span>
-                                    </>
-                                )}
-                            </div>
-                        )}
                         <form ref={formRef} onSubmit={handleSubmit}>
                             <fieldset disabled={isDecrypting} style={{ border: 'none', padding: 0, margin: 0 }}>
                                 {/* Display Name (only when a host is selected) */}
@@ -1584,15 +1633,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                         title={isDirty ? t('sessionDialog.saveTitleDirty') : t('sessionDialog.saveTitleClean')}
                                     >
                                         {t('common.save')}
-                                    </button>
-                                )}
-                                {isConnecting && (
-                                    <button
-                                        type="button"
-                                        className="btn-secondary"
-                                        onClick={handleCancelConnect}
-                                    >
-                                        {t('common.cancel')}
                                     </button>
                                 )}
                                 <button

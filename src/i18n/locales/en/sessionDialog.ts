@@ -87,6 +87,12 @@ export const sessionDialog = {
   saveTitleClean: 'No changes to save',
   connect: 'Connect',
   connecting: 'Connecting…',
+  iapPhase: {
+    resolving: 'Detecting SSH account…',
+    enrolling: 'Registering SSH key (first time on this PC)…',
+    tunnel: 'Starting IAP tunnel…',
+    authenticating: 'Authenticating…',
+  },
   connectFailed: 'Connection failed',
   connectFailedGeneric: 'Connection failed.',
   browseKeyTitle: 'Select private key file',

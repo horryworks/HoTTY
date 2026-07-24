@@ -1,5 +1,18 @@
 # Release Notes
 
+## v2.0.13-beta4
+
+**Google Cloud IAP now connects on a brand-new PC without any manual setup — and shows you what it's doing while it works.** The first IAP connection from a machine that had never registered an SSH key used to fail with `Permission denied (publickey)`; HoTTY now enrolls the key into the VM (or project) metadata for you automatically on the first connect. While the ~30–45 second pre-flight runs, the New Session dialog shows a live, step-by-step indicator (Detecting SSH account → Registering SSH key → Starting IAP tunnel → Authenticating) on every tab, so the spinner no longer looks frozen.
+
+### Bug Fixes
+
+- **First IAP connection on a fresh PC no longer fails with `Permission denied (publickey)`.** For VMs that don't use OS Login, HoTTY relies on an SSH key stored in the VM/project metadata — but on a machine whose key had never been registered, that key was missing and the login was rejected. HoTTY now enrolls your public key into the instance (or project) metadata automatically on the first connect (using your own gcloud credentials), so IAP connections work immediately on a new PC without having to run `gcloud compute ssh … --tunnel-through-iap` by hand first.
+
+### Improvements
+
+- **Live connect progress in the New Session dialog.** The GCP/IAP pre-flight can take 30–45 seconds — resolving your SSH account, registering the key the first time, starting the IAP tunnel, then authenticating. The dialog now shows which step it's on, with a **Cancel** button, on every tab (Hosts / GCP / Web), instead of a single spinner that looked stuck.
+- **More reliable SSH-account detection for IAP.** When working out the Linux login account and port, HoTTY now scans every line of gcloud's dry-run output rather than only the first match, and falls back to a username derived from your active gcloud account email — so it picks the right account automatically across more VM configurations and gcloud versions.
+
 ## v2.0.13-beta3
 
 **The GCP tab now tells you when your Google sign-in has expired — instead of just showing "No projects found."** If gcloud's saved credentials can no longer be refreshed (common on corporate accounts where the login expires or is revoked), the New Session → GCP tab now says so clearly and gives you a one-click **Run gcloud auth login** button to sign in again, rather than silently showing an empty project list.

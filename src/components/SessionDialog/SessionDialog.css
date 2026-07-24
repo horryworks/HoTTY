@@ -186,6 +186,23 @@
     word-break: break-word;
 }
 
+/* Dialog-level variant: rendered between the tab bar and the tab content so the
+   connecting spinner + Cancel appear on every tab (Hosts / GCP / Web), not just
+   inside the Hosts form panel. */
+.connect-status-dialog {
+    margin: 8px 12px 4px;
+}
+
+.connect-status-text {
+    flex: 1;
+}
+
+.connect-cancel-btn {
+    flex-shrink: 0;
+    margin-left: auto;
+    padding: 4px 12px;
+}
+
 .connect-spinner {
     width: 12px;
     height: 12px;

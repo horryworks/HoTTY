@@ -86,6 +86,12 @@ export const sessionDialog = {
   saveTitleClean: '保存する変更はありません',
   connect: '接続',
   connecting: '接続中…',
+  iapPhase: {
+    resolving: 'SSH アカウントを判定中…',
+    enrolling: 'SSH 鍵を登録中（この PC では初回）…',
+    tunnel: 'IAP トンネルを開始中…',
+    authenticating: '認証中…',
+  },
   connectFailed: '接続に失敗しました',
   connectFailedGeneric: '接続に失敗しました。',
   browseKeyTitle: '秘密鍵ファイルを選択',
