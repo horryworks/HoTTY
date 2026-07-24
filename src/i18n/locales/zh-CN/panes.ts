@@ -175,6 +175,8 @@ export const panes = {
     stopInstanceAria: '停止 {{name}}',
     startFailed: '启动失败：{{message}}',
     stopFailed: '停止失败：{{message}}',
+    stopConfirmTitle: '停止虚拟机？',
+    stopConfirmMessage: '停止“{{name}}”？虚拟机将被关闭。',
   },
   webBrowser: {
     addressPlaceholder: '输入网址 (例如 http://192.168.1.1)',

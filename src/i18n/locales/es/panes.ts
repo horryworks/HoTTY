@@ -174,6 +174,8 @@ export const panes = {
     stopInstanceAria: 'Detener {{name}}',
     startFailed: 'Error al iniciar: {{message}}',
     stopFailed: 'Error al detener: {{message}}',
+    stopConfirmTitle: '¿Detener la VM?',
+    stopConfirmMessage: '¿Detener "{{name}}"? La VM se apagará.',
   },
   webBrowser: {
     addressPlaceholder: 'Introduce una URL (p. ej. http://192.168.1.1)',

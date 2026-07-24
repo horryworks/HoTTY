@@ -219,14 +219,38 @@ describe('GcpInstancesPane', () => {
     );
   });
 
-  it('Stop button calls gceIapStopInstance for running VM', async () => {
+  it('Stop opens a confirmation dialog naming the VM and does not stop until confirmed', async () => {
     setSnapshot(populatedSnapshot());
     render(<GcpInstancesPane />);
     await waitFor(() => expect(screen.getByText('vm-prod')).toBeTruthy());
     fireEvent.click(screen.getByLabelText('Stop vm-prod'));
+    // The dialog is up and names the VM; nothing has been stopped yet.
+    expect(screen.getByText(/Stop "vm-prod"\?/)).toBeTruthy();
+    expect(gceIapStopInstance).not.toHaveBeenCalled();
+  });
+
+  it('Stop button calls gceIapStopInstance for running VM after confirming the dialog', async () => {
+    setSnapshot(populatedSnapshot());
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('vm-prod')).toBeTruthy());
+    fireEvent.click(screen.getByLabelText('Stop vm-prod'));
+    // Confirm via the dialog's danger button (labeled "Stop VM").
+    fireEvent.click(screen.getByRole('button', { name: 'Stop VM' }));
     await waitFor(() =>
       expect(gceIapStopInstance).toHaveBeenCalledWith('proj-a', 'us-central1-a', 'vm-prod'),
     );
+  });
+
+  it('cancelling the Stop confirmation dialog leaves the VM running', async () => {
+    setSnapshot(populatedSnapshot());
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('vm-prod')).toBeTruthy());
+    fireEvent.click(screen.getByLabelText('Stop vm-prod'));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    // Dialog dismissed, no stop issued, and the Stop button is still there.
+    expect(screen.queryByText(/Stop "vm-prod"\?/)).toBeNull();
+    expect(gceIapStopInstance).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Stop vm-prod')).toBeTruthy();
   });
 
   it('clicking an instance row calls onSelectInstance with the (project, zone, instance) tuple', async () => {
@@ -334,6 +358,7 @@ describe('GcpInstancesPane', () => {
     await waitFor(() => expect(screen.getByText('vm-prod')).toBeTruthy());
 
     fireEvent.click(screen.getByLabelText('Stop vm-prod'));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop VM' }));
     await waitFor(() => expect(screen.getByText('STOPPING')).toBeTruthy());
     expect(screen.queryByLabelText('Stop vm-prod')).toBeNull();
     expect(screen.queryByLabelText('Start vm-prod')).toBeNull();
@@ -386,6 +411,7 @@ describe('GcpInstancesPane', () => {
     await waitFor(() => expect(screen.getByText('vm-prod')).toBeTruthy());
 
     fireEvent.click(screen.getByLabelText('Stop vm-prod'));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop VM' }));
     await waitFor(() => expect(within(rowOf('vm-prod')).getByText('STOPPING')).toBeTruthy());
 
     const target = { instance: 'vm-prod', action: 'stopping' as const };
@@ -403,6 +429,7 @@ describe('GcpInstancesPane', () => {
     await waitFor(() => expect(screen.getByText('vm-prod')).toBeTruthy());
 
     fireEvent.click(screen.getByLabelText('Stop vm-prod'));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop VM' }));
     await pushVmAction({ instance: 'vm-prod', action: null, status: 'TERMINATED' });
     expect(within(rowOf('vm-prod')).getByText('TERMINATED')).toBeTruthy();
 

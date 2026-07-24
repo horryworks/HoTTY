@@ -176,6 +176,8 @@ export const panes = {
     stopInstanceAria: 'Stop {{name}}',
     startFailed: 'Start failed: {{message}}',
     stopFailed: 'Stop failed: {{message}}',
+    stopConfirmTitle: 'Stop VM?',
+    stopConfirmMessage: 'Stop "{{name}}"? The VM will be shut down.',
   },
   webBrowser: {
     addressPlaceholder: 'Enter a URL (e.g. http://192.168.1.1)',

@@ -174,6 +174,8 @@ export const panes = {
     stopInstanceAria: '{{name}} を停止',
     startFailed: '開始に失敗しました: {{message}}',
     stopFailed: '停止に失敗しました: {{message}}',
+    stopConfirmTitle: 'VM を停止しますか？',
+    stopConfirmMessage: '"{{name}}" を停止しますか？VM がシャットダウンされます。',
   },
   webBrowser: {
     addressPlaceholder: 'URL を入力 (例: http://192.168.1.1)',

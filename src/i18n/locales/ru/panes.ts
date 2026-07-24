@@ -180,6 +180,8 @@ export const panes = {
     stopInstanceAria: 'Остановить {{name}}',
     startFailed: 'Не удалось запустить: {{message}}',
     stopFailed: 'Не удалось остановить: {{message}}',
+    stopConfirmTitle: 'Остановить ВМ?',
+    stopConfirmMessage: 'Остановить «{{name}}»? ВМ будет выключена.',
   },
   webBrowser: {
     addressPlaceholder: 'Введите URL (напр. http://192.168.1.1)',

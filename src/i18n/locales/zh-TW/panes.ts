@@ -174,6 +174,8 @@ export const panes = {
     stopInstanceAria: '停止 {{name}}',
     startFailed: '啟動失敗：{{message}}',
     stopFailed: '停止失敗：{{message}}',
+    stopConfirmTitle: '停止 VM？',
+    stopConfirmMessage: '停止「{{name}}」？VM 將會關閉。',
   },
   webBrowser: {
     addressPlaceholder: '輸入網址 (例如 http://192.168.1.1)',

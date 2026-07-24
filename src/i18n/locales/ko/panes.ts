@@ -176,6 +176,8 @@ export const panes = {
     stopInstanceAria: '{{name}} 중지',
     startFailed: '시작 실패: {{message}}',
     stopFailed: '중지 실패: {{message}}',
+    stopConfirmTitle: 'VM을 중지할까요?',
+    stopConfirmMessage: '"{{name}}"을(를) 중지할까요? VM이 종료됩니다.',
   },
   webBrowser: {
     addressPlaceholder: 'URL 입력 (예: http://192.168.1.1)',

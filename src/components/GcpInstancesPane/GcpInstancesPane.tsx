@@ -13,6 +13,8 @@ import type {
 } from '../../types/appTypes';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useModalState } from '../../hooks/useModalState';
+import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import {
   getEffectiveIapAccess,
   getEffectiveOsLoginAccess,
@@ -115,6 +117,9 @@ export function GcpInstancesPane({
   );
   const [vmErrors, setVmErrors] = useState<Map<string, string>>(() => new Map());
   const [error, setError] = useState<string | null>(null);
+  /** Stop-confirmation dialog: opened with the target VM, closed on confirm/cancel. */
+  const [stopConfirmOpen, openStopConfirm, closeStopConfirm, stopTarget] =
+    useModalState<VmSelection>();
   const [showInaccessible, setShowInaccessible] = useState<boolean>(() => {
     try {
       return localStorage.getItem(STORAGE_KEYS.GCP_SHOW_INACCESSIBLE) === '1';
@@ -751,7 +756,7 @@ export function GcpInstancesPane({
                                       className="gcp-action-btn"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        handleStop(sel);
+                                        openStopConfirm(sel);
                                       }}
                                       title={t('panes.gcpInstances.stopVm')}
                                       aria-label={t('panes.gcpInstances.stopInstanceAria', { name: inst.name })}
@@ -773,6 +778,18 @@ export function GcpInstancesPane({
           })
         )}
       </div>
+      {stopConfirmOpen && stopTarget && (
+        <ConfirmModal
+          title={t('panes.gcpInstances.stopConfirmTitle')}
+          message={t('panes.gcpInstances.stopConfirmMessage', { name: stopTarget.instance })}
+          confirmLabel={t('panes.gcpInstances.stopVm')}
+          onConfirm={() => {
+            handleStop(stopTarget);
+            closeStopConfirm();
+          }}
+          onCancel={closeStopConfirm}
+        />
+      )}
     </div>
   );
 }
