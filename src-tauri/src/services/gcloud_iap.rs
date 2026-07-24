@@ -948,6 +948,20 @@ async fn resolve_ssh_identity(config: &GcloudIapConfig, default_key: PathBuf) ->
     let dry_args = dry_run_ssh_args(&config.project, &config.zone, &config.instance);
     match run_gcloud_capture(&dry_args, Duration::from_secs(45)).await {
         Ok(out) => match parse_dry_run_ssh_command(&out) {
+            // gcloud's default login is digit-leading (e.g. an all-numeric
+            // corporate AD id like `12345678`). The VM guest agent provisions
+            // metadata-SSH accounts with `useradd`, which rejects digit-leading
+            // names, so such a user can never be created and ssh is always
+            // refused — confirmed 2026-07-24: `gcloud compute ssh` itself fails
+            // as `12345678` but works as the email-derived `alice_smith`.
+            // Ignore it and fall through to Tier 3, which prefers the
+            // email-derived, letter-leading name the guest agent CAN provision.
+            Some((user, _)) if user.starts_with(|c: char| c.is_ascii_digit()) => {
+                log::info!(
+                    "gcloud-iap: dry-run username '{user}' is digit-leading and not a \
+                     provisionable Linux account; falling back to an email-derived name"
+                );
+            }
             Some((user, key)) => {
                 let key_path = key.unwrap_or(default_key);
                 log::info!(
@@ -1186,29 +1200,92 @@ async fn push_key_to_oslogin(pub_path: &Path) -> Result<(), SessionError> {
     Ok(())
 }
 
-/// In-process record of `project/instance` pairs whose metadata SSH key we've
-/// already confirmed present or just enrolled this run, so reconnects don't
-/// re-probe or re-enroll. Cleared on app restart (cheap to rebuild).
-fn enrolled_cache() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
-    use std::sync::OnceLock;
-    static CACHE: OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = OnceLock::new();
-    CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
-}
-
 /// The base64 body (second field) of an OpenSSH public-key line — the stable,
 /// unique part used to test whether a key is already in `ssh-keys` metadata.
 fn ssh_pubkey_body(pubkey: &str) -> Option<&str> {
     pubkey.split_whitespace().nth(1)
 }
 
-/// Is our public key already present in the VM's instance- or project-level
-/// `ssh-keys` metadata? Best-effort: any describe error → `false` (the caller
-/// then attempts enrollment, itself best-effort).
-async fn metadata_has_ssh_key(config: &GcloudIapConfig, key_body: &str) -> bool {
+/// Current Unix time in seconds, or `None` if the clock is before the epoch.
+fn now_unix_secs() -> Option<i64> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_secs() as i64)
+}
+
+/// Days since the Unix epoch for a proleptic-Gregorian civil date
+/// (Howard Hinnant's `days_from_civil`; no leap-table, valid for any year).
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = (if y >= 0 { y } else { y - 399 }) / 400;
+    let yoe = y - era * 400; // [0, 399]
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1; // [0, 365]
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy; // [0, 146096]
+    era * 146_097 + doe - 719_468
+}
+
+/// Parse the `YYYY-MM-DDThh:mm:ss` prefix of an RFC3339 timestamp to a Unix
+/// epoch. Any trailing timezone is treated as UTC — gcloud emits `+0000`.
+/// Dependency-free (no chrono/time in the tree) and unit-tested.
+fn rfc3339_utc_to_epoch(s: &str) -> Option<i64> {
+    if s.len() < 19 {
+        return None;
+    }
+    let num = |a: usize, z: usize| -> Option<i64> { s.get(a..z)?.parse().ok() };
+    let (y, mo, d) = (num(0, 4)?, num(5, 7)?, num(8, 10)?);
+    let (h, mi, sec) = (num(11, 13)?, num(14, 16)?, num(17, 19)?);
+    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) || h > 23 || mi > 59 || sec > 60 {
+        return None;
+    }
+    Some(days_from_civil(y, mo, d) * 86_400 + h * 3_600 + mi * 60 + sec)
+}
+
+/// Pull `expireOn` out of a metadata ssh-key line's `google-ssh {…}` trailer and
+/// parse it to a Unix epoch. `None` when there is no `expireOn` (a persistent
+/// key that never expires).
+fn parse_expire_on_epoch(line: &str) -> Option<i64> {
+    let idx = line.find("\"expireOn\"")?;
+    let after_colon = line[idx..].split_once(':')?.1.trim_start();
+    let inner = after_colon.strip_prefix('"')?;
+    let end = inner.find('"')?;
+    rfc3339_utc_to_epoch(&inner[..end])
+}
+
+/// True if this ssh-key line's `expireOn` is at or before `now_epoch`. Lines
+/// without an `expireOn` are persistent and never expire.
+fn ssh_key_entry_expired_at(line: &str, now_epoch: i64) -> bool {
+    parse_expire_on_epoch(line).is_some_and(|exp| exp <= now_epoch)
+}
+
+/// Does the `ssh-keys` metadata value bind `key_body` to `user` in an entry that
+/// is still valid at `now_epoch`? Requires a line `user:<type> <key_body>…` whose
+/// optional `expireOn` is in the future. A body match under a *different*
+/// username, or an expired entry, does NOT count — the guest agent has no live
+/// authorized_key for us then, so the caller must (re-)enroll. Pure, for tests.
+fn ssh_keys_have_live_entry(value: &str, user: &str, key_body: &str, now_epoch: i64) -> bool {
+    let prefix = format!("{user}:");
+    value.lines().any(|line| {
+        let line = line.trim();
+        line.starts_with(&prefix)
+            && line.contains(key_body)
+            && !ssh_key_entry_expired_at(line, now_epoch)
+    })
+}
+
+/// Is a **live** (non-expired) key for `user` with body `key_body` already in the
+/// instance- or project-level `ssh-keys` metadata? Best-effort: a describe error
+/// → `false` so the caller enrolls. Fixes the 2026-07-24 IAP failures where a
+/// body-only check skipped enrollment while the only key present was expired and
+/// bound to a different user.
+async fn metadata_has_ssh_key(config: &GcloudIapConfig, user: &str, key_body: &str) -> bool {
+    // Clock failure → treat every entry as expired so we enroll rather than trust
+    // a key we can't date-check.
+    let now = now_unix_secs().unwrap_or(i64::MAX);
     let inst_args = instance_oslogin_describe_args(&config.project, &config.zone, &config.instance);
     if let Ok(out) = run_gcloud_capture(&inst_args, Duration::from_secs(10)).await {
         if extract_metadata_value(&out, "metadata", "ssh-keys")
-            .is_some_and(|v| v.contains(key_body))
+            .is_some_and(|v| ssh_keys_have_live_entry(&v, user, key_body, now))
         {
             return true;
         }
@@ -1216,7 +1293,7 @@ async fn metadata_has_ssh_key(config: &GcloudIapConfig, key_body: &str) -> bool 
     let proj_args = project_oslogin_describe_args(&config.project);
     if let Ok(out) = run_gcloud_capture(&proj_args, Duration::from_secs(10)).await {
         if extract_metadata_value(&out, "commonInstanceMetadata", "ssh-keys")
-            .is_some_and(|v| v.contains(key_body))
+            .is_some_and(|v| ssh_keys_have_live_entry(&v, user, key_body, now))
         {
             return true;
         }
@@ -1262,11 +1339,12 @@ async fn enroll_metadata_ssh_key(config: &GcloudIapConfig, user: &str) {
     }
 }
 
-/// For OS-Login-off VMs, ensure this machine's public key is in the VM metadata
-/// before we ssh — gcloud only auto-registers metadata keys during a real
-/// `gcloud compute ssh`, and HoTTY runs its own ssh, so a fresh machine
-/// otherwise always hits `Permission denied (publickey)`. Lazy: skips when the
-/// key is already present or we handled this VM earlier in the run.
+/// For OS-Login-off VMs, ensure a **live** public key for `user` is in the VM
+/// metadata before we ssh — gcloud only auto-registers metadata keys during a
+/// real `gcloud compute ssh`, and HoTTY runs its own ssh, so a fresh (or
+/// expired) machine otherwise hits `Permission denied (publickey)`. Skips only
+/// when a non-expired key bound to `user` is already present; a body match under
+/// a different username, or an expired entry, still triggers (re-)enrollment.
 async fn ensure_metadata_key_enrolled(
     app: &AppHandle,
     session_id: &str,
@@ -1274,14 +1352,6 @@ async fn ensure_metadata_key_enrolled(
     user: &str,
     priv_key_path: &Path,
 ) {
-    let cache_key = format!("{}/{}", config.project, config.instance);
-    if enrolled_cache()
-        .lock()
-        .map(|c| c.contains(&cache_key))
-        .unwrap_or(false)
-    {
-        return;
-    }
     let pub_path = priv_key_path.with_extension("pub");
     let pubkey = match std::fs::read_to_string(&pub_path) {
         Ok(s) => s,
@@ -1294,21 +1364,17 @@ async fn ensure_metadata_key_enrolled(
         log::warn!("gcloud-iap: pubkey {pub_path:?} has no base64 body; skipping enrollment");
         return;
     };
-    if metadata_has_ssh_key(config, key_body).await {
-        log::info!("gcloud-iap: ssh key already in VM metadata; skipping enrollment");
-        if let Ok(mut c) = enrolled_cache().lock() {
-            c.insert(cache_key);
-        }
+    if metadata_has_ssh_key(config, user, key_body).await {
+        log::info!(
+            "gcloud-iap: a live ssh key for '{user}' is already in VM metadata; skipping enrollment"
+        );
         return;
     }
     log::info!(
-        "gcloud-iap: ssh key not in VM metadata — registering (first time from this machine) for '{user}'"
+        "gcloud-iap: no live ssh key for '{user}' in VM metadata — registering (first time or expired)"
     );
     emit_iap_connect_progress(app, session_id, "enrolling");
     enroll_metadata_ssh_key(config, user).await;
-    if let Ok(mut c) = enrolled_cache().lock() {
-        c.insert(cache_key);
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2656,6 +2722,85 @@ mod tests {
         let pk = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI comment@host\n";
         assert_eq!(ssh_pubkey_body(pk), Some("AAAAC3NzaC1lZDI1NTE5AAAAI"));
         assert_eq!(ssh_pubkey_body(""), None);
+    }
+
+    #[test]
+    fn rfc3339_utc_to_epoch_matches_known_instants() {
+        assert_eq!(rfc3339_utc_to_epoch("1970-01-01T00:00:00"), Some(0));
+        assert_eq!(
+            rfc3339_utc_to_epoch("2000-01-01T00:00:00"),
+            Some(946_684_800)
+        );
+        // gcloud's shape; the trailing `+0000` is ignored (already UTC).
+        assert_eq!(
+            rfc3339_utc_to_epoch("2026-07-15T05:50:14+0000"),
+            Some(1_784_094_614)
+        );
+        // Malformed / too short → None (caller then treats the key as persistent).
+        assert_eq!(rfc3339_utc_to_epoch("2026-07-15"), None);
+        assert_eq!(rfc3339_utc_to_epoch("not-a-timestamp-at-all"), None);
+    }
+
+    #[test]
+    fn parse_expire_on_epoch_reads_google_ssh_trailer() {
+        let line = r#"alice_smith:ssh-rsa AAAAB3Nza google-ssh {"userName":"alice@example.com","expireOn":"2026-07-15T05:50:14+0000"}"#;
+        assert_eq!(parse_expire_on_epoch(line), Some(1_784_094_614));
+        // A persistent key (no google-ssh trailer) has no expiry.
+        assert_eq!(
+            parse_expire_on_epoch("horry:ssh-rsa AAAAB3Nza persistent"),
+            None
+        );
+    }
+
+    #[test]
+    fn ssh_keys_live_entry_requires_matching_user_and_unexpired() {
+        // The exact shape observed 2026-07-24: two `alice_smith` keys,
+        // both expiring 2026-07-15, and NO key for gcloud's digit login.
+        let value = concat!(
+            "alice_smith:ecdsa-sha2-nistp256 ECDSABODY google-ssh {\"expireOn\":\"2026-07-15T05:50:14+0000\"}\n",
+            "alice_smith:ssh-rsa RSABODY google-ssh {\"expireOn\":\"2026-07-15T05:50:20+0000\"}"
+        );
+        let before = 1_784_000_000; // ~2026-07-14, keys still valid
+        let after = 1_784_500_000; // ~2026-07-19, keys expired
+
+        // Right user + not yet expired → live (skip enrollment).
+        assert!(ssh_keys_have_live_entry(
+            value,
+            "alice_smith",
+            "RSABODY",
+            before
+        ));
+        // Right user but expired → NOT live (must re-enroll) — the actual bug.
+        assert!(!ssh_keys_have_live_entry(
+            value,
+            "alice_smith",
+            "RSABODY",
+            after
+        ));
+        // Body present but under the WRONG user (gcloud's `12345678`) → not live.
+        assert!(!ssh_keys_have_live_entry(
+            value, "12345678", "RSABODY", before
+        ));
+        // Body absent → not live.
+        assert!(!ssh_keys_have_live_entry(
+            value,
+            "alice_smith",
+            "NOSUCHBODY",
+            before
+        ));
+    }
+
+    #[test]
+    fn ssh_keys_persistent_entry_never_expires() {
+        // A manually-added key with no `google-ssh {expireOn}` trailer is live
+        // no matter how far in the future we check.
+        let value = "horry:ssh-rsa PERSISTBODY manual-key";
+        assert!(ssh_keys_have_live_entry(
+            value,
+            "horry",
+            "PERSISTBODY",
+            i64::MAX - 1
+        ));
     }
 
     #[test]

@@ -1,5 +1,14 @@
 # Release Notes
 
+## v2.0.13-beta6
+
+**Fixes Google Cloud IAP on corporate PCs whose Windows login is all-numeric — this time for real.** beta5 made HoTTY connect under the numeric account gcloud reports (e.g. `12345678`), but a Linux VM can't create a login that starts with a digit, so the VM refused it. HoTTY now connects under the letter-leading name derived from your gcloud account email, which the VM can actually provision, and it enrolls a fresh SSH key whenever the one in the VM's metadata is missing, expired, or registered under a different name.
+
+### Bug Fixes
+
+- **IAP connect works on VMs where your Windows login is all-numeric.** The guest agent on the VM creates SSH accounts with `useradd`, which refuses usernames starting with a digit — so connecting as `12345678` could never succeed (even `gcloud compute ssh` itself fails the same way). HoTTY now prefers the letter-leading username derived from your gcloud account email, which the VM can create.
+- **HoTTY re-enrolls an expired or wrong-user SSH key instead of skipping it.** The "is my key already in the VM metadata?" check previously matched on the key contents alone, so it skipped enrollment when the only key present was expired or registered under a different username — leaving you with `Permission denied (publickey)`. It now requires a non-expired key bound to the exact account being used, and registers a fresh one otherwise.
+
 ## v2.0.13-beta5
 
 **Fixes the Google Cloud IAP `Permission denied (publickey)` that still hit corporate PCs whose Windows login is all-numeric.** On machines where the Windows/AD account is a bare number (e.g. `12345678`), HoTTY was rejecting that name as an SSH username *because it starts with a digit*, then falling back to a different, email-derived name that the VM had no key for. HoTTY now accepts digit-leading usernames, so it connects as exactly the account gcloud itself uses — which is what the VM's metadata SSH key is registered under.
