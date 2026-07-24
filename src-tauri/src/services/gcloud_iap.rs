@@ -45,13 +45,47 @@ pub struct GcloudIapConfig {
     /// event and waits for the user to approve or decline.
     #[serde(default)]
     pub auto_start: bool,
+
+    /// Explicit SSH login name. When set (and non-empty) it wins over every
+    /// auto-detection tier — the escape hatch for projects where neither
+    /// `gcloud compute ssh --dry-run` nor the metadata/org-policy fallback
+    /// picks the account the VM actually provisions.
+    #[serde(default)]
+    pub username: Option<String>,
 }
 
 fn default_encoding() -> String {
     "utf8".to_string()
 }
 
+/// Accept only POSIX-ish login names. The value ends up as an `ssh.exe` argv
+/// element, so `@`, whitespace, control characters and shell metacharacters are
+/// all rejected rather than escaped. Applied both to the user-supplied override
+/// and to whatever we parse out of gcloud's `--dry-run` output, so a malformed
+/// gcloud line cannot inject an argv element.
+pub(crate) fn is_valid_ssh_username(user: &str) -> bool {
+    if user.is_empty() || user.len() > 32 {
+        return false;
+    }
+    let mut chars = user.chars();
+    let first = chars.next().unwrap_or('\0');
+    if !(first.is_ascii_lowercase() || first == '_') {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+}
+
 impl GcloudIapConfig {
+    /// The override login name, if the user supplied a non-blank one.
+    /// Whitespace-only input is treated as "not set" so a stray space in the
+    /// settings field doesn't silently disable auto-detection.
+    pub fn username_override(&self) -> Option<&str> {
+        self.username
+            .as_deref()
+            .map(str::trim)
+            .filter(|u| !u.is_empty())
+    }
+
     pub fn validate(&self) -> Result<(), SessionError> {
         if !is_valid_project(&self.project) {
             return Err(SessionError::InvalidConfig(format!(
@@ -70,6 +104,13 @@ impl GcloudIapConfig {
                 "invalid GCE instance name: {}",
                 self.instance
             )));
+        }
+        if let Some(user) = self.username_override() {
+            if !is_valid_ssh_username(user) {
+                return Err(SessionError::InvalidConfig(format!(
+                    "invalid SSH username: {user}"
+                )));
+            }
         }
         Ok(())
     }
@@ -404,6 +445,247 @@ fn instance_oslogin_describe_args(project: &str, zone: &str, instance: &str) -> 
     ]
 }
 
+/// Build the args for `gcloud compute ssh --dry-run`, which prints the ssh
+/// command line gcloud *would* run without executing it. This is gcloud's own
+/// resolution of the login name and identity file — the authority we defer to
+/// instead of reimplementing the OS-Login-vs-metadata decision ourselves.
+///
+/// `--tunnel-through-iap` is required so gcloud resolves without needing the VM
+/// to have an external IP; the `ProxyCommand` it prints is discarded because we
+/// run our own tunnel.
+fn dry_run_ssh_args(project: &str, zone: &str, instance: &str) -> Vec<String> {
+    vec![
+        "compute".to_string(),
+        "ssh".to_string(),
+        instance.to_string(),
+        format!("--zone={zone}"),
+        format!("--project={project}"),
+        "--tunnel-through-iap".to_string(),
+        "--dry-run".to_string(),
+        "--quiet".to_string(),
+    ]
+}
+
+/// Build the args for reading the *effective* `compute.requireOsLogin` org
+/// policy. An org can enforce OS Login fleet-wide without ever writing the
+/// per-resource `enable-oslogin` metadata flag, so metadata alone cannot prove
+/// OS Login is off — this is the signal that can.
+fn require_oslogin_policy_args(project: &str) -> Vec<String> {
+    vec![
+        "resource-manager".to_string(),
+        "org-policies".to_string(),
+        "describe".to_string(),
+        "constraints/compute.requireOsLogin".to_string(),
+        format!("--project={project}"),
+        "--effective".to_string(),
+        "--format=json".to_string(),
+    ]
+}
+
+/// Read `booleanPolicy.enforced` from an effective-org-policy JSON document.
+///
+/// `Some(true)`  — OS Login is enforced fleet-wide.
+/// `Some(false)` — the policy exists but is not enforced. GCP renders an
+///                 unenforced boolean policy as `{"booleanPolicy": {}}`, so an
+///                 absent `enforced` key means *not* enforced, not "unknown".
+/// `None`        — no answer (403 from a tenant without `orgpolicy.policy.get`,
+///                 malformed output, …). The caller degrades to the local
+///                 username rather than treating "unknown" as "enforced".
+pub(crate) fn parse_require_oslogin_policy(json: &str) -> Option<bool> {
+    let v: serde_json::Value = serde_json::from_str(json.trim()).ok()?;
+    let boolean_policy = v.get("booleanPolicy")?;
+    Some(
+        boolean_policy
+            .get("enforced")
+            .and_then(|e| e.as_bool())
+            .unwrap_or(false),
+    )
+}
+
+/// Blank out double-quoted spans, preserving length and whitespace positions.
+///
+/// `gcloud compute ssh --dry-run` embeds a `ProxyCommand="…"` whose value holds
+/// both spaces and (in some gcloud builds) an `@`. Masking it lets the caller
+/// tokenize on whitespace and scan for `@` without the ProxyCommand's contents
+/// masquerading as the `user@host` argument or as a flag.
+fn mask_quoted_spans(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut in_quotes = false;
+    for c in line.chars() {
+        if c == '"' {
+            in_quotes = !in_quotes;
+            out.push(' ');
+        } else if in_quotes {
+            // Keep the character count stable so byte offsets still line up,
+            // but make sure the masked text can never be read as a token.
+            out.push('\u{0}');
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Extract `(user, key_path)` from the ssh command line that
+/// `gcloud compute ssh --dry-run` prints.
+///
+/// Returns `None` when no usable login name is present — the caller then falls
+/// back to in-house detection. A missing `-i` is *not* fatal: the username is
+/// the part that was getting this wrong, and the caller already knows the
+/// conventional key path via `ensure_ssh_key()`.
+pub(crate) fn parse_dry_run_ssh_command(stdout: &str) -> Option<(String, Option<PathBuf>)> {
+    // gcloud may print warnings (NumPy advice, updater notices) before the
+    // command itself; the command is always the last non-empty line.
+    let line = stdout.lines().rev().find(|l| !l.trim().is_empty())?;
+    let masked = mask_quoted_spans(line);
+    let tokens: Vec<&str> = masked.split_whitespace().collect();
+
+    // `user@host` is the final positional argument.
+    let last = tokens.last()?;
+    let (user, _host) = last.rsplit_once('@')?;
+    if !is_valid_ssh_username(user) {
+        return None;
+    }
+
+    // `-i <path>` — read the identity file from the *unmasked* line so a path
+    // containing spaces (which gcloud quotes) survives. Fall back to the masked
+    // token when the value is unquoted.
+    let key = extract_identity_file(line)
+        .or_else(|| {
+            tokens
+                .iter()
+                .position(|t| *t == "-i")
+                .and_then(|i| tokens.get(i + 1))
+                .map(|p| PathBuf::from(*p))
+        })
+        .filter(|p| {
+            // On Windows gcloud emits a PuTTY/plink command line when PuTTY is
+            // installed, pointing `-i` at the `.ppk` copy of the key. We always
+            // spawn OpenSSH's ssh.exe, which cannot read PuTTY format and fails
+            // with `Permission denied (publickey)`. Drop it so the caller keeps
+            // the OpenSSH key (same material, no extension).
+            let is_putty = p.extension().is_some_and(|e| e.eq_ignore_ascii_case("ppk"));
+            if is_putty {
+                log::info!(
+                    "gcloud-iap: ignoring PuTTY-format key {p:?} from --dry-run; \
+                     ssh.exe needs the OpenSSH key"
+                );
+            }
+            !is_putty
+        });
+
+    Some((user.to_string(), key))
+}
+
+/// Pull the value following `-i` out of a raw ssh command line, honoring a
+/// quoted path (gcloud quotes any path containing spaces).
+fn extract_identity_file(line: &str) -> Option<PathBuf> {
+    let idx = line.find(" -i ")?;
+    let rest = line[idx + 4..].trim_start();
+    if let Some(stripped) = rest.strip_prefix('"') {
+        let end = stripped.find('"')?;
+        return Some(PathBuf::from(&stripped[..end]));
+    }
+    let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+    let path = &rest[..end];
+    if path.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(path))
+    }
+}
+
+/// How much of ssh's own output to retain for failure diagnosis. Authentication
+/// failures are terse; this is generous enough to also catch a login banner
+/// printed ahead of the error.
+const SSH_TRANSCRIPT_CAPTURE_BYTES: usize = 2048;
+
+/// Truncate `s` to at most `max` bytes without splitting a UTF-8 character.
+/// `String::truncate` panics on a non-boundary index, and PTY reads split
+/// multi-byte sequences routinely.
+pub(crate) fn truncate_on_char_boundary(s: &mut String, max: usize) {
+    if s.len() <= max {
+        return;
+    }
+    let mut cut = max;
+    while cut > 0 && !s.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    s.truncate(cut);
+}
+
+/// Reduce raw PTY output to the plain text a human needs to read a failure.
+///
+/// ssh under ConPTY opens with a screen-clear and cursor-positioning burst; left
+/// intact it fills the capture budget with control codes and pads the log with
+/// scores of blank lines, burying the one line that matters (as it did on the
+/// first run of this diagnostic). Strips CSI/OSC escapes and collapses the
+/// resulting whitespace.
+pub(crate) fn sanitize_terminal_output(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut chars = raw.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\u{1b}' {
+            // Keep newlines; drop the other C0 controls (BEL, backspace, …).
+            if c == '\n' || c == '\t' || !c.is_control() {
+                out.push(c);
+            }
+            continue;
+        }
+        match chars.next() {
+            // CSI — parameters/intermediates, then a final byte in @..~
+            Some('[') => {
+                for e in chars.by_ref() {
+                    if ('\u{40}'..='\u{7e}').contains(&e) {
+                        break;
+                    }
+                }
+            }
+            // OSC — runs until BEL or ST (ESC \)
+            Some(']') => {
+                while let Some(e) = chars.next() {
+                    if e == '\u{7}' {
+                        break;
+                    }
+                    if e == '\u{1b}' && chars.peek() == Some(&'\\') {
+                        chars.next();
+                        break;
+                    }
+                }
+            }
+            // Any other two-character escape is consumed whole.
+            _ => {}
+        }
+    }
+    // Collapse the blank-line runs the cleared screen leaves behind.
+    out.lines()
+        .map(str::trim_end)
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
+
+/// Turn a raw ssh failure into a plain-language explanation, when we recognize
+/// the cause. Returns `None` for anything unrecognized so the terminal output
+/// (which the user already sees) stays the sole account of it.
+pub(crate) fn explain_ssh_failure(output: &str, user: &str) -> Option<String> {
+    if output.contains("Permission denied (publickey") {
+        return Some(format!(
+            "SSH rejected the login name '{user}'. The VM did not accept this account — \
+             it is most likely provisioned under a different one. Set the SSH user \
+             explicitly in New Connection → GCP, or run \
+             `gcloud compute ssh <instance> --tunnel-through-iap` once to register your key."
+        ));
+    }
+    if output.contains("Too many authentication failures") {
+        return Some(format!(
+            "SSH refused the connection for '{user}' after too many key attempts. \
+             An ssh-agent is likely offering unrelated keys first."
+        ));
+    }
+    None
+}
+
 /// Build the args for `gcloud compute project-info describe` that yield only
 /// `commonInstanceMetadata.items` as JSON.
 fn project_oslogin_describe_args(project: &str) -> Vec<String> {
@@ -446,12 +728,18 @@ fn extract_metadata_value(json: &str, container_key: &str, item_key: &str) -> Op
 /// permissions).
 ///
 /// **Important:** the per-resource flag does NOT capture org-level OS Login
-/// enforcement (`constraints/compute.requireOsLogin` policy), so a `Some(false)`
-/// return value does not mean OS Login is off for the user. Callers MUST also
-/// probe `resolve_oslogin_username()` on ALL three states (`Some(true)`,
-/// `Some(false)`, and `None`) and prefer the POSIX username when one exists.
-/// Only fall back to the local Windows username when no POSIX profile is
-/// available. This mirrors `gcloud compute ssh`'s resolution order.
+/// enforcement (`constraints/compute.requireOsLogin`), so a `Some(false)` return
+/// does not by itself prove OS Login is off. Resolve that with
+/// `org_policy_requires_oslogin()`.
+///
+/// What callers must NOT do is treat the existence of an OS Login POSIX profile
+/// as evidence that OS Login is on. Google auto-creates a profile for
+/// essentially every account — including accounts whose only registered key
+/// belongs to an unrelated machine — so that test answers "OS Login" almost
+/// always. Doing exactly that is what broke IAP login in v2.0.3-beta4
+/// (`e7a36216`): the VM provisions users from metadata `ssh-keys` only, the
+/// POSIX name has no account there, and ssh exits 255 with
+/// `Permission denied (publickey)`.
 ///
 /// Per Google's resolution order, the **instance** metadata value (if any)
 /// overrides the project metadata value. We honor that here.
@@ -501,14 +789,20 @@ async fn is_oslogin_enabled(project: &str, zone: &str, instance: &str) -> Option
     }
 }
 
-/// Look up the active gcloud account's OS Login POSIX username. Only meaningful
-/// if `is_oslogin_enabled` already returned true. Returns None on any failure
-/// (callers must fall back to the local Windows username).
-async fn resolve_oslogin_username() -> Option<String> {
+/// Look up the active gcloud account's OS Login POSIX username **for the target
+/// project**. Only call this once OS Login has actually been established as
+/// enabled — a profile exists for practically every account, so its presence
+/// proves nothing on its own (see `is_oslogin_enabled`'s doc).
+///
+/// The `--project` scoping matters: without it gcloud answers for whatever the
+/// active default project happens to be, which is routinely a different project
+/// than the one being connected to.
+async fn resolve_oslogin_username(project: &str) -> Option<String> {
     let args = vec![
         "compute".to_string(),
         "os-login".to_string(),
         "describe-profile".to_string(),
+        format!("--project={project}"),
         "--format=value(posixAccounts[0].username)".to_string(),
     ];
     match run_gcloud_capture(&args, Duration::from_secs(10)).await {
@@ -524,10 +818,143 @@ async fn resolve_oslogin_username() -> Option<String> {
     }
 }
 
+/// Is OS Login enforced fleet-wide by org policy? `None` when we can't tell —
+/// typically a 403 from a tenant that doesn't grant `orgpolicy.policy.get`.
+async fn org_policy_requires_oslogin(project: &str) -> Option<bool> {
+    let args = require_oslogin_policy_args(project);
+    let out = run_gcloud_capture(&args, Duration::from_secs(10))
+        .await
+        .ok()?;
+    let parsed = parse_require_oslogin_policy(&out);
+    log::debug!("gcloud-iap: requireOsLogin effective policy = {parsed:?}");
+    parsed
+}
+
 fn fallback_local_username() -> String {
     std::env::var("USERNAME")
         .or_else(|_| std::env::var("USER"))
         .unwrap_or_else(|_| "user".to_string())
+}
+
+/// The ssh identity for one connection, plus which tier produced it. `source` is
+/// logged next to any ssh failure so a bug report says how the name was chosen
+/// without needing to reproduce the resolution.
+struct SshIdentity {
+    user: String,
+    key_path: PathBuf,
+    source: &'static str,
+}
+
+/// Decide the SSH login name and identity file, in three tiers.
+///
+/// 1. **Override** — an explicit username from the connection config wins and
+///    skips every gcloud call.
+/// 2. **Delegate** — ask `gcloud compute ssh --dry-run` what it would do. This
+///    is the authority on *which account and key to use*: it resolves OS Login
+///    vs. metadata and org policy for us, and replaces the three describes tier
+///    3 makes. Verified 2026-07-24: `--dry-run` is strictly read-only — unlike a
+///    real `gcloud compute ssh` it does **not** register the public key with OS
+///    Login or write it into project metadata. So on a machine whose key was
+///    never registered, this tier returns a correct username with a key the VM
+///    won't accept; `explain_ssh_failure` tells the user to run
+///    `gcloud compute ssh` once. Do not assume delegation covers enrollment.
+/// 3. **In-house** — only when the dry run fails or can't be parsed. Metadata
+///    (instance, then project), then effective org policy, then the local
+///    username. Deliberately does *not* consult the OS Login POSIX profile
+///    unless one of those established OS Login is on.
+///
+/// Never fails: the worst case is the local username, which is what a
+/// metadata-based project wants anyway.
+async fn resolve_ssh_identity(config: &GcloudIapConfig, default_key: PathBuf) -> SshIdentity {
+    let phase = std::time::Instant::now();
+
+    // Tier 1 — explicit override. Already validated by `GcloudIapConfig::validate`.
+    if let Some(user) = config.username_override() {
+        log::info!("gcloud-iap: using explicit SSH username '{user}' from connection config");
+        return SshIdentity {
+            user: user.to_string(),
+            key_path: default_key,
+            source: "override",
+        };
+    }
+
+    // Tier 2 — delegate to gcloud.
+    let dry_args = dry_run_ssh_args(&config.project, &config.zone, &config.instance);
+    match run_gcloud_capture(&dry_args, Duration::from_secs(45)).await {
+        Ok(out) => match parse_dry_run_ssh_command(&out) {
+            Some((user, key)) => {
+                let key_path = key.unwrap_or(default_key);
+                log::info!(
+                    "gcloud-iap: resolved via `gcloud compute ssh --dry-run` in {:?}: user='{user}' key={key_path:?}",
+                    phase.elapsed()
+                );
+                return SshIdentity {
+                    user,
+                    key_path,
+                    source: "dry-run",
+                };
+            }
+            None => log::warn!(
+                "gcloud-iap: could not parse `gcloud compute ssh --dry-run` output; \
+                 falling back to metadata detection. Output was: {}",
+                out.trim()
+            ),
+        },
+        Err(e) => log::warn!(
+            "gcloud-iap: `gcloud compute ssh --dry-run` failed ({e}); \
+             falling back to metadata detection"
+        ),
+    }
+
+    // Tier 3 — in-house detection.
+    let enabled = match is_oslogin_enabled(&config.project, &config.zone, &config.instance).await {
+        Some(explicit) => {
+            log::info!("gcloud-iap: enable-oslogin metadata says {explicit}");
+            explicit
+        }
+        None => {
+            log::warn!("gcloud-iap: enable-oslogin metadata unreadable; checking org policy");
+            false
+        }
+    };
+    // Metadata that doesn't say TRUE still can't rule OS Login out — an org can
+    // enforce it fleet-wide without writing the per-resource flag. Ask the
+    // effective policy; an unreadable policy means "not enforced" rather than a
+    // guess, because guessing here is exactly what broke v2.0.3-beta4.
+    let enabled = enabled || org_policy_requires_oslogin(&config.project).await == Some(true);
+
+    if enabled {
+        // Register the key on every connect, not just when we generated it —
+        // OS Login only accepts keys present in the account's profile, and the
+        // key usually predates this connection.
+        let pub_path = default_key.with_extension("pub");
+        if let Err(e) = push_key_to_oslogin(&pub_path).await {
+            log::warn!("gcloud-iap: push_key_to_oslogin failed (non-fatal): {e}");
+        }
+        if let Some(user) = resolve_oslogin_username(&config.project).await {
+            log::info!(
+                "gcloud-iap: OS Login is on; using POSIX username '{user}' (resolved in {:?})",
+                phase.elapsed()
+            );
+            return SshIdentity {
+                user,
+                key_path: default_key,
+                source: "oslogin",
+            };
+        }
+        log::warn!("gcloud-iap: OS Login is on but the POSIX profile lookup failed");
+    }
+
+    let user = fallback_local_username();
+    log::info!(
+        "gcloud-iap: OS Login is off; using local username '{user}' (resolved in {:?})",
+        phase.elapsed()
+    );
+    SshIdentity {
+        user,
+        key_path: default_key,
+        source: "local",
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1032,6 +1459,7 @@ async fn ensure_vm_running(
         status.as_str(),
         config.auto_start,
     );
+    record_status_in_gcp_cache(app, config, status.as_str());
 
     match decide_preconnect_action(&status, config.auto_start) {
         PreConnectAction::Proceed => {
@@ -1130,6 +1558,16 @@ async fn start_and_wait(
     run_wait_loop(app, session_id, config).await
 }
 
+/// Mirror a status observed by the connect pre-flight into the shared GCP
+/// discovery cache, so the GCP pane doesn't keep showing TERMINATED for a VM
+/// this connection just booted. Best-effort: the cache is absent in tests and
+/// a VM that was never discovered simply isn't in it.
+fn record_status_in_gcp_cache(app: &AppHandle, config: &GcloudIapConfig, status: &str) {
+    if let Some(cache) = app.try_state::<Arc<iap_tunnel::GcloudCacheState>>() {
+        cache.record_instance_status(&config.project, &config.zone, &config.instance, status);
+    }
+}
+
 async fn run_wait_loop(
     app: &AppHandle,
     session_id: &str,
@@ -1137,12 +1575,14 @@ async fn run_wait_loop(
 ) -> Result<(), String> {
     let app_cb = app.clone();
     let sid_cb = session_id.to_string();
+    let config_cb = config.clone();
     iap_tunnel::wait_for_status_running(
         &config.project,
         &config.zone,
         &config.instance,
         move |event| match event {
             WaitEvent::Polling { status, elapsed } => {
+                record_status_in_gcp_cache(&app_cb, &config_cb, status.as_str());
                 if matches!(status, InstanceStatus::Running) {
                     return;
                 }
@@ -1157,6 +1597,7 @@ async fn run_wait_loop(
                 );
             }
             WaitEvent::Running { total } => {
+                record_status_in_gcp_cache(&app_cb, &config_cb, InstanceStatus::Running.as_str());
                 emit_session_data(
                     &app_cb,
                     &sid_cb,
@@ -1254,19 +1695,12 @@ impl SessionService for GcloudIapSession {
             "gcloud-iap: ssh key path={priv_key_path:?} generated={generated} (resolved in {:?})",
             key_phase.elapsed()
         );
-        if generated {
-            log::info!(
-                "gcloud-iap: pushing freshly generated public key to OS Login (best-effort)"
-            );
-            let pub_path = priv_key_path.with_extension("pub");
-            // Best-effort, errors logged but non-fatal: the project may not
-            // have OS Login enabled, in which case the user must run
-            // `gcloud compute ssh ... --tunnel-through-iap` once outside HoTTY
-            // to populate instance-metadata SSH keys.
-            if let Err(e) = push_key_to_oslogin(&pub_path).await {
-                log::warn!("gcloud-iap: push_key_to_oslogin failed (non-fatal): {e}");
-            }
-        }
+        // NOTE: key registration is NOT done here. It belongs to whichever
+        // resolution tier concludes OS Login is in play — gating it on
+        // `generated` (as this did until v2.0.13) meant any machine with a
+        // pre-existing ~/.ssh/google_compute_engine never registered its key at
+        // all. See `resolve_ssh_identity`.
+        //
         // Repair NTFS ACL — Windows OpenSSH rejects keys whose ACL contains
         // entries outside (owner, SYSTEM, Administrators). gcloud's generated
         // keys often inherit an `OWNER RIGHTS` ACE that triggers this.
@@ -1279,102 +1713,14 @@ impl SessionService for GcloudIapSession {
                 acl_phase.elapsed()
             );
         }
-        let priv_key_str = priv_key_path
+        // --- Resolve the SSH identity (login name + identity file) ---
+        let identity = resolve_ssh_identity(&self.config, priv_key_path).await;
+        let user = identity.user;
+        let priv_key_str = identity
+            .key_path
             .to_str()
             .ok_or_else(|| SessionError::ConnectionFailed("non-UTF8 key path".into()))?
             .to_string();
-
-        // --- Resolve SSH username ---
-        // Mirror `gcloud compute ssh`'s logic: only use the OS Login POSIX
-        // username when OS Login is explicitly enabled on the project or
-        // instance. Otherwise fall back to the local Windows username — which
-        // is what `gcloud compute ssh` does on legacy-metadata projects and is
-        // the user under whose name the existing instance-metadata SSH key was
-        // registered.
-        let user_phase = std::time::Instant::now();
-        let oslogin_state = is_oslogin_enabled(
-            &self.config.project,
-            &self.config.zone,
-            &self.config.instance,
-        )
-        .await;
-        let user = match oslogin_state {
-            Some(true) => {
-                log::info!(
-                    "gcloud-iap: OS Login is ENABLED (detected in {:?}); resolving POSIX username",
-                    user_phase.elapsed()
-                );
-                match resolve_oslogin_username().await {
-                    Some(u) => {
-                        log::info!("gcloud-iap: OS Login POSIX username='{u}'");
-                        u
-                    }
-                    None => {
-                        let u = fallback_local_username();
-                        log::warn!(
-                            "gcloud-iap: OS Login enabled but profile lookup failed; falling back to '{u}'"
-                        );
-                        u
-                    }
-                }
-            }
-            None => {
-                // Defense-in-depth: metadata describes failed entirely (could be
-                // auth, permissions, or transient gcloud error). Don't assume
-                // OS Login is disabled — try the POSIX lookup; if the account
-                // has a profile, that's a much better username than the local
-                // Windows one.
-                log::warn!(
-                    "gcloud-iap: OS Login metadata describe FAILED (detected in {:?}); attempting POSIX username lookup as a defensive fallback",
-                    user_phase.elapsed()
-                );
-                match resolve_oslogin_username().await {
-                    Some(u) => {
-                        log::info!(
-                            "gcloud-iap: POSIX profile found despite metadata describe failure — using OS Login username '{u}'"
-                        );
-                        u
-                    }
-                    None => {
-                        let u = fallback_local_username();
-                        log::warn!(
-                            "gcloud-iap: no POSIX profile either; falling back to local username '{u}' (SSH may fail if this user is not on the VM)"
-                        );
-                        u
-                    }
-                }
-            }
-            Some(false) => {
-                // Instance and project metadata both lack `enable-oslogin=TRUE`,
-                // but that does NOT prove OS Login is off. GCP org-level
-                // policies (`constraints/compute.requireOsLogin`) can enforce
-                // OS Login across an entire org without writing the per-resource
-                // flag — typical for enterprise tenants. `gcloud compute ssh`
-                // handles this by checking whether the active account actually
-                // has an OS Login POSIX profile and using it if so. Mirror that
-                // behavior here: probe `describe-profile` first, and only fall
-                // back to the local Windows username when no profile exists.
-                log::info!(
-                    "gcloud-iap: enable-oslogin metadata is FALSE/absent on instance and project (detected in {:?}); probing POSIX profile in case of org-level OS Login enforcement",
-                    user_phase.elapsed()
-                );
-                match resolve_oslogin_username().await {
-                    Some(u) => {
-                        log::info!(
-                            "gcloud-iap: POSIX profile found for active gcloud account — using OS Login username '{u}' (likely org-level enforcement; per-resource enable-oslogin flag was not set)"
-                        );
-                        u
-                    }
-                    None => {
-                        let u = fallback_local_username();
-                        log::info!(
-                            "gcloud-iap: no POSIX profile for active gcloud account; OS Login is genuinely off — using local username '{u}'"
-                        );
-                        u
-                    }
-                }
-            }
-        };
 
         // --- Pre-flight: ensure the VM is RUNNING (start or wait if needed) ---
         if let Err(e) = ensure_vm_running(&app, &session_id, &self.config).await {
@@ -1457,6 +1803,12 @@ impl SessionService for GcloudIapSession {
 
         emit_session_status(&app, &session_id, "connected");
 
+        // Head of ssh's own output, shared with the watcher task. Without this
+        // an authentication failure leaves nothing in HoTTY.log but a byte
+        // count — the reason diagnosing the v2.0.3-beta4 username regression
+        // required querying GCP by hand.
+        let transcript = Arc::new(std::sync::Mutex::new(String::new()));
+
         // --- Child watcher task ---
         // On Windows ConPTY, the master reader may not get EOF when the child
         // exits unless we actively wait. Spawn a watcher that blocks on
@@ -1468,6 +1820,9 @@ impl SessionService for GcloudIapSession {
         let app_w = app.clone();
         let sid_w = session_id.clone();
         let log_mgr_w = log_mgr.clone();
+        let transcript_w = transcript.clone();
+        let user_w = user.clone();
+        let source_w = identity.source;
         let watcher_join = tokio::spawn(async move {
             let exit_result = tokio::task::spawn_blocking(move || {
                 let mut child = child;
@@ -1475,8 +1830,19 @@ impl SessionService for GcloudIapSession {
             })
             .await;
             match exit_result {
-                Ok(Ok(status)) => {
+                Ok(Ok(status)) if status.success() => {
                     log::info!("gcloud-iap[ssh pid={ssh_pid}] {sid_w}: ssh exited: {status:?}")
+                }
+                Ok(Ok(status)) => {
+                    // Non-zero exit: report *why*, not just that it happened.
+                    let output = transcript_w.lock().map(|t| t.clone()).unwrap_or_default();
+                    log::warn!(
+                        "gcloud-iap[ssh pid={ssh_pid}] {sid_w}: ssh exited: {status:?} \
+                         (user='{user_w}' resolved via {source_w}). ssh said: {output}"
+                    );
+                    if let Some(hint) = explain_ssh_failure(&output, &user_w) {
+                        emit_session_error(&app_w, &sid_w, hint);
+                    }
                 }
                 Ok(Err(e)) => {
                     log::warn!("gcloud-iap[ssh pid={ssh_pid}] {sid_w}: child.wait error: {e}")
@@ -1541,6 +1907,25 @@ impl SessionService for GcloudIapSession {
                         total_bytes = total_bytes.saturating_add(n as u64);
                         let (decoded, _enc, _had_errors) = encoding.decode(&buf[..n]);
                         let text = decoded.into_owned();
+                        // Retain only the head, and only the readable part of
+                        // it — an authentication failure says everything it has
+                        // to say in the first few lines, and an interactive
+                        // session must not be buffered wholesale. Sanitizing
+                        // before the cap matters: ssh's opening screen-clear
+                        // burst would otherwise consume the whole budget in
+                        // control codes and bury the actual error.
+                        if let Ok(mut t) = transcript.lock() {
+                            if t.len() < SSH_TRANSCRIPT_CAPTURE_BYTES {
+                                let clean = sanitize_terminal_output(&text);
+                                if !clean.is_empty() {
+                                    if !t.is_empty() {
+                                        t.push_str(" | ");
+                                    }
+                                    t.push_str(&clean);
+                                    truncate_on_char_boundary(&mut t, SSH_TRANSCRIPT_CAPTURE_BYTES);
+                                }
+                            }
+                        }
                         emit_session_data(&app_r, &sid, text.clone());
                         log_mgr.write(&sid, &text).await;
                     }
@@ -1634,6 +2019,7 @@ mod tests {
             instance: instance.into(),
             encoding: "utf8".into(),
             auto_start: false,
+            username: None,
         }
     }
 
@@ -1749,6 +2135,364 @@ mod tests {
         assert_eq!(cfg.instance, "vm-01");
         assert_eq!(cfg.encoding, "utf8");
         assert!(cfg.validate().is_ok());
+    }
+
+    // --- SSH username override -------------------------------------------
+
+    /// A valid config carrying the given username override.
+    fn cfg_with_user(user: Option<&str>) -> GcloudIapConfig {
+        GcloudIapConfig {
+            username: user.map(String::from),
+            ..cfg("my-project-123", "us-central1-a", "vm-01")
+        }
+    }
+
+    #[test]
+    fn config_username_absent_by_default() {
+        let json = r#"{"project":"my-project-123","zone":"us-central1-a","instance":"vm-01"}"#;
+        let cfg: GcloudIapConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.username, None);
+        assert_eq!(cfg.username_override(), None);
+    }
+
+    #[test]
+    fn config_username_round_trips_and_trims() {
+        let json =
+            r#"{"project":"p-1","zone":"us-central1-a","instance":"vm-01","username":"  horry  "}"#;
+        let cfg: GcloudIapConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.username_override(), Some("horry"));
+    }
+
+    #[test]
+    fn config_blank_username_means_auto_detect() {
+        // A settings field the user cleared (or typed only spaces into) must not
+        // disable auto-detection — it should behave exactly like "unset".
+        for blank in ["", "   ", "\t"] {
+            assert_eq!(cfg_with_user(Some(blank)).username_override(), None);
+        }
+    }
+
+    #[test]
+    fn config_validate_accepts_posix_username() {
+        for ok in ["horry", "horryworks_gmail_com", "_svc", "a", "user-1"] {
+            assert!(
+                cfg_with_user(Some(ok)).validate().is_ok(),
+                "expected '{ok}' to validate"
+            );
+        }
+    }
+
+    #[test]
+    fn config_validate_rejects_argv_injection_shapes() {
+        // Each of these could alter the ssh.exe argv or the user@host token.
+        let bad = [
+            "a@b",                                      // second @ would confuse user@host parsing
+            "bad user",                                 // whitespace splits the argument
+            "x\ny",                                     // newline
+            "-oProxyCommand",                           // leading dash reads as a flag
+            "Horry",                                    // uppercase is not a POSIX login name
+            "1horry",                                   // must not start with a digit
+            "us$er",                                    // shell metacharacter
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // 40 chars, over the cap
+        ];
+        for b in bad {
+            assert!(
+                cfg_with_user(Some(b)).validate().is_err(),
+                "expected '{b}' to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn is_valid_ssh_username_boundary_lengths() {
+        assert!(is_valid_ssh_username(&"a".repeat(32)));
+        assert!(!is_valid_ssh_username(&"a".repeat(33)));
+        assert!(!is_valid_ssh_username(""));
+    }
+
+    // --- gcloud --dry-run delegation --------------------------------------
+
+    /// The shape gcloud actually prints on Windows for an IAP target: an
+    /// absolute ssh.exe path, a quoted ProxyCommand full of spaces, and
+    /// `user@host` last.
+    const WINDOWS_DRY_RUN: &str = concat!(
+        r#"C:\Windows\System32\OpenSSH\ssh.exe -t -i C:\Users\horry\.ssh\google_compute_engine "#,
+        r#"-o CheckHostIP=no -o HostKeyAlias=compute.123456789 -o IdentitiesOnly=yes "#,
+        r#"-o StrictHostKeyChecking=no "#,
+        r#"-o ProxyCommand="C:\Program Files\Python\python.exe -S C:\SDK\gcloud.py compute start-iap-tunnel vm-01 %p --listen-on-stdin" "#,
+        r#"horry@compute.123456789"#
+    );
+
+    #[test]
+    fn parse_dry_run_extracts_user_and_key_from_windows_output() {
+        let (user, key) = parse_dry_run_ssh_command(WINDOWS_DRY_RUN).unwrap();
+        assert_eq!(user, "horry");
+        assert_eq!(
+            key.unwrap(),
+            PathBuf::from(r"C:\Users\horry\.ssh\google_compute_engine")
+        );
+    }
+
+    #[test]
+    fn parse_dry_run_ignores_at_sign_inside_proxy_command() {
+        // Regression guard: a ProxyCommand containing an `@` must not be
+        // mistaken for the user@host token, which would yield a garbage login
+        // name and reintroduce the exact class of bug this replaces.
+        let line = concat!(
+            r#"ssh -i /home/h/.ssh/google_compute_engine "#,
+            r#"-o ProxyCommand="/usr/bin/curl user@example.com" "#,
+            r#"horry@compute.42"#
+        );
+        let (user, _) = parse_dry_run_ssh_command(line).unwrap();
+        assert_eq!(user, "horry");
+    }
+
+    #[test]
+    fn parse_dry_run_handles_unix_style_output() {
+        let line = "/usr/bin/ssh -t -i /home/h/.ssh/google_compute_engine -o StrictHostKeyChecking=no h_example_com@compute.7";
+        let (user, key) = parse_dry_run_ssh_command(line).unwrap();
+        assert_eq!(user, "h_example_com");
+        assert_eq!(
+            key.unwrap(),
+            PathBuf::from("/home/h/.ssh/google_compute_engine")
+        );
+    }
+
+    #[test]
+    fn parse_dry_run_handles_quoted_key_path_with_spaces() {
+        let line =
+            r#"ssh.exe -i "C:\Users\my name\.ssh\google_compute_engine" -o X=y horry@compute.1"#;
+        let (user, key) = parse_dry_run_ssh_command(line).unwrap();
+        assert_eq!(user, "horry");
+        assert_eq!(
+            key.unwrap(),
+            PathBuf::from(r"C:\Users\my name\.ssh\google_compute_engine")
+        );
+    }
+
+    #[test]
+    fn parse_dry_run_skips_leading_warning_lines() {
+        let out = "WARNING: consider installing NumPy.\n\nssh -i /k/id horry@compute.1\n";
+        let (user, _) = parse_dry_run_ssh_command(out).unwrap();
+        assert_eq!(user, "horry");
+    }
+
+    #[test]
+    fn parse_dry_run_drops_putty_format_key() {
+        // Regression, observed 2026-07-24: with PuTTY installed, gcloud emits a
+        // plink command line pointing -i at the .ppk copy. ssh.exe cannot read
+        // PuTTY format, so adopting it yields `Permission denied (publickey)`
+        // even though the username is correct. The caller must keep the OpenSSH
+        // key instead.
+        let line =
+            r#"plink.exe -i C:\Users\horry\.ssh\google_compute_engine.ppk -P 22 horry@compute.1"#;
+        let (user, key) = parse_dry_run_ssh_command(line).unwrap();
+        assert_eq!(user, "horry");
+        assert_eq!(key, None, "PuTTY key must not be adopted");
+    }
+
+    #[test]
+    fn parse_dry_run_drops_putty_key_regardless_of_case() {
+        let line = r#"plink.exe -i "C:\k\google_compute_engine.PPK" horry@compute.1"#;
+        assert_eq!(parse_dry_run_ssh_command(line).unwrap().1, None);
+    }
+
+    #[test]
+    fn parse_dry_run_keeps_openssh_key_without_extension() {
+        // The counterpart to the .ppk case: an extensionless OpenSSH key is
+        // exactly what we want to adopt.
+        let line = r#"ssh.exe -i C:\Users\horry\.ssh\google_compute_engine horry@compute.1"#;
+        let (_, key) = parse_dry_run_ssh_command(line).unwrap();
+        assert_eq!(
+            key.unwrap(),
+            PathBuf::from(r"C:\Users\horry\.ssh\google_compute_engine")
+        );
+    }
+
+    #[test]
+    fn parse_dry_run_without_identity_file_still_yields_user() {
+        // A missing -i is survivable: the caller already knows the conventional
+        // key path. A missing username is not.
+        let (user, key) = parse_dry_run_ssh_command("ssh -o X=y horry@compute.1").unwrap();
+        assert_eq!(user, "horry");
+        assert_eq!(key, None);
+    }
+
+    #[test]
+    fn parse_dry_run_rejects_unusable_output() {
+        for junk in [
+            "",                                 // nothing at all
+            "   \n  \n",                        // whitespace only
+            "ERROR: (gcloud.compute.ssh) ...",  // an error, not a command
+            "ssh -i /k/id compute.1",           // no user@host
+            "ssh -i /k/id Horry@compute.1",     // not a POSIX login name
+            "ssh -i /k/id -oProxy@x@compute.1", // reads as a flag, not a login
+        ] {
+            assert!(
+                parse_dry_run_ssh_command(junk).is_none(),
+                "expected None for {junk:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn dry_run_args_carry_no_cmd_exe_metacharacters() {
+        // Guards the 2026-05-22 class of regression: a `"` (or other cmd.exe
+        // metacharacter) in an arg makes gcloud.cmd fail with an opaque
+        // "'C:\...\Google\Cloud' is not recognized".
+        const FORBIDDEN: &[char] = &['"', '%', '^', '&', '|', '<', '>', '\n', '\r'];
+        for args in [
+            dry_run_ssh_args("my-project-123", "us-central1-a", "vm-01"),
+            require_oslogin_policy_args("my-project-123"),
+        ] {
+            for a in &args {
+                assert!(
+                    !a.chars().any(|c| FORBIDDEN.contains(&c)),
+                    "forbidden character in arg {a:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn dry_run_args_target_the_requested_vm_through_iap() {
+        let args = dry_run_ssh_args("proj-1", "us-central1-a", "vm-01");
+        assert_eq!(args[0], "compute");
+        assert_eq!(args[1], "ssh");
+        assert_eq!(args[2], "vm-01");
+        assert!(args.contains(&"--zone=us-central1-a".to_string()));
+        assert!(args.contains(&"--project=proj-1".to_string()));
+        // Without this gcloud demands an external IP the VM may not have.
+        assert!(args.contains(&"--tunnel-through-iap".to_string()));
+        assert!(args.contains(&"--dry-run".to_string()));
+        // --quiet keeps it from blocking on a key-generation prompt.
+        assert!(args.contains(&"--quiet".to_string()));
+    }
+
+    // --- org policy fallback ----------------------------------------------
+
+    #[test]
+    fn require_oslogin_policy_unenforced_renders_as_empty_boolean_policy() {
+        // This is the shape GCP actually returns for a project with no
+        // enforcement — an empty object, NOT a missing booleanPolicy.
+        let json = r#"{"booleanPolicy":{},"constraint":"constraints/compute.requireOsLogin"}"#;
+        assert_eq!(parse_require_oslogin_policy(json), Some(false));
+    }
+
+    #[test]
+    fn require_oslogin_policy_enforced() {
+        let json = r#"{"booleanPolicy":{"enforced":true},"constraint":"constraints/compute.requireOsLogin"}"#;
+        assert_eq!(parse_require_oslogin_policy(json), Some(true));
+    }
+
+    #[test]
+    fn require_oslogin_policy_explicit_false() {
+        let json = r#"{"booleanPolicy":{"enforced":false}}"#;
+        assert_eq!(parse_require_oslogin_policy(json), Some(false));
+    }
+
+    #[test]
+    fn require_oslogin_policy_unknown_is_none_not_false() {
+        // A 403 or garbage must stay distinguishable from "not enforced" so the
+        // caller can log it rather than silently deciding.
+        for junk in [
+            "",
+            "not-json",
+            r#"{"constraint":"constraints/compute.requireOsLogin"}"#,
+            r#"{"listPolicy":{}}"#,
+        ] {
+            assert_eq!(
+                parse_require_oslogin_policy(junk),
+                None,
+                "expected None for {junk:?}"
+            );
+        }
+    }
+
+    // --- ssh failure diagnosis --------------------------------------------
+
+    #[test]
+    fn explain_ssh_failure_names_the_rejected_user() {
+        let out = "horryworks_gmail_com@localhost: Permission denied (publickey).";
+        let msg = explain_ssh_failure(out, "horryworks_gmail_com").unwrap();
+        assert!(msg.contains("horryworks_gmail_com"));
+        assert!(
+            msg.contains("SSH user"),
+            "should point at the override: {msg}"
+        );
+    }
+
+    #[test]
+    fn explain_ssh_failure_covers_agent_key_exhaustion() {
+        let out = "Received disconnect from 127.0.0.1: Too many authentication failures";
+        assert!(explain_ssh_failure(out, "horry").is_some());
+    }
+
+    #[test]
+    fn explain_ssh_failure_stays_quiet_on_unrelated_output() {
+        // An ordinary logout or a server-side error already speaks for itself in
+        // the terminal; a second, guessed explanation would only mislead.
+        for out in [
+            "logout\r\nConnection to localhost closed.",
+            "",
+            "bash: x: not found",
+        ] {
+            assert_eq!(explain_ssh_failure(out, "horry"), None);
+        }
+    }
+
+    // --- transcript capture -----------------------------------------------
+
+    #[test]
+    fn truncate_on_char_boundary_never_splits_utf8() {
+        // PTY reads split multi-byte sequences routinely; String::truncate would
+        // panic on a non-boundary index.
+        let mut s = "日本語テキスト".to_string();
+        truncate_on_char_boundary(&mut s, 7);
+        assert_eq!(s, "日本"); // 6 bytes — cut back from the middle of 語
+        assert!(s.is_char_boundary(s.len()));
+    }
+
+    #[test]
+    fn truncate_on_char_boundary_leaves_short_strings_alone() {
+        let mut s = "ok".to_string();
+        truncate_on_char_boundary(&mut s, 2048);
+        assert_eq!(s, "ok");
+    }
+
+    #[test]
+    fn sanitize_terminal_output_recovers_the_error_from_conpty_noise() {
+        // Verbatim shape of what ssh emits under ConPTY: a screen-clear burst,
+        // an OSC title, dozens of erase-line sequences, then the real message.
+        // The first run of this diagnostic logged 70 blank lines and truncated
+        // the error away — this is the regression guard for that.
+        let raw = "\u{1b}[?9001h\u{1b}[?25l\u{1b}[2J\u{1b}[H\u{1b}]0;C:\\Windows\\ssh.exe\u{7}\
+                   \n\n\n\u{1b}[K\n\u{1b}[K\n\u{1b}[K\n\
+                   horry@localhost: Permission denied (publickey).\r\n";
+        let clean = sanitize_terminal_output(raw);
+        assert_eq!(clean, "horry@localhost: Permission denied (publickey).");
+        assert!(!clean.contains('\u{1b}'));
+    }
+
+    #[test]
+    fn sanitize_terminal_output_keeps_multiple_lines_readable() {
+        let raw = "line one\r\n\u{1b}[Kline two\r\n";
+        assert_eq!(sanitize_terminal_output(raw), "line one | line two");
+    }
+
+    #[test]
+    fn sanitize_terminal_output_handles_empty_and_pure_escape_input() {
+        assert_eq!(sanitize_terminal_output(""), "");
+        assert_eq!(sanitize_terminal_output("\u{1b}[2J\u{1b}[H"), "");
+    }
+
+    #[test]
+    fn sanitized_output_still_matches_the_failure_explainer() {
+        // The two halves have to agree: explain_ssh_failure runs on the
+        // sanitized text, so stripping must not break its pattern.
+        let raw = "\u{1b}[2J\u{1b}[Khorry@localhost: Permission denied (publickey).\r\n";
+        let clean = sanitize_terminal_output(raw);
+        assert!(explain_ssh_failure(&clean, "horry").is_some());
     }
 
     #[test]

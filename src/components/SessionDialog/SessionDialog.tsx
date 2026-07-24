@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useHostManager, decryptBatch, getCachedCredential, clearDecryptedCache, flattenHosts } from '../../hooks/useHostManager';
 import { type FixedSizeTri, triToBool, boolToTri } from '../../utils/fixedTerminalSize';
+import { resolveIapUsername } from '../../utils/iapUsername';
 import { isEncrypted } from '../../services/tauriService';
 import { tauriService } from '../../services/tauriService';
 import { HostTree } from '../HostTree/HostTree';
@@ -509,7 +510,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     // --- GCP discovery tab: double-click connects immediately ---
     const handleActivateGcpInstance = useCallback(
         (sel: VmSelection) => {
-            const globalEncoding = useSettingsStore.getState().globalEncoding;
+            const { globalEncoding, gcpIapUsername } = useSettingsStore.getState();
             const config: GcloudIapConnectionConfig = {
                 project: sel.project,
                 zone: sel.zone,
@@ -519,6 +520,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 // tab — the user explicitly chose this VM, so prompting again
                 // would be churn.
                 autoStart: true,
+                username: resolveIapUsername(undefined, gcpIapUsername),
             };
             dispatchConnect({
                 displayName: `IAP ${sel.instance}`,
@@ -565,6 +567,12 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 instance: e.iapTunnel.instance,
                 encoding: globalEncoding,
                 autoStart: !!e.iapTunnel.autoStart,
+                // IAP entries never carry an encrypted username (gcloud handles
+                // auth), so this fast path needs no decryption.
+                username: resolveIapUsername(
+                    e.username,
+                    useSettingsStore.getState().gcpIapUsername,
+                ),
             };
             // Fall back to a generated label when the tree node has no name
             // (e.g. the user double-clicked an unnamed entry created from the

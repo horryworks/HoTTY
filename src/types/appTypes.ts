@@ -44,6 +44,10 @@ export interface GcloudIapConnectionConfig {
   encoding: Encoding;
   /** Auto-start the VM if it is stopped instead of prompting the user. */
   autoStart?: boolean;
+  /** Explicit SSH login name. Omitted/blank lets the backend auto-detect it
+   *  (gcloud `--dry-run`, then metadata/org-policy). Set this only when the
+   *  VM provisions an account neither of those finds. */
+  username?: string;
 }
 
 export interface IapVmStartPromptPayload {
@@ -484,6 +488,30 @@ export interface GcpRefreshProgress {
   currentProject?: string;
   done: number;
   total: number;
+}
+
+/** Which direction an in-flight VM action is heading. */
+export type GcpVmAction = 'starting' | 'stopping';
+
+/**
+ * One `gcp-vm-action` event — the backend's running commentary on a tracked VM
+ * Start/Stop. The backend owns the poll loop (it outlives this pane, which
+ * unmounts whenever the session dialog closes), writes each transition into the
+ * GCP cache, and broadcasts to every window.
+ */
+export interface GcpVmActionEvent {
+  project: string;
+  zone: string;
+  instance: string;
+  /** `null` → the action has settled and `status` is final. */
+  action: GcpVmAction | null;
+  /**
+   * `STARTING` / `STOPPING` until a poll shows forward progress, then the
+   * status gcloud actually reported.
+   */
+  status: string;
+  /** Present when the underlying gcloud command failed. */
+  error?: string;
 }
 
 // ---------------------------------------------------------------------------

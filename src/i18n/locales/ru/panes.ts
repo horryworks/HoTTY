@@ -145,6 +145,10 @@ export const panes = {
     searchPlaceholder: 'Поиск проектов / экземпляров…',
     searchAria: 'Поиск проектов и экземпляров GCP',
     clearSearch: 'Очистить поиск',
+    sshUserLabel: 'Пользователь SSH',
+    sshUserPlaceholder: 'авто',
+    sshUserHint:
+      'Оставьте пустым для автоопределения имени входа. Указывайте, только если ВМ принимает другую учётную запись.',
     refreshing: 'Обновление…',
     checkingGcloud: 'Проверка gcloud CLI…',
     checkingAuth: 'Проверка аутентификации…',

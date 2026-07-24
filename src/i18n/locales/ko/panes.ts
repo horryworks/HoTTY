@@ -141,6 +141,10 @@ export const panes = {
     searchPlaceholder: '프로젝트 / 인스턴스 검색…',
     searchAria: 'GCP 프로젝트 및 인스턴스 검색',
     clearSearch: '검색 지우기',
+    sshUserLabel: 'SSH 사용자',
+    sshUserPlaceholder: '자동',
+    sshUserHint:
+      '비워 두면 로그인 이름을 자동으로 감지합니다. VM이 다른 계정을 사용할 때만 지정하세요.',
     refreshing: '새로 고치는 중…',
     checkingGcloud: 'gcloud CLI 확인 중…',
     checkingAuth: '인증 확인 중…',

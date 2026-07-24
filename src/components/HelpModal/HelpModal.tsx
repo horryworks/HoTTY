@@ -102,6 +102,17 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               </p>
               <p className="help-text">
                 <Trans
+                  i18nKey="help.gettingStarted.gcpSshUser"
+                  components={[
+                    <strong key="0" />,
+                    <strong key="1" />,
+                    <code key="2" />,
+                    <code key="3" />,
+                  ]}
+                />
+              </p>
+              <p className="help-text">
+                <Trans
                   i18nKey="help.gettingStarted.gcpFiltering"
                   components={[<strong key="0" />, <code key="1" />, <code key="2" />]}
                 />

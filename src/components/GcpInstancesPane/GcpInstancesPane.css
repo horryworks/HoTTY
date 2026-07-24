@@ -99,6 +99,40 @@
   border-color: var(--accent-color);
 }
 
+.gcp-pane-sshuser {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.gcp-pane-sshuser-label {
+  font-size: calc(var(--font-size-base) - 1px);
+  color: var(--text-secondary);
+  font-family: var(--ui-font-family);
+  flex-shrink: 0;
+}
+
+.gcp-pane-sshuser-input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.gcp-pane-sshuser-input:focus {
+  border-color: var(--accent-color);
+}
+
 .gcp-pane-search-clear {
   background: var(--btn-secondary-bg);
   border: 1px solid var(--border-color);

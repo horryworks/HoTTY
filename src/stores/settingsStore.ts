@@ -61,6 +61,12 @@ interface SettingsState {
   // Encoding
   globalEncoding: Encoding;
 
+  /** Explicit SSH login name for GCP IAP connections. Blank = let the backend
+   *  auto-detect. The right granularity is per-machine, not per-VM: which
+   *  account a VM accepts depends on the signed-in gcloud account and the local
+   *  Windows user, both of which are constant across a machine's VMs. */
+  gcpIapUsername: string;
+
   // Terminal colors (driven by the selected theme, not user-editable)
   terminalForeground: string;
   terminalBackground: string;
@@ -155,6 +161,7 @@ const DEFAULTS: SettingsState = {
   fontFamily: 'Consolas, "Courier New", monospace',
   sidebarPosition: 'left',
   globalEncoding: 'utf8',
+  gcpIapUsername: '',
   terminalForeground: DEFAULT_THEMES.dark.terminal.foreground,
   terminalBackground: DEFAULT_THEMES.dark.terminal.background,
   terminalBackgroundInactive: DEFAULT_THEMES.dark.terminal.backgroundInactive,
@@ -224,7 +231,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 25,
+      version: 26,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -345,6 +352,10 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
         if (version < 25) {
           // New AI Chat concurrent-stream cap — default 3 parallel streams/pane.
           state.maxConcurrentStreams ??= DEFAULTS.maxConcurrentStreams;
+        }
+        if (version < 26) {
+          // New GCP IAP SSH username override — blank keeps auto-detection.
+          state.gcpIapUsername ??= DEFAULTS.gcpIapUsername;
         }
         return state as SettingsState;
       },

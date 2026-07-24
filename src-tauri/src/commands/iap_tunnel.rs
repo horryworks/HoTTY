@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::services::gcloud_iap;
 use crate::services::iap_tunnel::{
     self, GceInstance, GcloudAuthStatus, GcloudCacheSnapshot, GcloudCacheState, GcloudStatus,
-    GcpProject,
+    GcpProject, VmAction, VmActionState,
 };
 
 // ---------------------------------------------------------------------------
@@ -77,42 +77,55 @@ pub async fn gce_iap_refresh_cache(
     Ok(s.snapshot())
 }
 
-/// Start a stopped GCE instance. Blocks until gcloud returns (up to the
-/// service-level timeout). The frontend should optimistically render the VM
-/// as transitioning while this is running.
+/// Start a stopped GCE instance, tracked to completion in the backend.
+///
+/// Returns as soon as the action is registered — it does NOT block on gcloud.
+/// Every status transition, the final resting status, and any failure arrive as
+/// `gcp-vm-action` events, and each transition is written into the discovery
+/// cache and persisted. Because the tracker outlives the pane, a Start survives
+/// the New Session dialog being closed. An `Err` here means the action was never
+/// registered (invalid identifiers, or one already in flight for this VM).
 #[tauri::command]
 pub async fn gce_iap_start_instance(
+    state: tauri::State<'_, Arc<GcloudCacheState>>,
+    app: tauri::AppHandle,
     project: String,
     zone: String,
     instance: String,
 ) -> Result<(), String> {
-    iap_tunnel::start_instance(&project, &zone, &instance).await
+    state
+        .inner()
+        .clone()
+        .run_vm_action(app, project, zone, instance, VmAction::Starting)
+        .await
 }
 
-/// Stop a running GCE instance.
+/// Stop a running GCE instance. Same tracking contract as
+/// [`gce_iap_start_instance`].
 #[tauri::command]
 pub async fn gce_iap_stop_instance(
+    state: tauri::State<'_, Arc<GcloudCacheState>>,
+    app: tauri::AppHandle,
     project: String,
     zone: String,
     instance: String,
 ) -> Result<(), String> {
-    iap_tunnel::stop_instance(&project, &zone, &instance).await
+    state
+        .inner()
+        .clone()
+        .run_vm_action(app, project, zone, instance, VmAction::Stopping)
+        .await
 }
 
-/// Lightweight per-VM status check (single `gcloud compute instances describe`).
-/// Returns the raw status string (e.g. "RUNNING", "PROVISIONING", "STAGING",
-/// "STOPPING", "TERMINATED"). Used by the GCP tab to poll an in-flight
-/// start/stop so the UI can move beyond the optimistic "STARTING"/"STOPPING"
-/// placeholder as soon as gcloud reports a real transition.
+/// Every Start/Stop currently in flight. The GCP pane calls this on mount to
+/// rehydrate actions that were started before it was mounted — without it, a
+/// Start issued and then "abandoned" by closing the dialog would render as a
+/// stale idle row until the tracker's final event happened to land.
 #[tauri::command]
-pub async fn gce_iap_get_instance_status(
-    project: String,
-    zone: String,
-    instance: String,
-) -> Result<String, String> {
-    iap_tunnel::get_instance_status(&project, &zone, &instance)
-        .await
-        .map(|s| s.as_str().to_string())
+pub fn gce_iap_list_vm_actions(
+    state: tauri::State<'_, Arc<GcloudCacheState>>,
+) -> Result<Vec<VmActionState>, String> {
+    Ok(state.vm_actions())
 }
 
 // ---------------------------------------------------------------------------
@@ -197,6 +210,52 @@ mod tests {
         assert_eq!(json["zone"], "us-central1-a");
         // `access` is None → omitted so older payload consumers stay compatible.
         assert!(json.get("access").is_none());
+    }
+
+    #[test]
+    fn vm_action_state_serializes_camel_case_with_lowercase_action() {
+        let s = VmActionState {
+            project: "proj-a".into(),
+            zone: "us-central1-a".into(),
+            instance: "vm-1".into(),
+            action: Some(VmAction::Starting),
+            status: "PROVISIONING".into(),
+            error: None,
+        };
+        let json = serde_json::to_value(&s).unwrap();
+        assert_eq!(json["project"], "proj-a");
+        assert_eq!(json["instance"], "vm-1");
+        assert_eq!(json["status"], "PROVISIONING");
+        // The frontend discriminates on this exact lowercase spelling.
+        assert_eq!(json["action"], "starting");
+        // `error` is None → omitted, so the TS `error?: string` stays accurate.
+        assert!(json.get("error").is_none());
+    }
+
+    #[test]
+    fn vm_action_state_final_event_carries_null_action_and_error() {
+        let s = VmActionState {
+            project: "proj-a".into(),
+            zone: "us-central1-a".into(),
+            instance: "vm-1".into(),
+            // The settled event: the frontend keys "action finished" off this
+            // being explicitly null, so it must serialize rather than vanish.
+            action: None,
+            status: "TERMINATED".into(),
+            error: Some("permission denied".into()),
+        };
+        let json = serde_json::to_value(&s).unwrap();
+        assert!(json["action"].is_null());
+        assert_eq!(json["status"], "TERMINATED");
+        assert_eq!(json["error"], "permission denied");
+    }
+
+    #[test]
+    fn vm_action_stopping_serializes_lowercase() {
+        assert_eq!(
+            serde_json::to_value(VmAction::Stopping).unwrap(),
+            serde_json::json!("stopping")
+        );
     }
 
     #[test]

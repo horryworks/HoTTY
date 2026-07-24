@@ -141,6 +141,10 @@ export const panes = {
     searchPlaceholder: 'Rechercher des projets / instances…',
     searchAria: 'Rechercher des projets et instances GCP',
     clearSearch: 'Effacer la recherche',
+    sshUserLabel: 'Utilisateur SSH',
+    sshUserPlaceholder: 'auto',
+    sshUserHint:
+      'Laissez vide pour détecter automatiquement le nom de connexion. Ne le renseignez que si la VM accepte un autre compte.',
     refreshing: 'Actualisation…',
     checkingGcloud: 'Vérification de gcloud CLI…',
     checkingAuth: "Vérification de l'authentification…",

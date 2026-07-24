@@ -139,6 +139,10 @@ export const panes = {
     searchPlaceholder: 'プロジェクト / インスタンスを検索…',
     searchAria: 'GCP のプロジェクトとインスタンスを検索',
     clearSearch: '検索をクリア',
+    sshUserLabel: 'SSH ユーザー',
+    sshUserPlaceholder: '自動',
+    sshUserHint:
+      '空欄にするとログイン名を自動判定します。VM が別のアカウントを使う場合のみ指定してください。',
     refreshing: '更新中…',
     checkingGcloud: 'gcloud CLI を確認中…',
     checkingAuth: '認証を確認中…',

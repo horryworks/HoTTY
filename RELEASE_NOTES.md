@@ -1,5 +1,22 @@
 # Release Notes
 
+## v2.0.13-beta1
+
+**Google Cloud IAP connections are fixed and more reliable.** Logging in to a VM over IAP had been failing with `Permission denied (publickey)` since v2.0.3-beta4 because HoTTY guessed the wrong Linux account; it now asks gcloud directly. VM start/stop status is also no longer lost when you close the New Connection dialog, and connecting is noticeably faster.
+
+### Bug Fixes
+
+- **IAP login no longer fails with "Permission denied (publickey)".** HoTTY was picking the OS Login account name (e.g. `you_example_com`) for VMs that do not use OS Login at all, so the account simply did not exist on the machine. It now asks `gcloud compute ssh` which account and key it would use, and falls back to reading the instance metadata, the project metadata, and the effective `compute.requireOsLogin` org policy — in that order — only using a local username when all of them say OS Login is off. Regression introduced in v2.0.3-beta4.
+- **IAP no longer offers ssh a PuTTY-format key.** On Windows with PuTTY installed, gcloud reports a `.ppk` key file, which OpenSSH cannot read — producing the same `Permission denied (publickey)` even once the account name was right. HoTTY now keeps the OpenSSH key.
+- **Your SSH key is registered with OS Login every time it is needed.** Registration previously ran only on the one connection where HoTTY had to generate a new key, so any machine with an existing `~/.ssh/google_compute_engine` never registered it and failed on OS Login-enabled projects. Present since v2.0.1.
+- **VM start/stop status survives closing the New Connection dialog.** Starting or stopping a VM from the GCP tab used to lose track of it the moment the dialog closed or you switched to the Hosts tab — reopening showed the old status and a ▶ Start button for an already-running VM. The whole start/stop lifecycle now runs in the background, so the status is kept, saved to disk, and shown live in every window.
+
+### Improvements
+
+- **Connecting over IAP is faster.** Working out the login account took three separate gcloud calls; it now takes one, cutting several seconds off every IAP connection.
+- **Optional SSH user for GCP.** The GCP tab has a new **SSH user** box. Leave it blank — the normal case — and HoTTY detects the account automatically; fill it in for a VM that accepts a different one. A username saved on an IAP host entry takes priority over it.
+- **Failed IAP logins say why.** When ssh exits with an error, HoTTY now records what ssh actually said in the log (previously only a byte count was kept) along with the account it used and how that account was chosen, and shows a plain-language explanation for a rejected key.
+
 ## v2.0.12
 
 **AI Chat** grows from watching a single terminal to watching many: one conversation can now monitor several terminals at once — colour-coded, with each suggested command routed to the right one — plus you can attach images and keep typing while the AI is still replying.

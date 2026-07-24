@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act, waitFor, within } from '@testing-librar
 import type {
   GcloudCacheSnapshot,
   GcpRefreshProgress,
+  GcpVmActionEvent,
 } from '../../types/appTypes';
 
 let currentSnapshot: GcloudCacheSnapshot = {
@@ -12,14 +13,18 @@ let currentSnapshot: GcloudCacheSnapshot = {
   refreshInProgress: false,
 };
 
+/** In-flight VM actions the fake backend reports from `gceIapListVmActions`. */
+let currentVmActions: GcpVmActionEvent[] = [];
+
 const gceIapGetCache = vi.fn(() => Promise.resolve(currentSnapshot));
 const gceIapRefreshCache = vi.fn(() => Promise.resolve(currentSnapshot));
 const gceIapStartInstance = vi.fn().mockResolvedValue(undefined);
 const gceIapStopInstance = vi.fn().mockResolvedValue(undefined);
-const gceIapGetInstanceStatus = vi.fn().mockResolvedValue('PROVISIONING');
+const gceIapListVmActions = vi.fn(() => Promise.resolve(currentVmActions));
 
 let emitProgress: ((p: GcpRefreshProgress) => void) | null = null;
 let emitUpdated: (() => void) | null = null;
+let emitVmAction: ((e: GcpVmActionEvent) => void) | null = null;
 
 vi.mock('../../services/tauriService', () => ({
   tauriService: {
@@ -29,8 +34,7 @@ vi.mock('../../services/tauriService', () => ({
       gceIapStartInstance(p, z, i),
     gceIapStopInstance: (p: string, z: string, i: string) =>
       gceIapStopInstance(p, z, i),
-    gceIapGetInstanceStatus: (p: string, z: string, i: string) =>
-      gceIapGetInstanceStatus(p, z, i),
+    gceIapListVmActions: () => gceIapListVmActions(),
     onGcpRefreshProgress: (cb: (p: GcpRefreshProgress) => void) => {
       emitProgress = cb;
       return Promise.resolve(() => {
@@ -43,14 +47,32 @@ vi.mock('../../services/tauriService', () => ({
         emitUpdated = null;
       });
     },
+    onGcpVmAction: (cb: (e: GcpVmActionEvent) => void) => {
+      emitVmAction = cb;
+      return Promise.resolve(() => {
+        emitVmAction = null;
+      });
+    },
   },
 }));
 
-import {
-  GcpInstancesPane,
-  STATUS_INITIAL_DELAY_MS,
-  STATUS_POLL_INTERVAL_MS,
-} from './GcpInstancesPane';
+import { GcpInstancesPane } from './GcpInstancesPane';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { resolveIapUsername } from '../../utils/iapUsername';
+
+/** Push one backend `gcp-vm-action` event, defaulting to the vm-stg target. */
+async function pushVmAction(evt: Partial<GcpVmActionEvent> & { status: string }) {
+  await waitFor(() => expect(emitVmAction).not.toBeNull());
+  await act(async () => {
+    emitVmAction!({
+      project: 'proj-a',
+      zone: 'us-central1-a',
+      instance: 'vm-stg',
+      action: 'starting',
+      ...evt,
+    });
+  });
+}
 
 function populatedSnapshot(): GcloudCacheSnapshot {
   return {
@@ -94,11 +116,14 @@ describe('GcpInstancesPane', () => {
     gceIapGetCache.mockClear();
     gceIapRefreshCache.mockClear();
     gceIapStartInstance.mockClear();
+    gceIapStartInstance.mockResolvedValue(undefined);
     gceIapStopInstance.mockClear();
-    gceIapGetInstanceStatus.mockClear();
-    gceIapGetInstanceStatus.mockResolvedValue('PROVISIONING');
+    gceIapStopInstance.mockResolvedValue(undefined);
+    gceIapListVmActions.mockClear();
+    currentVmActions = [];
     emitProgress = null;
     emitUpdated = null;
+    emitVmAction = null;
     // Clear persisted UI state (e.g. the GCP search query) so one test's input
     // can't leak into another via localStorage.
     try {
@@ -275,9 +300,9 @@ describe('GcpInstancesPane', () => {
     );
   });
 
-  it('shows the optimistic "STARTING" label as soon as Start is clicked, before any poll fires', async () => {
+  it('shows the optimistic "STARTING" label as soon as Start is clicked, before any event arrives', async () => {
     setSnapshot(populatedSnapshot());
-    // Hold the gcloud start call open so we can observe the in-flight state.
+    // Hold the invoke open so nothing but the optimistic update can have run.
     let resolveStart: () => void = () => {};
     gceIapStartInstance.mockImplementationOnce(
       () => new Promise<void>((res) => { resolveStart = res; }),
@@ -286,15 +311,14 @@ describe('GcpInstancesPane', () => {
     await waitFor(() => expect(screen.getByText('vm-stg')).toBeTruthy());
 
     fireEvent.click(screen.getByLabelText('Start vm-stg'));
-    // Without waiting for any poll interval, the row's status text should
-    // already have moved off the cached TERMINATED to the optimistic STARTING.
+    // The row's status text should already have moved off the cached
+    // TERMINATED to the optimistic STARTING.
     await waitFor(() => expect(screen.getByText('STARTING')).toBeTruthy());
 
-    // Both action buttons should be hidden while pending.
+    // Both action buttons should be hidden while the action is in flight.
     expect(screen.queryByLabelText('Start vm-stg')).toBeNull();
     expect(screen.queryByLabelText('Stop vm-stg')).toBeNull();
 
-    // Let the start call resolve so the test can clean up.
     await act(async () => {
       resolveStart();
     });
@@ -319,240 +343,230 @@ describe('GcpInstancesPane', () => {
     });
   });
 
-  it('replaces the optimistic STARTING label with the polled status once a poll resolves', async () => {
+  it('replaces the optimistic STARTING label with the backend-reported status', async () => {
     setSnapshot(populatedSnapshot());
-    vi.useFakeTimers();
-    // Keep gcloud start open so the poll loop drives the UI.
-    gceIapStartInstance.mockImplementationOnce(() => new Promise<void>(() => {}));
-    gceIapGetInstanceStatus.mockResolvedValue('PROVISIONING');
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('vm-stg')).toBeTruthy());
 
-    try {
-      render(<GcpInstancesPane />);
-      // First mount reads the cache via a microtask; flush it.
-      await act(async () => { await Promise.resolve(); });
-      expect(screen.getByText('vm-stg')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Start vm-stg'));
+    await waitFor(() => expect(screen.getByText('STARTING')).toBeTruthy());
 
-      fireEvent.click(screen.getByLabelText('Start vm-stg'));
-      // Optimistic label appears immediately, before any poll.
-      expect(screen.getByText('STARTING')).toBeTruthy();
-
-      // Advance past the initial delay so the first poll fires + resolves.
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(STATUS_INITIAL_DELAY_MS + 50);
-      });
-
-      expect(gceIapGetInstanceStatus).toHaveBeenCalledWith('proj-a', 'us-central1-a', 'vm-stg');
-      expect(screen.getByText('PROVISIONING')).toBeTruthy();
-    } finally {
-      vi.useRealTimers();
-    }
+    await pushVmAction({ action: 'starting', status: 'PROVISIONING' });
+    expect(within(rowOf('vm-stg')).getByText('PROVISIONING')).toBeTruthy();
   });
 
-  it('keeps polling until the VM reaches RUNNING — does NOT revert to TERMINATED when gcloud start returns', async () => {
+  it('tracks a start to RUNNING — never bouncing back to the cached TERMINATED', async () => {
     setSnapshot(populatedSnapshot());
-    vi.useFakeTimers();
-    // gcloud start returns quickly (mirroring the real bug the user saw).
-    gceIapStartInstance.mockResolvedValueOnce(undefined);
-    // Simulate the VM's real transition over several polls.
-    gceIapGetInstanceStatus
-      .mockResolvedValueOnce('PROVISIONING')
-      .mockResolvedValueOnce('STAGING')
-      .mockResolvedValueOnce('RUNNING')
-      .mockResolvedValue('RUNNING');
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('vm-stg')).toBeTruthy());
 
-    try {
-      render(<GcpInstancesPane />);
-      await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByLabelText('Start vm-stg'));
+    await waitFor(() => expect(screen.getByText('STARTING')).toBeTruthy());
 
-      fireEvent.click(screen.getByLabelText('Start vm-stg'));
-      expect(screen.getByText('STARTING')).toBeTruthy();
+    // Walk the transition the backend reports. Assertions are scoped to the
+    // vm-stg row because vm-prod also shows "RUNNING" from the cache.
+    await pushVmAction({ action: 'starting', status: 'PROVISIONING' });
+    expect(within(rowOf('vm-stg')).getByText('PROVISIONING')).toBeTruthy();
+    expect(within(rowOf('vm-stg')).queryByText('TERMINATED')).toBeNull();
 
-      // Walk through the poll cycles. After each cycle the row should reflect
-      // the latest polled status — never bouncing back to the cached
-      // TERMINATED even after gcloud start has resolved. Scope assertions to
-      // the vm-stg row since vm-prod also displays "RUNNING" from the cache.
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(STATUS_INITIAL_DELAY_MS + 50);
-      });
-      expect(within(rowOf('vm-stg')).getByText('PROVISIONING')).toBeTruthy();
-      expect(within(rowOf('vm-stg')).queryByText('TERMINATED')).toBeNull();
+    await pushVmAction({ action: 'starting', status: 'STAGING' });
+    expect(within(rowOf('vm-stg')).getByText('STAGING')).toBeTruthy();
+    expect(within(rowOf('vm-stg')).queryByText('TERMINATED')).toBeNull();
 
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(STATUS_POLL_INTERVAL_MS + 50);
-      });
-      expect(within(rowOf('vm-stg')).getByText('STAGING')).toBeTruthy();
-      expect(within(rowOf('vm-stg')).queryByText('TERMINATED')).toBeNull();
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(STATUS_POLL_INTERVAL_MS + 50);
-      });
-      expect(within(rowOf('vm-stg')).getByText('RUNNING')).toBeTruthy();
-    } finally {
-      vi.useRealTimers();
-    }
+    // Settled: action null, status final. The row keeps RUNNING and the Stop
+    // button comes back.
+    await pushVmAction({ action: null, status: 'RUNNING' });
+    expect(within(rowOf('vm-stg')).getByText('RUNNING')).toBeTruthy();
+    expect(screen.getByLabelText('Stop vm-stg')).toBeTruthy();
   });
 
-  it('keeps polling until the VM reaches TERMINATED — does NOT revert to RUNNING when gcloud stop returns', async () => {
+  it('tracks a stop to TERMINATED — never bouncing back to the cached RUNNING', async () => {
     setSnapshot(populatedSnapshot());
-    vi.useFakeTimers();
-    gceIapStopInstance.mockResolvedValueOnce(undefined);
-    // Real GCE transition: RUNNING (briefly still) -> STOPPING -> TERMINATED.
-    gceIapGetInstanceStatus
-      .mockResolvedValueOnce('STOPPING')
-      .mockResolvedValueOnce('TERMINATED')
-      .mockResolvedValue('TERMINATED');
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('vm-prod')).toBeTruthy());
 
-    try {
-      render(<GcpInstancesPane />);
-      await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByLabelText('Stop vm-prod'));
+    await waitFor(() => expect(within(rowOf('vm-prod')).getByText('STOPPING')).toBeTruthy());
 
-      fireEvent.click(screen.getByLabelText('Stop vm-prod'));
-      // Optimistic STOPPING shows before any poll.
-      expect(within(rowOf('vm-prod')).getByText('STOPPING')).toBeTruthy();
+    const target = { instance: 'vm-prod', action: 'stopping' as const };
+    await pushVmAction({ ...target, status: 'STOPPING' });
+    expect(within(rowOf('vm-prod')).getByText('STOPPING')).toBeTruthy();
 
-      // After the first poll: still STOPPING (from gcloud, matches optimistic).
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(STATUS_INITIAL_DELAY_MS + 50);
-      });
-      expect(within(rowOf('vm-prod')).getByText('STOPPING')).toBeTruthy();
-
-      // After the second poll: TERMINATED, loop exits, snapshot updated.
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(STATUS_POLL_INTERVAL_MS + 50);
-      });
-      expect(within(rowOf('vm-prod')).getByText('TERMINATED')).toBeTruthy();
-    } finally {
-      vi.useRealTimers();
-    }
+    await pushVmAction({ instance: 'vm-prod', action: null, status: 'TERMINATED' });
+    expect(within(rowOf('vm-prod')).getByText('TERMINATED')).toBeTruthy();
+    expect(screen.getByLabelText('Start vm-prod')).toBeTruthy();
   });
 
-  it('suppresses a stale "RUNNING" poll response while stopping — display stays STOPPING', async () => {
+  it('the settled status survives a remount — the reported bug', async () => {
     setSnapshot(populatedSnapshot());
-    vi.useFakeTimers();
-    gceIapStopInstance.mockImplementationOnce(() => new Promise<void>(() => {}));
-    // First describe arrives before GCP has registered the stop: still RUNNING.
-    // We must NOT show that — it would visibly flip RUNNING ⇄ STOPPING.
-    gceIapGetInstanceStatus.mockResolvedValueOnce('RUNNING');
+    const { unmount } = render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('vm-prod')).toBeTruthy());
 
-    try {
-      render(<GcpInstancesPane />);
-      await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByLabelText('Stop vm-prod'));
+    await pushVmAction({ instance: 'vm-prod', action: null, status: 'TERMINATED' });
+    expect(within(rowOf('vm-prod')).getByText('TERMINATED')).toBeTruthy();
 
-      fireEvent.click(screen.getByLabelText('Stop vm-prod'));
-      expect(within(rowOf('vm-prod')).getByText('STOPPING')).toBeTruthy();
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(STATUS_INITIAL_DELAY_MS + 50);
-      });
-      // The "RUNNING" from gcloud is on the wrong side of the transition for
-      // a 'stopping' action — the optimistic STOPPING must remain visible.
-      expect(within(rowOf('vm-prod')).getByText('STOPPING')).toBeTruthy();
-      expect(within(rowOf('vm-prod')).queryByText('RUNNING')).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
+    // The pane lives inside SessionDialog and unmounts on every sidebar-tab
+    // switch. Because the BACKEND owns the tracker, its cache — not this
+    // component's state — is what the remount reads back, so the fresh mount
+    // must not resurrect the pre-Stop RUNNING.
+    unmount();
+    setSnapshot({
+      ...populatedSnapshot(),
+      instancesByProject: {
+        'proj-a': [
+          { name: 'vm-prod', status: 'TERMINATED', zone: 'us-central1-a' },
+          { name: 'vm-stg', status: 'TERMINATED', zone: 'us-central1-a' },
+        ],
+        'proj-b': [],
+      },
+    });
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('vm-prod')).toBeTruthy());
+    expect(within(rowOf('vm-prod')).getByText('TERMINATED')).toBeTruthy();
+    expect(within(rowOf('vm-prod')).queryByText('RUNNING')).toBeNull();
   });
 
-  it('suppresses a stale "TERMINATED" poll response while starting — display stays STARTING', async () => {
+  it('re-adopts an in-flight action on mount, so a Start survives the dialog closing', async () => {
     setSnapshot(populatedSnapshot());
-    vi.useFakeTimers();
-    gceIapStartInstance.mockImplementationOnce(() => new Promise<void>(() => {}));
-    gceIapGetInstanceStatus.mockResolvedValueOnce('TERMINATED');
+    // The backend is mid-Start on vm-stg from before this pane existed.
+    currentVmActions = [
+      {
+        project: 'proj-a',
+        zone: 'us-central1-a',
+        instance: 'vm-stg',
+        action: 'starting',
+        status: 'PROVISIONING',
+      },
+    ];
 
-    try {
-      render(<GcpInstancesPane />);
-      await act(async () => { await Promise.resolve(); });
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(gceIapListVmActions).toHaveBeenCalled());
 
-      fireEvent.click(screen.getByLabelText('Start vm-stg'));
-      expect(within(rowOf('vm-stg')).getByText('STARTING')).toBeTruthy();
+    // The row renders as transitioning, not as the cached TERMINATED with a
+    // "▶ Start" button for a VM that is already booting.
+    await waitFor(() =>
+      expect(within(rowOf('vm-stg')).getByText('PROVISIONING')).toBeTruthy(),
+    );
+    expect(screen.queryByLabelText('Start vm-stg')).toBeNull();
+    expect(screen.queryByLabelText('Stop vm-stg')).toBeNull();
 
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(STATUS_INITIAL_DELAY_MS + 50);
-      });
-      expect(within(rowOf('vm-stg')).getByText('STARTING')).toBeTruthy();
-      expect(within(rowOf('vm-stg')).queryByText('TERMINATED')).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
+    // And the still-live event stream continues to drive it.
+    await pushVmAction({ action: null, status: 'RUNNING' });
+    expect(within(rowOf('vm-stg')).getByText('RUNNING')).toBeTruthy();
   });
 
-  it('does NOT trigger a full cache refresh after a successful Start', async () => {
+  it('applies an action started by another window (events are broadcast)', async () => {
     setSnapshot(populatedSnapshot());
-    vi.useFakeTimers();
-    gceIapStartInstance.mockResolvedValueOnce(undefined);
-    gceIapGetInstanceStatus.mockResolvedValue('RUNNING');
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('vm-prod')).toBeTruthy());
 
-    try {
-      render(<GcpInstancesPane />);
-      await act(async () => { await Promise.resolve(); });
-      gceIapRefreshCache.mockClear();
-
-      fireEvent.click(screen.getByLabelText('Start vm-stg'));
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(STATUS_INITIAL_DELAY_MS + 50);
-      });
-      // The poll saw RUNNING on the first probe; the tracker should exit
-      // without ever calling gceIapRefreshCache (which would surface a
-      // "Listing projects" progress message).
-      expect(gceIapRefreshCache).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
+    // No click here — the event arrives unprompted from another window.
+    await pushVmAction({ instance: 'vm-prod', action: 'stopping', status: 'STOPPING' });
+    expect(within(rowOf('vm-prod')).getByText('STOPPING')).toBeTruthy();
+    expect(screen.queryByLabelText('Stop vm-prod')).toBeNull();
   });
 
-  it('shows the per-VM ⚠ badge and a global error when Start fails', async () => {
+  it('does NOT trigger a full cache refresh when an action settles', async () => {
     setSnapshot(populatedSnapshot());
-    vi.useFakeTimers();
-    gceIapStartInstance.mockRejectedValueOnce('quota exceeded');
-    gceIapGetInstanceStatus.mockResolvedValue('TERMINATED');
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('vm-stg')).toBeTruthy());
+    gceIapRefreshCache.mockClear();
 
-    try {
-      render(<GcpInstancesPane />);
-      await act(async () => { await Promise.resolve(); });
-      expect(screen.getByText('vm-stg')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Start vm-stg'));
+    await pushVmAction({ action: null, status: 'RUNNING' });
 
-      fireEvent.click(screen.getByLabelText('Start vm-stg'));
-
-      // Drain initial delay + the post-error final probe.
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(STATUS_INITIAL_DELAY_MS + 100);
-      });
-
-      expect(screen.getByText(/Start failed.*quota exceeded/)).toBeTruthy();
-      expect(screen.getByLabelText(/Error: quota exceeded/)).toBeTruthy();
-    } finally {
-      vi.useRealTimers();
-    }
+    // A refresh would surface a "Listing projects" progress message and
+    // clobber other rows; the settled event is enough on its own.
+    expect(gceIapRefreshCache).not.toHaveBeenCalled();
   });
 
-  it('on Start failure: shows error, probes once more for real status, no full refresh', async () => {
+  it('shows the per-VM ⚠ badge and a global error when the settled event carries one', async () => {
     setSnapshot(populatedSnapshot());
-    vi.useFakeTimers();
-    gceIapStartInstance.mockRejectedValueOnce('quota exceeded');
-    gceIapGetInstanceStatus.mockResolvedValue('TERMINATED');
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('vm-stg')).toBeTruthy());
 
-    try {
-      render(<GcpInstancesPane />);
-      await act(async () => { await Promise.resolve(); });
-      gceIapRefreshCache.mockClear();
+    fireEvent.click(screen.getByLabelText('Start vm-stg'));
+    // gcloud rejected the start: the backend re-probed and reports the real
+    // status alongside the error.
+    await pushVmAction({ action: null, status: 'TERMINATED', error: 'quota exceeded' });
 
-      fireEvent.click(screen.getByLabelText('Start vm-stg'));
-      // Optimistic.
-      expect(screen.getByText('STARTING')).toBeTruthy();
+    expect(screen.getByText(/Start failed.*quota exceeded/)).toBeTruthy();
+    expect(screen.getByLabelText(/Error: quota exceeded/)).toBeTruthy();
+    // The optimistic label is gone — the row shows the real status again.
+    expect(within(rowOf('vm-stg')).getByText('TERMINATED')).toBeTruthy();
+    expect(screen.getByLabelText('Start vm-stg')).toBeTruthy();
+  });
 
-      // Drain the initial delay + the post-error final probe.
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(STATUS_INITIAL_DELAY_MS + 50);
-      });
+  it('reports a rejected registration and re-syncs the in-flight set', async () => {
+    setSnapshot(populatedSnapshot());
+    // The backend refuses because an action is already in flight for this VM.
+    gceIapStartInstance.mockRejectedValueOnce('already in progress');
+    currentVmActions = [];
 
-      // Global error banner and per-VM badge are shown.
-      expect(screen.getByText(/Start failed.*quota exceeded/)).toBeTruthy();
-      expect(screen.getByLabelText(/Error: quota exceeded/)).toBeTruthy();
-      // No full cache refresh was triggered.
-      expect(gceIapRefreshCache).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
+    render(<GcpInstancesPane />);
+    await waitFor(() => expect(screen.getByText('vm-stg')).toBeTruthy());
+    gceIapListVmActions.mockClear();
+
+    fireEvent.click(screen.getByLabelText('Start vm-stg'));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Start failed.*already in progress/)).toBeTruthy(),
+    );
+    expect(screen.getByLabelText(/Error: already in progress/)).toBeTruthy();
+    // No event is coming for an unregistered action, so the pane re-reads the
+    // backend's set rather than trusting its own optimistic entry.
+    expect(gceIapListVmActions).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(within(rowOf('vm-stg')).getByText('TERMINATED')).toBeTruthy(),
+    );
+  });
+});
+
+describe('GcpInstancesPane — SSH user override', () => {
+  beforeEach(() => {
+    useSettingsStore.getState().reset();
+    setSnapshot(populatedSnapshot());
+  });
+
+  function sshUserInput(container: HTMLElement): HTMLInputElement {
+    const el = container.querySelector('.gcp-pane-sshuser-input');
+    if (!el) throw new Error('SSH user input not found');
+    return el as HTMLInputElement;
+  }
+
+  it('starts blank, meaning the backend auto-detects the login name', async () => {
+    const { container } = render(<GcpInstancesPane />);
+    await waitFor(() => expect(gceIapGetCache).toHaveBeenCalled());
+    expect(sshUserInput(container).value).toBe('');
+  });
+
+  it('writes what the user types into the shared setting', async () => {
+    const { container } = render(<GcpInstancesPane />);
+    await waitFor(() => expect(gceIapGetCache).toHaveBeenCalled());
+
+    fireEvent.change(sshUserInput(container), { target: { value: 'horry' } });
+
+    expect(useSettingsStore.getState().gcpIapUsername).toBe('horry');
+  });
+
+  it('shows a value already in the setting, so it survives a remount', async () => {
+    useSettingsStore.getState().update('gcpIapUsername', 'horry');
+    const { container } = render(<GcpInstancesPane />);
+    await waitFor(() => expect(gceIapGetCache).toHaveBeenCalled());
+    expect(sshUserInput(container).value).toBe('horry');
+  });
+
+  it('clearing the field restores auto-detection rather than sending a blank name', async () => {
+    useSettingsStore.getState().update('gcpIapUsername', 'horry');
+    const { container } = render(<GcpInstancesPane />);
+    await waitFor(() => expect(gceIapGetCache).toHaveBeenCalled());
+
+    fireEvent.change(sshUserInput(container), { target: { value: '' } });
+
+    expect(useSettingsStore.getState().gcpIapUsername).toBe('');
+    expect(resolveIapUsername(undefined, useSettingsStore.getState().gcpIapUsername))
+      .toBeUndefined();
   });
 });
 
@@ -586,8 +600,11 @@ describe('GcpInstancesPane — search', () => {
   beforeEach(() => {
     gceIapGetCache.mockClear();
     gceIapRefreshCache.mockClear();
+    gceIapListVmActions.mockClear();
+    currentVmActions = [];
     emitProgress = null;
     emitUpdated = null;
+    emitVmAction = null;
     try {
       localStorage.clear();
     } catch {

@@ -54,6 +54,7 @@ import type {
   GceInstance,
   GcloudCacheSnapshot,
   GcpRefreshProgress,
+  GcpVmActionEvent,
   IapVmStartPromptPayload,
   AIAuthStatus,
   AIModelInfo,
@@ -617,28 +618,29 @@ export const tauriService = {
     return invoke<GcloudCacheSnapshot>('gce_iap_refresh_cache');
   },
 
-  /** Start a stopped GCE instance. Blocks until gcloud returns. */
+  /**
+   * Start a stopped GCE instance. Resolves as soon as the backend registers the
+   * action — it does NOT wait for gcloud. Transitions, the final status, and any
+   * failure arrive via `onGcpVmAction`, and each is written into the GCP cache.
+   * Rejects only when the action was never registered (invalid identifiers, or
+   * one already in flight for this VM).
+   */
   async gceIapStartInstance(project: string, zone: string, instance: string): Promise<void> {
     await invoke('gce_iap_start_instance', { project, zone, instance });
   },
 
-  /** Stop a running GCE instance. Blocks until gcloud returns. */
+  /** Stop a running GCE instance. Same contract as `gceIapStartInstance`. */
   async gceIapStopInstance(project: string, zone: string, instance: string): Promise<void> {
     await invoke('gce_iap_stop_instance', { project, zone, instance });
   },
 
   /**
-   * Single-VM status probe (one `gcloud compute instances describe`). Used by
-   * the GCP tab to poll an in-flight start/stop so the UI can show real
-   * transitions (PROVISIONING / STAGING / STOPPING) instead of the cached
-   * pre-action status.
+   * Every VM Start/Stop currently in flight. Called on mount so the pane can
+   * re-adopt actions started before it existed — a Start issued and then
+   * "abandoned" by closing the session dialog keeps running in the backend.
    */
-  async gceIapGetInstanceStatus(
-    project: string,
-    zone: string,
-    instance: string,
-  ): Promise<string> {
-    return invoke<string>('gce_iap_get_instance_status', { project, zone, instance });
+  async gceIapListVmActions(): Promise<GcpVmActionEvent[]> {
+    return invoke<GcpVmActionEvent[]>('gce_iap_list_vm_actions');
   },
 
   /** Subscribe to GCP cache refresh progress updates. */
@@ -649,6 +651,11 @@ export const tauriService = {
   /** Subscribe to "cache refresh completed" notifications. */
   onGcpCacheUpdated(cb: () => void): Promise<UnlistenFn> {
     return listen<void>('gcp-cache-updated', () => cb());
+  },
+
+  /** Subscribe to tracked VM Start/Stop progress (broadcast to every window). */
+  onGcpVmAction(cb: (e: GcpVmActionEvent) => void): Promise<UnlistenFn> {
+    return listen<GcpVmActionEvent>('gcp-vm-action', (e) => cb(e.payload));
   },
 
   // -----------------------------------------------------------------------

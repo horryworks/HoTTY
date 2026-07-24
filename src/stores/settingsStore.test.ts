@@ -129,4 +129,16 @@ describe('settingsStore', () => {
     useSettingsStore.getState().update('aiCommandIdleTimeoutSecs', 0);
     expect(useSettingsStore.getState().aiCommandIdleTimeoutSecs).toBe(0);
   });
+
+  it('defaults the GCP IAP username override to blank (auto-detect)', () => {
+    expect(useSettingsStore.getState().gcpIapUsername).toBe('');
+  });
+
+  it('updates the GCP IAP username override', () => {
+    useSettingsStore.getState().update('gcpIapUsername', 'horry');
+    expect(useSettingsStore.getState().gcpIapUsername).toBe('horry');
+
+    useSettingsStore.getState().update('gcpIapUsername', '');
+    expect(useSettingsStore.getState().gcpIapUsername).toBe('');
+  });
 });

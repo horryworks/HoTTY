@@ -8,8 +8,11 @@ import type {
   GcloudCacheSnapshot,
   GcpProject,
   GcpRefreshProgress,
+  GcpVmAction,
+  GcpVmActionEvent,
 } from '../../types/appTypes';
 import { STORAGE_KEYS } from '../../constants/storage';
+import { useSettingsStore } from '../../stores/settingsStore';
 import {
   getEffectiveIapAccess,
   getEffectiveOsLoginAccess,
@@ -30,59 +33,13 @@ interface VmSelection {
   instance: string;
 }
 
-type PendingAction = 'starting' | 'stopping';
-
-/** Initial delay before the first describe — gives the gcloud start/stop API
- *  request a moment to propagate so the first poll isn't just the pre-action
- *  status (which would briefly clobber the optimistic label). */
-const STATUS_INITIAL_DELAY_MS = 1500;
-
-/** Cadence of subsequent describes while a start/stop is in flight. */
-const STATUS_POLL_INTERVAL_MS = 3000;
-
-/** Safety cap on the start/stop wait loop (5 min). After this the loop bails
- *  out even if the VM hasn't reached the target status. */
-const STATUS_POLL_MAX_MS = 5 * 60 * 1000;
-
-const START_TARGETS = ['RUNNING'];
-const STOP_TARGETS = ['TERMINATED', 'STOPPED', 'SUSPENDED'];
-
 /** How long a persisted (disk-loaded) snapshot is considered fresh enough to
  *  show without an automatic background refresh. Older than this on first mount
  *  → revalidate in the background (stale-while-revalidate). 10 minutes. */
 const GCP_CACHE_TTL_MS = 10 * 60 * 1000;
 
-/**
- * While a start/stop is pending, a freshly-polled live status is "acceptable"
- * to display only if it represents forward progress toward the target. A poll
- * that arrives faster than the gcloud action propagates to GCP can briefly
- * return the pre-action status (TERMINATED while starting; RUNNING while
- * stopping), and displaying that would visibly bounce the row backwards.
- * Filtering it out keeps the optimistic label visible until the API actually
- * reflects the action.
- */
-function isLiveStatusOnPath(live: string, action: PendingAction): boolean {
-  const s = live.toUpperCase();
-  if (action === 'starting') {
-    return s === 'PROVISIONING' || s === 'STAGING' || s === 'REPAIRING' || s === 'RUNNING';
-  }
-  // stopping
-  return (
-    s === 'STOPPING' ||
-    s === 'SUSPENDING' ||
-    s === 'TERMINATED' ||
-    s === 'STOPPED' ||
-    s === 'SUSPENDED'
-  );
-}
-
-function vmKey(sel: VmSelection): string {
+function vmKey(sel: { project: string; zone: string; instance: string }): string {
   return `${sel.project}/${sel.zone}/${sel.instance}`;
-}
-
-/** Per-VM abort flag for an in-flight start/stop poll loop. */
-interface VmAbortFlag {
-  aborted: boolean;
 }
 
 interface GcpInstancesPaneProps {
@@ -149,10 +106,13 @@ export function GcpInstancesPane({
   const [progress, setProgress] = useState<GcpRefreshProgress | null>(null);
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<VmSelection | null>(null);
-  const [pendingActions, setPendingActions] = useState<Map<string, PendingAction>>(
+  /** Latest in-flight `gcp-vm-action` per VM, keyed by `vmKey`. Entries appear
+   *  when a Start/Stop is registered and are removed when it settles, so an
+   *  entry existing IS "this VM is transitioning". The backend owns the poll
+   *  loop, so these survive nothing locally — they're rehydrated on mount. */
+  const [vmActions, setVmActions] = useState<Map<string, GcpVmActionEvent>>(
     () => new Map(),
   );
-  const [liveStatus, setLiveStatus] = useState<Map<string, string>>(() => new Map());
   const [vmErrors, setVmErrors] = useState<Map<string, string>>(() => new Map());
   const [error, setError] = useState<string | null>(null);
   const [showInaccessible, setShowInaccessible] = useState<boolean>(() => {
@@ -169,9 +129,8 @@ export function GcpInstancesPane({
       return '';
     }
   });
+  const sshUsername = useSettingsStore((s) => s.gcpIapUsername);
   const didInitialFetchRef = useRef(false);
-  /** Map of vmKey → abort flag for an in-flight start/stop tracking loop. */
-  const activeActionsRef = useRef<Map<string, VmAbortFlag>>(new Map());
 
   const refreshAndStore = useCallback(async () => {
     try {
@@ -179,6 +138,19 @@ export function GcpInstancesPane({
       setSnapshot(snap);
     } catch (e) {
       setError(String(e));
+    }
+  }, []);
+
+  /** Adopt whatever Start/Stops the backend currently has in flight. This is
+   *  what makes an action survive the pane unmounting — the tracker runs in the
+   *  backend, so a Start issued and then "abandoned" by closing the session
+   *  dialog is still there when the pane comes back. */
+  const syncVmActions = useCallback(async () => {
+    try {
+      const actions = await tauriService.gceIapListVmActions();
+      setVmActions(new Map(actions.map((a) => [vmKey(a), a])));
+    } catch {
+      /* Non-fatal — the event stream still drives the UI from here on. */
     }
   }, []);
 
@@ -205,11 +177,12 @@ export function GcpInstancesPane({
       } catch (e) {
         if (!cancelled) setError(String(e));
       }
+      if (!cancelled) syncVmActions();
     })();
     return () => {
       cancelled = true;
     };
-  }, [refreshAndStore]);
+  }, [refreshAndStore, syncVmActions]);
 
   // Event subscriptions: progress + completion.
   useEffect(() => {
@@ -269,12 +242,12 @@ export function GcpInstancesPane({
     [onActivateInstance],
   );
 
-  /** Patch a single VM's status in the in-memory cache snapshot. Used at the
-   *  end of a start/stop tracker so the row reflects the final status without
-   *  triggering a full backend refresh (which would surface a "Listing
-   *  projects..." progress message and clobber other rows). */
+  /** Patch a single VM's status in this pane's copy of the cache snapshot.
+   *  The backend already wrote (and persisted) the same value into the real
+   *  cache; mirroring it here avoids a full refetch, which would surface a
+   *  "Listing projects..." progress message and clobber other rows. */
   const updateInstanceStatusInSnapshot = useCallback(
-    (sel: VmSelection, status: string) => {
+    (sel: { project: string; zone: string; instance: string }, status: string) => {
       setSnapshot((prev) => {
         const list = prev.instancesByProject[sel.project];
         if (!list) return prev;
@@ -298,166 +271,106 @@ export function GcpInstancesPane({
     [],
   );
 
-  /** Drive one start/stop with realtime status tracking. The gcloud action
-   *  and the status poll run concurrently; the tracker doesn't end until the
-   *  VM actually reaches one of `targetStatuses` (or the action errored out,
-   *  or the safety timeout fires). On completion the final status is merged
-   *  into the snapshot directly — no full cache refresh. */
-  const runActionWithTracking = useCallback(
-    async (
-      sel: VmSelection,
-      action: PendingAction,
-      targetStatuses: string[],
-      invokeAction: () => Promise<void>,
-    ): Promise<void> => {
+  /** Fold one backend `gcp-vm-action` event into the in-flight map. The backend
+   *  publishes only forward progress — a poll that lands before the action has
+   *  propagated and still reports the pre-action status is dropped there — so
+   *  whatever arrives here is safe to display as-is. */
+  const applyVmActionEvent = useCallback(
+    (evt: GcpVmActionEvent) => {
+      const key = vmKey(evt);
+      if (evt.action) {
+        setVmActions((p) => new Map(p).set(key, evt));
+        return;
+      }
+      // Settled. Mirror the final status into our snapshot copy and drop the
+      // in-flight entry so the row falls back to the (now-correct) cache value.
+      updateInstanceStatusInSnapshot(evt, evt.status);
+      setVmActions((p) => {
+        const n = new Map(p);
+        n.delete(key);
+        return n;
+      });
+      if (evt.error) {
+        const message = evt.error;
+        setVmErrors((p) => new Map(p).set(key, message));
+        setError(t('panes.gcpInstances.startFailed', { message }));
+      }
+    },
+    [updateInstanceStatusInSnapshot, t],
+  );
+
+  // Tracked Start/Stop progress. The backend broadcasts, so this also reflects
+  // actions another window started.
+  useEffect(() => {
+    let unlisten: undefined | (() => void);
+    let cancelled = false;
+    (async () => {
+      const u = await tauriService.onGcpVmAction(applyVmActionEvent);
+      if (cancelled) {
+        u();
+        return;
+      }
+      unlisten = u;
+    })();
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
+  }, [applyVmActionEvent]);
+
+  /** Ask the backend to start or stop a VM. It returns as soon as the action is
+   *  registered; every status change after that arrives via `gcp-vm-action`. */
+  const beginAction = useCallback(
+    async (sel: VmSelection, action: GcpVmAction): Promise<void> => {
       const key = vmKey(sel);
-
-      // If a prior tracker for this VM is still running (e.g. user double-
-      // clicked Start), tell it to bail out so it doesn't fight ours.
-      const prior = activeActionsRef.current.get(key);
-      if (prior) prior.aborted = true;
-      const ctrl: VmAbortFlag = { aborted: false };
-      activeActionsRef.current.set(key, ctrl);
-
       setError(null);
       setVmErrors((p) => {
         const n = new Map(p);
         n.delete(key);
         return n;
       });
-      setLiveStatus((p) => {
-        const n = new Map(p);
-        n.delete(key);
-        return n;
-      });
-      setPendingActions((p) => new Map(p).set(key, action));
-
-      // Fire the gcloud action without awaiting — the poll loop below drives
-      // the UI in parallel. We only need the result at the very end.
-      let actionError: string | null = null;
-      const actionPromise = invokeAction().then(
-        () => undefined,
-        (e: unknown) => {
-          actionError = String(e);
-        },
+      // Flip the row before the IPC round trip. The backend's first event
+      // carries this same placeholder, so this only closes the gap — it never
+      // disagrees with what the backend is about to say.
+      setVmActions((p) =>
+        new Map(p).set(key, {
+          ...sel,
+          action,
+          status: action === 'starting' ? 'STARTING' : 'STOPPING',
+        }),
       );
-
-      // Initial delay so the start/stop request has a moment to register
-      // before we describe — otherwise the first poll often returns the
-      // pre-action status.
-      await new Promise((r) => setTimeout(r, STATUS_INITIAL_DELAY_MS));
-
-      const startedAt = Date.now();
-      let finalStatus: string | null = null;
-      while (!ctrl.aborted && Date.now() - startedAt < STATUS_POLL_MAX_MS) {
-        try {
-          const status = await tauriService.gceIapGetInstanceStatus(
-            sel.project,
-            sel.zone,
-            sel.instance,
-          );
-          if (ctrl.aborted) return;
-          setLiveStatus((p) => new Map(p).set(key, status));
-          if (targetStatuses.includes(status.toUpperCase())) {
-            finalStatus = status;
-            break;
-          }
-        } catch {
-          // Transient describe failures are non-fatal; retry next tick.
+      try {
+        if (action === 'starting') {
+          await tauriService.gceIapStartInstance(sel.project, sel.zone, sel.instance);
+        } else {
+          await tauriService.gceIapStopInstance(sel.project, sel.zone, sel.instance);
         }
-        if (actionError) break;
-        await new Promise((r) => setTimeout(r, STATUS_POLL_INTERVAL_MS));
-      }
-
-      // Wait for the gcloud action itself to settle so we know its outcome
-      // before reporting (esp. for errors that didn't yet surface in poll).
-      await actionPromise;
-
-      if (ctrl.aborted) {
-        // Superseded by a newer tracker for this VM (or the pane is unmounting).
-        // The successor re-initializes this key's pending/live/error maps on
-        // start, so we must NOT clear them here — that would wipe the
-        // successor's optimistic status. Only retract our own registration, and
-        // only if a successor hasn't already replaced it (otherwise we'd delete
-        // the successor's ctrl and break its supersede-detection).
-        if (activeActionsRef.current.get(key) === ctrl) {
-          activeActionsRef.current.delete(key);
-        }
-        return;
-      }
-
-      if (actionError) {
+      } catch (e) {
+        const message = String(e);
+        setVmErrors((p) => new Map(p).set(key, message));
         setError(
           action === 'starting'
-            ? t('panes.gcpInstances.startFailed', { message: actionError })
-            : t('panes.gcpInstances.stopFailed', { message: actionError }),
+            ? t('panes.gcpInstances.startFailed', { message })
+            : t('panes.gcpInstances.stopFailed', { message }),
         );
-        setVmErrors((p) => new Map(p).set(key, actionError as string));
-        // Probe once more so the row doesn't keep showing the optimistic
-        // STARTING/STOPPING when the action was rejected.
-        try {
-          const status = await tauriService.gceIapGetInstanceStatus(
-            sel.project,
-            sel.zone,
-            sel.instance,
-          );
-          if (!ctrl.aborted) finalStatus = status;
-        } catch {
-          /* fall through with whatever finalStatus we already have */
-        }
-      }
-
-      // A tracker can lose ownership during the awaits above (actionPromise /
-      // the error re-probe) if the user re-clicked Start/Stop. Only commit the
-      // snapshot and retract this key's transient state while we're still the
-      // active owner — otherwise we'd clobber the successor's maps and write
-      // state for a VM whose newer action is mid-flight (or after unmount).
-      if (activeActionsRef.current.get(key) === ctrl) {
-        if (finalStatus) {
-          updateInstanceStatusInSnapshot(sel, finalStatus);
-        }
-        setPendingActions((p) => {
-          const n = new Map(p);
-          n.delete(key);
-          return n;
-        });
-        setLiveStatus((p) => {
-          const n = new Map(p);
-          n.delete(key);
-          return n;
-        });
-        activeActionsRef.current.delete(key);
+        // The action was never registered, so no event is coming. Re-read the
+        // backend's in-flight set rather than blindly dropping our optimistic
+        // entry — the rejection may be *because* another window already has
+        // this VM moving.
+        syncVmActions();
       }
     },
-    [updateInstanceStatusInSnapshot, t],
+    [syncVmActions, t],
   );
 
-  // Cleanup: abort any in-flight tracker loops on unmount so they stop
-  // polling and stop touching React state.
-  useEffect(() => {
-    const active = activeActionsRef.current;
-    return () => {
-      active.forEach((ctrl) => {
-        ctrl.aborted = true;
-      });
-      active.clear();
-    };
-  }, []);
-
   const handleStart = useCallback(
-    (sel: VmSelection) =>
-      runActionWithTracking(sel, 'starting', START_TARGETS, () =>
-        tauriService.gceIapStartInstance(sel.project, sel.zone, sel.instance),
-      ),
-    [runActionWithTracking],
+    (sel: VmSelection) => beginAction(sel, 'starting'),
+    [beginAction],
   );
 
   const handleStop = useCallback(
-    (sel: VmSelection) =>
-      runActionWithTracking(sel, 'stopping', STOP_TARGETS, () =>
-        tauriService.gceIapStopInstance(sel.project, sel.zone, sel.instance),
-      ),
-    [runActionWithTracking],
+    (sel: VmSelection) => beginAction(sel, 'stopping'),
+    [beginAction],
   );
 
   const toggleProject = useCallback((id: string) => {
@@ -500,6 +413,10 @@ export function GcpInstancesPane({
   const clearSearch = useCallback(() => {
     persistSearchQuery('');
   }, [persistSearchQuery]);
+
+  const handleSshUserChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    useSettingsStore.getState().update('gcpIapUsername', e.target.value);
+  }, []);
 
   const projects = snapshot.projects;
   const isUnauthenticated = Boolean(snapshot.auth && !snapshot.auth.authenticated);
@@ -672,6 +589,20 @@ export function GcpInstancesPane({
           </button>
         )}
       </div>
+      <div className="gcp-pane-sshuser">
+        <label className="gcp-pane-sshuser-label" htmlFor="gcp-ssh-user">
+          {t('panes.gcpInstances.sshUserLabel')}
+        </label>
+        <input
+          id="gcp-ssh-user"
+          type="text"
+          className="gcp-pane-sshuser-input"
+          placeholder={t('panes.gcpInstances.sshUserPlaceholder')}
+          value={sshUsername}
+          onChange={handleSshUserChange}
+          title={t('panes.gcpInstances.sshUserHint')}
+        />
+      </div>
       {error && (
         <div className="gcp-pane-error" role="alert">
           {error}
@@ -738,31 +669,14 @@ export function GcpInstancesPane({
                               selected.project === project.id &&
                               selected.zone === zone &&
                               selected.instance === inst.name;
-                            const pending = pendingActions.get(key);
-                            const live = liveStatus.get(key);
-                            // Display priority:
-                            //   1. while pending, the polled live status — but
-                            //      only if it represents forward progress
-                            //      (filters out stale pre-action statuses that
-                            //      gcloud may return before the start/stop
-                            //      request propagates).
-                            //   2. otherwise the polled live status if any.
-                            //   3. optimistic STARTING/STOPPING placeholder.
-                            //   4. cache snapshot value.
-                            let displayStatus: string;
-                            if (pending) {
-                              if (live && isLiveStatusOnPath(live, pending)) {
-                                displayStatus = live;
-                              } else {
-                                displayStatus = pending === 'starting' ? 'STARTING' : 'STOPPING';
-                              }
-                            } else if (live) {
-                              displayStatus = live;
-                            } else {
-                              displayStatus = inst.status;
-                            }
+                            // A tracked action's status wins while it is in
+                            // flight (it is fresher than the cache and already
+                            // filtered to forward progress by the backend);
+                            // otherwise show the cached status.
+                            const inFlight = vmActions.get(key);
+                            const displayStatus = inFlight?.status ?? inst.status;
                             const transitional =
-                              pending !== undefined || isTransitional(displayStatus);
+                              inFlight !== undefined || isTransitional(displayStatus);
                             const isRunning = displayStatus.toUpperCase() === 'RUNNING';
                             const vmError = vmErrors.get(key);
                             const rowClass =
@@ -864,5 +778,3 @@ export function GcpInstancesPane({
 }
 
 export type { VmSelection };
-// Re-exported for unit tests; the timer constants are used internally above.
-export { STATUS_INITIAL_DELAY_MS, STATUS_POLL_INTERVAL_MS };

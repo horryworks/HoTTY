@@ -39,6 +39,15 @@ pub const WAIT_RUNNING_TIMEOUT_SECS: u64 = 240;
 /// Polling cadence while waiting for the VM to reach RUNNING.
 const STATUS_POLL_INTERVAL_SECS: u64 = 3;
 
+/// Delay before the first describe of a tracked Start/Stop. Gives the gcloud
+/// request a moment to propagate so the first poll isn't just the pre-action
+/// status (which would immediately clobber the optimistic label).
+const VM_ACTION_INITIAL_DELAY_MS: u64 = 1500;
+
+/// Safety cap on a tracked Start/Stop. Once it fires the tracker publishes
+/// whatever status it last observed and releases the VM.
+const VM_ACTION_MAX_SECS: u64 = 300;
+
 /// After receiving an `Unknown(...)` status this many cycles in a row, give up.
 const UNKNOWN_STATUS_TOLERANCE: u32 = 3;
 
@@ -1375,6 +1384,112 @@ pub struct GcloudCacheSnapshot {
     pub refresh_in_progress: bool,
 }
 
+// ---------------------------------------------------------------------------
+// Tracked VM Start/Stop
+//
+// The GCP pane used to run this loop itself, but it lives inside SessionDialog
+// and unmounts on every sidebar-tab switch and dialog close — which aborted the
+// poll and left the (authoritative, persisted) cache holding the pre-action
+// status. Owning the lifecycle here means a Start survives the dialog closing,
+// the result is persisted, and every window sees the transition.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VmAction {
+    Starting,
+    Stopping,
+}
+
+impl VmAction {
+    /// Placeholder shown between the click and the first accepted poll. Not a
+    /// real GCE status — it is never written into the discovery cache.
+    fn optimistic_status(self) -> &'static str {
+        match self {
+            Self::Starting => "STARTING",
+            Self::Stopping => "STOPPING",
+        }
+    }
+}
+
+/// One in-flight (or just-settled) Start/Stop. Doubles as the `gcp-vm-action`
+/// event payload and as the entry returned by `gce_iap_list_vm_actions`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VmActionState {
+    pub project: String,
+    pub zone: String,
+    pub instance: String,
+    /// `None` on the final event — the action has settled and the VM is released.
+    pub action: Option<VmAction>,
+    /// Best-known status: the optimistic placeholder until a poll shows forward
+    /// progress, then the status gcloud actually reported.
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Whether a freshly-polled status represents forward progress toward `action`'s
+/// goal. A poll that lands before the Start/Stop propagates to GCP can return
+/// the pre-action status (TERMINATED while starting, RUNNING while stopping);
+/// publishing that would visibly bounce the row backwards, so it is dropped and
+/// the optimistic label stays up until the API actually reflects the action.
+pub(crate) fn is_status_on_path(live: &InstanceStatus, action: VmAction) -> bool {
+    match action {
+        VmAction::Starting => matches!(
+            live,
+            InstanceStatus::Provisioning
+                | InstanceStatus::Staging
+                | InstanceStatus::Repairing
+                | InstanceStatus::Running
+        ),
+        VmAction::Stopping => matches!(
+            live,
+            InstanceStatus::Stopping
+                | InstanceStatus::Suspending
+                | InstanceStatus::Terminated
+                | InstanceStatus::Suspended
+        ),
+    }
+}
+
+/// Whether `live` is a resting state for `action` — the tracker stops here.
+/// Note `InstanceStatus::from_gcloud_str` already folds `STOPPED` into
+/// `Terminated`, so both spellings are covered.
+pub(crate) fn is_terminal_for(live: &InstanceStatus, action: VmAction) -> bool {
+    match action {
+        VmAction::Starting => matches!(live, InstanceStatus::Running),
+        VmAction::Stopping => {
+            matches!(live, InstanceStatus::Terminated | InstanceStatus::Suspended)
+        }
+    }
+}
+
+/// Registry key for an in-flight action.
+pub(crate) fn vm_action_key(project: &str, zone: &str, instance: &str) -> String {
+    format!("{project}/{zone}/{instance}")
+}
+
+/// The VM a tracker operates on, plus its registry key. Bundled so the tracker
+/// and its publish path don't thread four positional strings apiece.
+struct VmTarget {
+    key: String,
+    project: String,
+    zone: String,
+    instance: String,
+}
+
+impl VmTarget {
+    fn new(project: String, zone: String, instance: String) -> Self {
+        Self {
+            key: vm_action_key(&project, &zone, &instance),
+            project,
+            zone,
+            instance,
+        }
+    }
+}
+
 #[derive(serde::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct GcpRefreshProgressEvent {
@@ -1391,6 +1506,9 @@ pub struct GcloudCacheState {
     /// Where the snapshot is persisted between app launches. `None` until
     /// `set_persist_path` is called during startup.
     persist_path: RwLock<Option<PathBuf>>,
+    /// In-flight Start/Stop actions, keyed by `vm_action_key`. Entries are
+    /// removed when the tracker settles.
+    vm_actions: RwLock<HashMap<String, VmActionState>>,
 }
 
 impl Default for GcloudCacheState {
@@ -1404,6 +1522,7 @@ impl GcloudCacheState {
         Self {
             inner: RwLock::new(GcloudCacheSnapshot::default()),
             persist_path: RwLock::new(None),
+            vm_actions: RwLock::new(HashMap::new()),
         }
     }
 
@@ -1792,6 +1911,276 @@ impl GcloudCacheState {
         }
         emit_progress(&app, "done", None, total, total);
         let _ = app.emit("gcp-cache-updated", ());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GcloudCacheState — tracked VM Start/Stop
+// ---------------------------------------------------------------------------
+
+impl GcloudCacheState {
+    /// Every in-flight Start/Stop. The GCP pane calls this on mount to rehydrate
+    /// actions started before it was mounted (or before the dialog was reopened).
+    pub fn vm_actions(&self) -> Vec<VmActionState> {
+        match self.vm_actions.read() {
+            Ok(m) => m.values().cloned().collect(),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// Current cached status of one instance, if the discovery cache knows it.
+    fn cached_instance_status(&self, project: &str, zone: &str, instance: &str) -> Option<String> {
+        let g = self.inner.read().ok()?;
+        g.instances_by_project
+            .get(project)?
+            .iter()
+            .find(|i| i.name == instance && i.zone.as_deref().unwrap_or_default() == zone)
+            .map(|i| i.status.clone())
+    }
+
+    /// Patch one instance's status in the discovery cache. Returns whether
+    /// anything actually changed (so callers can skip a redundant disk write).
+    ///
+    /// Deliberately does NOT touch `last_refreshed_ms`: bumping it would make a
+    /// long-stale snapshot look fresh and suppress the pane's
+    /// stale-while-revalidate refresh on the next launch.
+    fn patch_instance_status(
+        &self,
+        project: &str,
+        zone: &str,
+        instance: &str,
+        status: &str,
+    ) -> bool {
+        let Ok(mut g) = self.inner.write() else {
+            return false;
+        };
+        let Some(list) = g.instances_by_project.get_mut(project) else {
+            return false;
+        };
+        // Match on zone as well as name — the same name can legally exist in
+        // two zones of one project.
+        let Some(target) = list
+            .iter_mut()
+            .find(|i| i.name == instance && i.zone.as_deref().unwrap_or_default() == zone)
+        else {
+            return false;
+        };
+        if target.status == status {
+            return false;
+        }
+        target.status = status.to_string();
+        true
+    }
+
+    /// Record a status observed outside a tracked action (e.g. the IAP connect
+    /// pre-flight auto-starting a stopped VM) into the discovery cache, and
+    /// persist it if it changed anything. Without this, connecting to a stopped
+    /// VM would boot it while the GCP pane still showed TERMINATED.
+    pub fn record_instance_status(
+        &self,
+        project: &str,
+        zone: &str,
+        instance: &str,
+        status: &str,
+    ) -> bool {
+        if self.patch_instance_status(project, zone, instance, status) {
+            self.persist_to_disk();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Record an observed status: update the in-flight registry (or release the
+    /// VM when `action` is `None`), patch + persist the discovery cache, and
+    /// broadcast `gcp-vm-action` to every window.
+    ///
+    /// The broadcast is intentional — unlike terminal sessions, the GCP cache is
+    /// process-global, so a Start in one window must move the row in all of them.
+    fn publish_vm_status(
+        &self,
+        app: &AppHandle,
+        target: &VmTarget,
+        action: Option<VmAction>,
+        status: &str,
+        error: Option<String>,
+    ) {
+        if let Ok(mut map) = self.vm_actions.write() {
+            match action {
+                Some(_) => {
+                    if let Some(entry) = map.get_mut(&target.key) {
+                        entry.status = status.to_string();
+                        entry.error.clone_from(&error);
+                    }
+                }
+                None => {
+                    map.remove(&target.key);
+                }
+            }
+        }
+        self.record_instance_status(&target.project, &target.zone, &target.instance, status);
+        let payload = VmActionState {
+            project: target.project.clone(),
+            zone: target.zone.clone(),
+            instance: target.instance.clone(),
+            action,
+            status: status.to_string(),
+            error,
+        };
+        if let Err(e) = app.emit("gcp-vm-action", payload) {
+            log::warn!("gcp-vm-action: emit failed for {}: {e}", target.key);
+        }
+    }
+
+    /// Start or stop `instance` and track it to a resting state in the
+    /// background. Returns as soon as the action is registered — progress,
+    /// completion, and failure all arrive via `gcp-vm-action`.
+    ///
+    /// Rejects a second action for a VM that already has one in flight rather
+    /// than racing two pollers (and two gcloud invocations) against it.
+    pub async fn run_vm_action(
+        self: &Arc<Self>,
+        app: AppHandle,
+        project: String,
+        zone: String,
+        instance: String,
+        action: VmAction,
+    ) -> Result<(), String> {
+        validate_target(&project, &zone, &instance)?;
+        let target = VmTarget::new(project, zone, instance);
+
+        let initial = VmActionState {
+            project: target.project.clone(),
+            zone: target.zone.clone(),
+            instance: target.instance.clone(),
+            action: Some(action),
+            status: action.optimistic_status().to_string(),
+            error: None,
+        };
+
+        {
+            let mut map = self
+                .vm_actions
+                .write()
+                .map_err(|_| "GCP VM action registry is poisoned".to_string())?;
+            if map.contains_key(&target.key) {
+                return Err(format!(
+                    "A start/stop is already in progress for '{}'.",
+                    target.instance
+                ));
+            }
+            map.insert(target.key.clone(), initial.clone());
+        }
+
+        if let Err(e) = app.emit("gcp-vm-action", initial) {
+            log::warn!("gcp-vm-action: initial emit failed for {}: {e}", target.key);
+        }
+        log::info!("gcp-vm-action: {action:?} registered for {}", target.key);
+
+        let this = Arc::clone(self);
+        tauri::async_runtime::spawn(async move {
+            this.track_vm_action(app, target, action).await;
+        });
+        Ok(())
+    }
+
+    /// Background half of `run_vm_action`: issue the gcloud command and poll
+    /// `describe` alongside it until the VM rests (or the safety cap fires).
+    async fn track_vm_action(self: Arc<Self>, app: AppHandle, target: VmTarget, action: VmAction) {
+        let VmTarget {
+            key,
+            project,
+            zone,
+            instance,
+        } = &target;
+        // Fire the gcloud command without awaiting it. `instances start` only
+        // returns once the VM is RUNNING, so waiting on it would leave the row
+        // frozen on the optimistic label for the whole boot; the poll loop below
+        // moves the UI as soon as GCP reports PROVISIONING/STAGING.
+        let (tx, mut rx) = tokio::sync::oneshot::channel::<Result<(), String>>();
+        {
+            let (p, z, i) = (project.clone(), zone.clone(), instance.clone());
+            tauri::async_runtime::spawn(async move {
+                let result = match action {
+                    VmAction::Starting => start_instance(&p, &z, &i).await,
+                    VmAction::Stopping => stop_instance(&p, &z, &i).await,
+                };
+                let _ = tx.send(result);
+            });
+        }
+
+        tokio::time::sleep(Duration::from_millis(VM_ACTION_INITIAL_DELAY_MS)).await;
+
+        let deadline = Instant::now() + Duration::from_secs(VM_ACTION_MAX_SECS);
+        let poll_interval = Duration::from_secs(STATUS_POLL_INTERVAL_SECS);
+        // Only ever holds a status gcloud actually reported — the optimistic
+        // placeholder must never reach the discovery cache.
+        let mut last_real_status: Option<String> = None;
+        let mut action_error: Option<String> = None;
+        let mut action_settled = false;
+
+        loop {
+            match get_instance_status(project, zone, instance).await {
+                Ok(status) => {
+                    if is_status_on_path(&status, action) {
+                        let s = status.as_str().to_string();
+                        if last_real_status.as_deref() != Some(s.as_str()) {
+                            self.publish_vm_status(&app, &target, Some(action), &s, None);
+                        }
+                        last_real_status = Some(s);
+                        if is_terminal_for(&status, action) {
+                            break;
+                        }
+                    }
+                }
+                Err(e) => {
+                    // Transient describe failures are non-fatal; the deadline
+                    // below is what ends a genuinely stuck action.
+                    log::debug!("gcp-vm-action[{key}]: describe failed, retrying: {e}");
+                }
+            }
+
+            // Harvest the gcloud result the moment it lands, without letting it
+            // hold up the poll cadence.
+            if !action_settled {
+                match rx.try_recv() {
+                    Ok(Ok(())) => action_settled = true,
+                    Ok(Err(e)) => {
+                        action_error = Some(e);
+                        break;
+                    }
+                    Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {}
+                    Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
+                        action_settled = true;
+                    }
+                }
+            }
+
+            if Instant::now() >= deadline {
+                log::warn!(
+                    "gcp-vm-action[{key}]: {action:?} did not rest within {VM_ACTION_MAX_SECS}s (last status: {last_real_status:?})"
+                );
+                break;
+            }
+            tokio::time::sleep(poll_interval).await;
+        }
+
+        if let Some(err) = &action_error {
+            log::warn!("gcp-vm-action[{key}]: {action:?} failed: {err}");
+            // Probe once more so the row doesn't keep showing the optimistic
+            // label for an action gcloud rejected outright.
+            if let Ok(status) = get_instance_status(project, zone, instance).await {
+                last_real_status = Some(status.as_str().to_string());
+            }
+        }
+
+        // Release the VM. Fall back to the cached status when no describe ever
+        // succeeded, so the final event still carries a real GCE status.
+        let final_status = last_real_status
+            .or_else(|| self.cached_instance_status(project, zone, instance))
+            .unwrap_or_else(|| action.optimistic_status().to_string());
+        self.publish_vm_status(&app, &target, None, &final_status, action_error);
+        log::info!("gcp-vm-action[{key}]: settled at {final_status}");
     }
 }
 
@@ -2798,6 +3187,225 @@ mod tests {
         let msg = map_rest_instances_error(401, "Unauthorized", "p");
         assert!(msg.contains("401"), "status surfaced for opaque bodies");
         assert!(msg.contains("Unauthorized"));
+    }
+
+    // -- Tracked VM Start/Stop --
+
+    /// A cache with one project holding `vm-a` in two zones, so zone-matching
+    /// can be exercised (the same instance name is legal in two zones).
+    fn cache_with_two_zones() -> GcloudCacheState {
+        let state = GcloudCacheState::new();
+        state.write_partial(|s| {
+            s.instances_by_project.insert(
+                "proj-a".to_string(),
+                vec![
+                    GceInstance {
+                        name: "vm-a".to_string(),
+                        status: "RUNNING".to_string(),
+                        zone: Some("us-central1-a".to_string()),
+                        access: None,
+                    },
+                    GceInstance {
+                        name: "vm-a".to_string(),
+                        status: "TERMINATED".to_string(),
+                        zone: Some("us-central1-b".to_string()),
+                        access: None,
+                    },
+                ],
+            );
+            s.last_refreshed_ms = Some(1_700_000_000_000);
+        });
+        state
+    }
+
+    #[test]
+    fn is_status_on_path_accepts_only_forward_progress() {
+        // Starting: the pre-action status (TERMINATED) must be rejected so a
+        // poll that beats the API's propagation can't bounce the row backwards.
+        for s in [
+            InstanceStatus::Provisioning,
+            InstanceStatus::Staging,
+            InstanceStatus::Repairing,
+            InstanceStatus::Running,
+        ] {
+            assert!(is_status_on_path(&s, VmAction::Starting), "{s:?}");
+        }
+        for s in [
+            InstanceStatus::Terminated,
+            InstanceStatus::Suspended,
+            InstanceStatus::Stopping,
+            InstanceStatus::Suspending,
+            InstanceStatus::Unknown("WEIRD".to_string()),
+        ] {
+            assert!(!is_status_on_path(&s, VmAction::Starting), "{s:?}");
+        }
+
+        // Stopping: the mirror image — RUNNING is the stale pre-action status.
+        for s in [
+            InstanceStatus::Stopping,
+            InstanceStatus::Suspending,
+            InstanceStatus::Terminated,
+            InstanceStatus::Suspended,
+        ] {
+            assert!(is_status_on_path(&s, VmAction::Stopping), "{s:?}");
+        }
+        for s in [
+            InstanceStatus::Running,
+            InstanceStatus::Provisioning,
+            InstanceStatus::Staging,
+            InstanceStatus::Repairing,
+            InstanceStatus::Unknown("WEIRD".to_string()),
+        ] {
+            assert!(!is_status_on_path(&s, VmAction::Stopping), "{s:?}");
+        }
+    }
+
+    #[test]
+    fn is_terminal_for_matches_the_resting_states() {
+        assert!(is_terminal_for(
+            &InstanceStatus::Running,
+            VmAction::Starting
+        ));
+        assert!(!is_terminal_for(
+            &InstanceStatus::Staging,
+            VmAction::Starting
+        ));
+
+        assert!(is_terminal_for(
+            &InstanceStatus::Terminated,
+            VmAction::Stopping
+        ));
+        assert!(is_terminal_for(
+            &InstanceStatus::Suspended,
+            VmAction::Stopping
+        ));
+        assert!(!is_terminal_for(
+            &InstanceStatus::Stopping,
+            VmAction::Stopping
+        ));
+
+        // gcloud's "STOPPED" spelling folds into Terminated, so it rests too.
+        assert!(is_terminal_for(
+            &InstanceStatus::from_gcloud_str("STOPPED"),
+            VmAction::Stopping
+        ));
+    }
+
+    #[test]
+    fn patch_instance_status_matches_on_zone_as_well_as_name() {
+        let state = cache_with_two_zones();
+        assert!(state.patch_instance_status("proj-a", "us-central1-b", "vm-a", "PROVISIONING"));
+
+        let snap = state.snapshot();
+        let list = &snap.instances_by_project["proj-a"];
+        assert_eq!(
+            list[0].status, "RUNNING",
+            "the us-central1-a twin is untouched"
+        );
+        assert_eq!(list[1].status, "PROVISIONING");
+    }
+
+    #[test]
+    fn patch_instance_status_reports_no_change_and_ignores_unknown_targets() {
+        let state = cache_with_two_zones();
+        // Same value → no write, so callers can skip a redundant disk flush.
+        assert!(!state.patch_instance_status("proj-a", "us-central1-a", "vm-a", "RUNNING"));
+        // Unknown project / zone / instance are all silent no-ops.
+        assert!(!state.patch_instance_status("nope", "us-central1-a", "vm-a", "TERMINATED"));
+        assert!(!state.patch_instance_status("proj-a", "europe-west1-b", "vm-a", "TERMINATED"));
+        assert!(!state.patch_instance_status("proj-a", "us-central1-a", "ghost", "TERMINATED"));
+    }
+
+    #[test]
+    fn patch_instance_status_leaves_last_refreshed_ms_alone() {
+        // Bumping it would make a long-stale snapshot look fresh and suppress
+        // the pane's stale-while-revalidate refresh on the next launch.
+        let state = cache_with_two_zones();
+        state.patch_instance_status("proj-a", "us-central1-a", "vm-a", "STOPPING");
+        assert_eq!(state.snapshot().last_refreshed_ms, Some(1_700_000_000_000));
+    }
+
+    #[test]
+    fn record_instance_status_without_a_persist_path_is_a_noop_that_still_patches() {
+        let state = cache_with_two_zones();
+        assert!(state.record_instance_status("proj-a", "us-central1-a", "vm-a", "STOPPING"));
+        assert_eq!(
+            state.snapshot().instances_by_project["proj-a"][0].status,
+            "STOPPING"
+        );
+    }
+
+    /// Claim a VM the way `run_vm_action` does, minus the AppHandle. Mirrors the
+    /// registry half of the real thing so the mutual exclusion has coverage
+    /// without a Tauri app.
+    fn try_claim(state: &GcloudCacheState, key: &str, action: VmAction) -> bool {
+        let mut map = state.vm_actions.write().unwrap();
+        if map.contains_key(key) {
+            return false;
+        }
+        map.insert(
+            key.to_string(),
+            VmActionState {
+                project: "proj-a".to_string(),
+                zone: "us-central1-a".to_string(),
+                instance: "vm-a".to_string(),
+                action: Some(action),
+                status: action.optimistic_status().to_string(),
+                error: None,
+            },
+        );
+        true
+    }
+
+    #[test]
+    fn vm_action_registry_rejects_a_second_claim_until_released() {
+        let state = GcloudCacheState::new();
+        let key = vm_action_key("proj-a", "us-central1-a", "vm-a");
+        assert!(try_claim(&state, &key, VmAction::Starting));
+        // Double-clicking Start must not race two pollers (and two gcloud
+        // invocations) against the same VM.
+        assert!(!try_claim(&state, &key, VmAction::Stopping));
+
+        let listed = state.vm_actions();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].action, Some(VmAction::Starting));
+        assert_eq!(listed[0].status, "STARTING");
+
+        state.vm_actions.write().unwrap().remove(&key);
+        assert!(state.vm_actions().is_empty());
+        assert!(try_claim(&state, &key, VmAction::Stopping));
+    }
+
+    #[test]
+    fn vm_action_key_is_distinct_per_zone() {
+        assert_ne!(
+            vm_action_key("p", "us-central1-a", "vm"),
+            vm_action_key("p", "us-central1-b", "vm")
+        );
+    }
+
+    #[test]
+    fn cached_instance_status_backs_the_settled_events_fallback() {
+        let state = cache_with_two_zones();
+        assert_eq!(
+            state
+                .cached_instance_status("proj-a", "us-central1-b", "vm-a")
+                .as_deref(),
+            Some("TERMINATED")
+        );
+        // Unknown targets fall through, so the tracker's last-resort
+        // `optimistic_status()` placeholder can only ever apply to a VM the
+        // discovery cache doesn't hold — where patching is a no-op anyway and
+        // the placeholder therefore never lands in the cache.
+        assert!(state
+            .cached_instance_status("proj-a", "europe-west1-b", "vm-a")
+            .is_none());
+        assert!(state
+            .cached_instance_status("nope", "us-central1-a", "vm-a")
+            .is_none());
+        assert!(state
+            .cached_instance_status("proj-a", "us-central1-a", "ghost")
+            .is_none());
     }
 
     // -- Disk persistence round-trip --
