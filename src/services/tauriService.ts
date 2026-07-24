@@ -582,6 +582,12 @@ export const tauriService = {
     return invoke<GcloudAuthStatus>('gce_iap_check_auth');
   },
 
+  /** Launch `gcloud auth login` (browser OAuth). Fire-and-forget; the user
+   *  completes login in the browser, then refreshes the GCP pane. */
+  async gceIapRunAuthLogin(): Promise<void> {
+    return invoke<void>('gce_iap_run_auth_login');
+  },
+
   async gceIapListProjects(): Promise<GcpProject[]> {
     return invoke<GcpProject[]>('gce_iap_list_projects');
   },

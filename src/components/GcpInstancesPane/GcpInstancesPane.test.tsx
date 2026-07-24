@@ -21,6 +21,7 @@ const gceIapRefreshCache = vi.fn(() => Promise.resolve(currentSnapshot));
 const gceIapStartInstance = vi.fn().mockResolvedValue(undefined);
 const gceIapStopInstance = vi.fn().mockResolvedValue(undefined);
 const gceIapListVmActions = vi.fn(() => Promise.resolve(currentVmActions));
+const gceIapRunAuthLogin = vi.fn().mockResolvedValue(undefined);
 
 let emitProgress: ((p: GcpRefreshProgress) => void) | null = null;
 let emitUpdated: (() => void) | null = null;
@@ -35,6 +36,7 @@ vi.mock('../../services/tauriService', () => ({
     gceIapStopInstance: (p: string, z: string, i: string) =>
       gceIapStopInstance(p, z, i),
     gceIapListVmActions: () => gceIapListVmActions(),
+    gceIapRunAuthLogin: () => gceIapRunAuthLogin(),
     onGcpRefreshProgress: (cb: (p: GcpRefreshProgress) => void) => {
       emitProgress = cb;
       return Promise.resolve(() => {
@@ -120,6 +122,8 @@ describe('GcpInstancesPane', () => {
     gceIapStopInstance.mockClear();
     gceIapStopInstance.mockResolvedValue(undefined);
     gceIapListVmActions.mockClear();
+    gceIapRunAuthLogin.mockClear();
+    gceIapRunAuthLogin.mockResolvedValue(undefined);
     currentVmActions = [];
     emitProgress = null;
     emitUpdated = null;
@@ -279,7 +283,7 @@ describe('GcpInstancesPane', () => {
     });
   });
 
-  it('shows the "not authenticated" hint when auth.authenticated is false', async () => {
+  it('shows the "not authenticated" hint and a re-login button when auth.authenticated is false', async () => {
     setSnapshot({
       gcloud: { available: true },
       auth: { authenticated: false },
@@ -290,9 +294,74 @@ describe('GcpInstancesPane', () => {
       refreshInProgress: false,
     });
     render(<GcpInstancesPane />);
+    // The status appears both in the header subtitle and the body prompt.
     await waitFor(() =>
-      expect(screen.getByText(/Not authenticated/)).toBeTruthy(),
+      expect(screen.getAllByText(/Not authenticated/).length).toBeGreaterThan(0),
     );
+    expect(screen.getByRole('button', { name: 'Run gcloud auth login' })).toBeTruthy();
+  });
+
+  it('shows the credentials-expired prompt + re-login button when needsReauth is set (token refresh failed)', async () => {
+    setSnapshot({
+      gcloud: { available: true, version: '456.0.0' },
+      // auth.authenticated stays true — `gcloud auth list` still shows the
+      // account — but the refresh could not mint a token.
+      auth: { authenticated: true, account: 'user@example.com' },
+      projects: [],
+      instancesByProject: {},
+      projectErrors: {},
+      refreshError: 'There was a problem refreshing your current auth token',
+      needsReauth: true,
+      lastRefreshedMs: Date.now(),
+      refreshInProgress: false,
+    });
+    render(<GcpInstancesPane />);
+    await waitFor(() =>
+      expect(screen.getAllByText(/credentials have expired/).length).toBeGreaterThan(0),
+    );
+    expect(screen.getByRole('button', { name: 'Run gcloud auth login' })).toBeTruthy();
+    // Not the misleading "No projects found." message.
+    expect(screen.queryByText('No projects found.')).toBeNull();
+  });
+
+  it('clicking "Run gcloud auth login" launches the OAuth flow and shows the follow-up hint', async () => {
+    setSnapshot({
+      gcloud: { available: true, version: '456.0.0' },
+      auth: { authenticated: true, account: 'user@example.com' },
+      projects: [],
+      instancesByProject: {},
+      projectErrors: {},
+      refreshError: 'There was a problem refreshing your current auth token',
+      needsReauth: true,
+      lastRefreshedMs: Date.now(),
+      refreshInProgress: false,
+    });
+    render(<GcpInstancesPane />);
+    const btn = await screen.findByRole('button', { name: 'Run gcloud auth login' });
+    fireEvent.click(btn);
+    await waitFor(() => expect(gceIapRunAuthLogin).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByText(/Complete the login in your browser/)).toBeTruthy(),
+    );
+  });
+
+  it('shows a generic refresh-failure message (no re-login button) for a non-reauth error', async () => {
+    setSnapshot({
+      gcloud: { available: true, version: '456.0.0' },
+      auth: { authenticated: true, account: 'user@example.com' },
+      projects: [],
+      instancesByProject: {},
+      projectErrors: {},
+      refreshError: 'API rate limit exceeded',
+      needsReauth: false,
+      lastRefreshedMs: Date.now(),
+      refreshInProgress: false,
+    });
+    render(<GcpInstancesPane />);
+    await waitFor(() =>
+      expect(screen.getByText(/Could not load GCP data: API rate limit exceeded/)).toBeTruthy(),
+    );
+    expect(screen.queryByRole('button', { name: 'Run gcloud auth login' })).toBeNull();
   });
 
   it('updates UI when a cache-updated event fires after refresh', async () => {

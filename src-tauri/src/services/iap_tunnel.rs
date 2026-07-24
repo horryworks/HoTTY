@@ -392,8 +392,82 @@ pub async fn check_auth() -> GcloudAuthStatus {
     }
 }
 
-/// List GCP projects accessible to the authenticated user.
+/// Launch `gcloud auth login` (browser OAuth) for the user. Fire-and-forget: the
+/// child keeps running after this returns — the user completes login in the
+/// browser, then clicks ↻ in the GCP pane to refresh. Intentionally does NOT use
+/// `run_gcloud`, which `.output()`s under a timeout and would kill the interactive
+/// flow.
+pub async fn run_auth_login() -> Result<(), String> {
+    let (program, _use_shell) = gcloud_program();
+    let mut cmd = Command::new(&program);
+    // `--quiet` takes the default for any confirmation prompt (there is no
+    // console/stdin here to answer one); gcloud still auto-launches the browser.
+    cmd.args(["auth", "login", "--quiet"]);
+
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    // Same sanitized-env policy as run_gcloud, so gcloud finds its bundled python
+    // and reads/writes %APPDATA%\gcloud (where the refreshed credentials land).
+    cmd.env_clear();
+    for (k, v) in sanitized_env() {
+        cmd.env(k, v);
+    }
+
+    // Spawn detached: do not await, and do not set kill_on_drop, so the OAuth
+    // flow outlives this call. Dropping the Child leaves the process running.
+    match cmd.spawn() {
+        Ok(_child) => {
+            log::info!("gcp-cache: launched `gcloud auth login`");
+            Ok(())
+        }
+        Err(e) => {
+            log::warn!("gcp-cache: failed to launch `gcloud auth login`: {e}");
+            Err(format!("Failed to launch gcloud auth login: {e}"))
+        }
+    }
+}
+
+/// Heuristic: does this gcloud error text indicate expired/revoked credentials
+/// (fixable by re-running `gcloud auth login`) rather than e.g. a permission or
+/// API-not-enabled error? Used to decide whether the GCP pane should prompt the
+/// user to re-authenticate.
+fn is_reauth_error(msg: &str) -> bool {
+    let m = msg.to_ascii_lowercase();
+    m.contains("problem refreshing")       // "There was a problem refreshing your current auth token"
+        || m.contains("gcloud auth login") // gcloud's own remediation hint
+        || m.contains("invalid_grant")     // OAuth refresh token revoked/expired
+        || m.contains("reauthentication")  // SSO reauth required
+        || m.contains("valid credentials") // "do/does not have valid credentials"
+}
+
+/// Cap a gcloud error message stored on the snapshot so a multi-line stderr
+/// block doesn't bloat the persisted cache (mirrors the `project_errors` preview).
+fn truncate_error(msg: &str) -> String {
+    const MAX: usize = 300;
+    if msg.chars().count() > MAX {
+        msg.chars().take(MAX).collect::<String>() + "…"
+    } else {
+        msg.to_string()
+    }
+}
+
+/// List GCP projects accessible to the authenticated user. Swallows errors into
+/// an empty list (used by the `gce_iap_list_projects` command). The cache
+/// refresh path calls `list_projects_result` instead so it can surface failures.
 pub async fn list_projects() -> Vec<GcpProject> {
+    list_projects_result().await.unwrap_or_else(|e| {
+        log::warn!("Failed to list GCP projects: {e}");
+        Vec::new()
+    })
+}
+
+/// Like `list_projects`, but propagates the gcloud error so callers can tell an
+/// auth-refresh failure apart from a genuinely empty project list.
+async fn list_projects_result() -> Result<Vec<GcpProject>, String> {
     let args = [
         "projects",
         "list",
@@ -401,28 +475,21 @@ pub async fn list_projects() -> Vec<GcpProject> {
         "--limit=100",
         "--sort-by=projectId",
     ];
-    match run_gcloud(&args).await {
-        Ok(output) => {
-            let entries: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap_or_default();
-            entries
-                .iter()
-                .filter_map(|e| {
-                    let id = e.get("projectId")?.as_str()?.to_string();
-                    let name = e
-                        .get("name")
-                        .and_then(|n| n.as_str())
-                        .unwrap_or(id.as_str())
-                        .to_string();
-                    Some(GcpProject { id, name })
-                })
-                .take(MAX_PROJECTS)
-                .collect()
-        }
-        Err(e) => {
-            log::warn!("Failed to list GCP projects: {e}");
-            Vec::new()
-        }
-    }
+    let output = run_gcloud(&args).await?;
+    let entries: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap_or_default();
+    Ok(entries
+        .iter()
+        .filter_map(|e| {
+            let id = e.get("projectId")?.as_str()?.to_string();
+            let name = e
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or(id.as_str())
+                .to_string();
+            Some(GcpProject { id, name })
+        })
+        .take(MAX_PROJECTS)
+        .collect())
 }
 
 // ---------------------------------------------------------------------------
@@ -1382,6 +1449,16 @@ pub struct GcloudCacheSnapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_refreshed_ms: Option<u64>,
     pub refresh_in_progress: bool,
+    /// Human-readable reason the last refresh could not retrieve projects
+    /// (e.g. expired credentials). `None` when the last refresh succeeded.
+    /// This is the authoritative "can we actually use the token" signal —
+    /// `auth.authenticated` only reflects that `gcloud auth list` shows an
+    /// ACTIVE account, which stays true even when the refresh token is dead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refresh_error: Option<String>,
+    /// True when `refresh_error` is a credential/refresh-token problem that
+    /// re-running `gcloud auth login` would fix (vs. a permission/API error).
+    pub needs_reauth: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -1652,6 +1729,8 @@ impl GcloudCacheState {
                 s.instances_by_project.clear();
                 s.project_errors.clear();
                 s.project_access.clear();
+                s.refresh_error = None;
+                s.needs_reauth = false;
                 s.last_refreshed_ms = now_ms();
                 s.refresh_in_progress = false;
             });
@@ -1668,11 +1747,19 @@ impl GcloudCacheState {
         // refresh if the token can't be obtained or Resource Manager rejects it
         // (e.g. reduced-scope auth) — the CLI mints its own scoped token, so
         // behaviour stays identical.
+        // Tracks why the refresh could not retrieve projects, if at all. A token
+        // fetch failure alone is only a *candidate* reason (the CLI backend may
+        // still succeed with its own scoped token); it is promoted to the real
+        // reason only if the subsequent projects.list also fails. `(message,
+        // needs_reauth)`.
+        let mut refresh_failure: Option<(String, bool)> = None;
+
         let http_client = reqwest::Client::new();
         let token: Option<String> = match fetch_access_token().await {
             Ok(t) => Some(t),
             Err(e) => {
                 log::warn!("gcp-cache: access-token fetch failed ({e}); using gcloud CLI backend");
+                refresh_failure = Some((e.clone(), is_reauth_error(&e)));
                 None
             }
         };
@@ -1680,16 +1767,42 @@ impl GcloudCacheState {
             Some(tok) => match list_projects_rest(&http_client, tok).await {
                 Ok(p) => {
                     log::info!("gcp-cache: REST backend active ({} projects)", p.len());
+                    refresh_failure = None;
                     (p, true)
                 }
                 Err(e) => {
                     log::warn!(
                         "gcp-cache: REST projects.list failed ({e}); falling back to gcloud CLI"
                     );
-                    (list_projects().await, false)
+                    match list_projects_result().await {
+                        Ok(p) => {
+                            refresh_failure = None;
+                            (p, false)
+                        }
+                        Err(e2) => {
+                            let reauth = is_reauth_error(&e2) || is_reauth_error(&e);
+                            refresh_failure = Some((truncate_error(&e2), reauth));
+                            (Vec::new(), false)
+                        }
+                    }
                 }
             },
-            None => (list_projects().await, false),
+            None => match list_projects_result().await {
+                // The CLI mints its own scoped token, so it can succeed even when
+                // `print-access-token` failed — clear the candidate reason.
+                Ok(p) => {
+                    refresh_failure = None;
+                    (p, false)
+                }
+                Err(e2) => {
+                    // Prefer the projects.list message (more actionable), but keep
+                    // the re-auth flag if either the token or list error implied it.
+                    let prior_reauth = refresh_failure.as_ref().map(|(_, r)| *r).unwrap_or(false);
+                    let reauth = is_reauth_error(&e2) || prior_reauth;
+                    refresh_failure = Some((truncate_error(&e2), reauth));
+                    (Vec::new(), false)
+                }
+            },
         };
         let total = projects.len() as u32;
         log::info!(
@@ -1706,6 +1819,8 @@ impl GcloudCacheState {
             s.instances_by_project.clear();
             s.project_errors.clear();
             s.project_access.clear();
+            s.refresh_error = None;
+            s.needs_reauth = false;
         });
 
         // Fan out per-project work with bounded concurrency. Each task probes
@@ -1890,6 +2005,8 @@ impl GcloudCacheState {
         }
 
         self.write_partial(|s| {
+            s.refresh_error = refresh_failure.as_ref().map(|(m, _)| m.clone());
+            s.needs_reauth = refresh_failure.as_ref().map(|(_, r)| *r).unwrap_or(false);
             s.last_refreshed_ms = now_ms();
             s.refresh_in_progress = false;
         });
@@ -1898,12 +2015,14 @@ impl GcloudCacheState {
         self.persist_to_disk();
         let snap = self.snapshot();
         log::info!(
-            "gcp-cache: refresh done elapsed={:?} projects={} with_instances={} errors={} probed={}",
+            "gcp-cache: refresh done elapsed={:?} projects={} with_instances={} errors={} probed={} reauth={} refresh_error={:?}",
             refresh_started.elapsed(),
             snap.projects.len(),
             snap.instances_by_project.len(),
             snap.project_errors.len(),
-            snap.project_access.len()
+            snap.project_access.len(),
+            snap.needs_reauth,
+            snap.refresh_error.as_deref().map(|e| e.chars().take(120).collect::<String>())
         );
         for (pid, msg) in &snap.project_errors {
             let preview: String = msg.chars().take(240).collect();
@@ -2364,6 +2483,82 @@ mod tests {
         let json = serde_json::to_value(&project).unwrap();
         assert_eq!(json["id"], "my-project-123");
         assert_eq!(json["name"], "My Project");
+    }
+
+    // -- is_reauth_error tests --
+
+    #[test]
+    fn is_reauth_error_detects_expired_refresh_token() {
+        // The exact stderr observed when the refresh token is dead.
+        let raw = "gcloud error: ERROR: (gcloud.auth.print-access-token) There was a \
+                   problem refreshing your current auth token: invalid_grant";
+        assert!(is_reauth_error(raw));
+        // gcloud's own remediation block.
+        assert!(is_reauth_error("Please run:\n\n  $ gcloud auth login\n"));
+        // projects.list variant.
+        assert!(is_reauth_error(
+            "ERROR: (gcloud.projects.list) There was a problem refreshing your current auth token"
+        ));
+        // SSO reauthentication requirement.
+        assert!(is_reauth_error("Reauthentication required"));
+    }
+
+    #[test]
+    fn is_reauth_error_ignores_non_auth_errors() {
+        // A permission error is NOT a re-auth situation.
+        assert!(!is_reauth_error(
+            "ERROR: PERMISSION_DENIED: Required 'resourcemanager.projects.list' permission"
+        ));
+        // API-not-enabled is not re-auth either.
+        assert!(!is_reauth_error(
+            "Compute Engine API has not been used in project 123 before or it is disabled"
+        ));
+        assert!(!is_reauth_error("gcloud command timed out"));
+    }
+
+    #[test]
+    fn truncate_error_caps_long_messages() {
+        let short = "boom";
+        assert_eq!(truncate_error(short), "boom");
+        let long: String = "x".repeat(500);
+        let capped = truncate_error(&long);
+        // 300 chars + ellipsis.
+        assert_eq!(capped.chars().count(), 301);
+        assert!(capped.ends_with('…'));
+    }
+
+    // -- refresh_error / needs_reauth snapshot tests --
+
+    #[test]
+    fn snapshot_defaults_have_no_refresh_error() {
+        let snap = GcloudCacheState::new().snapshot();
+        assert!(snap.refresh_error.is_none());
+        assert!(!snap.needs_reauth);
+    }
+
+    #[test]
+    fn snapshot_omits_refresh_error_when_none_but_keeps_needs_reauth() {
+        let snap = GcloudCacheSnapshot::default();
+        let json = serde_json::to_value(&snap).unwrap();
+        // Option field is skipped when None...
+        assert!(json.get("refreshError").is_none());
+        // ...but the bool is always present (defaults false).
+        assert_eq!(json["needsReauth"], false);
+    }
+
+    #[test]
+    fn snapshot_roundtrips_reauth_fields_camelcase() {
+        let mut snap = GcloudCacheSnapshot::default();
+        snap.refresh_error = Some("There was a problem refreshing".to_string());
+        snap.needs_reauth = true;
+        let json = serde_json::to_value(&snap).unwrap();
+        assert_eq!(json["refreshError"], "There was a problem refreshing");
+        assert_eq!(json["needsReauth"], true);
+        // Legacy snapshots without the new fields still deserialize (serde default).
+        let legacy: GcloudCacheSnapshot =
+            serde_json::from_str(r#"{"projects":[],"refreshInProgress":false}"#).unwrap();
+        assert!(legacy.refresh_error.is_none());
+        assert!(!legacy.needs_reauth);
     }
 
     // -- map_list_instances_error tests --

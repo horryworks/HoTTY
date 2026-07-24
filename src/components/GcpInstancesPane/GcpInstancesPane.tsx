@@ -117,6 +117,9 @@ export function GcpInstancesPane({
   );
   const [vmErrors, setVmErrors] = useState<Map<string, string>>(() => new Map());
   const [error, setError] = useState<string | null>(null);
+  /** True once the user clicked "Run gcloud auth login" — swaps the button for a
+   *  "complete in browser, then refresh" hint. Reset when a refresh starts. */
+  const [authLoginLaunched, setAuthLoginLaunched] = useState(false);
   /** Stop-confirmation dialog: opened with the target VM, closed on confirm/cancel. */
   const [stopConfirmOpen, openStopConfirm, closeStopConfirm, stopTarget] =
     useModalState<VmSelection>();
@@ -228,8 +231,21 @@ export function GcpInstancesPane({
   const handleRefresh = useCallback(() => {
     if (snapshot.refreshInProgress) return;
     setError(null);
+    setAuthLoginLaunched(false);
     refreshAndStore();
   }, [snapshot.refreshInProgress, refreshAndStore]);
+
+  /** Launch `gcloud auth login` (browser OAuth). Fire-and-forget on the backend;
+   *  the user completes login in the browser, then clicks ↻ to refresh. */
+  const handleRunAuthLogin = useCallback(async () => {
+    setError(null);
+    try {
+      await tauriService.gceIapRunAuthLogin();
+      setAuthLoginLaunched(true);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, []);
 
   const handleSelect = useCallback(
     (sel: VmSelection) => {
@@ -427,6 +443,13 @@ export function GcpInstancesPane({
   const isUnauthenticated = Boolean(snapshot.auth && !snapshot.auth.authenticated);
   const isGcloudMissing = Boolean(snapshot.gcloud && !snapshot.gcloud.available);
   const hasCacheData = snapshot.lastRefreshedMs !== undefined;
+  /** True when the last refresh failed because the token could not be refreshed
+   *  (expired/revoked creds). `auth.authenticated` can still be true here since
+   *  it only reflects that `gcloud auth list` shows an ACTIVE account. */
+  const needsReauth = Boolean(snapshot.needsReauth);
+  const refreshError = snapshot.refreshError ?? null;
+  /** Show the re-auth prompt for both "never authenticated" and "token expired". */
+  const showReauthPrompt = isUnauthenticated || needsReauth;
 
   const isRefreshing = snapshot.refreshInProgress || (progress !== null && progress.stage !== 'done');
 
@@ -517,6 +540,7 @@ export function GcpInstancesPane({
     }
     if (isGcloudMissing) return t('panes.gcpInstances.gcloudMissing');
     if (isUnauthenticated) return t('panes.gcpInstances.notAuthenticated');
+    if (needsReauth) return t('panes.gcpInstances.credentialsExpired');
     if (snapshot.auth?.authenticated && snapshot.auth.account)
       return t('panes.gcpInstances.accountAndRefresh', {
         account: snapshot.auth.account,
@@ -533,9 +557,33 @@ export function GcpInstancesPane({
     progress,
     isGcloudMissing,
     isUnauthenticated,
+    needsReauth,
     hasCacheData,
     t,
   ]);
+
+  /** Actionable re-auth prompt: message + a one-click "Run gcloud auth login"
+   *  button, shown for both the never-authenticated and token-expired cases. */
+  const reauthNotice = (
+    <div className="gcp-reauth">
+      <div className="gcp-reauth-msg">
+        {needsReauth
+          ? t('panes.gcpInstances.credentialsExpired')
+          : t('panes.gcpInstances.notAuthenticated')}
+      </div>
+      <button
+        type="button"
+        className="gcp-reauth-btn"
+        onClick={handleRunAuthLogin}
+        disabled={authLoginLaunched}
+      >
+        {t('panes.gcpInstances.runAuthLoginButton')}
+      </button>
+      {authLoginLaunched && (
+        <div className="gcp-reauth-hint">{t('panes.gcpInstances.authLoginLaunched')}</div>
+      )}
+    </div>
+  );
 
   return (
     <div className="gcp-instances-pane">
@@ -620,9 +668,11 @@ export function GcpInstancesPane({
               ? t('panes.gcpInstances.loading')
               : isGcloudMissing
                 ? t('panes.gcpInstances.installGcloud')
-                : isUnauthenticated
-                  ? t('panes.gcpInstances.runAuthLogin')
-                  : t('panes.gcpInstances.noProjects')}
+                : showReauthPrompt
+                  ? reauthNotice
+                  : refreshError
+                    ? t('panes.gcpInstances.refreshFailed', { error: refreshError })
+                    : t('panes.gcpInstances.noProjects')}
           </div>
         ) : visibleProjects.length === 0 && trimmedQuery !== '' ? (
           <div className="gcp-empty">{t('panes.gcpInstances.noMatches', { query: trimmedQuery })}</div>

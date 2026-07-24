@@ -22,6 +22,13 @@ pub async fn gce_iap_check_auth() -> Result<GcloudAuthStatus, String> {
     Ok(iap_tunnel::check_auth().await)
 }
 
+/// Launch `gcloud auth login` (browser OAuth) so the user can refresh expired
+/// credentials without leaving the app. Fire-and-forget; the user clicks ↻ after.
+#[tauri::command]
+pub async fn gce_iap_run_auth_login() -> Result<(), String> {
+    iap_tunnel::run_auth_login().await
+}
+
 /// List GCP projects accessible to the authenticated user.
 #[tauri::command]
 pub async fn gce_iap_list_projects() -> Result<Vec<GcpProject>, String> {

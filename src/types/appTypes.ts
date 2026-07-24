@@ -481,6 +481,15 @@ export interface GcloudCacheSnapshot {
   /** Milliseconds since the Unix epoch of the last successful full refresh. */
   lastRefreshedMs?: number;
   refreshInProgress: boolean;
+  /**
+   * Human-readable reason the last refresh could not retrieve projects (e.g.
+   * expired credentials). Absent when the last refresh succeeded. Authoritative
+   * "can we actually use the token" signal — `auth.authenticated` only reflects
+   * that `gcloud auth list` shows an ACTIVE account.
+   */
+  refreshError?: string | null;
+  /** True when `refreshError` is fixable by re-running `gcloud auth login`. */
+  needsReauth?: boolean;
 }
 
 export interface GcpRefreshProgress {

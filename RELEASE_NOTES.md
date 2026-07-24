@@ -1,5 +1,17 @@
 # Release Notes
 
+## v2.0.13-beta3
+
+**The GCP tab now tells you when your Google sign-in has expired — instead of just showing "No projects found."** If gcloud's saved credentials can no longer be refreshed (common on corporate accounts where the login expires or is revoked), the New Session → GCP tab now says so clearly and gives you a one-click **Run gcloud auth login** button to sign in again, rather than silently showing an empty project list.
+
+### Bug Fixes
+
+- **"No projects found" no longer hides an expired login.** When gcloud showed an active account but its token could no longer be refreshed, the GCP tab listed zero projects with no explanation — it looked like you were signed in but simply had none. HoTTY now detects the failed token refresh and shows **"Your gcloud credentials have expired."** with guidance to re-authenticate, so the real cause is obvious instead of misleading.
+
+### Improvements
+
+- **One-click re-login in the GCP tab.** Both when your credentials have expired and when you were never signed in, the GCP tab now shows a **Run gcloud auth login** button that launches the Google sign-in in your browser — no need to open a terminal yourself. Finish signing in, then click ↻ to load your projects. A genuine empty account still shows the plain "No projects found." message, and a non-credential refresh failure now explains why instead of showing an empty list.
+
 ## v2.0.13-beta2
 
 **The New Connection dialog now waits with you.** Starting a connection keeps the dialog open with a Connecting indicator instead of dropping you straight into an empty pane — and if it fails, the reason is shown right there so you can fix the details and retry (or Cancel) without losing what you typed. The terminal opens only once the session is actually connected.
