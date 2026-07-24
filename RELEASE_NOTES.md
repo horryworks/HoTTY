@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.13-beta5
+
+**Fixes the Google Cloud IAP `Permission denied (publickey)` that still hit corporate PCs whose Windows login is all-numeric.** On machines where the Windows/AD account is a bare number (e.g. `12345678`), HoTTY was rejecting that name as an SSH username *because it starts with a digit*, then falling back to a different, email-derived name that the VM had no key for. HoTTY now accepts digit-leading usernames, so it connects as exactly the account gcloud itself uses — which is what the VM's metadata SSH key is registered under.
+
+### Bug Fixes
+
+- **IAP connect no longer fails with `Permission denied (publickey)` when the Windows login is all-numeric.** gcloud reports the SSH account it will use (e.g. `12345678`) in its `--dry-run` output, but HoTTY discarded any username starting with a digit and substituted a name derived from your gcloud email — which the VM's metadata key isn't bound to, so the login was rejected. Digit-leading POSIX usernames are now valid, so HoTTY uses gcloud's own account name and matches the enrolled key. (The allowed character set is unchanged — a leading `-` is still rejected — so SSH-username injection safety is unaffected.)
+
 ## v2.0.13-beta4
 
 **Google Cloud IAP now connects on a brand-new PC without any manual setup — and shows you what it's doing while it works.** The first IAP connection from a machine that had never registered an SSH key used to fail with `Permission denied (publickey)`; HoTTY now enrolls the key into the VM (or project) metadata for you automatically on the first connect. While the ~30–45 second pre-flight runs, the New Session dialog shows a live, step-by-step indicator (Detecting SSH account → Registering SSH key → Starting IAP tunnel → Authenticating) on every tab, so the spinner no longer looks frozen.

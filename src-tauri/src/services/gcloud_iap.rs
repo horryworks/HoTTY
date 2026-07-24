@@ -63,13 +63,21 @@ fn default_encoding() -> String {
 /// all rejected rather than escaped. Applied both to the user-supplied override
 /// and to whatever we parse out of gcloud's `--dry-run` output, so a malformed
 /// gcloud line cannot inject an argv element.
+///
+/// The first character may be an ASCII digit: corporate Windows machines log in
+/// under an all-numeric AD id (e.g. `12345678`), and gcloud provisions the
+/// metadata SSH user under exactly that name. Rejecting it made HoTTY throw away
+/// gcloud's own `--dry-run` username and fall back to a wrong email-derived name,
+/// causing `Permission denied (publickey)` (observed 2026-07-24). A leading `-`
+/// is still rejected (it would read as an ssh flag) and the character *set*
+/// (a-z 0-9 _ -) is unchanged, so argv-injection safety is unaffected.
 pub(crate) fn is_valid_ssh_username(user: &str) -> bool {
     if user.is_empty() || user.len() > 32 {
         return false;
     }
     let mut chars = user.chars();
     let first = chars.next().unwrap_or('\0');
-    if !(first.is_ascii_lowercase() || first == '_') {
+    if !(first.is_ascii_lowercase() || first.is_ascii_digit() || first == '_') {
         return false;
     }
     chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
@@ -871,8 +879,9 @@ async fn active_account_email() -> Option<String> {
 /// SSH setup is typically named: the local-part, lowercased, with any character
 /// outside `[a-z0-9_-]` replaced by `_` (e.g. `Alice.Smith@example.com` →
 /// `alice_smith`). `None` when the result isn't a valid ssh username
-/// (e.g. it would start with a digit). Preferred over the raw OS login on a
-/// corporate machine whose login is an opaque AD id like `12345678`.
+/// (e.g. an empty local-part). A Tier-3 fallback only: when gcloud's `--dry-run`
+/// gives a username it is used verbatim instead (see `resolve_ssh_identity`),
+/// which is what the VM's metadata SSH key is actually provisioned under.
 fn username_from_email(email: &str) -> Option<String> {
     let local = email.split('@').next()?.to_ascii_lowercase();
     let mut name: String = local
@@ -2389,7 +2398,17 @@ mod tests {
 
     #[test]
     fn config_validate_accepts_posix_username() {
-        for ok in ["horry", "horryworks_gmail_com", "_svc", "a", "user-1"] {
+        // `12345678` / `1horry`: digit-leading corporate AD logins are valid — the
+        // account gcloud itself uses and the VM's metadata SSH key is bound to.
+        for ok in [
+            "horry",
+            "horryworks_gmail_com",
+            "_svc",
+            "a",
+            "user-1",
+            "12345678",
+            "1horry",
+        ] {
             assert!(
                 cfg_with_user(Some(ok)).validate().is_ok(),
                 "expected '{ok}' to validate"
@@ -2406,7 +2425,6 @@ mod tests {
             "x\ny",                                     // newline
             "-oProxyCommand",                           // leading dash reads as a flag
             "Horry",                                    // uppercase is not a POSIX login name
-            "1horry",                                   // must not start with a digit
             "us$er",                                    // shell metacharacter
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // 40 chars, over the cap
         ];
@@ -2423,6 +2441,21 @@ mod tests {
         assert!(is_valid_ssh_username(&"a".repeat(32)));
         assert!(!is_valid_ssh_username(&"a".repeat(33)));
         assert!(!is_valid_ssh_username(""));
+    }
+
+    #[test]
+    fn is_valid_ssh_username_accepts_digit_leading_ad_id() {
+        // The 2026-07-24 IAP regression: a corporate all-numeric AD login must be
+        // accepted so gcloud's own `--dry-run` username survives validation.
+        assert!(is_valid_ssh_username("12345678"));
+        assert!(is_valid_ssh_username("1a-b_c"));
+        assert!(is_valid_ssh_username("0"));
+        // A leading hyphen would read as an ssh flag — still rejected.
+        assert!(!is_valid_ssh_username("-danger"));
+        // An uppercase first char is still not a POSIX-ish login.
+        assert!(!is_valid_ssh_username("Horry"));
+        // The character set is unchanged: metacharacters stay rejected.
+        assert!(!is_valid_ssh_username("1;rm"));
     }
 
     // --- gcloud --dry-run delegation --------------------------------------
@@ -2513,6 +2546,25 @@ mod tests {
     }
 
     #[test]
+    fn parse_dry_run_extracts_numeric_user_from_real_putty_line() {
+        // Real shape observed 2026-07-24 on a corporate PC: gcloud with PuTTY
+        // installed prints ONE putty.exe command whose quoted `-proxycmd` holds
+        // the start-iap-tunnel call and whose final token is `<ad-id>@compute.<n>`.
+        // The login is all-numeric (`12345678`) and the key is the `.ppk` copy —
+        // the parser must recover the username (previously rejected as digit-
+        // leading, which caused the wrong email-derived fallback) and drop the
+        // PuTTY key so the OpenSSH key is used.
+        let line = concat!(
+            r#""C:\SDK\bin\sdk\putty.exe" -t -i C:\Users\12345678\.ssh\google_compute_engine.ppk "#,
+            r#"-proxycmd ""C:\SDK\python.exe" "-S" "C:\SDK\gcloud.py" compute start-iap-tunnel "dev-horry" "%port" --listen-on-stdin --project=p --zone=z --verbosity=warning" "#,
+            r#"12345678@compute.1234567890"#
+        );
+        let (user, key) = parse_dry_run_ssh_command(line).unwrap();
+        assert_eq!(user, "12345678");
+        assert_eq!(key, None, "PuTTY .ppk key must not be adopted");
+    }
+
+    #[test]
     fn parse_dry_run_keeps_openssh_key_without_extension() {
         // The counterpart to the .ppk case: an extensionless OpenSSH key is
         // exactly what we want to adopt.
@@ -2589,10 +2641,13 @@ mod tests {
     }
 
     #[test]
-    fn username_from_email_rejects_invalid_ssh_names() {
-        // Local part starting with a digit is not a valid POSIX login.
-        assert_eq!(username_from_email("1horry@example.com"), None);
-        // Empty local part.
+    fn username_from_email_handles_digit_leading_and_empty_local_parts() {
+        // A digit-leading local part is now valid (corporate all-numeric AD ids).
+        assert_eq!(
+            username_from_email("1horry@example.com").as_deref(),
+            Some("1horry")
+        );
+        // An empty local part still yields nothing to log in as.
         assert_eq!(username_from_email("@example.com"), None);
     }
 

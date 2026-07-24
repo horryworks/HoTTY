@@ -2439,7 +2439,7 @@ dependencies = [
 
 [[package]]
 name = "hotty"
-version = "2.0.13-beta4"
+version = "2.0.13-beta5"
 dependencies = [
  "aes-gcm 0.10.3",
  "argon2",
