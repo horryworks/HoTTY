@@ -135,8 +135,8 @@ describe('settingsStore', () => {
   });
 
   it('updates the GCP IAP username override', () => {
-    useSettingsStore.getState().update('gcpIapUsername', 'horry');
-    expect(useSettingsStore.getState().gcpIapUsername).toBe('horry');
+    useSettingsStore.getState().update('gcpIapUsername', 'alice');
+    expect(useSettingsStore.getState().gcpIapUsername).toBe('alice');
 
     useSettingsStore.getState().update('gcpIapUsername', '');
     expect(useSettingsStore.getState().gcpIapUsername).toBe('');

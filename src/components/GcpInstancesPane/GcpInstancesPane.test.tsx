@@ -641,20 +641,20 @@ describe('GcpInstancesPane — SSH user override', () => {
     const { container } = render(<GcpInstancesPane />);
     await waitFor(() => expect(gceIapGetCache).toHaveBeenCalled());
 
-    fireEvent.change(sshUserInput(container), { target: { value: 'horry' } });
+    fireEvent.change(sshUserInput(container), { target: { value: 'alice' } });
 
-    expect(useSettingsStore.getState().gcpIapUsername).toBe('horry');
+    expect(useSettingsStore.getState().gcpIapUsername).toBe('alice');
   });
 
   it('shows a value already in the setting, so it survives a remount', async () => {
-    useSettingsStore.getState().update('gcpIapUsername', 'horry');
+    useSettingsStore.getState().update('gcpIapUsername', 'alice');
     const { container } = render(<GcpInstancesPane />);
     await waitFor(() => expect(gceIapGetCache).toHaveBeenCalled());
-    expect(sshUserInput(container).value).toBe('horry');
+    expect(sshUserInput(container).value).toBe('alice');
   });
 
   it('clearing the field restores auto-detection rather than sending a blank name', async () => {
-    useSettingsStore.getState().update('gcpIapUsername', 'horry');
+    useSettingsStore.getState().update('gcpIapUsername', 'alice');
     const { container } = render(<GcpInstancesPane />);
     await waitFor(() => expect(gceIapGetCache).toHaveBeenCalled());
 

@@ -28,7 +28,13 @@ jobs:
       # (A local build must use plain `npm ci` — --ignore-scripts drops lightningcss's
       # native binary. See .npmrc.)
       - run: npm ci --ignore-scripts
-      - run: npm audit --audit-level=moderate
+      # The advisory gate is `audit:deps`, NOT `npm audit`. The registry's bulk
+      # endpoint intermittently returns a gzip body without `Content-Encoding`,
+      # which makes `npm audit` die on a JSON parse error unrelated to this repo;
+      # the script retries and decompresses defensively. It also applies
+      # audit-ignore.json (reviewed-and-accepted, expiry-enforced) and exits 2 —
+      # not 0 — when the audit cannot run, so a network fault can never pass as clean.
+      - run: npm run audit:deps
       - run: npm audit signatures
 
   cargo-deny:

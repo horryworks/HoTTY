@@ -10,27 +10,13 @@
     "core:default",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
-    "core:window:allow-set-size",
-    "core:window:allow-set-focus",
     "core:window:allow-set-title",
-    "core:menu:default",
+    "core:window:allow-close",
+    "core:window:allow-destroy",
     "dialog:allow-open",
     "dialog:allow-save",
     "dialog:allow-ask",
-    "core:window:allow-close",
-    "core:window:allow-destroy",
     "clipboard-manager:allow-read-text",
-    "clipboard-manager:allow-write-text",
-    {
-      "identifier": "opener:allow-open-url",
-      "allow": [
-        { "url": "https://github.com/*" },
-        { "url": "https://cloud.google.com/*" },
-        { "url": "https://www.gnu.org/*" },
-        { "url": "https://accounts.google.com/*" },
-        { "url": "mailto:*" }
-      ]
-    },
-    "log:default"
+    "clipboard-manager:allow-write-text"
   ]
 }

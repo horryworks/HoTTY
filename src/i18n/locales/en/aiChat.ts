@@ -39,8 +39,8 @@ export const aiChat = {
   pane: {
     modelListError: 'Failed to retrieve the AI model list. Please check your authentication and network connection.',
     dismiss: 'Dismiss',
-    newChat: 'New chat',
-    newChatTitle: 'Start a new chat',
+    clearConversation: 'Clear Conversation',
+    clearConversationTitle: 'Clear this conversation',
     linkPickerTitle: 'Link this chat to a terminal',
     linkNone: 'Not linked',
     linkTerminal: 'Link a terminal',
@@ -99,10 +99,10 @@ export const aiChat = {
     tokenInOut: '{{in}} in / {{out}} out tokens',
     tokenCost: '~{{cost}}',
     tokenToSend: '~{{tokens}} tokens to send',
-    // New chat confirm
-    newChatConfirmTitle: 'Start a new chat?',
-    newChatConfirmMessage: 'The current conversation will be cleared. This cannot be undone.',
-    newChatConfirmButton: 'Start new chat',
+    // Clear conversation confirm
+    clearConversationConfirmTitle: 'Clear this conversation?',
+    clearConversationConfirmMessage: 'The current conversation will be cleared. This cannot be undone.',
+    clearConversationConfirmButton: 'Clear conversation',
     modelNotSelected: 'AI model not selected. Open AI settings below the message box and choose one.',
     // Generic empty-state suggestions (shown when no terminal is linked)
     suggestionGenericCapabilities: 'What can you help me with?',
@@ -139,14 +139,16 @@ export const aiChat = {
     sleepWaitingCapped: '⏳ Waiting {{seconds}}s… (capped)',
     autoRunCountdown: '⏳ Auto-running in {{seconds}}s…',
     autoRunCancel: 'Cancel',
-    // Per-command safety verdict
+    // Per-command safety verdict. These are the SUMMARY labels on the collapsed
+    // verdict line — a tone dot sits in front of each, so they carry no emoji.
     checkingSafety: '🔍 Checking safety…',
-    verdictBlacklist: '🛑 Blacklisted',
-    verdictWhitelist: '✅ Whitelisted',
-    verdictAi: '🤖 AI verdict',
-    verdictAsk: '❔ Needs confirmation',
-    verdictFallback: '❔ Unverified',
-    verdictConfidence: ' (confidence {{percent}}%)',
+    verdictBlacklist: 'Blocked',
+    verdictWhitelist: 'Safe · whitelisted',
+    verdictAi: 'Safe · AI',
+    verdictAiReview: 'Check · AI',
+    verdictAsk: 'Needs confirmation',
+    verdictFallback: 'Unverified',
+    verdictConfidence: ' {{percent}}%',
     verdictReasonReadOnly: 'read-only',
     verdictReasonRunManually: 'run manually',
   },

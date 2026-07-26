@@ -147,7 +147,7 @@ async function sendAndComplete(text: string, content: string = MODEL_CONTENT) {
     await act(async () => { await Promise.resolve(); });
 }
 
-describe('AIChatPane auto-execute after New chat', () => {
+describe('AIChatPane auto-execute after Clear Conversation', () => {
     beforeEach(() => {
         h.onRunCommand.mockClear();
         h.onAiChatResponseCb.current = null;
@@ -164,12 +164,12 @@ describe('AIChatPane auto-execute after New chat', () => {
         expect(h.onRunCommand).toHaveBeenCalledTimes(1);
         expect(h.onRunCommand).toHaveBeenLastCalledWith('sess-1', 'display version', 't1');
 
-        // Start a new chat (messages exist → confirm dialog), then confirm.
+        // Clear the conversation (messages exist → confirm dialog), then confirm.
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Start a new chat' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Clear this conversation' }));
         });
         await act(async () => {
-            fireEvent.click(screen.getByText('Start new chat'));
+            fireEvent.click(screen.getByText('Clear conversation'));
         });
 
         // Second conversation produces the SAME command at the SAME message index.
@@ -525,7 +525,8 @@ describe('AIChatPane AI classifier gray-zone verdicts', () => {
         await sendAndComplete('do the thing', GRAY_CONTENT);
         expect(h.aiClassifyCommand).toHaveBeenCalledWith('frobnicate --apply', expect.any(String));
         expect(h.onRunCommand).toHaveBeenCalledWith('sess-1', 'frobnicate --apply', 't1');
-        expect(screen.getByText(/AI verdict/)).toBeTruthy();
+        // Collapsed summary: tone word + AI confidence, reason one click away.
+        expect(screen.getByText(/Safe · AI 95%/)).toBeTruthy();
     });
 
     it('does NOT auto-execute when the AI judges it modifies state, but shows the verdict', async () => {
@@ -534,7 +535,27 @@ describe('AIChatPane AI classifier gray-zone verdicts', () => {
         await authenticate();
         await sendAndComplete('do the thing', GRAY_CONTENT);
         expect(h.onRunCommand).not.toHaveBeenCalled();
+        expect(screen.getByText(/Check · AI 90%/)).toBeTruthy();
+    });
+
+    it('collapses the verdict reason and reveals it when the summary is clicked', async () => {
+        h.aiClassifyCommand.mockResolvedValue({ modifiesState: true, confidence: 0.9, reason: 'changes config' });
+        renderPane({ onRunCommand: h.onRunCommand });
+        await authenticate();
+        await sendAndComplete('do the thing', GRAY_CONTENT);
+        // Reason hidden by default; the block still carries the warn tone bar.
+        expect(screen.queryByText(/changes config/)).toBeNull();
+        const toggle = screen.getByText(/Check · AI 90%/).closest('button')!;
+        expect(toggle.className).toContain('ai-execute-verdict-toggle-warn');
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        expect(document.querySelector('.ai-execute-block.ai-execute-tone-warn')).toBeTruthy();
+
+        fireEvent.click(toggle);
         expect(screen.getByText(/changes config/)).toBeTruthy();
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+
+        fireEvent.click(toggle);
+        expect(screen.queryByText(/changes config/)).toBeNull();
     });
 
     it('falls back to manual (no run) when classification fails', async () => {

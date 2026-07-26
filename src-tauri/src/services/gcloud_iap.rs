@@ -1401,25 +1401,60 @@ fn build_tunnel_argv(cfg: &GcloudIapConfig) -> Vec<String> {
     ]
 }
 
-/// SSH client args. `-i` selects the key, `-o` flags disable host-key checking
-/// (the IAP tunnel terminates on a fresh local port, so persistent host-key
-/// caching is meaningless and would prompt the user every time).
-fn build_ssh_argv(user: &str, port: u16, key_path: &str, instance: &str) -> Vec<String> {
+/// The `known_hosts` file `ssh.exe` is pointed at for IAP sessions — the same
+/// app-scoped file the native SSH protocol path uses, so a host key recorded by
+/// either route is seen by both.
+fn iap_known_hosts_path(app: &AppHandle) -> PathBuf {
+    let base = app
+        .path()
+        .app_config_dir()
+        .unwrap_or_else(|_| std::env::temp_dir());
+    let _ = std::fs::create_dir_all(&base);
+    super::known_hosts::default_known_hosts_path(&base)
+}
+
+/// SSH client args. `-i` selects the key; the `-o` flags configure host-key
+/// verification.
+///
+/// The tunnel terminates on a fresh `127.0.0.1:<ephemeral>` port every connect,
+/// so verification is keyed on the instance name via `HostKeyAlias` rather than
+/// on the dialed address — that is what makes a persistent record possible at
+/// all, and it is why the port churn is *not* a reason to skip checking (the
+/// previous `StrictHostKeyChecking=no` here contradicted the project rule
+/// "never disable known_hosts verification"). `CheckHostIP=no` is required for
+/// the same reason: without it ssh would also pin `127.0.0.1`, and the next
+/// tunnel to a *different* VM would look like a host-key mismatch.
+///
+/// `accept-new` is trust-on-first-use: record silently on first connect, and
+/// refuse loudly if the key later changes. `LogLevel=ERROR` hides the routine
+/// "Permanently added" notice while still surfacing a mismatch.
+fn build_ssh_argv(
+    user: &str,
+    port: u16,
+    key_path: &str,
+    instance: &str,
+    known_hosts: &Path,
+) -> Vec<String> {
+    // OpenSSH splits an unquoted UserKnownHostsFile value on whitespace into
+    // several filenames; the app config dir can contain spaces, so quote it.
+    let known_hosts = format!("UserKnownHostsFile=\"{}\"", known_hosts.display());
     vec![
         "-i".into(),
         key_path.into(),
         "-p".into(),
         port.to_string(),
         "-o".into(),
-        "StrictHostKeyChecking=no".into(),
+        "StrictHostKeyChecking=accept-new".into(),
         "-o".into(),
-        "UserKnownHostsFile=NUL".into(),
+        known_hosts,
         "-o".into(),
         "GlobalKnownHostsFile=NUL".into(),
         "-o".into(),
+        "CheckHostIP=no".into(),
+        "-o".into(),
         "LogLevel=ERROR".into(),
-        // Identify ourselves in audit logs as connecting to <instance> even though
-        // we dial localhost via the tunnel.
+        // Pin the host key to <instance> rather than the ephemeral tunnel
+        // address; also identifies the target in audit logs.
         "-o".into(),
         format!("HostKeyAlias={instance}"),
         format!("{user}@localhost"),
@@ -2034,7 +2069,13 @@ impl SessionService for GcloudIapSession {
         emit_iap_connect_progress(&app, &session_id, "authenticating");
 
         // --- Build the ssh.exe command for the PTY ---
-        let argv = build_ssh_argv(&user, port, &priv_key_str, &self.config.instance);
+        let argv = build_ssh_argv(
+            &user,
+            port,
+            &priv_key_str,
+            &self.config.instance,
+            &iap_known_hosts_path(&app),
+        );
         log::info!("gcloud-iap: ssh.exe argv={argv:?} (ssh_exe={ssh_exe:?})");
 
         // Human name for the ssh binary, reused in all PTY/spawn error messages.
@@ -2405,15 +2446,52 @@ mod tests {
             12345,
             r"C:\Users\alice\.ssh\google_compute_engine",
             "vm-01",
+            Path::new(r"C:\cfg\known_hosts"),
         );
         assert!(argv.contains(&"-i".to_string()));
         assert!(argv.contains(&r"C:\Users\alice\.ssh\google_compute_engine".to_string()));
         assert!(argv.contains(&"-p".to_string()));
         assert!(argv.contains(&"12345".to_string()));
-        assert!(argv.contains(&"StrictHostKeyChecking=no".to_string()));
         assert!(argv.contains(&"HostKeyAlias=vm-01".to_string()));
         // The user@host element must be the final positional.
         assert_eq!(argv.last().unwrap(), "alice@localhost");
+    }
+
+    /// Host-key verification must stay ON for IAP sessions: `.claude/rules/security.md`
+    /// forbids disabling known_hosts checking, and `HostKeyAlias` already makes a
+    /// persistent record work despite the ephemeral tunnel port.
+    #[test]
+    fn build_ssh_argv_verifies_host_key_against_app_known_hosts() {
+        let argv = build_ssh_argv(
+            "alice",
+            12345,
+            r"C:\Users\alice\.ssh\google_compute_engine",
+            "vm-01",
+            Path::new(r"C:\cfg\known_hosts"),
+        );
+        // Never disabled, in any form.
+        assert!(!argv.iter().any(|a| a.contains("StrictHostKeyChecking=no")));
+        assert!(!argv.iter().any(|a| a == "UserKnownHostsFile=NUL"));
+        assert!(argv.contains(&"StrictHostKeyChecking=accept-new".to_string()));
+        // Pinned by instance, not by the ephemeral 127.0.0.1:<port> we dial.
+        assert!(argv.contains(&"HostKeyAlias=vm-01".to_string()));
+        assert!(argv.contains(&"CheckHostIP=no".to_string()));
+        assert!(argv.contains(&r#"UserKnownHostsFile="C:\cfg\known_hosts""#.to_string()));
+    }
+
+    /// OpenSSH splits an unquoted `UserKnownHostsFile` on whitespace, so a config
+    /// dir containing a space must survive as a single filename.
+    #[test]
+    fn build_ssh_argv_quotes_known_hosts_path_with_spaces() {
+        let argv = build_ssh_argv(
+            "alice",
+            12345,
+            "k",
+            "vm-01",
+            Path::new(r"C:\Users\Alice Smith\cfg\known_hosts"),
+        );
+        assert!(argv
+            .contains(&r#"UserKnownHostsFile="C:\Users\Alice Smith\cfg\known_hosts""#.to_string()));
     }
 
     #[test]
@@ -2448,9 +2526,9 @@ mod tests {
     #[test]
     fn config_username_round_trips_and_trims() {
         let json =
-            r#"{"project":"p-1","zone":"us-central1-a","instance":"vm-01","username":"  horry  "}"#;
+            r#"{"project":"p-1","zone":"us-central1-a","instance":"vm-01","username":"  alice  "}"#;
         let cfg: GcloudIapConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(cfg.username_override(), Some("horry"));
+        assert_eq!(cfg.username_override(), Some("alice"));
     }
 
     #[test]
@@ -2464,16 +2542,16 @@ mod tests {
 
     #[test]
     fn config_validate_accepts_posix_username() {
-        // `12345678` / `1horry`: digit-leading corporate AD logins are valid — the
+        // `12345678` / `1alice`: digit-leading corporate AD logins are valid — the
         // account gcloud itself uses and the VM's metadata SSH key is bound to.
         for ok in [
-            "horry",
-            "horryworks_gmail_com",
+            "alice",
+            "alice_example_com",
             "_svc",
             "a",
             "user-1",
             "12345678",
-            "1horry",
+            "1alice",
         ] {
             assert!(
                 cfg_with_user(Some(ok)).validate().is_ok(),
@@ -2530,20 +2608,20 @@ mod tests {
     /// absolute ssh.exe path, a quoted ProxyCommand full of spaces, and
     /// `user@host` last.
     const WINDOWS_DRY_RUN: &str = concat!(
-        r#"C:\Windows\System32\OpenSSH\ssh.exe -t -i C:\Users\horry\.ssh\google_compute_engine "#,
+        r#"C:\Windows\System32\OpenSSH\ssh.exe -t -i C:\Users\alice\.ssh\google_compute_engine "#,
         r#"-o CheckHostIP=no -o HostKeyAlias=compute.123456789 -o IdentitiesOnly=yes "#,
         r#"-o StrictHostKeyChecking=no "#,
         r#"-o ProxyCommand="C:\Program Files\Python\python.exe -S C:\SDK\gcloud.py compute start-iap-tunnel vm-01 %p --listen-on-stdin" "#,
-        r#"horry@compute.123456789"#
+        r#"alice@compute.123456789"#
     );
 
     #[test]
     fn parse_dry_run_extracts_user_and_key_from_windows_output() {
         let (user, key) = parse_dry_run_ssh_command(WINDOWS_DRY_RUN).unwrap();
-        assert_eq!(user, "horry");
+        assert_eq!(user, "alice");
         assert_eq!(
             key.unwrap(),
-            PathBuf::from(r"C:\Users\horry\.ssh\google_compute_engine")
+            PathBuf::from(r"C:\Users\alice\.ssh\google_compute_engine")
         );
     }
 
@@ -2555,10 +2633,10 @@ mod tests {
         let line = concat!(
             r#"ssh -i /home/h/.ssh/google_compute_engine "#,
             r#"-o ProxyCommand="/usr/bin/curl user@example.com" "#,
-            r#"horry@compute.42"#
+            r#"alice@compute.42"#
         );
         let (user, _) = parse_dry_run_ssh_command(line).unwrap();
-        assert_eq!(user, "horry");
+        assert_eq!(user, "alice");
     }
 
     #[test]
@@ -2575,9 +2653,9 @@ mod tests {
     #[test]
     fn parse_dry_run_handles_quoted_key_path_with_spaces() {
         let line =
-            r#"ssh.exe -i "C:\Users\my name\.ssh\google_compute_engine" -o X=y horry@compute.1"#;
+            r#"ssh.exe -i "C:\Users\my name\.ssh\google_compute_engine" -o X=y alice@compute.1"#;
         let (user, key) = parse_dry_run_ssh_command(line).unwrap();
-        assert_eq!(user, "horry");
+        assert_eq!(user, "alice");
         assert_eq!(
             key.unwrap(),
             PathBuf::from(r"C:\Users\my name\.ssh\google_compute_engine")
@@ -2586,9 +2664,9 @@ mod tests {
 
     #[test]
     fn parse_dry_run_skips_leading_warning_lines() {
-        let out = "WARNING: consider installing NumPy.\n\nssh -i /k/id horry@compute.1\n";
+        let out = "WARNING: consider installing NumPy.\n\nssh -i /k/id alice@compute.1\n";
         let (user, _) = parse_dry_run_ssh_command(out).unwrap();
-        assert_eq!(user, "horry");
+        assert_eq!(user, "alice");
     }
 
     #[test]
@@ -2599,15 +2677,15 @@ mod tests {
         // even though the username is correct. The caller must keep the OpenSSH
         // key instead.
         let line =
-            r#"plink.exe -i C:\Users\horry\.ssh\google_compute_engine.ppk -P 22 horry@compute.1"#;
+            r#"plink.exe -i C:\Users\alice\.ssh\google_compute_engine.ppk -P 22 alice@compute.1"#;
         let (user, key) = parse_dry_run_ssh_command(line).unwrap();
-        assert_eq!(user, "horry");
+        assert_eq!(user, "alice");
         assert_eq!(key, None, "PuTTY key must not be adopted");
     }
 
     #[test]
     fn parse_dry_run_drops_putty_key_regardless_of_case() {
-        let line = r#"plink.exe -i "C:\k\google_compute_engine.PPK" horry@compute.1"#;
+        let line = r#"plink.exe -i "C:\k\google_compute_engine.PPK" alice@compute.1"#;
         assert_eq!(parse_dry_run_ssh_command(line).unwrap().1, None);
     }
 
@@ -2622,7 +2700,7 @@ mod tests {
         // PuTTY key so the OpenSSH key is used.
         let line = concat!(
             r#""C:\SDK\bin\sdk\putty.exe" -t -i C:\Users\12345678\.ssh\google_compute_engine.ppk "#,
-            r#"-proxycmd ""C:\SDK\python.exe" "-S" "C:\SDK\gcloud.py" compute start-iap-tunnel "dev-horry" "%port" --listen-on-stdin --project=p --zone=z --verbosity=warning" "#,
+            r#"-proxycmd ""C:\SDK\python.exe" "-S" "C:\SDK\gcloud.py" compute start-iap-tunnel "dev-vm-01" "%port" --listen-on-stdin --project=p --zone=z --verbosity=warning" "#,
             r#"12345678@compute.1234567890"#
         );
         let (user, key) = parse_dry_run_ssh_command(line).unwrap();
@@ -2634,11 +2712,11 @@ mod tests {
     fn parse_dry_run_keeps_openssh_key_without_extension() {
         // The counterpart to the .ppk case: an extensionless OpenSSH key is
         // exactly what we want to adopt.
-        let line = r#"ssh.exe -i C:\Users\horry\.ssh\google_compute_engine horry@compute.1"#;
+        let line = r#"ssh.exe -i C:\Users\alice\.ssh\google_compute_engine alice@compute.1"#;
         let (_, key) = parse_dry_run_ssh_command(line).unwrap();
         assert_eq!(
             key.unwrap(),
-            PathBuf::from(r"C:\Users\horry\.ssh\google_compute_engine")
+            PathBuf::from(r"C:\Users\alice\.ssh\google_compute_engine")
         );
     }
 
@@ -2646,8 +2724,8 @@ mod tests {
     fn parse_dry_run_without_identity_file_still_yields_user() {
         // A missing -i is survivable: the caller already knows the conventional
         // key path. A missing username is not.
-        let (user, key) = parse_dry_run_ssh_command("ssh -o X=y horry@compute.1").unwrap();
-        assert_eq!(user, "horry");
+        let (user, key) = parse_dry_run_ssh_command("ssh -o X=y alice@compute.1").unwrap();
+        assert_eq!(user, "alice");
         assert_eq!(key, None);
     }
 
@@ -2677,11 +2755,11 @@ mod tests {
         // reach past that line to the ssh command.
         let out = concat!(
             "ssh.exe -t -i C:\\Users\\me\\.ssh\\google_compute_engine ",
-            "-o StrictHostKeyChecking=no horry@compute.123456789\n",
-            "\"C:\\g\\python.exe\" \"-S\" \"C:\\g\\gcloud.py\" compute start-iap-tunnel dev-horry 22 --listen-on-stdin\n"
+            "-o StrictHostKeyChecking=no alice@compute.123456789\n",
+            "\"C:\\g\\python.exe\" \"-S\" \"C:\\g\\gcloud.py\" compute start-iap-tunnel dev-vm-01 22 --listen-on-stdin\n"
         );
         let (user, key) = parse_dry_run_ssh_command(out).unwrap();
-        assert_eq!(user, "horry");
+        assert_eq!(user, "alice");
         assert_eq!(
             key.unwrap(),
             PathBuf::from(r"C:\Users\me\.ssh\google_compute_engine")
@@ -2701,8 +2779,8 @@ mod tests {
         );
         // Already-clean local part passes through.
         assert_eq!(
-            username_from_email("horry@example.com").as_deref(),
-            Some("horry")
+            username_from_email("alice@example.com").as_deref(),
+            Some("alice")
         );
     }
 
@@ -2710,8 +2788,8 @@ mod tests {
     fn username_from_email_handles_digit_leading_and_empty_local_parts() {
         // A digit-leading local part is now valid (corporate all-numeric AD ids).
         assert_eq!(
-            username_from_email("1horry@example.com").as_deref(),
-            Some("1horry")
+            username_from_email("1alice@example.com").as_deref(),
+            Some("1alice")
         );
         // An empty local part still yields nothing to log in as.
         assert_eq!(username_from_email("@example.com"), None);
@@ -2747,7 +2825,7 @@ mod tests {
         assert_eq!(parse_expire_on_epoch(line), Some(1_784_094_614));
         // A persistent key (no google-ssh trailer) has no expiry.
         assert_eq!(
-            parse_expire_on_epoch("horry:ssh-rsa AAAAB3Nza persistent"),
+            parse_expire_on_epoch("alice:ssh-rsa AAAAB3Nza persistent"),
             None
         );
     }
@@ -2794,10 +2872,10 @@ mod tests {
     fn ssh_keys_persistent_entry_never_expires() {
         // A manually-added key with no `google-ssh {expireOn}` trailer is live
         // no matter how far in the future we check.
-        let value = "horry:ssh-rsa PERSISTBODY manual-key";
+        let value = "alice:ssh-rsa PERSISTBODY manual-key";
         assert!(ssh_keys_have_live_entry(
             value,
-            "horry",
+            "alice",
             "PERSISTBODY",
             i64::MAX - 1
         ));
@@ -2805,11 +2883,11 @@ mod tests {
 
     #[test]
     fn enroll_ssh_args_register_under_connect_user_through_iap() {
-        let args = enroll_ssh_args("alice_smith", "proj-1", "us-central1-a", "dev-horry");
+        let args = enroll_ssh_args("alice_smith", "proj-1", "us-central1-a", "dev-vm-01");
         assert_eq!(args[0], "compute");
         assert_eq!(args[1], "ssh");
         // Registered under the SAME name HoTTY connects as.
-        assert_eq!(args[2], "alice_smith@dev-horry");
+        assert_eq!(args[2], "alice_smith@dev-vm-01");
         assert!(args.contains(&"--zone=us-central1-a".to_string()));
         assert!(args.contains(&"--project=proj-1".to_string()));
         assert!(args.contains(&"--tunnel-through-iap".to_string()));
@@ -2903,9 +2981,9 @@ mod tests {
 
     #[test]
     fn explain_ssh_failure_names_the_rejected_user() {
-        let out = "horryworks_gmail_com@localhost: Permission denied (publickey).";
-        let msg = explain_ssh_failure(out, "horryworks_gmail_com").unwrap();
-        assert!(msg.contains("horryworks_gmail_com"));
+        let out = "alice_example_com@localhost: Permission denied (publickey).";
+        let msg = explain_ssh_failure(out, "alice_example_com").unwrap();
+        assert!(msg.contains("alice_example_com"));
         assert!(
             msg.contains("SSH user"),
             "should point at the override: {msg}"
@@ -2915,7 +2993,7 @@ mod tests {
     #[test]
     fn explain_ssh_failure_covers_agent_key_exhaustion() {
         let out = "Received disconnect from 127.0.0.1: Too many authentication failures";
-        assert!(explain_ssh_failure(out, "horry").is_some());
+        assert!(explain_ssh_failure(out, "alice").is_some());
     }
 
     #[test]
@@ -2927,7 +3005,7 @@ mod tests {
             "",
             "bash: x: not found",
         ] {
-            assert_eq!(explain_ssh_failure(out, "horry"), None);
+            assert_eq!(explain_ssh_failure(out, "alice"), None);
         }
     }
 
@@ -2958,9 +3036,9 @@ mod tests {
         // the error away — this is the regression guard for that.
         let raw = "\u{1b}[?9001h\u{1b}[?25l\u{1b}[2J\u{1b}[H\u{1b}]0;C:\\Windows\\ssh.exe\u{7}\
                    \n\n\n\u{1b}[K\n\u{1b}[K\n\u{1b}[K\n\
-                   horry@localhost: Permission denied (publickey).\r\n";
+                   alice@localhost: Permission denied (publickey).\r\n";
         let clean = sanitize_terminal_output(raw);
-        assert_eq!(clean, "horry@localhost: Permission denied (publickey).");
+        assert_eq!(clean, "alice@localhost: Permission denied (publickey).");
         assert!(!clean.contains('\u{1b}'));
     }
 
@@ -2980,9 +3058,9 @@ mod tests {
     fn sanitized_output_still_matches_the_failure_explainer() {
         // The two halves have to agree: explain_ssh_failure runs on the
         // sanitized text, so stripping must not break its pattern.
-        let raw = "\u{1b}[2J\u{1b}[Khorry@localhost: Permission denied (publickey).\r\n";
+        let raw = "\u{1b}[2J\u{1b}[Kalice@localhost: Permission denied (publickey).\r\n";
         let clean = sanitize_terminal_output(raw);
-        assert!(explain_ssh_failure(&clean, "horry").is_some());
+        assert!(explain_ssh_failure(&clean, "alice").is_some());
     }
 
     #[test]

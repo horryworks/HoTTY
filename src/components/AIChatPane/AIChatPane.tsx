@@ -162,28 +162,55 @@ const VERDICT_LABEL_KEY: Record<AutoExecDecision['source'], string> = {
     'fallback': 'aiChat.message.verdictFallback',
 };
 
+type VerdictTone = 'safe' | 'warn' | 'danger';
+
+// Tone: red for blocked, warning for "modifies / uncertain / unverified",
+// success for "will / did auto-run". Also drives the execute block's left bar,
+// so the judgement is readable without expanding the reason.
+const verdictTone = (verdict: AutoExecDecision): VerdictTone =>
+    verdict.source === 'blacklist' ? 'danger' : verdict.autoExec ? 'safe' : 'warn';
+
+// The verdict is summarised to a tone dot + one phrase ("Safe · whitelisted");
+// the full reason stays collapsed behind it so a routine safe run reads quietly.
+// Nothing is hidden — the reason is one click away, per block.
 const VerdictNote: React.FC<{ classifying?: boolean; verdict?: AutoExecDecision }> = ({ classifying, verdict }) => {
     const { t } = useTranslation();
+    const [expanded, setExpanded] = useState(false);
     if (classifying) {
         return <div className="ai-execute-verdict ai-execute-verdict-checking">{t('aiChat.message.checkingSafety')}</div>;
     }
     if (!verdict) return null;
 
-    // Tone: red for blocked, warning for "modifies / uncertain / unverified",
-    // success for "will/ did auto-run".
-    let tone: 'safe' | 'warn' | 'danger' = 'warn';
-    if (verdict.source === 'blacklist') tone = 'danger';
-    else if (verdict.autoExec) tone = 'safe';
-
-    const label = t(VERDICT_LABEL_KEY[verdict.source]);
-    const confidence = verdict.source === 'ai' && typeof verdict.confidence === 'number'
-        ? t('aiChat.message.verdictConfidence', { percent: Math.round(verdict.confidence * 100) })
-        : '';
+    const tone = verdictTone(verdict);
+    // An AI verdict carries its own confidence and splits by outcome
+    // ("Safe · AI 96%" vs "Check · AI 62%"); the static tiers are a fixed phrase.
+    const summary = verdict.source === 'ai'
+        ? t(verdict.autoExec ? 'aiChat.message.verdictAi' : 'aiChat.message.verdictAiReview')
+        + (typeof verdict.confidence === 'number'
+            ? t('aiChat.message.verdictConfidence', { percent: Math.round(verdict.confidence * 100) })
+            : '')
+        : t(VERDICT_LABEL_KEY[verdict.source]);
 
     return (
-        <div className={`ai-execute-verdict ai-execute-verdict-${tone}`}>
-            <strong>{label}{confidence}:</strong> {verdict.reason || (verdict.autoExec ? t('aiChat.message.verdictReasonReadOnly') : t('aiChat.message.verdictReasonRunManually'))}
-        </div>
+        <>
+            <button
+                type="button"
+                className={`ai-execute-verdict-toggle ai-execute-verdict-toggle-${tone}${expanded ? ' expanded' : ''}`}
+                onClick={() => setExpanded((v) => !v)}
+                aria-expanded={expanded}
+            >
+                <span className="ai-execute-verdict-dot" aria-hidden="true" />
+                <span>{summary}</span>
+                <svg className="ai-execute-verdict-caret" viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true">
+                    <path d="M9 6l6 6-6 6z" />
+                </svg>
+            </button>
+            {expanded && (
+                <div className={`ai-execute-verdict ai-execute-verdict-reason ai-execute-verdict-${tone}`}>
+                    {verdict.reason || (verdict.autoExec ? t('aiChat.message.verdictReasonReadOnly') : t('aiChat.message.verdictReasonRunManually'))}
+                </div>
+            )}
+        </>
     );
 };
 
@@ -293,8 +320,16 @@ const MessageContent: React.FC<{
                     const wasDeclined = declinedCommands?.has(command);
                     const scheduledAt = scheduledCommands?.get(command);
                     const isScheduled = scheduledAt !== undefined;
+                    // The verdict's tone bar rides on the block itself, and only
+                    // where the verdict summary is shown (a scheduled countdown /
+                    // declined block owns the row instead — see below).
+                    const isSleeping = !!sleepDelay && sleepDelay.command === command;
+                    const verdict = verdictByCommand?.get(command);
+                    const tone = !wasDeclined && !isScheduled && !isSleeping && verdict
+                        ? verdictTone(verdict)
+                        : undefined;
                     return (
-                        <div key={part.key} className={`ai-execute-block${wasAutoExecuted ? ' ai-execute-auto' : ''}${wasDeclined ? ' ai-execute-declined' : ''}${isScheduled ? ' ai-execute-scheduled' : ''}`}>
+                        <div key={part.key} className={`ai-execute-block${wasAutoExecuted ? ' ai-execute-auto' : ''}${wasDeclined ? ' ai-execute-declined' : ''}${isScheduled ? ' ai-execute-scheduled' : ''}${tone ? ` ai-execute-tone-${tone}` : ''}`}>
                             <pre><code>{command}</code></pre>
                             <div className="ai-execute-actions">
                                 {wasDeclined ? (
@@ -354,12 +389,12 @@ const MessageContent: React.FC<{
                             {!wasDeclined && (
                                 isScheduled ? (
                                     <AutoRunCountdown runAt={scheduledAt} />
-                                ) : sleepDelay && sleepDelay.command === command ? (
+                                ) : isSleeping && sleepDelay ? (
                                     <SleepCountdown delay={sleepDelay} />
                                 ) : (
                                     <VerdictNote
                                         classifying={classifyingCommands?.has(command)}
-                                        verdict={verdictByCommand?.get(command)}
+                                        verdict={verdict}
                                     />
                                 )
                             )}
@@ -725,7 +760,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // when the gate resolves; the loop re-runs on the consent-state flip.
     const consentPromptShownRef = useRef(false);
 
-    const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
+    const [showClearChatConfirm, setShowClearChatConfirm] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const settingsPopoverRef = useRef<HTMLDivElement>(null);
     const settingsTriggerRef = useRef<HTMLButtonElement>(null);
@@ -1036,7 +1071,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         if (prevLogoutNonceRef.current === logoutNonce) return;
         prevLogoutNonceRef.current = logoutNonce;
         resetAllStreams();
-        // Reset per-tab auto-exec/kickoff tracking too, mirroring performNewChat —
+        // Reset per-tab auto-exec/kickoff tracking too, mirroring performClearChat —
         // otherwise stale badges and blockKeys shadow the post-re-login conversation.
         resetAllTabTrackingRef.current();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1496,7 +1531,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         }
     };
 
-    const performNewChat = () => {
+    const performClearChat = () => {
         // Clear only the active tab's messages and streaming state (clearTabStream
         // also disarms the watchdog if this tab owned the in-flight stream).
         if (activeTabId) {
@@ -1515,11 +1550,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         tauriService.aiChatClear(aiBackendSessionId(paneId, activeTabId)).catch(() => {});
     };
 
-    const handleNewChatClick = () => {
+    const handleClearChatClick = () => {
         if (messages.length > 0 || streamingContent) {
-            setShowNewChatConfirm(true);
+            setShowClearChatConfirm(true);
         } else {
-            performNewChat();
+            performClearChat();
         }
     };
 
@@ -1612,21 +1647,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     <div className="ai-chat-logo">
                         <AIIcon size={24} provider={activeAiProvider} />
                     </div>
-                    {isAuthenticated && (
-                        <button
-                            type="button"
-                            className="ai-chat-new-chat-btn"
-                            onClick={handleNewChatClick}
-                            title={t('aiChat.pane.newChatTitle')}
-                            aria-label={t('aiChat.pane.newChatTitle')}
-                        >
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <line x1="12" y1="5" x2="12" y2="19" />
-                                <line x1="5" y1="12" x2="19" y2="12" />
-                            </svg>
-                            <span>{t('aiChat.pane.newChat')}</span>
-                        </button>
-                    )}
                     {/* Watched-terminal control (Phase 2): a wrapping ROW of chips —
                         one per watched terminal (click = jump to it, × = remove,
                         greyed when disconnected) — followed by a "+" picker to watch
@@ -1727,6 +1747,27 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                         </div>
                     )}
                 </div>
+                {/* One header action, on the right: clearing the conversation. (A
+                    separate "New chat" pill used to sit on the left doing the same
+                    thing — the tab strip's + is what opens a new conversation.) */}
+                {isAuthenticated && (
+                    <div className="ai-chat-header-right">
+                        <button
+                            type="button"
+                            className="ai-chat-new-chat-btn"
+                            onClick={handleClearChatClick}
+                            title={t('aiChat.pane.clearConversationTitle')}
+                            aria-label={t('aiChat.pane.clearConversationTitle')}
+                        >
+                            {/* trash icon */}
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                            </svg>
+                            <span>{t('aiChat.pane.clearConversation')}</span>
+                        </button>
+                    </div>
+                )}
             </div>
 
             {!isAuthenticated ? (
@@ -2216,16 +2257,16 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     onClose={() => setShowPromptModal(false)}
                 />
             )}
-            {showNewChatConfirm && (
+            {showClearChatConfirm && (
                 <ConfirmModal
-                    title={t('aiChat.pane.newChatConfirmTitle')}
-                    message={t('aiChat.pane.newChatConfirmMessage')}
-                    confirmLabel={t('aiChat.pane.newChatConfirmButton')}
+                    title={t('aiChat.pane.clearConversationConfirmTitle')}
+                    message={t('aiChat.pane.clearConversationConfirmMessage')}
+                    confirmLabel={t('aiChat.pane.clearConversationConfirmButton')}
                     onConfirm={() => {
-                        setShowNewChatConfirm(false);
-                        performNewChat();
+                        setShowClearChatConfirm(false);
+                        performClearChat();
                     }}
-                    onCancel={() => setShowNewChatConfirm(false)}
+                    onCancel={() => setShowClearChatConfirm(false)}
                 />
             )}
         </div>

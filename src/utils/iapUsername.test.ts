@@ -7,13 +7,13 @@ describe('resolveIapUsername', () => {
   });
 
   it('uses the global setting when the host has none', () => {
-    expect(resolveIapUsername(undefined, 'horry')).toBe('horry');
+    expect(resolveIapUsername(undefined, 'alice')).toBe('alice');
   });
 
   it('prefers the host entry over the global setting', () => {
     // The host value was chosen for that specific VM; the global one is a
     // machine-wide default.
-    expect(resolveIapUsername('vm-specific', 'horry')).toBe('vm-specific');
+    expect(resolveIapUsername('vm-specific', 'alice')).toBe('vm-specific');
   });
 
   it('treats blank and whitespace-only values as unset', () => {
@@ -21,11 +21,11 @@ describe('resolveIapUsername', () => {
     // explicit (and invalid) override.
     expect(resolveIapUsername('', '')).toBeUndefined();
     expect(resolveIapUsername('   ', '\t')).toBeUndefined();
-    expect(resolveIapUsername('  ', 'horry')).toBe('horry');
+    expect(resolveIapUsername('  ', 'alice')).toBe('alice');
   });
 
   it('trims surrounding whitespace off whichever value wins', () => {
-    expect(resolveIapUsername('  vm-specific ', 'horry')).toBe('vm-specific');
-    expect(resolveIapUsername(undefined, '  horry  ')).toBe('horry');
+    expect(resolveIapUsername('  vm-specific ', 'alice')).toBe('vm-specific');
+    expect(resolveIapUsername(undefined, '  alice  ')).toBe('alice');
   });
 });

@@ -1,7 +1,7 @@
 {
   "name": "hotty-rust-tauri",
   "private": true,
-  "version": "2.0.13-beta6",
+  "version": "2.0.13",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "engines": {
@@ -17,9 +17,13 @@
     "tauri:dev": "tauri dev --features embedded-webview",
     "tauri:build": "tauri build --features embedded-webview",
     "licenses:generate": "node scripts/generate-third-party-licenses.mjs",
+    "audit:deps": "node scripts/audit-advisories.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui"
+  },
+  "overrides": {
+    "postcss": "8.5.20"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.13.23",

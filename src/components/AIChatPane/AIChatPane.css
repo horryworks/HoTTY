@@ -12,6 +12,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    /* Keeps the scrolling chip row off the right-hand action in a narrow pane. */
+    gap: 8px;
     padding: 0 12px;
     background: var(--ai-header-bg);
     border-bottom: 1px solid var(--border-color);
@@ -59,55 +61,37 @@
     justify-content: center;
 }
 
-.ai-chat-header-btn {
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    cursor: pointer;
-    padding: 4px 6px;
-    border-radius: 4px;
-    font-size: var(--font-size-base);
-    transition: background-color 0.15s, color 0.15s;
+/* The header's single action group (clear conversation), pinned right so the
+   watched-terminal chips keep the whole left side to scroll in. */
+.ai-chat-header-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
 }
 
-.ai-chat-header-btn:hover:not(:disabled) {
-    background-color: var(--bg-tertiary);
-    color: var(--text-primary);
-}
-
-.ai-chat-header-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.ai-chat-header-btn--danger {
-    color: var(--color-danger);
-}
-
-.ai-chat-header-btn--danger:hover {
-    background-color: var(--color-danger-bg);
-    color: var(--color-danger);
-}
-
+/* Clear-conversation pill. Hover is danger-toned, not accent: the accent blue is
+   reserved for run/send actions (Run in Terminal, Send, the active tab). */
 .ai-chat-new-chat-btn {
     display: inline-flex;
     align-items: center;
     gap: 4px;
     padding: 4px 10px;
     background: var(--bg-secondary);
-    color: var(--text-primary);
+    color: var(--text-secondary);
     border: 1px solid var(--border-color);
     border-radius: 999px;
     cursor: pointer;
+    white-space: nowrap;
     font-size: calc(var(--font-size-base) - 1px);
     font-family: var(--ui-font-family);
     transition: background-color 0.1s, border-color 0.1s, color 0.1s;
 }
 
 .ai-chat-new-chat-btn:hover {
-    background-color: var(--bg-tertiary);
-    border-color: var(--accent-color);
-    color: var(--accent-color);
+    background-color: var(--color-danger-bg);
+    border-color: var(--color-danger-border);
+    color: var(--color-danger);
 }
 
 .ai-chat-header-divider {
@@ -381,6 +365,9 @@
 .ai-chat-messages {
     flex: 1;
     overflow-y: auto;
+    /* Wide content (command lines, captured output) scrolls inside its own block —
+       the message list itself must never scroll sideways. */
+    overflow-x: hidden;
     padding: 12px;
     display: flex;
     flex-direction: column;
@@ -1184,14 +1171,16 @@
     border-color: var(--success-color);
 }
 
+/* Tinted, not filled: a command that already ran is history, so it must not
+   compete with the live actions (Run / Send) that own the solid fills. */
 .ai-execute-auto-badge {
     display: flex;
     align-items: center;
     gap: 4px;
     padding: 0 10px;
     height: 26px;
-    background-color: var(--success-color);
-    color: var(--text-on-accent);
+    background-color: color-mix(in srgb, var(--success-color) 16%, transparent);
+    color: var(--success-color);
     border-radius: 4px;
     font-size: calc(var(--font-size-base) - 2px);
     font-weight: 600;
@@ -1246,16 +1235,80 @@
     font-weight: 500;
 }
 
-/* Per-command safety verdict note (auto-execute-safe mode). Always shown so the
-   user can see how each command was judged. */
+/* ── Per-command safety verdict ── */
+/* The verdict is always present, but summarised: the block carries a tone bar and
+   the summary line shows a tone dot + one phrase. The reason expands on click, so
+   a routine safe run stays quiet without hiding how it was judged. */
+.ai-execute-block.ai-execute-tone-safe {
+    box-shadow: inset 3px 0 0 var(--success-color);
+}
+
+.ai-execute-block.ai-execute-tone-warn {
+    box-shadow: inset 3px 0 0 var(--color-warning);
+}
+
+.ai-execute-block.ai-execute-tone-danger {
+    box-shadow: inset 3px 0 0 var(--color-danger);
+}
+
+.ai-execute-verdict-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 2px 12px 8px;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 3px);
+    transition: color 0.15s;
+}
+
+.ai-execute-verdict-toggle:hover {
+    color: var(--text-secondary);
+}
+
+.ai-execute-verdict-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-tertiary);
+}
+
+.ai-execute-verdict-toggle-safe .ai-execute-verdict-dot {
+    background: var(--success-color);
+}
+
+.ai-execute-verdict-toggle-warn .ai-execute-verdict-dot {
+    background: var(--color-warning);
+}
+
+.ai-execute-verdict-toggle-danger .ai-execute-verdict-dot {
+    background: var(--color-danger);
+}
+
+.ai-execute-verdict-caret {
+    display: block;
+    opacity: 0.7;
+    transition: transform 0.15s;
+}
+
+.ai-execute-verdict-toggle.expanded .ai-execute-verdict-caret {
+    transform: rotate(90deg);
+}
+
 .ai-execute-verdict {
     padding: 4px 12px 6px;
     font-size: calc(var(--font-size-base) - 2px);
     line-height: 1.4;
 }
 
-.ai-execute-verdict strong {
-    font-weight: 600;
+/* Expanded reason — the summary toggle above already carries the top spacing. */
+.ai-execute-verdict-reason {
+    padding-top: 0;
 }
 
 .ai-execute-verdict-checking {
