@@ -12,8 +12,12 @@ use crate::services::log_manager::LogManager;
 /// Maximum file size that can be read through the viewer (50 MB).
 const MAX_READ_SIZE: u64 = 50 * 1024 * 1024;
 
-/// Allowed file extensions for reading.
-const ALLOWED_EXTENSIONS: &[&str] = &["txt", "log", "tslog"];
+/// Allowed file extensions for reading. `md` covers AI-chat transcripts.
+const ALLOWED_EXTENSIONS: &[&str] = &["txt", "log", "tslog", "md"];
+
+/// Extensions surfaced in the viewer's file list. `.tslog` is readable but
+/// stays out of the listing — it is the internal timestamp sidecar of a `.txt`.
+const LISTED_EXTENSIONS: &[&str] = &["txt", "log", "md"];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -59,6 +63,14 @@ fn is_allowed_extension(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether a file should appear in the viewer's file list.
+fn is_listed_extension(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| LISTED_EXTENSIONS.contains(&ext))
+        .unwrap_or(false)
+}
+
 /// Get the real/canonical path, resolving symlinks.
 fn resolve_real_path(path: &Path) -> Result<std::path::PathBuf, String> {
     let canonical = path
@@ -78,7 +90,7 @@ fn system_time_to_millis(time: std::time::SystemTime) -> u64 {
 // Commands
 // ---------------------------------------------------------------------------
 
-/// List log files (.txt, .log) in a given folder.
+/// List log files (.txt, .log, .md) in a given folder.
 ///
 /// The folder MUST already be user-approved (via `select_folder`'s file
 /// picker dialog or `confirm_log_dir`'s yes/no prompt). A compromised
@@ -118,12 +130,8 @@ pub async fn list_log_files(
             continue;
         }
 
-        // Only include .txt and .log files (not .tslog — those are internal)
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or_default();
-        if ext != "txt" && ext != "log" {
+        // Only include .txt / .log / .md (not .tslog — those are internal)
+        if !is_listed_extension(&path) {
             continue;
         }
 
@@ -158,7 +166,7 @@ pub async fn list_log_files(
 /// Read the contents of a log file.
 ///
 /// Security:
-/// - Only .txt, .log, and .tslog extensions are allowed.
+/// - Only .txt, .log, .tslog, and .md extensions are allowed.
 /// - The file's real path (after resolving symlinks) must be within an allowed directory.
 /// - Maximum file size is 50 MB.
 #[tauri::command]
@@ -172,7 +180,9 @@ pub async fn read_log_file(
     if !is_allowed_extension(path) {
         return Ok(ReadLogFileResult {
             content: None,
-            error: Some("invalid file type: only .txt, .log, and .tslog files are allowed".into()),
+            error: Some(
+                "invalid file type: only .txt, .log, .tslog, and .md files are allowed".into(),
+            ),
         });
     }
 
@@ -288,9 +298,24 @@ mod tests {
         assert!(is_allowed_extension(Path::new("file.txt")));
         assert!(is_allowed_extension(Path::new("file.log")));
         assert!(is_allowed_extension(Path::new("file.tslog")));
+        assert!(is_allowed_extension(Path::new("chat.md")));
         assert!(!is_allowed_extension(Path::new("file.exe")));
         assert!(!is_allowed_extension(Path::new("file.json")));
         assert!(!is_allowed_extension(Path::new("noext")));
+    }
+
+    #[test]
+    fn is_listed_extension_works() {
+        assert!(is_listed_extension(Path::new("file.txt")));
+        assert!(is_listed_extension(Path::new("file.log")));
+        assert!(is_listed_extension(Path::new(
+            "20260727091402-AICHAT-router-a.md"
+        )));
+        // Readable but never listed — internal sidecar of a .txt session log.
+        assert!(!is_listed_extension(Path::new("file.tslog")));
+        assert!(!is_listed_extension(Path::new("ping.csv")));
+        assert!(!is_listed_extension(Path::new("file.exe")));
+        assert!(!is_listed_extension(Path::new("noext")));
     }
 
     #[test]

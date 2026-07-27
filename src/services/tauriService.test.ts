@@ -313,6 +313,41 @@ describe('tauriService log viewer commands', () => {
   });
 });
 
+describe('tauriService AI chat log commands', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset();
+  });
+
+  it('aiChatLogAppend invokes with logKey, logDir, meta and turns', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    const meta = { title: 'router-a', model: 'gemini-2.5-pro', provider: 'gemini', terminals: ['router-a'] };
+    const turns = [{ role: 'user' as const, content: 'show version' }];
+    await tauriService.aiChatLogAppend('ai-1::t1', '/logs', meta, turns);
+    expect(mockInvoke).toHaveBeenCalledWith('ai_chat_log_append', {
+      logKey: 'ai-1::t1',
+      logDir: '/logs',
+      meta,
+      turns,
+    });
+  });
+
+  it('aiChatLogAppend sends image metadata without a base64 payload', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    const meta = { title: '', model: 'm', provider: 'gemini', terminals: [] };
+    const turns = [
+      { role: 'user' as const, content: 'look', images: [{ mimeType: 'image/png', bytes: 300 }] },
+    ];
+    await tauriService.aiChatLogAppend('ai-1::t1', '/logs', meta, turns);
+    expect(JSON.stringify(mockInvoke.mock.calls[0][1])).not.toContain('dataBase64');
+  });
+
+  it('aiChatLogClose invokes with logKey', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await tauriService.aiChatLogClose('ai-1::t1');
+    expect(mockInvoke).toHaveBeenCalledWith('ai_chat_log_close', { logKey: 'ai-1::t1' });
+  });
+});
+
 describe('tauriService host tree commands', () => {
   beforeEach(() => {
     mockInvoke.mockReset();

@@ -19,7 +19,7 @@ export const settings = {
     loggingSection: 'Journalisation',
     enableLogging: 'Activer la journalisation',
     logFolderPath: 'Chemin du dossier de journaux',
-    logFolderPathHelp: 'Les journaux sont enregistrés sous AAAAMMJJHHMMSS-(Protocole)-(IP).txt',
+    logFolderPathHelp: 'Les journaux de terminal sont enregistrés sous AAAAMMJJHHMMSS-(Protocole)-(IP).txt et les transcriptions du chat IA sous AAAAMMJJHHMMSS-AICHAT-(Chat).md',
     logFolderPathPlaceholder: 'Sélectionnez un dossier ou saisissez un chemin...',
     // Terminal
     terminalSection: 'Terminal',

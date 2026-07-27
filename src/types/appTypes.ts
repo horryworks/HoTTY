@@ -619,6 +619,36 @@ export interface ChatImage {
   dataBase64: string;
 }
 
+/**
+ * Image metadata written to an AI-chat transcript. Deliberately carries NO
+ * base64 payload: one turn may hold 5 images x 5 MiB (~33 MB of base64), which
+ * would blow past the Log Viewer's 50 MB read cap and make the transcript
+ * unopenable. The log records that an image was attached, not the image itself.
+ */
+export interface ChatLogImageMeta {
+  mimeType: string;
+  bytes: number;
+}
+
+/** One conversation turn as written to the transcript. */
+export interface ChatLogTurnPayload {
+  role: 'user' | 'model';
+  content: string;
+  images?: ChatLogImageMeta[];
+}
+
+/**
+ * Conversation-level context for a transcript. Captured once, when the file is
+ * created on the first turn — like a terminal log's host, it is a snapshot and
+ * is not rewritten when the tab is later renamed or re-linked.
+ */
+export interface ChatLogMeta {
+  title: string;
+  model: string;
+  provider: string;
+  terminals: string[];
+}
+
 interface AITokenUsage {
   promptTokenCount?: number;
   candidatesTokenCount?: number;

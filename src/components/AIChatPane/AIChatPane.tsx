@@ -50,6 +50,7 @@ import { TabStrip } from './TabStrip';
 import { groupLinkableSessions } from './linkPicker';
 import { MODEL_LOAD_RETRY_DELAYS_MS } from './modelLoadRetry';
 import { useChatStream, type ChatMessage } from '../../hooks/useChatStream';
+import { useChatLog } from '../../hooks/useChatLog';
 import './AIChatPane.css';
 
 // ── Image-attachment limits (mirror the Rust validation in commands/ai.rs) ──
@@ -488,6 +489,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const classifierStrategy = useSettingsStore(s => s.classifierStrategy);
     const aiClassifyConfidenceThreshold = useSettingsStore(s => s.aiClassifyConfidenceThreshold);
     const aiDataConsentAccepted = useSettingsStore(s => s.aiDataConsentAccepted);
+    // Shared with terminal session logging — AI chat transcripts are written to
+    // the same user-approved folder, gated by the same toggle.
+    const loggingEnabled = useSettingsStore(s => s.loggingEnabled);
+    const loggingPath = useSettingsStore(s => s.loggingPath);
 
     // Auto-execute state. The de-dup guard and the executed-command badge set are
     // tracked PER TAB: their keys (blockKey = messageIndex:command, and command text)
@@ -562,7 +567,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // which needs handlers/refs declared further down — is assigned during render below.
     const streamCompleteHandlerRef = useRef<(tabId: string, messages: ChatMessage[]) => void>(() => {});
     const {
-        setMessagesByTab,
+        messagesByTab, setMessagesByTab,
         streamingByTab, streamingTabIds,
         messages, streamingContent, isStreaming,
         setStreamingForTab, markStreaming, setStreamingContent, setIsStreaming, setMessages,
@@ -672,6 +677,29 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     linkableByIdRef.current = linkableById;
     const activeTabIdRef = useRef(activeTabId);
     activeTabIdRef.current = activeTabId;
+
+    /** Display name of a watched terminal (this window's, else another's). */
+    const resolveTerminalName = useCallback(
+        (sessionId: string) =>
+            sessionsRef.current?.get(sessionId)?.displayName
+            ?? linkableByIdRef.current.get(sessionId)?.displayName,
+        [],
+    );
+    // Persist each conversation to a markdown transcript alongside the terminal
+    // session logs (same Settings → General → Logging toggle and folder). Placed
+    // after the session/linkable refs so the header records terminal display
+    // names rather than raw session ids.
+    useChatLog({
+        paneId,
+        messagesByTab,
+        tabs: chatState?.tabs ?? [],
+        selectedModel,
+        provider: activeAiProvider,
+        resolveTerminalName,
+        loggingEnabled,
+        loggingPath,
+    });
+
     /** Resolve a tab's execute-target session id + live-ness (this window or
      *  another). When the AI tagged its execute fence with `target=<alias>`, that
      *  alias (resolved against the tab's watched terminals) wins; otherwise it

@@ -162,6 +162,38 @@ describe('LogViewerPane', () => {
     expect(mockReadLogFile).toHaveBeenCalledWith('/logs/test.log');
   });
 
+  it('lists and opens an AI chat transcript (.md)', async () => {
+    const chatLog = '20260727091402-AICHAT-router-a.md';
+    mockListLogFiles.mockResolvedValue({
+      files: [
+        { name: chatLog, path: `/logs/${chatLog}`, mtime: 1700000000000, size: 2048 },
+        { name: 'session.txt', path: '/logs/session.txt', mtime: 1600000000000, size: 512 },
+      ],
+    });
+    mockReadLogFile.mockResolvedValue({
+      content: '# AI Chat — router-a\n\n## [2026-07-27 09:14:02.100] User\n\n```text\nshow version\n```\n',
+    });
+
+    render(<LogViewerPane paneId="lv-1" active={true} />);
+    fireEvent.change(screen.getByPlaceholderText('Log folder path...'), { target: { value: '/logs' } });
+    fireEvent.click(screen.getByText('Open'));
+
+    await waitFor(() => {
+      expect(screen.getByText(chatLog)).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText(chatLog));
+
+    await waitFor(() => {
+      const pre = document.querySelector('.log-viewer-pre');
+      expect(pre).toBeTruthy();
+      // Rendered as raw markdown source — no HTML rendering, no XSS surface.
+      expect(pre!.textContent).toContain('# AI Chat — router-a');
+      expect(pre!.textContent).toContain('```text');
+    });
+    expect(mockReadLogFile).toHaveBeenCalledWith(`/logs/${chatLog}`);
+  });
+
   it('shows error when listLogFiles returns error', async () => {
     mockListLogFiles.mockResolvedValue({
       error: 'Log folder is not registered',

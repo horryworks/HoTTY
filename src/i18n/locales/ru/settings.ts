@@ -19,7 +19,7 @@ export const settings = {
     loggingSection: 'Журналирование',
     enableLogging: 'Включить журналирование',
     logFolderPath: 'Путь к папке журналов',
-    logFolderPathHelp: 'Журналы сохраняются как YYYYMMDDHHMMSS-(Протокол)-(IP).txt',
+    logFolderPathHelp: 'Журналы терминала сохраняются как YYYYMMDDHHMMSS-(Протокол)-(IP).txt, а расшифровки чата с ИИ — как YYYYMMDDHHMMSS-AICHAT-(Чат).md',
     logFolderPathPlaceholder: 'Выберите папку или введите путь...',
     // Терминал
     terminalSection: 'Терминал',

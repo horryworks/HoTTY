@@ -15,6 +15,8 @@ vi.mock('../../services/tauriService', () => ({
     onAiChatResponse: vi.fn().mockResolvedValue(() => {}),
     onAiAuthResult: vi.fn().mockResolvedValue(() => {}),
     selectServiceAccountKeyFile: vi.fn().mockResolvedValue(null),
+    aiChatLogAppend: vi.fn().mockResolvedValue(undefined),
+    aiChatLogClose: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -43,6 +45,8 @@ vi.mock('../../stores/settingsStore', () => ({
       aiPersonas: [],
       watchBufferLimit: 500000,
       theme: 'dark',
+      loggingEnabled: false,
+      loggingPath: '',
       update: vi.fn(),
     }),
     { getState: () => ({ activeAiProvider: 'gemini', update: vi.fn() }) }

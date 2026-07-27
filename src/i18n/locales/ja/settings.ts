@@ -19,7 +19,7 @@ export const settings = {
     loggingSection: 'ログ',
     enableLogging: 'ログを有効にする',
     logFolderPath: 'ログフォルダのパス',
-    logFolderPathHelp: 'ログは YYYYMMDDHHMMSS-(プロトコル)-(IP).txt として保存されます',
+    logFolderPathHelp: 'ターミナルのログは YYYYMMDDHHMMSS-(プロトコル)-(IP).txt、AI チャットの履歴は YYYYMMDDHHMMSS-AICHAT-(チャット).md として保存されます',
     logFolderPathPlaceholder: 'フォルダを選択するかパスを入力...',
     // ターミナル
     terminalSection: 'ターミナル',

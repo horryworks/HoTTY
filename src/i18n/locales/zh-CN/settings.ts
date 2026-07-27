@@ -19,7 +19,7 @@ export const settings = {
     loggingSection: '日志记录',
     enableLogging: '启用日志记录',
     logFolderPath: '日志文件夹路径',
-    logFolderPathHelp: '日志将保存为 YYYYMMDDHHMMSS-(协议)-(IP).txt',
+    logFolderPathHelp: '终端日志将保存为 YYYYMMDDHHMMSS-(协议)-(IP).txt，AI 聊天记录将保存为 YYYYMMDDHHMMSS-AICHAT-(聊天).md',
     logFolderPathPlaceholder: '选择文件夹或输入路径...',
     // Terminal
     terminalSection: '终端',

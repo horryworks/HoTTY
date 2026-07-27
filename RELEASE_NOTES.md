@@ -1,5 +1,27 @@
 # Release Notes
 
+## v2.0.14-beta1
+
+**AI Chat conversations are now saved to disk, the same way terminal sessions already were.** Turn on **Settings → General → Logging** and every AI Chat conversation is written to a Markdown file in the same folder as your session logs — and shows up in the Log Viewer right next to them. Nothing else to configure: same checkbox, same folder, same folder-approval prompt.
+
+### New Features
+
+- **AI chat transcripts saved as Markdown.** While logging is on, each conversation is appended live to `YYYYMMDDHHMMSS-AICHAT-(Chat).md` in your log folder. The file opens with the model, AI provider, and the terminals the tab was watching, then records every turn with a timestamp. Your messages are written inside a code block so pasted terminal output can't mangle the formatting; the AI's replies stay as plain Markdown, so headings, lists, and code blocks read exactly as they do in the pane. Each turn lands on disk the moment it appears, so nothing is lost if the app is closed or killed mid-conversation.
+- **AI chat logs in the Log Viewer.** The Log Viewer now lists `.md` files alongside `.txt` and `.log` ones, sorted together by time, so a chat and the session it was about sit side by side. Type `AICHAT` in the filter box to see just the conversations.
+- **A new file per conversation.** Starting a new chat, closing a tab, or switching AI provider closes the current transcript and begins a fresh one on the next message — the same way reconnecting a terminal starts a new session log. The filename records the tab's name at the moment the file is created.
+
+### Improvements
+
+- **Clearer log folder help text.** The hint under **Log Folder Path** now describes both file types you will find there.
+- **New help section for AI chat logs.** **Help → Session Logging & Log Viewer** explains where transcripts go, what starts a new file, and that attached images are noted but not saved.
+
+### Security
+
+- **AI chat transcripts obey the same folder approval as session logs.** A transcript can only be written to a folder you approved through the native picker or confirm dialog; the check runs before anything touches the disk, and an unapproved path creates no file or directory. Chat tab names are sanitized before use in a filename, so a name can never steer the file out of the approved folder.
+- **Image attachments are recorded, not stored.** Only the image type and size are written to the transcript — the image data itself never leaves the app, which also keeps transcripts small enough for the Log Viewer to open.
+- **Logging failures are surfaced, never silent.** If a write fails, HoTTY tells you once and stops logging that conversation instead of quietly saving an incomplete transcript. Changing the log folder re-enables it.
+- **What you type is saved exactly as typed.** Terminal output that HoTTY sends to the AI is redacted first, but text you write yourself is not — so avoid typing credentials into the chat. The help text now says so.
+
 ## v2.0.13
 
 **Google Cloud IAP connections work end-to-end again, the New Connection dialog now waits with you instead of dropping you into an empty pane, and AI Chat's command verdicts got a quieter, expandable design.** IAP logins had been failing with `Permission denied (publickey)` since v2.0.3-beta4 — HoTTY now asks gcloud which account and key to use, enrolls your SSH key automatically on a fresh PC, and handles corporate Windows logins that are all digits. IAP sessions also verify the VM's host key now, instead of skipping the check entirely.

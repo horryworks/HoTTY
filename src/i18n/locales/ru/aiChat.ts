@@ -120,6 +120,7 @@ export const aiChat = {
     tooManyImages: 'Слишком много изображений (макс. 5)',
     cancelledSuffix: ' [отменено]',
     errorMessage: 'Ошибка: {{message}}',
+    chatLogDisabled: 'Журналирование чата с ИИ отключено: {{message}}',
     streamIdleTimeout: 'Поток ИИ простаивал {{seconds}} с — запрос отменён',
     streamHardcapTimeout: 'Поток ИИ превысил лимит {{seconds}} с — запрос отменён',
   },

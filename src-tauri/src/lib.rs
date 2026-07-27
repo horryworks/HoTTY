@@ -10,6 +10,7 @@ use commands::ai::{
     ai_chat_send, ai_classify_command, ai_list_locations, ai_list_models, ai_set_location,
     ai_set_provider, select_service_account_key_file, AIServiceState, ApprovedServiceAccountKeys,
 };
+use commands::chat_log::{ai_chat_log_append, ai_chat_log_close};
 use commands::dpapi::{dpapi_decrypt, dpapi_decrypt_batch, dpapi_encrypt, dpapi_encrypt_batch};
 use commands::file_explorer::{file_explorer_get_drives, file_explorer_list_directory};
 use commands::file_server::{
@@ -272,6 +273,9 @@ pub fn run() {
             list_log_files,
             read_log_file,
             confirm_log_dir,
+            // AI chat logging
+            ai_chat_log_append,
+            ai_chat_log_close,
             // Host tree import/export
             export_htree,
             select_import_file,

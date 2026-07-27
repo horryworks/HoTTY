@@ -118,6 +118,8 @@ export const help = {
       '<0>Registro de sesiones:</0> active el registro automático en <1>Configuración → General</1>. Toda la salida del terminal se guarda como archivos <2>.log</2> con marca de tiempo en la carpeta que especifique.',
     folderApproval:
       '<0>Aprobación de carpeta:</0> la primera vez que HoTTY usa una carpeta de registros — ya sea que inicie una sesión, active el registro o abra el Visor de registros — un diálogo de confirmación nativo le pide que apruebe esa carpeta. Elegir una carpeta mediante el botón <1>Examinar...</1> la aprueba automáticamente. Las aprobaciones persisten entre inicios de la aplicación (guardadas en <2>%APPDATA%\\com.hotty.terminal\\approved_log_dirs.json</2>), por lo que solo verá el diálogo una vez por carpeta. El mecanismo existe para que una ruta escrita o importada no pueda otorgar silenciosamente acceso al registro.',
+    aiChatLogging:
+      '<0>Registros del chat de IA:</0> Mientras el registro está activo, cada conversación del chat de IA se añade a un archivo Markdown (<1>...-AICHAT-....md</1>) en la misma carpeta y aparece en el Visor de registros. Las imágenes adjuntas se anotan pero no se guardan. Iniciar un chat nuevo, cerrar una pestaña o cambiar de proveedor de IA comienza un archivo nuevo. El texto que escribes se guarda tal cual, así que evita escribir credenciales en el chat.',
     logViewer:
       '<0>Visor de registros:</0> haga clic en el botón <1>Visor de registros</1> de la barra de pestañas para abrir un panel dedicado a la exploración de registros. Enumera todos los archivos de registro guardados y le permite abrirlos y buscar en ellos sin salir de HoTTY.',
     search:

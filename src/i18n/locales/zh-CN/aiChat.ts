@@ -119,6 +119,7 @@ export const aiChat = {
     tooManyImages: '图片过多（最多 5 张）',
     cancelledSuffix: ' [已取消]',
     errorMessage: '错误：{{message}}',
+    chatLogDisabled: 'AI 聊天日志记录已停用：{{message}}',
     streamIdleTimeout: 'AI 响应空闲 {{seconds}} 秒 — 请求已取消',
     streamHardcapTimeout: 'AI 响应超过 {{seconds}} 秒上限 — 请求已取消',
   },

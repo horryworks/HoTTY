@@ -2548,9 +2548,11 @@ mod tests {
 
     #[test]
     fn snapshot_roundtrips_reauth_fields_camelcase() {
-        let mut snap = GcloudCacheSnapshot::default();
-        snap.refresh_error = Some("There was a problem refreshing".to_string());
-        snap.needs_reauth = true;
+        let snap = GcloudCacheSnapshot {
+            refresh_error: Some("There was a problem refreshing".to_string()),
+            needs_reauth: true,
+            ..Default::default()
+        };
         let json = serde_json::to_value(&snap).unwrap();
         assert_eq!(json["refreshError"], "There was a problem refreshing");
         assert_eq!(json["needsReauth"], true);

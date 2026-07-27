@@ -19,7 +19,7 @@ export const settings = {
     loggingSection: 'Logging',
     enableLogging: 'Enable Logging',
     logFolderPath: 'Log Folder Path',
-    logFolderPathHelp: 'Logs are saved as YYYYMMDDHHMMSS-(Protocol)-(IP).txt',
+    logFolderPathHelp: 'Terminal logs are saved as YYYYMMDDHHMMSS-(Protocol)-(IP).txt, and AI chat transcripts as YYYYMMDDHHMMSS-AICHAT-(Chat).md',
     logFolderPathPlaceholder: 'Select a folder or type path...',
     // Terminal
     terminalSection: 'Terminal',

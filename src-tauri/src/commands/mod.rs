@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod chat_log;
 pub mod dpapi;
 pub mod file_explorer;
 pub mod file_server;

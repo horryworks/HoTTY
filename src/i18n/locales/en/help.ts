@@ -118,6 +118,8 @@ export const help = {
       '<0>Session Logging:</0> Enable automatic logging in <1>Settings → General</1>. All terminal output is saved as timestamped <2>.log</2> files to the folder you specify.',
     folderApproval:
       '<0>Folder approval:</0> The first time HoTTY uses a logging folder — whether you start a session, toggle logging on, or open the Log Viewer — a native confirm dialog asks you to approve that folder. Picking a folder via the <1>Browse...</1> button approves it automatically. Approvals persist across app launches (saved under <2>%APPDATA%\\com.hotty.terminal\\approved_log_dirs.json</2>), so you only see the dialog once per folder. The mechanism exists so a typed or imported path can\'t silently grant log access.',
+    aiChatLogging:
+      '<0>AI chat logs:</0> While logging is on, each AI Chat conversation is appended to a Markdown file (<1>...-AICHAT-....md</1>) in the same folder and appears in the Log Viewer. Attached images are noted but not saved. Starting a new chat, closing a tab, or switching AI provider begins a new file. Text you type is saved exactly as written, so avoid typing credentials into the chat.',
     logViewer:
       '<0>Log Viewer:</0> Click the <1>Log Viewer</1> button in the tab bar to open a dedicated log-browsing pane. It lists all saved log files and lets you open and search them without leaving HoTTY.',
     search:

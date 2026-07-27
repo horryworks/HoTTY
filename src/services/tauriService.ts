@@ -33,6 +33,8 @@ import type {
   ThirdPartyLicenses,
   ListLogFilesResult,
   ReadLogFileResult,
+  ChatLogMeta,
+  ChatLogTurnPayload,
   ExportHtreeResult,
   ReadFileResult,
   ListDirectoryResult,
@@ -282,6 +284,29 @@ export const tauriService = {
 
   async readLogFile(filePath: string): Promise<ReadLogFileResult> {
     return invoke<ReadLogFileResult>('read_log_file', { filePath });
+  },
+
+  // -----------------------------------------------------------------------
+  // AI chat logging (markdown transcripts, same folder as session logs)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Append conversation turns to `logKey`'s transcript, creating the file on
+   * the first call. Rejects if `logDir` is not in the dialog-attested
+   * allow-list that also gates terminal session logging.
+   */
+  async aiChatLogAppend(
+    logKey: string,
+    logDir: string,
+    meta: ChatLogMeta,
+    turns: ChatLogTurnPayload[],
+  ): Promise<void> {
+    await invoke('ai_chat_log_append', { logKey, logDir, meta, turns });
+  },
+
+  /** Forget `logKey` so the next append starts a fresh transcript file. */
+  async aiChatLogClose(logKey: string): Promise<void> {
+    await invoke('ai_chat_log_close', { logKey });
   },
 
   // -----------------------------------------------------------------------

@@ -19,7 +19,7 @@ export const settings = {
     loggingSection: 'Registro',
     enableLogging: 'Activar registro',
     logFolderPath: 'Ruta de la carpeta de registros',
-    logFolderPathHelp: 'Los registros se guardan como YYYYMMDDHHMMSS-(Protocolo)-(IP).txt',
+    logFolderPathHelp: 'Los registros de terminal se guardan como YYYYMMDDHHMMSS-(Protocolo)-(IP).txt y las transcripciones del chat de IA como YYYYMMDDHHMMSS-AICHAT-(Chat).md',
     logFolderPathPlaceholder: 'Seleccione una carpeta o escriba la ruta...',
     // Terminal
     terminalSection: 'Terminal',

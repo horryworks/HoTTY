@@ -19,7 +19,7 @@ export const settings = {
     loggingSection: '로깅',
     enableLogging: '로깅 사용',
     logFolderPath: '로그 폴더 경로',
-    logFolderPathHelp: '로그는 YYYYMMDDHHMMSS-(프로토콜)-(IP).txt 형식으로 저장됩니다',
+    logFolderPathHelp: '터미널 로그는 YYYYMMDDHHMMSS-(프로토콜)-(IP).txt, AI 채팅 기록은 YYYYMMDDHHMMSS-AICHAT-(채팅).md 형식으로 저장됩니다',
     logFolderPathPlaceholder: '폴더를 선택하거나 경로를 입력하세요...',
     // Terminal
     terminalSection: '터미널',

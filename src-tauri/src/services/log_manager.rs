@@ -1,16 +1,20 @@
 use std::collections::HashMap;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
+use crate::services::chat_log::{
+    build_chat_log_path, render_header, render_turn, ChatLogMeta, ChatLogTurn,
+};
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const MAX_FILENAME_LEN: usize = 200;
+pub(crate) const MAX_FILENAME_LEN: usize = 200;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,9 +46,28 @@ pub struct LogManager {
     inner: Arc<Mutex<LogManagerInner>>,
 }
 
+/// Per-conversation AI-chat log state, keyed by `paneId::tabId`.
+///
+/// Deliberately holds no `File`: `append_chat_log` opens, appends, flushes and
+/// closes on every call. Chat turns arrive a few per *minute* (not per
+/// keystroke like terminal output), so the reopen cost is noise, and in exchange
+/// there is no handle to release — no `Drop` impl, no window-close cleanup, no
+/// app-quit flush, and the transcript is complete on disk after every turn even
+/// if the app is killed.
+struct ChatLogState {
+    /// Absolute path of the markdown transcript.
+    path: PathBuf,
+    /// Canonicalized directory the file lives in, so a mid-conversation change
+    /// of the configured log folder rotates to a new file instead of appending
+    /// to the old one.
+    dir: PathBuf,
+}
+
 struct LogManagerInner {
     /// sessionId → active log state
     logs: HashMap<String, SessionLog>,
+    /// `paneId::tabId` → active AI-chat transcript
+    chat_logs: HashMap<String, ChatLogState>,
     /// Set of directories the user has explicitly attested for logging — only
     /// populated via a native dialog round-trip (`select_folder`'s file picker
     /// or `confirm_log_dir`'s yes/no prompt). The renderer cannot synthesise
@@ -153,7 +176,11 @@ fn process_log_data(raw: &str) -> String {
 // ---------------------------------------------------------------------------
 
 /// Sanitize a host string for use in filenames: replace non-alphanumeric chars with `_`.
-fn sanitize_host(host: &str) -> String {
+///
+/// The ASCII-only output is load-bearing: callers byte-truncate the resulting
+/// filename at `MAX_FILENAME_LEN`, which would panic on a char boundary if
+/// multi-byte characters survived. Do not widen the accepted set.
+pub(crate) fn sanitize_host(host: &str) -> String {
     host.chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || c == '.' || c == '-' {
@@ -166,7 +193,7 @@ fn sanitize_host(host: &str) -> String {
 }
 
 /// Generate a timestamp string in the format YYYYMMDDHHMMSS.
-fn timestamp_prefix() -> String {
+pub(crate) fn timestamp_prefix() -> String {
     chrono_lite_stamp()
 }
 
@@ -210,7 +237,7 @@ fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
 }
 
 /// Generate a millisecond-precision timestamp for .tslog entries.
-fn ts_log_timestamp() -> String {
+pub(crate) fn ts_log_timestamp() -> String {
     use std::time::SystemTime;
 
     let now = SystemTime::now()
@@ -274,6 +301,7 @@ impl LogManager {
         Self {
             inner: Arc::new(Mutex::new(LogManagerInner {
                 logs: HashMap::new(),
+                chat_logs: HashMap::new(),
                 allowed_dirs: Vec::new(),
                 persist_path: None,
             })),
@@ -475,6 +503,104 @@ impl LogManager {
             let _ = log.file.flush();
             let _ = log.ts_file.flush();
             log::info!("stopped logging session '{session_id}'");
+        }
+    }
+
+    /// Append AI-chat turns to the conversation's markdown transcript, creating
+    /// the file (and writing its header) on the first call for `log_key`.
+    ///
+    /// Security: `log_dir` must be in the same dialog-attested allow-list that
+    /// gates `start_logging`, so a compromised renderer cannot write markdown to
+    /// an arbitrary path by forging `log_key` / `log_dir`. Unlike
+    /// `start_logging` the approval check runs *before* any filesystem mutation
+    /// — no directory is created for an unapproved path. An approved directory
+    /// necessarily exists already (`confirm_log_dir` requires `is_dir()`).
+    pub async fn append_chat_log(
+        &self,
+        log_key: &str,
+        log_dir: &Path,
+        meta: &ChatLogMeta,
+        turns: &[ChatLogTurn],
+    ) -> Result<(), String> {
+        if turns.is_empty() {
+            return Ok(());
+        }
+
+        let mut inner = self.inner.lock().await;
+
+        let dir_buf = canonicalize_for_compare(log_dir);
+        if !inner.allowed_dirs.contains(&dir_buf) {
+            return Err(format!("log directory not approved: {}", log_dir.display()));
+        }
+        if !log_dir.is_dir() {
+            return Err(format!("log directory not found: {}", log_dir.display()));
+        }
+
+        // The configured log folder changed mid-conversation — retire the old
+        // file and start a fresh one under the new (also approved) directory.
+        if let Some(existing) = inner.chat_logs.get(log_key) {
+            if existing.dir != dir_buf {
+                inner.chat_logs.remove(log_key);
+            }
+        }
+
+        // Lazy start: an AI chat tab often never receives a message, so creating
+        // the file eagerly would litter the log folder with empty transcripts.
+        // Creating it on the first turn is also the moment the tab title is
+        // meaningful (it is empty until a terminal is linked).
+        let path = match inner.chat_logs.get(log_key) {
+            Some(state) => state.path.clone(),
+            None => {
+                let path = build_chat_log_path(log_dir, &meta.title);
+                let mut file = File::create(&path)
+                    .map_err(|e| format!("failed to create chat log file: {e}"))?;
+                let header = render_header(meta, log_key, &ts_log_timestamp());
+                file.write_all(header.as_bytes())
+                    .and_then(|()| file.flush())
+                    .map_err(|e| format!("failed to write chat log header: {e}"))?;
+                log::info!("started AI chat log '{log_key}' to {}", path.display());
+                inner.chat_logs.insert(
+                    log_key.to_string(),
+                    ChatLogState {
+                        path: path.clone(),
+                        dir: dir_buf,
+                    },
+                );
+                path
+            }
+        };
+
+        let mut body = String::new();
+        for turn in turns {
+            body.push_str(&render_turn(turn, &ts_log_timestamp()));
+        }
+
+        let write_result = OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .and_then(|mut f| f.write_all(body.as_bytes()).and_then(|()| f.flush()));
+
+        if let Err(e) = write_result {
+            // Mirrors `write`'s policy: surface the failure once and stop logging
+            // this conversation rather than silently truncating the transcript.
+            log::error!(
+                "AI chat log write failed for '{log_key}': {e}; stopping chat logging for this conversation"
+            );
+            inner.chat_logs.remove(log_key);
+            return Err(format!("failed to write chat log: {e}"));
+        }
+
+        Ok(())
+    }
+
+    /// Forget `log_key` so the next append starts a fresh transcript file.
+    ///
+    /// Called when a conversation is cleared, its tab closes, or the provider
+    /// changes. Nothing to flush — transcripts are never held open.
+    pub async fn close_chat_log(&self, log_key: &str) {
+        let mut inner = self.inner.lock().await;
+        if inner.chat_logs.remove(log_key).is_some() {
+            log::info!("closed AI chat log '{log_key}'");
         }
     }
 }
@@ -815,6 +941,215 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ---- AI chat transcripts -------------------------------------------
+
+    use crate::services::chat_log::{ChatLogRole, CHAT_LOG_EXT};
+
+    fn chat_turn(role: ChatLogRole, content: &str) -> ChatLogTurn {
+        ChatLogTurn {
+            role,
+            content: content.to_string(),
+            images: Vec::new(),
+        }
+    }
+
+    fn chat_meta() -> ChatLogMeta {
+        ChatLogMeta {
+            title: "router-a".to_string(),
+            model: "gemini-2.5-pro".to_string(),
+            provider: "gemini".to_string(),
+            terminals: vec!["router-a".to_string()],
+        }
+    }
+
+    /// Count `.md` files directly inside `dir`.
+    fn md_files(dir: &Path) -> Vec<PathBuf> {
+        let mut out: Vec<PathBuf> = fs::read_dir(dir)
+            .map(|rd| {
+                rd.flatten()
+                    .map(|e| e.path())
+                    .filter(|p| p.extension().and_then(|e| e.to_str()) == Some(CHAT_LOG_EXT))
+                    .collect()
+            })
+            .unwrap_or_default();
+        out.sort();
+        out
+    }
+
+    /// Fresh, approved temp directory for a chat-log test.
+    async fn approved_chat_dir(mgr: &LogManager, name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(name);
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        mgr.approve_dir(&dir).await;
+        dir
+    }
+
+    #[tokio::test]
+    async fn append_chat_log_creates_file_with_header_then_appends() {
+        let mgr = LogManager::new();
+        let dir = approved_chat_dir(&mgr, "hotty_test_chat_log_create").await;
+
+        mgr.append_chat_log(
+            "ai-1::tab-1",
+            &dir,
+            &chat_meta(),
+            &[chat_turn(ChatLogRole::User, "show version")],
+        )
+        .await
+        .unwrap();
+        mgr.append_chat_log(
+            "ai-1::tab-1",
+            &dir,
+            &chat_meta(),
+            &[chat_turn(ChatLogRole::Model, "Here is the version.")],
+        )
+        .await
+        .unwrap();
+
+        let files = md_files(&dir);
+        assert_eq!(files.len(), 1, "second append must reuse the same file");
+        let content = fs::read_to_string(&files[0]).unwrap();
+        assert!(content.starts_with("# AI Chat — router-a"));
+        assert!(content.contains("- **Model:** gemini-2.5-pro"));
+        let user_at = content.find("] User").expect("user turn missing");
+        let model_at = content.find("] Assistant").expect("model turn missing");
+        assert!(user_at < model_at, "turns must be in order");
+        assert!(content.contains("```text\nshow version\n```"));
+        assert!(content.contains("Here is the version."));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn append_chat_log_rejects_unapproved_dir() {
+        let dir = std::env::temp_dir().join("hotty_test_chat_log_unapproved");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let mgr = LogManager::new();
+        let result = mgr
+            .append_chat_log(
+                "ai-1::tab-1",
+                &dir,
+                &chat_meta(),
+                &[chat_turn(ChatLogRole::User, "hi")],
+            )
+            .await;
+
+        let msg = result.expect_err("expected error for unapproved dir");
+        assert!(
+            msg.contains("not approved"),
+            "expected 'not approved' in error, got: {msg}"
+        );
+        assert!(
+            md_files(&dir).is_empty(),
+            "an unapproved append must not create a file"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn close_chat_log_starts_a_new_file() {
+        let mgr = LogManager::new();
+        let dir = approved_chat_dir(&mgr, "hotty_test_chat_log_close").await;
+        let meta = chat_meta();
+
+        mgr.append_chat_log("k", &dir, &meta, &[chat_turn(ChatLogRole::User, "one")])
+            .await
+            .unwrap();
+        mgr.close_chat_log("k").await;
+        mgr.append_chat_log("k", &dir, &meta, &[chat_turn(ChatLogRole::User, "two")])
+            .await
+            .unwrap();
+
+        let files = md_files(&dir);
+        assert_eq!(files.len(), 2, "close must start a fresh transcript");
+        // Both files are created inside the same second, so the collision
+        // suffix decides their sort order — assert on content, not position.
+        let bodies: Vec<String> = files
+            .iter()
+            .map(|p| fs::read_to_string(p).unwrap())
+            .collect();
+        assert_eq!(
+            bodies.iter().filter(|b| b.contains("one")).count(),
+            1,
+            "the first turn must live in exactly one transcript"
+        );
+        assert_eq!(
+            bodies.iter().filter(|b| b.contains("two")).count(),
+            1,
+            "the second turn must live in exactly one transcript"
+        );
+        assert!(
+            !bodies
+                .iter()
+                .any(|b| b.contains("one") && b.contains("two")),
+            "close must not let both turns land in the same transcript"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn append_chat_log_rotates_when_log_dir_changes() {
+        let mgr = LogManager::new();
+        let dir_a = approved_chat_dir(&mgr, "hotty_test_chat_log_rot_a").await;
+        let dir_b = approved_chat_dir(&mgr, "hotty_test_chat_log_rot_b").await;
+        let meta = chat_meta();
+
+        mgr.append_chat_log("k", &dir_a, &meta, &[chat_turn(ChatLogRole::User, "a")])
+            .await
+            .unwrap();
+        mgr.append_chat_log("k", &dir_b, &meta, &[chat_turn(ChatLogRole::User, "b")])
+            .await
+            .unwrap();
+
+        assert_eq!(md_files(&dir_a).len(), 1);
+        assert_eq!(md_files(&dir_b).len(), 1);
+
+        let _ = fs::remove_dir_all(&dir_a);
+        let _ = fs::remove_dir_all(&dir_b);
+    }
+
+    #[tokio::test]
+    async fn append_chat_log_empty_turns_is_noop() {
+        let mgr = LogManager::new();
+        let dir = approved_chat_dir(&mgr, "hotty_test_chat_log_empty").await;
+
+        mgr.append_chat_log("k", &dir, &chat_meta(), &[])
+            .await
+            .unwrap();
+        assert!(md_files(&dir).is_empty(), "no turns means no file");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn append_chat_log_rejects_missing_dir() {
+        let mgr = LogManager::new();
+        let dir = approved_chat_dir(&mgr, "hotty_test_chat_log_missing").await;
+        // Approved, then removed out from under us.
+        let _ = fs::remove_dir_all(&dir);
+
+        let result = mgr
+            .append_chat_log(
+                "k",
+                &dir,
+                &chat_meta(),
+                &[chat_turn(ChatLogRole::User, "hi")],
+            )
+            .await;
+        assert!(result.is_err(), "expected error for a missing directory");
+    }
+
+    #[tokio::test]
+    async fn close_chat_log_unknown_key_is_noop() {
+        let mgr = LogManager::new();
+        mgr.close_chat_log("never-seen").await;
     }
 
     #[tokio::test]

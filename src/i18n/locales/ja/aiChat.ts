@@ -114,6 +114,7 @@ export const aiChat = {
     tooManyImages: '画像が多すぎます（最大5枚）',
     cancelledSuffix: ' [キャンセル済み]',
     errorMessage: 'エラー: {{message}}',
+    chatLogDisabled: 'AI チャットのログ保存を停止しました: {{message}}',
     streamIdleTimeout: 'AI 応答が {{seconds}} 秒間停止したため、リクエストをキャンセルしました',
     streamHardcapTimeout: 'AI 応答が上限の {{seconds}} 秒を超えたため、リクエストをキャンセルしました',
   },

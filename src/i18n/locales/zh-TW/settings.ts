@@ -19,7 +19,7 @@ export const settings = {
     loggingSection: '記錄',
     enableLogging: '啟用記錄',
     logFolderPath: '記錄檔資料夾路徑',
-    logFolderPathHelp: '記錄檔會以 YYYYMMDDHHMMSS-(Protocol)-(IP).txt 格式儲存',
+    logFolderPathHelp: '終端機記錄檔會以 YYYYMMDDHHMMSS-(Protocol)-(IP).txt 格式儲存，AI 聊天記錄則以 YYYYMMDDHHMMSS-AICHAT-(聊天).md 格式儲存',
     logFolderPathPlaceholder: '選取資料夾或輸入路徑...',
     // 終端機
     terminalSection: '終端機',

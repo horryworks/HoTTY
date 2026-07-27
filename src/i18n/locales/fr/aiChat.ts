@@ -119,6 +119,7 @@ export const aiChat = {
     tooManyImages: 'Trop d\'images (max. 5)',
     cancelledSuffix: ' [annulé]',
     errorMessage: 'Erreur : {{message}}',
+    chatLogDisabled: 'Journalisation du chat IA désactivée : {{message}}',
     streamIdleTimeout: "Le flux d'IA est resté inactif pendant {{seconds}} s — requête annulée",
     streamHardcapTimeout: "Le flux d'IA a dépassé la limite de {{seconds}} s — requête annulée",
   },

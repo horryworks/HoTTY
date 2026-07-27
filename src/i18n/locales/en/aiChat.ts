@@ -121,6 +121,7 @@ export const aiChat = {
     tooManyImages: 'Too many images (max 5)',
     cancelledSuffix: ' [cancelled]',
     errorMessage: 'Error: {{message}}',
+    chatLogDisabled: 'AI chat logging disabled: {{message}}',
     streamIdleTimeout: 'AI stream idle for {{seconds}}s — request cancelled',
     streamHardcapTimeout: 'AI stream exceeded {{seconds}}s limit — request cancelled',
   },
