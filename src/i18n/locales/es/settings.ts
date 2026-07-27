@@ -136,6 +136,10 @@ export const settings = {
     logViewerDescription: 'Ver y analizar registros de sesión',
     pingMonitorLabel: 'Monitor de Ping',
     pingMonitorDescription: 'Monitoreo continuo de Ping ICMP',
+
+    interfaceTrafficLabel: 'Tráfico de interfaces',
+
+    interfaceTrafficDescription: 'Contadores de interfaz SNMP en vivo (bps / pps / errores) de dispositivos de red',
   },
   ai: {
     // Proveedor

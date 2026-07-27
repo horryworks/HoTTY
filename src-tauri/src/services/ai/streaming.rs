@@ -44,7 +44,7 @@ pub fn cap_history<T>(history: &mut Vec<T>, max_messages: usize) {
         return;
     }
     let mut remove = history.len() - max_messages;
-    if remove % 2 != 0 {
+    if !remove.is_multiple_of(2) {
         remove += 1; // round up to an even count to keep alternation parity
     }
     if remove >= history.len() {

@@ -190,6 +190,7 @@ const DEFAULTS: SettingsState = {
     'ping-monitor': true,
     'file-server': true,
     'web-browser': true,
+    'interface-traffic': true,
   },
   webBrowserDefaultZoom: 100,
   fileServerConfig: {
@@ -229,7 +230,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 27,
+      version: 28,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -363,6 +364,15 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
             delete features['text-editor'];
             delete features['file-explorer'];
           }
+        }
+        if (version < 28) {
+          // New Interface Traffic Watcher (SNMP) pane — on by default, without
+          // clobbering the user's existing per-feature choices.
+          state.enabledFeatures = {
+            ...DEFAULTS.enabledFeatures,
+            ...(state.enabledFeatures ?? {}),
+            'interface-traffic': state.enabledFeatures?.['interface-traffic'] ?? true,
+          };
         }
         return state as SettingsState;
       },

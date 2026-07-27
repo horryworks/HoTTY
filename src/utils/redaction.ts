@@ -12,6 +12,13 @@ const SENSITIVE_KEYS = [
   'private[_-]?key',
   'refresh[_-]?token',
   'access[_-]?token',
+  // SNMP credentials. `auth[_-]?password` / `priv[_-]?password` need their own
+  // entries because the pattern below anchors each key with \b, and there is no
+  // word boundary inside `authPassword` — a bare `password` entry would not
+  // match it.
+  'community',
+  'auth[_-]?password',
+  'priv[_-]?password',
 ];
 
 const KEYED_VALUE_PATTERN = new RegExp(

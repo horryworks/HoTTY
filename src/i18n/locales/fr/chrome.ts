@@ -13,6 +13,8 @@ export const chrome = {
     aiMonitorStartAria: 'Démarrer la surveillance IA',
     logViewer: 'Visionneuse de journaux',
     pingMonitor: 'Surveillance Ping',
+
+    interfaceTraffic: 'Trafic des interfaces',
     aiChat: 'Chat IA',
     saveToHostTree: "Enregistrer dans l'arborescence des hôtes…",
     fixedTerminalSize: 'Largeur fixe ({{cols}})',

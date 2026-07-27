@@ -1,4 +1,10 @@
-export type FeaturePaneType = 'log-viewer' | 'ping-monitor' | 'ai-chat' | 'file-server' | 'web-browser';
+export type FeaturePaneType =
+  | 'log-viewer'
+  | 'ping-monitor'
+  | 'ai-chat'
+  | 'file-server'
+  | 'web-browser'
+  | 'interface-traffic';
 
 type PaneContentType = 'session' | FeaturePaneType;
 
@@ -14,6 +20,7 @@ const FEATURE_PREFIXES: Record<FeaturePaneType, string> = {
   'ai-chat': 'ai-',
   'file-server': 'fs-',
   'web-browser': 'wb-',
+  'interface-traffic': 'if-',
 };
 
 const FEATURE_DISPLAY_NAMES: Record<FeaturePaneType, string> = {
@@ -22,6 +29,7 @@ const FEATURE_DISPLAY_NAMES: Record<FeaturePaneType, string> = {
   'ai-chat': 'AI Chat',
   'file-server': 'File Server',
   'web-browser': 'Web Browser',
+  'interface-traffic': 'Interface Traffic',
 };
 
 export function makeFeaturePaneId(type: FeaturePaneType): string {

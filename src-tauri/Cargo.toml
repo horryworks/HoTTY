@@ -1,12 +1,15 @@
 [package]
 name = "hotty"
-version = "2.0.14-beta2"
+version = "2.0.14-beta3"
 description = "HoTTY - AI Integrated Advanced Terminal Emulator (Rust/Tauri)"
 authors = ["horryworks"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/horryworks/HoTTY"
 edition = "2021"
-rust-version = "1.77.2"
+# Floor raised from 1.77.2 for `snmp2` (edition 2024, MSRV 1.90.0). The pinned
+# toolchain in rust-toolchain.toml (1.95.0) is well above this; this field just
+# records the real floor so it doesn't drift from what the tree can build.
+rust-version = "1.90.0"
 
 [lib]
 name = "app_lib"
@@ -79,6 +82,22 @@ reqwest = { version = "0.12", features = ["json", "stream"] }
 # lets network devices (e.g. Cisco) pull/push firmware images over UDP.
 # Executor-agnostic (async-io reactor); runs inside the existing tokio app.
 async-tftp = "0.4.2"
+
+# SNMP v2c/v3 client for the Interface Traffic Watcher pane (ifTable/ifXTable
+# polling over UDP/161). Feature set is deliberately minimal:
+#   - "tokio"       async sessions on the existing runtime (AsyncSession)
+#   - "v3"          USM (noAuthNoPriv / authNoPriv / authPriv)
+#   - "crypto-rust" pure-Rust MD5/SHA/AES/DES — the RustCrypto crates it needs
+#                   are already in the tree via russh, so the lock delta is small
+#   - "heap_buffers" moves the two 65_507-byte scratch buffers (send + recv) off
+#                   the struct and onto the heap. Without it `AsyncSession` is a
+#                   ~131 KB by-value struct that gets memcpy'd out of its
+#                   constructor — exactly the kind of resident cost this project
+#                   exists to avoid.
+# `mibs` is OFF (it links native libnetsnmp) and `crypto-openssl` is OFF (would
+# drag in an OpenSSL build); default-features would enable crypto-rust anyway but
+# is disabled so the set stays explicit.
+snmp2 = { version = "0.5.2", default-features = false, features = ["tokio", "v3", "crypto-rust", "heap_buffers"] }
 
 # Off-thread file I/O adapter (futures AsyncRead/AsyncWrite over std::fs::File);
 # required to serve files through async-tftp's Handler trait. Already in the tree

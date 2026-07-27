@@ -136,6 +136,10 @@ export const settings = {
     logViewerDescription: '세션 로그 보기 및 분석',
     pingMonitorLabel: 'Ping 모니터',
     pingMonitorDescription: '지속적인 ICMP ping 모니터링',
+
+    interfaceTrafficLabel: '인터페이스 트래픽',
+
+    interfaceTrafficDescription: 'SNMP로 네트워크 장비의 인터페이스 카운터(bps / pps / 오류)를 실시간 확인',
   },
   ai: {
     // Provider

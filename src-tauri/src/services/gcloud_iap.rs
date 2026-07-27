@@ -1616,7 +1616,7 @@ async fn start_iap_tunnel(
                                 phase_start.elapsed()
                             );
                             return Ok::<u16, SessionError>(p);
-                        } else if probe_attempts == 1 || probe_attempts % 8 == 0 {
+                        } else if probe_attempts == 1 || probe_attempts.is_multiple_of(8) {
                             // Log first failure plus every ~2s of failures
                             // (8 × 250 ms tick = 2 s) so the log shows progress
                             // without a flood of identical lines.

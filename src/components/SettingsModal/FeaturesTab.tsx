@@ -11,6 +11,7 @@ const FEATURE_KEYS: { id: FeatureId; labelKey: string; descriptionKey: string }[
   { id: 'ping-monitor', labelKey: 'settings.features.pingMonitorLabel', descriptionKey: 'settings.features.pingMonitorDescription' },
   { id: 'file-server', labelKey: 'settings.features.fileServerLabel', descriptionKey: 'settings.features.fileServerDescription' },
   { id: 'web-browser', labelKey: 'settings.features.webBrowserLabel', descriptionKey: 'settings.features.webBrowserDescription' },
+  { id: 'interface-traffic', labelKey: 'settings.features.interfaceTrafficLabel', descriptionKey: 'settings.features.interfaceTrafficDescription' },
 ];
 
 export function FeaturesTab() {

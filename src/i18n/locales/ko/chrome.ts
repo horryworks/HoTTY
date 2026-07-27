@@ -13,6 +13,8 @@ export const chrome = {
     aiMonitorStartAria: 'AI 모니터링 시작',
     logViewer: '로그 뷰어',
     pingMonitor: 'Ping 모니터',
+
+    interfaceTraffic: '인터페이스 트래픽',
     aiChat: 'AI 채팅',
     saveToHostTree: '호스트 트리에 저장…',
     fixedTerminalSize: '너비 고정 ({{cols}})',

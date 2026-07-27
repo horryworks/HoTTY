@@ -136,6 +136,10 @@ export const settings = {
     logViewerDescription: 'Просмотр и анализ журналов сессий',
     pingMonitorLabel: 'Ping-мониторинг',
     pingMonitorDescription: 'Непрерывный ICMP ping-мониторинг',
+
+    interfaceTrafficLabel: 'Трафик интерфейсов',
+
+    interfaceTrafficDescription: 'Счётчики интерфейсов сетевых устройств по SNMP в реальном времени (бит/с, пак/с, ошибки)',
   },
   ai: {
     // Провайдер

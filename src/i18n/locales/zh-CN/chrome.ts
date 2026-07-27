@@ -13,6 +13,8 @@ export const chrome = {
     aiMonitorStartAria: '启动 AI 监控',
     logViewer: '日志查看器',
     pingMonitor: 'Ping 监控',
+
+    interfaceTraffic: '接口流量',
     aiChat: 'AI 聊天',
     saveToHostTree: '保存到主机树…',
     fixedTerminalSize: '固定宽度 ({{cols}})',

@@ -30,8 +30,8 @@ describe('appTypes', () => {
   });
 
   it('FeatureId accepts every declared member', () => {
-    const values: FeatureId[] = ['ai-chat', 'log-viewer', 'ping-monitor', 'file-server', 'web-browser'];
-    expect(values).toHaveLength(5);
+    const values: FeatureId[] = ['ai-chat', 'log-viewer', 'ping-monitor', 'file-server', 'web-browser', 'interface-traffic'];
+    expect(values).toHaveLength(6);
   });
 
   it('Encoding accepts every declared member', () => {

@@ -8,6 +8,7 @@ pub mod licenses;
 pub mod log_viewer;
 pub mod ping_monitor;
 pub mod session;
+pub mod snmp_watcher;
 pub mod ssh_algorithms;
 pub mod sync;
 pub mod system;

@@ -17,6 +17,7 @@ export const help = {
     clearOrSigint: 'Clear selection / Send SIGINT',
     paste: 'Paste to terminal (with security check)',
     sendMessage: 'Send message in Ask AI dialog',
+    findInLog: 'Search in the open log (Log Viewer pane)',
     closeModal: 'Close modal / dialog',
   },
 
@@ -142,6 +143,26 @@ export const help = {
       '<0>Windows Firewall:</0> If inbound is blocked, the pane shows it and offers <1>Allow through firewall</1> (one click, requires administrator).',
     security:
       '<0>Security:</0> Starting a server exposes the chosen folder to your local network. Serve only trusted files and keep uploads off unless you need them.',
+  },
+
+  interfaceTraffic: {
+    summary: 'Interface Traffic (SNMP)',
+    intro:
+      'Open the Interface Traffic pane via <0><1></1></0> (Features) → <2>"Interface Traffic"</2>. It polls a network device over SNMP and shows live per-interface throughput next to your terminals.',
+    connect:
+      '<0>Connect:</0> Enter the device host or IP address and pick the SNMP version. <1>v2c</1> takes a community string; <2>v3</2> takes a user name and a security level.',
+    discover:
+      '<0>List interfaces:</0> Tests the connection and lists what the device has. <1>Start</1> then begins polling — rates appear from the second poll, since the first one sets the baseline.',
+    columns:
+      '<0>Columns:</0> In/Out <1>bps</1> and <2>pps</2>, input and output errors and discards, plus each interface\'s name, description, status and speed. Click a column to sort, filter by name or description, or tick <3>Up only</3> to hide interfaces that are down.',
+    v3:
+      '<0>SNMP v3 security:</0> <1>noAuthNoPriv</1>, <2>authNoPriv</2> (MD5/SHA authentication) and <3>authPriv</3> (adds DES/AES privacy) are all supported, with an optional context name. noAuthNoPriv sends everything unauthenticated and in the clear.',
+    counters:
+      '<0>64-bit counters:</0> Used when the device offers <1>ifXTable</1>. Devices with only 32-bit counters still work, but the pane flags it — those wrap in about 34 seconds on a saturated 1 Gbps link.',
+    remember:
+      '<0>Saved settings:</0> Each pane keeps its own device settings. Tick <1>Remember these connection settings</1> to store the credentials too — they are encrypted with Windows DPAPI before being saved. Leave it off to re-enter them each time.',
+    enable:
+      '<0>Enable / disable:</0> The pane can be turned off in <1>Settings → Features</1>.',
   },
 
   webBrowser: {

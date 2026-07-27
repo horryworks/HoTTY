@@ -16,12 +16,19 @@ describe('FeaturesTab', () => {
   it('has the expected default enabled state (every shipped feature on)', () => {
     render(<FeaturesTab />);
     const checkboxes = screen.getAllByRole('checkbox');
-    expect(checkboxes.length).toBe(5);
+    expect(checkboxes.length).toBe(6);
     // All toggles are present and interactable regardless of state.
     for (const cb of checkboxes) {
       expect(cb).toHaveProperty('disabled', false);
     }
-    for (const name of ['AI Chat', 'Log Viewer', 'Ping Monitor', 'File Server', 'Web Browser']) {
+    for (const name of [
+      'AI Chat',
+      'Log Viewer',
+      'Ping Monitor',
+      'File Server',
+      'Web Browser',
+      'Interface Traffic',
+    ]) {
       expect(screen.getByRole('checkbox', { name })).toHaveProperty('checked', true);
     }
   });
@@ -41,6 +48,7 @@ describe('FeaturesTab', () => {
       'ping-monitor': true,
       'file-server': true,
       'web-browser': true,
+      'interface-traffic': true,
     });
     render(<FeaturesTab />);
     const aiChatCheckbox = screen.getByRole('checkbox', { name: 'AI Chat' });

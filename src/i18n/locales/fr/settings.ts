@@ -136,6 +136,10 @@ export const settings = {
     logViewerDescription: 'Consultez et analysez les journaux de session',
     pingMonitorLabel: 'Surveillance Ping',
     pingMonitorDescription: 'Surveillance ICMP ping continue',
+
+    interfaceTrafficLabel: 'Trafic des interfaces',
+
+    interfaceTrafficDescription: 'Compteurs d’interface SNMP en direct (bit/s, paq/s, erreurs) des équipements réseau',
   },
   ai: {
     // Provider

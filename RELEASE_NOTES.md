@@ -1,5 +1,28 @@
 # Release Notes
 
+## v2.0.14-beta3
+
+**A new Interface Traffic pane watches live SNMP counters on your network gear, and the Log Viewer finally has a proper search box.** Point the pane at a switch or router over SNMP v2c or v3 and it lists every interface, then refreshes bps, pps, errors and discards on each poll — no separate monitoring tool to open alongside your terminals. In the Log Viewer, `Ctrl+F` now opens an in-pane search with regular expressions, case matching, and jump-to-match navigation.
+
+### New Features
+
+- **Interface Traffic pane (SNMP).** A new utility pane that polls a network device's interface table and shows live per-interface throughput. **List interfaces** tests the connection and discovers what the device has; **Start** then begins polling and fills in **In/Out bps**, **In/Out pps**, **errors** and **discards** alongside each interface's name, description, status and speed. Rates appear from the second poll onward — the first one establishes the baseline. Sort by any column, filter by name or description, and tick **Up only** to hide interfaces that are down. Enable it under **Settings → Features**; it is on by default.
+- **SNMP v2c and v3.** v2c takes a community string; v3 supports all three security levels — **noAuthNoPriv**, **authNoPriv** and **authPriv** — with MD5/SHA authentication and DES/AES privacy, plus an optional context name. The pane warns you inline when noAuthNoPriv is selected, since that sends everything unauthenticated and in the clear.
+- **64-bit counters, with a warning when the device has none.** Where the device offers `ifXTable`, HoTTY reads the 64-bit counters. Older agents that only expose the 32-bit ones still work, but the pane shows a **32-bit counters** badge explaining that those wrap in roughly 34 seconds on a saturated 1 Gbps link.
+- **Search in the Log Viewer.** `Ctrl+F` opens a search box over the open log file. Move between hits with `Enter` and `Shift+Enter`, watch a live match count, and switch on **Match case**, **Use regular expression**, or **Matching lines only** to collapse the view down to just the lines that hit. An invalid regular expression is reported inline instead of silently finding nothing.
+
+### Improvements
+
+- **Poll interval adjustable without reconnecting.** Changing the interval retunes a running watcher in place, so you can go coarser or finer without dropping the SNMP session and losing your rate baseline.
+- **Connection settings remembered per pane.** Each Interface Traffic pane keeps its own device settings. Tick **Remember these connection settings** to keep the credentials too; leave it off and they are asked for each time.
+- **Live watcher status.** The pane reports whether it is running or stopped, the current interval, the actual poll time in milliseconds, the device's uptime, and a **Stale** indicator when replies stop arriving.
+- **`tauri dev` no longer reloads the app on every Rust rebuild.** Vite was watching `src-tauri/target/`, which cargo rewrites constantly, so each backend rebuild triggered a full page reload that wiped every open feature pane. Development-only — the shipped app is unaffected.
+- **Shared timestamp formatting.** The civil-date math the Ping Monitor carried privately moved into one place that both it and the new pane use, removing a duplicated copy rather than adding a third.
+
+### Security
+
+- **SNMP credentials are encrypted with Windows DPAPI.** Community strings and v3 authentication and privacy passwords are encrypted before being stored, and only when you asked for them to be remembered. They are also registered with the log redaction filter, so they cannot surface in a debug log.
+
 ## v2.0.14-beta2
 
 **Text Editor and File Explorer are gone, and the encryption behind your saved credentials got a substantial hardening pass.** Those two panes were used so rarely that they never received the attention the others did, so removing them leaves five focused utility panes and a smaller, lighter app. Alongside that, the Windows DPAPI layer that protects your saved usernames, passwords and key passphrases no longer accepts anything it did not encrypt itself.

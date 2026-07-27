@@ -16,6 +16,7 @@ describe('paneTypes', () => {
         ['ai-chat', 'ai-'],
         ['file-server', 'fs-'],
         ['web-browser', 'wb-'],
+        ['interface-traffic', 'if-'],
       ];
       for (const [type, prefix] of cases) {
         const id = makeFeaturePaneId(type);
@@ -37,6 +38,7 @@ describe('paneTypes', () => {
       expect(getPaneContentType('ai-def456')).toBe('ai-chat');
       expect(getPaneContentType('fs-ghi012')).toBe('file-server');
       expect(getPaneContentType('wb-jkl345')).toBe('web-browser');
+      expect(getPaneContentType('if-mno678')).toBe('interface-traffic');
     });
 
     it('returns session for session IDs', () => {
@@ -63,6 +65,7 @@ describe('paneTypes', () => {
       expect(isFeaturePane('ai-abc')).toBe(true);
       expect(isFeaturePane('fs-abc')).toBe(true);
       expect(isFeaturePane('wb-abc')).toBe(true);
+      expect(isFeaturePane('if-abc')).toBe(true);
     });
 
     it('returns false for session IDs', () => {
@@ -82,6 +85,7 @@ describe('paneTypes', () => {
       expect(getFeatureDisplayName('ai-chat')).toBe('AI Chat');
       expect(getFeatureDisplayName('file-server')).toBe('File Server');
       expect(getFeatureDisplayName('web-browser')).toBe('Web Browser');
+      expect(getFeatureDisplayName('interface-traffic')).toBe('Interface Traffic');
     });
   });
 });

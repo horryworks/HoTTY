@@ -137,6 +137,10 @@ export const settings = {
     logViewerDescription: 'セッションログの表示と分析',
     pingMonitorLabel: 'Pingモニター',
     pingMonitorDescription: '継続的な ICMP ping モニタリング',
+
+    interfaceTrafficLabel: 'インターフェース トラフィック',
+
+    interfaceTrafficDescription: 'ネットワーク機器のインターフェースカウンタ (bps / pps / エラー) を SNMP でリアルタイム表示',
   },
   ai: {
     // プロバイダー

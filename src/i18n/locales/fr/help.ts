@@ -17,6 +17,7 @@ export const help = {
     clearOrSigint: 'Effacer la sélection / Envoyer SIGINT',
     paste: 'Coller dans le terminal (avec vérification de sécurité)',
     sendMessage: "Envoyer le message dans la boîte de dialogue Demander à l'IA",
+    findInLog: 'Rechercher dans le journal ouvert (volet Visionneuse de journaux)',
     closeModal: 'Fermer la fenêtre modale / boîte de dialogue',
   },
 
@@ -142,6 +143,26 @@ export const help = {
       '<0>Pare-feu Windows :</0> Si le trafic entrant est bloqué, le panneau l\'indique et propose <1>Allow through firewall</1> (un clic, administrateur requis).',
     security:
       '<0>Sécurité :</0> Démarrer un serveur expose le dossier choisi à votre réseau local. Ne partagez que des fichiers de confiance et laissez les envois désactivés sauf si nécessaire.',
+  },
+
+  interfaceTraffic: {
+    summary: 'Trafic des interfaces (SNMP)',
+    intro:
+      'Ouvrez le volet Trafic des interfaces via <0><1></1></0> (Fonctionnalités) → <2>« Interface Traffic »</2>. Il interroge un équipement réseau en SNMP et affiche le débit par interface en temps réel, à côté de vos terminaux.',
+    connect:
+      '<0>Connexion :</0> Saisissez le nom d\'hôte ou l\'adresse IP de l\'équipement et choisissez la version SNMP. <1>v2c</1> utilise une chaîne de communauté ; <2>v3</2> demande un nom d\'utilisateur et un niveau de sécurité.',
+    discover:
+      '<0>Lister les interfaces :</0> Teste la connexion et liste les interfaces de l\'équipement. <1>Démarrer</1> lance ensuite l\'interrogation : les débits apparaissent à partir du deuxième relevé, le premier servant de référence.',
+    columns:
+      '<0>Colonnes :</0> <1>bps</1> et <2>pps</2> en entrée/sortie, erreurs et rejets en entrée/sortie, ainsi que le nom, la description, l\'état et la vitesse de chaque interface. Cliquez sur une colonne pour trier, filtrez par nom ou description, ou cochez <3>Actives uniquement</3> pour masquer les interfaces hors service.',
+    v3:
+      '<0>Sécurité SNMP v3 :</0> <1>noAuthNoPriv</1>, <2>authNoPriv</2> (authentification MD5/SHA) et <3>authPriv</3> (ajoute le chiffrement DES/AES) sont pris en charge, avec un nom de contexte facultatif. noAuthNoPriv transmet tout sans authentification ni chiffrement.',
+    counters:
+      '<0>Compteurs 64 bits :</0> Utilisés lorsque l\'équipement propose <1>ifXTable</1>. Les équipements limités aux compteurs 32 bits fonctionnent toujours, mais le volet le signale : ceux-ci débordent en 34 secondes environ sur un lien 1 Gbit/s saturé.',
+    remember:
+      '<0>Paramètres enregistrés :</0> Chaque volet conserve ses propres paramètres d\'équipement. Cochez <1>Mémoriser ces paramètres de connexion</1> pour enregistrer aussi les identifiants : ils sont chiffrés avec Windows DPAPI avant d\'être stockés. Laissez la case décochée pour les saisir à chaque fois.',
+    enable:
+      '<0>Activer / désactiver :</0> Le volet peut être désactivé dans <1>Paramètres → Fonctionnalités</1>.',
   },
 
   webBrowser: {

@@ -23,6 +23,7 @@ interface TabBarProps {
   onBookmark?: (id: string) => void;
   onNewLogViewer?: () => void;
   onNewPingMonitor?: () => void;
+  onNewInterfaceTraffic?: () => void;
   onNewFileServer?: () => void;
   onNewAiChat?: () => void;
 }
@@ -67,6 +68,7 @@ export function TabBar({
   onBookmark,
   onNewLogViewer,
   onNewPingMonitor,
+  onNewInterfaceTraffic,
   onNewFileServer,
   onNewAiChat,
 }: TabBarProps) {
@@ -84,7 +86,11 @@ export function TabBar({
   const visibleSet = new Set(visibleTabIds);
 
   const hasAnyFeatureCallback =
-    onNewLogViewer || onNewPingMonitor || onNewFileServer || onNewAiChat;
+    onNewLogViewer ||
+    onNewPingMonitor ||
+    onNewInterfaceTraffic ||
+    onNewFileServer ||
+    onNewAiChat;
 
   // Close features menu on click outside
   useEffect(() => {
@@ -367,6 +373,18 @@ export function TabBar({
                     <polyline points="12 6 12 12 16 14" />
                   </svg>
                   {t('chrome.tabBar.pingMonitor')}
+                </div>
+              )}
+              {onNewInterfaceTraffic && (
+                <div
+                  className="features-dropdown-item"
+                  onClick={() => { onNewInterfaceTraffic(); setShowFeaturesMenu(false); }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 17 9 11 13 15 21 7" />
+                    <polyline points="15 7 21 7 21 13" />
+                  </svg>
+                  {t('chrome.tabBar.interfaceTraffic')}
                 </div>
               )}
               {onNewFileServer && (

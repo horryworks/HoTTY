@@ -54,6 +54,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                 <li><code>Ctrl + C</code> {t('help.shortcuts.clearOrSigint')}</li>
                 <li><code>Ctrl + V</code> {t('help.shortcuts.paste')}</li>
                 <li><code>Ctrl + Enter</code> {t('help.shortcuts.sendMessage')}</li>
+                <li><code>Ctrl + F</code> {t('help.shortcuts.findInLog')}</li>
                 <li><code>Escape</code> {t('help.shortcuts.closeModal')}</li>
               </ul>
             </div>
@@ -305,6 +306,24 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                 <li><Trans i18nKey="help.fileServer.sftp" components={[<strong key="0" />]} /></li>
                 <li><Trans i18nKey="help.fileServer.firewall" components={[<strong key="0" />, <strong key="1" />]} /></li>
                 <li><Trans i18nKey="help.fileServer.security" components={[<strong key="0" />]} /></li>
+              </ul>
+            </div>
+          </details>
+
+          <details className="help-section">
+            <summary>{t('help.interfaceTraffic.summary')}</summary>
+            <div className="help-section-body">
+              <p className="help-text">
+                <Trans i18nKey="help.interfaceTraffic.intro" components={[<strong key="0" />, <FeaturesIcon key="1" />, <strong key="2" />]} />
+              </p>
+              <ul className="shortcuts-list">
+                <li><Trans i18nKey="help.interfaceTraffic.connect" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />]} /></li>
+                <li><Trans i18nKey="help.interfaceTraffic.discover" components={[<strong key="0" />, <strong key="1" />]} /></li>
+                <li><Trans i18nKey="help.interfaceTraffic.columns" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />]} /></li>
+                <li><Trans i18nKey="help.interfaceTraffic.v3" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />]} /></li>
+                <li><Trans i18nKey="help.interfaceTraffic.counters" components={[<strong key="0" />, <code key="1" />]} /></li>
+                <li><Trans i18nKey="help.interfaceTraffic.remember" components={[<strong key="0" />, <strong key="1" />]} /></li>
+                <li><Trans i18nKey="help.interfaceTraffic.enable" components={[<strong key="0" />, <strong key="1" />]} /></li>
               </ul>
             </div>
           </details>

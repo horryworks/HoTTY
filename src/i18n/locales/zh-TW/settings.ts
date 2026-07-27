@@ -136,6 +136,10 @@ export const settings = {
     logViewerDescription: '檢視並分析工作階段記錄',
     pingMonitorLabel: 'Ping 監控',
     pingMonitorDescription: '持續 ICMP Ping 監控',
+
+    interfaceTrafficLabel: '介面流量',
+
+    interfaceTrafficDescription: '透過 SNMP 即時檢視網路裝置的介面計數器（bps / pps / 錯誤）',
   },
   ai: {
     // 供應商

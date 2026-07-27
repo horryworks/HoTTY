@@ -12,6 +12,8 @@ export const chrome = {
     aiMonitorStartAria: 'AI監視を開始',
     logViewer: 'ログビューア',
     pingMonitor: 'Pingモニター',
+
+    interfaceTraffic: 'インターフェース トラフィック',
     aiChat: 'AIチャット',
     saveToHostTree: 'ホストツリーに保存…',
     fixedTerminalSize: '幅を固定 ({{cols}})',

@@ -22,9 +22,47 @@ vi.mock('../../hooks/useResize', () => ({
 const mockListLogFiles = vi.mocked(tauriService.listLogFiles);
 const mockReadLogFile = vi.mocked(tauriService.readLogFile);
 
+// jsdom does not implement scrollIntoView; the pane calls it to reveal the
+// focused match.
+Element.prototype.scrollIntoView = vi.fn();
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
+
+/** Render the pane, open /logs, and select a single log file with `content`. */
+async function openLog(content: string, active = true) {
+  mockListLogFiles.mockResolvedValue({
+    files: [{ name: 'test.log', path: '/logs/test.log', mtime: 1700000000000, size: 512 }],
+  });
+  mockReadLogFile.mockResolvedValue({ content });
+
+  const result = render(<LogViewerPane paneId="lv-1" active={active} />);
+  fireEvent.change(screen.getByPlaceholderText('Log folder path...'), { target: { value: '/logs' } });
+  fireEvent.click(screen.getByText('Open'));
+
+  await waitFor(() => {
+    expect(screen.getByText('test.log')).toBeTruthy();
+  });
+  fireEvent.click(screen.getByText('test.log'));
+  await waitFor(() => {
+    expect(document.querySelector('.log-viewer-search-bar')).toBeTruthy();
+    expect(document.querySelector('.log-viewer-pre')?.textContent).toBe(content);
+  });
+  return result;
+}
+
+/** Type into the find bar and wait for the debounced search to land. */
+async function search(query: string) {
+  fireEvent.change(screen.getByLabelText('Search in log'), { target: { value: query } });
+  await waitFor(() => {
+    expect(screen.getByLabelText('Search in log')).toHaveProperty('value', query);
+    expect(document.querySelector('.log-viewer-search-count')!.textContent).not.toBe('');
+  });
+}
+
+const marks = () => Array.from(document.querySelectorAll('mark')).map((m) => m.textContent);
+const countText = () => document.querySelector('.log-viewer-search-count')!.textContent;
 
 describe('LogViewerPane', () => {
   it('renders folder input toolbar when no folder is set', () => {
@@ -238,5 +276,224 @@ describe('LogViewerPane', () => {
     await waitFor(() => {
       expect(mockListLogFiles).toHaveBeenCalledWith('/logs');
     });
+  });
+});
+
+describe('LogViewerPane in-log search', () => {
+  const LOG = [
+    '2026-07-27 10:01:03 ssh: connect to vm-01',
+    '2026-07-27 10:01:09 read TIMEOUT after 30s',
+    '2026-07-27 10:01:10 retrying',
+    '2026-07-27 10:02:44 socket timeout',
+  ].join('\n');
+
+  it('shows the find bar only once a file is open', async () => {
+    mockListLogFiles.mockResolvedValue({ files: [] });
+    render(<LogViewerPane paneId="lv-1" active={true} />);
+    fireEvent.change(screen.getByPlaceholderText('Log folder path...'), { target: { value: '/logs' } });
+    fireEvent.click(screen.getByText('Open'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Select a file to view its content.')).toBeTruthy();
+    });
+    expect(document.querySelector('.log-viewer-search-bar')).toBeNull();
+  });
+
+  it('highlights every match and reports the count', async () => {
+    await openLog(LOG);
+    await search('timeout');
+
+    expect(marks()).toEqual(['TIMEOUT', 'timeout']);
+    expect(countText()).toBe('1 / 2');
+  });
+
+  it('never alters the log text while highlighting', async () => {
+    await openLog(LOG);
+    await search('timeout');
+
+    expect(document.querySelector('.log-viewer-pre')!.textContent).toBe(LOG);
+  });
+
+  it('marks the focused match and steps through with the arrow buttons', async () => {
+    await openLog(LOG);
+    await search('timeout');
+
+    const current = () => document.querySelector('mark.current')!.textContent;
+    expect(current()).toBe('TIMEOUT');
+
+    fireEvent.click(screen.getByLabelText('Next match (Enter)'));
+    expect(current()).toBe('timeout');
+    expect(countText()).toBe('2 / 2');
+
+    // Wraps around.
+    fireEvent.click(screen.getByLabelText('Next match (Enter)'));
+    expect(current()).toBe('TIMEOUT');
+    expect(countText()).toBe('1 / 2');
+
+    fireEvent.click(screen.getByLabelText('Previous match (Shift+Enter)'));
+    expect(countText()).toBe('2 / 2');
+  });
+
+  it('Enter and Shift+Enter step through matches', async () => {
+    await openLog(LOG);
+    await search('timeout');
+
+    const input = screen.getByLabelText('Search in log');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(countText()).toBe('2 / 2');
+
+    fireEvent.keyDown(input, { key: 'Enter', shiftKey: true });
+    expect(countText()).toBe('1 / 2');
+  });
+
+  it('honours the match-case toggle', async () => {
+    await openLog(LOG);
+    await search('timeout');
+    expect(marks()).toEqual(['TIMEOUT', 'timeout']);
+
+    fireEvent.click(screen.getByLabelText('Match case'));
+    await waitFor(() => {
+      expect(marks()).toEqual(['timeout']);
+    });
+    expect(countText()).toBe('1 / 1');
+  });
+
+  it('honours the regex toggle', async () => {
+    await openLog(LOG);
+    await search('connect|retrying');
+    expect(marks()).toEqual([]);
+    expect(countText()).toBe('No matches');
+
+    fireEvent.click(screen.getByLabelText('Use regular expression'));
+    await waitFor(() => {
+      expect(marks()).toEqual(['connect', 'retrying']);
+    });
+  });
+
+  it('flags an invalid regex instead of crashing', async () => {
+    await openLog(LOG);
+    fireEvent.click(screen.getByLabelText('Use regular expression'));
+    await search('[unclosed');
+
+    expect(countText()).toBe('Invalid regular expression');
+    expect(screen.getByLabelText('Search in log').classList.contains('invalid')).toBe(true);
+    // Content still renders, just unhighlighted.
+    expect(document.querySelector('.log-viewer-pre')!.textContent).toBe(LOG);
+  });
+
+  it('shows only matching lines when "Matching lines only" is checked', async () => {
+    await openLog(LOG);
+    await search('timeout');
+
+    fireEvent.click(screen.getByLabelText('Matching lines only'));
+    await waitFor(() => {
+      expect(document.querySelector('.log-viewer-filtered')).toBeTruthy();
+    });
+
+    const rows = Array.from(document.querySelectorAll('.log-viewer-match-line'))
+      .map((r) => r.textContent);
+    expect(rows).toEqual([
+      '2026-07-27 10:01:09 read TIMEOUT after 30s',
+      '2026-07-27 10:02:44 socket timeout',
+    ]);
+    expect(document.querySelector('.log-viewer-pre')).toBeNull();
+    expect(document.querySelector('.log-viewer-match-line.current')!.textContent)
+      .toBe('2026-07-27 10:01:09 read TIMEOUT after 30s');
+  });
+
+  it('reports no matches in filtered mode', async () => {
+    await openLog(LOG);
+    fireEvent.click(screen.getByLabelText('Matching lines only'));
+    await search('nosuchthing');
+
+    // Both the counter and the empty content area report it.
+    await waitFor(() => {
+      expect(countText()).toBe('No matches');
+    });
+    expect(document.querySelector('.log-viewer-file-content .log-viewer-placeholder')!.textContent)
+      .toBe('No matches');
+    expect(document.querySelectorAll('.log-viewer-match-line')).toHaveLength(0);
+  });
+
+  it('Ctrl+F focuses and selects the find box while the pane is active', async () => {
+    await openLog(LOG);
+    await search('timeout');
+    const input = screen.getByLabelText('Search in log') as HTMLInputElement;
+    input.blur();
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true }));
+
+    expect(document.activeElement).toBe(input);
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe('timeout'.length);
+  });
+
+  it('leaves Ctrl+F alone when the pane is not active', async () => {
+    await openLog(LOG, false);
+    const input = screen.getByLabelText('Search in log');
+
+    const ev = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true });
+    document.dispatchEvent(ev);
+
+    expect(document.activeElement).not.toBe(input);
+    expect(ev.defaultPrevented).toBe(false);
+  });
+
+  it('Escape clears the query', async () => {
+    await openLog(LOG);
+    await search('timeout');
+
+    const input = screen.getByLabelText('Search in log');
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    expect(input).toHaveProperty('value', '');
+    await waitFor(() => {
+      expect(marks()).toEqual([]);
+    });
+    expect(document.querySelector('.log-viewer-pre')!.textContent).toBe(LOG);
+  });
+
+  it('the clear button empties the query', async () => {
+    await openLog(LOG);
+    await search('timeout');
+
+    fireEvent.click(screen.getByLabelText('Clear search'));
+
+    expect(screen.getByLabelText('Search in log')).toHaveProperty('value', '');
+    await waitFor(() => {
+      expect(marks()).toEqual([]);
+    });
+  });
+
+  it('keeps the query and re-searches when another file is opened', async () => {
+    mockListLogFiles.mockResolvedValue({
+      files: [
+        { name: 'a.log', path: '/logs/a.log', mtime: 1700000000000, size: 512 },
+        { name: 'b.log', path: '/logs/b.log', mtime: 1600000000000, size: 512 },
+      ],
+    });
+    mockReadLogFile.mockResolvedValue({ content: 'has timeout here' });
+
+    render(<LogViewerPane paneId="lv-1" active={true} />);
+    fireEvent.change(screen.getByPlaceholderText('Log folder path...'), { target: { value: '/logs' } });
+    fireEvent.click(screen.getByText('Open'));
+    await waitFor(() => {
+      expect(screen.getByText('a.log')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText('a.log'));
+    await waitFor(() => {
+      expect(document.querySelector('.log-viewer-search-bar')).toBeTruthy();
+    });
+    await search('timeout');
+    expect(countText()).toBe('1 / 1');
+
+    mockReadLogFile.mockResolvedValue({ content: 'timeout\ntimeout' });
+    fireEvent.click(screen.getByText('b.log'));
+
+    await waitFor(() => {
+      expect(countText()).toBe('1 / 2');
+    });
+    expect(screen.getByLabelText('Search in log')).toHaveProperty('value', 'timeout');
   });
 });

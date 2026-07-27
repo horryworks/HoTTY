@@ -17,6 +17,7 @@ export const help = {
     clearOrSigint: 'Limpiar selección / Enviar SIGINT',
     paste: 'Pegar en el terminal (con comprobación de seguridad)',
     sendMessage: 'Enviar mensaje en el diálogo Preguntar a la IA',
+    findInLog: 'Buscar en el registro abierto (panel Visor de registros)',
     closeModal: 'Cerrar modal / diálogo',
   },
 
@@ -142,6 +143,26 @@ export const help = {
       '<0>Firewall de Windows:</0> Si el tráfico entrante está bloqueado, el panel lo indica y ofrece <1>Allow through firewall</1> (un clic, requiere administrador).',
     security:
       '<0>Seguridad:</0> Iniciar un servidor expone la carpeta elegida a tu red local. Comparte solo archivos de confianza y mantén las subidas desactivadas salvo que las necesites.',
+  },
+
+  interfaceTraffic: {
+    summary: 'Tráfico de interfaces (SNMP)',
+    intro:
+      'Abre el panel Tráfico de interfaces con <0><1></1></0> (Funciones) → <2>«Interface Traffic»</2>. Consulta un dispositivo de red por SNMP y muestra el rendimiento por interfaz en tiempo real junto a tus terminales.',
+    connect:
+      '<0>Conexión:</0> Introduce el host o la dirección IP del dispositivo y elige la versión de SNMP. <1>v2c</1> usa una cadena de comunidad; <2>v3</2> requiere un nombre de usuario y un nivel de seguridad.',
+    discover:
+      '<0>Listar interfaces:</0> Prueba la conexión y muestra las interfaces del dispositivo. Después, <1>Iniciar</1> comienza el sondeo: las tasas aparecen a partir del segundo sondeo, ya que el primero establece la referencia.',
+    columns:
+      '<0>Columnas:</0> <1>bps</1> y <2>pps</2> de entrada y salida, errores y descartes de entrada y salida, además del nombre, la descripción, el estado y la velocidad de cada interfaz. Haz clic en una columna para ordenar, filtra por nombre o descripción, o marca <3>Solo activas</3> para ocultar las interfaces caídas.',
+    v3:
+      '<0>Seguridad SNMP v3:</0> Se admiten <1>noAuthNoPriv</1>, <2>authNoPriv</2> (autenticación MD5/SHA) y <3>authPriv</3> (añade privacidad DES/AES), con un nombre de contexto opcional. noAuthNoPriv envía todo sin autenticar y en claro.',
+    counters:
+      '<0>Contadores de 64 bits:</0> Se usan cuando el dispositivo ofrece <1>ifXTable</1>. Los dispositivos que solo tienen contadores de 32 bits siguen funcionando, pero el panel lo indica: esos contadores se desbordan en unos 34 segundos en un enlace de 1 Gbps saturado.',
+    remember:
+      '<0>Ajustes guardados:</0> Cada panel conserva sus propios ajustes del dispositivo. Marca <1>Recordar estos ajustes de conexión</1> para guardar también las credenciales: se cifran con Windows DPAPI antes de almacenarse. Déjalo desmarcado para introducirlas cada vez.',
+    enable:
+      '<0>Activar / desactivar:</0> El panel se puede desactivar en <1>Ajustes → Funciones</1>.',
   },
 
   webBrowser: {

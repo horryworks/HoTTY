@@ -136,6 +136,10 @@ export const settings = {
     logViewerDescription: '查看和分析会话日志',
     pingMonitorLabel: 'Ping 监控',
     pingMonitorDescription: '持续的 ICMP ping 监控',
+
+    interfaceTrafficLabel: '接口流量',
+
+    interfaceTrafficDescription: '通过 SNMP 实时查看网络设备的接口计数器（bps / pps / 错误）',
   },
   ai: {
     // Provider

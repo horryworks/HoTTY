@@ -10,6 +10,7 @@ import { TerminalView } from './components/Terminal/Terminal';
 import { ConnectingOverlay } from './components/ConnectingOverlay/ConnectingOverlay';
 import { LogViewerPane } from './components/LogViewerPane/LogViewerPane';
 import { PingMonitorPane } from './components/PingMonitorPane/PingMonitorPane';
+import { InterfaceTrafficPane } from './components/InterfaceTrafficPane/InterfaceTrafficPane';
 import { FileServerPane } from './components/FileServerPane/FileServerPane';
 import { WebBrowserPane } from './components/WebBrowserPane/WebBrowserPane';
 import { AIChatPane } from './components/AIChatPane/AIChatPane';
@@ -436,6 +437,11 @@ function App() {
       if (type === 'ping-monitor') {
         tauriService.pingMonitorStop(id).catch(() => {});
       }
+      if (type === 'interface-traffic') {
+        // The SNMP poll loop lives in the backend, so closing the tab has to
+        // tell it to stop or it keeps querying the device.
+        tauriService.snmpWatcherStop(id).catch(() => {});
+      }
       if (type === 'file-server') {
         // Policy: the File Server runs only while its tab is open. Closing the
         // tab tears down both servers and frees their ports.
@@ -609,6 +615,12 @@ function App() {
               paneId={featureInfo.id}
               active={paneId === activePaneId}
             />
+          ) : featureInfo?.type === 'interface-traffic' ? (
+            <InterfaceTrafficPane
+              key={featureInfo.id}
+              paneId={featureInfo.id}
+              active={paneId === activePaneId}
+            />
           ) : featureInfo?.type === 'file-server' ? (
             <FileServerPane
               key={featureInfo.id}
@@ -733,6 +745,7 @@ function App() {
             }}
             onNewLogViewer={enabledFeatures['log-viewer'] ? () => handleNewFeaturePane('log-viewer') : undefined}
             onNewPingMonitor={enabledFeatures['ping-monitor'] ? () => handleNewFeaturePane('ping-monitor') : undefined}
+            onNewInterfaceTraffic={enabledFeatures['interface-traffic'] ? () => handleNewFeaturePane('interface-traffic') : undefined}
             onNewFileServer={enabledFeatures['file-server'] ? () => handleNewFeaturePane('file-server') : undefined}
             onNewAiChat={enabledFeatures['ai-chat'] ? openAiChatPane : undefined}
           />

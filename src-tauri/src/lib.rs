@@ -36,6 +36,9 @@ use commands::session::{
     connect_session, disconnect_session, list_all_sessions, send_input, ssh_host_key_response,
     term_resize, update_session_logging, SessionState,
 };
+use commands::snmp_watcher::{
+    snmp_list_interfaces, snmp_watcher_start, snmp_watcher_stop, snmp_watcher_update_interval,
+};
 use commands::ssh_algorithms::{get_ssh_algorithms, save_ssh_algorithms};
 use commands::sync::broadcast_shared_change;
 use commands::system::{
@@ -63,6 +66,7 @@ use services::iap_tunnel::GcloudCacheState;
 use services::log_manager::LogManager;
 use services::ping_monitor::PingMonitorState;
 use services::session_service::{PendingSizes, SessionOwners};
+use services::snmp::SnmpWatcherState;
 use services::watch_buffer::WatchBufferState;
 use services::web_browser::WebBrowserState;
 
@@ -124,6 +128,17 @@ fn cleanup_window_file_servers(app: &tauri::AppHandle, label: &str) {
     });
 }
 
+/// Stop the SNMP interface-traffic watchers a closing window owned, so their
+/// poll loops don't keep querying devices after the window is gone. Mirrors
+/// [`cleanup_window_file_servers`]; a window with no watcher is a cheap no-op.
+fn cleanup_window_snmp_watchers(app: &tauri::AppHandle, label: &str) {
+    let watchers = app.state::<SnmpWatcherState>().watchers.clone();
+    let label = label.to_string();
+    tauri::async_runtime::spawn(async move {
+        services::snmp::stop_watchers_for_window(&watchers, &label).await;
+    });
+}
+
 /// Format the main window's title for a given app version (e.g. `HoTTY v2.0.9`).
 /// Extracted from `setup` so the title contract has unit coverage without
 /// booting a Tauri runtime.
@@ -161,6 +176,7 @@ pub fn run() {
         .manage(ImportPathState::new())
         .manage(ApprovedServiceAccountKeys::new())
         .manage(PingMonitorState::new())
+        .manage(SnmpWatcherState::new())
         .manage(FileServerState::new())
         .manage(WebBrowserState::new())
         .manage(WindowCounterState::new())
@@ -168,12 +184,14 @@ pub fn run() {
         .manage(SessionOwners::new())
         .manage(PendingSizes::new())
         .manage(Arc::new(GcloudCacheState::new()))
-        // When a window closes, tear down only the sessions and File Server
-        // instances it owned (other windows keep running in this shared process).
+        // When a window closes, tear down only the sessions, File Server
+        // instances and SNMP watchers it owned (other windows keep running in
+        // this shared process).
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
                 cleanup_window_sessions(window.app_handle(), window.label());
                 cleanup_window_file_servers(window.app_handle(), window.label());
+                cleanup_window_snmp_watchers(window.app_handle(), window.label());
             }
         })
         .setup(|app| {
@@ -280,6 +298,11 @@ pub fn run() {
             ping_monitor_stop,
             ping_monitor_update_targets,
             ping_monitor_update_interval,
+            // Interface traffic watcher (SNMP)
+            snmp_list_interfaces,
+            snmp_watcher_start,
+            snmp_watcher_stop,
+            snmp_watcher_update_interval,
             // File server (TFTP / SFTP)
             file_server_tftp_start,
             file_server_tftp_stop,

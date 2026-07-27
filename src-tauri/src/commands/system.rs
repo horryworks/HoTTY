@@ -197,10 +197,11 @@ pub fn list_system_fonts() -> Result<Vec<FontInfo>, String> {
                     return 1;
                 }
                 let families_ptr = lparam.0 as *mut BTreeSet<String>;
-                if (families_ptr as usize) % std::mem::align_of::<BTreeSet<String>>() != 0 {
+                if !(families_ptr as usize).is_multiple_of(std::mem::align_of::<BTreeSet<String>>())
+                {
                     return 1;
                 }
-                if (lpelfe as usize) % std::mem::align_of::<ENUMLOGFONTEXW>() != 0 {
+                if !(lpelfe as usize).is_multiple_of(std::mem::align_of::<ENUMLOGFONTEXW>()) {
                     return 1;
                 }
                 let families = &mut *families_ptr;

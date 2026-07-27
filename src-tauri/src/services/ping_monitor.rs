@@ -94,59 +94,11 @@ pub fn is_valid_ping_target(target: &str) -> bool {
 // ---------------------------------------------------------------------------
 // Timestamp helpers
 // ---------------------------------------------------------------------------
+//
+// The civil-date math these used to carry now lives in `services::timefmt` so
+// the Interface Traffic Watcher can share it instead of copying it a third time.
 
-fn format_timestamp() -> String {
-    use std::time::SystemTime;
-
-    let now = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = now.as_secs();
-    let millis = now.subsec_millis();
-
-    let days = secs / 86400;
-    let time_of_day = secs % 86400;
-    let hours = time_of_day / 3600;
-    let minutes = (time_of_day % 3600) / 60;
-    let seconds = time_of_day % 60;
-
-    let (year, month, day) = days_to_ymd(days);
-
-    format!("{year:04}-{month:02}-{day:02} {hours:02}:{minutes:02}:{seconds:02}.{millis:03}")
-}
-
-fn format_file_timestamp() -> String {
-    use std::time::SystemTime;
-
-    let now = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = now.as_secs();
-
-    let days = secs / 86400;
-    let time_of_day = secs % 86400;
-    let hours = time_of_day / 3600;
-    let minutes = (time_of_day % 3600) / 60;
-    let seconds = time_of_day % 60;
-
-    let (year, month, day) = days_to_ymd(days);
-
-    format!("{year:04}{month:02}{day:02}{hours:02}{minutes:02}{seconds:02}")
-}
-
-fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
-    days += 719_468;
-    let era = days / 146_097;
-    let doe = days % 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    (y, m, d)
-}
+use crate::services::timefmt::{format_file_timestamp, format_timestamp};
 
 // ---------------------------------------------------------------------------
 // Ping execution
@@ -585,19 +537,8 @@ mod tests {
         assert_eq!(json["fileName"], "20240101-PING-MONITOR.csv");
     }
 
-    #[test]
-    fn format_timestamp_length() {
-        let ts = format_timestamp();
-        // YYYY-MM-DD HH:MM:SS.mmm = 23 chars
-        assert_eq!(ts.len(), 23);
-    }
-
-    #[test]
-    fn format_file_timestamp_length() {
-        let ts = format_file_timestamp();
-        // YYYYMMDDHHMMSS = 14 chars
-        assert_eq!(ts.len(), 14);
-    }
+    // The timestamp-format tests moved to `services::timefmt` along with the
+    // functions themselves.
 
     #[test]
     fn csv_row_format() {

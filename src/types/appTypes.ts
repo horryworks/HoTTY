@@ -1,5 +1,11 @@
 export type ProtocolId = 'ssh' | 'telnet' | 'serial' | 'wsl' | 'cmd' | 'powershell' | 'git-bash' | 'gcloud-iap';
-export type FeatureId = 'ai-chat' | 'log-viewer' | 'ping-monitor' | 'file-server' | 'web-browser';
+export type FeatureId =
+  | 'ai-chat'
+  | 'log-viewer'
+  | 'ping-monitor'
+  | 'file-server'
+  | 'web-browser'
+  | 'interface-traffic';
 
 export type Encoding = 'utf8' | 'shift_jis' | 'euc-jp';
 
@@ -328,6 +334,118 @@ export interface PingDataPayload {
 export interface PingLogFilePayload {
   sessionId: string;
   fileName: string;
+}
+
+// ---------------------------------------------------------------------------
+// Interface Traffic Watcher (SNMP)
+// ---------------------------------------------------------------------------
+// Mirrors `src-tauri/src/services/snmp/{config,payload}.rs`. Every optional
+// field is genuinely absent rather than null: the Rust payloads use
+// `skip_serializing_if = "Option::is_none"` to keep a 200-port snapshot small.
+
+export type SnmpVersion = 'v2c' | 'v3';
+export type SnmpSecurityLevel = 'noAuthNoPriv' | 'authNoPriv' | 'authPriv';
+export type SnmpAuthProtocol = 'md5' | 'sha1' | 'sha224' | 'sha256' | 'sha384' | 'sha512';
+export type SnmpPrivProtocol = 'des' | 'aes128' | 'aes192' | 'aes256';
+
+/** The connection settings the pane sends to the backend. */
+export interface SnmpConfig {
+  host: string;
+  port: number;
+  version: SnmpVersion;
+  /** v2c only. */
+  community?: string;
+  /** v3 only. */
+  username?: string;
+  securityLevel?: SnmpSecurityLevel;
+  authProtocol?: SnmpAuthProtocol;
+  authPassword?: string;
+  privProtocol?: SnmpPrivProtocol;
+  privPassword?: string;
+  /** v3 context name; empty/omitted means the default context. */
+  contextName?: string;
+  timeoutMs?: number;
+  retries?: number;
+}
+
+/** One interface row in the live table. */
+export interface SnmpIfRow {
+  ifIndex: number;
+  /** ifName — absent on agents without ifXTable. */
+  name?: string;
+  /** ifDescr. */
+  descr?: string;
+  /** ifAlias — the operator's description. */
+  alias?: string;
+  /** Raw IF-MIB enums; the pane maps them to translated labels. */
+  adminStatus?: number;
+  operStatus?: number;
+  speedMbps?: number;
+  /** Rates are absent until the second poll, and after a counter reset. */
+  bpsIn?: number;
+  bpsOut?: number;
+  ppsIn?: number;
+  ppsOut?: number;
+  utilInPct?: number;
+  utilOutPct?: number;
+  inErrors?: number;
+  outErrors?: number;
+  inDiscards?: number;
+  outDiscards?: number;
+  inErrorsDelta?: number;
+  outErrorsDelta?: number;
+  inDiscardsDelta?: number;
+  outDiscardsDelta?: number;
+  /** The device's counters restarted between this poll and the last one. */
+  discontinuity: boolean;
+}
+
+export type SnmpPollStatus = 'ok' | 'degraded' | 'error';
+/** `hc` = 64-bit ifXTable counters, `legacy` = 32-bit ifTable fallback. */
+export type SnmpCounterWidth = 'hc' | 'legacy';
+
+export interface SnmpDataPayload {
+  paneId: string;
+  timestamp: string;
+  status: SnmpPollStatus;
+  error?: string;
+  sysName?: string;
+  sysUptimeSecs?: number;
+  counterWidth: SnmpCounterWidth;
+  /** How long the cycle took — surfaces a chassis outgrowing the interval. */
+  pollMs: number;
+  /** Interval actually in effect, after clamping and failure backoff. */
+  intervalMs: number;
+  /** Set when the rows are carried over from an earlier successful poll. */
+  staleForMs?: number;
+  interfaces: SnmpIfRow[];
+}
+
+export type SnmpWatcherStatusState = 'connecting' | 'running' | 'stopped' | 'error';
+
+export interface SnmpStatusPayload {
+  paneId: string;
+  state: SnmpWatcherStatusState;
+  message?: string;
+  timestamp: string;
+}
+
+export interface SnmpInterfaceInfo {
+  ifIndex: number;
+  name?: string;
+  descr?: string;
+  alias?: string;
+  speedMbps?: number;
+  operStatus?: number;
+}
+
+/** Result of the one-shot connection test / interface listing. */
+export interface SnmpDiscovery {
+  sysName?: string;
+  sysDescr?: string;
+  sysUptimeSecs?: number;
+  counterWidth: SnmpCounterWidth;
+  interfaces: SnmpInterfaceInfo[];
 }
 
 // ---------------------------------------------------------------------------

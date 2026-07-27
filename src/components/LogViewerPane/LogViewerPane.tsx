@@ -3,6 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useResize } from '../../hooks/useResize';
+import { usePaneFindShortcut } from '../../hooks/usePaneFindShortcut';
+import {
+  MAX_MATCHES,
+  buildSearchRegex,
+  filterMatchingLines,
+  splitByMatches,
+  type Segment,
+} from './logSearch';
 import type { LogFile } from '../../types/appTypes';
 import './LogViewerPane.css';
 
@@ -14,6 +22,8 @@ interface LogViewerPaneProps {
 const MIN_PANEL_RATIO = 0.15;
 const MAX_PANEL_RATIO = 0.6;
 const DEFAULT_PANEL_RATIO = 0.3;
+/** Re-scan the log at most this often while the user is still typing. */
+const SEARCH_DEBOUNCE_MS = 150;
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -40,9 +50,18 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
   const [filterText, setFilterText] = useState('');
   const [panelRatio, setPanelRatio] = useState(DEFAULT_PANEL_RATIO);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  // In-log search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [useRegex, setUseRegex] = useState(false);
+  const [filterOnly, setFilterOnly] = useState(false);
+  const [matchIndex, setMatchIndex] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const ratioBeforeCollapse = useRef(DEFAULT_PANEL_RATIO);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const currentMatchRef = useRef<HTMLElement | null>(null);
 
   const { startResize } = useResize({
     orientation: 'horizontal',
@@ -173,6 +192,123 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
     return files.filter((f) => f.name.toLowerCase().includes(lower));
   }, [files, filterText]);
 
+  // ---- In-log search -------------------------------------------------------
+
+  // Debounce so a keystroke doesn't rescan a multi-megabyte log 10×/second.
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(searchQuery), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
+
+  const searchRegex = useMemo(
+    () => buildSearchRegex(debouncedQuery, { caseSensitive, useRegex }),
+    [debouncedQuery, caseSensitive, useRegex],
+  );
+  const regexInvalid = debouncedQuery.length > 0 && searchRegex === null;
+
+  // Highlight mode: one <pre> whose children alternate plain text and <mark>,
+  // so the DOM cost is O(matches) rather than O(lines).
+  const highlight = useMemo(
+    () => (searchRegex && !filterOnly ? splitByMatches(content, searchRegex, MAX_MATCHES) : null),
+    [content, searchRegex, filterOnly],
+  );
+
+  // Filter mode: only the lines that contain a match.
+  const filtered = useMemo(
+    () => (searchRegex && filterOnly ? filterMatchingLines(content, searchRegex, MAX_MATCHES) : null),
+    [content, searchRegex, filterOnly],
+  );
+
+  // Pre-split each surviving line once, so stepping through matches doesn't
+  // re-scan every visible row.
+  const filteredRows = useMemo(
+    () =>
+      filtered && searchRegex
+        ? filtered.lines.map((line) => splitByMatches(line, searchRegex, MAX_MATCHES).segments)
+        : null,
+    [filtered, searchRegex],
+  );
+
+  const matchCount = highlight?.total ?? filtered?.lines.length ?? 0;
+  const matchesTruncated = highlight?.truncated ?? filtered?.truncated ?? false;
+  // Clamp during render so a shrinking result set can never index out of range
+  // before the reset effect below runs.
+  const currentMatch = matchCount === 0 ? 0 : Math.min(matchIndex, matchCount - 1);
+
+  // Back to the first match whenever the search or the open file changes.
+  const selectedPath = selectedFile?.path ?? null;
+  useEffect(() => {
+    setMatchIndex(0);
+  }, [debouncedQuery, caseSensitive, useRegex, filterOnly, selectedPath]);
+
+  // Bring the focused match into view. No smooth scrolling — keep it snappy.
+  useEffect(() => {
+    currentMatchRef.current?.scrollIntoView({ block: 'center' });
+  }, [currentMatch, highlight, filtered]);
+
+  const setCurrentMatchRef = useCallback((el: HTMLElement | null) => {
+    currentMatchRef.current = el;
+  }, []);
+
+  const goToMatch = useCallback((delta: number) => {
+    setMatchIndex((prev) => {
+      if (matchCount === 0) return 0;
+      const base = Math.min(prev, matchCount - 1);
+      return (base + delta + matchCount) % matchCount;
+    });
+  }, [matchCount]);
+
+  const focusSearch = useCallback(() => {
+    searchInputRef.current?.focus();
+    searchInputRef.current?.select();
+  }, []);
+
+  const goToNext = useCallback(() => goToMatch(1), [goToMatch]);
+  const goToPrev = useCallback(() => goToMatch(-1), [goToMatch]);
+
+  usePaneFindShortcut(active, { onFind: focusSearch, onNext: goToNext, onPrev: goToPrev });
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      goToMatch(e.shiftKey ? -1 : 1);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (searchQuery) setSearchQuery('');
+      else searchInputRef.current?.blur();
+    }
+  };
+
+  const countLabel = useMemo(() => {
+    if (regexInvalid) return t('panes.logViewer.invalidRegex');
+    if (!debouncedQuery) return '';
+    if (matchCount === 0) return t('panes.logViewer.noMatches');
+    const params = { current: currentMatch + 1, total: matchCount };
+    return matchesTruncated
+      ? t('panes.logViewer.matchCountTruncated', params)
+      : t('panes.logViewer.matchCount', params);
+  }, [regexInvalid, debouncedQuery, matchCount, currentMatch, matchesTruncated, t]);
+
+  /** Render segments as plain strings interleaved with <mark> elements. */
+  const renderSegments = (segments: Segment[], markCurrent: boolean) => {
+    let seen = -1;
+    return segments.map((seg, i) => {
+      if (!seg.isMatch) return seg.text;
+      seen += 1;
+      const isCurrent = markCurrent && seen === currentMatch;
+      return (
+        <mark
+          key={i}
+          className={`log-viewer-mark${isCurrent ? ' current' : ''}`}
+          ref={isCurrent ? setCurrentMatchRef : null}
+        >
+          {seg.text}
+        </mark>
+      );
+    });
+  };
+
   const hasFolderSet = !!folderPath;
 
   return (
@@ -273,17 +409,121 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
           </button>
         </div>
 
-        <div className="log-viewer-file-content">
-          {loading && <div className="log-viewer-loading">{t('common.loading')}</div>}
-          {!loading && selectedFile && (
-            <pre className="log-viewer-pre">{content}</pre>
+        <div className="log-viewer-main">
+          {selectedFile && (
+            <div className="log-viewer-search-bar">
+              <input
+                ref={searchInputRef}
+                type="text"
+                className={`log-viewer-search-input${regexInvalid ? ' invalid' : ''}`}
+                placeholder={t('panes.logViewer.searchPlaceholder')}
+                aria-label={t('panes.logViewer.searchAria')}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="log-viewer-search-clear"
+                  onClick={() => { setSearchQuery(''); focusSearch(); }}
+                  title={t('panes.logViewer.clearSearch')}
+                  aria-label={t('panes.logViewer.clearSearch')}
+                >
+                  &times;
+                </button>
+              )}
+              <button
+                type="button"
+                className={`log-viewer-search-toggle${caseSensitive ? ' active' : ''}`}
+                onClick={() => setCaseSensitive((v) => !v)}
+                title={t('panes.logViewer.caseSensitive')}
+                aria-label={t('panes.logViewer.caseSensitive')}
+                aria-pressed={caseSensitive}
+              >
+                Aa
+              </button>
+              <button
+                type="button"
+                className={`log-viewer-search-toggle${useRegex ? ' active' : ''}`}
+                onClick={() => setUseRegex((v) => !v)}
+                title={t('panes.logViewer.useRegex')}
+                aria-label={t('panes.logViewer.useRegex')}
+                aria-pressed={useRegex}
+              >
+                .*
+              </button>
+              <button
+                type="button"
+                className="log-viewer-search-btn"
+                onClick={goToPrev}
+                disabled={matchCount === 0}
+                title={t('panes.logViewer.prevMatch')}
+                aria-label={t('panes.logViewer.prevMatch')}
+              >
+                &#9650;
+              </button>
+              <button
+                type="button"
+                className="log-viewer-search-btn"
+                onClick={goToNext}
+                disabled={matchCount === 0}
+                title={t('panes.logViewer.nextMatch')}
+                aria-label={t('panes.logViewer.nextMatch')}
+              >
+                &#9660;
+              </button>
+              <span
+                className="log-viewer-search-count"
+                title={matchesTruncated ? t('panes.logViewer.tooManyMatches', { limit: MAX_MATCHES }) : undefined}
+              >
+                {countLabel}
+              </span>
+              <label className="log-viewer-search-filter-toggle">
+                <input
+                  type="checkbox"
+                  checked={filterOnly}
+                  onChange={(e) => setFilterOnly(e.target.checked)}
+                />
+                {t('panes.logViewer.onlyMatchingLines')}
+              </label>
+            </div>
           )}
-          {!loading && !selectedFile && folderPath && (
-            <div className="log-viewer-placeholder">{t('panes.logViewer.selectFile')}</div>
-          )}
-          {!loading && !folderPath && (
-            <div className="log-viewer-placeholder">{t('panes.logViewer.enterFolder')}</div>
-          )}
+
+          <div className="log-viewer-file-content">
+            {loading && <div className="log-viewer-loading">{t('common.loading')}</div>}
+            {!loading && selectedFile && filteredRows && (
+              filteredRows.length === 0 ? (
+                <div className="log-viewer-placeholder">{t('panes.logViewer.noMatches')}</div>
+              ) : (
+                <div className="log-viewer-filtered">
+                  {filteredRows.map((segments, i) => {
+                    const isCurrent = i === currentMatch;
+                    return (
+                      <div
+                        key={i}
+                        className={`log-viewer-match-line${isCurrent ? ' current' : ''}`}
+                        ref={isCurrent ? setCurrentMatchRef : null}
+                      >
+                        {renderSegments(segments, false)}
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            )}
+            {!loading && selectedFile && !filteredRows && (
+              <pre className="log-viewer-pre">
+                {highlight ? renderSegments(highlight.segments, true) : content}
+              </pre>
+            )}
+            {!loading && !selectedFile && folderPath && (
+              <div className="log-viewer-placeholder">{t('panes.logViewer.selectFile')}</div>
+            )}
+            {!loading && !folderPath && (
+              <div className="log-viewer-placeholder">{t('panes.logViewer.enterFolder')}</div>
+            )}
+          </div>
         </div>
       </div>
     </div>

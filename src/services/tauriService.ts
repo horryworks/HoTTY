@@ -38,6 +38,10 @@ import type {
   ExportHtreeResult,
   PingDataPayload,
   PingLogFilePayload,
+  SnmpConfig,
+  SnmpDataPayload,
+  SnmpDiscovery,
+  SnmpStatusPayload,
   FileServerEvent,
   FileServerProtocol,
   FirewallReport,
@@ -402,6 +406,37 @@ export const tauriService = {
 
   onPingMonitorLogFile(cb: (p: PingLogFilePayload) => void): Promise<UnlistenFn> {
     return listen<PingLogFilePayload>('ping-monitor-log-file', (e) => cb(e.payload));
+  },
+
+  // -----------------------------------------------------------------------
+  // Interface traffic watcher (SNMP)
+  // -----------------------------------------------------------------------
+
+  /** One-shot connection test + interface listing. */
+  async snmpListInterfaces(config: SnmpConfig): Promise<SnmpDiscovery> {
+    return await invoke<SnmpDiscovery>('snmp_list_interfaces', { config });
+  },
+
+  /** Start (or restart) polling. Calling it again for the same pane replaces
+   *  the running watcher, which is also how the target device is changed. */
+  async snmpWatcherStart(paneId: string, config: SnmpConfig, intervalMs: number): Promise<void> {
+    await invoke('snmp_watcher_start', { paneId, config, intervalMs });
+  },
+
+  async snmpWatcherStop(paneId: string): Promise<void> {
+    await invoke('snmp_watcher_stop', { paneId });
+  },
+
+  async snmpWatcherUpdateInterval(paneId: string, intervalMs: number): Promise<void> {
+    await invoke('snmp_watcher_update_interval', { paneId, intervalMs });
+  },
+
+  onSnmpWatcherData(cb: (p: SnmpDataPayload) => void): Promise<UnlistenFn> {
+    return listen<SnmpDataPayload>('snmp-watcher-data', (e) => cb(e.payload));
+  },
+
+  onSnmpWatcherStatus(cb: (p: SnmpStatusPayload) => void): Promise<UnlistenFn> {
+    return listen<SnmpStatusPayload>('snmp-watcher-status', (e) => cb(e.payload));
   },
 
   // -----------------------------------------------------------------------
