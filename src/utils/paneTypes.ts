@@ -1,4 +1,4 @@
-export type FeaturePaneType = 'log-viewer' | 'ping-monitor' | 'text-editor' | 'file-explorer' | 'ai-chat' | 'file-server' | 'web-browser';
+export type FeaturePaneType = 'log-viewer' | 'ping-monitor' | 'ai-chat' | 'file-server' | 'web-browser';
 
 type PaneContentType = 'session' | FeaturePaneType;
 
@@ -11,8 +11,6 @@ export interface FeaturePaneInfo {
 const FEATURE_PREFIXES: Record<FeaturePaneType, string> = {
   'log-viewer': 'lv-',
   'ping-monitor': 'pm-',
-  'text-editor': 'te-',
-  'file-explorer': 'fe-',
   'ai-chat': 'ai-',
   'file-server': 'fs-',
   'web-browser': 'wb-',
@@ -21,8 +19,6 @@ const FEATURE_PREFIXES: Record<FeaturePaneType, string> = {
 const FEATURE_DISPLAY_NAMES: Record<FeaturePaneType, string> = {
   'log-viewer': 'Log Viewer',
   'ping-monitor': 'Ping Monitor',
-  'text-editor': 'Text Editor',
-  'file-explorer': 'File Explorer',
   'ai-chat': 'AI Chat',
   'file-server': 'File Server',
   'web-browser': 'Web Browser',

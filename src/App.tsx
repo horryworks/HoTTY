@@ -9,8 +9,6 @@ import { conversationColorIndex } from './utils/conversationColor';
 import { TerminalView } from './components/Terminal/Terminal';
 import { ConnectingOverlay } from './components/ConnectingOverlay/ConnectingOverlay';
 import { LogViewerPane } from './components/LogViewerPane/LogViewerPane';
-import { TextEditorPane } from './components/TextEditorPane/TextEditorPane';
-import { FileExplorerPane } from './components/FileExplorerPane/FileExplorerPane';
 import { PingMonitorPane } from './components/PingMonitorPane/PingMonitorPane';
 import { FileServerPane } from './components/FileServerPane/FileServerPane';
 import { WebBrowserPane } from './components/WebBrowserPane/WebBrowserPane';
@@ -57,7 +55,6 @@ import {
   type FeaturePaneInfo,
   type FeaturePaneType,
 } from './utils/paneTypes';
-import { totalDirtyEditors } from './utils/dirtyEditors';
 import './App.css';
 
 function App() {
@@ -318,35 +315,6 @@ function App() {
     }).catch(() => {});
   }, []);
 
-  // Intercept window close when text editors have unsaved changes so the user
-  // can confirm before losing work. The native ask dialog is used because the
-  // in-app SaveConfirmModal is keyed per-pane/tab and doesn't cover global quit.
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let closing = false;
-    tauriService.onWindowCloseRequested(async (preventDefault) => {
-      if (closing) return;
-      const count = totalDirtyEditors();
-      if (count === 0) return;
-      preventDefault();
-      const proceed = await tauriService.confirmDialog(
-        count === 1
-          ? i18n.t('dialogs.unsavedEditors.bodyOne', { count })
-          : i18n.t('dialogs.unsavedEditors.bodyMany', { count }),
-        {
-          title: i18n.t('dialogs.unsavedEditors.title'),
-          okLabel: i18n.t('dialogs.unsavedEditors.discardQuit'),
-          cancelLabel: i18n.t('common.cancel'),
-        },
-      );
-      if (proceed) {
-        closing = true;
-        await tauriService.destroyWindow();
-      }
-    }).then((fn) => { unlisten = fn; }).catch(() => {});
-    return () => { unlisten?.(); };
-  }, []);
-
   // Apply the selected UI language app-wide. react-i18next re-renders every
   // useTranslation()/<Trans> consumer on changeLanguage — live, no reload.
   useEffect(() => {
@@ -526,21 +494,8 @@ function App() {
       next.set(id, { id, type, displayName });
       return next;
     });
-    addSessionToStore(id, type === 'file-explorer' ? { preferSidebar: true } : undefined);
+    addSessionToStore(id);
   }, [addSessionToStore]);
-
-  const handleUpdateFeatureDisplayName = useCallback((id: string, displayName: string) => {
-    setFeaturePanes((prev) => {
-      const entry = prev.get(id);
-      if (!entry) return prev;
-      const next = new Map(prev);
-      next.set(id, { ...entry, displayName });
-      return next;
-    });
-  }, []);
-
-  // Track initial file paths for text editors opened from file explorer
-  const [editorInitialFiles, setEditorInitialFiles] = useState<Map<string, string>>(new Map());
 
   // Track initial URLs for web browser panes opened from a Web bookmark.
   const [webBrowserInitialUrls, setWebBrowserInitialUrls] = useState<Map<string, string>>(new Map());
@@ -589,49 +544,6 @@ function App() {
       return next;
     });
   }, []);
-
-  const handleOpenFileInEditor = useCallback(async (filePath: string) => {
-    if (!useSettingsStore.getState().enabledFeatures['text-editor']) return;
-    try {
-      await tauriService.textEditorApproveDroppedFile(filePath);
-    } catch { /* proceed — file may already be approved */ }
-
-    // Try to find an existing text editor pane and open the file there
-    const existingEditorId = Array.from(featurePanes.values()).find(
-      (fp) => fp.type === 'text-editor',
-    )?.id;
-
-    if (existingEditorId) {
-      // Route the file to the existing text editor's internal sub-tab
-      const el = document.querySelector(`[data-pane-id="${existingEditorId}"]`) as
-        | (HTMLElement & { __editorHandle?: { openFile: (path: string) => void } })
-        | null;
-      if (el?.__editorHandle) {
-        el.__editorHandle.openFile(filePath);
-        // Activate the editor pane
-        const paneEntry = Object.entries(paneAllocations).find(
-          ([, sid]) => sid === existingEditorId,
-        );
-        if (paneEntry) setActivePaneId(paneEntry[0]);
-        return;
-      }
-    }
-
-    // No existing editor — create a new one
-    const id = makeFeaturePaneId('text-editor');
-    const filename = filePath.split(/[\\/]/).pop() || i18n.t('panes.textEditor.untitled');
-    setFeaturePanes((prev) => {
-      const next = new Map(prev);
-      next.set(id, { id, type: 'text-editor', displayName: filename });
-      return next;
-    });
-    setEditorInitialFiles((prev) => {
-      const next = new Map(prev);
-      next.set(id, filePath);
-      return next;
-    });
-    addSessionToStore(id);
-  }, [addSessionToStore, featurePanes, paneAllocations, setActivePaneId]);
 
   const handleDropSession = (sessionId: string, targetPaneId: string) => {
     moveSessionToPane(sessionId, targetPaneId);
@@ -690,21 +602,6 @@ function App() {
               key={featureInfo.id}
               paneId={featureInfo.id}
               active={paneId === activePaneId}
-            />
-          ) : featureInfo?.type === 'text-editor' ? (
-            <TextEditorPane
-              key={featureInfo.id}
-              paneId={featureInfo.id}
-              active={paneId === activePaneId}
-              initialFilePath={editorInitialFiles.get(featureInfo.id)}
-              onDisplayNameChange={(name) => handleUpdateFeatureDisplayName(featureInfo.id, name)}
-            />
-          ) : featureInfo?.type === 'file-explorer' ? (
-            <FileExplorerPane
-              key={featureInfo.id}
-              paneId={featureInfo.id}
-              active={paneId === activePaneId}
-              onOpenFileInEditor={handleOpenFileInEditor}
             />
           ) : featureInfo?.type === 'ping-monitor' ? (
             <PingMonitorPane
@@ -836,8 +733,6 @@ function App() {
             }}
             onNewLogViewer={enabledFeatures['log-viewer'] ? () => handleNewFeaturePane('log-viewer') : undefined}
             onNewPingMonitor={enabledFeatures['ping-monitor'] ? () => handleNewFeaturePane('ping-monitor') : undefined}
-            onNewTextEditor={enabledFeatures['text-editor'] ? () => handleNewFeaturePane('text-editor') : undefined}
-            onNewFileExplorer={enabledFeatures['file-explorer'] ? () => handleNewFeaturePane('file-explorer') : undefined}
             onNewFileServer={enabledFeatures['file-server'] ? () => handleNewFeaturePane('file-server') : undefined}
             onNewAiChat={enabledFeatures['ai-chat'] ? openAiChatPane : undefined}
           />

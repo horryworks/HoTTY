@@ -78,7 +78,7 @@ fn load_or_create_key(
     let path = host_key_path(app, filename)?;
 
     if let Ok(enc) = std::fs::read_to_string(&path) {
-        if let Ok(pem) = crate::services::dpapi::decrypt_string(&enc) {
+        if let Ok(pem) = crate::services::dpapi::decrypt_string_allow_legacy(&enc) {
             if let Ok(key) = PrivateKey::from_openssh(pem.as_bytes()) {
                 return Ok(key);
             }

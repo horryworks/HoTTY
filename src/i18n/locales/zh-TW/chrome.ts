@@ -12,8 +12,6 @@ export const chrome = {
     aiMonitorStartAria: '開始 AI 監控',
     logViewer: '記錄檢視器',
     pingMonitor: 'Ping 監控',
-    textEditor: '文字編輯器',
-    fileExplorer: '檔案總管',
     aiChat: 'AI 聊天',
     saveToHostTree: '儲存至主機樹狀清單…',
     fixedTerminalSize: '固定寬度 ({{cols}})',

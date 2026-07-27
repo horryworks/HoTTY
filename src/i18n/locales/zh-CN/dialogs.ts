@@ -1,22 +1,10 @@
-// Modal dialogs — confirmation, save/discard, paste, SSH host key, system prompt,
+// Modal dialogs — confirmation, paste, SSH host key, system prompt,
 // Ask AI, IAP VM start, and Save-to-Host-Tree. Grouped one key block per dialog.
 export const dialogs = {
-  unsavedEditors: {
-    title: '未保存的更改',
-    bodyOne: '您有 {{count}} 个未保存的文本编辑器标签页。仍要关闭并放弃更改吗？',
-    bodyMany: '您有 {{count}} 个未保存的文本编辑器标签页。仍要关闭并放弃更改吗？',
-    discardQuit: '放弃并退出',
-  },
   confirm: {
     title: '确认',
     // Default confirm-button label when a caller does not pass one.
     confirmLabel: '删除',
-  },
-  saveConfirm: {
-    heading: '未保存的更改',
-    // {{filename}} is rendered in its own styled span via <Trans>.
-    body: '<0>{{filename}}</0> 有未保存的更改。是否在关闭前保存？',
-    dontSave: '不保存',
   },
   paste: {
     header: '粘贴确认',

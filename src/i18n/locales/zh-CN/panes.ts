@@ -1,4 +1,4 @@
-// Feature panes — Log Viewer, Ping Monitor, Text Editor, File Explorer, and
+// Feature panes — Log Viewer, Ping Monitor, File Server, Web Browser, and
 // GCP Instances. One key block per pane. Only user-facing display text lives
 // here; code identifiers, CSS classes, enum values, and backend-bound strings
 // stay in the components.
@@ -90,44 +90,6 @@ export const panes = {
     statusStopped: '已停止',
     statusInterval: '间隔：{{interval}}',
     statusLog: '日志：{{filename}}',
-  },
-  textEditor: {
-    displayName: '文本编辑器',
-    untitled: '无标题',
-    newTab: '新建标签页',
-    menuFile: '文件',
-    menuEdit: '编辑',
-    menuView: '视图',
-    fileNewTab: '新建标签页',
-    fileOpen: '打开...',
-    fileSave: '保存',
-    fileSaveAs: '另存为...',
-    fileCloseTab: '关闭标签页',
-    editUndo: '撤销',
-    editRedo: '重做',
-    editFind: '查找',
-    editReplace: '替换',
-    editGotoLine: '转到行...',
-    viewLineWrap: '自动换行',
-    viewShowReturnCodes: '显示换行符',
-    unsavedChanges: '未保存的更改',
-    modified: '已修改',
-    cursorPosition: '第 {{line}} 行，第 {{col}} 列',
-    findLabel: '查找：',
-    searchPlaceholder: '搜索...',
-    findNext: '下一个',
-    replaceLabel: '替换：',
-    replacePlaceholder: '替换...',
-    replace: '替换',
-    replaceAll: '全部',
-    gotoLine: '转到行 (1-{{max}})：',
-  },
-  fileExplorer: {
-    refresh: '刷新',
-    hideHidden: '隐藏隐藏文件',
-    showHidden: '显示隐藏文件',
-    loadingDrives: '正在加载驱动器...',
-    noFiles: '没有可显示的文件',
   },
   gcpInstances: {
     paneTitle: 'Google Cloud GCE',

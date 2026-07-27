@@ -1,7 +1,6 @@
 pub mod ai;
 pub mod chat_log;
 pub mod dpapi;
-pub mod file_explorer;
 pub mod file_server;
 pub mod host_tree;
 pub mod iap_tunnel;
@@ -12,7 +11,6 @@ pub mod session;
 pub mod ssh_algorithms;
 pub mod sync;
 pub mod system;
-pub mod text_editor;
 pub mod themes;
 pub mod updater;
 pub mod utilities;

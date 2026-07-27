@@ -14,7 +14,6 @@ import type {
   Theme,
   HostEntry,
   HostTreeNode,
-  TextEditorTab,
   AIChatResponseData,
   CommandExecutionMode,
   PersonaDefinition,
@@ -31,7 +30,7 @@ describe('appTypes', () => {
   });
 
   it('FeatureId accepts every declared member', () => {
-    const values: FeatureId[] = ['ai-chat', 'log-viewer', 'ping-monitor', 'text-editor', 'file-explorer'];
+    const values: FeatureId[] = ['ai-chat', 'log-viewer', 'ping-monitor', 'file-server', 'web-browser'];
     expect(values).toHaveLength(5);
   });
 
@@ -112,20 +111,6 @@ describe('appTypes', () => {
       kind: 'new',
     };
     expect(payload.kind).toBe('new');
-  });
-
-  it('TextEditorTab.lineEnding is restricted to "LF" | "CRLF"', () => {
-    const lf: TextEditorTab = {
-      id: '1',
-      filePath: null,
-      content: '',
-      savedContent: '',
-      encoding: 'utf-8',
-      lineEnding: 'LF',
-    };
-    const crlf: TextEditorTab['lineEnding'] = 'CRLF';
-    expect(lf.lineEnding).toBe('LF');
-    expect(crlf).toBe('CRLF');
   });
 
   it('Theme exposes variables map and terminal colors', () => {

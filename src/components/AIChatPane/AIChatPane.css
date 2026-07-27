@@ -88,10 +88,15 @@
     transition: background-color 0.1s, border-color 0.1s, color 0.1s;
 }
 
-.ai-chat-new-chat-btn:hover {
+.ai-chat-new-chat-btn:hover:not(:disabled) {
     background-color: var(--color-danger-bg);
     border-color: var(--color-danger-border);
     color: var(--color-danger);
+}
+
+.ai-chat-new-chat-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .ai-chat-header-divider {

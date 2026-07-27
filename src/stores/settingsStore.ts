@@ -188,8 +188,6 @@ const DEFAULTS: SettingsState = {
     'ai-chat': true,
     'log-viewer': true,
     'ping-monitor': true,
-    'text-editor': false,
-    'file-explorer': false,
     'file-server': true,
     'web-browser': true,
   },
@@ -231,7 +229,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 26,
+      version: 27,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -356,6 +354,15 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
         if (version < 26) {
           // New GCP IAP SSH username override — blank keeps auto-detection.
           state.gcpIapUsername ??= DEFAULTS.gcpIapUsername;
+        }
+        if (version < 27) {
+          // Text Editor and File Explorer were removed. Drop their now-unknown
+          // flags so the persisted feature map matches the shipped feature set.
+          const features = state.enabledFeatures as Record<string, boolean> | undefined;
+          if (features) {
+            delete features['text-editor'];
+            delete features['file-explorer'];
+          }
         }
         return state as SettingsState;
       },

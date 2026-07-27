@@ -22,10 +22,10 @@ describe('logError', () => {
   });
 
   it('appends Error.message when an Error is passed', () => {
-    logError('TextEditor', 'Failed to load file', new Error('ENOENT'));
+    logError('LogViewer', 'Failed to load file', new Error('ENOENT'));
     expect(tauriService.logDebug).toHaveBeenCalledWith(
       'error',
-      'TextEditor',
+      'LogViewer',
       'Failed to load file: ENOENT',
     );
   });
@@ -45,10 +45,10 @@ describe('logError', () => {
   });
 
   it('pushes a notification to the store with the full message', () => {
-    logError('TextEditor', 'Failed to load file', new Error('ENOENT'));
+    logError('LogViewer', 'Failed to load file', new Error('ENOENT'));
     const list = useErrorNotificationStore.getState().notifications;
     expect(list).toHaveLength(1);
-    expect(list[0].category).toBe('TextEditor');
+    expect(list[0].category).toBe('LogViewer');
     expect(list[0].message).toBe('Failed to load file: ENOENT');
   });
 

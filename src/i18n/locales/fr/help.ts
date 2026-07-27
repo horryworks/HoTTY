@@ -126,29 +126,6 @@ export const help = {
       '<0>Recherche :</0> utilisez la barre de recherche dans la Visionneuse de journaux pour filtrer les lignes. Basculez le bouton <1>.*</1> pour passer entre la recherche en texte brut et par expression régulière.',
   },
 
-  textEditor: {
-    summary: 'Éditeur de texte',
-    intro:
-      'Ouvrez un volet d\'éditeur de texte intégré via <0><1></1></0> (Fonctionnalités) → <2>« Éditeur de texte »</2>. Vous pouvez ouvrir plusieurs volets d\'éditeur et modifier plusieurs fichiers simultanément à l\'aide de sous-onglets.',
-    fileMenu:
-      '<0>Menu Fichier :</0> actions Nouveau, Ouvrir, Enregistrer, Enregistrer sous et Fermer pour chaque sous-onglet.',
-    viewMenu:
-      '<0>Menu Affichage :</0> basculez <1>Afficher les codes de retour</1> pour afficher les caractères de saut de ligne sous forme de symboles visibles dans l\'éditeur.',
-    findReplace:
-      '<0>Rechercher et remplacer :</0> appuyez sur <1>Ctrl + F</1> pour ouvrir la barre de recherche. Utilisez <2>Ctrl + H</2> pour rechercher et remplacer. Les correspondances sont surlignées et le nombre total est affiché.',
-    gotoLine:
-      '<0>Aller à la ligne :</0> appuyez sur <1>Ctrl + G</1> pour sauter à un numéro de ligne spécifique.',
-    encoding:
-      '<0>Encodage et fins de ligne :</0> cliquez sur l\'indicateur d\'encodage ou de fin de ligne dans la barre d\'état pour les modifier pour le fichier actuel.',
-    lineWrap:
-      '<0>Retour à la ligne :</0> contrôlé par la bascule globale <1>Paramètres → Apparence → Retour à la ligne</1>. Les numéros de ligne visuels se mettent à jour automatiquement pour refléter les lignes renvoyées à la ligne.',
-    fileAssociation:
-      '<0>Association de fichiers :</0> les fichiers ouverts depuis l\'Explorateur Windows (double-clic ou « Ouvrir avec ») se lancent directement dans l\'Éditeur de texte.',
-    tip:
-      '<0>Astuce :</0> un fichier non enregistré affiche un point <1>•</1> sur le titre de son sous-onglet. Enregistrez avec <2>Ctrl + S</2>.',
-    unsavedPrompt:
-      '<0>Invite de modifications non enregistrées :</0> fermer un sous-onglet ou quitter avec des éditeurs modifiés ouvre une boîte de dialogue <1>Enregistrer / Abandonner / Annuler</1> afin que vous ne perdiez jamais votre travail par accident.',
-  },
 
   fileServer: {
     summary:
@@ -187,17 +164,6 @@ export const help = {
       '<0>Activer / désactiver :</0> L’onglet Web peut être désactivé dans <1>Paramètres → Fonctionnalités</1>.',
   },
 
-  fileExplorer: {
-    summary: 'Explorateur de fichiers',
-    intro:
-      'Ouvrez un volet d\'explorateur de fichiers intégré via <0><1></1></0> (Fonctionnalités) → <2>« Explorateur de fichiers »</2>. Parcourez vos lecteurs et répertoires dans une structure arborescente repliable.',
-    navigate:
-      '<0>Naviguer :</0> cliquez sur les dossiers pour les développer/réduire. Utilisez le fil d\'Ariane en haut pour une navigation rapide.',
-    openFiles: '<0>Ouvrir des fichiers :</0> double-cliquez sur un fichier pour l\'ouvrir dans l\'Éditeur de texte.',
-    hiddenFiles:
-      '<0>Fichiers cachés :</0> basculez la visibilité des fichiers cachés avec l\'icône en forme d\'œil dans la barre d\'outils.',
-    refresh: '<0>Actualiser :</0> cliquez sur le bouton d\'actualisation pour recharger le répertoire actuel.',
-  },
 
   aiQuickStart: {
     summary: 'Guide de démarrage rapide de l\'IA',

@@ -23,8 +23,6 @@ interface TabBarProps {
   onBookmark?: (id: string) => void;
   onNewLogViewer?: () => void;
   onNewPingMonitor?: () => void;
-  onNewTextEditor?: () => void;
-  onNewFileExplorer?: () => void;
   onNewFileServer?: () => void;
   onNewAiChat?: () => void;
 }
@@ -69,8 +67,6 @@ export function TabBar({
   onBookmark,
   onNewLogViewer,
   onNewPingMonitor,
-  onNewTextEditor,
-  onNewFileExplorer,
   onNewFileServer,
   onNewAiChat,
 }: TabBarProps) {
@@ -88,7 +84,7 @@ export function TabBar({
   const visibleSet = new Set(visibleTabIds);
 
   const hasAnyFeatureCallback =
-    onNewLogViewer || onNewPingMonitor || onNewTextEditor || onNewFileExplorer || onNewFileServer || onNewAiChat;
+    onNewLogViewer || onNewPingMonitor || onNewFileServer || onNewAiChat;
 
   // Close features menu on click outside
   useEffect(() => {
@@ -371,29 +367,6 @@ export function TabBar({
                     <polyline points="12 6 12 12 16 14" />
                   </svg>
                   {t('chrome.tabBar.pingMonitor')}
-                </div>
-              )}
-              {onNewTextEditor && (
-                <div
-                  className="features-dropdown-item"
-                  onClick={() => { onNewTextEditor(); setShowFeaturesMenu(false); }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                  {t('chrome.tabBar.textEditor')}
-                </div>
-              )}
-              {onNewFileExplorer && (
-                <div
-                  className="features-dropdown-item"
-                  onClick={() => { onNewFileExplorer(); setShowFeaturesMenu(false); }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                  </svg>
-                  {t('chrome.tabBar.fileExplorer')}
                 </div>
               )}
               {onNewFileServer && (

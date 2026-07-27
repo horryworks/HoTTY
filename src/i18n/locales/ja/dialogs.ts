@@ -1,22 +1,10 @@
-// モーダルダイアログ — 確認・保存/破棄・貼り付け・SSHホスト鍵・システムプロンプト・
+// モーダルダイアログ — 確認・貼り付け・SSHホスト鍵・システムプロンプト・
 // AIへの質問・IAP VM起動・ホストツリーへの保存。ダイアログごとにキーをまとめています。
 export const dialogs = {
-  unsavedEditors: {
-    title: '未保存の変更',
-    bodyOne: '未保存のテキストエディタタブが {{count}} 個あります。変更を破棄して閉じますか？',
-    bodyMany: '未保存のテキストエディタタブが {{count}} 個あります。変更を破棄して閉じますか？',
-    discardQuit: '破棄して終了',
-  },
   confirm: {
     title: '確認',
     // 呼び出し元がラベルを渡さない場合の既定の確認ボタンラベル。
     confirmLabel: '削除',
-  },
-  saveConfirm: {
-    heading: '未保存の変更',
-    // {{filename}} は <Trans> で専用スタイルの span として表示されます。
-    body: '<0>{{filename}}</0> に未保存の変更があります。閉じる前に保存しますか？',
-    dontSave: '保存しない',
   },
   paste: {
     header: '貼り付けの確認',

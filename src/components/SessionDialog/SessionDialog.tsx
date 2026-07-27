@@ -1623,7 +1623,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 )}
                             </fieldset>
 
-                            <div className="form-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', alignItems: 'center' }}>
+                            <div className="form-actions">
                                 {originalState !== null && NETWORK_PROTOCOLS.has(protocol) && (
                                     <button
                                         type="button"

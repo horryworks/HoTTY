@@ -1,5 +1,5 @@
 export type ProtocolId = 'ssh' | 'telnet' | 'serial' | 'wsl' | 'cmd' | 'powershell' | 'git-bash' | 'gcloud-iap';
-export type FeatureId = 'ai-chat' | 'log-viewer' | 'ping-monitor' | 'text-editor' | 'file-explorer' | 'file-server' | 'web-browser';
+export type FeatureId = 'ai-chat' | 'log-viewer' | 'ping-monitor' | 'file-server' | 'web-browser';
 
 export type Encoding = 'utf8' | 'shift_jis' | 'euc-jp';
 
@@ -306,46 +306,6 @@ export interface ReadLogFileResult {
 export interface ExportHtreeResult {
   success: boolean;
   error?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Text Editor
-// ---------------------------------------------------------------------------
-
-export interface ReadFileResult {
-  content: string;
-  lineEnding: string;
-}
-
-export interface TextEditorTab {
-  id: string;
-  filePath: string | null;
-  content: string;
-  savedContent: string;
-  encoding: string;
-  lineEnding: 'LF' | 'CRLF';
-}
-
-// ---------------------------------------------------------------------------
-// File Explorer
-// ---------------------------------------------------------------------------
-
-export interface DirEntry {
-  name: string;
-  isDirectory: boolean;
-  size: number;
-  mtime: number;
-  isHidden: boolean;
-}
-
-export interface ListDirectoryResult {
-  entries?: DirEntry[];
-  error?: string;
-}
-
-export interface GetDrivesResult {
-  drives: string[];
-  homedir: string;
 }
 
 // ---------------------------------------------------------------------------

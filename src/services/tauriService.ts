@@ -36,9 +36,6 @@ import type {
   ChatLogMeta,
   ChatLogTurnPayload,
   ExportHtreeResult,
-  ReadFileResult,
-  ListDirectoryResult,
-  GetDrivesResult,
   PingDataPayload,
   PingLogFilePayload,
   FileServerEvent,
@@ -374,42 +371,6 @@ export const tauriService = {
   },
 
   // -----------------------------------------------------------------------
-  // Text editor
-  // -----------------------------------------------------------------------
-
-  async textEditorOpenFile(): Promise<string | null> {
-    return invoke<string | null>('text_editor_open_file');
-  },
-
-  async textEditorSaveFile(defaultPath?: string): Promise<string | null> {
-    return invoke<string | null>('text_editor_save_file', { defaultPath: defaultPath ?? null });
-  },
-
-  async textEditorReadFile(filePath: string, encoding: string): Promise<ReadFileResult> {
-    return invoke<ReadFileResult>('text_editor_read_file', { filePath, encoding });
-  },
-
-  async textEditorWriteFile(filePath: string, content: string, encoding: string): Promise<boolean> {
-    return invoke<boolean>('text_editor_write_file', { filePath, content, encoding });
-  },
-
-  async textEditorApproveDroppedFile(filePath: string): Promise<boolean> {
-    return invoke<boolean>('text_editor_approve_dropped_file', { filePath });
-  },
-
-  // -----------------------------------------------------------------------
-  // File explorer
-  // -----------------------------------------------------------------------
-
-  async fileExplorerListDirectory(dirPath: string): Promise<ListDirectoryResult> {
-    return invoke<ListDirectoryResult>('file_explorer_list_directory', { dirPath });
-  },
-
-  async fileExplorerGetDrives(): Promise<GetDrivesResult> {
-    return invoke<GetDrivesResult>('file_explorer_get_drives');
-  },
-
-  // -----------------------------------------------------------------------
   // Ping monitor
   // -----------------------------------------------------------------------
 
@@ -700,18 +661,6 @@ export const tauriService = {
 
   async setWindowTitle(title: string): Promise<void> {
     await getCurrentWebviewWindow().setTitle(title);
-  },
-
-  async onWindowCloseRequested(
-    handler: (preventDefault: () => void) => void | Promise<void>,
-  ): Promise<UnlistenFn> {
-    return getCurrentWebviewWindow().onCloseRequested(async (event) => {
-      await handler(() => event.preventDefault());
-    });
-  },
-
-  async destroyWindow(): Promise<void> {
-    await getCurrentWebviewWindow().destroy();
   },
 
   async confirmDialog(

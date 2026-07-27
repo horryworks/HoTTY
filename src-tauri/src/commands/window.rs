@@ -51,7 +51,8 @@ pub fn create_app_window(app: &AppHandle) -> Result<String, String> {
         .inner_size(WINDOW_WIDTH, WINDOW_HEIGHT)
         .resizable(true)
         // Match `dragDropEnabled: false` from tauri.conf.json so the webview
-        // receives HTML5 drag/drop events (used by the editor/file panes).
+        // receives HTML5 drag/drop events (used by tab reordering and pane
+        // assignment).
         .disable_drag_drop_handler()
         .build()
         .map_err(|e| e.to_string())?;

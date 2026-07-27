@@ -1,5 +1,26 @@
 # Release Notes
 
+## v2.0.14-beta2
+
+**Text Editor and File Explorer are gone, and the encryption behind your saved credentials got a substantial hardening pass.** Those two panes were used so rarely that they never received the attention the others did, so removing them leaves five focused utility panes and a smaller, lighter app. Alongside that, the Windows DPAPI layer that protects your saved usernames, passwords and key passphrases no longer accepts anything it did not encrypt itself.
+
+### Removed
+
+- **Text Editor and File Explorer panes.** Both are removed completely — from the tab bar's feature menu, from **Settings → Features**, and from Help. Five utility panes remain: **Log Viewer**, **Ping Monitor**, **AI Chat**, **File Server**, and **Web Browser**. If you had either one enabled, the leftover setting is tidied up automatically the first time you start this version — nothing to do on your side. Roughly 3,000 lines of code and one npm dependency went with them, so both the installer and the running app are a little lighter.
+
+### Security
+
+- **Saved credentials can no longer be used to decrypt another application's secrets.** HoTTY encrypts credentials with Windows DPAPI plus an app-specific binding, so a blob produced by some other program cannot be opened through HoTTY. Until now the decrypt path quietly retried *without* that binding whenever the first attempt failed, which undid the guarantee it was there to provide. That retry is gone from the path the app uses; it survives only where HoTTY reads back its own files.
+- **Credentials written by pre-2.0 builds are upgraded in place.** Anything still in the older format is re-encrypted with the current binding the first time your host tree loads — including **SSH key passphrases**, which the previous migration silently skipped. The plaintext never leaves the process.
+- **One unreadable credential no longer blanks the rest.** Decrypting the host tree used to be all-or-nothing: a single damaged entry emptied every other username and password in the list. A failure is now contained to the one field, which is left empty so you know to re-enter it.
+- **A saved credential can never be silently replaced with a blank.** A failed decryption could previously be written back over the real value during the host tree's automatic upgrade pass, destroying it for good. The original encrypted value is now always kept.
+- **The log folder can no longer be a network path.** A UNC path such as `\\server\share` is rejected before anything touches the disk, so Windows can never be steered into authenticating against a remote share while logging is being set up.
+
+### Improvements
+
+- **Snappier pane highlight.** The flash that marks the newly focused pane when you move with `Ctrl+Tab` is now half as long.
+- **Disabled AI Chat buttons stop looking clickable.** Header buttons that are currently unavailable no longer light up on hover.
+
 ## v2.0.14-beta1
 
 **AI Chat conversations are now saved to disk, the same way terminal sessions already were.** Turn on **Settings → General → Logging** and every AI Chat conversation is written to a Markdown file in the same folder as your session logs — and shows up in the Log Viewer right next to them. Nothing else to configure: same checkbox, same folder, same folder-approval prompt.

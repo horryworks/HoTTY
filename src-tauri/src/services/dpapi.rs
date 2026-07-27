@@ -26,26 +26,61 @@ pub(crate) fn encrypt_string(plaintext: &str) -> Result<String, String> {
     Ok(format!("{SAFE_PREFIX}{encoded}"))
 }
 
-/// Decrypt a `[SAFE]`- or `[DPAPI]`-prefixed ciphertext using Windows DPAPI.
-/// If the input has no recognised prefix it is returned as-is (plaintext passthrough).
+/// Decrypt a `[SAFE]`- or `[DPAPI]`-prefixed ciphertext, requiring HoTTY entropy
+/// **and** the HoTTY marker. This is the path the `dpapi_decrypt` /
+/// `dpapi_decrypt_batch` IPC commands use, so a renderer-supplied blob produced
+/// by another application can never be decrypted through them: the entropy
+/// binding is what makes that impossible, and there is no no-entropy retry here.
 ///
-/// The passthrough path is intentional — many callers store mixed-content
-/// fields (e.g. host-tree usernames) that may legitimately be plaintext when
-/// the user never enabled encryption. Inputs that look like they were *meant*
-/// to be encrypted (start with `[` but have an unknown tag) are still passed
-/// through unchanged but logged at warn level so accidental corruption of the
-/// prefix is visible.
+/// Pre-entropy HoTTY blobs (written by Rust dev builds before v2.0.0) are
+/// *rejected* by this function on purpose — they are upgraded in place by the
+/// host-tree migration, which uses `decrypt_string_allow_legacy` instead.
+///
+/// If the input has no recognised prefix it is returned as-is (plaintext
+/// passthrough). The passthrough path is intentional — many callers store
+/// mixed-content fields (e.g. host-tree usernames) that may legitimately be
+/// plaintext when the user never enabled encryption. Inputs that look like they
+/// were *meant* to be encrypted (start with `[` but have an unknown tag) are
+/// still passed through unchanged but logged at warn level so accidental
+/// corruption of the prefix is visible.
 pub(crate) fn decrypt_string(ciphertext: &str) -> Result<String, String> {
-    if let Some(b64) = ciphertext.strip_prefix(SAFE_PREFIX) {
+    decrypt_with(ciphertext, crypt_unprotect_strict)
+}
+
+/// Same as [`decrypt_string`], but additionally accepts pre-entropy HoTTY blobs
+/// (no entropy, no marker) via a no-entropy retry.
+///
+/// **Not reachable from IPC.** Restricted to trusted in-process callers that
+/// read HoTTY's own on-disk stores (`ai::config_store`, `sftp_server`) plus the
+/// host-tree credential migration, which re-encrypts what it reads. Keeping the
+/// no-entropy retry off the IPC surface is what preserves the guarantee stated
+/// on `HOTTY_ENTROPY`; see also the migration in `commands::host_tree`.
+///
+/// The migration is the one caller whose *input* is renderer-supplied, so it can
+/// in principle be used to launder a foreign no-entropy blob into an
+/// entropy-bound one that `decrypt_string` will then open. That is accepted: a
+/// no-entropy DPAPI blob is decryptable by *any* process running as the same
+/// user, so an attacker who can already supply the blob bytes can call
+/// `CryptUnprotectData` directly — the round-trip grants no capability it lacks.
+/// The control this file enforces is against a renderer-only attacker, which
+/// cannot obtain foreign blob bytes through HoTTY's IPC surface at all.
+pub(crate) fn decrypt_string_allow_legacy(ciphertext: &str) -> Result<String, String> {
+    decrypt_with(ciphertext, crypt_unprotect_allow_legacy)
+}
+
+fn decrypt_with(
+    ciphertext: &str,
+    unprotect: fn(&[u8]) -> Result<String, String>,
+) -> Result<String, String> {
+    let stripped = ciphertext
+        .strip_prefix(SAFE_PREFIX)
+        .or_else(|| ciphertext.strip_prefix(LEGACY_PREFIX));
+
+    if let Some(b64) = stripped {
         let bytes = BASE64
             .decode(b64)
             .map_err(|e| format!("base64 decode error: {e}"))?;
-        crypt_unprotect(&bytes)
-    } else if let Some(b64) = ciphertext.strip_prefix(LEGACY_PREFIX) {
-        let bytes = BASE64
-            .decode(b64)
-            .map_err(|e| format!("base64 decode error: {e}"))?;
-        crypt_unprotect(&bytes)
+        unprotect(&bytes)
     } else {
         if ciphertext.starts_with('[') {
             log::warn!(
@@ -91,23 +126,30 @@ fn crypt_protect(plaintext: &str) -> Result<Vec<u8>, String> {
     crypt_protect_raw(&framed, Some(HOTTY_ENTROPY))
 }
 
+/// Entropy-bound decrypt: requires both `HOTTY_ENTROPY` and `HOTTY_MARKER`.
+/// Never retries without entropy, so a foreign DPAPI blob cannot be decrypted
+/// through it.
 #[cfg(windows)]
-fn crypt_unprotect(encrypted: &[u8]) -> Result<String, String> {
-    // Preferred path: HoTTY entropy + HoTTY marker.
-    match crypt_unprotect_raw(encrypted, Some(HOTTY_ENTROPY)) {
-        Ok(bytes) => {
-            if let Some(rest) = bytes.strip_prefix(HOTTY_MARKER) {
-                return String::from_utf8(rest.to_vec())
-                    .map_err(|e| format!("DPAPI decrypted data is not valid UTF-8: {e}"));
-            }
-            // Cryptographically near-impossible: entropy matched but the marker
-            // is missing. Treat as corruption rather than returning content
-            // we can't authenticate as HoTTY-produced.
-            return Err("DPAPI: entropy matched but HoTTY marker missing".into());
-        }
-        Err(_) => {
-            // Fall through to legacy compatibility path.
-        }
+fn crypt_unprotect_strict(encrypted: &[u8]) -> Result<String, String> {
+    let bytes = crypt_unprotect_raw(encrypted, Some(HOTTY_ENTROPY))
+        .map_err(|_| "DPAPI CryptUnprotectData failed".to_string())?;
+    let rest = bytes.strip_prefix(HOTTY_MARKER).ok_or_else(|| {
+        // Cryptographically near-impossible: entropy matched but the marker is
+        // missing. Treat as corruption rather than returning content we can't
+        // authenticate as HoTTY-produced.
+        "DPAPI: entropy matched but HoTTY marker missing".to_string()
+    })?;
+    String::from_utf8(rest.to_vec())
+        .map_err(|e| format!("DPAPI decrypted data is not valid UTF-8: {e}"))
+}
+
+/// `crypt_unprotect_strict` plus a fallback for pre-entropy HoTTY blobs.
+///
+/// Only for trusted in-process callers — see `decrypt_string_allow_legacy`.
+#[cfg(windows)]
+fn crypt_unprotect_allow_legacy(encrypted: &[u8]) -> Result<String, String> {
+    if let Ok(plain) = crypt_unprotect_strict(encrypted) {
+        return Ok(plain);
     }
 
     // Legacy compatibility: pre-entropy HoTTY blobs (`[SAFE]` + base64(DPAPI))
@@ -248,13 +290,45 @@ fn crypt_protect(_plaintext: &str) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(not(windows))]
-fn crypt_unprotect(_encrypted: &[u8]) -> Result<String, String> {
+fn crypt_unprotect_strict(_encrypted: &[u8]) -> Result<String, String> {
+    Err("DPAPI is only available on Windows".into())
+}
+
+#[cfg(not(windows))]
+fn crypt_unprotect_allow_legacy(_encrypted: &[u8]) -> Result<String, String> {
     Err("DPAPI is only available on Windows".into())
 }
 
 #[cfg(not(windows))]
 fn crypt_unprotect_raw_no_entropy(_encrypted: &[u8]) -> Result<Vec<u8>, String> {
     Err("DPAPI is only available on Windows".into())
+}
+
+// ---------------------------------------------------------------------------
+// Test support
+// ---------------------------------------------------------------------------
+
+/// Fixtures shared with other modules' tests (notably the host-tree credential
+/// migration). Kept here so the legacy wire format lives in exactly one place.
+#[cfg(test)]
+pub(crate) mod test_support {
+    /// Build a pre-entropy HoTTY blob: DPAPI-encrypted, no entropy, no marker.
+    /// Byte-identical to what a Rust dev build wrote before v2.0.0 — and also to
+    /// any *other* application's no-entropy DPAPI blob, which is precisely why
+    /// the strict path must refuse it.
+    #[cfg(windows)]
+    pub(crate) fn legacy_no_entropy_blob(plain: &str) -> String {
+        use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+        let raw = super::crypt_protect_raw(plain.as_bytes(), None).unwrap();
+        format!("{}{}", super::SAFE_PREFIX, BASE64.encode(&raw))
+    }
+
+    #[cfg(not(windows))]
+    pub(crate) fn legacy_no_entropy_blob(_plain: &str) -> String {
+        // Callers guard with `if !cfg!(windows) { return; }`; this exists only so
+        // the test module still compiles off Windows.
+        String::new()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -284,15 +358,40 @@ mod tests {
     }
 
     #[cfg(windows)]
+    use super::test_support::legacy_no_entropy_blob as make_legacy_blob;
+
+    #[cfg(windows)]
     #[test]
-    fn legacy_no_entropy_blob_still_decrypts() {
-        // Simulate a pre-M3 HoTTY blob: DPAPI-encrypted plaintext, no entropy,
-        // no HoTTY marker. The new decrypt path must accept it (but log a warn).
+    fn strict_decrypt_rejects_legacy_no_entropy_blob() {
+        // The security property: `decrypt_string` (what the dpapi_decrypt IPC
+        // commands use) must NOT retry without entropy, so a foreign no-entropy
+        // DPAPI blob cannot be decrypted through it. This is the guarantee the
+        // HOTTY_ENTROPY doc comment states.
+        let blob = make_legacy_blob("legacy secret");
+        assert!(
+            decrypt_string(&blob).is_err(),
+            "strict path must refuse a no-entropy blob"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn allow_legacy_decrypt_accepts_legacy_no_entropy_blob() {
+        // The compatibility escape hatch, reachable only in-process: it is what
+        // lets the host-tree migration recover a pre-entropy credential in order
+        // to re-encrypt it with entropy.
         let plain = "legacy secret";
-        let raw = crypt_protect_raw(plain.as_bytes(), None).unwrap();
-        let legacy_blob = format!("{SAFE_PREFIX}{}", BASE64.encode(&raw));
-        let decrypted = decrypt_string(&legacy_blob).unwrap();
-        assert_eq!(decrypted, plain);
+        let blob = make_legacy_blob(plain);
+        assert_eq!(decrypt_string_allow_legacy(&blob).unwrap(), plain);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn entropy_bound_blob_decrypts_through_both_paths() {
+        let plain = "current-format secret";
+        let blob = encrypt_string(plain).unwrap();
+        assert_eq!(decrypt_string(&blob).unwrap(), plain);
+        assert_eq!(decrypt_string_allow_legacy(&blob).unwrap(), plain);
     }
 
     #[cfg(windows)]
@@ -300,12 +399,17 @@ mod tests {
     fn foreign_no_entropy_blob_with_marker_byte_pattern_is_rejected() {
         // Defensive: if a foreign blob happens to start with the HoTTY marker
         // bytes after no-entropy decryption (cryptographic accident), we must
-        // refuse to return it.
+        // refuse to return it — on the legacy path too, which is the only one
+        // that gets that far.
         let mut framed = HOTTY_MARKER.to_vec();
         framed.extend_from_slice(b"impostor");
         let raw = crypt_protect_raw(&framed, None).unwrap();
         let blob = format!("{SAFE_PREFIX}{}", BASE64.encode(&raw));
-        let result = decrypt_string(&blob);
+        assert!(
+            decrypt_string(&blob).is_err(),
+            "marker-bearing legacy blob must be rejected by the strict path"
+        );
+        let result = decrypt_string_allow_legacy(&blob);
         assert!(
             result.is_err(),
             "marker-bearing legacy blob must be rejected"

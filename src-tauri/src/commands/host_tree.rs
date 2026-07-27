@@ -10,7 +10,9 @@ use tauri::State;
 use tauri_plugin_dialog::DialogExt;
 use tokio::sync::Mutex;
 
-use crate::services::dpapi::{decrypt_string, decrypt_v1_safe_string, encrypt_string};
+use crate::services::dpapi::{
+    decrypt_string, decrypt_string_allow_legacy, decrypt_v1_safe_string, encrypt_string,
+};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -475,12 +477,23 @@ pub fn migrate_host_tree_credentials(tree_json: String) -> Result<String, String
     serde_json::to_string(&tree).map_err(|e| format!("failed to serialise host tree: {e}"))
 }
 
-/// Walk a host-tree node and, for every host entry, upgrade any `[SAFE]`-prefixed
-/// `username` / `password` field that was written by the v1 Electron build
-/// (`[SAFE]` + base64(`v10` + DPAPI-blob)) into the v2 format
-/// (`[SAFE]` + base64(DPAPI-blob)). Fields that already decrypt under v2 are left
-/// untouched. Fields that can't be decoded under either scheme are left as-is so
-/// the user can re-enter them manually.
+/// Walk a host-tree node and upgrade every encrypted credential field on each
+/// host entry to the current format (`[SAFE]` + base64(entropy-bound DPAPI blob
+/// framed with `HOTTY_MARKER`)). Two legacy shapes are upgraded:
+///
+/// 1. **v1 Electron** — `[SAFE]` + base64(`v10` + DPAPI-blob).
+/// 2. **Pre-entropy v2** — `[SAFE]` + base64(DPAPI-blob) with no entropy and no
+///    marker, written by Rust dev builds before v2.0.0 (2026-05-10). These are
+///    rejected by `decrypt_string`, so upgrading them here is what lets the IPC
+///    decrypt path stay entropy-only without stranding anyone's credentials.
+///
+/// Fields that already decrypt under the current scheme are left untouched
+/// (making this idempotent). Fields that can't be decoded under any scheme are
+/// left as-is so the user can re-enter them manually.
+///
+/// The field list must stay in sync with what the frontend encrypts in
+/// `useHostManager.encryptTree` — currently `username`, `password`, and
+/// `privateKeyPassphrase`.
 fn migrate_credentials(node: &mut serde_json::Value) {
     // Recurse into child folders first.
     if let Some(children) = node.get_mut("children").and_then(|c| c.as_array_mut()) {
@@ -502,7 +515,7 @@ fn migrate_credentials(node: &mut serde_json::Value) {
         return;
     };
 
-    for field in ["username", "password"] {
+    for field in ["username", "password", "privateKeyPassphrase"] {
         let Some(current) = entry.get(field).and_then(|v| v.as_str()) else {
             continue;
         };
@@ -510,22 +523,34 @@ fn migrate_credentials(node: &mut serde_json::Value) {
             continue;
         }
 
-        // Already a valid v2 ciphertext? Leave it alone.
+        // Already entropy-bound? Leave it alone (keeps this idempotent).
         if decrypt_string(current).is_ok() {
             continue;
         }
 
-        match decrypt_v1_safe_string(current) {
-            Ok(plain) => match encrypt_string(&plain) {
-                Ok(v2_cipher) => {
-                    entry.insert(field.to_string(), serde_json::Value::String(v2_cipher));
-                }
+        // Try the pre-entropy v2 shape first, then the v1 Electron shape. Both
+        // resolve to plaintext we immediately re-encrypt with entropy; the
+        // plaintext never leaves this process.
+        let recovered = decrypt_string_allow_legacy(current)
+            .ok()
+            // `decrypt_string_allow_legacy` passes unprefixed input straight
+            // through, so guard against "recovering" the ciphertext itself.
+            .filter(|plain| plain != current)
+            .or_else(|| match decrypt_v1_safe_string(current) {
+                Ok(plain) => Some(plain),
                 Err(e) => {
-                    log::warn!("htree import: re-encrypt of migrated {field} failed: {e}");
+                    log::warn!("htree migration: could not decode legacy {field}: {e}");
+                    None
                 }
-            },
+            });
+
+        let Some(plain) = recovered else { continue };
+        match encrypt_string(&plain) {
+            Ok(upgraded) => {
+                entry.insert(field.to_string(), serde_json::Value::String(upgraded));
+            }
             Err(e) => {
-                log::warn!("htree import: could not migrate v1 {field}: {e}");
+                log::warn!("htree migration: re-encrypt of upgraded {field} failed: {e}");
             }
         }
     }
@@ -794,6 +819,55 @@ mod tests {
         assert!(p.starts_with("[SAFE]"));
         assert_eq!(decrypt_string(u).unwrap(), "alice");
         assert_eq!(decrypt_string(p).unwrap(), "hunter2");
+    }
+
+    /// Pre-entropy v2 blobs (Rust dev builds before v2.0.0) are rejected by
+    /// `decrypt_string`, so the migration must recover them via the legacy path
+    /// and re-encrypt with entropy — otherwise the entropy-only IPC decrypt
+    /// path would strand those credentials. Covers `privateKeyPassphrase` too,
+    /// which the frontend encrypts but this migration used to skip.
+    #[test]
+    fn migrate_credentials_upgrades_pre_entropy_blobs() {
+        if !cfg!(windows) {
+            return;
+        }
+
+        let legacy = |plain: &str| {
+            let raw = crate::services::dpapi::test_support::legacy_no_entropy_blob(plain);
+            assert!(
+                decrypt_string(&raw).is_err(),
+                "fixture must be un-decryptable under the strict path"
+            );
+            raw
+        };
+
+        let mut node = serde_json::json!({
+            "id": "1",
+            "type": "host",
+            "name": "Server",
+            "entry": {
+                "username": legacy("alice"),
+                "password": legacy("hunter2"),
+                "privateKeyPassphrase": legacy("key-pass"),
+            }
+        });
+
+        migrate_credentials(&mut node);
+
+        let entry = node.get("entry").and_then(|e| e.as_object()).unwrap();
+        for (field, expected) in [
+            ("username", "alice"),
+            ("password", "hunter2"),
+            ("privateKeyPassphrase", "key-pass"),
+        ] {
+            let got = entry.get(field).and_then(|v| v.as_str()).unwrap();
+            assert!(got.starts_with("[SAFE]"));
+            assert_eq!(
+                decrypt_string(got).unwrap(),
+                expected,
+                "{field} must now decrypt under the entropy-bound path"
+            );
+        }
     }
 
     #[test]

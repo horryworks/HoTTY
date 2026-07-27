@@ -140,8 +140,8 @@ describe('TabBar', () => {
         {...defaultProps}
         onNewLogViewer={() => {}}
         onNewPingMonitor={() => {}}
-        onNewTextEditor={() => {}}
-        onNewFileExplorer={() => {}}
+        onNewFileServer={() => {}}
+        onNewAiChat={() => {}}
       />
     );
     expect(screen.getByTitle('Features')).toBeTruthy();
@@ -153,28 +153,28 @@ describe('TabBar', () => {
         {...defaultProps}
         onNewLogViewer={() => {}}
         onNewPingMonitor={() => {}}
-        onNewTextEditor={() => {}}
-        onNewFileExplorer={() => {}}
+        onNewFileServer={() => {}}
+        onNewAiChat={() => {}}
       />
     );
     fireEvent.click(screen.getByTitle('Features'));
 
     expect(screen.getByText('Log Viewer')).toBeTruthy();
     expect(screen.getByText('Ping Monitor')).toBeTruthy();
-    expect(screen.getByText('Text Editor')).toBeTruthy();
-    expect(screen.getByText('File Explorer')).toBeTruthy();
+    expect(screen.getByText('File Server')).toBeTruthy();
+    expect(screen.getByText('AI Chat')).toBeTruthy();
   });
 
   it('clicking a feature item calls the callback and closes dropdown', () => {
     const onNewLogViewer = vi.fn();
-    const onNewTextEditor = vi.fn();
+    const onNewFileServer = vi.fn();
     render(
       <TabBar
         {...defaultProps}
         onNewLogViewer={onNewLogViewer}
         onNewPingMonitor={() => {}}
-        onNewTextEditor={onNewTextEditor}
-        onNewFileExplorer={() => {}}
+        onNewFileServer={onNewFileServer}
+        onNewAiChat={() => {}}
       />
     );
     fireEvent.click(screen.getByTitle('Features'));
@@ -183,8 +183,8 @@ describe('TabBar', () => {
     expect(screen.queryByText('Log Viewer')).toBeNull();
 
     fireEvent.click(screen.getByTitle('Features'));
-    fireEvent.click(screen.getByText('Text Editor'));
-    expect(onNewTextEditor).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText('File Server'));
+    expect(onNewFileServer).toHaveBeenCalledTimes(1);
   });
 
   it('only renders dropdown items for provided callbacks', () => {
@@ -192,15 +192,15 @@ describe('TabBar', () => {
       <TabBar
         {...defaultProps}
         onNewLogViewer={() => {}}
-        onNewTextEditor={() => {}}
+        onNewFileServer={() => {}}
       />
     );
     fireEvent.click(screen.getByTitle('Features'));
 
     expect(screen.getByText('Log Viewer')).toBeTruthy();
-    expect(screen.getByText('Text Editor')).toBeTruthy();
+    expect(screen.getByText('File Server')).toBeTruthy();
     expect(screen.queryByText('Ping Monitor')).toBeNull();
-    expect(screen.queryByText('File Explorer')).toBeNull();
+    expect(screen.queryByText('AI Chat')).toBeNull();
   });
 
   // --- AI Watch button ---

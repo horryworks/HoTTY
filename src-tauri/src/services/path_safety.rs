@@ -22,8 +22,8 @@ const BLOCKED_HOME_DIRS: &[&str] = &[
     // GCP application default credentials
     r"appdata\roaming\gcloud",
     // HoTTY's own app data dir (DPAPI-encrypted tokens, htree exports,
-    // approved_log_dirs.json, vertexai_config.json, etc.) — must never
-    // be tampered with via the editor / dropped-file approval flows.
+    // approved_log_dirs.json, vertexai_config.json, etc.) — must never be
+    // reachable as a File Server root/upload target or an AI-supplied path.
     r"appdata\roaming\com.hotty.terminal",
     r"appdata\local\com.hotty.terminal",
 ];

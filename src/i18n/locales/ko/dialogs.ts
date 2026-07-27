@@ -1,22 +1,10 @@
-// Modal dialogs — confirmation, save/discard, paste, SSH host key, system prompt,
+// Modal dialogs — confirmation, paste, SSH host key, system prompt,
 // Ask AI, IAP VM start, and Save-to-Host-Tree. Grouped one key block per dialog.
 export const dialogs = {
-  unsavedEditors: {
-    title: '저장되지 않은 변경 사항',
-    bodyOne: '저장되지 않은 텍스트 편집기 탭이 {{count}}개 있습니다. 변경 사항을 버리고 닫으시겠습니까?',
-    bodyMany: '저장되지 않은 텍스트 편집기 탭이 {{count}}개 있습니다. 변경 사항을 버리고 닫으시겠습니까?',
-    discardQuit: '버리고 종료',
-  },
   confirm: {
     title: '확인',
     // Default confirm-button label when a caller does not pass one.
     confirmLabel: '삭제',
-  },
-  saveConfirm: {
-    heading: '저장되지 않은 변경 사항',
-    // {{filename}} is rendered in its own styled span via <Trans>.
-    body: '<0>{{filename}}</0>에 저장되지 않은 변경 사항이 있습니다. 닫기 전에 저장하시겠습니까?',
-    dontSave: '저장 안 함',
   },
   paste: {
     header: '붙여넣기 확인',

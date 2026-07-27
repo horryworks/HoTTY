@@ -1,4 +1,4 @@
-// 功能窗格 — 記錄檢視器、Ping 監控、文字編輯器、檔案總管，以及 GCP 執行個體。
+// 功能窗格 — 記錄檢視器、Ping 監控、檔案伺服器、網頁瀏覽器，以及 GCP 執行個體。
 // 每個窗格對應一個鍵區塊。此處只放面向使用者的顯示文字；程式碼識別字、CSS 類別、
 // 列舉值與綁定後端的字串都留在元件中。
 export const panes = {
@@ -89,44 +89,6 @@ export const panes = {
     statusStopped: '已停止',
     statusInterval: '間隔：{{interval}}',
     statusLog: '記錄檔：{{filename}}',
-  },
-  textEditor: {
-    displayName: '文字編輯器',
-    untitled: '未命名',
-    newTab: '新分頁',
-    menuFile: '檔案',
-    menuEdit: '編輯',
-    menuView: '檢視',
-    fileNewTab: '新分頁',
-    fileOpen: '開啟...',
-    fileSave: '儲存',
-    fileSaveAs: '另存新檔...',
-    fileCloseTab: '關閉分頁',
-    editUndo: '復原',
-    editRedo: '取消復原',
-    editFind: '尋找',
-    editReplace: '取代',
-    editGotoLine: '前往行...',
-    viewLineWrap: '自動換行',
-    viewShowReturnCodes: '顯示換行符號',
-    unsavedChanges: '尚未儲存的變更',
-    modified: '已修改',
-    cursorPosition: '第 {{line}} 行，第 {{col}} 欄',
-    findLabel: '尋找：',
-    searchPlaceholder: '搜尋...',
-    findNext: '下一個',
-    replaceLabel: '取代：',
-    replacePlaceholder: '取代...',
-    replace: '取代',
-    replaceAll: '全部',
-    gotoLine: '前往行（1-{{max}}）：',
-  },
-  fileExplorer: {
-    refresh: '重新整理',
-    hideHidden: '隱藏隱藏檔案',
-    showHidden: '顯示隱藏檔案',
-    loadingDrives: '正在載入磁碟機...',
-    noFiles: '沒有可顯示的檔案',
   },
   gcpInstances: {
     paneTitle: 'Google Cloud GCE',

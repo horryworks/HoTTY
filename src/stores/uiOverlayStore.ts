@@ -39,15 +39,14 @@ export const useUiOverlayStore = create<UiOverlayState>((set) => ({
 /**
  * Full-screen modal overlays + dropdowns that can cover a pane. These are the
  * components in the "Modals" UI-consistency group plus the TabBar dropdown /
- * tab context menu. In-pane, non-covering overlays (`connecting-overlay`,
- * `text-editor-*-overlay`) are deliberately excluded.
+ * tab context menu. In-pane, non-covering overlays (`connecting-overlay`) are
+ * deliberately excluded.
  *
  * When adding a new modal, add its overlay class here.
  */
 const OVERLAY_SELECTOR = [
   '.settings-modal-overlay', // SettingsModal + HelpModal
   '.confirm-modal-overlay',
-  '.save-confirm-modal-overlay',
   '.paste-modal-overlay',
   '.system-prompt-modal-overlay',
   '.ssh-host-key-overlay',

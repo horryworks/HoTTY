@@ -136,10 +136,6 @@ export const settings = {
     logViewerDescription: '查看和分析会话日志',
     pingMonitorLabel: 'Ping 监控',
     pingMonitorDescription: '持续的 ICMP ping 监控',
-    textEditorLabel: '文本编辑器',
-    textEditorDescription: '内置文本文件编辑器',
-    fileExplorerLabel: '文件浏览器',
-    fileExplorerDescription: '浏览和管理文件',
   },
   ai: {
     // Provider

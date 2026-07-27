@@ -214,56 +214,6 @@ describe('paneStore', () => {
     expect(s.paneAllocations['bar-left']).toBe('s3');
   });
 
-  it('addSession with preferSidebar places into bar-left when visible', () => {
-    useSidebarLayoutStore.setState({ showLeftSidebar: true });
-    usePaneStore.setState({ layoutMode: '2x2' });
-    usePaneStore.getState().addSession('s1', { preferSidebar: true });
-    const s = usePaneStore.getState();
-    expect(s.paneAllocations['bar-left']).toBe('s1');
-    expect(s.paneAllocations['0']).toBeUndefined();
-    expect(s.activePaneId).toBe('bar-left');
-  });
-
-  it('addSession with preferSidebar falls back to bar-right if left is occupied', () => {
-    useSidebarLayoutStore.setState({ showLeftSidebar: true, showRightSidebar: true });
-    usePaneStore.setState({
-      layoutMode: '2x2',
-      paneAllocations: { 'bar-left': 'existing' },
-      sessionOrder: ['existing'],
-    });
-    usePaneStore.getState().addSession('s1', { preferSidebar: true });
-    const s = usePaneStore.getState();
-    expect(s.paneAllocations['bar-right']).toBe('s1');
-  });
-
-  it('addSession with preferSidebar falls back to grid if no sidebars visible', () => {
-    usePaneStore.setState({ layoutMode: '2x2' });
-    usePaneStore.getState().addSession('s1', { preferSidebar: true });
-    const s = usePaneStore.getState();
-    expect(s.paneAllocations['0']).toBe('s1');
-  });
-
-  it('addSession with preferSidebar falls back to grid when left/right hidden but top visible', () => {
-    useSidebarLayoutStore.setState({ showTopBar: true });
-    usePaneStore.setState({ layoutMode: '2x2' });
-    usePaneStore.getState().addSession('s1', { preferSidebar: true });
-    const s = usePaneStore.getState();
-    expect(s.paneAllocations['0']).toBe('s1');
-    expect(s.paneAllocations['bar-top']).toBeUndefined();
-  });
-
-  it('addSession with preferSidebar uses top/bottom only after grid also full', () => {
-    useSidebarLayoutStore.setState({ showTopBar: true, showBottomBar: true });
-    usePaneStore.setState({
-      layoutMode: '1x1',
-      paneAllocations: { '0': 'existing' },
-      sessionOrder: ['existing'],
-    });
-    usePaneStore.getState().addSession('s1', { preferSidebar: true });
-    const s = usePaneStore.getState();
-    expect(s.paneAllocations['bar-top']).toBe('s1');
-  });
-
   it('removeSession frees a sidebar pane allocation', () => {
     usePaneStore.setState({
       layoutMode: '1x1',

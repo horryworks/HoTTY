@@ -422,6 +422,18 @@ impl LogManager {
             return Ok(());
         }
 
+        // Reject UNC/network paths BEFORE touching the filesystem. `log_dir`
+        // arrives straight from the renderer, and `create_dir_all` below runs
+        // ahead of the approval check (so a previously approved folder the user
+        // has since deleted is transparently recreated). Without this guard a
+        // forged `connect_session` could aim that at `\\attacker\share`, making
+        // the Windows redirector authenticate and leak an NTLMv2 hash before
+        // the approval check ever runs. Same defense as ssh.rs / local.rs /
+        // file_server.rs — see `path_safety::is_unc_path`.
+        if crate::services::path_safety::is_unc_path(&log_dir.to_string_lossy()) {
+            return Err("log directory cannot be a UNC/network path".into());
+        }
+
         // Ensure directory exists
         fs::create_dir_all(log_dir).map_err(|e| format!("failed to create log dir: {e}"))?;
 
@@ -1160,6 +1172,26 @@ mod tests {
 
         assert!(mgr.is_path_allowed(Path::new("/test/logs/file.txt")).await);
         assert!(!mgr.is_path_allowed(Path::new("/other/file.txt")).await);
+    }
+
+    /// A renderer-supplied UNC log dir must be rejected before `start_logging`
+    /// touches the filesystem — resolving `\\host\share` makes Windows
+    /// authenticate over SMB and leak an NTLMv2 hash. The check runs ahead of
+    /// `create_dir_all`, so this must fail even though the dir is unapproved
+    /// (the approval error would otherwise come only *after* the FS touch).
+    #[tokio::test]
+    async fn start_logging_rejects_unc_log_dir() {
+        let mgr = LogManager::new();
+        for dir in [r"\\attacker.example\share\logs", "//attacker.example/share"] {
+            let err = mgr
+                .start_logging("s-unc", Path::new(dir), "ssh", "host")
+                .await
+                .expect_err("UNC log dir must be rejected");
+            assert!(
+                err.contains("UNC"),
+                "expected a UNC rejection for {dir}, got: {err}"
+            );
+        }
     }
 
     #[test]

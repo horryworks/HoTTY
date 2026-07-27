@@ -77,9 +77,20 @@ async function encryptBatch(values: (string | undefined)[]): Promise<(string | u
     return mapDefinedBatch(values, (v) => tauriService.dpapiEncryptBatch(v), 'encrypt');
 }
 
-/** Decrypt credential strings via the Tauri backend (Windows DPAPI). */
+/**
+ * Decrypt credential strings via the Tauri backend (Windows DPAPI).
+ *
+ * `dpapi_decrypt_batch` contains per-entry failures by returning an empty string
+ * for them (so one bad blob can't fail the whole batch). Every caller only ever
+ * passes values that already satisfied `isEncrypted()`, and `encryptTree` never
+ * encrypts an empty value — so `''` coming back is unambiguously "could not
+ * decrypt", never a real secret. Normalise it to `undefined` here: every caller
+ * already guards on `!== undefined` and leaves its existing value in place, which
+ * keeps the original ciphertext instead of overwriting a credential with blank.
+ */
 export async function decryptBatch(values: (string | undefined)[]): Promise<(string | undefined)[]> {
-    return mapDefinedBatch(values, (v) => tauriService.dpapiDecryptBatch(v), 'decrypt');
+    const mapped = await mapDefinedBatch(values, (v) => tauriService.dpapiDecryptBatch(v), 'decrypt');
+    return mapped.map((val, i) => (val === '' && values[i] !== '' ? undefined : val));
 }
 
 // ── Serialization / Deserialization ──

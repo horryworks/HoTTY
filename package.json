@@ -1,7 +1,7 @@
 {
   "name": "hotty-rust-tauri",
   "private": true,
-  "version": "2.0.14-beta1",
+  "version": "2.0.14-beta2",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "engines": {
@@ -26,7 +26,6 @@
     "postcss": "8.5.20"
   },
   "dependencies": {
-    "@tanstack/react-virtual": "^3.13.23",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.0",
     "@tauri-apps/plugin-dialog": "^2.7.0",

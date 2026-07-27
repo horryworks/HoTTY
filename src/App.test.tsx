@@ -37,13 +37,10 @@ vi.mock('./services/tauriService', () => ({
     readClipboard: vi.fn().mockResolvedValue(''),
     sendInput: vi.fn().mockResolvedValue(undefined),
     pingMonitorStop: vi.fn().mockResolvedValue(undefined),
-    textEditorApproveDroppedFile: vi.fn().mockResolvedValue(undefined),
     getAppVersion: vi.fn().mockResolvedValue('2.0.0-beta1'),
     setWindowTitle: vi.fn().mockResolvedValue(undefined),
     onSessionData: vi.fn().mockResolvedValue(() => {}),
     onSessionStatus: vi.fn().mockResolvedValue(() => {}),
-    onWindowCloseRequested: vi.fn().mockResolvedValue(() => {}),
-    destroyWindow: vi.fn().mockResolvedValue(undefined),
     confirmDialog: vi.fn().mockResolvedValue(false),
     showContextMenu: vi.fn().mockResolvedValue(null),
     logDebug: vi.fn().mockResolvedValue(undefined),
@@ -120,14 +117,6 @@ vi.mock('./components/Terminal/Terminal', () => ({
 
 vi.mock('./components/LogViewerPane/LogViewerPane', () => ({
   LogViewerPane: () => <div data-testid="log-viewer" />,
-}));
-
-vi.mock('./components/TextEditorPane/TextEditorPane', () => ({
-  TextEditorPane: () => <div data-testid="text-editor" />,
-}));
-
-vi.mock('./components/FileExplorerPane/FileExplorerPane', () => ({
-  FileExplorerPane: () => <div data-testid="file-explorer" />,
 }));
 
 vi.mock('./components/PingMonitorPane/PingMonitorPane', () => ({

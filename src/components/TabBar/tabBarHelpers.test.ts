@@ -45,7 +45,7 @@ describe('buildTabItems', () => {
 
   it('interleaves sessions and features by order', () => {
     const sessions = [makeSession('s1')];
-    const features = [makeFeature('f1', 'text-editor')];
+    const features = [makeFeature('f1', 'file-server')];
     const result = buildTabItems(sessions, features, ['f1', 's1']);
     expect(result[0].id).toBe('f1');
     expect(result[1].id).toBe('s1');

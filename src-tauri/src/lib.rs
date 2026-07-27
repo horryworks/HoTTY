@@ -12,7 +12,6 @@ use commands::ai::{
 };
 use commands::chat_log::{ai_chat_log_append, ai_chat_log_close};
 use commands::dpapi::{dpapi_decrypt, dpapi_decrypt_batch, dpapi_encrypt, dpapi_encrypt_batch};
-use commands::file_explorer::{file_explorer_get_drives, file_explorer_list_directory};
 use commands::file_server::{
     file_server_firewall_allow, file_server_firewall_status, file_server_sftp_start,
     file_server_sftp_stop, file_server_tftp_start, file_server_tftp_stop,
@@ -42,10 +41,6 @@ use commands::sync::broadcast_shared_change;
 use commands::system::{
     detect_git_bash, focus_window, list_serial_ports, list_system_fonts, list_wsl_distributions,
     open_debug_log_folder, open_external, show_context_menu,
-};
-use commands::text_editor::{
-    text_editor_approve_dropped_file, text_editor_open_file, text_editor_read_file,
-    text_editor_save_file, text_editor_write_file, ApprovedEditorPaths,
 };
 use commands::themes::{delete_custom_theme, get_themes, save_custom_theme};
 use commands::updater::check_for_updates;
@@ -164,7 +159,6 @@ pub fn run() {
         .manage(SessionState::new())
         .manage(LogManager::new())
         .manage(ImportPathState::new())
-        .manage(ApprovedEditorPaths::new())
         .manage(ApprovedServiceAccountKeys::new())
         .manage(PingMonitorState::new())
         .manage(FileServerState::new())
@@ -281,15 +275,6 @@ pub fn run() {
             select_import_file,
             decrypt_import_file,
             migrate_host_tree_credentials,
-            // Text editor
-            text_editor_open_file,
-            text_editor_save_file,
-            text_editor_read_file,
-            text_editor_write_file,
-            text_editor_approve_dropped_file,
-            // File explorer
-            file_explorer_list_directory,
-            file_explorer_get_drives,
             // Ping monitor
             ping_monitor_start,
             ping_monitor_stop,

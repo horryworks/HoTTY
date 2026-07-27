@@ -1,4 +1,4 @@
-// Feature panes — Log Viewer, Ping Monitor, Text Editor, File Explorer, and
+// Feature panes — Log Viewer, Ping Monitor, File Server, Web Browser, and
 // GCP Instances. One key block per pane. Only user-facing display text lives
 // here; code identifiers, CSS classes, enum values, and backend-bound strings
 // stay in the components.
@@ -90,44 +90,6 @@ export const panes = {
     statusStopped: 'Arrêté',
     statusInterval: 'Intervalle : {{interval}}',
     statusLog: 'Journal : {{filename}}',
-  },
-  textEditor: {
-    displayName: 'Éditeur de texte',
-    untitled: 'Sans titre',
-    newTab: 'Nouvel onglet',
-    menuFile: 'Fichier',
-    menuEdit: 'Édition',
-    menuView: 'Affichage',
-    fileNewTab: 'Nouvel onglet',
-    fileOpen: 'Ouvrir...',
-    fileSave: 'Enregistrer',
-    fileSaveAs: 'Enregistrer sous...',
-    fileCloseTab: "Fermer l'onglet",
-    editUndo: 'Annuler',
-    editRedo: 'Rétablir',
-    editFind: 'Rechercher',
-    editReplace: 'Remplacer',
-    editGotoLine: 'Aller à la ligne...',
-    viewLineWrap: 'Retour à la ligne',
-    viewShowReturnCodes: 'Afficher les codes de retour',
-    unsavedChanges: 'Modifications non enregistrées',
-    modified: 'Modifié',
-    cursorPosition: 'Lgn {{line}}, Col {{col}}',
-    findLabel: 'Rechercher :',
-    searchPlaceholder: 'Rechercher...',
-    findNext: 'Suivant',
-    replaceLabel: 'Remplacer :',
-    replacePlaceholder: 'Remplacer...',
-    replace: 'Remplacer',
-    replaceAll: 'Tout',
-    gotoLine: 'Aller à la ligne (1-{{max}}) :',
-  },
-  fileExplorer: {
-    refresh: 'Actualiser',
-    hideHidden: 'Masquer les fichiers cachés',
-    showHidden: 'Afficher les fichiers cachés',
-    loadingDrives: 'Chargement des lecteurs...',
-    noFiles: 'Aucun fichier à afficher',
   },
   gcpInstances: {
     paneTitle: 'Google Cloud GCE',

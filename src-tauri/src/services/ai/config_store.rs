@@ -47,7 +47,9 @@ impl EncryptedConfigStore {
         }
         let encrypted = std::fs::read_to_string(&self.path)
             .map_err(|e| format!("Failed to read config: {e}"))?;
-        let plaintext = dpapi::decrypt_string(&encrypted)?;
+        // Trusted in-process read of HoTTY's own store, so pre-entropy blobs
+        // written by a dev build before v2.0.0 are still accepted here.
+        let plaintext = dpapi::decrypt_string_allow_legacy(&encrypted)?;
         if plaintext.is_empty() {
             return Ok(None);
         }

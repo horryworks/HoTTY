@@ -1,4 +1,4 @@
-// Feature panes — Log Viewer, Ping Monitor, Text Editor, File Explorer, and
+// Feature panes — Log Viewer, Ping Monitor, File Server, Web Browser, and
 // GCP Instances. One key block per pane. Only user-facing display text lives
 // here; code identifiers, CSS classes, enum values, and backend-bound strings
 // stay in the components.
@@ -90,44 +90,6 @@ export const panes = {
     statusStopped: '중지됨',
     statusInterval: '간격: {{interval}}',
     statusLog: '로그: {{filename}}',
-  },
-  textEditor: {
-    displayName: '텍스트 편집기',
-    untitled: '제목 없음',
-    newTab: '새 탭',
-    menuFile: '파일',
-    menuEdit: '편집',
-    menuView: '보기',
-    fileNewTab: '새 탭',
-    fileOpen: '열기...',
-    fileSave: '저장',
-    fileSaveAs: '다른 이름으로 저장...',
-    fileCloseTab: '탭 닫기',
-    editUndo: '실행 취소',
-    editRedo: '다시 실행',
-    editFind: '찾기',
-    editReplace: '바꾸기',
-    editGotoLine: '줄로 이동...',
-    viewLineWrap: '줄 바꿈',
-    viewShowReturnCodes: '줄 바꿈 코드 표시',
-    unsavedChanges: '저장되지 않은 변경 사항',
-    modified: '수정됨',
-    cursorPosition: '{{line}}행, {{col}}열',
-    findLabel: '찾기:',
-    searchPlaceholder: '검색...',
-    findNext: '다음',
-    replaceLabel: '바꾸기:',
-    replacePlaceholder: '바꾸기...',
-    replace: '바꾸기',
-    replaceAll: '모두',
-    gotoLine: '줄로 이동 (1-{{max}}):',
-  },
-  fileExplorer: {
-    refresh: '새로 고침',
-    hideHidden: '숨김 파일 숨기기',
-    showHidden: '숨김 파일 표시',
-    loadingDrives: '드라이브 로딩 중...',
-    noFiles: '표시할 파일이 없습니다',
   },
   gcpInstances: {
     paneTitle: 'Google Cloud GCE',

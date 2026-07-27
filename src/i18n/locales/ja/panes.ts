@@ -1,4 +1,4 @@
-// 機能ペイン（ログビューア / Ping モニター / テキストエディタ / ファイルエクスプローラー /
+// 機能ペイン（ログビューア / Ping モニター / ファイルサーバー / Web ブラウザー /
 // GCP インスタンス）の日本語カタログ。未翻訳のキーは実行時に英語へフォールバックします。
 export const panes = {
   fileServer: {
@@ -88,44 +88,6 @@ export const panes = {
     statusStopped: '停止',
     statusInterval: '間隔: {{interval}}',
     statusLog: 'ログ: {{filename}}',
-  },
-  textEditor: {
-    displayName: 'テキストエディタ',
-    untitled: '無題',
-    newTab: '新規タブ',
-    menuFile: 'ファイル',
-    menuEdit: '編集',
-    menuView: '表示',
-    fileNewTab: '新規タブ',
-    fileOpen: '開く...',
-    fileSave: '保存',
-    fileSaveAs: '名前を付けて保存...',
-    fileCloseTab: 'タブを閉じる',
-    editUndo: '元に戻す',
-    editRedo: 'やり直し',
-    editFind: '検索',
-    editReplace: '置換',
-    editGotoLine: '指定行へ移動...',
-    viewLineWrap: '行の折り返し',
-    viewShowReturnCodes: '改行コードを表示',
-    unsavedChanges: '未保存の変更',
-    modified: '変更あり',
-    cursorPosition: '{{line}} 行, {{col}} 列',
-    findLabel: '検索:',
-    searchPlaceholder: '検索...',
-    findNext: '次へ',
-    replaceLabel: '置換:',
-    replacePlaceholder: '置換後...',
-    replace: '置換',
-    replaceAll: 'すべて',
-    gotoLine: '指定行へ移動 (1-{{max}}):',
-  },
-  fileExplorer: {
-    refresh: '更新',
-    hideHidden: '隠しファイルを非表示',
-    showHidden: '隠しファイルを表示',
-    loadingDrives: 'ドライブを読み込み中...',
-    noFiles: '表示するファイルがありません',
   },
   gcpInstances: {
     paneTitle: 'Google Cloud GCE',

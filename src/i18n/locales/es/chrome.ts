@@ -12,8 +12,6 @@ export const chrome = {
     aiMonitorStartAria: 'Iniciar monitoreo de IA',
     logViewer: 'Visor de registros',
     pingMonitor: 'Monitor de Ping',
-    textEditor: 'Editor de texto',
-    fileExplorer: 'Explorador de archivos',
     aiChat: 'Chat de IA',
     saveToHostTree: 'Guardar en el árbol de hosts…',
     fixedTerminalSize: 'Ancho fijo ({{cols}})',

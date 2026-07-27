@@ -1,4 +1,4 @@
-// Feature panes — Log Viewer, Ping Monitor, Text Editor, File Explorer, and
+// Feature panes — Log Viewer, Ping Monitor, File Server, Web Browser, and
 // GCP Instances. One key block per pane. Only user-facing display text lives
 // here; code identifiers, CSS classes, enum values, and backend-bound strings
 // stay in the components.
@@ -90,44 +90,6 @@ export const panes = {
     statusStopped: 'Stopped',
     statusInterval: 'Interval: {{interval}}',
     statusLog: 'Log: {{filename}}',
-  },
-  textEditor: {
-    displayName: 'Text Editor',
-    untitled: 'Untitled',
-    newTab: 'New Tab',
-    menuFile: 'File',
-    menuEdit: 'Edit',
-    menuView: 'View',
-    fileNewTab: 'New Tab',
-    fileOpen: 'Open...',
-    fileSave: 'Save',
-    fileSaveAs: 'Save As...',
-    fileCloseTab: 'Close Tab',
-    editUndo: 'Undo',
-    editRedo: 'Redo',
-    editFind: 'Find',
-    editReplace: 'Replace',
-    editGotoLine: 'Go to Line...',
-    viewLineWrap: 'Line Wrap',
-    viewShowReturnCodes: 'Show Return Codes',
-    unsavedChanges: 'Unsaved changes',
-    modified: 'Modified',
-    cursorPosition: 'Ln {{line}}, Col {{col}}',
-    findLabel: 'Find:',
-    searchPlaceholder: 'Search...',
-    findNext: 'Next',
-    replaceLabel: 'Replace:',
-    replacePlaceholder: 'Replace...',
-    replace: 'Replace',
-    replaceAll: 'All',
-    gotoLine: 'Go to Line (1-{{max}}):',
-  },
-  fileExplorer: {
-    refresh: 'Refresh',
-    hideHidden: 'Hide hidden files',
-    showHidden: 'Show hidden files',
-    loadingDrives: 'Loading drives...',
-    noFiles: 'No files to display',
   },
   gcpInstances: {
     paneTitle: 'Google Cloud GCE',

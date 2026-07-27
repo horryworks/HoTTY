@@ -136,10 +136,6 @@ export const settings = {
     logViewerDescription: '檢視並分析工作階段記錄',
     pingMonitorLabel: 'Ping 監控',
     pingMonitorDescription: '持續 ICMP Ping 監控',
-    textEditorLabel: '文字編輯器',
-    textEditorDescription: '內建文字檔編輯器',
-    fileExplorerLabel: '檔案總管',
-    fileExplorerDescription: '瀏覽並管理檔案',
   },
   ai: {
     // 供應商

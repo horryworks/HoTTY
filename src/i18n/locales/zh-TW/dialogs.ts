@@ -1,22 +1,10 @@
-// 強制回應對話方塊 — 確認、儲存／捨棄、貼上、SSH 主機金鑰、系統提示詞、
+// 強制回應對話方塊 — 確認、貼上、SSH 主機金鑰、系統提示詞、
 // 詢問 AI、IAP VM 啟動，以及儲存至主機樹狀清單。每個對話方塊對應一個鍵區塊。
 export const dialogs = {
-  unsavedEditors: {
-    title: '未儲存的變更',
-    bodyOne: '您有 {{count}} 個未儲存的文字編輯器分頁。仍要關閉並捨棄變更嗎？',
-    bodyMany: '您有 {{count}} 個未儲存的文字編輯器分頁。仍要關閉並捨棄變更嗎？',
-    discardQuit: '捨棄並結束',
-  },
   confirm: {
     title: '確認',
     // 呼叫端未傳入時的預設確認按鈕標籤。
     confirmLabel: '刪除',
-  },
-  saveConfirm: {
-    heading: '尚未儲存的變更',
-    // {{filename}} 會透過 <Trans> 在自己的樣式化 span 中呈現。
-    body: '<0>{{filename}}</0> 有尚未儲存的變更。是否要在關閉前儲存？',
-    dontSave: '不要儲存',
   },
   paste: {
     header: '貼上確認',

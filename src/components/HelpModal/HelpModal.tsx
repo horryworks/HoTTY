@@ -294,45 +294,6 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
           </details>
 
           <details className="help-section">
-            <summary>{t('help.textEditor.summary')}</summary>
-            <div className="help-section-body">
-              <p className="help-text">
-                <Trans i18nKey="help.textEditor.intro" components={[<strong key="0" />, <FeaturesIcon key="1" />, <strong key="2" />]} />
-              </p>
-              <ul className="shortcuts-list">
-                <li><Trans i18nKey="help.textEditor.fileMenu" components={[<strong key="0" />]} /></li>
-                <li><Trans i18nKey="help.textEditor.viewMenu" components={[<strong key="0" />, <strong key="1" />]} /></li>
-                <li><Trans i18nKey="help.textEditor.findReplace" components={[<strong key="0" />, <code key="1" />, <code key="2" />]} /></li>
-                <li><Trans i18nKey="help.textEditor.gotoLine" components={[<strong key="0" />, <code key="1" />]} /></li>
-                <li><Trans i18nKey="help.textEditor.encoding" components={[<strong key="0" />]} /></li>
-                <li><Trans i18nKey="help.textEditor.lineWrap" components={[<strong key="0" />, <strong key="1" />]} /></li>
-                <li><Trans i18nKey="help.textEditor.fileAssociation" components={[<strong key="0" />]} /></li>
-              </ul>
-              <p className="help-text">
-                <Trans i18nKey="help.textEditor.tip" components={[<strong key="0" />, <code key="1" />, <code key="2" />]} />
-              </p>
-              <p className="help-text">
-                <Trans i18nKey="help.textEditor.unsavedPrompt" components={[<strong key="0" />, <strong key="1" />]} />
-              </p>
-            </div>
-          </details>
-
-          <details className="help-section">
-            <summary>{t('help.fileExplorer.summary')}</summary>
-            <div className="help-section-body">
-              <p className="help-text">
-                <Trans i18nKey="help.fileExplorer.intro" components={[<strong key="0" />, <FeaturesIcon key="1" />, <strong key="2" />]} />
-              </p>
-              <ul className="shortcuts-list">
-                <li><Trans i18nKey="help.fileExplorer.navigate" components={[<strong key="0" />]} /></li>
-                <li><Trans i18nKey="help.fileExplorer.openFiles" components={[<strong key="0" />]} /></li>
-                <li><Trans i18nKey="help.fileExplorer.hiddenFiles" components={[<strong key="0" />]} /></li>
-                <li><Trans i18nKey="help.fileExplorer.refresh" components={[<strong key="0" />]} /></li>
-              </ul>
-            </div>
-          </details>
-
-          <details className="help-section">
             <summary>{t('help.fileServer.summary')}</summary>
             <div className="help-section-body">
               <p className="help-text">

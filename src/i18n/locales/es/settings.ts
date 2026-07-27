@@ -136,10 +136,6 @@ export const settings = {
     logViewerDescription: 'Ver y analizar registros de sesión',
     pingMonitorLabel: 'Monitor de Ping',
     pingMonitorDescription: 'Monitoreo continuo de Ping ICMP',
-    textEditorLabel: 'Editor de texto',
-    textEditorDescription: 'Editor de archivos de texto integrado',
-    fileExplorerLabel: 'Explorador de archivos',
-    fileExplorerDescription: 'Examinar y gestionar archivos',
   },
   ai: {
     // Proveedor

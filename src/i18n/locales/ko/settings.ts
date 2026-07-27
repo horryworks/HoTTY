@@ -136,10 +136,6 @@ export const settings = {
     logViewerDescription: '세션 로그 보기 및 분석',
     pingMonitorLabel: 'Ping 모니터',
     pingMonitorDescription: '지속적인 ICMP ping 모니터링',
-    textEditorLabel: '텍스트 편집기',
-    textEditorDescription: '내장 텍스트 파일 편집기',
-    fileExplorerLabel: '파일 탐색기',
-    fileExplorerDescription: '파일 찾아보기 및 관리',
   },
   ai: {
     // Provider

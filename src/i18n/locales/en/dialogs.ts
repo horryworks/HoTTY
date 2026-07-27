@@ -1,22 +1,10 @@
-// Modal dialogs — confirmation, save/discard, paste, SSH host key, system prompt,
+// Modal dialogs — confirmation, paste, SSH host key, system prompt,
 // Ask AI, IAP VM start, and Save-to-Host-Tree. Grouped one key block per dialog.
 export const dialogs = {
-  unsavedEditors: {
-    title: 'Unsaved changes',
-    bodyOne: 'You have {{count}} unsaved text editor tab. Close anyway and discard changes?',
-    bodyMany: 'You have {{count}} unsaved text editor tabs. Close anyway and discard changes?',
-    discardQuit: 'Discard & Quit',
-  },
   confirm: {
     title: 'Confirm',
     // Default confirm-button label when a caller does not pass one.
     confirmLabel: 'Delete',
-  },
-  saveConfirm: {
-    heading: 'Unsaved changes',
-    // {{filename}} is rendered in its own styled span via <Trans>.
-    body: '<0>{{filename}}</0> has unsaved changes. Do you want to save before closing?',
-    dontSave: "Don't save",
   },
   paste: {
     header: 'Paste Confirmation',

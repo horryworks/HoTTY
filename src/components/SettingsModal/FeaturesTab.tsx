@@ -9,8 +9,6 @@ const FEATURE_KEYS: { id: FeatureId; labelKey: string; descriptionKey: string }[
   { id: 'ai-chat', labelKey: 'settings.features.aiChatLabel', descriptionKey: 'settings.features.aiChatDescription' },
   { id: 'log-viewer', labelKey: 'settings.features.logViewerLabel', descriptionKey: 'settings.features.logViewerDescription' },
   { id: 'ping-monitor', labelKey: 'settings.features.pingMonitorLabel', descriptionKey: 'settings.features.pingMonitorDescription' },
-  { id: 'text-editor', labelKey: 'settings.features.textEditorLabel', descriptionKey: 'settings.features.textEditorDescription' },
-  { id: 'file-explorer', labelKey: 'settings.features.fileExplorerLabel', descriptionKey: 'settings.features.fileExplorerDescription' },
   { id: 'file-server', labelKey: 'settings.features.fileServerLabel', descriptionKey: 'settings.features.fileServerDescription' },
   { id: 'web-browser', labelKey: 'settings.features.webBrowserLabel', descriptionKey: 'settings.features.webBrowserDescription' },
 ];

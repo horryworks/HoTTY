@@ -13,8 +13,6 @@ export const chrome = {
     aiMonitorStartAria: 'Start AI Watch',
     logViewer: 'Log Viewer',
     pingMonitor: 'Ping Monitor',
-    textEditor: 'Text Editor',
-    fileExplorer: 'File Explorer',
     aiChat: 'AI Chat',
     saveToHostTree: 'Save to Host Tree…',
     fixedTerminalSize: 'Fixed width ({{cols}})',

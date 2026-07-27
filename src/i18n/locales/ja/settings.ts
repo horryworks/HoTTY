@@ -137,10 +137,6 @@ export const settings = {
     logViewerDescription: 'セッションログの表示と分析',
     pingMonitorLabel: 'Pingモニター',
     pingMonitorDescription: '継続的な ICMP ping モニタリング',
-    textEditorLabel: 'テキストエディター',
-    textEditorDescription: '組み込みのテキストファイルエディター',
-    fileExplorerLabel: 'ファイルエクスプローラー',
-    fileExplorerDescription: 'ファイルの参照と管理',
   },
   ai: {
     // プロバイダー

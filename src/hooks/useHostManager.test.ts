@@ -267,6 +267,38 @@ describe('useHostManager', () => {
     setItemSpy.mockRestore();
   });
 
+  // `dpapi_decrypt_batch` returns '' for an entry it could not decrypt (so one
+  // bad blob can't fail the whole batch). The eager-decrypt pass rewrites
+  // [DPAPI] entries with their plaintext and persists automatically, so a ''
+  // leaking through would silently overwrite a real credential with blank —
+  // unrecoverable. decryptBatch must map '' back to undefined instead.
+  it('keeps the original ciphertext when a [DPAPI] credential fails to decrypt', async () => {
+    // `decryptedCache` is module-level and survives between tests, so this node
+    // needs an id no other test has already marked decrypted.
+    const legacyTree: HostTreeNode[] = [
+      {
+        id: 'host-undecryptable',
+        type: 'host',
+        name: 'Legacy',
+        entry: { protocol: 'ssh', host: 'h', port: 22, username: '[DPAPI]undecryptable' },
+      },
+    ];
+    localStorage.setItem('hotty_host_tree', JSON.stringify(legacyTree));
+    vi.mocked(tauriService.dpapiDecryptBatch).mockResolvedValueOnce(['']);
+
+    renderHook(() => useHostManager());
+
+    await waitFor(() => {
+      expect(tauriService.dpapiDecryptBatch).toHaveBeenCalled();
+    });
+
+    // The cache must not hold the empty sentinel...
+    expect(getCachedCredential('host-undecryptable')?.username).toBeUndefined();
+    // ...and the persisted ciphertext must survive untouched.
+    const persisted: HostTreeNode[] = JSON.parse(localStorage.getItem('hotty_host_tree')!);
+    expect(persisted[0].entry?.username).toBe('[DPAPI]undecryptable');
+  });
+
   it('falls back to the raw tree when migration throws', async () => {
     localStorage.setItem('hotty_host_tree', JSON.stringify(sampleTree));
     vi.mocked(tauriService.migrateHostTreeCredentials).mockRejectedValueOnce(new Error('boom'));

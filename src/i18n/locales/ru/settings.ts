@@ -136,10 +136,6 @@ export const settings = {
     logViewerDescription: 'Просмотр и анализ журналов сессий',
     pingMonitorLabel: 'Ping-мониторинг',
     pingMonitorDescription: 'Непрерывный ICMP ping-мониторинг',
-    textEditorLabel: 'Текстовый редактор',
-    textEditorDescription: 'Встроенный редактор текстовых файлов',
-    fileExplorerLabel: 'Проводник файлов',
-    fileExplorerDescription: 'Просмотр и управление файлами',
   },
   ai: {
     // Провайдер

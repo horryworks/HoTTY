@@ -126,29 +126,6 @@ export const help = {
       '<0>Search:</0> Use the search bar inside Log Viewer to filter lines. Toggle the <1>.*</1> button to switch between plain-text and regular expression search.',
   },
 
-  textEditor: {
-    summary: 'Text Editor',
-    intro:
-      'Open a built-in text editor pane via <0><1></1></0> (Features) → <2>"Text Editor"</2>. You can open multiple editor panes and edit multiple files simultaneously using sub-tabs.',
-    fileMenu:
-      '<0>File menu:</0> New, Open, Save, Save As, and Close actions for individual sub-tabs.',
-    viewMenu:
-      '<0>View menu:</0> Toggle <1>Show Return Codes</1> to display newline characters as visible symbols in the editor.',
-    findReplace:
-      '<0>Find & Replace:</0> Press <1>Ctrl + F</1> to open the search bar. Use <2>Ctrl + H</2> for find-and-replace. Matches are highlighted and the total count is shown.',
-    gotoLine:
-      '<0>Go to Line:</0> Press <1>Ctrl + G</1> to jump to a specific line number.',
-    encoding:
-      '<0>Encoding & Line Endings:</0> Click the encoding or line ending indicator in the status bar to change them for the current file.',
-    lineWrap:
-      '<0>Line Wrap:</0> Controlled by the global <1>Settings → Appearance → Line Wrap</1> toggle. Visual line numbers update automatically to reflect wrapped lines.',
-    fileAssociation:
-      '<0>File Association:</0> Files opened from Windows Explorer (double-click or "Open with") launch directly in the Text Editor.',
-    tip:
-      '<0>Tip:</0> An unsaved file shows a <1>•</1> dot on its sub-tab title. Save with <2>Ctrl + S</2>.',
-    unsavedPrompt:
-      '<0>Unsaved changes prompt:</0> Closing a sub-tab or exiting with dirty editors opens a <1>Save / Discard / Cancel</1> dialog so you never lose work by accident.',
-  },
 
   fileServer: {
     summary:
@@ -187,17 +164,6 @@ export const help = {
       '<0>Enable / disable:</0> The Web tab can be turned off in <1>Settings → Features</1>.',
   },
 
-  fileExplorer: {
-    summary: 'File Explorer',
-    intro:
-      'Open a built-in file browser pane via <0><1></1></0> (Features) → <2>"File Explorer"</2>. Browse your drives and directories in a collapsible tree structure.',
-    navigate:
-      '<0>Navigate:</0> Click folders to expand/collapse. Use the breadcrumb path at the top for quick navigation.',
-    openFiles: '<0>Open files:</0> Double-click a file to open it in the Text Editor.',
-    hiddenFiles:
-      '<0>Hidden files:</0> Toggle hidden file visibility with the eye icon in the toolbar.',
-    refresh: '<0>Refresh:</0> Click the refresh button to reload the current directory.',
-  },
 
   aiQuickStart: {
     summary: 'AI Quick Start Guide',

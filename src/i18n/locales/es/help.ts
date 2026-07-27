@@ -126,29 +126,6 @@ export const help = {
       '<0>Búsqueda:</0> use la barra de búsqueda dentro del Visor de registros para filtrar líneas. Active el botón <1>.*</1> para alternar entre la búsqueda de texto plano y la de expresiones regulares.',
   },
 
-  textEditor: {
-    summary: 'Editor de texto',
-    intro:
-      'Abra un panel de editor de texto integrado mediante <0><1></1></0> (Funciones) → <2>"Editor de texto"</2>. Puede abrir varios paneles de editor y editar varios archivos simultáneamente usando subpestañas.',
-    fileMenu:
-      '<0>Menú Archivo:</0> acciones de Nuevo, Abrir, Guardar, Guardar como y Cerrar para subpestañas individuales.',
-    viewMenu:
-      '<0>Menú Ver:</0> active <1>Mostrar códigos de salto de línea</1> para mostrar los caracteres de salto de línea como símbolos visibles en el editor.',
-    findReplace:
-      '<0>Buscar y reemplazar:</0> pulse <1>Ctrl + F</1> para abrir la barra de búsqueda. Use <2>Ctrl + H</2> para buscar y reemplazar. Las coincidencias se resaltan y se muestra el recuento total.',
-    gotoLine:
-      '<0>Ir a línea:</0> pulse <1>Ctrl + G</1> para saltar a un número de línea específico.',
-    encoding:
-      '<0>Codificación y fin de línea:</0> haga clic en el indicador de codificación o de fin de línea en la barra de estado para cambiarlos en el archivo actual.',
-    lineWrap:
-      '<0>Ajuste de línea:</0> controlado por el interruptor global <1>Configuración → Apariencia → Ajuste de línea</1>. Los números de línea visuales se actualizan automáticamente para reflejar las líneas ajustadas.',
-    fileAssociation:
-      '<0>Asociación de archivos:</0> los archivos abiertos desde el Explorador de Windows (doble clic o "Abrir con") se inician directamente en el Editor de texto.',
-    tip:
-      '<0>Sugerencia:</0> un archivo sin guardar muestra un punto <1>•</1> en el título de su subpestaña. Guarde con <2>Ctrl + S</2>.',
-    unsavedPrompt:
-      '<0>Aviso de cambios sin guardar:</0> al cerrar una subpestaña o salir con editores con cambios pendientes se abre un diálogo de <1>Guardar / Descartar / Cancelar</1> para que nunca pierda trabajo por accidente.',
-  },
 
   fileServer: {
     summary:
@@ -187,17 +164,6 @@ export const help = {
       '<0>Activar / desactivar:</0> La pestaña Web se puede desactivar en <1>Ajustes → Funciones</1>.',
   },
 
-  fileExplorer: {
-    summary: 'Explorador de archivos',
-    intro:
-      'Abra un panel de explorador de archivos integrado mediante <0><1></1></0> (Funciones) → <2>"Explorador de archivos"</2>. Examine sus unidades y directorios en una estructura de árbol contraíble.',
-    navigate:
-      '<0>Navegar:</0> haga clic en las carpetas para expandirlas/contraerlas. Use la ruta de migas de pan de la parte superior para una navegación rápida.',
-    openFiles: '<0>Abrir archivos:</0> haga doble clic en un archivo para abrirlo en el Editor de texto.',
-    hiddenFiles:
-      '<0>Archivos ocultos:</0> alterne la visibilidad de los archivos ocultos con el icono del ojo en la barra de herramientas.',
-    refresh: '<0>Actualizar:</0> haga clic en el botón de actualizar para recargar el directorio actual.',
-  },
 
   aiQuickStart: {
     summary: 'Guía de inicio rápido de la IA',

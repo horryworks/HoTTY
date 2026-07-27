@@ -10,9 +10,13 @@ pub fn dpapi_encrypt(plaintext: String) -> Result<String, String> {
 }
 
 // ---------------------------------------------------------------------------
-// dpapi_decrypt  — single value (supports [SAFE] and legacy [DPAPI])
+// dpapi_decrypt  — single value
 // ---------------------------------------------------------------------------
 
+/// Decrypt one value. Entropy-bound only: pre-entropy blobs are rejected here
+/// and upgraded by the host-tree migration instead (see `commands::host_tree`).
+/// A single value fails loudly so the one caller that needs to know
+/// (`useAiAuthOwner`) can react.
 #[tauri::command]
 pub fn dpapi_decrypt(ciphertext: String) -> Result<String, String> {
     decrypt_string(&ciphertext)
@@ -31,9 +35,27 @@ pub fn dpapi_encrypt_batch(values: Vec<String>) -> Result<Vec<String>, String> {
 // dpapi_decrypt_batch
 // ---------------------------------------------------------------------------
 
+/// Decrypt many values, containing failures **per entry**.
+///
+/// `collect()` into a `Result` would abort the whole batch on the first bad
+/// value: one undecryptable credential (wrong Windows profile, corrupted blob,
+/// a pre-entropy blob the migration hasn't reached) would take every other
+/// credential in the host tree down with it. Instead each failure becomes an
+/// empty string and is logged with its index — the blast radius is the one
+/// affected field, and an empty credential reads unambiguously as "re-enter
+/// this" rather than being mistaken for a real secret or a ciphertext blob.
 #[tauri::command]
 pub fn dpapi_decrypt_batch(values: Vec<String>) -> Result<Vec<String>, String> {
-    values.into_iter().map(|v| decrypt_string(&v)).collect()
+    Ok(values
+        .into_iter()
+        .enumerate()
+        .map(|(i, v)| {
+            decrypt_string(&v).unwrap_or_else(|e| {
+                log::warn!("dpapi: batch decrypt failed for entry {i}: {e}");
+                String::new()
+            })
+        })
+        .collect())
 }
 
 // ---------------------------------------------------------------------------
@@ -73,6 +95,27 @@ mod tests {
             }
             let decrypted = dpapi_decrypt_batch(encrypted).unwrap();
             assert_eq!(decrypted, values);
+        }
+    }
+
+    /// One undecryptable entry must not take the rest of the batch with it —
+    /// otherwise a single bad credential blanks every password in the host tree.
+    #[test]
+    fn batch_decrypt_contains_a_single_bad_entry() {
+        if cfg!(windows) {
+            let good = dpapi_encrypt("keep-me".to_string()).unwrap();
+            // Valid base64, but not a DPAPI blob — decryption must fail.
+            let bad = "[SAFE]bm90LWEtZHBhcGktYmxvYg==".to_string();
+
+            let out =
+                dpapi_decrypt_batch(vec![good.clone(), bad, good, "plain-username".to_string()])
+                    .expect("batch itself must not fail");
+
+            assert_eq!(out.len(), 4);
+            assert_eq!(out[0], "keep-me");
+            assert_eq!(out[1], "", "failed entry becomes empty, not ciphertext");
+            assert_eq!(out[2], "keep-me", "entries after the failure still decrypt");
+            assert_eq!(out[3], "plain-username", "unprefixed input passes through");
         }
     }
 }

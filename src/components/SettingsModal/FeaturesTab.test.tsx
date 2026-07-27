@@ -9,22 +9,18 @@ describe('FeaturesTab', () => {
     expect(screen.getByText('AI Chat')).toBeTruthy();
     expect(screen.getByText('Log Viewer')).toBeTruthy();
     expect(screen.getByText('Ping Monitor')).toBeTruthy();
-    expect(screen.getByText('Text Editor')).toBeTruthy();
-    expect(screen.getByText('File Explorer')).toBeTruthy();
+    expect(screen.getByText('File Server')).toBeTruthy();
     expect(screen.getByText('Web Browser')).toBeTruthy();
   });
 
-  it('has the expected default enabled state (File Explorer & Text Editor off)', () => {
+  it('has the expected default enabled state (every shipped feature on)', () => {
     render(<FeaturesTab />);
     const checkboxes = screen.getAllByRole('checkbox');
-    expect(checkboxes.length).toBe(7);
+    expect(checkboxes.length).toBe(5);
     // All toggles are present and interactable regardless of state.
     for (const cb of checkboxes) {
       expect(cb).toHaveProperty('disabled', false);
     }
-    // File Explorer and Text Editor default OFF (new installs); the rest default ON.
-    expect(screen.getByRole('checkbox', { name: 'File Explorer' })).toHaveProperty('checked', false);
-    expect(screen.getByRole('checkbox', { name: 'Text Editor' })).toHaveProperty('checked', false);
     for (const name of ['AI Chat', 'Log Viewer', 'Ping Monitor', 'File Server', 'Web Browser']) {
       expect(screen.getByRole('checkbox', { name })).toHaveProperty('checked', true);
     }
@@ -43,8 +39,6 @@ describe('FeaturesTab', () => {
       'ai-chat': false,
       'log-viewer': true,
       'ping-monitor': true,
-      'text-editor': true,
-      'file-explorer': true,
       'file-server': true,
       'web-browser': true,
     });
