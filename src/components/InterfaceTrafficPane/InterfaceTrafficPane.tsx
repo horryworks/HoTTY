@@ -45,7 +45,10 @@ const INTERVAL_OPTIONS = [
   { label: '30s', value: 30000 },
   { label: '60s', value: 60000 },
 ];
-const DEFAULT_INTERVAL_MS = 10000;
+// 60s by default: a MIB walk is cheap for HoTTY but not for the device's
+// control plane, and traffic trends read fine at one-minute granularity. Pick a
+// shorter interval per pane when you are actively watching a link.
+const DEFAULT_INTERVAL_MS = 60000;
 
 const AUTH_PROTOCOLS: SnmpAuthProtocol[] = ['md5', 'sha1', 'sha224', 'sha256', 'sha384', 'sha512'];
 const PRIV_PROTOCOLS: SnmpPrivProtocol[] = ['des', 'aes128', 'aes192', 'aes256'];

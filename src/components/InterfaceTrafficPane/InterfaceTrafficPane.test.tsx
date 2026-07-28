@@ -61,7 +61,7 @@ describe('InterfaceTrafficPane', () => {
     expect(mockStart).toHaveBeenCalledWith(
       'if-1',
       expect.objectContaining({ host: '192.0.2.20', port: 161, version: 'v2c', community: 'public' }),
-      10000
+      60000
     );
   });
 

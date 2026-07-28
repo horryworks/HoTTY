@@ -5,7 +5,18 @@ import { DEFAULT_THEMES } from '../themes/defaults';
 import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from '../utils/commandLists';
 import type { FixedSizeMode } from '../utils/fixedTerminalSize';
 
-const DEFAULT_PROMPT_HIGHLIGHT_COLOR = 'rgba(255, 255, 255, 0.15)';
+/**
+ * The prompt-highlight colour that shipped as the hardcoded default before v10.
+ *
+ * **Frozen — do not re-point this at a theme variable and do not "fix" the
+ * literal.** It is no longer a default (the live default is `''`, the
+ * "use the theme's `--terminal-prompt-default`" sentinel); it survives only as a
+ * fixture the migrations compare against. The v10 migration below recognises a
+ * legacy install by testing stored state for *exactly* this string, so deriving
+ * it from the current theme would make that check miss and pin those users to
+ * the old colour forever.
+ */
+const LEGACY_PROMPT_HIGHLIGHT_COLOR = 'rgba(255, 255, 255, 0.15)';
 
 export const DEFAULT_PROMPT_PATTERNS: PromptPattern[] = [
   { id: 'cisco', name: 'Cisco / Allied Telesis', pattern: '^([a-zA-Z0-9_\\-\\./]+(?:\\([a-zA-Z0-9_\\-\\./]+\\))?[>#])\\s*' },
@@ -238,7 +249,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
         }
         if (version < 3) {
           state.enablePromptHighlight ??= true;
-          state.promptHighlightColor ??= DEFAULT_PROMPT_HIGHLIGHT_COLOR;
+          state.promptHighlightColor ??= LEGACY_PROMPT_HIGHLIGHT_COLOR;
           state.promptPatterns ??= DEFAULT_PROMPT_PATTERNS;
         }
         if (version < 4) {
@@ -270,7 +281,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           // falls back to `var(--terminal-prompt-default)` when the value is empty,
           // so existing users who never customised the colour migrate to the
           // theme-driven default instead of being pinned to the old hardcoded value.
-          if (state.promptHighlightColor === DEFAULT_PROMPT_HIGHLIGHT_COLOR) {
+          if (state.promptHighlightColor === LEGACY_PROMPT_HIGHLIGHT_COLOR) {
             state.promptHighlightColor = '';
           }
         }

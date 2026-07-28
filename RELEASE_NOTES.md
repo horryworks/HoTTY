@@ -1,5 +1,51 @@
 # Release Notes
 
+## v2.0.14
+
+**The v2.0.14 stable release, consolidating the v2.0.14 beta series.** The headline changes: a new **Interface Traffic** pane watches live SNMP counters on your switches and routers, so throughput sits next to the terminals you are working in; **AI Chat conversations are now saved to disk** as Markdown in the same folder as your session logs; the **Log Viewer gained a proper search box** with `Ctrl+F`, regular expressions and jump-to-match; and the rarely used **Text Editor and File Explorer panes were removed**, alongside a substantial hardening pass on the Windows DPAPI layer that protects your saved credentials.
+
+### Removed
+
+- **Text Editor and File Explorer panes.** Both are removed completely — from the tab bar's feature menu, from **Settings → Features**, and from Help. Five utility panes remain: **Log Viewer**, **Ping Monitor**, **AI Chat**, **File Server**, and **Web Browser**. If you had either one enabled, the leftover setting is tidied up automatically the first time you start this version — nothing to do on your side. Roughly 3,000 lines of code and one npm dependency went with them, so both the installer and the running app are a little lighter.
+
+### New Features
+
+- **Interface Traffic pane (SNMP).** A new utility pane that polls a network device's interface table and shows live per-interface throughput. **List interfaces** tests the connection and discovers what the device has; **Start** then begins polling and fills in **In/Out bps**, **In/Out pps**, **errors** and **discards** alongside each interface's name, description, status and speed. Rates appear from the second poll onward — the first one establishes the baseline. Sort by any column, filter by name or description, and tick **Up only** to hide interfaces that are down. Enable it under **Settings → Features**; it is on by default.
+- **SNMP v2c and v3.** v2c takes a community string; v3 supports all three security levels — **noAuthNoPriv**, **authNoPriv** and **authPriv** — with MD5/SHA authentication and DES/AES privacy, plus an optional context name. The pane warns you inline when noAuthNoPriv is selected, since that sends everything unauthenticated and in the clear.
+- **64-bit counters, with a warning when the device has none.** Where the device offers `ifXTable`, HoTTY reads the 64-bit counters. Older agents that only expose the 32-bit ones still work, but the pane shows a **32-bit counters** badge explaining that those wrap in roughly 34 seconds on a saturated 1 Gbps link.
+- **Search in the Log Viewer.** `Ctrl+F` opens a search box over the open log file. Move between hits with `Enter` and `Shift+Enter`, watch a live match count, and switch on **Match case**, **Use regular expression**, or **Matching lines only** to collapse the view down to just the lines that hit. An invalid regular expression is reported inline instead of silently finding nothing.
+- **AI chat transcripts saved as Markdown.** While logging is on, each conversation is appended live to `YYYYMMDDHHMMSS-AICHAT-(Chat).md` in your log folder. The file opens with the model, AI provider, and the terminals the tab was watching, then records every turn with a timestamp. Your messages are written inside a code block so pasted terminal output can't mangle the formatting; the AI's replies stay as plain Markdown, so headings, lists, and code blocks read exactly as they do in the pane. Each turn lands on disk the moment it appears, so nothing is lost if the app is closed or killed mid-conversation.
+- **AI chat logs in the Log Viewer.** The Log Viewer now lists `.md` files alongside `.txt` and `.log` ones, sorted together by time, so a chat and the session it was about sit side by side. Type `AICHAT` in the filter box to see just the conversations.
+- **A new file per conversation.** Starting a new chat, closing a tab, or switching AI provider closes the current transcript and begins a fresh one on the next message — the same way reconnecting a terminal starts a new session log. The filename records the tab's name at the moment the file is created.
+
+### Improvements
+
+- **Poll interval adjustable without reconnecting.** Changing the interval retunes a running watcher in place, so you can go coarser or finer without dropping the SNMP session and losing your rate baseline.
+- **Interface Traffic polls once a minute by default.** A MIB walk is cheap for HoTTY but not for the device's control plane, and traffic trends read fine at one-minute granularity. Pick a shorter interval per pane when you are actively watching a link.
+- **Connection settings remembered per pane.** Each Interface Traffic pane keeps its own device settings. Tick **Remember these connection settings** to keep the credentials too; leave it off and they are asked for each time.
+- **Live watcher status.** The pane reports whether it is running or stopped, the current interval, the actual poll time in milliseconds, the device's uptime, and a **Stale** indicator when replies stop arriving.
+- **Clearer log folder help text.** The hint under **Log Folder Path** now describes both file types you will find there.
+- **New help section for AI chat logs.** **Help → Session Logging & Log Viewer** explains where transcripts go, what starts a new file, and that attached images are noted but not saved.
+- **Snappier pane highlight.** The flash that marks the newly focused pane when you move with `Ctrl+Tab` is now half as long.
+- **Disabled AI Chat buttons stop looking clickable.** Header buttons that are currently unavailable no longer light up on hover.
+
+### Bug Fixes
+
+- **The built-in themes ship complete again.** The Dark, Light and Medium theme files bundled with the app had not been refreshed since v2.0.0-beta1, so the copies that actually shipped were missing 18 colours that newer parts of the interface expect, and carried an outdated Dark accent colour. In practice the **connecting** tab and pane, the terminal letterbox, and the tab danger gradient kept the colours of whichever theme happened to load first and did not follow a theme switch. All three built-in themes are current again, and the two copies are now checked against each other so they cannot drift apart unnoticed.
+
+### Security
+
+- **SNMP credentials are encrypted with Windows DPAPI.** Community strings and v3 authentication and privacy passwords are encrypted before being stored, and only when you asked for them to be remembered. They are also registered with the log redaction filter, so they cannot surface in a debug log.
+- **Saved credentials can no longer be used to decrypt another application's secrets.** HoTTY encrypts credentials with Windows DPAPI plus an app-specific binding, so a blob produced by some other program cannot be opened through HoTTY. Until now the decrypt path quietly retried *without* that binding whenever the first attempt failed, which undid the guarantee it was there to provide. That retry is gone from the path the app uses; it survives only where HoTTY reads back its own files.
+- **Credentials written by pre-2.0 builds are upgraded in place.** Anything still in the older format is re-encrypted with the current binding the first time your host tree loads — including **SSH key passphrases**, which the previous migration silently skipped. The plaintext never leaves the process.
+- **One unreadable credential no longer blanks the rest.** Decrypting the host tree used to be all-or-nothing: a single damaged entry emptied every other username and password in the list. A failure is now contained to the one field, which is left empty so you know to re-enter it.
+- **A saved credential can never be silently replaced with a blank.** A failed decryption could previously be written back over the real value during the host tree's automatic upgrade pass, destroying it for good. The original encrypted value is now always kept.
+- **The log folder can no longer be a network path.** A UNC path such as `\\server\share` is rejected before anything touches the disk, so Windows can never be steered into authenticating against a remote share while logging is being set up.
+- **AI chat transcripts obey the same folder approval as session logs.** A transcript can only be written to a folder you approved through the native picker or confirm dialog; the check runs before anything touches the disk, and an unapproved path creates no file or directory. Chat tab names are sanitized before use in a filename, so a name can never steer the file out of the approved folder.
+- **Image attachments are recorded, not stored.** Only the image type and size are written to the transcript — the image data itself never leaves the app, which also keeps transcripts small enough for the Log Viewer to open.
+- **Logging failures are surfaced, never silent.** If a write fails, HoTTY tells you once and stops logging that conversation instead of quietly saving an incomplete transcript. Changing the log folder re-enables it.
+- **What you type is saved exactly as typed.** Terminal output that HoTTY sends to the AI is redacted first, but text you write yourself is not — so avoid typing credentials into the chat. The help text now says so.
+
 ## v2.0.14-beta3
 
 **A new Interface Traffic pane watches live SNMP counters on your network gear, and the Log Viewer finally has a proper search box.** Point the pane at a switch or router over SNMP v2c or v3 and it lists every interface, then refreshes bps, pps, errors and discards on each poll — no separate monitoring tool to open alongside your terminals. In the Log Viewer, `Ctrl+F` now opens an in-pane search with regular expressions, case matching, and jump-to-match navigation.

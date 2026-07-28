@@ -4,6 +4,7 @@
 //! lives in `services::snmp::poller`, both of which are unit-testable without a
 //! Tauri runtime.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tauri::{AppHandle, State, Window};
@@ -14,6 +15,28 @@ use crate::services::snmp::{
     clamp_interval, is_valid_pane_id, poller, stop_watcher, validate, SnmpConfigDto, SnmpDiscovery,
     SnmpWatcherState, WatcherHandle,
 };
+
+/// Retune a running watcher's poll interval in place.
+///
+/// Split out of [`snmp_watcher_update_interval`] so the part that is not just
+/// Tauri plumbing can be tested without a runtime. Returns whether a watcher was
+/// actually retuned, so an unknown pane is an observable no-op rather than a
+/// silent one. The clamp is applied here, not at the call site: the renderer's
+/// interval picker is not the only possible caller and ADR-013 relies on the
+/// floor holding for every path that can change the interval.
+async fn retune_interval(
+    map: &HashMap<String, WatcherHandle>,
+    pane_id: &str,
+    interval_ms: u64,
+) -> bool {
+    match map.get(pane_id) {
+        Some(handle) => {
+            *handle.interval_ms.lock().await = clamp_interval(interval_ms);
+            true
+        }
+        None => false,
+    }
+}
 
 /// Start (or restart) polling for a pane.
 ///
@@ -86,9 +109,7 @@ pub async fn snmp_watcher_update_interval(
     interval_ms: u64,
 ) -> Result<(), String> {
     let watchers = state.watchers.lock().await;
-    if let Some(handle) = watchers.get(&pane_id) {
-        *handle.interval_ms.lock().await = clamp_interval(interval_ms);
-    }
+    retune_interval(&watchers, &pane_id, interval_ms).await;
     Ok(())
 }
 
@@ -98,4 +119,68 @@ pub async fn snmp_watcher_update_interval(
 pub async fn snmp_list_interfaces(config: SnmpConfigDto) -> Result<SnmpDiscovery, String> {
     let target = validate(config)?;
     poller::discover(target).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A handle whose task parks until cancelled — enough to stand in for a
+    /// running watcher without opening an SNMP session.
+    fn parked_watcher(interval_ms: u64) -> WatcherHandle {
+        let cancel = CancellationToken::new();
+        let child = cancel.clone();
+        WatcherHandle {
+            cancel,
+            join: tokio::spawn(async move { child.cancelled().await }),
+            interval_ms: Arc::new(Mutex::new(interval_ms)),
+            window_label: "main".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn retune_interval_updates_a_running_watcher_in_place() {
+        // The point of retuning rather than restarting: the poll loop re-reads
+        // this value each cycle, so the SNMP session and the rate baseline
+        // survive an interval change.
+        let mut map = HashMap::new();
+        map.insert("if-1".to_string(), parked_watcher(60_000));
+
+        assert!(retune_interval(&map, "if-1", 30_000).await);
+        assert_eq!(*map["if-1"].interval_ms.lock().await, 30_000);
+    }
+
+    #[tokio::test]
+    async fn retune_interval_clamps_below_the_floor() {
+        // A caller asking for 1 s must not get 1 s: a MIB walk runs on the
+        // device's control-plane CPU (ADR-013).
+        let mut map = HashMap::new();
+        map.insert("if-1".to_string(), parked_watcher(60_000));
+
+        assert!(retune_interval(&map, "if-1", 1_000).await);
+        let applied = *map["if-1"].interval_ms.lock().await;
+        assert_eq!(applied, clamp_interval(1_000));
+        assert!(applied > 1_000, "the floor was not applied");
+    }
+
+    #[tokio::test]
+    async fn retune_interval_is_a_no_op_for_an_unknown_pane() {
+        // A stale renderer can send an interval for a pane that has already been
+        // stopped; that must not create or resurrect a watcher.
+        let mut map = HashMap::new();
+        map.insert("if-1".to_string(), parked_watcher(60_000));
+
+        assert!(!retune_interval(&map, "if-gone", 30_000).await);
+        assert_eq!(map.len(), 1);
+        assert_eq!(*map["if-1"].interval_ms.lock().await, 60_000);
+    }
+
+    /// The `start` command gates on this before touching the watcher map; the
+    /// ids the renderer actually sends must pass and traversal-ish ones must not.
+    #[test]
+    fn start_rejects_pane_ids_it_should_not_accept() {
+        assert!(is_valid_pane_id("if-1"));
+        assert!(!is_valid_pane_id(""));
+        assert!(!is_valid_pane_id("if-1/../if-2"));
+    }
 }

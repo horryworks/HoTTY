@@ -291,6 +291,48 @@ pub async fn delete_custom_theme(
 mod tests {
     use super::*;
 
+    /// The built-in themes exist twice on disk: `resources/` at the repo root is
+    /// the canonical source (imported at build time by `src/themes/defaults.ts`),
+    /// while `src-tauri/resources/` is what `tauri.conf.json` actually bundles and
+    /// what [`get_themes`] reads at runtime. Because `useThemes` merges as
+    /// `{ ...DEFAULT_THEMES, ...loaded }`, the bundled copy wins wholesale — so if
+    /// the two drift, the app ships the stale palette and any variable missing
+    /// from the bundled copy is simply never applied. They did drift once: the
+    /// bundled files sat untouched from v2.0.0-beta1 while the canonical ones
+    /// gained 19 variables, which left the connecting-tab and letterbox colours
+    /// pinned to whichever theme happened to load first. This test is the guard.
+    #[test]
+    fn bundled_themes_match_the_canonical_ones() {
+        let bundled_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources");
+        let canonical_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("src-tauri always has a parent")
+            .join("resources");
+
+        for &key in BUILT_IN_THEMES {
+            let file = format!("{key}.json");
+            let bundled = std::fs::read_to_string(bundled_dir.join(&file))
+                .unwrap_or_else(|e| panic!("cannot read bundled {file}: {e}"));
+            let canonical = std::fs::read_to_string(canonical_dir.join(&file))
+                .unwrap_or_else(|e| panic!("cannot read canonical {file}: {e}"));
+
+            // Compare parsed values, not bytes: the two copies may legitimately
+            // differ in line endings or trailing newline.
+            let bundled: serde_json::Value = serde_json::from_str(&bundled)
+                .unwrap_or_else(|e| panic!("bundled {file} is not valid JSON: {e}"));
+            let canonical: serde_json::Value = serde_json::from_str(&canonical)
+                .unwrap_or_else(|e| panic!("canonical {file} is not valid JSON: {e}"));
+
+            assert_eq!(
+                bundled, canonical,
+                "src-tauri/resources/{file} has drifted from the canonical \
+                 resources/{file}. Copy the canonical file over the bundled one — \
+                 the bundled copy is what ships and it overrides the build-time \
+                 defaults at runtime."
+            );
+        }
+    }
+
     #[test]
     fn validate_theme_key_valid() {
         assert!(validate_theme_key("my-theme").is_ok());

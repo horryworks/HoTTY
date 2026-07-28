@@ -85,7 +85,6 @@
         "terminal-prompt-default": "#dc2626",
         "terminal-prompt-active": "#1d4ed8",
         "terminal-letterbox-bg": "#ebebeb",
-        "prompt-highlight-default": "rgba(0, 0, 0, 0.1)",
         "text-tertiary": "#888888",
         "status-success": "#388e3c",
         "status-error": "#d32f2f",
