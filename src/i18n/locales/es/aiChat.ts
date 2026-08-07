@@ -83,6 +83,7 @@ export const aiChat = {
     labelPersona: 'Perfil',
     viewPrompt: 'Ver prompt',
     labelLanguage: 'Idioma',
+    languageAuto: 'Automático ({{lang}})',
     labelRegion: 'Región',
     sendTitleSelectModel: 'Seleccione primero un modelo',
     sendTitleEmpty: 'Escriba primero un mensaje',

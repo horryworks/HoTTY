@@ -14,7 +14,7 @@ export const settings = {
     languageSection: '언어',
     languageLabel: '표시 언어',
     languageHelp:
-      '앱 인터페이스의 언어를 변경합니다. (AI 응답 언어는 AI 채팅 패널에서 별도로 설정합니다.)',
+      '앱 인터페이스의 언어를 변경합니다. (AI 응답 언어는 기본적으로 이 설정을 따르며, AI 채팅 패널에서 개별 지정할 수 있습니다.)',
     // Logging
     loggingSection: '로깅',
     enableLogging: '로깅 사용',

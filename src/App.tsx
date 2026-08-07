@@ -394,34 +394,45 @@ function App() {
   const handleNewConnectionClick = () => setConnectOpen(true);
 
   const handleConnectSubmit = (payload: ConnectSubmitPayload): string => {
-    // Start the connection but keep the dialog open and DON'T reveal a pane yet.
-    // openSession returns the id synchronously and runs the connect in the
-    // background; SessionDialog watches the resulting session and shows an
-    // in-dialog "connecting" state. The pane is created only once the session
-    // reaches 'connected' (handleSessionConnected) — a failed or cancelled
-    // attempt never puts a tab in the grid. The id is returned so the dialog
-    // can track this session's lifecycle.
-    return openSession(payload);
+    // Start the connection AND allocate its pane right away, while the dialog
+    // stays open on top showing in-dialog progress. Allocating now is what
+    // mounts TerminalXtermHost during 'connecting' (behind the modal, under the
+    // pane's ConnectingOverlay) so xterm measures its real width and reports it
+    // via term_resize BEFORE the backend allocates the pty. Deferring this to
+    // 'connected' — as the in-dialog progress flow originally did — meant the
+    // terminal never existed in time, so resolve_initial_pty_size always timed
+    // out and fell back to 80x24: a device that latches the pty width and
+    // ignores later window-change (Huawei USG/VRP) then stayed stuck at 80
+    // columns for the whole session, letterboxed inside a much wider pane.
+    // A cancelled attempt releases the pane in handleCancelConnect; a failed one
+    // via the auto-close path (onSessionRemoved → paneStore.removeSession).
+    // The id is returned so the dialog can track this session's lifecycle.
+    const id = openSession(payload);
+    addSessionToStore(id);
+    return id;
   };
 
   // Called by SessionDialog once a dialog-initiated session is established:
-  // reveal + activate its pane, close the dialog, and focus the terminal.
-  // addSessionToStore already marks the new pane active; the queueMicrotask
-  // focus is belt-and-suspenders alongside TerminalXtermHost's active-effect.
+  // close the dialog and focus the terminal. The pane was already allocated and
+  // activated at submit time (handleConnectSubmit) — the queueMicrotask focus is
+  // belt-and-suspenders alongside TerminalXtermHost's active-effect, which only
+  // focuses once the session leaves 'connecting'.
   const handleSessionConnected = (id: string) => {
-    addSessionToStore(id);
     setConnectOpen(false);
-    // The revealed pane's TerminalXtermHost opens + focuses the terminal via its
-    // own mount effects; this extra focus is belt-and-suspenders and guarded
+    // The pane's TerminalXtermHost focuses the terminal itself once the status
+    // leaves 'connecting'; this extra focus is belt-and-suspenders and guarded
     // because the xterm may not be open()'d yet when the microtask runs.
     queueMicrotask(() => { try { sessions.get(id)?.term.focus(); } catch { /* not yet open — the pane's active-effect will focus it */ } });
   };
 
   // Called by SessionDialog when the user cancels an in-progress connection:
-  // tear down the never-revealed session (disconnects the backend and cancels
-  // any pending host-key prompt). The dialog stays open and editable.
+  // tear down the session (disconnects the backend and cancels any pending
+  // host-key prompt) and release the pane handleConnectSubmit allocated for it,
+  // so an abandoned attempt leaves no tab or occupied cell behind. The dialog
+  // stays open and editable.
   const handleCancelConnect = (id: string) => {
     void closeSession(id);
+    removeSessionFromStore(id);
   };
 
   const handleSelectTab = (id: string) => {

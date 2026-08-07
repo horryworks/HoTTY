@@ -14,7 +14,7 @@ export const settings = {
     languageSection: '语言',
     languageLabel: '显示语言',
     languageHelp:
-      '更改应用界面的语言。（AI 响应语言在 AI 聊天面板中单独设置。）',
+      '更改应用界面的语言。（AI 响应语言默认跟随此设置，也可在 AI 聊天面板中单独指定。）',
     // Logging
     loggingSection: '日志记录',
     enableLogging: '启用日志记录',

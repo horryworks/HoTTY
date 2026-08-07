@@ -124,10 +124,11 @@ vi.mock('./components/PingMonitorPane/PingMonitorPane', () => ({
 }));
 
 vi.mock('./components/SessionDialog/SessionDialog', () => ({
-  SessionDialog: ({ open, onClose, onConnect }: {
+  SessionDialog: ({ open, onClose, onConnect, onCancelConnect }: {
     open: boolean;
     onClose: () => void;
     onConnect: (payload: unknown) => void;
+    onCancelConnect?: (sessionId: string) => void;
   }) =>
     open ? (
       <div data-testid="connect-form">
@@ -137,6 +138,13 @@ vi.mock('./components/SessionDialog/SessionDialog', () => ({
           onClick={() => onConnect({ protocol: 'ssh', config: {} })}
         >
           Connect
+        </button>
+        {/* Stands in for the dialog's in-progress Cancel (Esc / Cancel button). */}
+        <button
+          data-testid="abort-connect"
+          onClick={() => onCancelConnect?.('sess-1')}
+        >
+          Abort
         </button>
       </div>
     ) : null,
@@ -192,11 +200,18 @@ vi.mock('./components/UpdateNotification/UpdateNotification', () => ({
 
 import App from './App';
 import { useSettingsStore } from './stores/settingsStore';
+import { usePaneStore } from './stores/paneStore';
 import { tauriService } from './services/tauriService';
 
 describe('App', () => {
   beforeEach(() => {
     useSettingsStore.getState().reset();
+    usePaneStore.setState({
+      layoutMode: '1x1',
+      activePaneId: '0',
+      paneAllocations: {},
+      sessionOrder: [],
+    });
     mockOpenSession.mockReset().mockReturnValue('sess-1');
     mockCloseSession.mockReset().mockResolvedValue(undefined);
     mockSessions.clear();
@@ -258,6 +273,32 @@ describe('App', () => {
     await waitFor(() => {
       expect(mockOpenSession).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('allocates the pane at submit time, not on connect', () => {
+    // Regression guard for the Huawei width latch: the pane must be allocated
+    // while the session is still 'connecting' so TerminalXtermHost mounts and
+    // xterm reports its measured size before the backend allocates the pty.
+    // Deferring this to 'connected' made resolve_initial_pty_size time out and
+    // fall back to 80x24, pinning width-latching devices to 80 columns.
+    render(<App />);
+    fireEvent.click(screen.getByTestId('new-btn'));
+    fireEvent.click(screen.getByTestId('submit-connect'));
+    expect(Object.values(usePaneStore.getState().paneAllocations)).toContain('sess-1');
+    // The dialog stays open on top until the session reaches 'connected'.
+    expect(screen.getByTestId('connect-form')).toBeTruthy();
+  });
+
+  it('releases the pane when an in-progress connection is cancelled', () => {
+    render(<App />);
+    fireEvent.click(screen.getByTestId('new-btn'));
+    fireEvent.click(screen.getByTestId('submit-connect'));
+    expect(Object.values(usePaneStore.getState().paneAllocations)).toContain('sess-1');
+
+    fireEvent.click(screen.getByTestId('abort-connect'));
+    expect(mockCloseSession).toHaveBeenCalledWith('sess-1');
+    expect(Object.values(usePaneStore.getState().paneAllocations)).not.toContain('sess-1');
+    expect(usePaneStore.getState().sessionOrder).not.toContain('sess-1');
   });
 
   // Helper: drive the paste-confirmation modal flow up to the point where the

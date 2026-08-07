@@ -83,6 +83,7 @@ export const aiChat = {
     labelPersona: '角色',
     viewPrompt: '檢視提示詞',
     labelLanguage: '語言',
+    languageAuto: '自動 ({{lang}})',
     labelRegion: '地區',
     sendTitleSelectModel: '請先選取模型',
     sendTitleEmpty: '請先輸入訊息',

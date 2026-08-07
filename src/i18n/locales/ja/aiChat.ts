@@ -80,6 +80,7 @@ export const aiChat = {
     labelPersona: 'ペルソナ',
     viewPrompt: 'プロンプトを表示',
     labelLanguage: '言語',
+    languageAuto: '自動 ({{lang}})',
     labelRegion: 'リージョン',
     sendTitleSelectModel: '先にモデルを選択してください',
     sendTitleEmpty: '先にメッセージを入力してください',

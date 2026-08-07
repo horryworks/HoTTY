@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware';
 import type { Encoding, FeatureId, FileServerConfig, PromptPattern, ThemeId, LanguageId, CommandExecutionMode, ClassifierStrategy, PersonaDefinition } from '../types/appTypes';
 import { DEFAULT_THEMES } from '../themes/defaults';
 import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from '../utils/commandLists';
+import { AUTO_LANGUAGE } from '../constants/aiPrompts';
+import { STORAGE_KEYS } from '../constants/storage';
 import type { FixedSizeMode } from '../utils/fixedTerminalSize';
 
 /**
@@ -158,6 +160,12 @@ interface SettingsState {
   /** Whether the user has accepted the one-time disclosure that AI features send
    *  terminal data to the configured third-party provider. Gates all AI sends. */
   aiDataConsentAccepted: boolean;
+  /** Language the AI must answer in, as the display name sent to the model
+   *  ('English', 'Japanese', …). `AUTO_LANGUAGE` follows the UI `language` above.
+   *  App-wide on purpose: every AI Chat pane in every window shares it (the
+   *  settings store is cross-window synced), which is what lets a switch reach a
+   *  conversation that is already in progress. */
+  aiResponseLanguage: string;
 }
 
 interface SettingsActions {
@@ -230,6 +238,7 @@ const DEFAULTS: SettingsState = {
   aiSleepAsClientDelay: true,
   aiSleepMaxDelaySecs: 900,
   aiDataConsentAccepted: false,
+  aiResponseLanguage: AUTO_LANGUAGE,
 };
 
 export const useSettingsStore = create<SettingsState & SettingsActions>()(
@@ -241,7 +250,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 28,
+      version: 29,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -384,6 +393,27 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
             ...(state.enabledFeatures ?? {}),
             'interface-traffic': state.enabledFeatures?.['interface-traffic'] ?? true,
           };
+        }
+        if (version < 29) {
+          // The AI answer language moved out of localStorage into this (cross-window
+          // synced) store. The AI Chat pane only ever WROTE 'hotty_gemini_language'
+          // on an explicit dropdown change — its navigator.language seed was
+          // read-only — so a present key means the user deliberately picked that
+          // language: adopt it verbatim, mapping the legacy '日本語' value that never
+          // matched an <option>. Absent ⇒ 'Auto', which now follows Settings →
+          // General. The localStorage entry is intentionally NOT removed, so a
+          // rollback to a pre-v29 build still finds the user's choice.
+          if (state.aiResponseLanguage === undefined) {
+            let legacy: string | null = null;
+            try {
+              legacy = localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE);
+            } catch {
+              // Storage unavailable (private mode / quota) — fall through to the default.
+            }
+            state.aiResponseLanguage = legacy
+              ? (legacy === '日本語' ? 'Japanese' : legacy)
+              : DEFAULTS.aiResponseLanguage;
+          }
         }
         return state as SettingsState;
       },

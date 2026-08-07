@@ -14,7 +14,7 @@ export const settings = {
     languageSection: 'Language',
     languageLabel: 'Display language',
     languageHelp:
-      'Changes the language of the app interface. (The AI response language is set separately in the AI chat panel.)',
+      'Changes the language of the app interface. (The AI response language follows this setting by default; override it in the AI chat panel.)',
     // Logging
     loggingSection: 'Logging',
     enableLogging: 'Enable Logging',

@@ -1,5 +1,29 @@
 # Release Notes
 
+## v2.0.15
+
+**The AI now answers in the language your app is set to, and the language picker finally works mid-conversation.** Set HoTTY to 日本語 and the AI replies in Japanese without you configuring anything else — the AI Chat language selector defaults to **Auto**, which follows **Settings → General → Display language**. Changing the language during a conversation now actually switches it, which it did not before. Also in this release: terminals no longer get stuck at 80 columns on devices that latch the width at connect, such as Huawei USG/VRP.
+
+### New Features
+
+- **The AI answers in your app's language by default.** The AI Chat language selector has a new **Auto** setting, and it is the default: the AI replies in whatever language the interface is set to, so switching **Settings → General → Display language** switches the AI too. The option is labelled with the language it currently resolves to — *Auto (日本語)* — so it is never a guess. Pin a specific language from the same selector at any time; the list is unchanged.
+
+### Improvements
+
+- **One answer language for the whole app.** The AI answer language used to be remembered per AI Chat pane in browser storage. It now lives in your settings alongside everything else, which means every conversation in every window shares it, and a change reaches conversations that are already under way rather than only new ones. Your existing choice is carried over automatically the first time you start this version.
+- **The new tab appears the moment you press Connect.** It sits behind the connect dialog showing its connecting state, instead of appearing only once the connection succeeds. Cancelling or a failed attempt still leaves no tab behind, and the dialog stays open and editable exactly as before.
+- **Clearer wording for the display-language setting.** Both **Settings → General** and **Help** now say that the AI response language follows the interface by default and where to override it.
+
+### Bug Fixes
+
+- **Changing the AI answer language mid-conversation did nothing.** Picking a different language only affected new conversations — an ongoing one carried on in the old language however many times you switched. Two things caused it: selecting **English** sent no language instruction at all, and because the whole conversation is replayed to the model on every turn, the earlier replies simply decided the language. Every request now carries an explicit language instruction that overrides the earlier turns, and the moment you switch, each open conversation is told so at its very next message. Commands inside execute blocks, terminal output, file paths and identifiers are explicitly exempt, so nothing that gets run on a device is ever translated.
+- **Ask AI ignored your language and reset your persona.** Right-clicking a terminal selection and asking a question read the answer language from the old per-pane storage — where English produced no instruction — and overwrote the chat's system prompt in the process, silently dropping the persona you had selected. Both paths now share a single language resolver, and Ask AI no longer touches the system prompt of a chat pane that is already open.
+- **Terminals stuck at 80 columns on width-latching devices.** On hardware that fixes the terminal width at login and ignores later resizes (Huawei USG/VRP and similar), sessions could come up at 80 columns and stay there — letterboxed inside a much wider pane — undoing what **Fixed terminal size** is for. The terminal was not being created until the connection had already succeeded, so it never got the chance to report its real width before the remote side was asked for a size, and an 80x24 fallback was used. The terminal is now created and measuring while the connection is still being made, and it retries that first measurement until the renderer can give a real figure, so the true width is reported in time.
+
+### Security
+
+- **One less permission in the shipped app.** HoTTY no longer requests permission to open a native *Save* file dialog. Nothing in the interface has used it since the Text Editor and File Explorer panes were removed in v2.0.14, so it is gone from the app's capability set entirely.
+
 ## v2.0.14
 
 **The v2.0.14 stable release, consolidating the v2.0.14 beta series.** The headline changes: a new **Interface Traffic** pane watches live SNMP counters on your switches and routers, so throughput sits next to the terminals you are working in; **AI Chat conversations are now saved to disk** as Markdown in the same folder as your session logs; the **Log Viewer gained a proper search box** with `Ctrl+F`, regular expressions and jump-to-match; and the rarely used **Text Editor and File Explorer panes were removed**, alongside a substantial hardening pass on the Windows DPAPI layer that protects your saved credentials.

@@ -385,6 +385,9 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               <p className="help-text">
                 <Trans i18nKey="help.aiFeatures.attachImages" components={[<strong key="0" />]} />
               </p>
+              <p className="help-text">
+                <Trans i18nKey="help.aiFeatures.answerLanguage" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />]} />
+              </p>
 
               <p className="help-text" style={{ marginBottom: '4px' }}><strong>{t('help.aiFeatures.askAiHeading')}</strong></p>
               <p className="help-text">

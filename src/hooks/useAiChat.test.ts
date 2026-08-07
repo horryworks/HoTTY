@@ -4,6 +4,7 @@ import { useAiChat, getActiveTab, createDefaultAiChatState, aiBackendSessionId, 
 import type { SessionRecord } from './useSessionManager';
 import type { FeaturePaneInfo } from '../utils/paneTypes';
 import type { PersonaDefinition } from '../types/appTypes';
+import { useSettingsStore } from '../stores/settingsStore';
 
 vi.mock('../services/tauriService', () => ({
   tauriService: {
@@ -54,6 +55,8 @@ function makeDefaultOptions(overrides: Partial<Parameters<typeof useAiChat>[0]> 
 describe('useAiChat', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // The settings store is module-global; askAi reads it for the answer language.
+    useSettingsStore.getState().reset();
   });
 
   afterEach(() => {
@@ -450,6 +453,52 @@ describe('useAiChat', () => {
     expect(activeTab?.pendingMessages?.[0]).toContain('Explain this');
     expect(activeTab?.pendingMessages?.[0]).toContain('some code');
     expect(state?.systemInstruction).toContain('You are a helpful assistant');
+  });
+
+  it('askAi seeds a language directive resolved from the settings store', async () => {
+    // Regression: this path used to read `localStorage || 'English'`, and English
+    // produced an EMPTY directive — so Ask AI silently answered in whatever
+    // language the model felt like, regardless of the user's setting.
+    useSettingsStore.getState().update('language', 'ja');
+
+    const featurePanes = new Map<string, FeaturePaneInfo>();
+    featurePanes.set('ai-1', { id: 'ai-1', type: 'ai-chat', displayName: 'AI Chat' });
+
+    const opts = makeDefaultOptions({ featurePanes });
+    const { result } = renderHook(() => useAiChat(opts));
+
+    await act(async () => {
+      await result.current.askAi('some code', 'Explain this');
+    });
+
+    expect(result.current.aiChatStates.get('ai-1')?.systemInstruction).toContain('Japanese');
+  });
+
+  it('askAi leaves a mounted pane\'s own system instruction alone', async () => {
+    // A mounted AIChatPane owns systemInstruction (persona + rules + language);
+    // overwriting it here dropped the language directive AND the user's persona
+    // for every later queue-path send.
+    const featurePanes = new Map<string, FeaturePaneInfo>();
+    featurePanes.set('ai-1', { id: 'ai-1', type: 'ai-chat', displayName: 'AI Chat' });
+
+    const opts = makeDefaultOptions({ featurePanes });
+    const { result } = renderHook(() => useAiChat(opts));
+
+    act(() => {
+      result.current.updateAiChatState('ai-1', {
+        ...createDefaultAiChatState(),
+        selectedExpertise: 'Network Expert',
+        systemInstruction: 'PANE-OWNED INSTRUCTION',
+      });
+    });
+
+    await act(async () => {
+      await result.current.askAi('some code', 'Explain this');
+    });
+
+    const state = result.current.aiChatStates.get('ai-1');
+    expect(state?.systemInstruction).toBe('PANE-OWNED INSTRUCTION');
+    expect(state?.selectedExpertise).toBe('Network Expert');
   });
 
   it('askAi ignores an empty question', () => {

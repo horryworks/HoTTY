@@ -211,6 +211,8 @@ export const help = {
       '<0>Stream watchdog:</0> If an AI provider stops sending data mid-response (network drop, hung backend), the in-flight request is automatically cancelled after 3 minutes of silence and an error message appears in the chat — no more stuck "streaming" states.',
     attachImages:
       '<0>Attach images:</0> Paste an image (Ctrl + V), drop image files onto the message box, or use the paperclip button to send screenshots to the AI. PNG, JPEG, WebP and GIF are supported (up to 5 images, 5 MB each). The selected model must support image input.',
+    answerLanguage:
+      '<0>Answer language:</0> The AI replies in the app\'s display language by default, so switching <1>Settings → General → Display language</1> switches the AI\'s replies too. To pin a different one, open <2>settings</2> at the top of the AI Chat pane and choose a language — <3>Auto</3> follows the interface and shows which language that currently is. The choice is shared by every conversation in every window, including ones already under way, and applies from your next message onward. Commands, terminal output, file paths and identifiers are always left untranslated.',
     askAiHeading: 'Ask AI (Right-Click)',
     askAiBody:
       'Select text in the terminal (or click a <0>Terminal Marker</0> to select a whole output block), then right-click and type your question in the <1>"Ask AI"</1> box — press Enter to send. HoTTY opens the AI chat with your question and the selected text.',
@@ -354,6 +356,6 @@ export const help = {
     unusedPane:
       '<0>Unused Pane Background:</0> In <1>Settings → Appearance</1>, choose a solid color or custom image to show in empty grid panes.',
     language:
-      '<0>Display Language:</0> Switch the interface language in <1>Settings → General → Display language</1>. HoTTY is available in English, 日本語, 简体中文, 繁體中文, 한국어, Русский, Español, and Français — the change applies instantly. (The AI response language is set separately in the AI chat panel.)',
+      '<0>Display Language:</0> Switch the interface language in <1>Settings → General → Display language</1>. HoTTY is available in English, 日本語, 简体中文, 繁體中文, 한국어, Русский, Español, and Français — the change applies instantly. (The AI response language follows this setting by default; override it in the AI chat panel\'s settings.)',
   },
 } as const;

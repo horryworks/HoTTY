@@ -38,6 +38,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 ### Localization
 - Multilingual UI with an in-app **Display language** selector (Settings → General)
 - 8 languages: English, 日本語, 简体中文, 繁體中文, 한국어, Русский, Español, Français — switches instantly, no restart
+- AI replies follow the display language by default, overridable in the AI Chat pane
 
 ### Security & Credentials
 - Windows DPAPI encryption for stored credentials
@@ -54,6 +55,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 - Multi-provider support: Google AI Studio (Gemini), Vertex AI, Anthropic (Claude), OpenAI (GPT)
 - AI Chat pane with streaming responses, personas, token cost tracking, and multiple colour-coded parallel conversations
 - Image attachments — paste, drop, or attach images to an AI Chat message on vision-capable models
+- Answer language — **Auto** follows the app's display language, or pin a specific one; shared by every window and applied to conversations already in progress
 - Ask AI — select terminal output, right-click, and type a free-form question to send it (with the selection) to the AI Chat
 - Interactive Mode — AI suggests and executes terminal commands, gated by a managed Whitelist / Blacklist + AI safety classifier
 - Watch Mode — one AI Chat conversation can watch several terminals at once, with AI-suggested commands routed to the right one; captured output is sent to the AI for analysis

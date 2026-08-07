@@ -85,6 +85,7 @@ export const aiChat = {
     labelPersona: '페르소나',
     viewPrompt: '프롬프트 보기',
     labelLanguage: '언어',
+    languageAuto: '자동 ({{lang}})',
     labelRegion: '지역',
     sendTitleSelectModel: '먼저 모델을 선택하세요',
     sendTitleEmpty: '먼저 메시지를 입력하세요',

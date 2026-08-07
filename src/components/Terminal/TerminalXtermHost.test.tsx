@@ -173,6 +173,14 @@ describe('TerminalXtermHost', () => {
     expect(termB.focus).not.toHaveBeenCalled();
   });
 
+  it('does not focus a session that is still connecting', () => {
+    // The pane is mounted during 'connecting' (so xterm can measure before the
+    // pty-req) while the modal connect dialog is on top and owns focus.
+    const { session, term } = makeSession({ status: 'connecting' });
+    render(<TerminalXtermHost session={session} active={true} />);
+    expect(term.focus).not.toHaveBeenCalled();
+  });
+
   it('subscribes to onLineFeed and onCursorMove only when wrap is OFF', () => {
     useSettingsStore.getState().update('lineWrapEnabled', false);
     const { session: off, term: termOff } = makeSession();
@@ -207,6 +215,63 @@ describe('TerminalXtermHost', () => {
     (fitAddon.proposeDimensions as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
     render(<TerminalXtermHost session={session} active={true} />);
     expect(resize).not.toHaveBeenCalled();
+  });
+
+  it('retries the initial measurement until the renderer can measure', () => {
+    // The first pass runs before xterm has painted, so nothing is measurable;
+    // the ResizeObserver won't fire again (the pane keeps its size) and the
+    // session record doesn't change while connecting — so only the retry can
+    // get the size to the backend inside its 2s pty-req window. Without it a
+    // width-latching device (Huawei USG/VRP) gets the 80x24 fallback and stays
+    // stuck at 80 columns for the whole session.
+    vi.useFakeTimers();
+    try {
+      useSettingsStore.getState().update('lineWrapEnabled', true);
+      const { session, term, fitAddon } = makeSession();
+      const propose = fitAddon.proposeDimensions as ReturnType<typeof vi.fn>;
+      const fit = fitAddon.fit as ReturnType<typeof vi.fn>;
+      propose.mockReturnValue(undefined);
+      fit.mockImplementation(() => term.resize(120, 40));
+
+      render(<TerminalXtermHost session={session} active={true} />);
+      expect(resize).not.toHaveBeenCalled();
+
+      // Let the mount-time rAF and a dozen retries run while still unmeasurable,
+      // so the assertion below can only be satisfied by a still-live retry loop.
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(resize).not.toHaveBeenCalled();
+
+      // Renderer paints; cell metrics become available.
+      propose.mockReturnValue({ cols: 120, rows: 40 });
+      act(() => {
+        vi.advanceTimersByTime(32);
+      });
+      expect(resize).toHaveBeenCalledWith('s1', 120, 40);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops retrying the initial measurement once the host unmounts', () => {
+    vi.useFakeTimers();
+    try {
+      useSettingsStore.getState().update('lineWrapEnabled', true);
+      const { session, fitAddon } = makeSession();
+      const propose = fitAddon.proposeDimensions as ReturnType<typeof vi.fn>;
+      propose.mockReturnValue(undefined);
+
+      const { unmount } = render(<TerminalXtermHost session={session} active={true} />);
+      unmount();
+      propose.mockReturnValue({ cols: 120, rows: 40 });
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(resize).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('uses the cols=5000 trick when wrap is OFF', () => {

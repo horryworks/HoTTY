@@ -2,6 +2,9 @@ export const STORAGE_KEYS = {
   HOST_TREE: 'hotty_host_tree',
   GEMINI_CLIENT_ID: 'hotty_gemini_client_id',
   GEMINI_CLIENT_SECRET: 'hotty_gemini_client_secret',
+  /** LEGACY (read-only). The AI answer language now lives in the settings store
+   *  as `aiResponseLanguage`; this key survives only so the v29 settings
+   *  migration can adopt a pre-existing choice. Never written to again. */
   GEMINI_LANGUAGE: 'hotty_gemini_language',
   VERTEXAI_PROJECT_ID: 'hotty_vertexai_project_id',
   VERTEXAI_LOCATION: 'hotty_vertexai_location',

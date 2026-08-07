@@ -1,3 +1,5 @@
+import type { LanguageId } from '../types/appTypes';
+
 /**
  * Build execution rules appended to every AI system instruction.
  * Includes proactive investigation instruction as a built-in rule.
@@ -69,15 +71,80 @@ export function withTargetDirective(message: string, alias: string): string {
 }
 
 /**
- * Build the language directive appended to an AI system instruction.
+ * UI language (i18n) → the language NAME interpolated into the system prompt.
  *
- * Returns an empty string for `English` (the model's default) and for `Auto`
- * (let the model match the user's language) — any other value asks the model to
- * answer in that language. Centralized so every AI entry point treats the
- * language selection identically; in particular `Auto` must never leak into the
- * prompt as a literal "answer in Auto" instruction.
+ * Deliberately AI-facing English names rather than the native labels in
+ * `SUPPORTED_LANGUAGES` (i18n/index.ts): this string goes into the prompt, where
+ * an English name is the most reliably understood token. Typed as a total
+ * `Record<LanguageId, …>` so adding a UI language is a compile error until it is
+ * mapped here.
+ */
+export const AI_LANGUAGE_BY_UI_LANGUAGE: Record<LanguageId, string> = {
+    'en': 'English',
+    'ja': 'Japanese',
+    'zh-CN': 'Chinese (Simplified)',
+    'zh-TW': 'Chinese (Traditional)',
+    'ko': 'Korean',
+    'ru': 'Russian',
+    'es': 'Spanish',
+    'fr': 'French',
+};
+
+/**
+ * Resolve the CONCRETE language the model must answer in.
+ *
+ * An explicit AI-language choice always wins. `Auto` (and any empty/missing
+ * value) follows the app's UI language, so Settings → General drives the AI too.
+ * An unknown UI language falls back to English rather than resolving to nothing:
+ * every request must carry an explicit language, otherwise the replayed
+ * conversation history silently decides it — which is exactly the bug where
+ * switching the language mid-conversation appeared to do nothing.
+ *
+ * The single resolver used by BOTH entry points (AIChatPane and the terminal
+ * "Ask AI" path in useAiChat), so they can never diverge again.
+ */
+export function resolveAiLanguage(
+    selected: string | null | undefined,
+    appLanguage: LanguageId | string | null | undefined,
+): string {
+    if (selected && selected !== AUTO_LANGUAGE) return selected;
+    return AI_LANGUAGE_BY_UI_LANGUAGE[appLanguage as LanguageId] ?? 'English';
+}
+
+/**
+ * Build the language directive appended (last) to every AI system instruction.
+ *
+ * Emits an UNCONDITIONAL directive for every concrete language INCLUDING
+ * English. The previous version returned '' for English, so selecting English
+ * sent no directive at all — and because the backend replays the whole
+ * conversation every turn (`ChatHistoryStore::snapshot`), the model simply kept
+ * answering in whatever language the history was already in. The wording
+ * therefore has to override the earlier turns explicitly, not just state a
+ * preference.
+ *
+ * Command payloads are explicitly exempted: an "answer in Japanese" instruction
+ * must never translate a command inside an ```execute block that the auto-exec
+ * loop then runs on a real device.
+ *
+ * `Auto` still returns '' as a guard so a stale caller can never emit "answer in
+ * Auto" — callers must run the value through {@link resolveAiLanguage} first.
  */
 export function languageDirective(lang: string | null | undefined): string {
-    if (!lang || lang === 'English' || lang === AUTO_LANGUAGE) return '';
-    return ` You MUST answer in ${lang}.`;
+    if (!lang || lang === AUTO_LANGUAGE) return '';
+    return ` [OUTPUT LANGUAGE - HIGHEST PRIORITY] Write EVERY reply in ${lang}, starting with your very next reply. This overrides the language used anywhere earlier in this conversation: if your previous replies were in a different language, switch to ${lang} now and do not switch back. Applies to all prose, headings, explanations and code comments. Do NOT translate commands inside \`\`\`execute blocks, literal terminal output, file paths, or identifiers - reproduce those verbatim.`;
+}
+
+/**
+ * One-shot, in-band notice appended to the NEXT outgoing message of every open
+ * conversation right after the effective answer language changes.
+ *
+ * The system instruction already carries the directive on every turn, but the
+ * backend replays the entire history each turn, so N turns in the old language
+ * can still anchor a model. Putting the switch INTO the history at the exact
+ * turn it happened removes that ambiguity. Sent, never displayed — the
+ * transcript keeps the user's clean text (same convention as the
+ * watched-terminal context prefix in `useAiChat.sendMessage`).
+ */
+export function languageSwitchNotice(lang: string): string {
+    return `\n\n[Language switched] From this message on, reply ONLY in ${lang}, regardless of the language used earlier in this conversation.`;
 }

@@ -14,7 +14,7 @@ export const settings = {
     languageSection: 'Idioma',
     languageLabel: 'Idioma de visualización',
     languageHelp:
-      'Cambia el idioma de la interfaz de la aplicación. (El idioma de respuesta de la IA se configura por separado en el panel de chat de IA.)',
+      'Cambia el idioma de la interfaz de la aplicación. (El idioma de respuesta de la IA sigue esta configuración de forma predeterminada; puede anularlo en el panel de chat de IA.)',
     // Registro
     loggingSection: 'Registro',
     enableLogging: 'Activar registro',

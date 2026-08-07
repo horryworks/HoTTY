@@ -16,7 +16,8 @@ import {
 import { STORAGE_KEYS } from '../../constants/storage';
 import { aiProviderLabelKey } from '../../constants/aiProviders';
 import { formatAICost } from '../../constants/aiPricing';
-import { buildExecutionRules, languageDirective, AUTO_LANGUAGE, NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP, buildWatchTargetsBlock, withTargetDirective } from '../../constants/aiPrompts';
+import { buildExecutionRules, languageDirective, resolveAiLanguage, languageSwitchNotice, AUTO_LANGUAGE, NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP, buildWatchTargetsBlock, withTargetDirective } from '../../constants/aiPrompts';
+import { SUPPORTED_LANGUAGES } from '../../i18n';
 import { ExecutionModeBar } from './ExecutionModeBar';
 import { TerminalOutputBlock } from './TerminalOutputBlock';
 import { parseTerminalOutputMessage, notConnectedNote, declinedNote } from './terminalOutputUtils';
@@ -493,6 +494,21 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // the same user-approved folder, gated by the same toggle.
     const loggingEnabled = useSettingsStore(s => s.loggingEnabled);
     const loggingPath = useSettingsStore(s => s.loggingPath);
+    // App UI language + the AI answer language. Both live in the settings store,
+    // which is cross-window synced, so changing either reaches every open AI Chat
+    // pane (and its in-progress conversation) instead of one pane's local state.
+    // `?? …` guards a store that predates these fields (or a test mock that omits
+    // them), matching the `maxConcurrentStreams` convention above.
+    const appLanguage = useSettingsStore(s => s.language) ?? 'en';
+    const aiResponseLanguage = useSettingsStore(s => s.aiResponseLanguage) ?? AUTO_LANGUAGE;
+    const updateSetting = useSettingsStore(s => s.update);
+    // The concrete language the model is told to answer in. `Auto` follows the app
+    // UI language, so a Settings → General change re-authors the system prompt
+    // below without the user touching this pane.
+    const effectiveLanguage = useMemo(
+        () => resolveAiLanguage(aiResponseLanguage, appLanguage),
+        [aiResponseLanguage, appLanguage],
+    );
 
     // Auto-execute state. The de-dup guard and the executed-command badge set are
     // tracked PER TAB: their keys (blockKey = messageIndex:command, and command text)
@@ -580,18 +596,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         selectedModelRef,
         onStreamComplete: (tabId, msgs) => streamCompleteHandlerRef.current(tabId, msgs),
     });
-    const [selectedLanguage, setSelectedLanguage] = useState(() => {
-        const saved = localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE);
-        // Migrate the legacy '日本語' value (which never matched the 'Japanese'
-        // <option>, leaving the select with no selected option) to the canonical
-        // option value.
-        if (saved) return saved === '日本語' ? 'Japanese' : saved;
-        // First run: derive from the OS locale so a Japanese-locale user
-        // doesn't have to switch from English manually every time they
-        // install on a new machine. Must be a real <option> value ('Japanese',
-        // not '日本語') or the select renders with nothing selected.
-        return navigator.language?.toLowerCase().startsWith('ja') ? 'Japanese' : 'English';
-    });
     const defaultExpertise = aiPersonas?.[0]?.label || 'General Assistant';
     const [selectedExpertise, setSelectedExpertise] = useState(chatState?.selectedExpertise || defaultExpertise);
     // The Network Expert persona carries a mandatory start-of-session protocol
@@ -668,6 +672,12 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // chatState as a dependency.
     const chatStateRef = useRef(chatState);
     chatStateRef.current = chatState;
+    // One-shot language-switch notice (see languageSwitchNotice): the previous
+    // effective language, and the set of tabs whose NEXT outgoing message must
+    // carry the notice. A tab id is consumed (deleted) by whichever send site
+    // dispatches that tab first, so the notice goes out exactly once per tab.
+    const prevEffectiveLangRef = useRef<string | null>(null);
+    const langNudgeTabsRef = useRef<Set<string>>(new Set());
     // Refs the async auto-exec continuation reads to resolve/re-check a SPECIFIC
     // tab's linked session (auto-exec can complete on a background tab whose link
     // differs from the active tab's). Updated every render.
@@ -842,16 +852,27 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
 
 
     // ── Real-time System Prompt Update ──
+    // `effectiveLanguage` is derived from BOTH the AI-language setting and the app
+    // UI language, so a change to either regenerates the instruction — that is what
+    // makes an in-progress conversation switch language.
     useEffect(() => {
         const selectedPersona = aiPersonas?.find(p => p.label === selectedExpertise);
         const basePrompt = selectedPersona?.systemPrompt || aiPersonas?.[0]?.systemPrompt || 'You are a helpful assistant.';
         const extraInstructions = buildExecutionRules();
-        const langInstruction = languageDirective(selectedLanguage);
+        const langInstruction = languageDirective(effectiveLanguage);
         const newInstruction = `${basePrompt}${extraInstructions}${langInstruction}`;
         setLocalSystemInstruction(newInstruction);
         onChatStateChange?.({ systemInstruction: newInstruction });
+        // Arm the one-shot in-band switch notice on an ACTUAL change (never on
+        // mount) for EVERY open conversation: each tab is its own backend session
+        // with its own replayed history, so each needs the switch marked at its own
+        // next turn. Stale tab ids are harmless — they're only ever deleted.
+        if (prevEffectiveLangRef.current !== null && prevEffectiveLangRef.current !== effectiveLanguage) {
+            langNudgeTabsRef.current = new Set((chatStateRef.current?.tabs ?? []).map(t => t.id));
+        }
+        prevEffectiveLangRef.current = effectiveLanguage;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedExpertise, selectedLanguage, aiPersonas]);
+    }, [selectedExpertise, effectiveLanguage, aiPersonas]);
 
     // ── Scroll to bottom on new messages ──
     const prevMessagesLength = useRef(messages.length);
@@ -962,6 +983,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 const ls = linkableById.get(w.sessionId);
                 return { sessionId: w.sessionId, displayName: rec?.displayName ?? ls?.displayName ?? w.sessionId, status: rec?.status ?? ls?.status };
             })));
+            // One-shot language-switch notice for this tab (send-only, never stored
+            // or rendered — the transcript keeps the clean text, same convention as
+            // the watched-terminal context prefix). Appended at the END so
+            // useAiChat.sendMessage's "Terminal Output (Command:" prefix check and
+            // the auto-exec envelope parsing both still see an unchanged head.
+            const sentPm = langNudgeTabsRef.current.delete(tab.id)
+                ? pm + languageSwitchNotice(effectiveLanguage)
+                : pm;
             // Remove the head of the queue we're dispatching from.
             if (isHuman) onDequeuePendingUser?.(tab.id);
             else onDequeuePending?.(tab.id);
@@ -993,7 +1022,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             markStreaming(tab.id, true);
             setStreamingForTab(tab.id, '');
             armStreamWatchdog(tab.id);
-            tauriService.aiChatSend(aiBackendSessionId(paneId, tab.id), pm, selectedModel, sysInstr + targetsBlock, pmImages).catch((err) => {
+            tauriService.aiChatSend(aiBackendSessionId(paneId, tab.id), sentPm, selectedModel, sysInstr + targetsBlock, pmImages).catch((err) => {
                 logError('AI', 'aiChatSend invoke failed', err);
                 clearStreamWatchdog(tab.id);
                 markStreaming(tab.id, false);
@@ -1530,10 +1559,15 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             if (activeTabId) armStreamWatchdog(activeTabId);
 
             const images = imagesToSend.length > 0 ? imagesToSend : undefined;
+            // One-shot language-switch notice (send-only): the bubble rendered above
+            // and lastSentTextRef both keep the user's clean `text`.
+            const sentText = activeTabId && langNudgeTabsRef.current.delete(activeTabId)
+                ? text + languageSwitchNotice(effectiveLanguage)
+                : text;
             if (onSendMessage) {
-                onSendMessage(text, images);
+                onSendMessage(sentText, images);
             } else {
-                tauriService.aiChatSend(aiBackendSessionId(paneId, activeTabId), text, selectedModel, localSystemInstruction, images).catch((err) => {
+                tauriService.aiChatSend(aiBackendSessionId(paneId, activeTabId), sentText, selectedModel, localSystemInstruction, images).catch((err) => {
                     logError('AI', 'aiChatSend invoke failed', err);
                     if (activeTabId) clearStreamWatchdog(activeTabId);
                     setIsStreaming(false);
@@ -2168,15 +2202,21 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                             <label className="ai-chat-settings-popover-label">{t('aiChat.pane.labelLanguage')}</label>
                                             <select
                                                 className="ai-chat-settings-popover-select"
-                                                value={selectedLanguage}
-                                                onChange={(e) => {
-                                                    const lang = e.target.value;
-                                                    setSelectedLanguage(lang);
-                                                    localStorage.setItem(STORAGE_KEYS.GEMINI_LANGUAGE, lang);
-                                                }}
+                                                value={aiResponseLanguage}
+                                                onChange={(e) => updateSetting('aiResponseLanguage', e.target.value)}
                                             >
+                                                {/* Option VALUES are the prompt vocabulary interpolated into
+                                                    languageDirective, so they stay untranslated English names.
+                                                    Only Auto's LABEL is localized, and it names the app UI
+                                                    language it currently resolves to. */}
                                                 {[AUTO_LANGUAGE, 'English', 'Japanese', 'Chinese', 'Korean', 'Spanish', 'French', 'German', 'Russian'].map(lang => (
-                                                    <option key={lang} value={lang}>{lang}</option>
+                                                    <option key={lang} value={lang}>
+                                                        {lang === AUTO_LANGUAGE
+                                                            ? t('aiChat.pane.languageAuto', {
+                                                                lang: SUPPORTED_LANGUAGES.find(l => l.id === appLanguage)?.label ?? 'English',
+                                                            })
+                                                            : lang}
+                                                    </option>
                                                 ))}
                                             </select>
                                         </div>

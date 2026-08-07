@@ -14,7 +14,7 @@ export const settings = {
     languageSection: '言語',
     languageLabel: '表示言語',
     languageHelp:
-      'アプリのインターフェースの言語を変更します。（AIの応答言語はAIチャットパネルで個別に設定します。）',
+      'アプリのインターフェースの言語を変更します。（AIの応答言語は既定でこの設定に従います。AIチャットパネルで個別に指定することもできます。）',
     // ログ
     loggingSection: 'ログ',
     enableLogging: 'ログを有効にする',

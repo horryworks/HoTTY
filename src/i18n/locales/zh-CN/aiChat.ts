@@ -85,6 +85,7 @@ export const aiChat = {
     labelPersona: '角色',
     viewPrompt: '查看提示词',
     labelLanguage: '语言',
+    languageAuto: '自动 ({{lang}})',
     labelRegion: '区域',
     sendTitleSelectModel: '请先选择一个模型',
     sendTitleEmpty: '请先输入消息',

@@ -9,14 +9,5 @@
     "against the gate again and the report says the acceptance expired. Set it to the",
     "date the blocker is expected to clear, not to a comfortable distance."
   ],
-  "ignore": [
-    {
-      "id": "GHSA-mh99-v99m-4gvg",
-      "package": "brace-expansion",
-      "severity": "high",
-      "reason": "DoS (OOM) in glob expansion. devDependency only — reaches eslint/typescript-eslint via minimatch and is never bundled into the shipped Tauri app, so it is not reachable by end users; exploiting it needs an attacker-controlled glob pattern at lint time. The only patched release (5.0.8, published 2026-07-23) is still inside the 7-day Renovate minimumReleaseAge cooldown, and the second copy (1.1.16) sits under minimatch@3 in eslint, which requires brace-expansion@^1 — forcing 5.0.8 there is a major-version override. Accepted 2026-07-26 pending the cooldown.",
-      "accepted": "2026-07-26",
-      "expires": "2026-07-30"
-    }
-  ]
+  "ignore": []
 }

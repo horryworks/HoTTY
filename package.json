@@ -1,7 +1,7 @@
 {
   "name": "hotty-rust-tauri",
   "private": true,
-  "version": "2.0.14",
+  "version": "2.0.15",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "engines": {
@@ -23,7 +23,11 @@
     "test:ui": "vitest --ui"
   },
   "overrides": {
-    "postcss": "8.5.20"
+    "postcss": "8.5.23",
+    "js-yaml": "4.3.1",
+    "undici": "7.29.0",
+    "brace-expansion@1": "1.1.18",
+    "brace-expansion@5": "5.0.9"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

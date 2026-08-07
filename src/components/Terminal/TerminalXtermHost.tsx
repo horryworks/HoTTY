@@ -38,6 +38,17 @@ interface TerminalXtermHostProps {
 
 const NO_WRAP_COLS = 5000;
 
+// Initial-measurement retry. The first performResize runs before xterm has
+// painted, so the renderer usually has no cell metrics yet and nothing can be
+// measured; the ResizeObserver only fires on an actual size change, so without
+// a retry nothing would try again while the session sits in 'connecting'. The
+// backend waits up to 2s for that first report to size the INITIAL pty-req
+// (resolve_initial_pty_size), and missing the window leaves a width-latching
+// device (Huawei USG/VRP) pinned to the 80x24 fallback for the whole session.
+// ~16ms x 60 ~= 1s, comfortably inside that window.
+const MEASURE_RETRY_MS = 16;
+const MEASURE_RETRY_LIMIT = 60;
+
 /**
  * Hosts the xterm.js Terminal instance. Owns:
  *  - DOM mounting / re-attaching of the xterm element
@@ -203,6 +214,22 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
     el.addEventListener('paste', suppressPaste, true);
 
     performResize();
+    // Retry until the renderer produces a real measurement (see the constants
+    // above for why a single pass at mount is not enough).
+    let retries = 0;
+    let measureTimer: number | undefined;
+    const retryMeasure = () => {
+      measureTimer = undefined;
+      if (hasMeasuredRef.current) return;
+      performResize();
+      if (!hasMeasuredRef.current && ++retries < MEASURE_RETRY_LIMIT) {
+        measureTimer = window.setTimeout(retryMeasure, MEASURE_RETRY_MS);
+      }
+    };
+    if (!hasMeasuredRef.current) {
+      measureTimer = window.setTimeout(retryMeasure, MEASURE_RETRY_MS);
+    }
+
     const ro = new ResizeObserver(performResize);
     ro.observe(el);
 
@@ -237,6 +264,7 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
     }
 
     return () => {
+      if (measureTimer !== undefined) clearTimeout(measureTimer);
       ro.disconnect();
       lineFeedDispose?.dispose();
       cursorMoveDispose?.dispose();
@@ -255,8 +283,13 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
     return () => cancelAnimationFrame(raf);
   }, [session, fontSize, fontFamily, scrollback, performResize]);
 
+  // Focus the active terminal — but never while it is still connecting. The
+  // pane is mounted during 'connecting' (so xterm can measure before the
+  // pty-req) and the modal connect dialog is on top of it at that point;
+  // grabbing focus here would fight the dialog's focus trap. App focuses the
+  // terminal when the dialog hands off on 'connected'.
   useEffect(() => {
-    if (active) session.term.focus();
+    if (active && session.status !== 'connecting') session.term.focus();
   }, [active, session]);
 
   return (

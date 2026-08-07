@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { PersonaDefinition, ChatImage } from '../types/appTypes';
 import type { SessionRecord } from './useSessionManager';
 import type { FeaturePaneInfo } from '../utils/paneTypes';
-import { STORAGE_KEYS } from '../constants/storage';
-import { buildExecutionRules, languageDirective, watchedOutputSection, buildWatchTargetsBlock } from '../constants/aiPrompts';
+import { buildExecutionRules, languageDirective, resolveAiLanguage, watchedOutputSection, buildWatchTargetsBlock } from '../constants/aiPrompts';
+import { useSettingsStore } from '../stores/settingsStore';
 import { tauriService } from '../services/tauriService';
 import { sessionBindingKey } from '../utils/sessionBindingKey';
 import { redactSecrets } from '../utils/redaction';
@@ -726,6 +726,9 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
 
     // Initialize state if missing, or set active tab's link to the target terminal
     let existingState = aiChatStatesRef.current.get(aiPaneId);
+    // Captured BEFORE the create below: only a pane we're bringing into existence
+    // needs its system instruction seeded here (see the seed block after this).
+    const isNewPaneState = !existingState;
     if (!existingState) {
       existingState = createDefaultAiChatState(activeTermId, activeSession?.displayName);
       updateAiChatStateRef.current(aiPaneId, existingState);
@@ -738,12 +741,22 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       }
     }
 
-    const lang = localStorage.getItem(STORAGE_KEYS.GEMINI_LANGUAGE) || 'English';
-    const expertiseLabel = existingState?.selectedExpertise;
-    const systemInstruction = `${resolvePersonaPrompt(expertiseLabel)}${languageDirective(lang)}`;
     const userPrompt = `${question}\n\n\`\`\`\n${finalSelection}\n\`\`\``;
 
-    updateAiChatStateRef.current(aiPaneId, { systemInstruction });
+    // Seed the system instruction ONLY for a pane whose state we just created. A
+    // MOUNTED AIChatPane owns `systemInstruction` — its effect re-authors persona +
+    // execution rules + language whenever any of them changes — so overwriting it
+    // here used to (a) drop the language directive, because this path resolved
+    // `localStorage || 'English'` and English produced an EMPTY directive, and
+    // (b) clobber the user's persona, since `chatState.selectedExpertise` is never
+    // written back by the pane. Same resolver as the pane, so `Auto` follows the
+    // app UI language identically.
+    if (isNewPaneState) {
+      const { language, aiResponseLanguage } = useSettingsStore.getState();
+      const lang = resolveAiLanguage(aiResponseLanguage, language);
+      const systemInstruction = `${resolvePersonaPrompt(existingState?.selectedExpertise)}${languageDirective(lang)}`;
+      updateAiChatStateRef.current(aiPaneId, { systemInstruction });
+    }
     // Resolve the active tab from the state we're operating on (aiChatStatesRef is
     // updated in a post-commit effect, so it can be stale right after a create).
     const targetTabId = getActiveTab(existingState)?.id;

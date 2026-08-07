@@ -14,7 +14,7 @@ export const settings = {
     languageSection: 'Langue',
     languageLabel: "Langue d'affichage",
     languageHelp:
-      "Change la langue de l'interface de l'application. (La langue des réponses de l'IA se règle séparément dans le panneau de chat IA.)",
+      "Change la langue de l'interface de l'application. (La langue des réponses de l'IA suit ce réglage par défaut ; vous pouvez la remplacer dans le panneau de chat IA.)",
     // Logging
     loggingSection: 'Journalisation',
     enableLogging: 'Activer la journalisation',

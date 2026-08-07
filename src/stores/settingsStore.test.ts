@@ -67,6 +67,17 @@ describe('settingsStore', () => {
     expect(useSettingsStore.getState().language).toBe('ja');
   });
 
+  it("defaults the AI response language to 'Auto' (follows the UI language)", () => {
+    expect(useSettingsStore.getState().aiResponseLanguage).toBe('Auto');
+  });
+
+  it('updates the AI response language and restores Auto on reset', () => {
+    useSettingsStore.getState().update('aiResponseLanguage', 'Japanese');
+    expect(useSettingsStore.getState().aiResponseLanguage).toBe('Japanese');
+    useSettingsStore.getState().reset();
+    expect(useSettingsStore.getState().aiResponseLanguage).toBe('Auto');
+  });
+
   it('defaults pane background to color mode with no image', () => {
     const s = useSettingsStore.getState();
     expect(s.paneBackgroundMode).toBe('color');

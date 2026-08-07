@@ -211,6 +211,8 @@ export const help = {
       '<0>Chien de garde du flux :</0> si un fournisseur d\'IA cesse d\'envoyer des données au milieu d\'une réponse (coupure réseau, backend bloqué), la requête en cours est automatiquement annulée après 3 minutes de silence et un message d\'erreur apparaît dans le chat — finis les états « diffusion » bloqués.',
     attachImages:
       '<0>Joindre des images :</0> Collez une image (Ctrl + V), déposez des fichiers image sur la zone de message ou utilisez le bouton trombone pour envoyer des captures à l\'IA. PNG, JPEG, WebP et GIF sont pris en charge (jusqu\'à 5 images, 5 Mo chacune). Le modèle sélectionné doit prendre en charge les images.',
+    answerLanguage:
+      '<0>Langue des réponses :</0> Par défaut, l\'IA répond dans la langue de l\'interface : changer <1>Paramètres → Général → Langue d\'affichage</1> change donc aussi la langue de ses réponses. Pour en fixer une autre, ouvrez <2>paramètres</2> en haut du panneau Chat IA et choisissez une langue — <3>Auto</3> suit l\'interface et indique de quelle langue il s\'agit actuellement. Ce choix est partagé par toutes les conversations de toutes les fenêtres, y compris celles déjà en cours, et s\'applique à partir de votre message suivant. Les commandes, la sortie du terminal, les chemins de fichiers et les identifiants ne sont jamais traduits.',
     askAiHeading: 'Demander à l\'IA (clic droit)',
     askAiBody:
       'Sélectionnez du texte dans le terminal (ou cliquez sur un <0>Marqueur de terminal</0> pour sélectionner tout un bloc de sortie), puis faites un clic droit et saisissez votre question dans le champ <1>« Demander à l\'IA »</1> — appuyez sur Entrée pour envoyer. HoTTY ouvre le chat IA avec votre question et le texte sélectionné.',
@@ -354,6 +356,6 @@ export const help = {
     unusedPane:
       '<0>Arrière-plan des volets inutilisés :</0> dans <1>Paramètres → Apparence</1>, choisissez une couleur unie ou une image personnalisée à afficher dans les volets de grille vides.',
     language:
-      '<0>Langue de l\'interface :</0> changez la langue de l\'interface dans <1>Paramètres → Général → Langue d\'affichage</1>. HoTTY est disponible en English, 日本語, 简体中文, 繁體中文, 한국어, Русский, Español et Français — le changement s\'applique instantanément. (La langue de réponse de l\'IA se configure séparément dans le panneau de chat IA.)',
+      '<0>Langue de l\'interface :</0> changez la langue de l\'interface dans <1>Paramètres → Général → Langue d\'affichage</1>. HoTTY est disponible en English, 日本語, 简体中文, 繁體中文, 한국어, Русский, Español et Français — le changement s\'applique instantanément. (La langue de réponse de l\'IA suit ce réglage par défaut ; vous pouvez la remplacer dans les paramètres du panneau de chat IA.)',
   },
 };

@@ -56,15 +56,18 @@ interface SessionDialogProps {
     onConnect: (payload: ConnectSubmitPayload) => string | null | void;
     /**
      * Called once a session initiated via `onConnect` reaches 'connected'.
-     * The host reveals + activates the pane, closes the dialog, and focuses
-     * the terminal. The dialog stays open until this fires (or the attempt
-     * fails / is cancelled), so the user waits inside the dialog.
+     * The host closes the dialog and focuses the terminal. (The pane itself is
+     * allocated by the host back in `onConnect`, so the terminal is mounted and
+     * measuring behind this dialog for the whole attempt.) The dialog stays open
+     * until this fires (or the attempt fails / is cancelled), so the user waits
+     * inside the dialog.
      */
     onConnected?: (sessionId: string) => void;
     /**
      * Called when the user cancels an in-progress connection. The host tears
-     * down the never-revealed session (disconnects the backend / cancels a
-     * pending host-key prompt). The dialog itself stays open and editable.
+     * down the session (disconnects the backend / cancels a pending host-key
+     * prompt) and releases the pane it allocated in `onConnect`. The dialog
+     * itself stays open and editable.
      */
     onCancelConnect?: (sessionId: string) => void;
     /**
@@ -328,8 +331,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         }
     }, [onConnect]);
 
-    // Abort an in-progress connection: ask the host to tear down the
-    // never-revealed session, then return the form to an editable state.
+    // Abort an in-progress connection: ask the host to tear down the session
+    // and release its pane, then return the form to an editable state.
     // The dialog itself stays open (the user can fix and retry, or close).
     const handleCancelConnect = useCallback(() => {
         const id = connectingSessionIdRef.current;
@@ -473,7 +476,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             if (rec) connectingSeenRef.current = true;
             const status = rec?.status;
             if (status === 'connected') {
-                // Established: hand off to the host (reveal pane + close + focus).
+                // Established: hand off to the host (close dialog + focus).
                 setConnectError(null);
                 setConnectingSessionId(null);
                 onConnected?.(activeId);

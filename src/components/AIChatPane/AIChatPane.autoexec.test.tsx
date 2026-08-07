@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 
 // Shared, mutable holders captured by the mocks below. `vi.hoisted` runs before
 // the module mocks are evaluated, so the holders exist when the factories close
@@ -968,8 +968,12 @@ describe('AIChatPane image attachments', () => {
                 clipboardData: { items: [{ kind: 'file', type: file.type, getAsFile: () => file }] },
             });
         });
-        // FileReader.readAsDataURL resolves on a macrotask — flush a real timer.
-        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+        // FileReader.readAsDataURL resolves on a macrotask. POLL for the settled
+        // thumbnail rather than assuming a single `setTimeout(0)` tick is enough:
+        // under a fully loaded suite run the FIRST read in a worker takes several
+        // ticks, so the one-tick flush failed this deterministically at 145 files
+        // while passing when the file ran alone.
+        await waitFor(() => expect(document.querySelector('.ai-chat-thumb-img')).toBeTruthy());
     }
 
     it('pastes an image → shows a thumbnail → sends it as an image-only message', async () => {

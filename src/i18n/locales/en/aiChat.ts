@@ -85,6 +85,7 @@ export const aiChat = {
     labelPersona: 'Persona',
     viewPrompt: 'View prompt',
     labelLanguage: 'Language',
+    languageAuto: 'Auto ({{lang}})',
     labelRegion: 'Region',
     sendTitleSelectModel: 'Select a model first',
     sendTitleEmpty: 'Type a message first',
