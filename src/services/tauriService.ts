@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import {
@@ -6,7 +6,7 @@ import {
   writeText as clipboardWriteText,
 } from '@tauri-apps/plugin-clipboard-manager';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { ask as dialogAsk } from '@tauri-apps/plugin-dialog';
+import { ask as dialogAsk, open as dialogOpen } from '@tauri-apps/plugin-dialog';
 import { redactSensitive } from '../utils/redaction';
 import { WINDOW_LABEL } from '../utils/windowLabel';
 import type {
@@ -368,6 +368,27 @@ export const tauriService = {
 
   async selectFolder(): Promise<string | null> {
     return invoke<string | null>('select_folder');
+  },
+
+  /**
+   * Native single-file picker. Unlike the pickers above there is no backend
+   * command behind this one — it is the `plugin-dialog` API directly — but it is
+   * wrapped here anyway so components never import a Tauri API themselves
+   * (ADR-004). Returns null when the user cancels.
+   */
+  async selectFile(title: string): Promise<string | null> {
+    const selected = await dialogOpen({ multiple: false, directory: false, title });
+    return typeof selected === 'string' ? selected : null;
+  },
+
+  /**
+   * Convert an absolute filesystem path into a URL the webview can load through
+   * Tauri's asset protocol (scoped by `assetProtocol.scope` in
+   * `tauri.conf.json`). Synchronous — `convertFileSrc` is pure string rewriting,
+   * not IPC — so callers must not await it.
+   */
+  toAssetUrl(path: string): string {
+    return convertFileSrc(path);
   },
 
   async confirmLogDir(path: string): Promise<boolean> {

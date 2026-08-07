@@ -67,7 +67,8 @@ pub async fn ping_monitor_start(
             logging_enabled: effective_logging_enabled,
             logging_path,
         },
-    );
+    )
+    .await;
     Ok(())
 }
 
@@ -78,7 +79,7 @@ pub async fn ping_monitor_stop(
     session_id: String,
 ) -> Result<(), String> {
     let mut monitors = state.monitors.lock().await;
-    crate::services::ping_monitor::stop_monitor(&mut monitors, &session_id);
+    crate::services::ping_monitor::stop_monitor(&mut monitors, &session_id).await;
     Ok(())
 }
 

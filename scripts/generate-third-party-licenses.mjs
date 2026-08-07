@@ -160,7 +160,16 @@ function main() {
   };
 
   if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
-  writeFileSync(outFile, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+  // Written MINIFIED (no `null, 2` indent). This is a generated, gitignored
+  // artifact that only Rust ever reads (commands/licenses.rs deserializes it
+  // with serde, which is whitespace-insensitive) and that reaches the frontend
+  // as an already-parsed struct over IPC — no human and no JS ever sees the
+  // text, so there is nothing to keep readable.
+  // Measured: 713,110 → 665,776 bytes raw (−47 KB). Post-LZMA the installer
+  // only shrinks ~2-4 KB, so this is NOT an installer-size win; the payoff is
+  // 47 KB less on disk after install and 47 KB less to read + parse every time
+  // the About → Third-Party Licenses modal is opened.
+  writeFileSync(outFile, JSON.stringify(manifest) + '\n', 'utf8');
   console.log(`[licenses] wrote ${packages.length} entries (npm: ${npm.length}, rust: ${rust.length}) → ${outFile}`);
 }
 
@@ -171,7 +180,7 @@ try {
   console.warn('[licenses] generation failed, writing empty manifest:', e?.message ?? e);
   try {
     if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
-    writeFileSync(outFile, JSON.stringify({ generatedAt: new Date().toISOString(), counts: { npm: 0, rust: 0, total: 0 }, packages: [] }, null, 2) + '\n', 'utf8');
+    writeFileSync(outFile, JSON.stringify({ generatedAt: new Date().toISOString(), counts: { npm: 0, rust: 0, total: 0 }, packages: [] }) + '\n', 'utf8');
   } catch { /* truly give up, but still exit 0 */ }
 }
 process.exit(0);

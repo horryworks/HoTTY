@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { GridLayout } from './components/GridLayout/GridLayout';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { sidebarPaneId } from './components/Sidebar/sidebarHelpers';
@@ -8,17 +8,33 @@ import { buildTabItems, type ConversationSummary } from './components/TabBar/tab
 import { conversationColorIndex } from './utils/conversationColor';
 import { TerminalView } from './components/Terminal/Terminal';
 import { ConnectingOverlay } from './components/ConnectingOverlay/ConnectingOverlay';
-import { LogViewerPane } from './components/LogViewerPane/LogViewerPane';
-import { PingMonitorPane } from './components/PingMonitorPane/PingMonitorPane';
-import { InterfaceTrafficPane } from './components/InterfaceTrafficPane/InterfaceTrafficPane';
-import { FileServerPane } from './components/FileServerPane/FileServerPane';
-import { WebBrowserPane } from './components/WebBrowserPane/WebBrowserPane';
-import { AIChatPane } from './components/AIChatPane/AIChatPane';
-import { SessionDialog, type ConnectSubmitPayload } from './components/SessionDialog/SessionDialog';
-import { SaveToHostTreeDialog } from './components/SaveToHostTreeDialog/SaveToHostTreeDialog';
-import { SettingsModal, type SettingsTab } from './components/SettingsModal/SettingsModal';
-import { CustomThemeCreator } from './components/CustomThemeCreator/CustomThemeCreator';
-import { HelpModal } from './components/HelpModal/HelpModal';
+// --- Lazily loaded panes and modals -----------------------------------------
+// None of these are on the first-paint path: a feature pane only mounts once
+// the user creates it, and a modal only once it is opened. Splitting them out
+// keeps ~300 KB of minified JS and ~110 KB of CSS out of the startup parse.
+//
+// KEEP these as dynamic import()s. A static `import type` for their prop types
+// is fine — `verbatimModuleSyntax: true` erases it entirely — but a plain
+// `import { X, type Y }` would keep the VALUE import alive and silently defeat
+// the split. That is why the two type imports below are separate statements.
+const LogViewerPane = lazy(() => import('./components/LogViewerPane/LogViewerPane').then((m) => ({ default: m.LogViewerPane })));
+const PingMonitorPane = lazy(() => import('./components/PingMonitorPane/PingMonitorPane').then((m) => ({ default: m.PingMonitorPane })));
+const InterfaceTrafficPane = lazy(() => import('./components/InterfaceTrafficPane/InterfaceTrafficPane').then((m) => ({ default: m.InterfaceTrafficPane })));
+const FileServerPane = lazy(() => import('./components/FileServerPane/FileServerPane').then((m) => ({ default: m.FileServerPane })));
+const WebBrowserPane = lazy(() => import('./components/WebBrowserPane/WebBrowserPane').then((m) => ({ default: m.WebBrowserPane })));
+const AIChatPane = lazy(() => import('./components/AIChatPane/AIChatPane').then((m) => ({ default: m.AIChatPane })));
+const SessionDialog = lazy(() => import('./components/SessionDialog/SessionDialog').then((m) => ({ default: m.SessionDialog })));
+const SaveToHostTreeDialog = lazy(() => import('./components/SaveToHostTreeDialog/SaveToHostTreeDialog').then((m) => ({ default: m.SaveToHostTreeDialog })));
+const SettingsModal = lazy(() => import('./components/SettingsModal/SettingsModal').then((m) => ({ default: m.SettingsModal })));
+const CustomThemeCreator = lazy(() => import('./components/CustomThemeCreator/CustomThemeCreator').then((m) => ({ default: m.CustomThemeCreator })));
+const HelpModal = lazy(() => import('./components/HelpModal/HelpModal').then((m) => ({ default: m.HelpModal })));
+import type { ConnectSubmitPayload } from './components/SessionDialog/SessionDialog';
+import type { SettingsTab } from './components/SettingsModal/SettingsModal';
+// SshHostKeyModal / IapVmStartModal stay EAGER: they take no props and register
+// their tauriService prompt listeners in a mount effect, so deferring them would
+// mean the listener is never attached (they are always rendered, never gated).
+// PasteConfirmationModal / AiConsentModal stay eager too — ~2 KB each and on the
+// Ctrl+V hot path, where a one-frame delay would be felt.
 import { SshHostKeyModal } from './components/SshHostKeyModal/SshHostKeyModal';
 import { IapVmStartModal } from './components/IapVmStartModal/IapVmStartModal';
 import { PasteConfirmationModal } from './components/PasteConfirmationModal/PasteConfirmationModal';
@@ -39,7 +55,7 @@ import { useWebBrowserBookmarkStore } from './stores/webBrowserBookmarkStore';
 import { useWebBrowserZoomStore } from './stores/webBrowserZoomStore';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from './stores/settingsStore';
-import i18n from './i18n';
+import { changeLanguage } from './i18n';
 import { applyTheme } from './utils/applyTheme';
 import { DEFAULT_THEMES, isBuiltInThemeId } from './themes/defaults';
 import { useThemes } from './hooks/useThemes';
@@ -57,6 +73,28 @@ import {
   type FeaturePaneType,
 } from './utils/paneTypes';
 import './App.css';
+
+/**
+ * Mount-once latch for the lazily loaded modals.
+ *
+ * These modals render `null` while closed but must stay MOUNTED once opened.
+ * SessionDialog alone keeps its typed host/port/username/password, the selected
+ * host id, `treePanelWidth`, and `dialogSize`/`dialogPos` — the DRAGGED position
+ * — in local state, and runs effects that are not gated on `isOpen` (the
+ * sessions-watching effect that drives the connect handoff, and the IAP progress
+ * listener). A plain `{open && <Modal/>}` would silently discard all of that on
+ * every close.
+ *
+ * Latching defers the chunk fetch to first use while preserving the existing
+ * "mounted, renders null when closed" contract exactly. Setting state during
+ * render is React's sanctioned derive-from-props pattern and is already used in
+ * SettingsModal for its `prevOpen` tracking.
+ */
+function useMountLatch(open: boolean): boolean {
+  const [mounted, setMounted] = useState(open);
+  if (open && !mounted) setMounted(true);
+  return mounted;
+}
 
 function App() {
   // Single per-window owner of the AI auth lifecycle (auto re-auth + event
@@ -289,6 +327,14 @@ function App() {
 
   const saveToTreeSession = saveToTreeSessionId ? sessions.get(saveToTreeSessionId) : undefined;
 
+  // Each lazy modal's chunk is fetched on its first open and the component then
+  // stays mounted for the rest of the session (see useMountLatch above).
+  const showSessionDialog = useMountLatch(connectOpen);
+  const showSaveToTree = useMountLatch(saveToTreeSessionId !== null);
+  const showSettings = useMountLatch(settingsOpen);
+  const showCustomTheme = useMountLatch(customThemeOpen);
+  const showHelp = useMountLatch(helpOpen);
+
   const { themesData, deleteTheme } = useThemes();
 
   // If the currently selected theme was deleted/missing, fall back to 'dark'.
@@ -316,10 +362,13 @@ function App() {
     }).catch(() => {});
   }, []);
 
-  // Apply the selected UI language app-wide. react-i18next re-renders every
-  // useTranslation()/<Trans> consumer on changeLanguage — live, no reload.
+  // Apply the selected UI language app-wide. The `changeLanguage` wrapper
+  // fetches that language's catalog chunk FIRST and only then switches, so no
+  // frame ever renders with the target language selected but its strings
+  // missing. react-i18next re-renders every useTranslation()/<Trans> consumer
+  // on the switch — live, no reload.
   useEffect(() => {
-    i18n.changeLanguage(language);
+    void changeLanguage(language);
     document.documentElement.lang = language;
   }, [language]);
 
@@ -588,6 +637,15 @@ function App() {
               </div>
             )}
           >
+          {/* Feature panes are lazy chunks. One boundary covers the whole
+              conditional chain — only one branch can be live per pane, so there
+              is no cross-contamination. `fallback={null}` because the ~1 frame
+              a local chunk takes is shorter than any spinner would be useful
+              for, and a visible fallback would flash inside an otherwise-themed
+              pane. The ErrorBoundary sits OUTSIDE this Suspense on purpose: a
+              failed chunk load then surfaces as the pane's themed
+              "crashed / Retry" card instead of a blank pane. */}
+          <Suspense fallback={null}>
           {session ? (
             // Mount the terminal even while connecting, with the connecting
             // overlay stacked on top of it. xterm therefore renders, measures
@@ -706,6 +764,7 @@ function App() {
               <span className="drop-hint">{t('chrome.pane.dropTabHere')}</span>
             </div>
           )}
+          </Suspense>
           </ErrorBoundary>
         </div>
       </div>
@@ -792,38 +851,64 @@ function App() {
         </div>
       </div>
 
-      <SessionDialog
-        open={connectOpen}
-        onClose={() => setConnectOpen(false)}
-        onConnect={handleConnectSubmit}
-        onConnected={handleSessionConnected}
-        onCancelConnect={handleCancelConnect}
-        sessions={sessions}
-        onOpenBookmark={handleOpenBookmark}
-      />
-      <SaveToHostTreeDialog
-        open={saveToTreeSessionId !== null}
-        initialName={saveToTreeSession?.displayName ?? ''}
-        protocol={saveToTreeSession?.protocol ?? null}
-        config={saveToTreeSession?.connectionConfig}
-        onClose={() => setSaveToTreeSessionId(null)}
-      />
-      <SettingsModal
-        open={settingsOpen}
-        onClose={() => { setSettingsOpen(false); setSettingsInitialTab(undefined); }}
-        themesData={themesData}
-        onOpenCustomThemeCreator={() => setCustomThemeOpen(true)}
-        onDeleteTheme={handleDeleteTheme}
-        initialTab={settingsInitialTab}
-      />
-      <CustomThemeCreator
-        isOpen={customThemeOpen}
-        themesData={themesData}
-        currentTheme={themeId}
-        onSave={handleCustomThemeSaved}
-        onCancel={() => setCustomThemeOpen(false)}
-      />
-      <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
+      {/* One Suspense boundary PER modal, never a shared one: a shared boundary
+          would suspend when any latched-mounted sibling's chunk resolves,
+          replacing them all with the fallback and unmounting exactly the state
+          the latch exists to protect. `fallback={null}` because the chunk
+          resolves in ~1 frame from the local asset protocol — a visible
+          placeholder would just flash where a dialog is expected. */}
+      {showSessionDialog && (
+        <Suspense fallback={null}>
+          <SessionDialog
+            open={connectOpen}
+            onClose={() => setConnectOpen(false)}
+            onConnect={handleConnectSubmit}
+            onConnected={handleSessionConnected}
+            onCancelConnect={handleCancelConnect}
+            sessions={sessions}
+            onOpenBookmark={handleOpenBookmark}
+          />
+        </Suspense>
+      )}
+      {showSaveToTree && (
+        <Suspense fallback={null}>
+          <SaveToHostTreeDialog
+            open={saveToTreeSessionId !== null}
+            initialName={saveToTreeSession?.displayName ?? ''}
+            protocol={saveToTreeSession?.protocol ?? null}
+            config={saveToTreeSession?.connectionConfig}
+            onClose={() => setSaveToTreeSessionId(null)}
+          />
+        </Suspense>
+      )}
+      {showSettings && (
+        <Suspense fallback={null}>
+          <SettingsModal
+            open={settingsOpen}
+            onClose={() => { setSettingsOpen(false); setSettingsInitialTab(undefined); }}
+            themesData={themesData}
+            onOpenCustomThemeCreator={() => setCustomThemeOpen(true)}
+            onDeleteTheme={handleDeleteTheme}
+            initialTab={settingsInitialTab}
+          />
+        </Suspense>
+      )}
+      {showCustomTheme && (
+        <Suspense fallback={null}>
+          <CustomThemeCreator
+            isOpen={customThemeOpen}
+            themesData={themesData}
+            currentTheme={themeId}
+            onSave={handleCustomThemeSaved}
+            onCancel={() => setCustomThemeOpen(false)}
+          />
+        </Suspense>
+      )}
+      {showHelp && (
+        <Suspense fallback={null}>
+          <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
+        </Suspense>
+      )}
       <SshHostKeyModal />
       <IapVmStartModal />
       <UpdateNotification />

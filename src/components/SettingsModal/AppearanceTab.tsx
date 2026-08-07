@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { convertFileSrc } from '@tauri-apps/api/core';
 import { useSettingsStore, DEFAULT_PROMPT_PATTERNS } from '../../stores/settingsStore';
 import { DEFAULT_THEMES, DEFAULT_THEME_IDS, isBuiltInThemeId } from '../../themes/defaults';
 import { tauriService } from '../../services/tauriService';
@@ -214,7 +213,7 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
               type="button"
               onClick={async () => {
                 const path = await tauriService.selectImage();
-                if (path) update('paneBackgroundImage', convertFileSrc(path));
+                if (path) update('paneBackgroundImage', tauriService.toAssetUrl(path));
               }}
             >
               {t('settings.appearance.browse')}

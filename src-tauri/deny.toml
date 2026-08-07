@@ -42,7 +42,18 @@ ignore = [
 [bans]
 multiple-versions = "warn" # solo project: surface duplicate versions, don't block
 wildcards = "deny"         # no wildcard ("*") version requirements
-deny = []                  # add a crate here to ban it outright
+deny = [
+  # ring left the build in v2.0.16-beta1: jsonwebtoken 10 made its crypto backend
+  # selectable, so Vertex AI's JWT signing moved onto aws-lc-rs, which russh
+  # already compiles. ring is now reachable ONLY as rustls-webpki's optional
+  # `ring` feature, which is off — so it can return with no Cargo.toml change at
+  # all (a dependency flipping its default features is enough). Cargo.lock still
+  # carries a ring entry for exactly that reason (the lock is resolved without
+  # features), which makes the absence easy to misread as presence and vice
+  # versa. This ban turns a silent return into a hard CI failure.
+  # Lift it deliberately if a ring-backed dependency is ever genuinely wanted.
+  { crate = "ring", reason = "removed in v2.0.16-beta1 — aws-lc-rs is the single crypto backend; see the jsonwebtoken entry in Cargo.toml" },
+]
 
 [sources]
 unknown-registry = "deny"

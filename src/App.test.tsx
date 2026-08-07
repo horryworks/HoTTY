@@ -233,35 +233,43 @@ describe('App', () => {
     expect(screen.getByTestId('open-settings')).toBeTruthy();
   });
 
-  it('opens ConnectForm when new-tab button is clicked', () => {
+  // NOTE on the `await screen.findByTestId(...)` calls below: SessionDialog,
+  // SettingsModal and HelpModal are React.lazy chunks in App.tsx, so they mount
+  // one microtask after the click that opens them rather than synchronously.
+  // vi.mock intercepts the dynamic import() exactly as it did the static one, so
+  // the mocks themselves are unchanged — only the timing is. Unmount on close is
+  // still synchronous, so the `queryByTestId(...)).toBeNull()` assertions stay as
+  // they are.
+
+  it('opens ConnectForm when new-tab button is clicked', async () => {
     render(<App />);
     expect(screen.queryByTestId('connect-form')).toBeNull();
     fireEvent.click(screen.getByTestId('new-btn'));
-    expect(screen.getByTestId('connect-form')).toBeTruthy();
+    expect(await screen.findByTestId('connect-form')).toBeTruthy();
   });
 
-  it('closes ConnectForm on cancel', () => {
+  it('closes ConnectForm on cancel', async () => {
     render(<App />);
     fireEvent.click(screen.getByTestId('new-btn'));
-    expect(screen.getByTestId('connect-form')).toBeTruthy();
+    expect(await screen.findByTestId('connect-form')).toBeTruthy();
     fireEvent.click(screen.getByTestId('cancel-connect'));
     expect(screen.queryByTestId('connect-form')).toBeNull();
   });
 
-  it('opens and closes SettingsModal', () => {
+  it('opens and closes SettingsModal', async () => {
     render(<App />);
     expect(screen.queryByTestId('settings-modal')).toBeNull();
     fireEvent.click(screen.getByTestId('open-settings'));
-    expect(screen.getByTestId('settings-modal')).toBeTruthy();
+    expect(await screen.findByTestId('settings-modal')).toBeTruthy();
     fireEvent.click(screen.getByTestId('close-settings'));
     expect(screen.queryByTestId('settings-modal')).toBeNull();
   });
 
-  it('opens and closes HelpModal', () => {
+  it('opens and closes HelpModal', async () => {
     render(<App />);
     expect(screen.queryByTestId('help-modal')).toBeNull();
     fireEvent.click(screen.getByTestId('open-help'));
-    expect(screen.getByTestId('help-modal')).toBeTruthy();
+    expect(await screen.findByTestId('help-modal')).toBeTruthy();
     fireEvent.click(screen.getByTestId('close-help'));
     expect(screen.queryByTestId('help-modal')).toBeNull();
   });
@@ -269,13 +277,14 @@ describe('App', () => {
   it('submitting ConnectForm calls openSession', async () => {
     render(<App />);
     fireEvent.click(screen.getByTestId('new-btn'));
+    await screen.findByTestId('connect-form');
     fireEvent.click(screen.getByTestId('submit-connect'));
     await waitFor(() => {
       expect(mockOpenSession).toHaveBeenCalledTimes(1);
     });
   });
 
-  it('allocates the pane at submit time, not on connect', () => {
+  it('allocates the pane at submit time, not on connect', async () => {
     // Regression guard for the Huawei width latch: the pane must be allocated
     // while the session is still 'connecting' so TerminalXtermHost mounts and
     // xterm reports its measured size before the backend allocates the pty.
@@ -283,15 +292,17 @@ describe('App', () => {
     // fall back to 80x24, pinning width-latching devices to 80 columns.
     render(<App />);
     fireEvent.click(screen.getByTestId('new-btn'));
+    await screen.findByTestId('connect-form');
     fireEvent.click(screen.getByTestId('submit-connect'));
     expect(Object.values(usePaneStore.getState().paneAllocations)).toContain('sess-1');
     // The dialog stays open on top until the session reaches 'connected'.
     expect(screen.getByTestId('connect-form')).toBeTruthy();
   });
 
-  it('releases the pane when an in-progress connection is cancelled', () => {
+  it('releases the pane when an in-progress connection is cancelled', async () => {
     render(<App />);
     fireEvent.click(screen.getByTestId('new-btn'));
+    await screen.findByTestId('connect-form');
     fireEvent.click(screen.getByTestId('submit-connect'));
     expect(Object.values(usePaneStore.getState().paneAllocations)).toContain('sess-1');
 

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { open } from '@tauri-apps/plugin-dialog';
 import { useHostManager, decryptBatch, getCachedCredential, clearDecryptedCache, flattenHosts } from '../../hooks/useHostManager';
 import { type FixedSizeTri, triToBool, boolToTri } from '../../utils/fixedTerminalSize';
 import { resolveIapUsername } from '../../utils/iapUsername';
@@ -1164,12 +1163,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     };
 
     const handleBrowseKey = async () => {
-        const selected = await open({
-            multiple: false,
-            directory: false,
-            title: t('sessionDialog.browseKeyTitle'),
-        });
-        if (typeof selected === 'string') {
+        const selected = await tauriService.selectFile(t('sessionDialog.browseKeyTitle'));
+        if (selected) {
             setPrivateKeyPath(selected);
         }
     };

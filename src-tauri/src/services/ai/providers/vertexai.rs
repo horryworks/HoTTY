@@ -1775,4 +1775,44 @@ mod tests {
             p.display()
         );
     }
+
+    // -----------------------------------------------------------------------
+    // create_jwt
+    //
+    // Coverage note, so the gap is explicit rather than assumed: these cover
+    // key PARSING and error surfacing only. Verifying an actual RS256 signature
+    // would need an RSA private key, and the two ways to get one here are both
+    // worse than the gap — committing a PEM fixture (this repo has been burned
+    // by credential-shaped content in commits before) or taking a dev-dependency
+    // on a pre-release `rsa` crate purely to encode PKCS#8. Real signing is
+    // covered by the manual Vertex AI service-account smoke test.
+    //
+    // These still earn their place: they are what fails loudly if the crypto
+    // backend selected in Cargo.toml (`jsonwebtoken`'s `aws_lc_rs` feature,
+    // which replaced v9's `ring`) is ever misconfigured or dropped, since
+    // `from_rsa_pem` is the backend's entry point.
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn create_jwt_rejects_a_malformed_private_key() {
+        let err = create_jwt("svc@proj-1.iam.gserviceaccount.com", "not a pem at all")
+            .expect_err("a non-PEM key must not produce a token");
+        assert!(
+            err.starts_with("Invalid private key:"),
+            "unexpected error text: {err}"
+        );
+    }
+
+    #[test]
+    fn create_jwt_rejects_a_well_formed_pem_that_is_not_an_rsa_key() {
+        // Correct PEM framing, garbage payload — exercises the decode path past
+        // the armor rather than failing at the header.
+        let pem = "-----BEGIN PRIVATE KEY-----\nAAAAAAAA\n-----END PRIVATE KEY-----\n";
+        let err = create_jwt("svc@proj-1.iam.gserviceaccount.com", pem)
+            .expect_err("a non-RSA payload must not produce a token");
+        assert!(
+            err.starts_with("Invalid private key:"),
+            "unexpected error text: {err}"
+        );
+    }
 }

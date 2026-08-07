@@ -21,7 +21,7 @@
     {
       "description": "Extra-long soak for crypto/SSH crates; never automerge.",
       "matchManagers": ["cargo"],
-      "matchPackageNames": ["russh", "rustls", "rsa", "aws-lc-sys", "aes-gcm", "argon2", "pbkdf2"],
+      "matchPackageNames": ["russh", "rustls", "rsa", "aws-lc-rs", "aws-lc-sys", "aes-gcm", "argon2", "pbkdf2", "jsonwebtoken"],
       "minimumReleaseAge": "14 days",
       "automerge": false
     },

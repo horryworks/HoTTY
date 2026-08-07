@@ -1,6 +1,6 @@
 [package]
 name = "hotty"
-version = "2.0.15"
+version = "2.0.16-beta1"
 description = "HoTTY - AI Integrated Advanced Terminal Emulator (Rust/Tauri)"
 authors = ["horryworks"]
 license = "GPL-3.0-or-later"
@@ -13,7 +13,18 @@ rust-version = "1.90.0"
 
 [lib]
 name = "app_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# Windows desktop only (`bundle.targets = ["nsis"]`). The bin target in
+# src/main.rs links this as an rlib, and tests/ai_streaming.rs does too; nothing
+# consumes the other two crate types.
+#
+# `staticlib`/`cdylib` are the Tauri MOBILE template's defaults — Xcode links the
+# staticlib for iOS, Android's JNI loader dlopen()s the cdylib — and the mobile
+# entry point in lib.rs is cfg-gated (`#[cfg_attr(mobile, tauri::mobile_entry_point)]`),
+# a cfg that is never set for x86_64-pc-windows-msvc. Building them costs a
+# 183 MB app_lib.lib and a 1.7 MB app_lib.dll on every release build, and with
+# `lto = "fat"` below cargo would run whole-program LTO over all three outputs
+# instead of one. Restore them if a mobile target is ever added.
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.5.6", features = [] }
@@ -150,8 +161,29 @@ futures = "0.3"
 # Cancellation tokens for async tasks
 tokio-util = { version = "0.7", features = ["rt"] }
 
-# JWT creation for Vertex AI service account authentication
-jsonwebtoken = "9"
+# JWT creation for Vertex AI service account authentication (RS256 over a PEM
+# service-account key).
+#
+# v10 replaced v9's hard `ring` dependency with a selectable crypto backend.
+# jsonwebtoken was `ring`'s only consumer in the BUILD graph, and `aws-lc-rs` is
+# already compiled here via russh 0.60 — so selecting `aws_lc_rs` drops a whole
+# second C/assembly crypto stack for zero new native build requirements.
+# Verify with `cargo tree -e all -i ring --target all` (expect "nothing to
+# print"), NOT by grepping Cargo.lock: the lock is resolved without features, so
+# it still lists ring under rustls-webpki's optional `ring` feature, which is
+# off. deny.toml bans the crate outright so a silent return fails CI.
+#
+# Pinned to "10" rather than "11" on purpose. 11.0.0 was published 2026-07-24 —
+# note that jsonwebtoken was NOT on renovate.json's 14-day crypto list at that
+# point (only the global 7-day soak reached it); it was added to that list in
+# this release, so the cooldown appealed to here now genuinely exists. Either
+# way 11.x is merely *eligible*, not soaked, while 10.4.0 has ~3 months in the
+# field on the auth path. Treat the 11.x bump as a deliberate, separately
+# verified change — re-check that the backend still resolves to aws_lc_rs, since
+# the feature set is precisely what moved between 9 and 10.
+#
+# `use_pem` is part of `default` and stays on — EncodingKey::from_rsa_pem needs it.
+jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
 
 # Lightweight regex (no proc-macro, used for validation)
 regex-lite = "0.1"
@@ -166,3 +198,56 @@ zeroize = "1"
 tokio = { version = "1", features = ["rt", "macros", "time", "sync"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 futures = "0.3"
+
+# ---------------------------------------------------------------------------
+# Release profile.
+#
+# There is no workspace root Cargo.toml, so this crate's profile is the one that
+# governs the shipped binary. Cargo's defaults (thin-LOCAL LTO, 16 codegen
+# units) leave a lot on the table for a binary that links ~800 crates: with 16
+# CGUs the optimizer never sees across unit boundaries, so generic
+# instantiations and small cross-crate calls are duplicated instead of merged.
+#
+# Baseline before this block: hotty.exe = 25.39 MiB (.text 17.63, .rdata 6.68,
+# .pdata 1.00), NSIS installer = 6.37 MiB.
+# ---------------------------------------------------------------------------
+[profile.release]
+# cargo default. This app is latency-sensitive (PTY read loop, SSH transport,
+# SNMP polling, SSE stream drivers) — "s"/"z" would trade measurable throughput
+# for a few hundred KB, which is the wrong side of the trade here.
+opt-level = 3
+
+# Whole-program LTO across every crate in the graph, and a single final codegen
+# unit so nothing is duplicated across units. This pair is the actual size win.
+# If the link ever OOMs or gets intolerable, `lto = "thin"` retains ~75-85% of
+# the reduction at a fraction of the cost.
+lto = "fat"
+codegen-units = 1
+
+# NOTE — measured on *-pc-windows-msvc, not assumed: this is NOT a size win.
+# Release already has `debug = false`, and MSVC keeps debug info out of band in
+# hotty.pdb. The PE's debug directory holds only an 84-byte table plus a 34-byte
+# CodeView record naming "hotty.pdb", a 20-byte VC-Feature record and a
+# 1084-byte POGO record — ~1.2 KB out of 25.39 MiB (0.005%).
+# What `strip` actually does here is suppress PDB generation, dropping the
+# 10.6 MB local hotty.pdb and shortening the link. The cost is that crash
+# reports / minidumps can no longer be symbolized. Set `strip = "none"` if
+# symbolized crashes matter more — the SHIPPED artifact is the same size either way.
+strip = true
+
+# cargo default, stated explicitly so it is never silently flipped. `abort`
+# would shrink .text further by dropping the 1.00 MB .pdata unwind tables, but
+# it changes crash semantics for the SSH/PTY task tree: tokio tasks that
+# currently unwind and are joined would take the whole process down instead.
+panic = "unwind"
+
+# All cargo defaults; listed so the profile is self-documenting.
+debug = false
+incremental = false
+overflow-checks = false
+
+# Deliberately NOT set:
+#   split-debuginfo — MSVC only supports "packed" (a PDB); setting it is inert.
+#   [profile.release.package."*"] opt-level = "s" — under fat LTO the final
+#     codegen uses THIS profile's settings, so a per-package opt-level only
+#     affects the pre-LTO pass. Unpredictable payoff; skipped.

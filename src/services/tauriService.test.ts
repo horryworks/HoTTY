@@ -3,17 +3,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const writeText = vi.fn();
 const readText = vi.fn();
 const mockInvoke = vi.fn();
+const dialogOpenMock = vi.fn();
 
 vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
   writeText: (t: string) => writeText(t),
   readText: () => readText(),
 }));
 
-vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }));
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: (...args: unknown[]) => mockInvoke(...args),
+  convertFileSrc: (path: string) => `asset://localhost/${encodeURIComponent(path)}`,
+}));
 vi.mock('@tauri-apps/api/app', () => ({ getVersion: vi.fn().mockResolvedValue('0.0.0') }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
   getCurrentWebviewWindow: () => ({ setTitle: vi.fn() }),
+}));
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  ask: vi.fn(),
+  open: (...args: unknown[]) => dialogOpenMock(...args),
 }));
 
 import { listen } from '@tauri-apps/api/event';
@@ -216,6 +224,40 @@ describe('tauriService file dialog commands', () => {
     mockInvoke.mockResolvedValue(false);
     const result = await tauriService.confirmLogDir('/tmp/logs');
     expect(result).toBe(false);
+  });
+
+  // selectFile is the one picker with no backend command behind it — it wraps
+  // the dialog plugin so components do not import a Tauri API themselves.
+  it('selectFile asks the dialog plugin for a single file and returns the path', async () => {
+    dialogOpenMock.mockReset();
+    dialogOpenMock.mockResolvedValue('C:/keys/id_ed25519');
+    const result = await tauriService.selectFile('Select private key');
+    expect(dialogOpenMock).toHaveBeenCalledWith({
+      multiple: false,
+      directory: false,
+      title: 'Select private key',
+    });
+    expect(result).toBe('C:/keys/id_ed25519');
+  });
+
+  it('selectFile returns null when cancelled', async () => {
+    dialogOpenMock.mockReset();
+    dialogOpenMock.mockResolvedValue(null);
+    expect(await tauriService.selectFile('Select private key')).toBeNull();
+  });
+
+  it('selectFile returns null rather than an array if multiple paths come back', async () => {
+    dialogOpenMock.mockReset();
+    dialogOpenMock.mockResolvedValue(['/a', '/b']);
+    expect(await tauriService.selectFile('Select private key')).toBeNull();
+  });
+});
+
+describe('tauriService asset URLs', () => {
+  it('toAssetUrl converts a filesystem path for the webview', () => {
+    expect(tauriService.toAssetUrl('C:/pics/bg.png')).toBe(
+      'asset://localhost/C%3A%2Fpics%2Fbg.png',
+    );
   });
 
   it('openExternal forwards the URL to open_external', async () => {

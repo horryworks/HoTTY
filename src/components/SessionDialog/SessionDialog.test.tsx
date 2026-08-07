@@ -44,13 +44,11 @@ vi.mock('../../services/tauriService', () => ({
     dpapiEncryptBatch: vi.fn(async (values: string[]) => values.map(v => `[SAFE]${v}`)),
     dpapiDecryptBatch: vi.fn(async (values: string[]) => values.map(v => v.replace(/^\[SAFE\]/, ''))),
     migrateHostTreeCredentials: vi.fn(async (treeJson: string) => treeJson),
+    // Private-key browse. The dialog plugin is reached through tauriService now,
+    // so this stands in for the native picker (null = user cancelled).
+    selectFile: vi.fn().mockResolvedValue(null),
   },
   isEncrypted: (value: string) => value.startsWith('[DPAPI]') || value.startsWith('[SAFE]'),
-}));
-
-// Mock dialog plugin
-vi.mock('@tauri-apps/plugin-dialog', () => ({
-  open: vi.fn().mockResolvedValue(null),
 }));
 
 const defaultProps = {

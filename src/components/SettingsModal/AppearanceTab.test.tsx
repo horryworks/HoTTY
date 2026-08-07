@@ -10,6 +10,10 @@ vi.mock('../../services/tauriService', () => ({
       { family: 'Consolas' },
       { family: 'Courier New' },
     ]),
+    // Background-image browse: the picker and the asset-URL conversion both go
+    // through tauriService now rather than the Tauri API directly.
+    selectImage: vi.fn().mockResolvedValue(null),
+    toAssetUrl: (path: string) => `asset://localhost/${encodeURIComponent(path)}`,
   },
 }));
 

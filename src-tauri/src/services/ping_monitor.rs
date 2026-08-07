@@ -66,11 +66,40 @@ impl Default for PingMonitorState {
     }
 }
 
-/// Handle to a running monitor — holds the cancel token.
+/// Grace period a monitor gets to wind down cooperatively before it is aborted.
+/// A cycle in flight can hold the loop for up to `PING_KILL_TIMEOUT_MS` per
+/// target, so a stop during a cycle normally lands on the abort path — which is
+/// the point: teardown is bounded regardless of what the loop is doing.
+const SHUTDOWN_GRACE_MS: u64 = 2000;
+
+/// Handle to a running monitor — the cancel token plus the task's `JoinHandle`.
+///
+/// The join handle is what makes teardown enforceable (ADR-011): the cancel
+/// channel only *asks* the loop to stop, so without a handle a task that never
+/// observes the token would outlive its pane. Mirrors `snmp::WatcherHandle`.
 pub struct MonitorHandle {
     cancel: tokio::sync::watch::Sender<bool>,
     targets: Arc<Mutex<Vec<String>>>,
     interval_ms: Arc<Mutex<u64>>,
+    join: tokio::task::JoinHandle<()>,
+}
+
+/// Signal a monitor to stop, wait briefly for the loop to wind down, then force
+/// abort. A `timeout` on a `JoinHandle` only *detaches* the task, so the explicit
+/// abort is what actually stops a loop that ignored cancellation (mirrors
+/// `snmp::stop_watcher`).
+async fn shutdown(handle: MonitorHandle) {
+    let _ = handle.cancel.send(true);
+    let abort = handle.join.abort_handle();
+    if tokio::time::timeout(
+        std::time::Duration::from_millis(SHUTDOWN_GRACE_MS),
+        handle.join,
+    )
+    .await
+    .is_err()
+    {
+        abort.abort();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -134,16 +163,21 @@ async fn ping_target(target: &str) -> PingResult {
 async fn execute_ping(target: &str) -> PingResult {
     use tokio::process::Command;
 
+    // kill_on_drop: the poll loop can be aborted mid-cycle during teardown, and
+    // the `ping_target` timeout also drops this future. Without it the child
+    // `ping` would be orphaned rather than reaped.
     #[cfg(windows)]
     let output = Command::new("ping")
         .args(["-n", "1", "-w", "3000", target])
         .creation_flags(0x08000000) // CREATE_NO_WINDOW
+        .kill_on_drop(true)
         .output()
         .await;
 
     #[cfg(not(windows))]
     let output = Command::new("ping")
         .args(["-c", "1", "-W", "3", target])
+        .kill_on_drop(true)
         .output()
         .await;
 
@@ -272,7 +306,7 @@ pub struct StartMonitorConfig {
 }
 
 /// Start a ping monitor for a session.
-pub fn start_monitor(
+pub async fn start_monitor(
     app: AppHandle,
     monitors: &mut HashMap<String, MonitorHandle>,
     config: StartMonitorConfig,
@@ -293,9 +327,11 @@ pub fn start_monitor(
 
     let session_id = config.session_id;
 
-    // Stop existing monitor
+    // Stop existing monitor. Fully tear it down (cancel, then abort if it does
+    // not stop) before starting the replacement — dropping the handle alone
+    // would leave the old loop emitting under the same session id.
     if let Some(existing) = monitors.remove(&session_id) {
-        let _ = existing.cancel.send(true);
+        shutdown(existing).await;
     }
 
     let interval = config.interval_ms.max(MIN_INTERVAL_MS);
@@ -303,19 +339,16 @@ pub fn start_monitor(
     let targets_arc = Arc::new(Mutex::new(valid_targets));
     let interval_arc = Arc::new(Mutex::new(interval));
 
-    let handle = MonitorHandle {
-        cancel: cancel_tx,
-        targets: Arc::clone(&targets_arc),
-        interval_ms: Arc::clone(&interval_arc),
-    };
-
-    monitors.insert(session_id.clone(), handle);
+    // Cloned before the spawn: the originals move into the loop, these stay
+    // behind on the handle so update_targets/update_interval can reach them.
+    let targets_for_handle = Arc::clone(&targets_arc);
+    let interval_for_handle = Arc::clone(&interval_arc);
 
     // Spawn the monitoring loop
     let sid = session_id.clone();
     let logging_enabled = config.logging_enabled;
     let logging_path = config.logging_path;
-    tokio::spawn(async move {
+    let join = tokio::spawn(async move {
         // Set up CSV logging if enabled
         let mut csv_file = if logging_enabled && !logging_path.is_empty() {
             match setup_csv_logging(&logging_path) {
@@ -383,13 +416,23 @@ pub fn start_monitor(
         }
     });
 
+    monitors.insert(
+        session_id.clone(),
+        MonitorHandle {
+            cancel: cancel_tx,
+            targets: targets_for_handle,
+            interval_ms: interval_for_handle,
+            join,
+        },
+    );
+
     log::info!("ping-monitor: started for session {session_id}");
 }
 
 /// Stop a monitor by session id.
-pub fn stop_monitor(monitors: &mut HashMap<String, MonitorHandle>, session_id: &str) {
+pub async fn stop_monitor(monitors: &mut HashMap<String, MonitorHandle>, session_id: &str) {
     if let Some(handle) = monitors.remove(session_id) {
-        let _ = handle.cancel.send(true);
+        shutdown(handle).await;
         log::info!("ping-monitor: stopped session {session_id}");
     }
 }
@@ -625,5 +668,75 @@ mod tests {
         // Just verify it creates successfully
         let monitors = state.monitors.try_lock().unwrap();
         assert!(monitors.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // Teardown (ADR-011) — mirrors `snmp::stop_watcher`'s tests.
+    // -----------------------------------------------------------------------
+
+    /// A handle whose task parks on the cancel channel, so joining completes as
+    /// soon as it is signalled.
+    fn spawn_parked() -> MonitorHandle {
+        let (cancel, mut rx) = tokio::sync::watch::channel(false);
+        let join = tokio::spawn(async move {
+            let _ = rx.changed().await;
+        });
+        MonitorHandle {
+            cancel,
+            targets: Arc::new(Mutex::new(vec!["192.168.1.1".to_string()])),
+            interval_ms: Arc::new(Mutex::new(10_000)),
+            join,
+        }
+    }
+
+    #[tokio::test]
+    async fn stop_monitor_removes_and_cancels() {
+        let mut map = HashMap::new();
+        map.insert("ping-1".to_string(), spawn_parked());
+        stop_monitor(&mut map, "ping-1").await;
+        assert!(map.is_empty());
+    }
+
+    #[tokio::test]
+    async fn stop_monitor_is_noop_for_unknown_session() {
+        let mut map = HashMap::new();
+        map.insert("ping-1".to_string(), spawn_parked());
+        stop_monitor(&mut map, "ping-nope").await;
+        assert_eq!(map.len(), 1);
+    }
+
+    /// A loop that never observes the cancel channel must still be stopped.
+    /// This is precisely what the `JoinHandle` on `MonitorHandle` buys: before
+    /// it existed, `stop_monitor` could only *ask* the task to stop.
+    #[tokio::test]
+    async fn stop_monitor_aborts_a_task_that_ignores_cancellation() {
+        let (cancel, _rx) = tokio::sync::watch::channel(false);
+        let join = tokio::spawn(async { std::future::pending::<()>().await });
+        let abort_probe = join.abort_handle();
+        let mut map = HashMap::new();
+        map.insert(
+            "ping-stuck".to_string(),
+            MonitorHandle {
+                cancel,
+                targets: Arc::new(Mutex::new(Vec::new())),
+                interval_ms: Arc::new(Mutex::new(10_000)),
+                join,
+            },
+        );
+
+        // The grace period elapses, then the task is aborted.
+        stop_monitor(&mut map, "ping-stuck").await;
+        assert!(map.is_empty());
+
+        // `abort()` only *requests* cancellation — the task is not marked
+        // finished until the runtime gets a turn to drop it, so yield rather
+        // than asserting on the very next line.
+        for _ in 0..16 {
+            if abort_probe.is_finished() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(abort_probe.is_finished());
     }
 }

@@ -1,7 +1,17 @@
-import { describe, it, expect, afterEach } from 'vitest';
-import i18n, { SUPPORTED_LANGUAGES } from './index';
+import { describe, it, expect, afterEach, beforeAll } from 'vitest';
+import i18n, { SUPPORTED_LANGUAGES, loadCatalog, changeLanguage } from './index';
 import { en } from './locales/en';
 import { ja } from './locales/ja';
+
+// Only `en` is registered at init() — the other seven catalogs are lazily
+// imported chunks in production (see the CATALOG_LOADERS comment in ./index).
+// Register them all up front so the parity assertions below still see the full
+// set; this also exercises the loader itself, which the old inline `resources`
+// map could not.
+beforeAll(async () => {
+  const results = await Promise.all(SUPPORTED_LANGUAGES.map(({ id }) => loadCatalog(id)));
+  expect(results.every(Boolean), 'every catalog chunk loads').toBe(true);
+});
 
 /** Flatten a nested catalog object into dot-joined leaf keys. */
 function flattenKeys(obj: unknown, prefix = '', out: string[] = []): string[] {
@@ -26,7 +36,7 @@ describe('i18n', () => {
   });
 
   it('returns Japanese strings after switching language', async () => {
-    await i18n.changeLanguage('ja');
+    await changeLanguage('ja');
     expect(i18n.t('settings.general.languageSection')).toBe(ja.settings!.general!.languageSection);
     expect(i18n.t('common.save')).toBe(ja.common!.save);
   });
@@ -35,7 +45,7 @@ describe('i18n', () => {
     // Add a synthetic key to English only, then confirm Japanese falls back to it
     // (rather than returning the raw key) — this stays valid as the ja catalog fills in.
     i18n.addResource('en', 'translation', 'test.fallbackOnly', 'English only');
-    await i18n.changeLanguage('ja');
+    await changeLanguage('ja');
     expect(i18n.t('test.fallbackOnly' as never)).toBe('English only');
   });
 

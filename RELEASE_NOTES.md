@@ -1,5 +1,24 @@
 # Release Notes
 
+## v2.0.16-beta1
+
+**HoTTY starts faster and takes up less space, and stopping a Ping Monitor now actually stops it.** The app no longer reads everything it might eventually need before it can draw its first window: the seven non-English translation catalogs, the utility panes and the dialogs are each loaded the moment you first use them. The Windows program itself is now built with whole-program optimization on top of that. Nothing about how the app works changes — this release is entirely about the startup path, the size on disk, and one background job that did not shut down cleanly.
+
+### Improvements
+
+- **Faster startup and a smaller app.** The code the app has to read and parse before the first window appears is down by roughly 60%, and its stylesheet by about three quarters, because the panes, dialogs and translations that are not on screen yet are no longer part of it. Alongside that, the program file is built as a single optimized unit rather than sixteen separate ones, which takes about 3.4 MB off it (a 13% reduction). The installer shrinks only slightly — it already compresses the program on the way in — so the gain shows up in startup time and in the space HoTTY occupies once installed. Everything still behaves exactly as before: the first frame is drawn in your language, not in English, and switching **Settings → General → Display language** is still immediate.
+- **The Third-Party Licenses list opens faster.** The bundled license manifest — over 800 packages — is no longer stored with the indentation that made it human-readable. Nothing ever displays that file as text, so the formatting only cost 47 KB of disk space and extra work every time **Settings → About → Third-Party Licenses** was opened.
+- **Even button spacing in the GCP Instances pane header.** Its toolbar buttons sat slightly tighter together than the ones in every other pane header.
+
+### Bug Fixes
+
+- **Stopping a Ping Monitor did not stop it straight away.** Stopping a monitor, closing its pane, or restarting it with different targets only *asked* the background job to stop, and it checked for that request only between polling cycles. A cycle already under way therefore ran to the end first — up to five seconds for every target in the list — and still wrote that final round to the CSV log and pushed it to the interface after you had stopped it. Teardown now waits briefly for the job to wind down on its own and then forcibly ends it, so a monitor is always finished within about two seconds of asking.
+- **`ping` processes could be left running in the background.** When a ping did not answer within its five-second limit, HoTTY gave up waiting but never terminated the underlying `ping` process, so unreachable targets slowly accumulated abandoned processes for as long as the monitor ran. Each ping is now terminated together with the attempt that started it, both on timeout and when the monitor shuts down.
+
+### Security
+
+- **One fewer cryptography library inside the app.** HoTTY compiled in two independent cryptographic implementations: the one the SSH stack uses, and a second one whose only purpose was signing the token for **Vertex AI** service-account sign-in. That signing now uses the same library as everything else, so the second implementation is gone from the shipped app — one less codebase carrying cryptographic code that has to be watched for security advisories. Vertex AI sign-in is unchanged.
+
 ## v2.0.15
 
 **The AI now answers in the language your app is set to, and the language picker finally works mid-conversation.** Set HoTTY to 日本語 and the AI replies in Japanese without you configuring anything else — the AI Chat language selector defaults to **Auto**, which follows **Settings → General → Display language**. Changing the language during a conversation now actually switches it, which it did not before. Also in this release: terminals no longer get stuck at 80 columns on devices that latch the width at connect, such as Huawei USG/VRP.
