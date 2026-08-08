@@ -29,9 +29,21 @@ export function TerminalScrollbar({ term }: TerminalScrollbarProps) {
   const spacerRef = useRef<HTMLDivElement | null>(null);
   const isSyncingRef = useRef(false);
   const cellHeightRef = useRef(17);
+  // Mirror of `rail.scrollTop`. Reading the real property inside `update` cost a
+  // forced synchronous layout on *every* rendered frame: xterm has just rewritten
+  // its rows, so the box tree is dirty and the getter must flush it before it can
+  // answer. Reading before writing the spacer (the previous fix) only avoided the
+  // invalidation this component caused itself — it could do nothing about the one
+  // xterm causes. Nothing moves the rail except our own writes and the user, and
+  // both paths refresh this mirror; the user path does it from inside a `scroll`
+  // handler, where layout has already settled and the read is free.
+  const lastTopRef = useRef(0);
 
   useEffect(() => {
     let rafId = 0;
+    // Seed once per term binding. From here on the mirror is maintained by the
+    // two paths that can move the rail, so `update` never touches the DOM getter.
+    lastTopRef.current = railRef.current ? railRef.current.scrollTop : 0;
 
     const update = () => {
       const buffer = term.buffer.active;
@@ -46,13 +58,6 @@ export function TerminalScrollbar({ term }: TerminalScrollbarProps) {
       const rail = railRef.current;
       const spacer = spacerRef.current;
 
-      // Read before writing. `update` runs on every rendered frame, and reading
-      // scrollTop *after* changing the spacer's height forces the browser to
-      // recompute layout synchronously each time. Growing the spacer does not
-      // move scrollTop, so the value read here stays valid for the comparison
-      // below.
-      const currentTop = rail ? rail.scrollTop : 0;
-
       if (spacer) {
         const newHeight = `${totalLines * cellHeight}px`;
         if (spacer.style.height !== newHeight) {
@@ -62,9 +67,12 @@ export function TerminalScrollbar({ term }: TerminalScrollbarProps) {
 
       if (rail) {
         const targetTop = viewportY * cellHeight;
-        if (Math.abs(currentTop - targetTop) > 0.5) {
+        if (Math.abs(lastTopRef.current - targetTop) > 0.5) {
           isSyncingRef.current = true;
+          // Spacer height is already in the DOM at this point, so the assignment
+          // below is not clamped and the rail really does land on `targetTop`.
           rail.scrollTop = targetTop;
+          lastTopRef.current = targetTop;
           // At most one pending frame: a burst of syncs before the callback
           // runs used to queue a callback each, all doing the same assignment.
           if (rafId === 0) {
@@ -87,10 +95,16 @@ export function TerminalScrollbar({ term }: TerminalScrollbarProps) {
   }, [term]);
 
   const handleScroll = () => {
-    if (isSyncingRef.current) return;
     const rail = railRef.current;
+    if (!rail) return;
+    // The one place the mirror is refreshed from the DOM. A scroll event is
+    // dispatched after layout has settled, so this read is cheap. It runs even
+    // for the events our own sync provokes, because that is what corrects the
+    // mirror if the browser ever clamps a value we wrote.
+    lastTopRef.current = rail.scrollTop;
+    if (isSyncingRef.current) return;
     const cellHeight = cellHeightRef.current;
-    if (!rail || cellHeight === 0) return;
+    if (cellHeight === 0) return;
     const targetLine = Math.round(rail.scrollTop / cellHeight);
     term.scrollToLine(targetLine);
   };

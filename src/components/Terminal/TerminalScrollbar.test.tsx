@@ -137,6 +137,61 @@ describe('TerminalScrollbar', () => {
     rafSpy.mockRestore();
   });
 
+  // xterm rewrites its rows immediately before firing onRender, so the box tree
+  // is dirty when `update` runs. Touching the scrollTop getter there forced a
+  // synchronous layout on every frame; the component keeps a mirror instead.
+  it('does not read rail.scrollTop on every rendered frame', () => {
+    const term = makeTerm({ length: 10000, cellHeight: 20, viewportY: 0 });
+    const { container } = render(<TerminalScrollbar term={term} />);
+    const rail = container.querySelector('.terminal-scrollbar-rail') as HTMLElement;
+
+    // Installed after render so the effect's one-off seed read is not counted.
+    let top = 0;
+    const getSpy = vi.fn(() => top);
+    Object.defineProperty(rail, 'scrollTop', {
+      get: getSpy,
+      set: (v: number) => {
+        top = v;
+      },
+      configurable: true,
+    });
+
+    act(() => {
+      for (let y = 1; y <= 20; y++) {
+        term.buffer.active.viewportY = y;
+        term._onRenderHandlers.forEach((h) => h());
+      }
+    });
+
+    expect(getSpy).not.toHaveBeenCalled();
+    // The writes still happened — the mirror is not hiding a broken sync.
+    expect(top).toBe(400);
+  });
+
+  it('recovers when the browser clamps a programmatic scrollTop write', () => {
+    const term = makeTerm({ length: 100, cellHeight: 20, viewportY: 0 });
+    const { container } = render(<TerminalScrollbar term={term} />);
+    const rail = container.querySelector('.terminal-scrollbar-rail') as HTMLElement;
+    Object.defineProperty(rail, 'scrollTop', { value: 0, writable: true, configurable: true });
+
+    term.buffer.active.viewportY = 25;
+    act(() => {
+      term._onRenderHandlers.forEach((h) => h());
+    });
+    expect(rail.scrollTop).toBe(500);
+
+    // The browser clamps the write and reports the real value via a scroll
+    // event. Without refreshing the mirror there, the component would believe it
+    // was already at 500 and leave the rail stranded.
+    rail.scrollTop = 300;
+    fireEvent.scroll(rail);
+
+    act(() => {
+      term._onRenderHandlers.forEach((h) => h());
+    });
+    expect(rail.scrollTop).toBe(500);
+  });
+
   it('ignores scroll events fired during programmatic sync', () => {
     const term = makeTerm({ length: 100, cellHeight: 20, viewportY: 0 });
     const { container } = render(<TerminalScrollbar term={term} />);

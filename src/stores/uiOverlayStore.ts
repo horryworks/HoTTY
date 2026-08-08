@@ -78,9 +78,10 @@ function recompute(): void {
 
 /**
  * Start observing the DOM for overlay mount/unmount. Idempotent; safe to call
- * once at app startup. The callback only inspects added/removed *element* nodes
- * that match the overlay selector, so heavy terminal/xterm DOM churn (which
- * adds non-matching nodes) is cheap to skip.
+ * once at app startup. Both the added and the removed branch test the mutated
+ * nodes themselves, so heavy terminal/xterm DOM churn — which neither adds nor
+ * removes anything matching the selector — costs a class-name check per node
+ * and never a walk of the whole document.
  */
 export function initOverlayWatcher(): void {
   if (observer || typeof document === 'undefined') return;
@@ -94,9 +95,24 @@ export function initOverlayWatcher(): void {
           return;
         }
       }
-      // A removal might have closed the last overlay — re-evaluate.
-      if (m.removedNodes.length > 0) {
-        recompute();
+      // A removal only matters when what left the DOM *was* an overlay, or
+      // contained one (a modal unmounting together with its wrapper). This used
+      // to call `recompute()` for any removal at all, which re-ran the
+      // document-wide `querySelector` below — during bulk output xterm removes
+      // rows continuously, and that made `querySelector` the second most
+      // expensive function in a profile (13.2% self time). Both checks here are
+      // scoped to the removed subtree, so a discarded row of terminal spans no
+      // longer costs a scan of the entire document.
+      for (const node of m.removedNodes) {
+        if (
+          node instanceof Element &&
+          (node.matches(OVERLAY_SELECTOR) || node.querySelector(OVERLAY_SELECTOR) !== null)
+        ) {
+          // Still a full re-scan rather than a plain `false`: another overlay
+          // (a nested modal, a dropdown) may well remain open.
+          recompute();
+          return;
+        }
       }
     }
   });
