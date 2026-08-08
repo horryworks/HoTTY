@@ -13,6 +13,7 @@ pub mod log_manager;
 pub mod os_paths;
 pub mod path_safety;
 pub mod ping_monitor;
+pub mod read_pump;
 pub mod sensitive_env;
 pub mod serial;
 pub mod session_service;

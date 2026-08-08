@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use base64::Engine;
+use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -23,6 +24,7 @@ use super::known_hosts::{
     check_known_host, default_known_hosts_path, upsert_known_host, HostKeyCheck,
 };
 use super::path_safety::is_unc_path;
+use super::read_pump::MAX_COALESCE_BYTES;
 use super::session_service::{
     abort_all, emit_session_data, emit_session_pty_size, emit_session_status, emit_to_owner,
     encoding_for, join_or_abort, resolve_initial_pty_size, SessionError, SessionService,
@@ -1026,7 +1028,10 @@ impl SessionService for SshSession {
         let reader_join = tokio::spawn(async move {
             let mut rd = read_half;
             loop {
-                tokio::select! {
+                // The select! only yields the message — the drain below needs
+                // `rd` back, and select! holds its futures (hence a &mut rd)
+                // alive for the whole block.
+                let msg = tokio::select! {
                     _ = reader_cancel.cancelled() => {
                         // disconnect() initiated teardown: stop cleanly without a
                         // redundant 'disconnected' emit (the close was user-driven
@@ -1034,33 +1039,68 @@ impl SessionService for SshSession {
                         log_mgr.stop_logging(&sid_r).await;
                         break;
                     }
-                    msg = rd.wait() => {
-                        match msg {
-                            Some(ChannelMsg::Data { data }) => {
-                                let (decoded, _, _) = encoding.decode(&data);
-                                let text = decoded.into_owned();
-                                emit_session_data(&app_r, &sid_r, text.clone());
-                                log_mgr.write(&sid_r, &text).await;
-                            }
-                            Some(ChannelMsg::ExtendedData { data, .. }) => {
-                                let (decoded, _, _) = encoding.decode(&data);
-                                let text = decoded.into_owned();
-                                emit_session_data(&app_r, &sid_r, text.clone());
-                                log_mgr.write(&sid_r, &text).await;
-                            }
-                            Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) => {
-                                log_mgr.stop_logging(&sid_r).await;
-                                emit_session_status(&app_r, &sid_r, "disconnected");
-                                break;
-                            }
-                            Some(_) => {}
-                            None => {
-                                log_mgr.stop_logging(&sid_r).await;
-                                emit_session_status(&app_r, &sid_r, "disconnected");
-                                break;
+                    msg = rd.wait() => msg,
+                };
+                match msg {
+                    Some(ChannelMsg::Data { data })
+                    | Some(ChannelMsg::ExtendedData { data, .. }) => {
+                        let (decoded, _, _) = encoding.decode(&data);
+                        let mut text = decoded.into_owned();
+
+                        // Coalesce whatever has ALREADY arrived behind this
+                        // chunk into one emit. Each `session-data` event costs a
+                        // serde_json escape pass (every ESC becomes 6 bytes) and
+                        // a WebView2 ExecuteScript hop, and a fast `cat`
+                        // produces chunks far quicker than the UI absorbs them.
+                        // `now_or_never` takes only what is ready this instant,
+                        // so nothing is ever *delayed* waiting for more — an
+                        // interactive echo has nothing queued behind it and
+                        // still emits on its own, immediately.
+                        let mut ended = false;
+                        while text.len() < MAX_COALESCE_BYTES {
+                            match rd.wait().now_or_never() {
+                                Some(Some(ChannelMsg::Data { data }))
+                                | Some(Some(ChannelMsg::ExtendedData { data, .. })) => {
+                                    let (decoded, _, _) = encoding.decode(&data);
+                                    text.push_str(&decoded);
+                                }
+                                Some(Some(ChannelMsg::Eof))
+                                | Some(Some(ChannelMsg::Close))
+                                | Some(None) => {
+                                    ended = true;
+                                    break;
+                                }
+                                // Some other protocol message (window adjust,
+                                // exit status, …) — nothing to render.
+                                Some(Some(_)) => {}
+                                // Nothing queued right now: stop draining.
+                                None => break,
                             }
                         }
+
+                        // Clone only when a log will consume it; emit first so
+                        // the UI never waits on a disk write.
+                        if log_mgr.is_logging_active() {
+                            emit_session_data(&app_r, &sid_r, text.clone());
+                            log_mgr.write(&sid_r, &text).await;
+                        } else {
+                            emit_session_data(&app_r, &sid_r, text);
+                        }
+
+                        // The close arrived mid-drain: report it only after its
+                        // preceding output has been emitted.
+                        if ended {
+                            log_mgr.stop_logging(&sid_r).await;
+                            emit_session_status(&app_r, &sid_r, "disconnected");
+                            break;
+                        }
                     }
+                    Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => {
+                        log_mgr.stop_logging(&sid_r).await;
+                        emit_session_status(&app_r, &sid_r, "disconnected");
+                        break;
+                    }
+                    Some(_) => {}
                 }
             }
         });

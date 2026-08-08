@@ -24,6 +24,28 @@ export type AnyConfig =
   | WslConnectionConfig
   | LocalConnectionConfig;
 
+// Server-side DECAWM overrides we strip from terminal output so OUR wrap state
+// stays authoritative. Hoisted to module scope, and paired with a literal
+// `includes` probe below, because the `session-data` handler runs for every
+// chunk of terminal output: building two RegExp objects and allocating a full
+// copy of the chunk per event — even when there is nothing to strip, which is
+// almost always — was pure overhead on the hottest path in the app.
+// eslint-disable-next-line no-control-regex
+const DECAWM_DISABLE_RE = /\x1b\[\?7l/g;
+// eslint-disable-next-line no-control-regex
+const DECAWM_ENABLE_RE = /\x1b\[\?7h/g;
+const DECAWM_DISABLE = '\x1b[?7l';
+const DECAWM_ENABLE = '\x1b[?7h';
+
+/** DEL (0x7f) → BS (0x08) for terminals that expect backspace to send BS. */
+const DEL_RE = /\x7f/g;
+const DEL = '\x7f';
+
+/** Quiet period after the last selection change before copy-on-select writes
+ *  the clipboard. Long enough to collapse a drag into one write, short enough
+ *  that the selection is on the clipboard before the user can paste it. */
+const SELECTION_COPY_DEBOUNCE_MS = 120;
+
 export interface SessionRecord {
   id: string;
   displayName: string;
@@ -253,14 +275,13 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
         // Strip server DECAWM overrides so our effective wrap state is authoritative.
         // A fixed-size session is always wrap-ON (its grid is pinned and must wrap
         // at the device's latched width), regardless of the global setting.
+        // The `includes` probe keeps the common no-override chunk allocation-free;
+        // `replace` copies the whole string even when it matches nothing.
         const wrap = settingsRef.current.lineWrapEnabled || rec.fixedSize;
-        // eslint-disable-next-line no-control-regex
-        const disableWrap = /\x1b\[\?7l/g;
-        // eslint-disable-next-line no-control-regex
-        const enableWrap = /\x1b\[\?7h/g;
-        const filtered = wrap
-          ? data.replace(disableWrap, '')   // remove disable when wrap is ON
-          : data.replace(enableWrap, '');   // remove enable when wrap is OFF
+        const unwanted = wrap ? DECAWM_DISABLE : DECAWM_ENABLE;
+        const filtered = data.includes(unwanted)
+          ? data.replace(wrap ? DECAWM_DISABLE_RE : DECAWM_ENABLE_RE, '')
+          : data;
         rec.term.write(filtered);
       })
     );
@@ -406,15 +427,25 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       // Apply initial line wrap state (fixed-size sessions are always wrap-ON)
       applyWrapSequence(term, s.lineWrapEnabled || fixedSize);
 
+      // Copy-on-select. The event fires on every mouse-move of a drag, so a
+      // single selection used to issue dozens of clipboard IPC round trips;
+      // debouncing collapses a drag into one write of the final selection.
+      let selectionCopyTimer: ReturnType<typeof setTimeout> | undefined;
       term.onSelectionChange(() => {
-        const sel = term.getSelection();
-        if (sel) {
-          tauriService.writeClipboard(sel).catch((err) => {
-            // Surface clipboard failures: the user just selected text expecting
-            // it to be copied; silent swallow leaves them confused on paste.
-            logError('Clipboard', 'failed to copy selection', err);
-          });
-        }
+        if (selectionCopyTimer !== undefined) clearTimeout(selectionCopyTimer);
+        selectionCopyTimer = setTimeout(() => {
+          selectionCopyTimer = undefined;
+          // The session may have been closed while the timer was pending.
+          if (!sessionsRef.current.has(id)) return;
+          const sel = term.getSelection();
+          if (sel) {
+            tauriService.writeClipboard(sel).catch((err) => {
+              // Surface clipboard failures: the user just selected text expecting
+              // it to be copied; silent swallow leaves them confused on paste.
+              logError('Clipboard', 'failed to copy selection', err);
+            });
+          }
+        }, SELECTION_COPY_DEBOUNCE_MS);
       });
 
       term.attachCustomKeyEventHandler((e) =>
@@ -422,9 +453,12 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       );
 
       term.onData((data) => {
-        const converted = settingsRef.current.backspaceSendsDel
-          ? data
-          : data.replace(/\x7f/g, '\x08');
+        const converted =
+          settingsRef.current.backspaceSendsDel || !data.includes(DEL)
+            ? data
+            : data.replace(DEL_RE, '\x08');
+        // Deliberately one invoke per keystroke: batching input would add
+        // latency to the one interaction where it is most felt.
         tauriService.sendInput(id, converted).catch(() => {
           /* swallow — surfaced via session-error */
         });

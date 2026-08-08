@@ -14,12 +14,14 @@ use tokio::process::{Child, Command as TokioCommand};
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::{timeout, MissedTickBehavior};
+use tokio_util::sync::CancellationToken;
 
 use super::exe_finder::find_executable;
 use super::iap_tunnel::{
     self, decide_preconnect_action, gcloud_program, is_valid_instance, is_valid_project,
     is_valid_zone, InstanceStatus, PreConnectAction, WaitEvent,
 };
+use super::read_pump::{spawn_read_pump, ReadStep};
 use super::session_service::{
     abort_all, emit_iap_connect_progress, emit_session_data, emit_session_error,
     emit_session_status, emit_to_owner, encoding_for, humanize_pty_error, humanize_read_error,
@@ -1942,6 +1944,9 @@ pub struct GcloudIapSession {
     /// Live `gcloud compute start-iap-tunnel` subprocess. Held for the
     /// lifetime of the SSH session; killed on disconnect.
     tunnel_child: Option<Child>,
+    /// Cancelled by disconnect() so the read pump's tasks end without emitting
+    /// a redundant 'disconnected' (the close was user-driven).
+    cancel: CancellationToken,
 }
 
 impl GcloudIapSession {
@@ -1953,6 +1958,7 @@ impl GcloudIapSession {
             writer_tx: None,
             join: Vec::new(),
             tunnel_child: None,
+            cancel: CancellationToken::new(),
         }
     }
 }
@@ -2214,25 +2220,29 @@ impl SessionService for GcloudIapSession {
         });
         self.join.push(writer_join);
 
-        // --- Reader task ---
+        // --- Reader thread + coalescing emitter (see services::read_pump) ---
         let encoding = self.encoding;
-        let app_r = app.clone();
-        let sid = session_id.clone();
+        let mut reader = reader;
+        let mut buf = vec![0u8; 32 * 1024];
+        let mut total_bytes: u64 = 0;
+        // Moved into the closure so the pty master stays open for exactly as
+        // long as the read loop runs, and is released when its thread ends.
+        let master_keepalive = master;
 
-        let reader_join = tokio::spawn(async move {
-            log::info!("gcloud-iap[ssh pid={ssh_pid}] reader task started for {sid}");
-            let mut reader = reader;
-            let mut buf = [0u8; 4096];
-            let mut total_bytes: u64 = 0;
-            loop {
+        let (reader_join, emitter_join) = spawn_read_pump(
+            app.clone(),
+            session_id.clone(),
+            log_mgr,
+            "gcloud-iap",
+            self.cancel.clone(),
+            move || {
+                let _keep = &master_keepalive;
                 match reader.read(&mut buf) {
                     Ok(0) => {
                         log::info!(
-                            "gcloud-iap[ssh pid={ssh_pid}] {sid}: PTY read returned 0 (ssh exited); total_bytes={total_bytes}"
+                            "gcloud-iap[ssh pid={ssh_pid}]: ssh exited; total_bytes={total_bytes}"
                         );
-                        log_mgr.stop_logging(&sid).await;
-                        emit_session_status(&app_r, &sid, "disconnected");
-                        break;
+                        ReadStep::Eof
                     }
                     Ok(n) => {
                         total_bytes = total_bytes.saturating_add(n as u64);
@@ -2257,23 +2267,19 @@ impl SessionService for GcloudIapSession {
                                 }
                             }
                         }
-                        emit_session_data(&app_r, &sid, text.clone());
-                        log_mgr.write(&sid, &text).await;
+                        ReadStep::Data(text)
                     }
                     Err(e) => {
                         log::error!(
-                            "gcloud-iap[ssh pid={ssh_pid}] {sid}: PTY read error after {total_bytes} bytes: {e}"
+                            "gcloud-iap[ssh pid={ssh_pid}]: PTY read failed after {total_bytes} bytes"
                         );
-                        log_mgr.stop_logging(&sid).await;
-                        emit_session_error(&app_r, &sid, humanize_read_error(&e));
-                        emit_session_status(&app_r, &sid, "disconnected");
-                        break;
+                        ReadStep::Error(humanize_read_error(&e))
                     }
                 }
-            }
-            drop(master);
-        });
+            },
+        );
         self.join.push(reader_join);
+        self.join.push(emitter_join);
 
         Ok(())
     }
@@ -2301,6 +2307,7 @@ impl SessionService for GcloudIapSession {
     }
 
     async fn disconnect(&mut self) -> Result<(), SessionError> {
+        self.cancel.cancel();
         if let Some(tx) = self.writer_tx.take() {
             let _ = tx.send(WriterCmd::Close).await;
         }

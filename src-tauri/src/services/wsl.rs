@@ -6,11 +6,12 @@ use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
+use super::read_pump::{spawn_read_pump, ReadStep};
 use super::session_service::{
-    abort_all, emit_session_data, emit_session_error, emit_session_status, encoding_for,
-    humanize_pty_error, humanize_read_error, humanize_spawn_error, join_or_abort, SessionError,
-    SessionService, DISCONNECT_DRAIN_MS,
+    abort_all, emit_session_status, encoding_for, humanize_pty_error, humanize_read_error,
+    humanize_spawn_error, join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -91,6 +92,9 @@ pub struct WslSession {
     /// and pinned threads (see disconnect()).
     killer: Option<Box<dyn ChildKiller + Send + Sync>>,
     join: Vec<JoinHandle<()>>,
+    /// Cancelled by disconnect() so the read pump's tasks end without emitting
+    /// a redundant 'disconnected' (the close was user-driven).
+    cancel: CancellationToken,
 }
 
 impl WslSession {
@@ -102,6 +106,7 @@ impl WslSession {
             writer_tx: None,
             killer: None,
             join: Vec::new(),
+            cancel: CancellationToken::new(),
         }
     }
 }
@@ -230,41 +235,34 @@ impl SessionService for WslSession {
         });
         self.join.push(writer_join);
 
-        // --- Reader task ---
+        // --- Reader thread + coalescing emitter (see services::read_pump) ---
         let encoding = self.encoding;
-        let app_r = app.clone();
-        let sid = session_id.clone();
+        let mut reader = reader;
+        let mut buf = vec![0u8; 32 * 1024];
+        // Moved into the closure so the pty master stays open for exactly as
+        // long as the read loop runs, and is released when its thread ends.
+        let master_keepalive = master;
 
-        let reader_join = tokio::spawn(async move {
-            log::info!("wsl reader task started for {sid}");
-            let mut reader = reader;
-            let mut buf = [0u8; 4096];
-            loop {
+        let (reader_join, emitter_join) = spawn_read_pump(
+            app.clone(),
+            session_id.clone(),
+            log_mgr,
+            "wsl",
+            self.cancel.clone(),
+            move || {
+                let _keep = &master_keepalive;
                 match reader.read(&mut buf) {
-                    Ok(0) => {
-                        log::info!("wsl {sid}: read returned 0 (shell exited)");
-                        log_mgr.stop_logging(&sid).await;
-                        emit_session_status(&app_r, &sid, "disconnected");
-                        break;
-                    }
+                    Ok(0) => ReadStep::Eof,
                     Ok(n) => {
                         let (decoded, _enc, _had_errors) = encoding.decode(&buf[..n]);
-                        let text = decoded.into_owned();
-                        emit_session_data(&app_r, &sid, text.clone());
-                        log_mgr.write(&sid, &text).await;
+                        ReadStep::Data(decoded.into_owned())
                     }
-                    Err(e) => {
-                        log::error!("wsl {sid}: read error: {e}");
-                        log_mgr.stop_logging(&sid).await;
-                        emit_session_error(&app_r, &sid, humanize_read_error(&e));
-                        emit_session_status(&app_r, &sid, "disconnected");
-                        break;
-                    }
+                    Err(e) => ReadStep::Error(humanize_read_error(&e)),
                 }
-            }
-            drop(master);
-        });
+            },
+        );
         self.join.push(reader_join);
+        self.join.push(emitter_join);
 
         Ok(())
     }
@@ -299,6 +297,7 @@ impl SessionService for WslSession {
         if let Some(mut killer) = self.killer.take() {
             let _ = killer.kill();
         }
+        self.cancel.cancel();
         if let Some(tx) = self.writer_tx.take() {
             let _ = tx.send(WriterCmd::Close).await;
         }

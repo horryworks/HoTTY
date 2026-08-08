@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use futures::FutureExt;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::Duration;
@@ -9,6 +10,7 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 
 use super::jumpbox::{establish_tunnel, JumpboxConfig, JumpboxHandler};
+use super::read_pump::MAX_COALESCE_BYTES;
 use super::session_service::{
     abort_all, emit_session_data, emit_session_error, emit_session_pty_size, emit_session_status,
     encoding_for, humanize_io_error, humanize_read_error, join_or_abort, resolve_initial_pty_size,
@@ -456,7 +458,7 @@ impl SessionService for TelnetSession {
                     continue;
                 }
                 let (decoded, _enc, _had_errors) = encoding.decode(&cleaned);
-                let text = decoded.into_owned();
+                let mut text = decoded.into_owned();
 
                 // Auto-login state machine
                 if login_state != LoginState::Done {
@@ -506,9 +508,66 @@ impl SessionService for TelnetSession {
                     }
                 }
 
-                log::debug!("telnet {sid}: emitting {} chars", text.chars().count());
-                emit_session_data(&app_r, &sid, text.clone());
-                log_mgr.write(&sid, &text).await;
+                // Coalesce whatever has ALREADY arrived behind this chunk into
+                // one emit: each `session-data` event costs a serde_json escape
+                // pass plus a WebView2 ExecuteScript hop, and a bulk dump
+                // (`display current-configuration`) arrives far quicker than the
+                // UI absorbs it. `now_or_never` takes only what is ready this
+                // instant, so nothing is delayed waiting for more.
+                //
+                // Skipped until auto-login is Done so the prompt state machine
+                // above keeps seeing chunks exactly as they arrive off the wire.
+                let mut closed = false;
+                let mut drain_error = None;
+                while login_state == LoginState::Done && text.len() < MAX_COALESCE_BYTES {
+                    match rd.read(&mut buf).now_or_never() {
+                        Some(Ok(0)) => {
+                            closed = true;
+                            break;
+                        }
+                        Some(Ok(more)) => {
+                            let (cleaned, response) =
+                                process_iac(&buf[..more], (naws_cols, naws_rows));
+                            if !response.is_empty() {
+                                let _ = writer_tx_for_login.send(WriterCmd::Bytes(response)).await;
+                            }
+                            if cleaned.is_empty() {
+                                continue;
+                            }
+                            let (decoded, _enc, _had_errors) = encoding.decode(&cleaned);
+                            text.push_str(&decoded);
+                        }
+                        Some(Err(e)) => {
+                            drain_error = Some(e);
+                            break;
+                        }
+                        // Nothing queued right now: stop draining.
+                        None => break,
+                    }
+                }
+
+                // Clone only when a log will consume it; emit first so the UI
+                // never waits on a disk write.
+                if log_mgr.is_logging_active() {
+                    emit_session_data(&app_r, &sid, text.clone());
+                    log_mgr.write(&sid, &text).await;
+                } else {
+                    emit_session_data(&app_r, &sid, text);
+                }
+
+                // A close or error that arrived mid-drain is reported only after
+                // the output preceding it has been emitted.
+                if let Some(e) = drain_error {
+                    log::error!("telnet {sid}: read error: {e}");
+                    emit_session_error(&app_r, &sid, humanize_read_error(&e));
+                    emit_session_status(&app_r, &sid, "disconnected");
+                    break;
+                }
+                if closed {
+                    log::info!("telnet {sid}: read returned 0 (remote closed)");
+                    emit_session_status(&app_r, &sid, "disconnected");
+                    break;
+                }
             }
             log_mgr.stop_logging(&sid).await;
             log::info!("telnet reader task ended for {sid}");

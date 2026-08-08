@@ -4,6 +4,7 @@ import type { SessionRecord } from '../../hooks/useSessionManager';
 import { tauriService } from '../../services/tauriService';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { TERMINAL_SEQUENCES } from '../../constants/terminalSequences';
+import { enableWebglRenderer } from '../../utils/xtermRenderer';
 import '@xterm/xterm/css/xterm.css';
 
 function applyXtermTheme(
@@ -182,6 +183,9 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
     } else {
       session.term.open(el);
     }
+    // Hardware-accelerated rendering, once per Terminal (this effect re-runs on
+    // every re-attach). Falls back to the DOM renderer on any failure.
+    enableWebglRenderer(session.term);
     // Apply DECAWM after open to ensure it takes effect before server data
     // renders. Fixed-size sessions are always wrap-ON (grid pinned to the
     // device's width), regardless of the global setting.

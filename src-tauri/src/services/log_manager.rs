@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
@@ -44,6 +45,12 @@ impl Drop for SessionLog {
 /// Thread-safe via `Arc<Mutex<...>>` — designed to be stored in Tauri managed state.
 pub struct LogManager {
     inner: Arc<Mutex<LogManagerInner>>,
+    /// Number of sessions currently logging, mirrored as an atomic so the hot
+    /// [`write`](LogManager::write) path — called for EVERY terminal data chunk
+    /// of EVERY session — can skip the process-global mutex when nothing is
+    /// being logged (the default). Same fast-path-gate pattern as
+    /// `WatchBufferState::watching_count`.
+    active_logs: Arc<AtomicUsize>,
 }
 
 /// Per-conversation AI-chat log state, keyed by `paneId::tabId`.
@@ -305,7 +312,18 @@ impl LogManager {
                 allowed_dirs: Vec::new(),
                 persist_path: None,
             })),
+            active_logs: Arc::new(AtomicUsize::new(0)),
         }
+    }
+
+    /// True while at least one session is logging.
+    ///
+    /// Deliberately process-wide rather than per-session: it exists only so the
+    /// terminal read loops can skip cloning a chunk they would hand to
+    /// [`write`](LogManager::write), and a false positive there costs one
+    /// needless clone, never correctness.
+    pub fn is_logging_active(&self) -> bool {
+        self.active_logs.load(Ordering::Relaxed) > 0
     }
 
     /// Set the file path used to persist approved log directories.
@@ -467,12 +485,19 @@ impl LogManager {
                 at_line_start: true,
             },
         );
+        self.active_logs.fetch_add(1, Ordering::Relaxed);
 
         Ok(())
     }
 
     /// Write terminal data to the session's log files.
     pub async fn write(&self, session_id: &str, raw_data: &str) {
+        // Cheap atomic gate: this runs for every chunk of every session, so
+        // don't serialize them all on the global mutex just to discover that
+        // logging is off (the default).
+        if !self.is_logging_active() {
+            return;
+        }
         let mut inner = self.inner.lock().await;
         let Some(log) = inner.logs.get_mut(session_id) else {
             return;
@@ -492,6 +517,7 @@ impl LogManager {
                 "session log write failed for {session_id}: {e}; stopping logging for this session"
             );
             inner.logs.remove(session_id);
+            self.active_logs.fetch_sub(1, Ordering::Relaxed);
             return;
         }
 
@@ -512,6 +538,7 @@ impl LogManager {
     pub async fn stop_logging(&self, session_id: &str) {
         let mut inner = self.inner.lock().await;
         if let Some(mut log) = inner.logs.remove(session_id) {
+            self.active_logs.fetch_sub(1, Ordering::Relaxed);
             let _ = log.file.flush();
             let _ = log.ts_file.flush();
             log::info!("stopped logging session '{session_id}'");
@@ -627,6 +654,7 @@ impl Clone for LogManager {
     fn clone(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
+            active_logs: Arc::clone(&self.active_logs),
         }
     }
 }
@@ -1205,5 +1233,46 @@ mod tests {
         assert_eq!(&ts[13..14], ":");
         assert_eq!(&ts[16..17], ":");
         assert_eq!(&ts[19..20], ".");
+    }
+
+    /// `write` runs for every chunk of every session, so it must not touch the
+    /// global mutex while nothing is being logged. Proven by holding the lock
+    /// for the duration of the call: if `write` tried to acquire it, this would
+    /// deadlock rather than return.
+    #[tokio::test]
+    async fn write_skips_the_global_lock_when_nothing_is_logging() {
+        let mgr = LogManager::new();
+        assert!(!mgr.is_logging_active());
+
+        let held = mgr.inner.lock().await;
+        mgr.write("sid", "output that goes nowhere").await;
+        drop(held);
+    }
+
+    /// The atomic gate must track start/stop so a real log is never skipped.
+    #[tokio::test]
+    async fn active_log_count_tracks_start_and_stop() {
+        let dir = std::env::temp_dir().join("hotty_test_active_log_count");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let mgr = LogManager::new();
+        mgr.approve_dir(&dir).await;
+        assert!(!mgr.is_logging_active());
+
+        mgr.start_logging("sid", &dir, "ssh", "host").await.unwrap();
+        assert!(mgr.is_logging_active());
+
+        // A repeat start is a no-op and must not double-count, or the counter
+        // would never fall back to zero after a single stop.
+        mgr.start_logging("sid", &dir, "ssh", "host").await.unwrap();
+        mgr.stop_logging("sid").await;
+        assert!(!mgr.is_logging_active());
+
+        // A stop for a session that was never logging must not underflow.
+        mgr.stop_logging("never-logged").await;
+        assert!(!mgr.is_logging_active());
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

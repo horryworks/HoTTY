@@ -6,10 +6,12 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
+use super::read_pump::{spawn_read_pump, ReadStep};
 use super::session_service::{
-    abort_all, emit_session_data, emit_session_error, emit_session_status, encoding_for,
-    humanize_read_error, join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
+    abort_all, emit_session_status, encoding_for, humanize_read_error, join_or_abort, SessionError,
+    SessionService, DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -152,6 +154,11 @@ pub struct SerialSession {
     encoding: &'static encoding_rs::Encoding,
     writer_tx: Option<mpsc::Sender<WriterCmd>>,
     join: Vec<JoinHandle<()>>,
+    /// Cancelled by disconnect() to end the read loop. Load-bearing here in a
+    /// way it isn't for the pty protocols: serial has no child to kill, so the
+    /// port's 100 ms read timeout plus this flag is the *only* thing that stops
+    /// the blocking reader (an abort cannot reach a thread inside a syscall).
+    cancel: CancellationToken,
 }
 
 impl SerialSession {
@@ -162,6 +169,7 @@ impl SerialSession {
             encoding,
             writer_tx: None,
             join: Vec::new(),
+            cancel: CancellationToken::new(),
         }
     }
 }
@@ -268,57 +276,50 @@ impl SessionService for SerialSession {
         });
         self.join.push(writer_join);
 
-        // --- Reader task ---
+        // --- Reader thread + coalescing emitter (see services::read_pump) ---
         let encoding = self.encoding;
-        let app_r = app.clone();
-        let sid = session_id.clone();
         let read_port = port;
         let log_mgr: super::log_manager::LogManager = app
             .state::<super::log_manager::LogManager>()
             .inner()
             .clone();
 
-        let reader_join = tokio::spawn(async move {
-            log::info!("serial reader task started for {sid}");
-            let mut buf = [0u8; 1024];
-            let mut read_handle = read_handle;
-            loop {
+        let mut buf = vec![0u8; 8 * 1024];
+        let mut read_handle = read_handle;
+
+        let (reader_join, emitter_join) = spawn_read_pump(
+            app.clone(),
+            session_id.clone(),
+            log_mgr,
+            "serial",
+            self.cancel.clone(),
+            move || {
                 // Prefer the independent clone (no lock); only fall back to the
                 // shared port under a lock when try_clone was unavailable.
+                // `blocking_lock` is the correct call here — this closure runs
+                // on a blocking thread, never inside an async context.
                 let result = if let Some(rp) = read_handle.as_mut() {
                     rp.read(&mut buf)
                 } else {
-                    let mut p = read_port.lock().await;
+                    let mut p = read_port.blocking_lock();
                     p.read(&mut buf)
                 };
                 match result {
-                    Ok(0) => {
-                        log::info!("serial {sid}: read returned 0 (port closed)");
-                        log_mgr.stop_logging(&sid).await;
-                        emit_session_status(&app_r, &sid, "disconnected");
-                        break;
-                    }
+                    Ok(0) => ReadStep::Eof,
                     Ok(n) => {
                         let (decoded, _enc, _had_errors) = encoding.decode(&buf[..n]);
-                        let text = decoded.into_owned();
-                        emit_session_data(&app_r, &sid, text.clone());
-                        log_mgr.write(&sid, &text).await;
+                        ReadStep::Data(decoded.into_owned())
                     }
-                    Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                        tokio::task::yield_now().await;
-                        continue;
-                    }
-                    Err(e) => {
-                        log::error!("serial {sid}: read error: {e}");
-                        log_mgr.stop_logging(&sid).await;
-                        emit_session_error(&app_r, &sid, humanize_read_error(&e));
-                        emit_session_status(&app_r, &sid, "disconnected");
-                        break;
-                    }
+                    // The port's 100ms read timeout expiring just means the
+                    // device is idle. On a dedicated blocking thread this is a
+                    // plain loop, not the 10Hz task-scheduler wake it used to be.
+                    Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => ReadStep::Idle,
+                    Err(e) => ReadStep::Error(humanize_read_error(&e)),
                 }
-            }
-        });
+            },
+        );
         self.join.push(reader_join);
+        self.join.push(emitter_join);
 
         Ok(())
     }
@@ -344,6 +345,10 @@ impl SessionService for SerialSession {
     }
 
     async fn disconnect(&mut self) -> Result<(), SessionError> {
+        // Stop the blocking reader: it re-checks this every port-read timeout
+        // (~100ms), which is the only way out — abort cannot cancel a thread
+        // parked in a read syscall.
+        self.cancel.cancel();
         if let Some(tx) = self.writer_tx.take() {
             let _ = tx.send(WriterCmd::Close).await;
         }
@@ -361,6 +366,9 @@ impl Drop for SerialSession {
     fn drop(&mut self) {
         if self.writer_tx.is_some() {
             log::warn!("SerialSession dropped without calling disconnect()");
+            // abort_all cannot reach the blocking reader thread; the token is
+            // what actually stops it (see the `cancel` field).
+            self.cancel.cancel();
             abort_all(std::mem::take(&mut self.join));
         }
     }

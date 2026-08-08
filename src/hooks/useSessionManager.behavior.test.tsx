@@ -12,6 +12,19 @@ async function flushMicrotasks() {
 // is unsuitable for jsdom; the hook only needs the methods exercised here.
 const disposeMock = vi.fn();
 
+/** Every Terminal the hook constructed, newest last — lets the hot-path tests
+ *  reach the write/onData/onSelectionChange handlers of a specific session. */
+const terminalStubs: TerminalStubShape[] = [];
+interface TerminalStubShape {
+  loadAddon: ReturnType<typeof vi.fn>;
+  write: ReturnType<typeof vi.fn>;
+  onSelectionChange: ReturnType<typeof vi.fn>;
+  attachCustomKeyEventHandler: ReturnType<typeof vi.fn>;
+  onData: ReturnType<typeof vi.fn>;
+  getSelection: ReturnType<typeof vi.fn>;
+  dispose: ReturnType<typeof vi.fn>;
+}
+
 vi.mock('@xterm/xterm', () => {
   class TerminalStub {
     loadAddon = vi.fn();
@@ -21,6 +34,9 @@ vi.mock('@xterm/xterm', () => {
     onData = vi.fn();
     getSelection = vi.fn().mockReturnValue('');
     dispose = disposeMock;
+    constructor() {
+      terminalStubs.push(this as unknown as TerminalStubShape);
+    }
   }
   return { Terminal: TerminalStub };
 });
@@ -620,5 +636,109 @@ describe('useSessionManager — fixed terminal size', () => {
     expect((rec?.connectionConfig as { fixedTerminalSize?: boolean }).fixedTerminalSize).toBe(true);
     act(() => { result.current.setSessionFixedSize(id, false); });
     expect(result.current.sessions.get(id)?.fixedSize).toBe(false);
+  });
+});
+
+describe('useSessionManager — terminal hot path', () => {
+  beforeEach(() => {
+    terminalStubs.length = 0;
+    writeClipboardMock.mockClear();
+    sendInputMock.mockClear();
+    connectSessionMock.mockReset();
+    onSessionDataCb.current = null;
+    useSettingsStore.getState().update('lineWrapEnabled', true);
+    useSettingsStore.getState().update('backspaceSendsDel', false);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function openOne() {
+    const { result } = renderHook(() => useSessionManager());
+    await act(async () => { await flushMicrotasks(); });
+    let id = '';
+    act(() => { id = result.current.openSession(sampleRequest); });
+    return { id, term: terminalStubs[terminalStubs.length - 1] };
+  }
+
+  it('strips a server DECAWM-disable while wrap is ON', async () => {
+    const { id, term } = await openOne();
+    act(() => {
+      onSessionDataCb.current?.({ sessionId: id, data: 'a\x1b[?7lb' });
+    });
+    expect(term.write).toHaveBeenCalledWith('ab');
+  });
+
+  it('strips a server DECAWM-enable while wrap is OFF', async () => {
+    useSettingsStore.getState().update('lineWrapEnabled', false);
+    const { id, term } = await openOne();
+    act(() => {
+      onSessionDataCb.current?.({ sessionId: id, data: 'a\x1b[?7hb' });
+    });
+    expect(term.write).toHaveBeenCalledWith('ab');
+  });
+
+  it('passes a chunk with no DECAWM override straight through, uncopied', async () => {
+    const { id, term } = await openOne();
+    // Drop the wrap sequence openSession writes at mount.
+    term.write.mockClear();
+    // The fast path must hand xterm the very same string it received — proof
+    // that no whole-chunk replace() ran on the common case.
+    const chunk = 'plain output with \x1b[31mcolour\x1b[0m but no wrap override';
+    act(() => {
+      onSessionDataCb.current?.({ sessionId: id, data: chunk });
+    });
+    expect(term.write).toHaveBeenCalledTimes(1);
+    expect(term.write.mock.calls[0][0]).toBe(chunk);
+  });
+
+  it('collapses a drag-selection into a single clipboard write', async () => {
+    vi.useFakeTimers();
+    const { term } = await openOne();
+    const onSelection = term.onSelectionChange.mock.calls[0][0] as () => void;
+    term.getSelection.mockReturnValue('selected text');
+
+    // Every mouse-move of a drag fires the event.
+    act(() => { onSelection(); onSelection(); onSelection(); });
+    expect(writeClipboardMock).not.toHaveBeenCalled();
+
+    act(() => { vi.advanceTimersByTime(200); });
+    expect(writeClipboardMock).toHaveBeenCalledTimes(1);
+    expect(writeClipboardMock).toHaveBeenCalledWith('selected text');
+  });
+
+  it('does not write the clipboard for a selection cleared before the debounce', async () => {
+    vi.useFakeTimers();
+    const { term } = await openOne();
+    const onSelection = term.onSelectionChange.mock.calls[0][0] as () => void;
+    term.getSelection.mockReturnValue('transient');
+    act(() => { onSelection(); });
+    term.getSelection.mockReturnValue('');
+    act(() => { onSelection(); });
+
+    act(() => { vi.advanceTimersByTime(200); });
+    expect(writeClipboardMock).not.toHaveBeenCalled();
+  });
+
+  it('converts DEL to BS on input only when backspaceSendsDel is off', async () => {
+    const { id, term } = await openOne();
+    const onData = term.onData.mock.calls[0][0] as (d: string) => void;
+
+    act(() => { onData('a\x7fb'); });
+    expect(sendInputMock).toHaveBeenLastCalledWith(id, 'a\x08b');
+
+    // No DEL present: the string must pass through untouched (same reference).
+    sendInputMock.mockClear();
+    act(() => { onData('plain'); });
+    expect(sendInputMock).toHaveBeenLastCalledWith(id, 'plain');
+
+    // Inside act() so the effect that refreshes the hook's settings ref runs.
+    await act(async () => {
+      useSettingsStore.getState().update('backspaceSendsDel', true);
+      await flushMicrotasks();
+    });
+    act(() => { onData('a\x7fb'); });
+    expect(sendInputMock).toHaveBeenLastCalledWith(id, 'a\x7fb');
   });
 });

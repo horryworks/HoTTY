@@ -1,5 +1,22 @@
 # Release Notes
 
+## v2.0.16-beta2
+
+**HoTTY now keeps up with output that arrives faster than it can draw it.** Dumping a large file, running `display current-configuration` on a switch, or scrolling back through a busy session used to make the app work far harder than the amount of text justified: every burst of output coming off the device was handed to the display separately no matter how small, and the terminal grid was then redrawn one HTML element at a time. Both of those are addressed here. Typing is deliberately untouched — nothing is ever held back waiting for more to arrive, so a keystroke still echoes exactly as immediately as it did before.
+
+### Performance
+
+- **Bulk output is delivered in far fewer, larger pieces.** When a device sends output faster than the display can absorb it, HoTTY now gathers everything that has *already* arrived and hands it over in one go, instead of once per read. Each hand-over carries a fixed cost that has nothing to do with how much text it contains, and a fast `cat` or a long `display current-configuration` was paying that cost hundreds of times over. Nothing is ever delayed to make this happen — only what is already waiting gets combined, so an interactive echo, which has nothing queued behind it, still goes straight through on its own. This applies equally to SSH, Telnet, Serial, WSL, local shells and GCP IAP sessions.
+- **The terminal is now drawn by the graphics card.** The grid used to be assembled from HTML elements — one per run of same-styled text, per row, every frame — which is the slowest layer during heavy scrolling. HoTTY now draws the whole grid with WebGL instead. If your machine cannot provide it (remote desktop sessions, older graphics drivers) or it becomes unavailable while you are working, HoTTY quietly goes back to the previous method and carries on. There is nothing to configure and nothing to notice apart from the speed.
+- **Waiting for output no longer ties up the app's worker threads.** Local shells, WSL, Serial and GCP IAP sessions read from their device with a call that simply waits until something arrives. Each open session was holding one of the app's general-purpose worker threads for as long as it stayed open, so on a four-core machine four such sessions could leave very little free for everything else happening in the background. Those reads now run on a pool intended for exactly this kind of waiting.
+- **Session logging costs nothing while it is switched off.** Every piece of terminal output from every session was queueing behind a single app-wide lock purely to discover that logging was not enabled — which is the default.
+- **Less work on each piece of output that arrives.** The step that strips a line-wrap control sequence out of incoming text used to rebuild its search patterns and copy the whole text every time, whether or not the sequence was actually present. It now checks first, and in the ordinary case copies nothing at all.
+- **Copy on select no longer writes to the clipboard mid-drag.** With **Copy on select** enabled, dragging across the terminal wrote to the Windows clipboard continuously as the selection grew. It now writes once the selection settles. What ends up on the clipboard is the final selection, exactly as before.
+
+### Security
+
+- **The sanitizer that cleans AI Chat answers has been updated.** DOMPurify — which strips anything dangerous out of a formatted AI reply before it is displayed — is updated to a version that fixes a published cross-site-scripting advisory. HoTTY does not use the affected mode, so the flaw was not reachable from the app, but the fixed version ships from this release onwards.
+
 ## v2.0.16-beta1
 
 **HoTTY is smaller and lighter, and stopping a Ping Monitor now actually stops it.** The app no longer loads everything it might eventually need in order to start: the seven non-English translation catalogs, the utility panes and the dialogs are each loaded the moment you first use them, so a feature you never open costs nothing to have. The Windows program itself is now built with whole-program optimization on top of that. Nothing about how the app works changes — this release is about the space HoTTY takes up in memory and on disk, and one background job that did not shut down cleanly.
