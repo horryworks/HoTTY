@@ -147,12 +147,17 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
   );
   const sessionsRef = useRef(sessions);
 
-  const settings = useSettingsStore();
-  const settingsRef = useRef(settings);
+  // Subscribe ONLY to the settings whose change must re-run an effect below.
+  // `App` composes this hook, so subscribing to the whole store made every
+  // settings write — a font tweak, an AI provider switch — re-render the
+  // entire app. Everything else this hook reads is read at call time from
+  // `useSettingsStore.getState()`, which needs no subscription at all.
+  const loggingEnabled = useSettingsStore((s) => s.loggingEnabled);
+  const loggingPath = useSettingsStore((s) => s.loggingPath);
+  const lineWrapEnabled = useSettingsStore((s) => s.lineWrapEnabled);
 
   useEffect(() => {
     sessionsRef.current = sessions;
-    settingsRef.current = settings;
   });
 
   // Pending auto-close timers for sessions that failed during initial connect.
@@ -166,8 +171,6 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
   // initial mount (where the values come from persisted settings) and not
   // on StrictMode's double effect-invocation. Without this guard the
   // confirm-log-dir dialog would pop up on every app launch.
-  const loggingEnabled = settings.loggingEnabled;
-  const loggingPath = settings.loggingPath;
   const prevLoggingRef = useRef<{ enabled: boolean; path: string } | null>(null);
   useEffect(() => {
     const current = { enabled: loggingEnabled, path: loggingPath };
@@ -207,7 +210,6 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
   // Apply Line Wrap setting to all terminals when it changes. Fixed-size sessions
   // stay wrap-ON regardless — their pinned grid must keep wrapping at the device's
   // latched width, so the global toggle doesn't disable wrap for them.
-  const lineWrapEnabled = settings.lineWrapEnabled;
   useEffect(() => {
     for (const rec of sessionsRef.current.values()) {
       const sequence = lineWrapEnabled || rec.fixedSize
@@ -277,7 +279,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
         // at the device's latched width), regardless of the global setting.
         // The `includes` probe keeps the common no-override chunk allocation-free;
         // `replace` copies the whole string even when it matches nothing.
-        const wrap = settingsRef.current.lineWrapEnabled || rec.fixedSize;
+        const wrap = useSettingsStore.getState().lineWrapEnabled || rec.fixedSize;
         const unwanted = wrap ? DECAWM_DISABLE : DECAWM_ENABLE;
         const filtered = data.includes(unwanted)
           ? data.replace(wrap ? DECAWM_DISABLE_RE : DECAWM_ENABLE_RE, '')
@@ -318,13 +320,13 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
         if (!rec) return;
         const fixedSize = resolveFixedSize(
           rec.fixedSizeOverride,
-          settingsRef.current.fixedTerminalSizeMode,
+          useSettingsStore.getState().fixedTerminalSizeMode,
           deviceLatchesWidth
         );
         // Auto-detection may have just turned pinning on; a pinned grid must be
         // wrap-ON so it wraps at the device's latched width.
         if (fixedSize !== rec.fixedSize) {
-          applyWrapSequence(rec.term, fixedSize || settingsRef.current.lineWrapEnabled);
+          applyWrapSequence(rec.term, fixedSize || useSettingsStore.getState().lineWrapEnabled);
         }
         setSessions((p) => {
           const next = new Map(p);
@@ -401,7 +403,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
   const openSession = useCallback(
     (req: OpenRequest): string => {
       const id = makeSessionId();
-      const s = settingsRef.current;
+      const s = useSettingsStore.getState();
       // Provisional pin flag. Auto-detection isn't known until the connect-time
       // pty-size event, which is also the only thing that can start a pin (it
       // carries ptyCols) — so resolving without it here is safe, and the event
@@ -454,7 +456,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
 
       term.onData((data) => {
         const converted =
-          settingsRef.current.backspaceSendsDel || !data.includes(DEL)
+          useSettingsStore.getState().backspaceSendsDel || !data.includes(DEL)
             ? data
             : data.replace(DEL_RE, '\x08');
         // Deliberately one invoke per keystroke: batching input would add
@@ -587,7 +589,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
   const setSessionFixedSize = useCallback((id: string, on: boolean) => {
     const rec = sessionsRef.current.get(id);
     if (rec) {
-      applyWrapSequence(rec.term, on || settingsRef.current.lineWrapEnabled);
+      applyWrapSequence(rec.term, on || useSettingsStore.getState().lineWrapEnabled);
     }
     setSessions((prev) => {
       const next = new Map(prev);

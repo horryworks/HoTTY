@@ -1,5 +1,20 @@
 # Release Notes
 
+## v2.0.16-beta3
+
+**The graphics-card renderer added in beta2 is removed — measured side by side, it made no difference.** The beta2 notes claimed that drawing the terminal with the graphics card is faster. Tested against the workload it should have suited best — heavily coloured output, which is exactly what the previous method handles worst — it was no quicker, and the first screenful was actually slower while the graphics pipeline warmed up. So it is gone, along with the roughly 120 KB of code it added. What this release does contain is work found by profiling the app rather than reasoning about it: several parts of the interface were doing a great deal of work on every frame of incoming output, and no longer do. None of this changes what you see on screen — it is about how hard the app works to put it there, which shows up as steadier scrolling on a busy machine and less battery use on a laptop.
+
+### Performance
+
+- **The prompt marker rail no longer redraws your entire scrollback.** With prompt highlighting on — the default — every detected prompt and output block anywhere in the scrollback had a marker rebuilt for it on every frame of arriving output. With the default 10,000-line scrollback and a long dump that marks almost every line, that meant rebuilding thousands of markers to show the forty or so that fit on screen. Only the markers actually in view are built now. Clicking one still selects the whole block, including the parts scrolled out of sight.
+- **Prompt detection does far less work per line.** For each line that appeared, all eight prompt patterns were rebuilt from their text before being matched, and the line was normalized for accented and combining characters whether or not it contained any. The patterns are now prepared once, when you change them, and the normalization is skipped for ordinary text. Re-checking after the cursor moves is also limited to the lines that can actually have changed.
+- **Changing one setting no longer redraws the whole interface.** The part of HoTTY that manages sessions was listening for changes to every setting, so altering any single one — a colour, a font size, a checkbox — triggered a redraw of the entire app. It now listens only to the three settings it actually reacts to.
+- **The terminal scrollbar no longer forces the page to be re-measured mid-frame.** Keeping the custom scrollbar in step with the terminal read its position immediately after changing its size, which obliges the browser engine to recalculate the layout there and then instead of at its own convenience, and it queued a fresh animation callback for every such update during bulk output. It now reads before it writes, and reuses a callback that is already pending.
+
+### Improvements
+
+- **Debug logs now keep enough history to be worth reading.** HoTTY's own debug log rotated every 40 KB and kept only one previous file, so by the time you noticed a problem and went looking, the part that mattered had usually been thrown away. Each file now holds up to 512 KB and two are kept. The release build also stops writing a second copy of every line to a console output that does not exist in a windowed application. This is the log under `%APPDATA%\com.hotty.terminal\logs\`, reachable from **Settings → About** — your session logs are a separate thing and are unaffected.
+
 ## v2.0.16-beta2
 
 **HoTTY now keeps up with output that arrives faster than it can draw it.** Dumping a large file, running `display current-configuration` on a switch, or scrolling back through a busy session used to make the app work far harder than the amount of text justified: every burst of output coming off the device was handed to the display separately no matter how small, and the terminal grid was then redrawn one HTML element at a time. Both of those are addressed here. Typing is deliberately untouched — nothing is ever held back waiting for more to arrive, so a keystroke still echoes exactly as immediately as it did before.

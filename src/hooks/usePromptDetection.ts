@@ -12,6 +12,21 @@ export interface DetectedMarker {
 }
 
 /**
+ * True when `s` contains any code unit above U+007F.
+ *
+ * `String.prototype.normalize` goes through ICU and allocates even when the
+ * input is already in NFC, and this runs for every rendered row during bulk
+ * output. Every combining mark lives above U+007F, so an all-ASCII line is
+ * normalisation-invariant and can skip the call entirely.
+ */
+function hasNonAscii(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    if (s.charCodeAt(i) > 0x7f) return true;
+  }
+  return false;
+}
+
+/**
  * Pure prompt detection hook. Watches the terminal buffer and emits an
  * up-to-date array of detected lines (prompt or non-prompt content). Empty
  * lines that have no content anywhere below them in the buffer are excluded
@@ -19,6 +34,10 @@ export interface DetectedMarker {
  *
  * This hook does NOT register xterm decorations; rendering the markers is the
  * caller's responsibility.
+ *
+ * Prompt highlighting is ON by default, so everything below `useEffect` runs
+ * for every terminal of every user — per-row work here is on the bulk-output
+ * hot path and should stay allocation-light.
  */
 export function usePromptDetection(
   term: Terminal | null,
@@ -34,8 +53,38 @@ export function usePromptDetection(
       return () => clearTimeout(id);
     }
 
+    // Compile every pattern ONCE per `patterns` identity. This used to sit
+    // inside the per-line evaluation, so with the eight shipped defaults it
+    // cost eight `new RegExp` compiles for every row that scrolled past.
+    // None of these carry the `g` flag, so `exec` keeps no `lastIndex` state
+    // and one instance can safely be shared across lines.
+    const compiled: RegExp[] = [];
+    for (const patternObj of patterns) {
+      if (!patternObj.pattern) continue;
+      try {
+        compiled.push(new RegExp(patternObj.pattern));
+      } catch {
+        // Same outcome as before (the pattern simply never matches), but now
+        // the user gets a hint instead of a silent no-op.
+        console.warn(`[promptDetection] ignoring invalid pattern: ${patternObj.pattern}`);
+      }
+    }
+
     // Map keyed by logical start line Y so we can incrementally update.
     const map = new Map<number, DetectedMarker>();
+    /**
+     * Upper bound on the largest key in `map`. Never smaller than the true
+     * maximum; it can go stale-HIGH after a delete, which only costs the
+     * occasional full scan (i.e. the old behaviour) and is corrected by the
+     * prune pass in `onRender`.
+     */
+    let maxKey = -1;
+    /**
+     * `buffer.length` at the last prune. Keys can only fall out of range when
+     * the buffer SHRINKS, so a same-or-growing length lets the prune walk be
+     * skipped — it would otherwise run on every rendered frame.
+     */
+    let lastBufferLength = -1;
     let pendingFlush = false;
 
     const flush = () => {
@@ -72,16 +121,16 @@ export function usePromptDetection(
         currentLine = prevLine;
       }
 
-      const logicalStartLine = buffer.getLine(startLineY);
-      if (!logicalStartLine) return;
+      // The trace-back loop leaves `currentLine` as the line at `startLineY`,
+      // so re-fetching it would be a redundant getLine per evaluated row.
+      const logicalStartLine = currentLine;
 
       // Normalise to NFC so prompts containing combining marks (composed vs.
       // decomposed Japanese / accented Latin) match user-supplied regex
-      // patterns regardless of how the terminal sent the bytes.
-      const startText = logicalStartLine
-        .translateToString(true)
-        .normalize('NFC')
-        .trimEnd();
+      // patterns regardless of how the terminal sent the bytes. ASCII-only
+      // lines — the overwhelming majority of bulk output — skip the call.
+      const rawText = logicalStartLine.translateToString(true);
+      const startText = (hasNonAscii(rawText) ? rawText.normalize('NFC') : rawText).trimEnd();
       const isEmpty = startText.length === 0;
 
       // "Unused trailing" = empty line with no content anywhere below it.
@@ -106,17 +155,11 @@ export function usePromptDetection(
 
       let isPrompt = false;
       if (!isEmpty) {
-        for (const patternObj of patterns) {
-          if (!patternObj.pattern) continue;
-          try {
-            const regex = new RegExp(patternObj.pattern);
-            const match = regex.exec(startText);
-            if (match && match.index === 0) {
-              isPrompt = true;
-              break;
-            }
-          } catch {
-            /* ignore invalid regex */
+        for (const regex of compiled) {
+          const match = regex.exec(startText);
+          if (match && match.index === 0) {
+            isPrompt = true;
+            break;
           }
         }
       }
@@ -137,6 +180,7 @@ export function usePromptDetection(
         return; // No change
       }
       map.set(startLineY, { line: startLineY, isPrompt, lineCount });
+      if (startLineY > maxKey) maxKey = startLineY;
       flush();
     };
 
@@ -153,9 +197,13 @@ export function usePromptDetection(
       const buffer = term.buffer.active;
       const currentCursorY = buffer.baseY + buffer.cursorY;
       evaluateLine(currentCursorY);
-      // Re-evaluate any tracked markers at or below the cursor
-      for (const key of map.keys()) {
-        if (key >= currentCursorY) evaluateLine(key);
+      // Re-evaluate any tracked markers at or below the cursor. During bulk
+      // output every marker sits ABOVE the cursor, so the bound check skips
+      // the whole walk instead of comparing several hundred keys per move.
+      if (maxKey >= currentCursorY) {
+        for (const key of map.keys()) {
+          if (key >= currentCursorY) evaluateLine(key);
+        }
       }
     });
 
@@ -172,13 +220,26 @@ export function usePromptDetection(
           evaluateLine(bufferY);
         }
       }
-      // Drop entries whose line is no longer valid (buffer trimmed by scrollback)
-      for (const key of map.keys()) {
-        if (key < 0 || key >= buffer.length) {
-          map.delete(key);
-          flush();
+      // Drop entries whose line is no longer valid (buffer trimmed by
+      // scrollback, cleared, or swapped to the alternate buffer). Only a
+      // SHRINKING buffer can invalidate a key, so the walk is skipped while
+      // the buffer grows — and one flush covers the whole pass.
+      const len = buffer.length;
+      if (len < lastBufferLength) {
+        let removed = false;
+        let newMax = -1;
+        for (const key of map.keys()) {
+          if (key < 0 || key >= len) {
+            map.delete(key);
+            removed = true;
+          } else if (key > newMax) {
+            newMax = key;
+          }
         }
+        maxKey = newMax;
+        if (removed) flush();
       }
+      lastBufferLength = len;
     });
 
     scanAllLines();

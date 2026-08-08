@@ -13,12 +13,14 @@ function makeTerm(overrides?: {
   length?: number;
   getLine?: (y: number) => unknown;
   cellHeight?: number;
+  rows?: number;
 }) {
   const onScrollHandlers: Array<() => void> = [];
   const onRenderHandlers: Array<() => void> = [];
   const cellHeight = overrides?.cellHeight ?? 20;
 
   const term = {
+    rows: overrides?.rows ?? 24,
     buffer: {
       active: {
         viewportY: overrides?.viewportY ?? 0,
@@ -174,6 +176,47 @@ describe('TerminalMarkerRail', () => {
     const [start, end] = term.selectLines.mock.calls[0];
     expect(start).toBe(5);
     expect(end).toBe(7); // expanded through wrapped rows 6 and 7
+  });
+
+  // `markers` spans the whole scrollback (10,000 lines by default) but only the
+  // viewport is visible. Rendering every marker meant thousands of DOM nodes,
+  // rebuilt on every flush, to show a couple of dozen.
+  it('renders only the markers within the viewport, not the whole scrollback', () => {
+    const term = makeTerm({ viewportY: 5000, rows: 30, length: 10000 });
+    const markers: DetectedMarker[] = Array.from({ length: 10000 }, (_, i) => ({
+      line: i,
+      isPrompt: i % 2 === 0,
+      lineCount: 1,
+    }));
+    const { container } = render(
+      <TerminalMarkerRail term={term} markers={markers} highlightColor="#fff" />
+    );
+    const els = container.querySelectorAll('.terminal-marker');
+    // 30 visible rows plus one row of margin on each side.
+    expect(els.length).toBeLessThanOrEqual(34);
+    expect(els.length).toBeGreaterThanOrEqual(30);
+  });
+
+  it('still resolves block selection against markers outside the viewport', () => {
+    // The click handler walks the FULL marker list to find block boundaries, so
+    // virtualising the render must not narrow what a click can select.
+    const term = makeTerm({ viewportY: 100, rows: 10, length: 1000 });
+    const markers: DetectedMarker[] = [
+      { line: 50, isPrompt: false, lineCount: 1 }, // above the viewport
+      { line: 100, isPrompt: true, lineCount: 1 },
+      { line: 101, isPrompt: true, lineCount: 1 },
+      { line: 500, isPrompt: false, lineCount: 1 }, // below the viewport
+    ];
+    const { container } = render(
+      <TerminalMarkerRail term={term} markers={markers} highlightColor="#fff" />
+    );
+    const els = container.querySelectorAll('.terminal-marker');
+    expect(els.length).toBe(2); // only lines 100 and 101 are on screen
+    fireEvent.click(els[0]);
+    const [start, end] = term.selectLines.mock.calls[0];
+    // Bounded by the off-screen non-prompt markers at 50 and 500.
+    expect(start).toBe(100);
+    expect(end).toBe(101);
   });
 
   it('updates marker positions when xterm fires onScroll', () => {

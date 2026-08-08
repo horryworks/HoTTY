@@ -11,12 +11,6 @@ vi.mock('../../services/tauriService', () => ({
   },
 }));
 
-// The host upgrades every terminal to the WebGL renderer on mount. jsdom has no
-// WebGL2 context, so letting that run would only pull in the real addon and log
-// canvas warnings on its way to the DOM-renderer fallback — which is covered
-// directly in xtermRenderer.test.ts.
-vi.mock('../../utils/xtermRenderer', () => ({ enableWebglRenderer: () => {} }));
-
 class MockResizeObserver {
   observe() {}
   disconnect() {}

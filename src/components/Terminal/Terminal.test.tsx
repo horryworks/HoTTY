@@ -5,17 +5,9 @@ const resize = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../services/tauriService', () => ({
   tauriService: {
     resize: (id: string, cols: number, rows: number) => resize(id, cols, rows),
-    // The host attempts a WebGL renderer upgrade on mount; in jsdom that fails
-    // and reports the fallback through logDebug.
     logDebug: () => Promise.resolve(),
   },
 }));
-
-// The host upgrades every terminal to the WebGL renderer on mount. jsdom has no
-// WebGL2 context, so letting that run would only pull in the real addon and log
-// canvas warnings on its way to the DOM-renderer fallback — which is covered
-// directly in xtermRenderer.test.ts.
-vi.mock('../../utils/xtermRenderer', () => ({ enableWebglRenderer: () => {} }));
 
 // jsdom has no ResizeObserver.
 class MockResizeObserver {

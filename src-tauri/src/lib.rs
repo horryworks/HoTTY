@@ -4,6 +4,7 @@ pub mod services;
 use std::sync::Arc;
 
 use tauri::Manager;
+use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
 use commands::ai::{
     ai_auth_auto, ai_auth_logout, ai_auth_start, ai_auth_status, ai_chat_cancel, ai_chat_clear,
@@ -166,6 +167,26 @@ pub fn run() {
                 } else {
                     log::LevelFilter::Info
                 })
+                // The plugin defaults to [Stdout, LogDir]. A release build sets
+                // `windows_subsystem = "windows"` and has no console attached,
+                // so every line was still being formatted and written to a
+                // handle that goes nowhere. Keep Stdout only where a console
+                // actually exists.
+                .targets(if cfg!(debug_assertions) {
+                    vec![
+                        Target::new(TargetKind::Stdout),
+                        Target::new(TargetKind::LogDir { file_name: None }),
+                    ]
+                } else {
+                    vec![Target::new(TargetKind::LogDir { file_name: None })]
+                })
+                // Defaults are 40 KB + KeepOne, and KeepOne DELETES the file on
+                // overflow rather than archiving it — so the debug log held at
+                // most 40 KB and then vanished, which is usually less than one
+                // session and routinely missing the lines that explain a bug
+                // report. 512 KB with two archives caps the cost at ~1.5 MB.
+                .max_file_size(512 * 1024)
+                .rotation_strategy(RotationStrategy::KeepSome(2))
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())

@@ -31,6 +31,8 @@ export function TerminalScrollbar({ term }: TerminalScrollbarProps) {
   const cellHeightRef = useRef(17);
 
   useEffect(() => {
+    let rafId = 0;
+
     const update = () => {
       const buffer = term.buffer.active;
       const totalLines = buffer.length;
@@ -41,7 +43,16 @@ export function TerminalScrollbar({ term }: TerminalScrollbarProps) {
       const cellHeight = typeof dims === 'number' && dims > 0 ? dims : 17;
       cellHeightRef.current = cellHeight;
 
+      const rail = railRef.current;
       const spacer = spacerRef.current;
+
+      // Read before writing. `update` runs on every rendered frame, and reading
+      // scrollTop *after* changing the spacer's height forces the browser to
+      // recompute layout synchronously each time. Growing the spacer does not
+      // move scrollTop, so the value read here stays valid for the comparison
+      // below.
+      const currentTop = rail ? rail.scrollTop : 0;
+
       if (spacer) {
         const newHeight = `${totalLines * cellHeight}px`;
         if (spacer.style.height !== newHeight) {
@@ -49,15 +60,19 @@ export function TerminalScrollbar({ term }: TerminalScrollbarProps) {
         }
       }
 
-      const rail = railRef.current;
       if (rail) {
         const targetTop = viewportY * cellHeight;
-        if (Math.abs(rail.scrollTop - targetTop) > 0.5) {
+        if (Math.abs(currentTop - targetTop) > 0.5) {
           isSyncingRef.current = true;
           rail.scrollTop = targetTop;
-          requestAnimationFrame(() => {
-            isSyncingRef.current = false;
-          });
+          // At most one pending frame: a burst of syncs before the callback
+          // runs used to queue a callback each, all doing the same assignment.
+          if (rafId === 0) {
+            rafId = requestAnimationFrame(() => {
+              rafId = 0;
+              isSyncingRef.current = false;
+            });
+          }
         }
       }
     };
@@ -67,6 +82,7 @@ export function TerminalScrollbar({ term }: TerminalScrollbarProps) {
     return () => {
       onScroll.dispose();
       onRender.dispose();
+      if (rafId !== 0) cancelAnimationFrame(rafId);
     };
   }, [term]);
 

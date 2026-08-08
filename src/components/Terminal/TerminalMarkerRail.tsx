@@ -127,18 +127,32 @@ export function TerminalMarkerRail({ term, markers, highlightColor }: TerminalMa
 
   const promptColor = highlightColor || 'var(--terminal-prompt-default, #f44336)';
   const nonPromptColor = 'var(--terminal-prompt-active, #2196f3)';
+  // Hoisted out of the map below: these are two constant strings, but calling
+  // `t()` per marker made i18next's lookup one of the most expensive functions
+  // in a bulk-output profile.
+  const promptLabel = t('terminal.promptMarker');
+  const outputLabel = t('terminal.outputMarker');
+
+  // Only the rows on screen can be seen, but `markers` covers the whole
+  // scrollback — 10,000 lines by default — and a bulk dump marks nearly every
+  // one of them. Rendering the lot meant rebuilding thousands of DOM nodes on
+  // every flush to show about forty. Slice to the viewport (plus a row of
+  // margin each way so a partially-scrolled marker doesn't pop in) and let the
+  // rest stay out of the DOM entirely.
+  const rows = term.rows || 24; // 0/undefined before the first fit — don't hide everything
+  const firstRow = viewport.viewportY - 1;
+  const lastRow = viewport.viewportY + rows + 1;
+  const visible = markers.filter((m) => m.line + m.lineCount >= firstRow && m.line <= lastRow);
 
   return (
     <div className="terminal-marker-rail" aria-label={t('terminal.markerRail')}>
-      {markers.map((m) => {
+      {visible.map((m) => {
         // (m.line - viewport.viewportY) is the visual row offset within the
-        // viewport. Negative or beyond rows means off-screen; we still render
-        // (clipped by parent overflow) so we don't have to recompute on every
-        // micro-scroll.
+        // viewport.
         const top = (m.line - viewport.viewportY) * viewport.cellHeight;
         const height = m.lineCount * viewport.cellHeight;
         const color = m.isPrompt ? promptColor : nonPromptColor;
-        const label = m.isPrompt ? t('terminal.promptMarker') : t('terminal.outputMarker');
+        const label = m.isPrompt ? promptLabel : outputLabel;
         return (
           <div
             key={m.line}

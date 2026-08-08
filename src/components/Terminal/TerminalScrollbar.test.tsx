@@ -113,6 +113,30 @@ describe('TerminalScrollbar', () => {
     expect(term.scrollToLine).toHaveBeenCalledWith(10);
   });
 
+  // `update` runs on every rendered frame, and during bulk output it syncs
+  // scrollTop on nearly all of them. Queueing a fresh callback per sync made
+  // requestAnimationFrame the single most expensive entry in a profile.
+  it('schedules at most one animation frame while a sync is still pending', () => {
+    const term = makeTerm({ length: 10000, cellHeight: 20, viewportY: 0 });
+    const rafSpy = vi
+      .spyOn(globalThis, 'requestAnimationFrame')
+      .mockImplementation(() => 1 as unknown as number);
+    const { container } = render(<TerminalScrollbar term={term} />);
+    const rail = container.querySelector('.terminal-scrollbar-rail') as HTMLElement;
+    Object.defineProperty(rail, 'scrollTop', { value: 0, writable: true, configurable: true });
+
+    rafSpy.mockClear();
+    act(() => {
+      // Ten frames of output before the browser gets to run the callback.
+      for (let y = 1; y <= 10; y++) {
+        term.buffer.active.viewportY = y;
+        term._onRenderHandlers.forEach((h) => h());
+      }
+    });
+    expect(rafSpy).toHaveBeenCalledTimes(1);
+    rafSpy.mockRestore();
+  });
+
   it('ignores scroll events fired during programmatic sync', () => {
     const term = makeTerm({ length: 100, cellHeight: 20, viewportY: 0 });
     const { container } = render(<TerminalScrollbar term={term} />);
