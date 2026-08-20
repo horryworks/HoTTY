@@ -123,6 +123,10 @@ export const help = {
       '<0>AI chat logs:</0> While logging is on, each AI Chat conversation is appended to a Markdown file (<1>...-AICHAT-....md</1>) in the same folder and appears in the Log Viewer. Attached images are noted but not saved. Starting a new chat, closing a tab, or switching AI provider begins a new file. Text you type is saved exactly as written, so avoid typing credentials into the chat.',
     logViewer:
       '<0>Log Viewer:</0> Click the <1>Log Viewer</1> button in the tab bar to open a dedicated log-browsing pane. It lists all saved log files and lets you open and search them without leaving HoTTY.',
+    fileTypes:
+      '<0>File types:</0> A session log opens as plain text. An AI chat transcript (<1>.md</1>) opens formatted — headings, tables and code blocks, exactly as the reply looked in the AI Chat pane. A Ping Monitor log (<2>.csv</2>) opens as a table. A button in the search bar switches either one back to the raw file, and search works the same in both views.',
+    pingCsv:
+      '<0>Ping Monitor CSV:</0> Ping Monitor saves its results into the same logging folder set in <1>Settings → General</1>, so its files appear in the Log Viewer next to your session logs. Its <2>CSV Logging</2> checkbox stays unavailable until that folder is set.',
     search:
       '<0>Search:</0> Use the search bar inside Log Viewer to filter lines. Toggle the <1>.*</1> button to switch between plain-text and regular expression search.',
   },

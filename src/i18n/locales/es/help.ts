@@ -123,6 +123,10 @@ export const help = {
       '<0>Registros del chat de IA:</0> Mientras el registro está activo, cada conversación del chat de IA se añade a un archivo Markdown (<1>...-AICHAT-....md</1>) en la misma carpeta y aparece en el Visor de registros. Las imágenes adjuntas se anotan pero no se guardan. Iniciar un chat nuevo, cerrar una pestaña o cambiar de proveedor de IA comienza un archivo nuevo. El texto que escribes se guarda tal cual, así que evita escribir credenciales en el chat.',
     logViewer:
       '<0>Visor de registros:</0> haga clic en el botón <1>Visor de registros</1> de la barra de pestañas para abrir un panel dedicado a la exploración de registros. Enumera todos los archivos de registro guardados y le permite abrirlos y buscar en ellos sin salir de HoTTY.',
+    fileTypes:
+      '<0>Tipos de archivo:</0> un registro de sesión se abre como texto plano. Una transcripción de chat de IA (<1>.md</1>) se abre con formato — títulos, tablas y bloques de código, tal como se veía la respuesta en el panel de Chat IA. Un registro del Monitor de ping (<2>.csv</2>) se abre como tabla. Un botón de la barra de búsqueda devuelve cualquiera de las dos vistas al archivo original, y la búsqueda funciona igual en todas ellas.',
+    pingCsv:
+      '<0>CSV del Monitor de ping:</0> el Monitor de ping guarda sus resultados en la misma carpeta de registro configurada en <1>Configuración → General</1>, por lo que sus archivos aparecen en el Visor de registros junto a los registros de sesión. Su casilla <2>Registro CSV</2> no está disponible hasta que se configure esa carpeta.',
     search:
       '<0>Búsqueda:</0> use la barra de búsqueda dentro del Visor de registros para filtrar líneas. Active el botón <1>.*</1> para alternar entre la búsqueda de texto plano y la de expresiones regulares.',
   },

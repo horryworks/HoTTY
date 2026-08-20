@@ -1,5 +1,22 @@
 # Release Notes
 
+## v2.0.17
+
+**Log files that are not plain text now open as what they actually are.** An AI Chat transcript in the Log Viewer used to be a wall of raw markdown — `##` headings, pipe-delimited tables, backtick fences — and a Ping Monitor CSV did not appear in the file list at all. A transcript now reads exactly as the conversation did in the AI Chat pane, and a CSV opens as a real table you can search by cell. Alongside that, the Ping Monitor stops working through its target list one host at a time: every target in a cycle is now pinged together, so a few unreachable hosts no longer hold up the whole list.
+
+### New Features
+
+- **AI chat transcripts read as conversations in the Log Viewer.** A `.md` chat log now renders the way the reply looked when the AI wrote it — headings, tables, lists, bold text and code blocks — instead of showing you the markdown source. The find bar searches the formatted text, and a button in the search bar switches back to the raw file whenever you want to see it. Links inside a transcript open in your browser through the same checked path the AI Chat pane uses, rather than navigating away from HoTTY. Two things are worth knowing: a search cannot match across formatting, so "bold" is not found inside `**bo**ld`, and match counts differ between the two views because the raw view can also match the markdown characters themselves. Transcripts larger than 2 MB stay as plain text — formatting is done in a single pass, and a file that size would lock up the pane.
+- **Ping Monitor logs open as a table.** `.csv` files now appear in the Log Viewer's file list — until now they were written but never listed — and open as a table with a header row rather than as comma-separated text. Search runs over the cells, so a highlight can never straddle a comma that is really a column edge, and **Only matching lines** filters whole rows. Long files show their first 5,000 rows with a notice saying so, and a button in the search bar switches back to raw text.
+
+### Improvements
+
+- **The Ping Monitor pings every target at once.** A polling cycle used to work through the target list one host at a time, which made a cycle take as long as all of its targets added together: roughly 32 ms for a LAN address that answers immediately, but around 2.6 seconds for one that stays silent. With 50 targets and a handful unreachable, tens of seconds could pass before a single row updated. Every target in a cycle is now pinged at the same time — up to 100 at once — so a cycle takes about as long as its slowest single target instead of the sum of them all. The table's row order is unchanged.
+
+### Bug Fixes
+
+- **Ping Monitor CSV logging could silently write nothing.** HoTTY only writes logs into a folder you have approved through a native dialog; a path that merely arrives as text is deliberately not enough, so that no typed or imported path can quietly grant write access. The Ping Monitor's log folder, however, was a plain text box, which could never produce that approval — so ticking **CSV Logging** and typing a path produced no file and no explanation. The pane now uses the same logging folder as everything else, the one set in **Settings → General**, and shows you which folder that is. The checkbox is unavailable until that folder is set, and if the folder has not been approved the pane says so instead of leaving you hunting for a file that was never written. Monitoring itself still runs either way — only the CSV side is affected.
+
 ## v2.0.16
 
 **The v2.0.16 stable release, consolidating the v2.0.16 beta series.** This release changes almost nothing about what HoTTY does — it is about how hard it works to do it. The app no longer loads everything it might eventually need in order to start, and the Windows program itself is now built as a single optimized unit, so it is smaller on disk and lighter in memory. Output arriving faster than it can be drawn — a large `cat`, a `display current-configuration` on a switch — is handed to the display in far fewer, larger pieces, and several parts of the interface that were doing a great deal of work on *every frame* of that output no longer do. Typing is deliberately untouched: nothing is ever held back waiting for more to arrive, so a keystroke still echoes exactly as immediately as before. Alongside that, stopping a Ping Monitor now really stops it, HoTTY's own debug log keeps enough history to be worth reading, and one cryptography library has left the shipped app.

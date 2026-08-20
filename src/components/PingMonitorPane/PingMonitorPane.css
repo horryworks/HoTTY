@@ -184,26 +184,18 @@
   white-space: nowrap;
 }
 
-.ping-monitor-logging-path {
-  width: 100%;
-  padding: 3px 8px;
-  background: var(--input-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-family: var(--font-family);
-  font-size: calc(var(--font-size-base) - 2px);
-  outline: none;
-  box-sizing: border-box;
-}
-
-.ping-monitor-logging-path:focus {
-  border-color: var(--accent-color);
-}
-
-.ping-monitor-logging-path:disabled {
+.ping-monitor-logging-toggle.disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Read-only reminder of where CSV files land (the app-wide log folder). */
+.ping-monitor-logging-hint {
+  font-size: calc(var(--font-size-base) - 3px);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Divider with resize handle and collapse toggle */

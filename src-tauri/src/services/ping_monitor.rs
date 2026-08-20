@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use futures::stream::StreamExt;
 use serde::Serialize;
 use tauri::AppHandle;
 use tauri::Emitter;
@@ -18,6 +19,16 @@ const PING_KILL_TIMEOUT_MS: u64 = 5000;
 
 /// Maximum target hostname/IP length.
 const MAX_TARGET_LEN: usize = 253;
+
+/// How many pings may be in flight at once within a single cycle.
+///
+/// Each ping is its own `ping` subprocess, so this is also the ceiling on
+/// concurrently spawned children per monitor. A cycle used to be strictly
+/// sequential, which made its duration the *sum* of every target: roughly 32ms
+/// for an instant LAN reply but about 2.6s for a silent host, so 50 targets
+/// with a handful of dead ones took tens of seconds before a single row could
+/// be emitted.
+const MAX_CONCURRENT_PINGS: usize = 100;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,9 +78,10 @@ impl Default for PingMonitorState {
 }
 
 /// Grace period a monitor gets to wind down cooperatively before it is aborted.
-/// A cycle in flight can hold the loop for up to `PING_KILL_TIMEOUT_MS` per
-/// target, so a stop during a cycle normally lands on the abort path — which is
-/// the point: teardown is bounded regardless of what the loop is doing.
+/// A cycle in flight can hold the loop for up to `PING_KILL_TIMEOUT_MS` (per
+/// batch of `MAX_CONCURRENT_PINGS`, since the cycle fans out), so a stop during
+/// a cycle normally lands on the abort path — which is the point: teardown is
+/// bounded regardless of what the loop is doing.
 const SHUTDOWN_GRACE_MS: u64 = 2000;
 
 /// Handle to a running monitor — the cancel token plus the task's `JoinHandle`.
@@ -157,6 +169,34 @@ async fn ping_target(target: &str) -> PingResult {
             timestamp,
         },
     }
+}
+
+/// Ping every target with at most `MAX_CONCURRENT_PINGS` in flight, returning
+/// the results **in the original target order**.
+///
+/// Order matters to the UI, not just to tests: the pane rebuilds its table from
+/// the emitted snapshot and numbers the rows by position, so a completion-order
+/// result vector would reshuffle every row on every cycle.
+/// `buffer_unordered` yields by completion, hence the index tag and the sort.
+///
+/// Generic over the ping fn so the ordering and the concurrency cap can be
+/// tested without spawning real subprocesses.
+async fn ping_all<F, Fut>(targets: &[String], ping: F) -> Vec<PingResult>
+where
+    F: Fn(String) -> Fut,
+    Fut: std::future::Future<Output = PingResult>,
+{
+    let mut indexed: Vec<(usize, PingResult)> =
+        futures::stream::iter(targets.iter().cloned().enumerate().map(|(i, t)| {
+            let fut = ping(t);
+            async move { (i, fut.await) }
+        }))
+        .buffer_unordered(MAX_CONCURRENT_PINGS)
+        .collect()
+        .await;
+
+    indexed.sort_unstable_by_key(|(i, _)| *i);
+    indexed.into_iter().map(|(_, r)| r).collect()
 }
 
 /// Run the system `ping` command and parse the output.
@@ -374,11 +414,12 @@ pub async fn start_monitor(
             // Run one ping cycle
             let current_targets = targets_arc.lock().await.clone();
             if !current_targets.is_empty() {
-                let mut results = Vec::with_capacity(current_targets.len());
-                let futures: Vec<_> = current_targets.iter().map(|t| ping_target(t)).collect();
-                for future in futures {
-                    results.push(future.await);
-                }
+                // Fan the cycle out rather than awaiting each ping in turn: a
+                // `Vec` of futures is inert until polled, so the old
+                // collect-then-await-in-a-loop ran strictly one target at a
+                // time and every slow or silent host stalled the whole cycle.
+                let results =
+                    ping_all(&current_targets, |t| async move { ping_target(&t).await }).await;
 
                 // Write to CSV if logging
                 if let Some(ref mut file) = csv_file {
@@ -668,6 +709,115 @@ mod tests {
         // Just verify it creates successfully
         let monitors = state.monitors.try_lock().unwrap();
         assert!(monitors.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // Cycle fan-out — `ping_all` is generic over the ping fn precisely so these
+    // can run without spawning real `ping` subprocesses.
+    // -----------------------------------------------------------------------
+
+    fn fake_ok(target: &str) -> PingResult {
+        PingResult {
+            target: target.to_string(),
+            status: "ok".into(),
+            rtt: Some(1),
+            ttl: Some(64),
+            timestamp: "ts".into(),
+        }
+    }
+
+    /// `buffer_unordered` yields by completion, so the results must be sorted
+    /// back into target order. The pane numbers its rows by position — without
+    /// this the table reshuffles on every cycle.
+    #[tokio::test]
+    async fn ping_all_preserves_target_order() {
+        let targets: Vec<String> = ["a", "b", "c", "d"].iter().map(|s| s.to_string()).collect();
+
+        // Deliberately inverted: "a" finishes last, "d" first.
+        let results = ping_all(&targets, |t| async move {
+            let delay = match t.as_str() {
+                "a" => 40,
+                "b" => 30,
+                "c" => 20,
+                _ => 1,
+            };
+            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+            fake_ok(&t)
+        })
+        .await;
+
+        let order: Vec<&str> = results.iter().map(|r| r.target.as_str()).collect();
+        assert_eq!(order, ["a", "b", "c", "d"]);
+    }
+
+    /// Repeated targets must not collapse or reorder — the index tag, not the
+    /// target string, is what the sort keys on.
+    #[tokio::test]
+    async fn ping_all_keeps_duplicate_targets_positional() {
+        let targets: Vec<String> = ["x", "y", "x"].iter().map(|s| s.to_string()).collect();
+        let results = ping_all(&targets, |t| async move { fake_ok(&t) }).await;
+        let order: Vec<&str> = results.iter().map(|r| r.target.as_str()).collect();
+        assert_eq!(order, ["x", "y", "x"]);
+    }
+
+    #[tokio::test]
+    async fn ping_all_empty_targets_yields_nothing() {
+        let results = ping_all(&[], |t| async move { fake_ok(&t) }).await;
+        assert!(results.is_empty());
+    }
+
+    /// The regression this whole change exists for: targets must overlap in
+    /// flight rather than run one at a time.
+    #[tokio::test]
+    async fn ping_all_runs_targets_concurrently() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let inflight = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let targets: Vec<String> = (0..8).map(|i| format!("h{i}")).collect();
+
+        ping_all(&targets, |t| {
+            let inflight = Arc::clone(&inflight);
+            let peak = Arc::clone(&peak);
+            async move {
+                let now = inflight.fetch_add(1, Ordering::SeqCst) + 1;
+                peak.fetch_max(now, Ordering::SeqCst);
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                inflight.fetch_sub(1, Ordering::SeqCst);
+                fake_ok(&t)
+            }
+        })
+        .await;
+
+        assert_eq!(peak.load(Ordering::SeqCst), 8);
+    }
+
+    /// …but not unboundedly: every in-flight ping is a subprocess, so the fan-out
+    /// is capped at `MAX_CONCURRENT_PINGS`.
+    #[tokio::test]
+    async fn ping_all_caps_concurrency_at_the_limit() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let inflight = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let count = MAX_CONCURRENT_PINGS * 2 + 7;
+        let targets: Vec<String> = (0..count).map(|i| format!("h{i}")).collect();
+
+        let results = ping_all(&targets, |t| {
+            let inflight = Arc::clone(&inflight);
+            let peak = Arc::clone(&peak);
+            async move {
+                let now = inflight.fetch_add(1, Ordering::SeqCst) + 1;
+                peak.fetch_max(now, Ordering::SeqCst);
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                inflight.fetch_sub(1, Ordering::SeqCst);
+                fake_ok(&t)
+            }
+        })
+        .await;
+
+        assert_eq!(results.len(), count);
+        assert_eq!(peak.load(Ordering::SeqCst), MAX_CONCURRENT_PINGS);
     }
 
     // -----------------------------------------------------------------------

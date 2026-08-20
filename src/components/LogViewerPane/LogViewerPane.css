@@ -278,6 +278,52 @@
   word-break: break-all;
 }
 
+/* CSV log rendered as a table (Ping Monitor logs). Cells wrap rather than
+   overflow so a long target never pushes the timestamp column off-screen. */
+.log-viewer-csv-notice {
+  position: sticky;
+  left: 0;
+  padding: 4px 10px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-tertiary);
+  font-size: calc(var(--font-size-base) - 2px);
+}
+
+.log-viewer-csv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+}
+
+.log-viewer-csv-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.log-viewer-csv-table th {
+  padding: 4px 10px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.log-viewer-csv-table td {
+  padding: 3px 10px;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: top;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.log-viewer-csv-table tbody tr:hover {
+  background: var(--hover-bg);
+}
+
 /* In-log search bar */
 .log-viewer-search-bar {
   display: flex;
@@ -411,4 +457,42 @@
 .log-viewer-empty {
   padding: 20px 10px;
   height: auto;
+}
+
+.log-viewer-search-toggle svg {
+  display: block;
+}
+
+/* `.md` log rendered as formatted markdown (AI Chat transcripts).
+   Font family and size are inherited from `.app-root` — the same ones the AI
+   Chat pane inherits — so a transcript reads there exactly as it did live.
+   `.log-viewer-file-content` already scrolls, so this only supplies the gutter. */
+.log-viewer-md {
+  padding: 10px;
+}
+
+/* The shared markdown stylesheet leaves edge trimming to the consumer; without
+   it the first heading pushes the document off the top gutter. */
+.log-viewer-md .md-content>*:first-child {
+  margin-top: 0;
+}
+
+.log-viewer-md .md-content>*:last-child {
+  margin-bottom: 0;
+}
+
+/* Shown above the raw text when a `.md` was too large to format. */
+.log-viewer-md-notice {
+  padding: 4px 10px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-tertiary);
+  font-size: calc(var(--font-size-base) - 2px);
+}
+
+/* "Matching lines only" has no meaning over a rendered document — a formatted
+   transcript has blocks, not lines — so it is disabled in that view. */
+.log-viewer-search-filter-toggle.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

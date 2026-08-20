@@ -123,6 +123,10 @@ export const help = {
       '<0>Journaux du chat IA :</0> Lorsque la journalisation est active, chaque conversation du chat IA est ajoutée à un fichier Markdown (<1>...-AICHAT-....md</1>) dans le même dossier et apparaît dans la visionneuse de journaux. Les images jointes sont signalées mais non enregistrées. Démarrer un nouveau chat, fermer un onglet ou changer de fournisseur IA commence un nouveau fichier. Le texte que vous saisissez est enregistré tel quel : évitez de taper des identifiants dans le chat.',
     logViewer:
       '<0>Visionneuse de journaux :</0> cliquez sur le bouton <1>Visionneuse de journaux</1> dans la barre d\'onglets pour ouvrir un volet dédié à la navigation des journaux. Il répertorie tous les fichiers journaux enregistrés et vous permet de les ouvrir et de les rechercher sans quitter HoTTY.',
+    fileTypes:
+      '<0>Types de fichiers :</0> un journal de session s\'ouvre en texte brut. Une transcription de chat IA (<1>.md</1>) s\'ouvre mise en forme — titres, tableaux et blocs de code, exactement comme la réponse apparaissait dans le volet Chat IA. Un journal du Moniteur ping (<2>.csv</2>) s\'ouvre sous forme de tableau. Un bouton de la barre de recherche ramène l\'une ou l\'autre vue au fichier brut, et la recherche fonctionne de la même façon dans toutes.',
+    pingCsv:
+      '<0>CSV du Moniteur ping :</0> le Moniteur ping enregistre ses résultats dans le même dossier de journalisation défini dans <1>Paramètres → Général</1>, de sorte que ses fichiers apparaissent dans la Visionneuse de journaux à côté de vos journaux de session. Sa case <2>Journalisation CSV</2> reste indisponible tant que ce dossier n\'est pas défini.',
     search:
       '<0>Recherche :</0> utilisez la barre de recherche dans la Visionneuse de journaux pour filtrer les lignes. Basculez le bouton <1>.*</1> pour passer entre la recherche en texte brut et par expression régulière.',
   },

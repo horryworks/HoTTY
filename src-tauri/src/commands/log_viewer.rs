@@ -12,12 +12,26 @@ use crate::services::log_manager::LogManager;
 /// Maximum file size that can be read through the viewer (50 MB).
 const MAX_READ_SIZE: u64 = 50 * 1024 * 1024;
 
-/// Allowed file extensions for reading. `md` covers AI-chat transcripts.
-const ALLOWED_EXTENSIONS: &[&str] = &["txt", "log", "tslog", "md"];
+/// Allowed file extensions for reading. `md` covers AI-chat transcripts and
+/// `csv` the Ping Monitor logs.
+///
+/// `txt` / `log` / `tslog` / `csv` are rendered as inert text or table cells by
+/// the viewer. `md` is the one exception: it is formatted, so that a chat
+/// transcript reads there as it did in the AI Chat pane. That path is the same
+/// one the pane itself uses — `marked` for the markup, then DOMPurify
+/// (`utils/htmlUtils.ts`) to strip scripts, event handlers and the rest before
+/// anything reaches the DOM — and the app's CSP (`tauri.conf.json`) bars remote
+/// subresources, so a `.md` a third party dropped into the folder cannot phone
+/// home either. Adding a new extension here does not by itself make it render
+/// as markup; that is decided in `LogViewerPane`.
+///
+/// The directory allow-list in `LogManager` remains the real boundary on
+/// *which* files can be read at all.
+const ALLOWED_EXTENSIONS: &[&str] = &["txt", "log", "tslog", "md", "csv"];
 
 /// Extensions surfaced in the viewer's file list. `.tslog` is readable but
 /// stays out of the listing — it is the internal timestamp sidecar of a `.txt`.
-const LISTED_EXTENSIONS: &[&str] = &["txt", "log", "md"];
+const LISTED_EXTENSIONS: &[&str] = &["txt", "log", "md", "csv"];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -181,7 +195,8 @@ pub async fn read_log_file(
         return Ok(ReadLogFileResult {
             content: None,
             error: Some(
-                "invalid file type: only .txt, .log, .tslog, and .md files are allowed".into(),
+                "invalid file type: only .txt, .log, .tslog, .md, and .csv files are allowed"
+                    .into(),
             ),
         });
     }
@@ -299,6 +314,9 @@ mod tests {
         assert!(is_allowed_extension(Path::new("file.log")));
         assert!(is_allowed_extension(Path::new("file.tslog")));
         assert!(is_allowed_extension(Path::new("chat.md")));
+        assert!(is_allowed_extension(Path::new(
+            "20260820120000-PING-MONITOR.csv"
+        )));
         assert!(!is_allowed_extension(Path::new("file.exe")));
         assert!(!is_allowed_extension(Path::new("file.json")));
         assert!(!is_allowed_extension(Path::new("noext")));
@@ -311,9 +329,12 @@ mod tests {
         assert!(is_listed_extension(Path::new(
             "20260727091402-AICHAT-router-a.md"
         )));
+        // Ping Monitor writes these into the same folder as the session logs.
+        assert!(is_listed_extension(Path::new(
+            "20260820120000-PING-MONITOR.csv"
+        )));
         // Readable but never listed — internal sidecar of a .txt session log.
         assert!(!is_listed_extension(Path::new("file.tslog")));
-        assert!(!is_listed_extension(Path::new("ping.csv")));
         assert!(!is_listed_extension(Path::new("file.exe")));
         assert!(!is_listed_extension(Path::new("noext")));
     }

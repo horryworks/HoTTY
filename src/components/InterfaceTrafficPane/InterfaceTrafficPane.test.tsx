@@ -106,7 +106,8 @@ describe('InterfaceTrafficPane', () => {
 
     fireEvent.click(screen.getByText('Stop'));
     await waitFor(() => expect(mockStop).toHaveBeenCalledWith('if-1'));
-    expect(screen.getByText('Start')).toBeTruthy();
+    // The button flips back only after the stop call resolves, so wait for the render.
+    await waitFor(() => expect(screen.getByText('Start')).toBeTruthy());
   });
 
   it('only pushes an interval change to the backend while running', async () => {
@@ -141,9 +142,12 @@ describe('InterfaceTrafficPane', () => {
       fireEvent.click(screen.getByText('Start'));
 
       await waitFor(() => expect(mockStart).toHaveBeenCalled());
+      // persist() runs after the start call resolves — wait for the write, not the call.
+      await waitFor(() =>
+        expect(localStorage.getItem('hotty_snmp_target_if-1') ?? '').toContain('sw1')
+      );
       const stored = localStorage.getItem('hotty_snmp_target_if-1') ?? '';
       expect(stored).not.toContain('super-secret');
-      expect(stored).toContain('sw1');
       expect(mockEncrypt).not.toHaveBeenCalled();
     });
 
@@ -159,8 +163,13 @@ describe('InterfaceTrafficPane', () => {
 
       await waitFor(() => expect(mockStart).toHaveBeenCalled());
       await waitFor(() => expect(mockEncrypt).toHaveBeenCalledWith('super-secret'));
+      // The write happens only once every encrypt call has resolved, not on the first.
+      await waitFor(() =>
+        expect(localStorage.getItem('hotty_snmp_target_if-1') ?? '').toContain(
+          '[SAFE]super-secret'
+        )
+      );
       const stored = localStorage.getItem('hotty_snmp_target_if-1') ?? '';
-      expect(stored).toContain('[SAFE]super-secret');
       // The plaintext must never be the stored form.
       expect(stored).not.toMatch(/"community":"super-secret"/);
     });

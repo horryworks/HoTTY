@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useReducer, useCallback, useMemo } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
-import { marked } from 'marked';
 import { getTransparentColor } from '../../utils/colorUtils';
-import { sanitizeHtml, externalLinkFromClick } from '../../utils/htmlUtils';
+import { renderMarkdown } from '../../utils/markdown';
+import { MarkdownContent } from '../MarkdownContent/MarkdownContent';
 import { decideAutoExec, classifyStatic, type AutoExecDecision } from '../../utils/aiCommandClassifier';
 import {
     autoExecReducer,
@@ -407,20 +407,10 @@ const MessageContent: React.FC<{
                     );
                 }
                 return (
-                    <div
+                    <MarkdownContent
                         key={part.key}
                         className="ai-chat-markdown-inline"
-                        onClick={(e) => {
-                            // AI-authored links are untrusted; never let them
-                            // navigate this privileged window in place. Route
-                            // external links through the vetted opener instead.
-                            const url = externalLinkFromClick(e.target);
-                            if (url) {
-                                e.preventDefault();
-                                void tauriService.openExternal(url).catch(() => {});
-                            }
-                        }}
-                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(marked.parse(part.text, { async: false }) as string) }}
+                        sanitizedHtml={renderMarkdown(part.text)}
                     />
                 );
             })}

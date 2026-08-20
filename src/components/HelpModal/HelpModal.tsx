@@ -289,6 +289,12 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                 <Trans i18nKey="help.logging.logViewer" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
               <p className="help-text">
+                <Trans i18nKey="help.logging.fileTypes" components={[<strong key="0" />, <code key="1" />, <code key="2" />]} />
+              </p>
+              <p className="help-text">
+                <Trans i18nKey="help.logging.pingCsv" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />]} />
+              </p>
+              <p className="help-text">
                 <Trans i18nKey="help.logging.search" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
             </div>

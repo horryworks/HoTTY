@@ -11,6 +11,16 @@ import {
   splitByMatches,
   type Segment,
 } from './logSearch';
+import {
+  MAX_CSV_ROWS,
+  buildCsvView,
+  isCsvFile,
+  parseCsv,
+  type CsvCell,
+} from './logCsv';
+import { MAX_MARKDOWN_BYTES, highlightHtml, isMarkdownFile } from './logMarkdown';
+import { MarkdownContent } from '../MarkdownContent/MarkdownContent';
+import { renderMarkdown } from '../../utils/markdown';
 import type { LogFile } from '../../types/appTypes';
 import './LogViewerPane.css';
 
@@ -57,11 +67,18 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
   const [useRegex, setUseRegex] = useState(false);
   const [filterOnly, setFilterOnly] = useState(false);
   const [matchIndex, setMatchIndex] = useState(0);
+  // A .csv opens as a table; the toggle lets the user drop back to raw text.
+  const [csvAsTable, setCsvAsTable] = useState(true);
+  // A .md opens formatted, for the same reason. Like `csvAsTable` this is a
+  // pane-level preference, not per-file — flipping to the source stays flipped
+  // while the user walks the file list.
+  const [mdRendered, setMdRendered] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const ratioBeforeCollapse = useRef(DEFAULT_PANEL_RATIO);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const currentMatchRef = useRef<HTMLElement | null>(null);
+  const mdRef = useRef<HTMLDivElement>(null);
 
   const { startResize } = useResize({
     orientation: 'horizontal',
@@ -206,17 +223,61 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
   );
   const regexInvalid = debouncedQuery.length > 0 && searchRegex === null;
 
+  // ---- CSV table view ------------------------------------------------------
+
+  const isCsv = !!selectedFile && isCsvFile(selectedFile.name);
+  const showCsvTable = isCsv && csvAsTable;
+
+  const csvTable = useMemo(
+    () => (showCsvTable ? parseCsv(content) : null),
+    [showCsvTable, content],
+  );
+
+  // Search runs over the cells rather than the raw line, so a highlight can
+  // never straddle a comma that the table has already turned into a column edge.
+  const csvView = useMemo(
+    () => (csvTable ? buildCsvView(csvTable, searchRegex, filterOnly) : null),
+    [csvTable, searchRegex, filterOnly],
+  );
+
+  // ---- Markdown view -------------------------------------------------------
+
+  const isMd = !!selectedFile && isMarkdownFile(selectedFile.name);
+  // Formatting is synchronous (marked, then a walk over every text node), so a
+  // huge file would freeze the pane. Past the cap it stays raw text.
+  const mdTooLarge = isMd && content.length > MAX_MARKDOWN_BYTES;
+  const showMarkdown = isMd && mdRendered && !mdTooLarge;
+
+  const mdHtml = useMemo(
+    () => (showMarkdown ? renderMarkdown(content) : null),
+    [showMarkdown, content],
+  );
+
+  // Split from `mdHtml` on purpose: stepping through matches only toggles a
+  // class on one <mark> (see the effect below), so neither the markdown parse
+  // nor the highlight walk re-runs on next/previous.
+  const mdHighlight = useMemo(
+    () => (mdHtml !== null && searchRegex ? highlightHtml(mdHtml, searchRegex, MAX_MATCHES) : null),
+    [mdHtml, searchRegex],
+  );
+
   // Highlight mode: one <pre> whose children alternate plain text and <mark>,
   // so the DOM cost is O(matches) rather than O(lines).
   const highlight = useMemo(
-    () => (searchRegex && !filterOnly ? splitByMatches(content, searchRegex, MAX_MATCHES) : null),
-    [content, searchRegex, filterOnly],
+    () =>
+      !showCsvTable && !showMarkdown && searchRegex && !filterOnly
+        ? splitByMatches(content, searchRegex, MAX_MATCHES)
+        : null,
+    [showCsvTable, showMarkdown, content, searchRegex, filterOnly],
   );
 
   // Filter mode: only the lines that contain a match.
   const filtered = useMemo(
-    () => (searchRegex && filterOnly ? filterMatchingLines(content, searchRegex, MAX_MATCHES) : null),
-    [content, searchRegex, filterOnly],
+    () =>
+      !showCsvTable && !showMarkdown && searchRegex && filterOnly
+        ? filterMatchingLines(content, searchRegex, MAX_MATCHES)
+        : null,
+    [showCsvTable, showMarkdown, content, searchRegex, filterOnly],
   );
 
   // Pre-split each surviving line once, so stepping through matches doesn't
@@ -229,8 +290,10 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
     [filtered, searchRegex],
   );
 
-  const matchCount = highlight?.total ?? filtered?.lines.length ?? 0;
-  const matchesTruncated = highlight?.truncated ?? filtered?.truncated ?? false;
+  const matchCount =
+    csvView?.total ?? mdHighlight?.total ?? highlight?.total ?? filtered?.lines.length ?? 0;
+  const matchesTruncated =
+    csvView?.truncated ?? mdHighlight?.truncated ?? highlight?.truncated ?? filtered?.truncated ?? false;
   // Clamp during render so a shrinking result set can never index out of range
   // before the reset effect below runs.
   const currentMatch = matchCount === 0 ? 0 : Math.min(matchIndex, matchCount - 1);
@@ -239,12 +302,25 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
   const selectedPath = selectedFile?.path ?? null;
   useEffect(() => {
     setMatchIndex(0);
-  }, [debouncedQuery, caseSensitive, useRegex, filterOnly, selectedPath]);
+  }, [debouncedQuery, caseSensitive, useRegex, filterOnly, csvAsTable, mdRendered, selectedPath]);
 
   // Bring the focused match into view. No smooth scrolling — keep it snappy.
   useEffect(() => {
     currentMatchRef.current?.scrollIntoView({ block: 'center' });
-  }, [currentMatch, highlight, filtered]);
+  }, [currentMatch, highlight, filtered, csvView]);
+
+  // The markdown view is set through innerHTML, so its <mark>s cannot carry a
+  // React ref. Focus them by their ordinal instead: a class swap on two
+  // elements, with no re-render of the document.
+  useEffect(() => {
+    const root = mdRef.current;
+    if (!root) return;
+    root.querySelector('.log-viewer-mark.current')?.classList.remove('current');
+    const el = root.querySelector<HTMLElement>(`.log-viewer-mark[data-match-index="${currentMatch}"]`);
+    if (!el) return;
+    el.classList.add('current');
+    el.scrollIntoView({ block: 'center' });
+  }, [currentMatch, mdHighlight]);
 
   const setCurrentMatchRef = useCallback((el: HTMLElement | null) => {
     currentMatchRef.current = el;
@@ -297,6 +373,28 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
       if (!seg.isMatch) return seg.text;
       seen += 1;
       const isCurrent = markCurrent && seen === currentMatch;
+      return (
+        <mark
+          key={i}
+          className={`log-viewer-mark${isCurrent ? ' current' : ''}`}
+          ref={isCurrent ? setCurrentMatchRef : null}
+        >
+          {seg.text}
+        </mark>
+      );
+    });
+  };
+
+  /** Render one table cell, highlighting its matches by their global ordinal. */
+  const renderCell = (cell: CsvCell) => {
+    // Overwhelmingly the common case — collapse to a plain string so a table
+    // with thousands of rows does not allocate an element per cell.
+    if (cell.matchStart < 0) return cell.segments.map((seg) => seg.text).join('');
+    let seen = -1;
+    return cell.segments.map((seg, i) => {
+      if (!seg.isMatch) return seg.text;
+      seen += 1;
+      const isCurrent = cell.matchStart + seen === currentMatch;
       return (
         <mark
           key={i}
@@ -453,6 +551,35 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
               >
                 .*
               </button>
+              {isCsv && (
+                <button
+                  type="button"
+                  className={`log-viewer-search-toggle${csvAsTable ? ' active' : ''}`}
+                  onClick={() => setCsvAsTable((v) => !v)}
+                  title={t('panes.logViewer.tableView')}
+                  aria-label={t('panes.logViewer.tableView')}
+                  aria-pressed={csvAsTable}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="1" />
+                    <path d="M3 9h18M3 15h18M9 3v18" />
+                  </svg>
+                </button>
+              )}
+              {isMd && (
+                <button
+                  type="button"
+                  className={`log-viewer-search-toggle${mdRendered ? ' active' : ''}`}
+                  onClick={() => setMdRendered((v) => !v)}
+                  title={t('panes.logViewer.renderedView')}
+                  aria-label={t('panes.logViewer.renderedView')}
+                  aria-pressed={mdRendered}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M4 5h16M4 10h16M4 15h11M4 20h7" />
+                  </svg>
+                </button>
+              )}
               <button
                 type="button"
                 className="log-viewer-search-btn"
@@ -479,10 +606,11 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
               >
                 {countLabel}
               </span>
-              <label className="log-viewer-search-filter-toggle">
+              <label className={`log-viewer-search-filter-toggle${showMarkdown ? ' disabled' : ''}`}>
                 <input
                   type="checkbox"
                   checked={filterOnly}
+                  disabled={showMarkdown}
                   onChange={(e) => setFilterOnly(e.target.checked)}
                 />
                 {t('panes.logViewer.onlyMatchingLines')}
@@ -492,7 +620,47 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
 
           <div className="log-viewer-file-content">
             {loading && <div className="log-viewer-loading">{t('common.loading')}</div>}
-            {!loading && selectedFile && filteredRows && (
+            {!loading && selectedFile && csvView && csvTable && (
+              csvView.rows.length === 0 ? (
+                <div className="log-viewer-placeholder">
+                  {filterOnly && searchRegex
+                    ? t('panes.logViewer.noMatches')
+                    : t('panes.logViewer.csvEmpty')}
+                </div>
+              ) : (
+                <div className="log-viewer-csv">
+                  {csvTable.truncated && (
+                    <div className="log-viewer-csv-notice">
+                      {t('panes.logViewer.csvTruncated', { limit: MAX_CSV_ROWS })}
+                    </div>
+                  )}
+                  <table className="log-viewer-csv-table">
+                    <thead>
+                      <tr>
+                        {csvView.header.map((label, i) => (
+                          <th key={i}>{label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {csvView.rows.map((row, r) => (
+                        <tr key={r}>
+                          {row.cells.map((cell, c) => (
+                            <td key={c}>{renderCell(cell)}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            )}
+            {!loading && selectedFile && showMarkdown && (
+              <div className="log-viewer-md" ref={mdRef}>
+                <MarkdownContent sanitizedHtml={mdHighlight?.html ?? mdHtml ?? ''} />
+              </div>
+            )}
+            {!loading && selectedFile && !csvView && filteredRows && (
               filteredRows.length === 0 ? (
                 <div className="log-viewer-placeholder">{t('panes.logViewer.noMatches')}</div>
               ) : (
@@ -512,10 +680,17 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
                 </div>
               )
             )}
-            {!loading && selectedFile && !filteredRows && (
-              <pre className="log-viewer-pre">
-                {highlight ? renderSegments(highlight.segments, true) : content}
-              </pre>
+            {!loading && selectedFile && !csvView && !showMarkdown && !filteredRows && (
+              <>
+                {mdTooLarge && mdRendered && (
+                  <div className="log-viewer-md-notice">
+                    {t('panes.logViewer.mdTooLarge')}
+                  </div>
+                )}
+                <pre className="log-viewer-pre">
+                  {highlight ? renderSegments(highlight.segments, true) : content}
+                </pre>
+              </>
             )}
             {!loading && !selectedFile && folderPath && (
               <div className="log-viewer-placeholder">{t('panes.logViewer.selectFile')}</div>

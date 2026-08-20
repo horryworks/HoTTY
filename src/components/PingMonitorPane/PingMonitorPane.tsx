@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
 import { usePingMonitorEvents } from '../../hooks/usePingMonitorEvents';
 import { useResize } from '../../hooks/useResize';
+import { useSettingsStore } from '../../stores/settingsStore';
 import './PingMonitorPane.css';
 
 interface PingMonitorPaneProps {
@@ -41,12 +42,17 @@ export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
   const [intervalMs, setIntervalMs] = useState(5000);
   const [running, setRunning] = useState(false);
   const [loggingEnabled, setLoggingEnabled] = useState(false);
-  const [loggingPath, setLoggingPath] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [panelRatio, setPanelRatio] = useState(DEFAULT_PANEL_RATIO);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   const ratioBeforeCollapse = useRef(DEFAULT_PANEL_RATIO);
+
+  // CSV logs land in the same folder as every other log (Settings → General)
+  // rather than a pane-local path. A typed path could never work here anyway:
+  // the backend only writes to folders the user attested through a native
+  // dialog, and this pane has no Browse button to produce that attestation.
+  const loggingPath = useSettingsStore((s) => s.loggingPath);
 
   const { latestResults, logFileName } = usePingMonitorEvents(paneId);
 
@@ -79,8 +85,31 @@ export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
       return;
     }
     setError(null);
+
+    // The backend refuses to write CSV into a folder that was never approved
+    // through a native dialog, so confirm it before starting — otherwise
+    // logging would silently do nothing. An already-approved folder (the usual
+    // case, since approvals persist) returns true without showing a prompt.
+    let approved = false;
+    if (loggingEnabled && loggingPath) {
+      try {
+        approved = await tauriService.confirmLogDir(loggingPath);
+      } catch {
+        approved = false;
+      }
+      // Monitoring still starts — only the CSV side is suppressed — but say so
+      // rather than leaving the user to wonder where the file went.
+      if (!approved) setError(t('panes.pingMonitor.loggingDirDenied'));
+    }
+
     try {
-      await tauriService.pingMonitorStart(paneId, targets, intervalMs, loggingEnabled, loggingPath);
+      await tauriService.pingMonitorStart(
+        paneId,
+        targets,
+        intervalMs,
+        approved,
+        approved ? loggingPath : '',
+      );
       setRunning(true);
     } catch (e) {
       setError(String(e));
@@ -176,25 +205,20 @@ export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
               placeholder="8.8.8.8&#10;1.1.1.1&#10;example.com"
             />
             <div className="ping-monitor-logging-section">
-              <label className="ping-monitor-logging-toggle">
+              <label className={`ping-monitor-logging-toggle${loggingPath ? '' : ' disabled'}`}>
                 <input
                   type="checkbox"
                   checked={loggingEnabled}
                   onChange={(e) => setLoggingEnabled(e.target.checked)}
-                  disabled={running}
+                  disabled={running || !loggingPath}
                 />
                 {t('panes.pingMonitor.csvLogging')}
               </label>
-              {loggingEnabled && (
-                <input
-                  type="text"
-                  className="ping-monitor-logging-path"
-                  value={loggingPath}
-                  onChange={(e) => setLoggingPath(e.target.value)}
-                  placeholder={t('panes.pingMonitor.loggingPathPlaceholder')}
-                  disabled={running}
-                />
-              )}
+              <span className="ping-monitor-logging-hint" title={loggingPath || undefined}>
+                {loggingPath
+                  ? t('panes.pingMonitor.loggingFolder', { path: loggingPath })
+                  : t('panes.pingMonitor.loggingFolderUnset')}
+              </span>
             </div>
           </div>
         )}

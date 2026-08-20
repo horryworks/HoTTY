@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { PingMonitorPane } from './PingMonitorPane';
 import { tauriService } from '../../services/tauriService';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 vi.mock('../../services/tauriService', () => ({
   tauriService: {
@@ -9,6 +10,7 @@ vi.mock('../../services/tauriService', () => ({
     pingMonitorStop: vi.fn(),
     pingMonitorUpdateTargets: vi.fn(),
     pingMonitorUpdateInterval: vi.fn(),
+    confirmLogDir: vi.fn(),
     onPingMonitorData: vi.fn().mockResolvedValue(() => {}),
     onPingMonitorLogFile: vi.fn().mockResolvedValue(() => {}),
   },
@@ -20,11 +22,23 @@ vi.mock('../../hooks/useResize', () => ({
 
 const mockStart = vi.mocked(tauriService.pingMonitorStart);
 const mockStop = vi.mocked(tauriService.pingMonitorStop);
+const mockConfirm = vi.mocked(tauriService.confirmLogDir);
+
+/** Point the app-wide log folder somewhere, as Settings → General would. */
+const setLogFolder = (path: string) => {
+  act(() => {
+    useSettingsStore.getState().update('loggingPath', path);
+  });
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(tauriService.onPingMonitorData).mockResolvedValue(() => {});
   vi.mocked(tauriService.onPingMonitorLogFile).mockResolvedValue(() => {});
+  act(() => {
+    useSettingsStore.getState().reset();
+  });
+  localStorage.clear();
 });
 
 describe('PingMonitorPane', () => {
@@ -156,6 +170,86 @@ describe('PingMonitorPane', () => {
   it('renders CSV logging toggle', () => {
     render(<PingMonitorPane paneId="pm-1" active={true} />);
     expect(screen.getByText('CSV Logging')).toBeTruthy();
+  });
+
+  it('disables CSV logging and explains why when no log folder is configured', () => {
+    render(<PingMonitorPane paneId="pm-1" active={true} />);
+    const checkbox = document.querySelector(
+      '.ping-monitor-logging-toggle input',
+    ) as HTMLInputElement;
+    expect(checkbox.disabled).toBe(true);
+    expect(
+      screen.getByText('Set a log folder in Settings → General to use CSV logging'),
+    ).toBeTruthy();
+  });
+
+  it('shows the app-wide log folder instead of a path input', () => {
+    setLogFolder('C:/logs');
+    render(<PingMonitorPane paneId="pm-1" active={true} />);
+
+    // The pane no longer owns a path field — the folder is read-only info.
+    expect(document.querySelector('.ping-monitor-logging-path')).toBeNull();
+    expect(screen.getByText('Saved to C:/logs')).toBeTruthy();
+    const checkbox = document.querySelector(
+      '.ping-monitor-logging-toggle input',
+    ) as HTMLInputElement;
+    expect(checkbox.disabled).toBe(false);
+  });
+
+  it('approves the app-wide log folder and starts logging to it', async () => {
+    mockStart.mockResolvedValue();
+    mockConfirm.mockResolvedValue(true);
+    setLogFolder('C:/logs');
+
+    render(<PingMonitorPane paneId="pm-1" active={true} />);
+    fireEvent.change(screen.getByPlaceholderText(/8.8.8.8/), {
+      target: { value: '8.8.8.8' },
+    });
+    fireEvent.click(document.querySelector('.ping-monitor-logging-toggle input')!);
+    fireEvent.click(screen.getByText('Start'));
+
+    await waitFor(() => {
+      expect(mockConfirm).toHaveBeenCalledWith('C:/logs');
+      expect(mockStart).toHaveBeenCalledWith('pm-1', ['8.8.8.8'], 5000, true, 'C:/logs');
+    });
+  });
+
+  it('starts without logging and says so when the folder is not approved', async () => {
+    mockStart.mockResolvedValue();
+    mockConfirm.mockResolvedValue(false);
+    setLogFolder('C:/logs');
+
+    render(<PingMonitorPane paneId="pm-1" active={true} />);
+    fireEvent.change(screen.getByPlaceholderText(/8.8.8.8/), {
+      target: { value: '8.8.8.8' },
+    });
+    fireEvent.click(document.querySelector('.ping-monitor-logging-toggle input')!);
+    fireEvent.click(screen.getByText('Start'));
+
+    await waitFor(() => {
+      // Monitoring still runs; only the CSV side is suppressed.
+      expect(mockStart).toHaveBeenCalledWith('pm-1', ['8.8.8.8'], 5000, false, '');
+      expect(
+        screen.getByText('Log folder was not approved — CSV logging is off'),
+      ).toBeTruthy();
+      expect(screen.getByText('Running')).toBeTruthy();
+    });
+  });
+
+  it('does not prompt for approval when CSV logging is off', async () => {
+    mockStart.mockResolvedValue();
+    setLogFolder('C:/logs');
+
+    render(<PingMonitorPane paneId="pm-1" active={true} />);
+    fireEvent.change(screen.getByPlaceholderText(/8.8.8.8/), {
+      target: { value: '8.8.8.8' },
+    });
+    fireEvent.click(screen.getByText('Start'));
+
+    await waitFor(() => {
+      expect(mockStart).toHaveBeenCalledWith('pm-1', ['8.8.8.8'], 5000, false, '');
+    });
+    expect(mockConfirm).not.toHaveBeenCalled();
   });
 
   it('updates target count as targets are entered', () => {

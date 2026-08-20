@@ -24,8 +24,8 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 - **Multiple windows** — open additional windows (New Window / `Ctrl+Shift+N`) in a single process; each window has its own panes and sessions, while settings, theme, host tree and bookmarks stay shared and in sync across windows
 
 ### Integrated Utility Tools
-- **Log Viewer** — browse and read session log files and AI chat transcripts, with in-pane search (`Ctrl+F`) supporting regular expressions, case matching, and a matching-lines-only view
-- **Ping Monitor** — monitor multiple targets with configurable intervals
+- **Log Viewer** — browse and read session log files, AI chat transcripts and Ping Monitor CSV logs, with in-pane search (`Ctrl+F`) supporting regular expressions, case matching, and a matching-lines-only view; `.md` transcripts render as formatted conversations and `.csv` logs as searchable tables, each with a one-click switch back to the raw file
+- **Ping Monitor** — monitor multiple targets with configurable intervals, pinging every target in a cycle concurrently, with optional CSV logging to the app log folder
 - **Interface Traffic** — live SNMP interface counters (bps / pps / errors / discards) for switches and routers over SNMP v2c or v3, with interface discovery, sortable/filterable table, 64-bit `ifXTable` counters where available, and DPAPI-encrypted credential storage
 - **File Server** — built-in TFTP & SFTP servers for uploading firmware/config to network devices (e.g. Cisco), with path-jailed serving and Windows Firewall detection
 - **Web Browser** — embedded browser pane (Edge WebView2) for network-device web admin UIs, opened from New Session → Web with folder-organized bookmarks; keeps login sessions, can save/autofill passwords, supports per-page zoom, and can clear browsing data (cookies, cache, history, passwords) on demand
