@@ -32,9 +32,17 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({ sanitizedHtml,
             // file in the user's log folder. Without interception a click is a
             // same-window top-level navigation that would replace the privileged
             // app UI in place. Route http(s) through the vetted opener instead.
+            //
+            // preventDefault() is unconditional on purpose: cancelling only when
+            // externalLinkFromClick() returns a URL means any href it rejects
+            // still navigates the app frame. That is the whole bug class here —
+            // a scheme DOMPurify allows but this code does not recognise must
+            // end as a dead click, never as a navigation away from the app.
+            const anchor = e.target instanceof HTMLElement ? e.target.closest('a') : null;
+            if (!anchor) return;
+            e.preventDefault();
             const url = externalLinkFromClick(e.target);
             if (url) {
-                e.preventDefault();
                 void tauriService.openExternal(url).catch(() => {});
             }
         }}

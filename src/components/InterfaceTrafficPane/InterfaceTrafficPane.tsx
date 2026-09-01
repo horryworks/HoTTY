@@ -5,6 +5,7 @@ import { useInterfaceTrafficEvents } from '../../hooks/useInterfaceTrafficEvents
 import { useResize } from '../../hooks/useResize';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { logError } from '../../utils/logger';
+import i18n from '../../i18n';
 import {
   NO_VALUE,
   adminStatusKey,
@@ -146,7 +147,7 @@ export function InterfaceTrafficPane({ paneId, active }: InterfaceTrafficPanePro
       setAuthPassword(a);
       setPrivPassword(p);
     };
-    load().catch((e) => logError('InterfaceTraffic', 'Failed to restore settings', e));
+    load().catch((e) => logError('InterfaceTraffic', i18n.t('notifications.errors.trafficSettingsRestore'), e));
     return () => {
       cancelled = true;
     };

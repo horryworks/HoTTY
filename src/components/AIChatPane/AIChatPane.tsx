@@ -4,6 +4,7 @@ import { getTransparentColor } from '../../utils/colorUtils';
 import { renderMarkdown } from '../../utils/markdown';
 import { MarkdownContent } from '../MarkdownContent/MarkdownContent';
 import { decideAutoExec, classifyStatic, type AutoExecDecision } from '../../utils/aiCommandClassifier';
+import i18n from '../../i18n';
 import {
     autoExecReducer,
     emptyAutoExecState,
@@ -1013,7 +1014,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             setStreamingForTab(tab.id, '');
             armStreamWatchdog(tab.id);
             tauriService.aiChatSend(aiBackendSessionId(paneId, tab.id), sentPm, selectedModel, sysInstr + targetsBlock, pmImages).catch((err) => {
-                logError('AI', 'aiChatSend invoke failed', err);
+                logError('AI', i18n.t('notifications.errors.aiChatSendFailed'), err);
                 clearStreamWatchdog(tab.id);
                 markStreaming(tab.id, false);
             });
@@ -1558,7 +1559,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 onSendMessage(sentText, images);
             } else {
                 tauriService.aiChatSend(aiBackendSessionId(paneId, activeTabId), sentText, selectedModel, localSystemInstruction, images).catch((err) => {
-                    logError('AI', 'aiChatSend invoke failed', err);
+                    logError('AI', i18n.t('notifications.errors.aiChatSendFailed'), err);
                     if (activeTabId) clearStreamWatchdog(activeTabId);
                     setIsStreaming(false);
                 });

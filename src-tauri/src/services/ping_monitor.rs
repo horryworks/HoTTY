@@ -7,6 +7,8 @@ use tauri::AppHandle;
 use tauri::Emitter;
 use tokio::sync::Mutex;
 
+use crate::services::session_service::{join_or_abort, POLLER_STOP_GRACE_MS};
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -82,7 +84,10 @@ impl Default for PingMonitorState {
 /// batch of `MAX_CONCURRENT_PINGS`, since the cycle fans out), so a stop during
 /// a cycle normally lands on the abort path — which is the point: teardown is
 /// bounded regardless of what the loop is doing.
-const SHUTDOWN_GRACE_MS: u64 = 2000;
+///
+/// The value is the shared `POLLER_STOP_GRACE_MS` rather than a local number so
+/// the ping monitor, the SNMP watchers and the file servers cannot drift apart.
+const SHUTDOWN_GRACE_MS: u64 = POLLER_STOP_GRACE_MS;
 
 /// Handle to a running monitor — the cancel token plus the task's `JoinHandle`.
 ///
@@ -98,20 +103,12 @@ pub struct MonitorHandle {
 
 /// Signal a monitor to stop, wait briefly for the loop to wind down, then force
 /// abort. A `timeout` on a `JoinHandle` only *detaches* the task, so the explicit
-/// abort is what actually stops a loop that ignored cancellation (mirrors
-/// `snmp::stop_watcher`).
+/// abort is what actually stops a loop that ignored cancellation — that is what
+/// the shared `join_or_abort` does, and it also logs the forced abort, which a
+/// hand-rolled copy silently dropped.
 async fn shutdown(handle: MonitorHandle) {
     let _ = handle.cancel.send(true);
-    let abort = handle.join.abort_handle();
-    if tokio::time::timeout(
-        std::time::Duration::from_millis(SHUTDOWN_GRACE_MS),
-        handle.join,
-    )
-    .await
-    .is_err()
-    {
-        abort.abort();
-    }
+    join_or_abort(vec![handle.join], "ping monitor", SHUTDOWN_GRACE_MS).await;
 }
 
 // ---------------------------------------------------------------------------

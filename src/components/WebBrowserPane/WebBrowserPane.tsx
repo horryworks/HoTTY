@@ -17,6 +17,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useWebBrowserZoomStore } from '../../stores/webBrowserZoomStore';
 import { findBookmarkByUrl, flattenBookmarks } from '../BookmarkTree/bookmarkTreeHelpers';
 import { logError } from '../../utils/logger';
+import i18n from '../../i18n';
 import type { WebBrowserRect, WebBrowserClearDataOptions, BookmarkNode } from '../../types/appTypes';
 import { normalizeUrl, resolveAddress } from './webBrowserUrl';
 import { canZoomIn, canZoomOut, clampZoom, nextZoom, prevZoom } from './webBrowserZoom';
@@ -232,7 +233,7 @@ export function WebBrowserPane({
           }
         })
         .catch((e) => {
-          if (!cancelled) logError('web-browser', 'failed to create browser pane', e);
+          if (!cancelled) logError('web-browser', i18n.t('notifications.errors.browserPaneCreate'), e);
         });
     });
     return () => {
@@ -423,7 +424,7 @@ export function WebBrowserPane({
       setError(null);
       tauriService.webBrowserNavigate(paneId, url).catch((e) => {
         setError(t('panes.webBrowser.invalidUrl'));
-        logError('web-browser', 'navigate failed', e);
+        logError('web-browser', i18n.t('notifications.errors.browserNavigate'), e);
       });
     },
     [paneId, t],
@@ -745,7 +746,7 @@ export function WebBrowserPane({
                 setMoreOpen(false);
                 tauriService
                   .webBrowserClearBrowsingData(paneId, options)
-                  .catch((e) => logError('web-browser', 'clear browsing data failed', e));
+                  .catch((e) => logError('web-browser', i18n.t('notifications.errors.browserClearData'), e));
               }}
             />
           </div>

@@ -202,7 +202,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
           approved ? loggingPath : '',
         );
       } catch (err) {
-        logError('Logging', 'failed to update session logging', err);
+        logError('Logging', i18n.t('notifications.errors.sessionLoggingUpdate'), err);
       }
     })();
   }, [loggingEnabled, loggingPath]);
@@ -266,7 +266,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
           unlisteners.push(fn);
         }
       }).catch((e) => {
-        logError('Session', 'Failed to set up session event listener', e);
+        logError('Session', i18n.t('notifications.errors.sessionListener'), e);
       });
     };
 
@@ -444,7 +444,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
             tauriService.writeClipboard(sel).catch((err) => {
               // Surface clipboard failures: the user just selected text expecting
               // it to be copied; silent swallow leaves them confused on paste.
-              logError('Clipboard', 'failed to copy selection', err);
+              logError('Clipboard', i18n.t('notifications.errors.clipboardCopy'), err);
             });
           }
         }, SELECTION_COPY_DEBOUNCE_MS);

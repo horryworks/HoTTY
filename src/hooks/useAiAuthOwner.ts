@@ -4,6 +4,7 @@ import { useAiAuthStore } from '../stores/aiAuthStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { STORAGE_KEYS } from '../constants/storage';
 import { logError } from '../utils/logger';
+import i18n from '../i18n';
 
 /**
  * Single owner of the AI auth lifecycle, mounted once per window (in App).
@@ -115,7 +116,7 @@ export async function aiAuthLogin(req: AiLoginRequest): Promise<void> {
         localStorage.setItem(STORAGE_KEYS.GEMINI_CLIENT_ID, encId);
         localStorage.setItem(STORAGE_KEYS.GEMINI_CLIENT_SECRET, encSecret);
       } catch (err) {
-        logError('AI', 'Failed to encrypt Gemini credentials', err);
+        logError('AI', i18n.t('notifications.errors.aiCredentialEncrypt'), err);
       }
       await tauriService.aiSetProvider('gemini');
       await tauriService.aiAuthStart({ clientId: req.clientId, clientSecret: req.clientSecret });
@@ -127,7 +128,7 @@ export async function aiAuthLogin(req: AiLoginRequest): Promise<void> {
     await tauriService.aiSetProvider(req.provider);
     await tauriService.aiAuthStart({ apiKey: req.apiKey });
   } catch (err) {
-    logError('AI', 'Sign-in failed to start', err);
+    logError('AI', i18n.t('notifications.errors.aiSignInStart'), err);
     clearAuthTimeout();
     useAiAuthStore.setState({ isAuthLoading: false, authError: 'failed' });
   }
@@ -150,7 +151,7 @@ export async function aiAuthLogout(): Promise<void> {
   try {
     await tauriService.aiAuthLogout();
   } catch (err) {
-    logError('AI', 'Logout failed', err);
+    logError('AI', i18n.t('notifications.errors.aiLogout'), err);
   }
   // signalLogout (not resetAuth) so this window's panes clear conversations
   // immediately; the ai-auth-logout broadcast does the same for other windows.
@@ -220,7 +221,7 @@ export function useAiAuthOwner(): void {
           if (isCurrent()) useAiAuthStore.getState().setAuthLoading(false);
         }
       } catch (err) {
-        logError('AI', 'Failed to auto-auth', err);
+        logError('AI', i18n.t('notifications.errors.aiAutoAuth'), err);
         if (isCurrent()) useAiAuthStore.getState().setAuthLoading(false);
       }
     };
@@ -254,7 +255,7 @@ export function useAiAuthOwner(): void {
           .catch(() => { if (!cancelled) useAiAuthStore.setState({ isAuthenticated: false }); });
       }
     }).then((fn) => { if (cancelled) fn(); else unlisteners.push(fn); })
-      .catch((e) => logError('AI', 'Auth result listener setup failed', e));
+      .catch((e) => logError('AI', i18n.t('notifications.errors.aiAuthListener'), e));
 
     tauriService.onAiAuthLogout(() => {
       if (cancelled) return;
@@ -262,7 +263,7 @@ export function useAiAuthOwner(): void {
       clearAuthTimeout();
       useAiAuthStore.getState().signalLogout();
     }).then((fn) => { if (cancelled) fn(); else unlisteners.push(fn); })
-      .catch((e) => logError('AI', 'Auth logout listener setup failed', e));
+      .catch((e) => logError('AI', i18n.t('notifications.errors.aiLogoutListener'), e));
 
     return () => {
       cancelled = true;

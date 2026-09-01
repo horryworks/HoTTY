@@ -41,6 +41,20 @@ describe('uiOverlayStore', () => {
     expect(useUiOverlayStore.getState().overlayOpen).toBe(true);
   });
 
+  // AiConsentModal mounts at app level rather than inside another registered
+  // overlay, so if its class is missing from OVERLAY_SELECTOR nothing else
+  // sets overlayOpen for it — a WebBrowserPane's WebView2 child, which the OS
+  // composites above the HTML layer, then paints over the consent dialog and
+  // makes it unreachable.
+  it('detects the AI data-sharing consent overlay', async () => {
+    initOverlayWatcher();
+    const overlay = document.createElement('div');
+    overlay.className = 'ai-consent-overlay';
+    document.body.appendChild(overlay);
+    await tick();
+    expect(useUiOverlayStore.getState().overlayOpen).toBe(true);
+  });
+
   it('ignores non-overlay DOM changes', async () => {
     initOverlayWatcher();
     document.body.appendChild(document.createElement('div'));

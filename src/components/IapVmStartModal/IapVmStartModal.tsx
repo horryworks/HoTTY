@@ -4,6 +4,7 @@ import { tauriService } from '../../services/tauriService';
 import { logError } from '../../utils/logger';
 import type { IapVmStartPromptPayload } from '../../types/appTypes';
 import './IapVmStartModal.css';
+import i18n from '../../i18n';
 
 export function IapVmStartModal() {
   const { t } = useTranslation();
@@ -18,7 +19,7 @@ export function IapVmStartModal() {
         unlisten = fn;
       })
       .catch((e) => {
-        logError('IAP', 'Failed to listen for VM-start prompts', e);
+        logError('IAP', i18n.t('notifications.errors.iapVmPromptListen'), e);
       });
     return () => {
       unlisten?.();
@@ -33,7 +34,7 @@ export function IapVmStartModal() {
     try {
       await tauriService.gceIapRespondVmStart(prompt.sessionId, approved);
     } catch (e) {
-      logError('IAP', 'Failed to respond to VM-start prompt', e);
+      logError('IAP', i18n.t('notifications.errors.iapVmPromptRespond'), e);
     } finally {
       setBusy(false);
       setPrompt(null);

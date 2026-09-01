@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tauriService } from '../services/tauriService';
 import { logError } from '../utils/logger';
+import i18n from '../i18n';
 import type { FileServerProtocol } from '../types/appTypes';
 
 const MAX_TRANSFERS = 200;
@@ -77,7 +78,7 @@ export function useFileServerEvents(serverId: string): FileServerEventData {
       else unlisten = fn;
     };
 
-    setup().catch((e) => logError('FileServer', 'Failed to set up listeners', e));
+    setup().catch((e) => logError('FileServer', i18n.t('notifications.errors.fileServerListener'), e));
 
     return () => {
       cancelled = true;

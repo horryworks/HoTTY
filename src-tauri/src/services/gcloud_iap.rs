@@ -24,8 +24,9 @@ use super::iap_tunnel::{
 use super::read_pump::{spawn_read_pump, ReadStep};
 use super::session_service::{
     abort_all, emit_iap_connect_progress, emit_session_data, emit_session_error,
-    emit_session_status, emit_to_owner, encoding_for, humanize_pty_error, humanize_read_error,
-    humanize_spawn_error, join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
+    emit_session_status, emit_to_owner, encoding_for, humanize_fs_error, humanize_pty_error,
+    humanize_read_error, humanize_spawn_error, join_or_abort, SessionError, SessionService,
+    DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -1077,8 +1078,9 @@ async fn ensure_ssh_key() -> Result<(PathBuf, bool), SessionError> {
         .parent()
         .ok_or_else(|| SessionError::ConnectionFailed("invalid SSH key path".into()))?;
     if !ssh_dir.exists() {
-        std::fs::create_dir_all(ssh_dir)
-            .map_err(|e| SessionError::ConnectionFailed(format!("failed to create ~/.ssh: {e}")))?;
+        std::fs::create_dir_all(ssh_dir).map_err(|e| {
+            SessionError::ConnectionFailed(humanize_fs_error("the ~/.ssh folder", &e))
+        })?;
     }
     let keygen = find_ssh_keygen_path().ok_or_else(|| {
         SessionError::ConnectionFailed(
@@ -1170,12 +1172,13 @@ async fn ensure_key_permissions(priv_path: &Path) -> Result<(), SessionError> {
 async fn ensure_key_permissions(priv_path: &Path) -> Result<(), SessionError> {
     use std::os::unix::fs::PermissionsExt;
     let metadata = std::fs::metadata(priv_path)
-        .map_err(|e| SessionError::ConnectionFailed(format!("stat key: {e}")))?;
+        .map_err(|e| SessionError::ConnectionFailed(humanize_fs_error("the SSH key", &e)))?;
     let mut perms = metadata.permissions();
     if perms.mode() & 0o077 != 0 {
         perms.set_mode(0o600);
-        std::fs::set_permissions(priv_path, perms)
-            .map_err(|e| SessionError::ConnectionFailed(format!("chmod key: {e}")))?;
+        std::fs::set_permissions(priv_path, perms).map_err(|e| {
+            SessionError::ConnectionFailed(humanize_fs_error("the SSH key permissions", &e))
+        })?;
         log::info!("gcloud-iap: chmod 600 on {priv_path:?}");
     }
     Ok(())
@@ -1580,7 +1583,10 @@ async fn start_iap_tunnel(
                         }
                         Err(e) => {
                             log::error!("gcloud-iap[{gcloud_pid}]: stdout read error: {e}");
-                            return Err(SessionError::ConnectionFailed(format!("gcloud stdout read error: {e}")));
+                            return Err(SessionError::ConnectionFailed(format!(
+                                "gcloud tunnel: {}",
+                                humanize_read_error(&e)
+                            )));
                         }
                     }
                 }
@@ -1601,7 +1607,10 @@ async fn start_iap_tunnel(
                         Ok(None) => { /* stderr closed; keep looping for stdout */ }
                         Err(e) => {
                             log::error!("gcloud-iap[{gcloud_pid}]: stderr read error: {e}");
-                            return Err(SessionError::ConnectionFailed(format!("gcloud stderr read error: {e}")));
+                            return Err(SessionError::ConnectionFailed(format!(
+                                "gcloud tunnel: {}",
+                                humanize_read_error(&e)
+                            )));
                         }
                     }
                 }

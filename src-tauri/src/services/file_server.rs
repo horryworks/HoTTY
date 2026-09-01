@@ -19,6 +19,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::path_safety::{is_sensitive_path, is_unc_path};
+use crate::services::session_service::{join_or_abort, POLLER_STOP_GRACE_MS};
 
 // ---------------------------------------------------------------------------
 // Shared state
@@ -80,17 +81,14 @@ pub async fn stop_servers_for_window(
 }
 
 /// Signal a running server to stop, then wait briefly for the task to wind down
-/// before force-aborting. Used by both protocols on stop / restart.
+/// before force-aborting. Used by both protocols on stop / restart. Defers to
+/// the shared `join_or_abort` (ADR-007) rather than re-implementing the
+/// timeout-then-abort dance, so the grace value and the "forced abort" warning
+/// log stay in one place.
 pub async fn stop_handle(map: &mut HashMap<String, ServerHandle>, server_id: &str) {
     if let Some(handle) = map.remove(server_id) {
         handle.cancel.cancel();
-        let abort = handle.join.abort_handle();
-        if tokio::time::timeout(std::time::Duration::from_secs(2), handle.join)
-            .await
-            .is_err()
-        {
-            abort.abort();
-        }
+        join_or_abort(vec![handle.join], "file server", POLLER_STOP_GRACE_MS).await;
         log::info!("file-server: stopped {server_id}");
     }
 }

@@ -26,6 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tauriService } from '../services/tauriService';
 import { logError } from '../utils/logger';
+import i18n from '../i18n';
 import { calcAICost } from '../constants/aiPricing';
 import { aiBackendSessionId } from './useAiChat';
 import { streamTimeoutMessage, STREAM_IDLE_TIMEOUT_MS, STREAM_HARD_CAP_MS } from '../components/AIChatPane/streamWatchdog';
@@ -253,7 +254,7 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
             }
         }).then(fn => {
             if (cancelled) { fn(); } else { unlisten = fn; }
-        }).catch(e => logError('AI', 'Response listener setup failed', e));
+        }).catch(e => logError('AI', i18n.t('notifications.errors.aiResponseListener'), e));
 
         return () => { cancelled = true; unlisten?.(); clearAllStreamWatchdogs(); };
     }, [paneId, selectedModelRef, setStreamingForTab, markStreaming, armStreamWatchdog, clearStreamWatchdog, clearAllStreamWatchdogs]);

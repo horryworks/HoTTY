@@ -282,6 +282,37 @@ pub fn humanize_read_error(err: &std::io::Error) -> String {
     }
 }
 
+/// Convert a raw `std::io::Error` from a *local filesystem* operation (create a
+/// directory, stat a key, change permissions) into a short, human-friendly
+/// string. The third ADR-005 translation point, and the right one for file work:
+/// [`humanize_io_error`] is connect-flavoured and would render a missing file as
+/// "Host not found", while [`humanize_read_error`] would call it "Connection
+/// lost". `what` names the thing being acted on (e.g. `"~/.ssh"`, `"the SSH
+/// key"`) and is woven into the message.
+pub fn humanize_fs_error(what: &str, err: &std::io::Error) -> String {
+    use std::io::ErrorKind;
+    match err.kind() {
+        ErrorKind::PermissionDenied => format!("Access denied to {what}"),
+        ErrorKind::NotFound => format!("{what} not found"),
+        ErrorKind::AlreadyExists => format!("{what} already exists"),
+        ErrorKind::StorageFull => format!("Not enough disk space for {what}"),
+        _ => {
+            // Windows reports several of these as `Uncategorized` with raw text
+            // rather than a typed ErrorKind, so match the common wording too.
+            let lower = err.to_string().to_ascii_lowercase();
+            if lower.contains("access is denied") || lower.contains("permission denied") {
+                format!("Access denied to {what}")
+            } else if lower.contains("cannot find") || lower.contains("no such file") {
+                format!("{what} not found")
+            } else {
+                // Never swallow an unrecognized failure — keep the raw text
+                // behind a readable prefix.
+                format!("Could not access {what}: {err}")
+            }
+        }
+    }
+}
+
 /// Convert a failure to *start* an external program (a PTY `spawn_command` or a
 /// `tokio` `Command::spawn`) into a short, human-friendly string. Like
 /// [`humanize_io_error`], this is an ADR-005 translation point: it keeps the raw
@@ -511,6 +542,14 @@ pub async fn join_or_abort(joins: Vec<JoinHandle<()>>, label: &str, timeout_ms: 
 /// long enough to let a task that *can* finish gracefully (e.g. an SSH reader
 /// receiving Eof/Close) do so before being aborted.
 pub const DISCONNECT_DRAIN_MS: u64 = 1500;
+
+/// Stop grace for the background pollers that are not session protocols — the
+/// ping monitor, the SNMP watchers, and the TFTP/SFTP file servers. Longer than
+/// [`DISCONNECT_DRAIN_MS`] because a poller may be mid-cycle (an outstanding
+/// `ping` child, an in-flight SNMP request) rather than merely draining a
+/// socket. Kept here so the ADR-011 "2 s join grace" lives in one place instead
+/// of being re-typed at each call site.
+pub const POLLER_STOP_GRACE_MS: u64 = 2000;
 
 /// Immediately abort background task handles. Used by `Drop` as a last-resort
 /// safety net when a service is dropped without `disconnect()` having run.
@@ -767,6 +806,55 @@ mod tests {
             humanize_io_error(&e, Some(15)),
             "Connection failed: weird platform quirk"
         );
+    }
+
+    // -- humanize_fs_error tests --
+
+    #[test]
+    fn humanize_fs_error_permission_denied() {
+        let e = io(std::io::ErrorKind::PermissionDenied, "Access is denied.");
+        assert_eq!(
+            humanize_fs_error("the ~/.ssh folder", &e),
+            "Access denied to the ~/.ssh folder"
+        );
+    }
+
+    #[test]
+    fn humanize_fs_error_not_found() {
+        let e = io(std::io::ErrorKind::NotFound, "no such file");
+        assert_eq!(
+            humanize_fs_error("the SSH key", &e),
+            "the SSH key not found"
+        );
+    }
+
+    #[test]
+    fn humanize_fs_error_windows_access_denied_falls_through_to_string_match() {
+        // Windows reports this as Uncategorized rather than PermissionDenied.
+        let e = io(std::io::ErrorKind::Other, "Access is denied. (os error 5)");
+        assert_eq!(
+            humanize_fs_error("the ~/.ssh folder", &e),
+            "Access denied to the ~/.ssh folder"
+        );
+    }
+
+    #[test]
+    fn humanize_fs_error_unknown_keeps_readable_prefix() {
+        let e = io(std::io::ErrorKind::Other, "weird disk quirk");
+        assert_eq!(
+            humanize_fs_error("the SSH key", &e),
+            "Could not access the SSH key: weird disk quirk"
+        );
+    }
+
+    #[test]
+    fn humanize_fs_error_does_not_borrow_connect_wording() {
+        // Regression: these sites used to format the raw io::Error, and the
+        // obvious "reuse humanize_io_error" fix is wrong — that helper maps
+        // NotFound to "Host not found", which is nonsense for a missing file.
+        let e = io(std::io::ErrorKind::NotFound, "no such file");
+        assert_eq!(humanize_io_error(&e, None), "Host not found");
+        assert!(!humanize_fs_error("the SSH key", &e).contains("Host"));
     }
 
     // -- humanize_spawn_error / humanize_pty_error tests --

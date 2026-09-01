@@ -20,6 +20,7 @@ pub mod session_service;
 pub mod sftp_server;
 pub mod snmp;
 pub mod ssh;
+pub mod system_fonts;
 pub mod telnet;
 pub mod tftp_server;
 pub mod timefmt;

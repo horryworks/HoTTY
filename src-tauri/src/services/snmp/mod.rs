@@ -22,10 +22,11 @@ pub mod session;
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
+
+use crate::services::session_service::{join_or_abort, POLLER_STOP_GRACE_MS};
 
 pub use config::{clamp_interval, is_valid_pane_id, validate, SnmpConfigDto, SnmpTarget};
 pub use payload::SnmpDiscovery;
@@ -63,17 +64,13 @@ impl Default for SnmpWatcherState {
 
 /// Signal a watcher to stop, wait briefly for the task to wind down, then force
 /// abort. A `timeout` on a `JoinHandle` only *detaches* the task, so the explicit
-/// abort is what actually stops a loop that ignored cancellation.
+/// abort is what actually stops a loop that ignored cancellation — that is what
+/// the shared `join_or_abort` does, and it also logs the forced abort, which a
+/// hand-rolled copy silently dropped.
 pub async fn stop_watcher(map: &mut HashMap<String, WatcherHandle>, pane_id: &str) {
     if let Some(handle) = map.remove(pane_id) {
         handle.cancel.cancel();
-        let abort = handle.join.abort_handle();
-        if tokio::time::timeout(Duration::from_secs(2), handle.join)
-            .await
-            .is_err()
-        {
-            abort.abort();
-        }
+        join_or_abort(vec![handle.join], "snmp watcher", POLLER_STOP_GRACE_MS).await;
         log::info!("snmp: stopped watcher for pane {pane_id}");
     }
 }

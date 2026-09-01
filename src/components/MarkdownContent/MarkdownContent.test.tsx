@@ -78,9 +78,39 @@ describe('MarkdownContent link interception', () => {
         expect(event.defaultPrevented).toBe(false);
     });
 
-    it('leaves a non-http scheme alone', () => {
+    it('never opens a non-http scheme, and still cancels the click', () => {
         render(<MarkdownContent sanitizedHtml='<p><a href="mailto:someone@example.com">mail</a></p>' />);
-        fireEvent.click(screen.getByText('mail'));
+        const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+        screen.getByText('mail').dispatchEvent(event);
+
+        expect(mockOpenExternal).not.toHaveBeenCalled();
+        // Cancelled even though it is not opened: a scheme this code does not
+        // recognise must end as a dead click, never as a navigation that
+        // replaces the privileged app frame.
+        expect(event.defaultPrevented).toBe(true);
+    });
+
+    // Regression: the guard used to pattern-match the raw href attribute, so an
+    // href that DOMPurify allows but /^https?:\/\// rejects was never cancelled
+    // and navigated the app frame to the attacker origin.
+    it.each([
+        ['protocol-relative', '//evil.example/x', 'http://evil.example/x'],
+        ['control chars in scheme', 'ht\ntps://evil.example/x', 'https://evil.example/x'],
+    ])('cancels and routes a %s href', (_label, href, expected) => {
+        render(<MarkdownContent sanitizedHtml={`<p><a href="${href}">click</a></p>`} />);
+        const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+        screen.getByText('click').dispatchEvent(event);
+
+        expect(event.defaultPrevented).toBe(true);
+        expect(mockOpenExternal).toHaveBeenCalledWith(expected);
+    });
+
+    it('cancels a same-origin link without handing it to the opener', () => {
+        render(<MarkdownContent sanitizedHtml='<p><a href="/local/page">local</a></p>' />);
+        const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+        screen.getByText('local').dispatchEvent(event);
+
+        expect(event.defaultPrevented).toBe(true);
         expect(mockOpenExternal).not.toHaveBeenCalled();
     });
 

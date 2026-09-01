@@ -52,6 +52,8 @@ const OVERLAY_SELECTOR = [
   '.ssh-host-key-overlay',
   '.connection-dialog-overlay', // SessionDialog
   '.iap-vm-start-overlay',
+  '.ai-consent-overlay', // AiConsentModal — mounted at app level, not nested
+
   '.save-to-tree-overlay',
   '.ctc-overlay', // CustomThemeCreator
   '.host-edit-modal-overlay', // HostTree + BookmarkTree add/edit modal

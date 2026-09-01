@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { tauriService } from '../services/tauriService';
 import { logError } from '../utils/logger';
+import i18n from '../i18n';
 import type { SnmpDataPayload, SnmpWatcherStatusState } from '../types/appTypes';
 
 export interface InterfaceTrafficEventData {
@@ -50,7 +51,7 @@ export function useInterfaceTrafficEvents(paneId: string): InterfaceTrafficEvent
     };
 
     setup().catch((e) => {
-      logError('InterfaceTraffic', 'Failed to set up listeners', e);
+      logError('InterfaceTraffic', i18n.t('notifications.errors.trafficListener'), e);
     });
 
     return () => {

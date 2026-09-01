@@ -156,92 +156,15 @@ pub async fn detect_git_bash() -> Result<Option<String>, String> {
 
 #[tauri::command]
 pub fn list_system_fonts() -> Result<Vec<FontInfo>, String> {
-    #[cfg(windows)]
-    {
-        use std::collections::BTreeSet;
-        use windows::core::PCWSTR;
-        use windows::Win32::Foundation::LPARAM;
-        use windows::Win32::Graphics::Gdi::{
-            CreateDCW, DeleteDC, EnumFontFamiliesExW, DEFAULT_CHARSET, ENUMLOGFONTEXW, HDC,
-            LOGFONTW,
-        };
-
-        let mut families = BTreeSet::<String>::new();
-
-        unsafe {
-            let display: Vec<u16> = "DISPLAY\0".encode_utf16().collect();
-            let hdc: HDC = CreateDCW(
-                PCWSTR(display.as_ptr()),
-                PCWSTR::null(),
-                PCWSTR::null(),
-                None,
-            );
-            if hdc.is_invalid() {
-                return Err("failed to create device context for font enumeration".into());
-            }
-
-            let logfont = LOGFONTW {
-                lfCharSet: DEFAULT_CHARSET,
-                ..Default::default()
-            };
-
-            unsafe extern "system" fn enum_cb(
-                lpelfe: *const LOGFONTW,
-                _: *const windows::Win32::Graphics::Gdi::TEXTMETRICW,
-                _: u32,
-                lparam: LPARAM,
-            ) -> i32 {
-                // Defensive validation: both pointers are supplied by the OS, but
-                // guard against a null/misaligned input rather than dereferencing blindly.
-                if lpelfe.is_null() || lparam.0 == 0 {
-                    return 1;
-                }
-                let families_ptr = lparam.0 as *mut BTreeSet<String>;
-                if !(families_ptr as usize).is_multiple_of(std::mem::align_of::<BTreeSet<String>>())
-                {
-                    return 1;
-                }
-                if !(lpelfe as usize).is_multiple_of(std::mem::align_of::<ENUMLOGFONTEXW>()) {
-                    return 1;
-                }
-                let families = &mut *families_ptr;
-                let lf = &*(lpelfe as *const ENUMLOGFONTEXW);
-                let name_u16 = &lf.elfLogFont.lfFaceName;
-                let len = name_u16
-                    .iter()
-                    .position(|&c| c == 0)
-                    .unwrap_or(name_u16.len());
-                let name = String::from_utf16_lossy(&name_u16[..len]);
-                if !name.starts_with('@') {
-                    families.insert(name);
-                }
-                1 // continue enumeration
-            }
-
-            EnumFontFamiliesExW(
-                hdc,
-                &logfont,
-                Some(enum_cb),
-                LPARAM(&mut families as *mut BTreeSet<String> as isize),
-                0,
-            );
-
-            let _ = DeleteDC(hdc);
-        }
-
-        let result: Vec<FontInfo> = families
-            .into_iter()
-            .map(|family| FontInfo { family })
-            .collect();
-
-        log::info!("enumerated {} system fonts", result.len());
-        Ok(result)
-    }
-
-    #[cfg(not(windows))]
-    {
-        Ok(vec![])
-    }
+    // The Win32 GDI enumeration lives in services/system_fonts.rs so the
+    // OS-specific API stays in one swappable module (architecture Non-goal on
+    // cross-platform support). This command is only the IPC surface.
+    let families = crate::services::system_fonts::enumerate_families()?;
+    log::info!("enumerated {} system fonts", families.len());
+    Ok(families
+        .into_iter()
+        .map(|family| FontInfo { family })
+        .collect())
 }
 
 // ---------------------------------------------------------------------------

@@ -78,4 +78,34 @@ describe('externalLinkFromClick', () => {
     expect(externalLinkFromClick(document.createElement('div'))).toBeNull();
     expect(externalLinkFromClick(null)).toBeNull();
   });
+
+  // The href must be resolved the way the browser resolves it before the scheme
+  // is judged. Testing the raw attribute against /^https?:\/\// let these two
+  // shapes through DOMPurify and past the guard, so the click was never
+  // cancelled and the app frame navigated to the attacker origin.
+  it('resolves a protocol-relative href instead of rejecting it', () => {
+    const a = document.createElement('a');
+    a.setAttribute('href', '//evil.example/x');
+    // Same-origin scheme (http: under jsdom) + attacker host — must be routed
+    // to the external opener, not left to navigate the app frame.
+    expect(externalLinkFromClick(a)).toBe('http://evil.example/x');
+  });
+
+  it('resolves an href carrying control characters inside the scheme', () => {
+    const a = document.createElement('a');
+    a.setAttribute('href', 'ht\ntps://evil.example/x');
+    expect(externalLinkFromClick(a)).toBe('https://evil.example/x');
+  });
+
+  it('returns null for a same-origin link so fragments never reach the opener', () => {
+    const a = document.createElement('a');
+    a.setAttribute('href', '/local/page');
+    expect(externalLinkFromClick(a)).toBeNull();
+  });
+
+  it('returns null for an unparseable href rather than throwing', () => {
+    const a = document.createElement('a');
+    a.setAttribute('href', 'http://[');
+    expect(externalLinkFromClick(a)).toBeNull();
+  });
 });

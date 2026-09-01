@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import { STORAGE_KEYS } from '../constants/storage';
 import { tauriService, isEncrypted } from '../services/tauriService';
 import { logError } from '../utils/logger';
+import i18n from '../i18n';
 import { WINDOW_LABEL, IS_TAURI } from '../utils/windowLabel';
 import type { HostTreeNode, HostEntry } from '../types/appTypes';
 
@@ -67,7 +68,7 @@ async function mapDefinedBatch(
         }
         return result;
     } catch (err) {
-        logError('HostManager', `Failed to batch ${label} credentials`, err);
+        logError('HostManager', i18n.t('notifications.errors.credentialBatch', { label }), err);
         return values;
     }
 }
@@ -311,7 +312,7 @@ export function useHostManager() {
                 }
             })
             .catch((err) => {
-                logError('HostManager', 'encryptTree failed', err);
+                logError('HostManager', i18n.t('notifications.errors.hostTreeEncrypt'), err);
             });
     }, []);
 
@@ -345,7 +346,7 @@ export function useHostManager() {
                 setTree(migrated);
                 return migrated;
             } catch (err) {
-                logError('HostManager', 'v1→v2 credential migration failed', err);
+                logError('HostManager', i18n.t('notifications.errors.credentialMigration'), err);
                 return nodes;
             }
         };
@@ -474,7 +475,7 @@ export function useHostManager() {
             .then(migrateIapProtocol)
             .then(eagerDecryptTree)
             .catch(err => {
-                logError('HostManager', 'Background eager decryption failed', err);
+                logError('HostManager', i18n.t('notifications.errors.credentialPreload'), err);
             });
     }, [persistEncryptedAsync]);
 

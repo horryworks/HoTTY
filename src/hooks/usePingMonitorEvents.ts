@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { tauriService } from '../services/tauriService';
 import { logError } from '../utils/logger';
+import i18n from '../i18n';
 import type { PingResult } from '../types/appTypes';
 
 const MAX_HISTORY = 60;
@@ -58,7 +59,7 @@ export function usePingMonitorEvents(sessionId: string): PingMonitorEventData {
     };
 
     setup().catch((e) => {
-      logError('PingMonitor', 'Failed to set up listeners', e);
+      logError('PingMonitor', i18n.t('notifications.errors.pingMonitorListener'), e);
     });
 
     return () => {
