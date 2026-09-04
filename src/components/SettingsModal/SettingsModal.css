@@ -17,12 +17,45 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Anchors the resize grip in the corner. */
+  position: relative;
   width: 520px;
+  /* Fixed, not content-sized: letting each tab set the height made the dialog
+     jump on every tab change. The body scrolls when a tab needs more, and a
+     short tab simply has space below it. Both are quieter than resizing on
+     every click, and the user can drag the dialog to whatever suits them. */
+  height: 600px;
   max-width: 90vw;
   max-height: 90vh;
   color: var(--text-primary);
   font-family: var(--ui-font-family);
   font-size: var(--font-size-base);
+}
+
+/* Resize grip, bottom-right. Double-click resets to the size above. */
+.settings-modal-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  /* Two diagonal ticks — the conventional "drag me" mark. Drawn with a
+     gradient so it needs no extra element or icon. */
+  background: linear-gradient(
+    135deg,
+    transparent 0 42%,
+    var(--text-tertiary) 42% 52%,
+    transparent 52% 62%,
+    var(--text-tertiary) 62% 72%,
+    transparent 72%
+  );
+  opacity: 0.6;
+  transition: opacity 0.1s;
+}
+
+.settings-modal-resize:hover {
+  opacity: 1;
 }
 
 .settings-modal-header {
@@ -32,10 +65,16 @@
   font-weight: 600;
 }
 
-.settings-modal-tabs {
-  display: flex;
+/* The tab row is a `ScrollStrip`: scrolling, arrow buttons and edge fades come
+   from `.scroll-strip` / `.scroll-strip-wrap`. The border lives on the wrapper
+   so it runs under the arrow buttons too. */
+.settings-modal-tabs-wrap {
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
+}
+
+.settings-modal-tabs {
+  display: flex;
 }
 
 .settings-modal-tab {
@@ -46,6 +85,9 @@
   cursor: pointer;
   font-family: var(--ui-font-family);
   font-size: var(--font-size-base);
+  /* Never squeeze a label to fit: the strip scrolls instead. */
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .settings-modal-tab.active {

@@ -11,7 +11,7 @@ export const notifications = {
     titleAvailable: 'Nueva versión disponible: v{{version}}',
     prereleaseSuffix: ' (versión preliminar)',
     running: 'Está ejecutando la v{{version}}',
-    viewRelease: 'Ver versión',
+    viewRelease: 'Cambiar de versión',
     dismiss: 'Descartar',
     dismissAria: 'Descartar notificación de actualización',
   },

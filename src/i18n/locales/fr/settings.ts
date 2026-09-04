@@ -1,12 +1,14 @@
 // Settings modal — shell, tab labels, and all tab content.
 export const settings = {
   title: 'Paramètres',
+  resizeHint: 'Faites glisser pour redimensionner. Double-cliquez pour réinitialiser.',
   tabs: {
     general: 'Général',
     appearance: 'Apparence',
     protocols: 'Protocoles',
     features: 'Fonctionnalités',
     ai: 'IA',
+    versions: 'Versions',
     about: 'À propos',
   },
   general: {
@@ -287,6 +289,28 @@ export const settings = {
     resetDataConsent: 'Afficher à nouveau',
     resetDataConsentHelp:
       "Réinitialisez le consentement afin que la divulgation sur le partage de données avec l'IA soit affichée à nouveau avant le prochain envoi à l'IA.",
+  },
+  versions: {
+    title: 'Versions de HoTTY',
+    installedLabel: 'Installée : v{{version}}',
+    showPrereleases: 'Afficher les préversions',
+    refresh: 'Actualiser',
+    loading: 'Chargement des versions…',
+    empty: 'Aucune version trouvée',
+    selectPrompt: 'Choisissez une version pour lire ses notes',
+    noNotes: 'Aucune note pour cette version',
+    badgeCurrent: 'Installée',
+    badgePrerelease: 'Bêta',
+    notInstallable: 'Aucune somme de contrôle publiée : vérification impossible',
+    install: 'Passer à la v{{version}}',
+    reinstall: 'Réinstaller la v{{version}}',
+    close: 'Fermer',
+    cancel: 'Annuler',
+    downloading: 'Téléchargement… {{percent}} %',
+    verifying: 'Vérification de la somme de contrôle…',
+    launching: 'Lancement de l\'installateur…',
+    downgradeNote: 'En revenant en arrière, vos hôtes, thèmes et identifiants enregistrés sont conservés. Les réglages ajoutés dans les versions plus récentes sont ignorés, pas supprimés.',
+    failed: 'Échec du changement de version : {{message}}',
   },
   about: {
     version: 'v{{version}}',

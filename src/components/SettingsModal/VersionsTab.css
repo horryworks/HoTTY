@@ -1,0 +1,202 @@
+/* Settings → Versions. The settings modal is 520px wide, so this is a single
+   column: list on top, release notes for the selected row below it. */
+
+.versions-tab {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.versions-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.versions-current {
+    flex: 1;
+    font-size: calc(var(--font-size-base) - 1px);
+    color: var(--text-secondary);
+}
+
+.versions-refresh {
+    padding: 3px 8px;
+    background: var(--btn-secondary-bg);
+    color: var(--text-primary);
+    border: none;
+    border-radius: 4px;
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 2px);
+    cursor: pointer;
+    transition: background-color 0.1s;
+}
+
+.versions-refresh:hover:not(:disabled) {
+    background: var(--btn-secondary-hover-bg);
+}
+
+.versions-refresh:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.versions-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: calc(var(--font-size-base) - 1px);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.versions-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-height: 170px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--input-bg);
+}
+
+.versions-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 8px;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 1px);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.1s;
+}
+
+.versions-row:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+}
+
+.versions-row.selected {
+    background: var(--accent-color);
+    color: var(--text-on-accent);
+}
+
+.versions-row:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.versions-name {
+    flex: 1;
+}
+
+.versions-badge {
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: calc(var(--font-size-base) - 3px);
+    font-weight: 600;
+}
+
+.versions-badge.current {
+    background: var(--accent-color);
+    color: var(--text-on-accent);
+}
+
+.versions-badge.beta {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.versions-badge.warn {
+    background: var(--color-warning);
+    color: var(--text-on-accent);
+}
+
+.versions-notes {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 6px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+}
+
+.versions-status {
+    margin: 0;
+    color: var(--text-tertiary);
+    font-size: calc(var(--font-size-base) - 1px);
+}
+
+.versions-warning,
+.versions-error {
+    margin: 0;
+    font-size: calc(var(--font-size-base) - 1px);
+    line-height: 1.4;
+}
+
+.versions-warning {
+    color: var(--color-warning);
+}
+
+.versions-error {
+    color: var(--color-danger);
+}
+
+.versions-progress-label {
+    margin-bottom: 4px;
+    font-size: calc(var(--font-size-base) - 1px);
+    color: var(--text-secondary);
+}
+
+.versions-progress-track {
+    height: 4px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.versions-progress-bar {
+    height: 100%;
+    background: var(--accent-color);
+    transition: width 0.2s;
+}
+
+.versions-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.versions-btn {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    background: var(--btn-secondary-bg);
+    color: var(--text-primary);
+    font-family: var(--ui-font-family);
+    font-size: var(--font-size-base);
+    transition: background-color 0.1s;
+}
+
+.versions-btn:hover:not(:disabled) {
+    background: var(--btn-secondary-hover-bg);
+}
+
+.versions-btn-primary {
+    background: var(--accent-color);
+    color: var(--text-on-accent);
+}
+
+.versions-btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+.versions-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

@@ -12,7 +12,7 @@ export const notifications = {
     titleAvailable: '새 버전 사용 가능: v{{version}}',
     prereleaseSuffix: ' (사전 릴리스)',
     running: '현재 v{{version}}을(를) 사용 중입니다',
-    viewRelease: '릴리스 보기',
+    viewRelease: '버전 전환',
     dismiss: '닫기',
     dismissAria: '업데이트 알림 닫기',
   },

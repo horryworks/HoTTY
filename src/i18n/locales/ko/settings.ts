@@ -1,12 +1,14 @@
 // Settings modal — shell, tab labels, and all tab content.
 export const settings = {
   title: '설정',
+  resizeHint: '드래그하여 크기 조절. 두 번 클릭하면 기본값으로 되돌립니다.',
   tabs: {
     general: '일반',
     appearance: '모양',
     protocols: '프로토콜',
     features: '기능',
     ai: 'AI',
+    versions: '버전',
     about: '정보',
   },
   general: {
@@ -287,6 +289,28 @@ export const settings = {
     resetDataConsent: '다시 표시',
     resetDataConsentHelp:
       '동의를 재설정하여 다음 AI 전송 전에 AI 데이터 공유 고지가 다시 표시되도록 합니다.',
+  },
+  versions: {
+    title: 'HoTTY 버전',
+    installedLabel: '사용 중: v{{version}}',
+    showPrereleases: '베타 버전도 표시',
+    refresh: '새로 고침',
+    loading: '릴리스를 불러오는 중…',
+    empty: '릴리스를 찾을 수 없습니다',
+    selectPrompt: '버전을 선택하면 릴리스 노트가 표시됩니다',
+    noNotes: '이 버전에는 릴리스 노트가 없습니다',
+    badgeCurrent: '사용 중',
+    badgePrerelease: '베타',
+    notInstallable: '공개된 체크섬이 없어 검증할 수 없습니다',
+    install: 'v{{version}}(으)로 전환',
+    reinstall: 'v{{version}} 다시 설치',
+    close: '닫기',
+    cancel: '취소',
+    downloading: '다운로드 중… {{percent}}%',
+    verifying: '체크섬을 검증하는 중…',
+    launching: '설치 프로그램을 시작하는 중…',
+    downgradeNote: '이전 버전으로 돌아가도 호스트, 테마, 저장된 자격 증명은 그대로 유지됩니다. 최신 버전에서 추가된 설정은 무시될 뿐 삭제되지 않습니다.',
+    failed: '버전 전환에 실패했습니다: {{message}}',
   },
   about: {
     version: 'v{{version}}',

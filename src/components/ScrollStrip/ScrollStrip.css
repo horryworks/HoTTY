@@ -1,0 +1,102 @@
+/* Shared scrolling tab strip: terminal tabs, AI Chat tabs, settings tabs.
+   The arrow buttons only exist while the row overflows, so a short row renders
+   exactly as it did before this component. */
+
+.scroll-strip-wrap {
+    display: flex;
+    align-items: stretch;
+    /* Without this a flex child refuses to shrink below its content width, and
+       the strip would never overflow — it would push its siblings out instead. */
+    min-width: 0;
+    /* No `flex` here on purpose. The wrapper is content-width and shrinks only
+       when it has to, which is what a tab row followed by other controls needs:
+       stretching it would pin New Terminal and Features to the far right. A
+       caller that does want it to fill the row asks for that via wrapClassName. */
+}
+
+.scroll-strip {
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    /* The scrollbar is hidden on purpose: these rows are ~30px tall and the
+       global 10px bar takes a visible share of one. The arrows and the edge
+       fade are the affordance instead. */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.scroll-strip::-webkit-scrollbar {
+    display: none;
+}
+
+/* The strip takes focus so the arrow keys reach it (useTabKeyboardNav), so it
+   has to show focus — for keyboard users only, and inset so nothing shifts. */
+.scroll-strip:focus-visible {
+    outline: 1px solid var(--accent-color);
+    outline-offset: -1px;
+}
+
+/* Fade whichever edge still has content behind it. The arrows say there is
+   more; the fade says which direction, and stops a tab from being cut off at a
+   hard edge as though it were a rendering fault. */
+.scroll-strip.scrollable:not(.at-end) {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
+}
+
+.scroll-strip.scrollable:not(.at-start) {
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 20px);
+    mask-image: linear-gradient(to right, transparent 0, #000 20px);
+}
+
+.scroll-strip.scrollable:not(.at-start):not(.at-end) {
+    -webkit-mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        #000 20px,
+        #000 calc(100% - 20px),
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        #000 20px,
+        #000 calc(100% - 20px),
+        transparent 100%
+    );
+}
+
+.scroll-strip-btn {
+    flex-shrink: 0;
+    width: 20px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    /* Full-strength text, not --text-secondary: an arrow that can be pressed
+       has to out-contrast one that cannot, and the disabled state below is the
+       other half of that pair. */
+    color: var(--text-primary);
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) + 4px);
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+        background-color 0.1s,
+        opacity 0.1s;
+}
+
+.scroll-strip-btn:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+}
+
+/* Sunk far enough to read as "nothing here", not merely as "slightly dimmer".
+   At the previous --text-secondary + 0.5 the two states were nearly the same
+   shade and neither arrow looked pressable. */
+.scroll-strip-btn:disabled {
+    opacity: 0.2;
+    /* `default`, not `not-allowed`: reaching the end of a list is not an error
+       worth flagging with a warning cursor. */
+    cursor: default;
+}

@@ -60,7 +60,9 @@
 }
 
 .log-viewer-toolbar-btn {
+  flex-shrink: 0;
   padding: 3px 8px;
+  transition: background-color 0.1s;
   background: var(--btn-secondary-bg);
   border: none;
   border-radius: 4px;

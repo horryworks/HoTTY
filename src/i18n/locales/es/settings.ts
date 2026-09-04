@@ -1,12 +1,14 @@
 // Modal de configuración — shell, etiquetas de pestañas y todo el contenido de las pestañas.
 export const settings = {
   title: 'Configuración',
+  resizeHint: 'Arrastra para cambiar el tamaño. Doble clic para restablecer.',
   tabs: {
     general: 'General',
     appearance: 'Apariencia',
     protocols: 'Protocolos',
     features: 'Funciones',
     ai: 'IA',
+    versions: 'Versiones',
     about: 'Acerca de',
   },
   general: {
@@ -287,6 +289,28 @@ export const settings = {
     resetDataConsent: 'Mostrar de nuevo',
     resetDataConsentHelp:
       'Restablezca el consentimiento para que la divulgación sobre el envío de datos a la IA se muestre de nuevo antes del próximo envío a la IA.',
+  },
+  versions: {
+    title: 'Versiones de HoTTY',
+    installedLabel: 'Instalada: v{{version}}',
+    showPrereleases: 'Mostrar versiones beta',
+    refresh: 'Actualizar',
+    loading: 'Cargando versiones…',
+    empty: 'No se encontraron versiones',
+    selectPrompt: 'Elige una versión para leer sus notas',
+    noNotes: 'Esta versión no tiene notas',
+    badgeCurrent: 'Instalada',
+    badgePrerelease: 'Beta',
+    notInstallable: 'Sin suma de verificación publicada: no se puede verificar',
+    install: 'Cambiar a v{{version}}',
+    reinstall: 'Reinstalar v{{version}}',
+    close: 'Cerrar',
+    cancel: 'Cancelar',
+    downloading: 'Descargando… {{percent}}%',
+    verifying: 'Verificando la suma de comprobación…',
+    launching: 'Iniciando el instalador…',
+    downgradeNote: 'Al volver atrás se conservan los hosts, los temas y las credenciales guardadas. Los ajustes añadidos en versiones más nuevas se ignoran, no se borran.',
+    failed: 'No se pudo cambiar de versión: {{message}}',
   },
   about: {
     version: 'v{{version}}',

@@ -1,12 +1,14 @@
 // 設定強制回應視窗 — 外框、分頁標籤，以及所有分頁內容。
 export const settings = {
   title: '設定',
+  resizeHint: '拖曳可調整大小，按兩下可還原預設。',
   tabs: {
     general: '一般',
     appearance: '外觀',
     protocols: '通訊協定',
     features: '功能',
     ai: 'AI',
+    versions: '版本',
     about: '關於',
   },
   general: {
@@ -287,6 +289,28 @@ export const settings = {
     resetDataConsent: '重新顯示',
     resetDataConsentHelp:
       '重設同意，以便在下次 AI 傳送前再次顯示 AI 資料分享告知。',
+  },
+  versions: {
+    title: 'HoTTY 版本',
+    installedLabel: '目前使用: v{{version}}',
+    showPrereleases: '顯示測試版',
+    refresh: '重新整理',
+    loading: '正在載入版本清單…',
+    empty: '找不到任何版本',
+    selectPrompt: '選擇一個版本以檢視發行說明',
+    noNotes: '此版本沒有發行說明',
+    badgeCurrent: '使用中',
+    badgePrerelease: '測試版',
+    notInstallable: '未發布校驗碼，無法驗證此版本',
+    install: '切換至 v{{version}}',
+    reinstall: '重新安裝 v{{version}}',
+    close: '關閉',
+    cancel: '取消',
+    downloading: '正在下載… {{percent}}%',
+    verifying: '正在驗證校驗碼…',
+    launching: '正在啟動安裝程式…',
+    downgradeNote: '回到舊版本後，主機清單、佈景主題與已儲存的憑證都會保留。新版本新增的設定會被忽略，但不會被刪除。',
+    failed: '切換版本失敗: {{message}}',
   },
   about: {
     version: 'v{{version}}',

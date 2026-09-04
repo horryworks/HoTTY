@@ -1,12 +1,14 @@
 // Settings modal — shell, tab labels, and all tab content.
 export const settings = {
   title: 'Settings',
+  resizeHint: 'Drag to resize. Double-click to reset.',
   tabs: {
     general: 'General',
     appearance: 'Appearance',
     protocols: 'Protocols',
     features: 'Features',
     ai: 'AI',
+    versions: 'Versions',
     about: 'About',
   },
   general: {
@@ -289,6 +291,28 @@ export const settings = {
     resetDataConsent: 'Show again',
     resetDataConsentHelp:
       'Reset consent so the AI data-sharing disclosure is shown again before the next AI send.',
+  },
+  versions: {
+    title: 'HoTTY versions',
+    installedLabel: 'Installed: v{{version}}',
+    showPrereleases: 'Show pre-releases',
+    refresh: 'Refresh',
+    loading: 'Loading releases…',
+    empty: 'No releases found',
+    selectPrompt: 'Select a version to read its release notes',
+    noNotes: 'No release notes for this version',
+    badgeCurrent: 'Installed',
+    badgePrerelease: 'Beta',
+    notInstallable: 'No published checksum — this version cannot be verified',
+    install: 'Switch to v{{version}}',
+    reinstall: 'Reinstall v{{version}}',
+    close: 'Close',
+    cancel: 'Cancel',
+    downloading: 'Downloading… {{percent}}%',
+    verifying: 'Verifying checksum…',
+    launching: 'Starting the installer…',
+    downgradeNote: 'Going back: hosts, themes and saved credentials are kept. Settings added in newer versions are ignored, not deleted.',
+    failed: 'Version switch failed: {{message}}',
   },
   about: {
     version: 'v{{version}}',

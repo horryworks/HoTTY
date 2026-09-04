@@ -16,4 +16,7 @@ export const common = {
   retry: 'Retry',
   copy: 'Copy',
   copied: 'Copied',
+  // Arrow buttons on a scrolling tab strip (ScrollStrip).
+  scrollStripLeft: 'Scroll tabs left',
+  scrollStripRight: 'Scroll tabs right',
 } as const;

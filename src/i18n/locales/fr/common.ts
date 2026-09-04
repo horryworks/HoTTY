@@ -16,4 +16,7 @@ export const common = {
   retry: 'Réessayer',
   copy: 'Copier',
   copied: 'Copié',
+  // Arrow buttons on a scrolling tab strip (ScrollStrip).
+  scrollStripLeft: 'Faire défiler les onglets vers la gauche',
+  scrollStripRight: 'Faire défiler les onglets vers la droite',
 };

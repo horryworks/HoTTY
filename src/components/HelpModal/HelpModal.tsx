@@ -122,6 +122,9 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                 <Trans i18nKey="help.gettingStarted.updateNotifications" components={[<strong key="0" />]} />
               </p>
               <p className="help-text">
+                <Trans i18nKey="help.gettingStarted.versionSwitching" components={[<strong key="0" />]} />
+              </p>
+              <p className="help-text">
                 <Trans
                   i18nKey="help.gettingStarted.connectionStatus"
                   components={[

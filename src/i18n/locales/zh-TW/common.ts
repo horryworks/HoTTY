@@ -16,4 +16,7 @@ export const common = {
   retry: '重試',
   copy: '複製',
   copied: '已複製',
+  // Arrow buttons on a scrolling tab strip (ScrollStrip).
+  scrollStripLeft: '向左捲動分頁',
+  scrollStripRight: '向右捲動分頁',
 };

@@ -182,6 +182,17 @@ interface SettingsState {
   aiWorkerIdleTimeoutMins: number;
   /** Which PC shell the AI gets when it asks for a local terminal. */
   aiLocalShellType: AiLocalShellType;
+  /**
+   * Settings dialog size, in px, once the user has resized it. `null` means
+   * "not resized" — the dialog uses the fixed default from its stylesheet.
+   *
+   * The height is fixed rather than content-sized on purpose: sizing to the
+   * active tab made the dialog jump every time the user changed tab. A tab with
+   * little in it now has some empty space below instead, which is the quieter
+   * of the two.
+   */
+  settingsModalWidth: number | null;
+  settingsModalHeight: number | null;
 }
 
 interface SettingsActions {
@@ -264,6 +275,8 @@ const DEFAULTS: SettingsState = {
   aiMaxWorkerSessionsPerTab: 5,
   aiWorkerIdleTimeoutMins: 10,
   aiLocalShellType: 'powershell',
+  settingsModalWidth: null,
+  settingsModalHeight: null,
 };
 
 export const useSettingsStore = create<SettingsState & SettingsActions>()(
@@ -275,7 +288,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 30,
+      version: 31,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -453,6 +466,12 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           state.aiMaxWorkerSessionsPerTab ??= DEFAULTS.aiMaxWorkerSessionsPerTab;
           state.aiWorkerIdleTimeoutMins ??= DEFAULTS.aiWorkerIdleTimeoutMins;
           state.aiLocalShellType ??= DEFAULTS.aiLocalShellType;
+        }
+        if (version < 31) {
+          // Settings dialog size. Null on upgrade, so an existing install keeps
+          // the auto-sized dialog it has always had until the user drags it.
+          state.settingsModalWidth ??= DEFAULTS.settingsModalWidth;
+          state.settingsModalHeight ??= DEFAULTS.settingsModalHeight;
         }
         return state as SettingsState;
       },

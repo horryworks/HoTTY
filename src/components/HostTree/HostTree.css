@@ -304,10 +304,18 @@
     padding: 6px 16px;
     border: none;
     border-radius: 4px;
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 1px);
     cursor: pointer;
     background: var(--btn-secondary-bg);
     color: var(--text-primary);
     transition: background-color 0.1s;
+}
+
+.modal-actions .btn-primary:disabled,
+.modal-actions .btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .modal-actions .btn-secondary:hover:not(:disabled) {
@@ -318,6 +326,8 @@
     padding: 6px 16px;
     border: none;
     border-radius: 4px;
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 1px);
     cursor: pointer;
     background: var(--accent-color);
     color: var(--text-on-accent);

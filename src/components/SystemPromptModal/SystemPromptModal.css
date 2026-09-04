@@ -10,6 +10,7 @@
 
 .system-prompt-modal {
   background: var(--bg-secondary);
+  font-size: var(--font-size-base);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   box-shadow: 0 4px 16px var(--modal-shadow);

@@ -84,12 +84,85 @@ describe('SettingsModal', () => {
     expect(screen.getByText('AI Provider')).toBeTruthy();
   });
 
-  it('renders all 5 tab buttons', () => {
+  it('renders every tab button', () => {
     render(<SettingsModal open onClose={() => {}} {...themeProps} />);
     expect(screen.getByText('General')).toBeTruthy();
     expect(screen.getByText('Appearance')).toBeTruthy();
     expect(screen.getByText('Protocols')).toBeTruthy();
     expect(screen.getByText('Features')).toBeTruthy();
+    expect(screen.getByText('Versions')).toBeTruthy();
     expect(screen.getByText('About')).toBeTruthy();
+  });
+
+  describe('resizing', () => {
+    const grip = () => document.querySelector('.settings-modal-resize') as HTMLElement;
+    const dialog = () => document.querySelector('.settings-modal') as HTMLElement;
+
+    /** jsdom computes no layout, so the starting size has to be supplied. */
+    function openAt(w: number, h: number) {
+      render(<SettingsModal open onClose={() => {}} {...themeProps} />);
+      const el = dialog();
+      Object.defineProperty(el, 'offsetWidth', { value: w, configurable: true });
+      Object.defineProperty(el, 'offsetHeight', { value: h, configurable: true });
+      return el;
+    }
+
+    it('applies a stored size on open', () => {
+      useSettingsStore.getState().update('settingsModalWidth', 700);
+      useSettingsStore.getState().update('settingsModalHeight', 640);
+      render(<SettingsModal open onClose={() => {}} {...themeProps} />);
+      expect(dialog().style.width).toBe('700px');
+      expect(dialog().style.height).toBe('640px');
+    });
+
+    it('resizes during the drag but only persists on release', () => {
+      const el = openAt(520, 600);
+
+      fireEvent.mouseDown(grip(), { clientX: 100, clientY: 100 });
+      fireEvent.mouseMove(document, { clientX: 180, clientY: 160 });
+      expect(el.style.width).toBe('600px');
+      expect(el.style.height).toBe('660px');
+      // Still unsaved: persisting per frame would rewrite the whole settings
+      // blob to localStorage on every mousemove.
+      expect(useSettingsStore.getState().settingsModalWidth).toBeNull();
+
+      fireEvent.mouseUp(document);
+      expect(useSettingsStore.getState().settingsModalWidth).toBe(600);
+      expect(useSettingsStore.getState().settingsModalHeight).toBe(660);
+    });
+
+    it('will not shrink past a usable size', () => {
+      const el = openAt(520, 600);
+      fireEvent.mouseDown(grip(), { clientX: 100, clientY: 100 });
+      fireEvent.mouseMove(document, { clientX: -500, clientY: -500 });
+      // Any narrower and the tab strip is more arrows than tabs.
+      expect(el.style.width).toBe('420px');
+      expect(el.style.height).toBe('320px');
+      fireEvent.mouseUp(document);
+    });
+
+    it('returns to the stylesheet size on double-click', () => {
+      useSettingsStore.getState().update('settingsModalWidth', 700);
+      useSettingsStore.getState().update('settingsModalHeight', 640);
+      render(<SettingsModal open onClose={() => {}} {...themeProps} />);
+      expect(dialog().style.width).toBe('700px');
+
+      fireEvent.doubleClick(grip());
+      expect(useSettingsStore.getState().settingsModalWidth).toBeNull();
+      expect(useSettingsStore.getState().settingsModalHeight).toBeNull();
+      // The inline style has to go too: the drag wrote it straight to the node,
+      // so clearing the stored value alone would leave the dialog resized.
+      expect(dialog().style.width).toBe('');
+      expect(dialog().style.height).toBe('');
+    });
+
+    it('keeps its height when the tab changes', () => {
+      useSettingsStore.getState().update('settingsModalHeight', 640);
+      render(<SettingsModal open onClose={() => {}} {...themeProps} />);
+      const before = dialog().style.height;
+      fireEvent.click(screen.getByText('About'));
+      // The dialog used to size to its content, so every tab change resized it.
+      expect(dialog().style.height).toBe(before);
+    });
   });
 });

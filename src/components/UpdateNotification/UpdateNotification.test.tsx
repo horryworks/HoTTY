@@ -10,6 +10,8 @@ vi.mock('../../services/tauriService', () => ({
   },
 }));
 
+const onOpenVersions = vi.fn();
+
 const sampleInfo = {
   currentVersion: '2.0.0-beta3',
   latestVersion: '2.0.0',
@@ -32,7 +34,7 @@ describe('UpdateNotification', () => {
 
   it('renders nothing when no update is available', async () => {
     vi.mocked(tauriService.checkForUpdates).mockResolvedValueOnce(null);
-    const { container } = render(<UpdateNotification />);
+    const { container } = render(<UpdateNotification onOpenVersions={onOpenVersions} />);
     await waitFor(() => {
       expect(tauriService.checkForUpdates).toHaveBeenCalled();
     });
@@ -41,22 +43,25 @@ describe('UpdateNotification', () => {
 
   it('shows the banner when an update is available', async () => {
     vi.mocked(tauriService.checkForUpdates).mockResolvedValueOnce(sampleInfo);
-    render(<UpdateNotification />);
+    render(<UpdateNotification onOpenVersions={onOpenVersions} />);
     expect(await screen.findByText(/New version available: v2\.0\.0/)).toBeTruthy();
     expect(screen.getByText(/You are running v2\.0\.0-beta3/)).toBeTruthy();
   });
 
-  it('opens the release URL when View release is clicked', async () => {
+  it('opens the in-app version switcher rather than the browser', async () => {
     vi.mocked(tauriService.checkForUpdates).mockResolvedValueOnce(sampleInfo);
-    render(<UpdateNotification />);
-    const btn = await screen.findByText('View release');
+    render(<UpdateNotification onOpenVersions={onOpenVersions} />);
+    const btn = await screen.findByText('Switch version');
     fireEvent.click(btn);
-    expect(tauriService.openExternal).toHaveBeenCalledWith(sampleInfo.releaseUrl);
+    expect(onOpenVersions).toHaveBeenCalled();
+    // The point of the change: updating no longer sends the user out to
+    // GitHub, so nothing here may reach for the browser.
+    expect(tauriService.openExternal).not.toHaveBeenCalled();
   });
 
   it('hides and persists dismissal when Dismiss is clicked', async () => {
     vi.mocked(tauriService.checkForUpdates).mockResolvedValueOnce(sampleInfo);
-    const { container } = render(<UpdateNotification />);
+    const { container } = render(<UpdateNotification onOpenVersions={onOpenVersions} />);
     const btn = await screen.findByText('Dismiss');
     fireEvent.click(btn);
     expect(container.firstChild).toBeNull();
@@ -66,7 +71,7 @@ describe('UpdateNotification', () => {
   it('does not show the banner for a previously dismissed version', async () => {
     localStorage.setItem('hotty:update-dismissed-version', '2.0.0');
     vi.mocked(tauriService.checkForUpdates).mockResolvedValueOnce(sampleInfo);
-    const { container } = render(<UpdateNotification />);
+    const { container } = render(<UpdateNotification onOpenVersions={onOpenVersions} />);
     await waitFor(() => {
       expect(tauriService.checkForUpdates).toHaveBeenCalled();
     });
@@ -75,7 +80,7 @@ describe('UpdateNotification', () => {
 
   it('swallows errors silently', async () => {
     vi.mocked(tauriService.checkForUpdates).mockRejectedValueOnce(new Error('net down'));
-    const { container } = render(<UpdateNotification />);
+    const { container } = render(<UpdateNotification onOpenVersions={onOpenVersions} />);
     await waitFor(() => {
       expect(tauriService.checkForUpdates).toHaveBeenCalled();
     });

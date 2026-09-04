@@ -41,7 +41,7 @@
   cursor: pointer;
   font-size: calc(var(--font-size-base) - 2px);
   line-height: 1;
-  transition: background 0.15s;
+  transition: background-color 0.1s;
   font-family: var(--ui-font-family);
 }
 
@@ -57,7 +57,7 @@
 }
 
 .gcp-toggle-btn.active {
-  border-color: var(--accent-color);
+  box-shadow: inset 0 0 0 1px var(--accent-color);
   background: var(--btn-secondary-hover-bg);
 }
 

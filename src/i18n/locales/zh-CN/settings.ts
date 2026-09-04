@@ -1,12 +1,14 @@
 // Settings modal — shell, tab labels, and all tab content.
 export const settings = {
   title: '设置',
+  resizeHint: '拖动可调整大小，双击恢复默认。',
   tabs: {
     general: '常规',
     appearance: '外观',
     protocols: '协议',
     features: '功能',
     ai: 'AI',
+    versions: '版本',
     about: '关于',
   },
   general: {
@@ -287,6 +289,28 @@ export const settings = {
     resetDataConsent: '重新显示',
     resetDataConsentHelp:
       '重置同意，以便在下次 AI 发送前再次显示 AI 数据共享告知。',
+  },
+  versions: {
+    title: 'HoTTY 版本',
+    installedLabel: '当前使用: v{{version}}',
+    showPrereleases: '显示测试版',
+    refresh: '刷新',
+    loading: '正在加载版本列表…',
+    empty: '未找到任何版本',
+    selectPrompt: '选择一个版本以查看发行说明',
+    noNotes: '该版本没有发行说明',
+    badgeCurrent: '使用中',
+    badgePrerelease: '测试版',
+    notInstallable: '未发布校验和，无法验证此版本',
+    install: '切换到 v{{version}}',
+    reinstall: '重新安装 v{{version}}',
+    close: '关闭',
+    cancel: '取消',
+    downloading: '正在下载… {{percent}}%',
+    verifying: '正在校验…',
+    launching: '正在启动安装程序…',
+    downgradeNote: '回到旧版本后，主机列表、主题和已保存的凭据都会保留。新版本新增的设置会被忽略，但不会被删除。',
+    failed: '切换版本失败: {{message}}',
   },
   about: {
     version: 'v{{version}}',

@@ -67,6 +67,9 @@ import type {
   ChatImage,
   CommandVerdict,
   UpdateInfo,
+  ReleaseEntry,
+  UpdaterDialogLang,
+  UpdaterProgress,
 } from '../types/appTypes';
 
 type AnyConfig =
@@ -748,6 +751,32 @@ export const tauriService = {
 
   async checkForUpdates(): Promise<UpdateInfo | null> {
     return invoke<UpdateInfo | null>('check_for_updates');
+  },
+
+  /** Every switchable release, newest first. `refresh` bypasses the 10-minute cache. */
+  async listReleases(refresh = false): Promise<ReleaseEntry[]> {
+    return invoke<ReleaseEntry[]>('updater_list_releases', { refresh });
+  },
+
+  /**
+   * Switch to a release: confirm natively, download, verify, then exit so the
+   * installer can run.
+   *
+   * Takes a tag and a dialog language — never a URL. The backend resolves the
+   * tag against its own release list, which is what stops this command from
+   * being pointed at an arbitrary download.
+   */
+  async installVersion(tag: string, lang: UpdaterDialogLang): Promise<void> {
+    await invoke('updater_install_version', { tag, lang });
+  },
+
+  async cancelVersionInstall(): Promise<void> {
+    await invoke('updater_cancel_install');
+  },
+
+  /** Download / verify progress for a version switch (broadcast to every window). */
+  onUpdaterProgress(cb: (p: UpdaterProgress) => void): Promise<UnlistenFn> {
+    return listen<UpdaterProgress>('updater-progress', (e) => cb(e.payload));
   },
 
   // -----------------------------------------------------------------------

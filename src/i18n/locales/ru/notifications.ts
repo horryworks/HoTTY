@@ -12,7 +12,7 @@ export const notifications = {
     titleAvailable: 'Доступна новая версия: v{{version}}',
     prereleaseSuffix: ' (предварительный выпуск)',
     running: 'У вас установлена версия v{{version}}',
-    viewRelease: 'Открыть выпуск',
+    viewRelease: 'Сменить версию',
     dismiss: 'Закрыть',
     dismissAria: 'Закрыть уведомление об обновлении',
   },

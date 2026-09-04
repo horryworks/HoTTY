@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChatTab } from '../../hooks/useAiChat';
+import { useTabKeyboardNav } from '../../hooks/useTabKeyboardNav';
+import { ScrollStrip } from '../ScrollStrip/ScrollStrip';
 import { conversationColorIndex, conversationColorVar } from '../../utils/conversationColor';
 import './TabStrip.css';
 
@@ -17,9 +19,25 @@ interface TabStripProps {
 
 export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect, onClose, onAdd, streamingTabIds }) => {
     const { t } = useTranslation();
+    const activeTabRef = useRef<HTMLDivElement | null>(null);
+    const { onKeyDown } = useTabKeyboardNav({
+        ids: tabs.map((tab) => tab.id),
+        activeId: activeTabId,
+        onSelect,
+    });
+
     return (
         <div className="ai-chat-tab-strip" role="tablist" aria-label={t('aiChat.tabStrip.ariaLabel')}>
-            <div className="ai-chat-tab-strip-list">
+            <ScrollStrip
+                className="ai-chat-tab-strip-list"
+                tabIndex={0}
+                onKeyDown={onKeyDown}
+                // Keep the selected tab visible: it can be scrolled out of
+                // sight after an arrow-key move, or when a background
+                // conversation is switched to from elsewhere.
+                activeChildRef={activeTabRef}
+                revealKey={activeTabId}
+            >
                 {tabs.map((tab) => {
                     const active = tab.id === activeTabId;
                     const streaming = streamingTabIds?.has(tab.id) ?? false;
@@ -30,6 +48,7 @@ export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect,
                     return (
                         <div
                             key={tab.id}
+                            ref={active ? activeTabRef : undefined}
                             role="tab"
                             aria-selected={active}
                             aria-busy={streaming}
@@ -76,7 +95,7 @@ export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect,
                 >
                     +
                 </button>
-            </div>
+            </ScrollStrip>
         </div>
     );
 };

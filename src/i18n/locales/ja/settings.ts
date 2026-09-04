@@ -1,12 +1,14 @@
 // 設定モーダル — 全体・タブラベル・各タブの内容。
 export const settings = {
   title: '設定',
+  resizeHint: 'ドラッグでサイズ変更。ダブルクリックで既定に戻す。',
   tabs: {
     general: '一般',
     appearance: '外観',
     protocols: 'プロトコル',
     features: '機能',
     ai: 'AI',
+    versions: 'バージョン',
     about: '情報',
   },
   general: {
@@ -289,6 +291,28 @@ export const settings = {
     resetDataConsent: '再表示',
     resetDataConsentHelp:
       '同意をリセットし、次回の AI 送信前に AI データ共有の開示を再度表示します。',
+  },
+  versions: {
+    title: 'HoTTY のバージョン',
+    installedLabel: '使用中: v{{version}}',
+    showPrereleases: 'ベータ版も表示する',
+    refresh: '再読み込み',
+    loading: 'リリースを読み込んでいます…',
+    empty: 'リリースが見つかりません',
+    selectPrompt: 'バージョンを選ぶとリリースノートが表示されます',
+    noNotes: 'このバージョンのリリースノートはありません',
+    badgeCurrent: '使用中',
+    badgePrerelease: 'ベータ',
+    notInstallable: 'チェックサムが公開されていないため検証できません',
+    install: 'v{{version}} に切り替える',
+    reinstall: 'v{{version}} を入れ直す',
+    close: '閉じる',
+    cancel: 'キャンセル',
+    downloading: 'ダウンロード中… {{percent}}%',
+    verifying: 'チェックサムを検証しています…',
+    launching: 'インストーラーを起動しています…',
+    downgradeNote: '古い版に戻します。ホスト一覧・テーマ・保存した認証情報はそのまま残ります。新しい版で増えた設定は無視されます（消えません）。',
+    failed: 'バージョンの切り替えに失敗しました: {{message}}',
   },
   about: {
     version: 'v{{version}}',

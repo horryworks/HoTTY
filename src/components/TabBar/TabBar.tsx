@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTabKeyboardNav } from '../../hooks/useTabKeyboardNav';
+import { ScrollStrip } from '../ScrollStrip/ScrollStrip';
 import { useUiOverlayStore } from '../../stores/uiOverlayStore';
 import { type TabItem, type ConversationSummary } from './tabBarHelpers';
 import { conversationColorVar } from '../../utils/conversationColor';
@@ -188,9 +190,27 @@ export function TabBar({
     useUiOverlayStore.getState().setSessionDragging(false);
   };
 
+  // Terminal tabs scroll like every other strip in the app. Note that dragging
+  // a tab here reorders it — which is exactly why no strip in the app scrolls
+  // by dragging, and all three use the end arrows instead.
+  const activeTabRef = useRef<HTMLDivElement | null>(null);
+  const { onKeyDown: onTabKeyDown } = useTabKeyboardNav({
+    ids: tabItems.map((item) => item.id),
+    activeId: activeTabId,
+    onSelect,
+  });
+
   return (
     <div className="tab-bar">
-      <div className="tab-list">
+      <ScrollStrip
+        className="tab-list"
+        tabIndex={0}
+        onKeyDown={onTabKeyDown}
+        // Follow the selection: an arrow-key move, or a tab activated from
+        // elsewhere (a new session, the AI opening one), can land off-screen.
+        activeChildRef={activeTabRef}
+        revealKey={activeTabId}
+      >
         {tabItems.map((item, i) => {
           const isActive = item.id === activeTabId;
           const isHidden = !visibleSet.has(item.id);
@@ -210,6 +230,7 @@ export function TabBar({
           return (
             <div
               key={item.id}
+              ref={isActive ? activeTabRef : undefined}
               data-session-id={item.id}
               draggable
               style={tabStyle}
@@ -301,7 +322,7 @@ export function TabBar({
             </div>
           );
         })}
-      </div>
+      </ScrollStrip>
       <div className="new-tab-btn" onClick={onNew} title={t('chrome.tabBar.newSession')} role="button" tabIndex={0}>
         <svg
           width="20"

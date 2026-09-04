@@ -12,6 +12,9 @@
 
 .save-to-tree-modal {
     background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: var(--ui-font-family);
+    font-size: var(--font-size-base);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     min-width: 360px;
@@ -98,8 +101,8 @@
 }
 
 .save-to-tree-folder-row.selected {
-    background: var(--accent-light);
-    color: var(--text-primary);
+    background: var(--accent-color);
+    color: var(--text-on-accent);
 }
 
 .save-to-tree-folder-icon {

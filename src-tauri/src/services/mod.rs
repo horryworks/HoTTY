@@ -25,6 +25,7 @@ pub mod system_fonts;
 pub mod telnet;
 pub mod tftp_server;
 pub mod timefmt;
+pub mod updater;
 pub mod watch_buffer;
 pub mod web_browser;
 pub mod wsl;

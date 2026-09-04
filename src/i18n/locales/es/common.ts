@@ -16,4 +16,7 @@ export const common = {
   retry: 'Reintentar',
   copy: 'Copiar',
   copied: 'Copiado',
+  // Arrow buttons on a scrolling tab strip (ScrollStrip).
+  scrollStripLeft: 'Desplazar pestañas a la izquierda',
+  scrollStripRight: 'Desplazar pestañas a la derecha',
 };

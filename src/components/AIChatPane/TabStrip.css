@@ -21,9 +21,9 @@
     min-width: 0;
 }
 
-.ai-chat-tab-strip-list::-webkit-scrollbar {
-    height: 4px;
-}
+/* No scrollbar rule here: the strip is a `ScrollStrip`, which hides the bar and
+   uses end arrows plus an edge fade instead. A `height` here would override
+   that and put the bar back. */
 
 .ai-chat-tab {
     display: inline-flex;

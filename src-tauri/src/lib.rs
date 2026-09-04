@@ -47,7 +47,9 @@ use commands::system::{
     open_debug_log_folder, open_external, show_context_menu,
 };
 use commands::themes::{delete_custom_theme, get_themes, save_custom_theme};
-use commands::updater::check_for_updates;
+use commands::updater::{
+    check_for_updates, updater_cancel_install, updater_install_version, updater_list_releases,
+};
 use commands::utilities::{log_debug, select_folder, select_image};
 use commands::watch::{clear_watch_buffer, get_watch_buffer, set_watching, take_watch_buffer};
 use commands::web_browser::{
@@ -68,6 +70,7 @@ use services::log_manager::LogManager;
 use services::ping_monitor::PingMonitorState;
 use services::session_service::{PendingSizes, SessionOwners};
 use services::snmp::SnmpWatcherState;
+use services::updater::UpdaterState;
 use services::watch_buffer::WatchBufferState;
 use services::web_browser::WebBrowserState;
 
@@ -205,6 +208,7 @@ pub fn run() {
         .manage(SessionOwners::new())
         .manage(PendingSizes::new())
         .manage(Arc::new(GcloudCacheState::new()))
+        .manage(UpdaterState::new())
         // When a window closes, tear down only the sessions, File Server
         // instances and SNMP watchers it owned (other windows keep running in
         // this shared process).
@@ -213,6 +217,11 @@ pub fn run() {
                 cleanup_window_sessions(window.app_handle(), window.label());
                 cleanup_window_file_servers(window.app_handle(), window.label());
                 cleanup_window_snmp_watchers(window.app_handle(), window.label());
+                // A version switch downloads in the background and then exits
+                // the whole app. If the window that asked for one is gone,
+                // stop it rather than let it close the windows still open.
+                let updater: tauri::State<UpdaterState> = window.app_handle().state();
+                updater.cancel_for_window(window.label());
             }
         })
         .setup(|app| {
@@ -220,6 +229,11 @@ pub fn run() {
                 let version = app.package_info().version.to_string();
                 let _ = window.set_title(&main_window_title(&version));
             }
+
+            // Drop installer images left behind by an earlier version switch,
+            // keeping only the newest. The image that was just used could not
+            // be deleted while it was running, so this start is where it goes.
+            services::updater::prune_images();
 
             let app_data_dir = app
                 .path()
@@ -379,9 +393,22 @@ pub fn run() {
             select_service_account_key_file,
             // Updater
             check_for_updates,
+            updater_list_releases,
+            updater_install_version,
+            updater_cancel_install,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // The installer for an in-app version switch is spawned here rather
+            // than in the command that downloaded it. By this point every window
+            // and webview is gone, so NSIS killing this process — which it does
+            // silently under `/P` — cannot cut off a localStorage write and take
+            // the Host Tree with it.
+            if let tauri::RunEvent::Exit = event {
+                commands::updater::launch_pending_installer(app_handle);
+            }
+        });
 }
 
 // ---------------------------------------------------------------------------

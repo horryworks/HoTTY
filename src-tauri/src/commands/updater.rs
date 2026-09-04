@@ -1,17 +1,22 @@
-use serde::{Deserialize, Serialize};
+//! Tauri commands for the updater. All logic lives in
+//! [`crate::services::updater`]; this file is the boundary layer — argument
+//! validation happens on the way in, `UpdaterError` becomes a string on the way
+//! out (ADR-005).
 
-// GitHub releases endpoint.
-const RELEASES_URL: &str = "https://api.github.com/repos/horryworks/HoTTY/releases/latest";
+use serde::Serialize;
+use tauri::Manager;
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
-#[derive(Debug, Deserialize)]
-struct GithubRelease {
-    tag_name: String,
-    name: Option<String>,
-    html_url: String,
-    prerelease: bool,
-    body: Option<String>,
-}
+use crate::commands::session::SessionState;
+use crate::services::updater::{
+    self, DialogLang, Relation, ReleaseEntry, UpdaterError, UpdaterState,
+};
 
+/// The "a newer version exists" payload behind the startup toast.
+///
+/// Kept as-is (field for field) so `UpdateInfo` in `src/types/appTypes.ts` and
+/// the existing `UpdateNotification` tests keep working; only how it is sourced
+/// changed.
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateInfo {
@@ -24,169 +29,137 @@ pub struct UpdateInfo {
     pub is_newer: bool,
 }
 
-/// Strip a leading `v` / `V` from a tag like `v2.0.1` → `2.0.1`.
-fn strip_v_prefix(tag: &str) -> &str {
-    tag.strip_prefix('v')
-        .or_else(|| tag.strip_prefix('V'))
-        .unwrap_or(tag)
-}
-
-/// Parse a version string into `(major, minor, patch, prerelease_tag)`.
-/// Pre-release (anything after `-`) is returned as the tail string; absent pre-release = `""`.
-/// Unparseable components default to 0 so a malformed input is treated as the lowest version.
-fn parse_version(v: &str) -> (u32, u32, u32, String) {
-    let v = strip_v_prefix(v.trim());
-    let (core, pre) = match v.split_once('-') {
-        Some((c, p)) => (c, p.to_string()),
-        None => (v, String::new()),
-    };
-    let mut parts = core.split('.');
-    let major = parts
-        .next()
-        .and_then(|s| s.parse::<u32>().ok())
-        .unwrap_or(0);
-    let minor = parts
-        .next()
-        .and_then(|s| s.parse::<u32>().ok())
-        .unwrap_or(0);
-    let patch = parts
-        .next()
-        .and_then(|s| s.parse::<u32>().ok())
-        .unwrap_or(0);
-    (major, minor, patch, pre)
-}
-
-/// Compare two prerelease tags. Falls back to lexicographic, but when both
-/// sides decompose into the same alphabetic prefix + numeric suffix the
-/// suffix is compared numerically. So "beta10" > "beta9", which a plain
-/// string compare would get wrong.
-fn compare_prerelease(a: &str, b: &str) -> std::cmp::Ordering {
-    fn split_alpha_num(s: &str) -> Option<(&str, u64)> {
-        let digit_start = s.find(|c: char| c.is_ascii_digit())?;
-        if digit_start == 0 {
-            return None;
-        }
-        let (alpha, num_str) = s.split_at(digit_start);
-        let num: u64 = num_str.parse().ok()?;
-        Some((alpha, num))
-    }
-    match (split_alpha_num(a), split_alpha_num(b)) {
-        (Some((aa, an)), Some((ba, bn))) if aa == ba => an.cmp(&bn),
-        _ => a.cmp(b),
-    }
-}
-
-/// Return true iff `latest` is strictly newer than `current` using semver-ish comparison.
-/// A release with no pre-release suffix ranks higher than the same core with a pre-release.
-fn is_strictly_newer(current: &str, latest: &str) -> bool {
-    let (ca, cb, cc, cpre) = parse_version(current);
-    let (la, lb, lc, lpre) = parse_version(latest);
-    match (la, lb, lc).cmp(&(ca, cb, cc)) {
-        std::cmp::Ordering::Greater => true,
-        std::cmp::Ordering::Less => false,
-        std::cmp::Ordering::Equal => match (cpre.is_empty(), lpre.is_empty()) {
-            (false, true) => true,  // current is pre, latest is stable → newer
-            (true, false) => false, // current is stable, latest is pre → not newer
-            (true, true) => false,  // identical stable
-            (false, false) => compare_prerelease(&lpre, &cpre).is_gt(),
-        },
-    }
-}
-
+/// Is there a newer release worth telling the user about?
+///
+/// Now backed by the full release list rather than `/releases/latest`. That
+/// endpoint filters pre-releases out server-side, which meant a user on a
+/// `-betaN` build was never notified of anything — including the stable release
+/// that superseded their beta. Channel policy lives in
+/// `services::updater::select_latest`.
 #[tauri::command]
-pub async fn check_for_updates(app: tauri::AppHandle) -> Result<Option<UpdateInfo>, String> {
+pub async fn check_for_updates(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, UpdaterState>,
+) -> Result<Option<UpdateInfo>, String> {
     let current = app.package_info().version.to_string();
-
-    let client = reqwest::Client::builder()
-        .user_agent(format!("HoTTY/{current}"))
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| format!("http client: {e}"))?;
-
-    let resp = client
-        .get(RELEASES_URL)
-        .header("Accept", "application/vnd.github+json")
-        .send()
+    let entries = updater::fetch_releases(&state, &current, false)
         .await
-        .map_err(|e| format!("request failed: {e}"))?;
+        .map_err(|e| e.to_string())?;
+    let list: Vec<ReleaseEntry> = entries.into_iter().map(|(entry, _)| entry).collect();
 
-    if !resp.status().is_success() {
-        return Err(format!("github returned status {}", resp.status()));
-    }
-
-    let release: GithubRelease = resp
-        .json()
-        .await
-        .map_err(|e| format!("parse release json: {e}"))?;
-
-    let latest_version = strip_v_prefix(&release.tag_name).to_string();
-    let is_newer = is_strictly_newer(&current, &latest_version);
-
-    if !is_newer {
-        return Ok(None);
-    }
-
-    Ok(Some(UpdateInfo {
-        current_version: current,
-        latest_version,
-        release_name: release.name.unwrap_or_else(|| release.tag_name.clone()),
-        release_url: release.html_url,
-        prerelease: release.prerelease,
-        notes: release.body.unwrap_or_default(),
-        is_newer,
-    }))
+    Ok(
+        updater::select_latest(&list, &current).map(|entry| UpdateInfo {
+            current_version: current.clone(),
+            latest_version: entry.version.clone(),
+            release_name: entry.name.clone(),
+            release_url: entry.html_url.clone(),
+            prerelease: entry.prerelease,
+            notes: entry.notes.clone(),
+            is_newer: true,
+        }),
+    )
 }
 
+/// Every installable release, newest first.
+#[tauri::command]
+pub async fn updater_list_releases(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, UpdaterState>,
+    refresh: bool,
+) -> Result<Vec<ReleaseEntry>, String> {
+    let current = app.package_info().version.to_string();
+    updater::fetch_releases(&state, &current, refresh)
+        .await
+        .map(|entries| entries.into_iter().map(|(entry, _)| entry).collect())
+        .map_err(|e| e.to_string())
+}
+
+/// Switch to `tag`: confirm, download, verify, then exit so the installer can
+/// run.
+///
+/// The renderer supplies a tag and nothing else. The URL and the checksum come
+/// from the list this process fetched, so a compromised renderer cannot aim the
+/// downloader anywhere of its choosing (see `services::updater`).
+///
+/// Consent is taken through a native dialog rather than in the web layer: the
+/// renderer can call this command, but it cannot fake the OS-level click, which
+/// is the same reasoning as `open_external` and ADR-010.
+#[tauri::command]
+pub async fn updater_install_version(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    state: tauri::State<'_, UpdaterState>,
+    sessions: tauri::State<'_, SessionState>,
+    tag: String,
+    lang: DialogLang,
+) -> Result<(), String> {
+    let current = app.package_info().version.to_string();
+    let (entry, asset) = updater::resolve_asset(&state, &current, &tag)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let open_sessions = sessions.sessions.lock().await.len();
+    let (title, body) = updater::dialog_strings(lang, &entry, &current, open_sessions);
+    let kind = if entry.relation == Relation::Older {
+        MessageDialogKind::Warning
+    } else {
+        MessageDialogKind::Info
+    };
+    let approved = app
+        .dialog()
+        .message(body)
+        .title(title)
+        .kind(kind)
+        .buttons(MessageDialogButtons::OkCancel)
+        .blocking_show();
+    if !approved {
+        return Ok(());
+    }
+
+    updater::prepare_install(&app, &state, &current, &tag, &asset, window.label())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("updater: switching to {tag}; exiting to run the installer");
+    // The installer itself is spawned from `RunEvent::Exit`, once the windows
+    // and their webviews are gone. Doing it here instead would race NSIS's
+    // `CheckIfAppIsRunning`, which under `/P` kills this process outright and
+    // could cut off a localStorage flush mid-write.
+    app.exit(0);
+    Ok(())
+}
+
+/// Cancel a download in progress. Safe to call when nothing is running.
+#[tauri::command]
+pub async fn updater_cancel_install(state: tauri::State<'_, UpdaterState>) -> Result<(), String> {
+    state.cancel();
+    Ok(())
+}
+
+/// Launch the installer parked by a completed install, if any.
+///
+/// Called from `RunEvent::Exit` in `lib.rs` — see `updater_install_version`.
+pub fn launch_pending_installer(app: &tauri::AppHandle) {
+    let state: tauri::State<'_, UpdaterState> = app.state();
+    state.launch_pending();
+}
+
+/// Convert an `UpdaterError` at the boundary. Kept as a named helper so the
+/// error text the renderer sees has exactly one definition.
+pub fn describe(err: &UpdaterError) -> String {
+    err.to_string()
+}
+
+// The commands above all need an `AppHandle` or managed state, so they are not
+// unit-testable here; the logic they wrap is covered in
+// `services::updater`'s own test module.
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn strip_v_prefix_trims_leading_v() {
-        assert_eq!(strip_v_prefix("v1.2.3"), "1.2.3");
-        assert_eq!(strip_v_prefix("V1.2.3"), "1.2.3");
-        assert_eq!(strip_v_prefix("1.2.3"), "1.2.3");
-    }
-
-    #[test]
-    fn parse_version_splits_core_and_pre() {
-        assert_eq!(parse_version("2.0.0"), (2, 0, 0, String::new()));
-        assert_eq!(parse_version("v2.0.1-beta3"), (2, 0, 1, "beta3".into()));
-        assert_eq!(parse_version("garbage"), (0, 0, 0, String::new()));
-    }
-
-    #[test]
-    fn newer_when_core_is_higher() {
-        assert!(is_strictly_newer("2.0.0", "2.0.1"));
-        assert!(is_strictly_newer("2.0.0", "2.1.0"));
-        assert!(is_strictly_newer("2.0.0", "3.0.0"));
-        assert!(!is_strictly_newer("2.0.1", "2.0.0"));
-    }
-
-    #[test]
-    fn stable_is_newer_than_its_own_prerelease() {
-        assert!(is_strictly_newer("2.0.0-beta3", "2.0.0"));
-        assert!(!is_strictly_newer("2.0.0", "2.0.0-beta3"));
-    }
-
-    #[test]
-    fn same_version_is_not_newer() {
-        assert!(!is_strictly_newer("2.0.0", "2.0.0"));
-        assert!(!is_strictly_newer("2.0.0-beta3", "2.0.0-beta3"));
-    }
-
-    #[test]
-    fn later_prerelease_tag_is_newer() {
-        assert!(is_strictly_newer("2.0.0-beta3", "2.0.0-beta4"));
-        assert!(!is_strictly_newer("2.0.0-beta4", "2.0.0-beta3"));
-    }
-
-    #[test]
-    fn double_digit_prerelease_compares_numerically() {
-        // Lexicographic compare would say "beta10" < "beta9"; numeric-aware
-        // compare must say "beta10" > "beta9".
-        assert!(is_strictly_newer("2.0.0-beta9", "2.0.0-beta10"));
-        assert!(!is_strictly_newer("2.0.0-beta10", "2.0.0-beta9"));
-        assert!(is_strictly_newer("2.0.0-beta9", "2.0.0-beta11"));
+    fn errors_stringify_without_panicking() {
+        assert_eq!(describe(&UpdaterError::InvalidTag), "invalid release tag");
+        assert!(describe(&UpdaterError::UnknownTag("v9.9.9".into())).contains("v9.9.9"));
     }
 }

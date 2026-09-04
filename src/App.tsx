@@ -989,7 +989,7 @@ function App() {
       )}
       <SshHostKeyModal />
       <IapVmStartModal />
-      <UpdateNotification />
+      <UpdateNotification onOpenVersions={() => openSettings('versions')} />
       <ErrorNotification />
       {pasteReq && (
         <PasteConfirmationModal

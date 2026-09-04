@@ -16,4 +16,7 @@ export const common = {
   retry: '다시 시도',
   copy: '복사',
   copied: '복사됨',
+  // Arrow buttons on a scrolling tab strip (ScrollStrip).
+  scrollStripLeft: '탭을 왼쪽으로 스크롤',
+  scrollStripRight: '탭을 오른쪽으로 스크롤',
 };

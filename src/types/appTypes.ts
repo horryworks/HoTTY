@@ -682,6 +682,46 @@ export interface UpdateInfo {
   isNewer: boolean;
 }
 
+/** How a listed release relates to the running build. */
+export type ReleaseRelation = 'current' | 'newer' | 'older';
+
+/**
+ * One switchable release.
+ *
+ * Note the absence of a download URL: the backend resolves `tag` against the
+ * list it fetched itself, so the renderer never chooses what gets downloaded.
+ * Keep it that way — adding a URL field here would undo that guarantee.
+ */
+export interface ReleaseEntry {
+  /** Git tag, e.g. `v2.0.18`. This is what `installVersion` takes. */
+  tag: string;
+  /** Tag without the leading `v`. */
+  version: string;
+  name: string;
+  prerelease: boolean;
+  /** Release notes, raw markdown. */
+  notes: string;
+  htmlUrl: string;
+  assetName: string;
+  size: number;
+  relation: ReleaseRelation;
+  /** False when GitHub published no checksum: listed, but not installable. */
+  installable: boolean;
+}
+
+export type UpdaterPhase = 'downloading' | 'verifying' | 'launching';
+
+export interface UpdaterProgress {
+  tag: string;
+  phase: UpdaterPhase;
+  downloaded: number;
+  /** 0 when the server sent no Content-Length. */
+  total: number;
+}
+
+/** Language for the backend's native confirmation dialog. */
+export type UpdaterDialogLang = 'en' | 'ja';
+
 export interface AIAuthStatus {
   authenticated: boolean;
   accountInfo?: string;

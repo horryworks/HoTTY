@@ -12,7 +12,7 @@ export const notifications = {
     titleAvailable: 'New version available: v{{version}}',
     prereleaseSuffix: ' (pre-release)',
     running: 'You are running v{{version}}',
-    viewRelease: 'View release',
+    viewRelease: 'Switch version',
     dismiss: 'Dismiss',
     dismissAria: 'Dismiss update notification',
   },

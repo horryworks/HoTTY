@@ -11,7 +11,7 @@ export const notifications = {
     titleAvailable: '新しいバージョンがあります: v{{version}}',
     prereleaseSuffix: '（プレリリース）',
     running: '現在のバージョン: v{{version}}',
-    viewRelease: 'リリースを表示',
+    viewRelease: 'バージョンを切り替える',
     dismiss: '閉じる',
     dismissAria: 'アップデート通知を閉じる',
   },

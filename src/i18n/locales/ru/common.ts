@@ -16,4 +16,7 @@ export const common = {
   retry: 'Повторить',
   copy: 'Копировать',
   copied: 'Скопировано',
+  // Arrow buttons on a scrolling tab strip (ScrollStrip).
+  scrollStripLeft: 'Прокрутить вкладки влево',
+  scrollStripRight: 'Прокрутить вкладки вправо',
 };

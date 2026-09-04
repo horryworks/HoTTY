@@ -6,7 +6,14 @@ import './UpdateNotification.css';
 
 const DISMISSED_KEY = 'hotty:update-dismissed-version';
 
-export function UpdateNotification(): React.JSX.Element | null {
+interface UpdateNotificationProps {
+  /** Opens Settings → Versions, where the switch is actually performed. */
+  onOpenVersions: () => void;
+}
+
+export function UpdateNotification({
+  onOpenVersions,
+}: UpdateNotificationProps): React.JSX.Element | null {
   const { t } = useTranslation();
   const [info, setInfo] = useState<UpdateInfo | null>(null);
 
@@ -30,8 +37,13 @@ export function UpdateNotification(): React.JSX.Element | null {
 
   if (!info) return null;
 
+  // Goes to Settings → Versions rather than out to the GitHub release page: the
+  // update is applied there and the notes are readable there, so there is
+  // nothing left to open a browser for. The toast steps aside (without being
+  // recorded as dismissed, so it returns next launch if nothing was installed).
   const handleOpen = (): void => {
-    tauriService.openExternal(info.releaseUrl).catch(() => {});
+    setInfo(null);
+    onOpenVersions();
   };
 
   const handleDismiss = (): void => {

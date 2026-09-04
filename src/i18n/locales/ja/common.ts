@@ -16,4 +16,7 @@ export const common = {
   retry: '再試行',
   copy: 'コピー',
   copied: 'コピーしました',
+  // Arrow buttons on a scrolling tab strip (ScrollStrip).
+  scrollStripLeft: 'タブを左にスクロール',
+  scrollStripRight: 'タブを右にスクロール',
 };

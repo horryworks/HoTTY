@@ -11,7 +11,7 @@ export const notifications = {
     titleAvailable: '有新版本可用：v{{version}}',
     prereleaseSuffix: '（預先發行版）',
     running: '您目前使用的版本為 v{{version}}',
-    viewRelease: '檢視發行版本',
+    viewRelease: '切換版本',
     dismiss: '關閉',
     dismissAria: '關閉更新通知',
   },

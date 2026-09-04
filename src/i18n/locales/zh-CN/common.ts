@@ -16,4 +16,7 @@ export const common = {
   retry: '重试',
   copy: '复制',
   copied: '已复制',
+  // Arrow buttons on a scrolling tab strip (ScrollStrip).
+  scrollStripLeft: '向左滚动标签页',
+  scrollStripRight: '向右滚动标签页',
 };

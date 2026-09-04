@@ -12,7 +12,7 @@ export const notifications = {
     titleAvailable: '有新版本可用：v{{version}}',
     prereleaseSuffix: '（预发布）',
     running: '您当前运行的是 v{{version}}',
-    viewRelease: '查看发布',
+    viewRelease: '切换版本',
     dismiss: '关闭',
     dismissAria: '关闭更新通知',
   },

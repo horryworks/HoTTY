@@ -70,6 +70,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 - System font detection
 - Context menu support
 - Debug log management
+- In-app version switching (Settings → Versions) — install any published release, forward or back, verified against the checksum published by GitHub
 - Third-Party Licenses viewer (Settings → About)
 
 ## Installation
