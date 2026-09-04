@@ -732,3 +732,32 @@ describe('SessionDialog', () => {
     });
   });
 });
+
+describe('SessionDialog prefill (AI connect request, ADR-AI-007)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    useSidebarLayoutStore.setState({ activeSidebarTab: 'hosts' });
+    useBookmarkStore.setState({ tree: [] });
+  });
+
+  it('fills protocol / host / port / username / name', () => {
+    render(<SessionDialog {...defaultProps} prefill={{ protocol: 'ssh', host: '192.0.2.10', port: 2222, username: 'alice', displayName: 'sw-01', nonce: 1 }} />);
+    expect(screen.getByDisplayValue('192.0.2.10')).toBeTruthy();
+    expect(screen.getByDisplayValue('2222')).toBeTruthy();
+    expect(screen.getByDisplayValue('alice')).toBeTruthy();
+  });
+
+  it('re-applies when the nonce changes, and leaves the form alone when it does not', () => {
+    const { rerender } = render(<SessionDialog {...defaultProps} prefill={{ protocol: 'ssh', host: '192.0.2.10', port: 22, nonce: 1 }} />);
+    const hostInput = screen.getByDisplayValue('192.0.2.10') as HTMLInputElement;
+    fireEvent.change(hostInput, { target: { value: '192.0.2.99' } });
+    // Same nonce → the user's edit survives.
+    rerender(<SessionDialog {...defaultProps} prefill={{ protocol: 'ssh', host: '192.0.2.10', port: 22, nonce: 1 }} />);
+    expect(screen.getByDisplayValue('192.0.2.99')).toBeTruthy();
+    // New nonce → re-applied (a fresh request for the same host).
+    rerender(<SessionDialog {...defaultProps} prefill={{ protocol: 'telnet', host: '192.0.2.20', port: 23, nonce: 2 }} />);
+    expect(screen.getByDisplayValue('192.0.2.20')).toBeTruthy();
+    expect(screen.getByDisplayValue('23')).toBeTruthy();
+  });
+});

@@ -258,3 +258,56 @@ describe('AISettingsTab', () => {
     expect(input.disabled).toBe(true);
   });
 });
+
+describe('AISettingsTab — AI-opened terminals (ADR-AI-007)', () => {
+  beforeEach(() => {
+    useSettingsStore.getState().reset();
+    localStorage.clear();
+  });
+
+  const groupInput = (labelText: string): HTMLInputElement =>
+    screen.getByText(labelText).closest('.settings-group')!.querySelector('input') as HTMLInputElement;
+
+  // Security: the shipped default asks. Auto-opening a PC shell is an opt-in the
+  // user makes here, never something an install or an upgrade turns on for them.
+  it('renders the policy select defaulting to ask, and updates the store', () => {
+    render(<AISettingsTab />);
+    const select = screen.getByDisplayValue('Ask for everything') as HTMLSelectElement;
+    expect(select.value).toBe('ask');
+    fireEvent.change(select, { target: { value: 'local-auto' } });
+    expect(useSettingsStore.getState().aiConnectPolicy).toBe('local-auto');
+    fireEvent.change(select, { target: { value: 'off' } });
+    expect(useSettingsStore.getState().aiConnectPolicy).toBe('off');
+  });
+
+  it('switches the PC shell the AI gets', () => {
+    render(<AISettingsTab />);
+    const select = screen.getByDisplayValue('PowerShell') as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'cmd' } });
+    expect(useSettingsStore.getState().aiLocalShellType).toBe('cmd');
+  });
+
+  it('clamps the per-conversation cap to 1–10 and the idle timeout to 0–1440', () => {
+    render(<AISettingsTab />);
+    const cap = groupInput('Max AI-opened terminals per conversation');
+    expect(cap.value).toBe('5');
+    fireEvent.change(cap, { target: { value: '42' } });
+    expect(useSettingsStore.getState().aiMaxWorkerSessionsPerTab).toBe(10);
+    fireEvent.change(cap, { target: { value: '0' } });
+    expect(useSettingsStore.getState().aiMaxWorkerSessionsPerTab).toBe(1);
+    const idle = groupInput('Close idle AI terminals after (minutes)');
+    expect(idle.value).toBe('10');
+    fireEvent.change(idle, { target: { value: '-3' } });
+    expect(useSettingsStore.getState().aiWorkerIdleTimeoutMins).toBe(0);
+    fireEvent.change(idle, { target: { value: '99999' } });
+    expect(useSettingsStore.getState().aiWorkerIdleTimeoutMins).toBe(1440);
+  });
+
+  it('credential reuse is off by default and toggles', () => {
+    render(<AISettingsTab />);
+    const box = screen.getByRole('checkbox', { name: /Allow reusing a watched terminal/ }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    fireEvent.click(box);
+    expect(useSettingsStore.getState().aiConnectReuseCredentials).toBe(true);
+  });
+});

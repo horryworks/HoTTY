@@ -221,6 +221,25 @@ export const settings = {
     concurrentStreams: 'AI 聊天并行回复数',
     concurrentStreamsHelp:
       '一个窗格中可同时接收回复的 AI 聊天标签页数量。超出的发送会排队，并在回复完成后开始。1 表示严格一次一个（旧行为）。如果你的提供商有速率限制（如 Gemini 免费层），请调低。最大 8。默认：3。',
+    connectPolicy: '允许 AI 打开终端',
+    connectPolicyHelp:
+      'AI 可以请求 HoTTY 打开本机 Shell（用于运行 ping / tracert / nslookup），或打开到通过 CDP/LLDP 发现的邻居设备的 SSH/Telnet 会话。这些会话没有标签页（输出为 AI 捕获），可随时作为标签页打开。关闭：忽略请求。总是询问：每个请求都需要在聊天中批准。本机 Shell 自动：本机 Shell 无需询问即打开，设备登录仍需确认。本机 + 主机树自动：还会使用已保存的凭据打开主机与主机树条目匹配的 SSH/Telnet。自动打开仅在自动执行模式下生效，并使用自动运行倒计时。默认：始终询问。',
+    connectPolicyOff: '关闭',
+    connectPolicyAsk: '总是询问',
+    connectPolicyLocalAuto: '本机 Shell 自动，设备需确认',
+    connectPolicyHostTreeAuto: '本机 Shell + 主机树设备自动',
+    connectLocalShell: 'AI 使用的本机 Shell',
+    connectLocalShellHelp:
+      'AI 请求本地终端时 HoTTY 打开的 Shell。每个对话一个，再次请求时复用已打开的 Shell。',
+    connectMaxPerTab: '每个对话中 AI 打开终端的上限',
+    connectMaxPerTabHelp:
+      '一个对话中 AI 可同时保持打开的终端数（包括已转为标签页的）。保护设备有限的 VTY 线路。关闭一个即可释放名额。1–10。默认：5。',
+    connectIdleTimeout: '空闲的 AI 终端关闭时间（分钟）',
+    connectIdleTimeoutHelp:
+      '没有标签页且 AI 在此时间内未使用的 AI 打开的终端将自动断开。已转为标签页的终端属于您，将保持打开。0 = 从不。默认：10。',
+    connectReuseCredentials: '允许沿用受监视终端的凭据',
+    connectReuseCredentialsHelp:
+      '当 AI 在请求中指定受监视的终端（via: <别名>）时，将该会话的登录名和密码复制到新的 SSH/Telnet 登录。始终要求您确认，并说明凭据来自哪个终端。关闭：仅沿用登录名。默认关闭，因为伪造的 CDP/LLDP 邻居信息可能把 AI 引向恶意主机。',
     deviceResponseTimeout: '设备响应超时（秒）',
     deviceResponseTimeoutHelp:
       '如果设备在命令后这么多秒内没有产生新输出，系统会告知 AI 设备已停止响应，以便循环可以继续。0 将禁用空闲检测。默认：10。',

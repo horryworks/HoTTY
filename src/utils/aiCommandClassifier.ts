@@ -10,20 +10,23 @@
  *                                      says — applied to every strategy so the AI
  *                                      path can't approve what the whitelist path
  *                                      rejects structurally.
- *   3. Whitelist match (user list)  → auto-execute.
- *   4. AI verdict                   → read-only & confident → auto; else → ask.
- *   5. None of the above            → ask before execute.
+ *   3. Network egress (floor)       → ask. curl/wget/nc/nmap/… NEVER auto-run:
+ *                                      a read-shaped GET exfiltrates context.
+ *   4. Whitelist match (user list)  → auto-execute.
+ *   5. AI verdict                   → read-only & confident → auto; else → ask.
+ *   6. None of the above            → ask before execute.
  *
- * Strategy variants: `static` skips step 4; `ai` skips step 3; `hybrid` (default)
- * runs all. Anything that can't be decided (AI error/timeout/unauthed) falls back
- * to manual — never to "assume safe".
+ * Strategy variants: `static` skips step 5; `ai` skips step 4; `hybrid` (default)
+ * runs all. Both floors (2, 3) apply to every strategy. Anything that can't be
+ * decided (AI error/timeout/unauthed) falls back to manual — never to
+ * "assume safe".
  *
  * AI verdicts are cached per (provider, model, normalized command).
  */
 
 import type { ClassifierStrategy, CommandVerdict } from '../types/appTypes';
 import { matchBlacklist } from './commandLists';
-import { classifyCommand, structuralDanger } from './commandClassifier';
+import { classifyCommand, networkEgressDanger, structuralDanger } from './commandClassifier';
 import { tauriService } from '../services/tauriService';
 
 type DecisionSource = 'blacklist' | 'whitelist' | 'ai' | 'ask' | 'fallback';
@@ -111,7 +114,7 @@ async function aiDecision(command: string, opts: DecideOptions): Promise<AutoExe
 
 /**
  * Run only the free, synchronous safety tiers (blacklist → structural-danger →
- * whitelist) and never call the AI. Used to surface a verdict badge in
+ * network-egress → whitelist) and never call the AI. Used to surface a badge in
  * `ask-before-execute` mode — where nothing auto-runs, but the user should still
  * see a 🛑 blacklist warning or ✅ whitelist reassurance before clicking Run.
  *
@@ -133,6 +136,10 @@ export function classifyStatic(
     const danger = structuralDanger(command);
     if (danger.danger) {
         return { autoExec: false, reason: danger.reason, source: 'ask' };
+    }
+    const egress = networkEgressDanger(command);
+    if (egress.danger) {
+        return { autoExec: false, reason: egress.reason, source: 'ask' };
     }
     const c = classifyCommand(command, opts.whitelist);
     if (c.safe) {
@@ -167,22 +174,31 @@ export async function decideAutoExec(
         return { autoExec: false, reason: danger.reason, source: 'ask' };
     }
 
+    // 3. Network-egress floor — also before the AI path, same reasoning.
+    // curl/wget/nc/nmap/… are deliberately not whitelisted, but that alone let
+    // them fall through to the AI verdict, which rates a plain GET read-only and
+    // auto-ran it. That is an exfiltration path for anything already in context.
+    const egress = networkEgressDanger(command);
+    if (egress.danger) {
+        return { autoExec: false, reason: egress.reason, source: 'ask' };
+    }
+
     if (opts.strategy === 'ai') {
         // Skip the whitelist fast-path; let the AI judge everything else.
         return aiDecision(command, opts);
     }
 
-    // 2. Whitelist (static + hybrid).
+    // 4. Whitelist (static + hybrid).
     const c = classifyCommand(command, opts.whitelist);
     if (c.safe) {
         return { autoExec: true, reason: c.reason || 'whitelisted', source: 'whitelist' };
     }
 
-    // 3. AI judgment (hybrid only).
+    // 5. AI judgment (hybrid only).
     if (opts.strategy === 'hybrid') {
         return aiDecision(command, opts);
     }
 
-    // 4. static strategy, not whitelisted → ask.
+    // 6. static strategy, not whitelisted → ask.
     return { autoExec: false, reason: c.reason, source: 'ask' };
 }

@@ -23,6 +23,7 @@ use super::jumpbox::{establish_tunnel, JumpboxConfig, JumpboxHandler};
 use super::known_hosts::{
     check_known_host, default_known_hosts_path, upsert_known_host, HostKeyCheck,
 };
+use super::net_validation::validate_host;
 use super::path_safety::is_unc_path;
 use super::read_pump::MAX_COALESCE_BYTES;
 use super::session_service::{
@@ -84,17 +85,11 @@ fn default_connect_timeout_secs() -> u32 {
 }
 
 const MAX_CREDENTIAL_LEN: usize = 1024;
-const MAX_HOST_LEN: usize = 253;
 const MAX_USERNAME_LEN: usize = 256;
 
 impl SshConfig {
     fn validate(&self) -> Result<(), SessionError> {
-        if self.host.trim().is_empty() {
-            return Err(SessionError::InvalidConfig("Host is required".into()));
-        }
-        if self.host.len() > MAX_HOST_LEN {
-            return Err(SessionError::InvalidConfig("Host is too long".into()));
-        }
+        validate_host(&self.host).map_err(SessionError::InvalidConfig)?;
         if self.port == 0 {
             return Err(SessionError::InvalidConfig("Port must be 1-65535".into()));
         }
@@ -1442,6 +1437,56 @@ mod tests {
         assert!(p.cipher.contains(&cipher::TRIPLE_DES_CBC));
         assert!(p.mac.contains(&mac::HMAC_SHA1));
         assert!(p.key.contains(&ssh_key::Algorithm::Dsa));
+    }
+
+    // -- validate: host syntax is checked through net_validation --
+
+    fn minimal_config(host: &str) -> SshConfig {
+        SshConfig {
+            host: host.into(),
+            port: 22,
+            username: "alice".into(),
+            password: None,
+            private_key_path: None,
+            private_key_passphrase: None,
+            encoding: "utf8".into(),
+            keepalive_interval_secs: 0,
+            connect_timeout_secs: 5,
+            jumpbox: None,
+        }
+    }
+
+    #[test]
+    fn validate_keeps_the_legacy_host_messages() {
+        assert_eq!(
+            minimal_config("").validate().unwrap_err().to_string(),
+            "Host is required"
+        );
+        assert_eq!(
+            minimal_config(&"a".repeat(254))
+                .validate()
+                .unwrap_err()
+                .to_string(),
+            "Host is too long"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_host_with_metacharacters_or_whitespace() {
+        for bad in ["192.0.2.10; rm -rf /", "host name", "host|cat", "-flag"] {
+            assert_eq!(
+                minimal_config(bad).validate().unwrap_err().to_string(),
+                "Host contains invalid characters",
+                "{bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_accepts_ipv6_and_underscore_hosts() {
+        assert!(minimal_config("2001:db8::1").validate().is_ok());
+        assert!(minimal_config("my_host").validate().is_ok());
+        assert!(minimal_config(" sw-01.example.com ").validate().is_ok());
     }
 
     #[test]

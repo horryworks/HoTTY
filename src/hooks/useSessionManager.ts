@@ -84,6 +84,26 @@ export interface OpenRequest {
   hostNodeId?: string;
 }
 
+/**
+ * Attach a terminal to a session that ALREADY exists in the backend but has no
+ * xterm in this window — an AI worker session being "materialized" into a real
+ * tab. Unlike OpenRequest nothing is connected: the record is created in the
+ * given status and later status/data events flow into it like any other tab.
+ */
+export interface AdoptRequest {
+  id: string;
+  displayName: string;
+  protocol: ProtocolId;
+  /** Secret-free connection config (host/port/username) so the binding key and
+   *  "Save to Host Tree" keep working. */
+  config?: AnyConfig;
+  status: SessionRecordStatus;
+  errorMessage?: string;
+  /** Captured output to replay into the new terminal as history (ANSI already
+   *  stripped by the watch buffer; LF is normalized to CRLF). */
+  initialText?: string;
+}
+
 function makeSessionId(): string {
   return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -400,17 +420,13 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
     };
   }, []);
 
-  const openSession = useCallback(
-    (req: OpenRequest): string => {
-      const id = makeSessionId();
+  // Construct the xterm instance (+ fit addon) for a session id, wired for
+  // copy-on-select, paste interception and keystroke forwarding. Shared by
+  // openSession (fresh connect) and adoptSession (attach to a live backend
+  // session that had no terminal yet — an AI worker being materialized).
+  const createTerminal = useCallback(
+    (id: string, fixedSize: boolean): { term: Terminal; fitAddon: FitAddon } => {
       const s = useSettingsStore.getState();
-      // Provisional pin flag. Auto-detection isn't known until the connect-time
-      // pty-size event, which is also the only thing that can start a pin (it
-      // carries ptyCols) — so resolving without it here is safe, and the event
-      // handler recomputes. A fixed-size session is always wrap-ON.
-      const fixedSizeOverride = (req.config as { fixedTerminalSize?: boolean })
-        .fixedTerminalSize;
-      const fixedSize = resolveFixedSize(fixedSizeOverride, s.fixedTerminalSizeMode, undefined);
       const term = new Terminal({
         fontFamily: s.fontFamily,
         fontSize: s.fontSize,
@@ -465,6 +481,23 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
           /* swallow — surfaced via session-error */
         });
       });
+      return { term, fitAddon };
+    },
+    []
+  );
+
+  const openSession = useCallback(
+    (req: OpenRequest): string => {
+      const id = makeSessionId();
+      const s = useSettingsStore.getState();
+      // Provisional pin flag. Auto-detection isn't known until the connect-time
+      // pty-size event, which is also the only thing that can start a pin (it
+      // carries ptyCols) — so resolving without it here is safe, and the event
+      // handler recomputes. A fixed-size session is always wrap-ON.
+      const fixedSizeOverride = (req.config as { fixedTerminalSize?: boolean })
+        .fixedTerminalSize;
+      const fixedSize = resolveFixedSize(fixedSizeOverride, s.fixedTerminalSizeMode, undefined);
+      const { term, fitAddon } = createTerminal(id, fixedSize);
 
       // Fallback display name: if the caller passed an empty/whitespace-only
       // string, the tab strip would render a blank label which is unfriendly.
@@ -547,7 +580,45 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
 
       return id;
     },
-    [scheduleAutoClose]
+    [scheduleAutoClose, createTerminal]
+  );
+
+  // Materialize a backend session that has no terminal in this window (an AI
+  // worker session) into a normal tab record. No connect happens — the backend
+  // session is already live — so this is synchronous and cannot fail. The
+  // caller allocates the pane (usePaneStore.addSession) exactly as after
+  // openSession. From here on, status/data/error events reach the record
+  // through the global listeners like any other tab.
+  const adoptSession = useCallback(
+    (req: AdoptRequest): void => {
+      if (sessionsRef.current.has(req.id)) return;
+      const s = useSettingsStore.getState();
+      const fixedSize = resolveFixedSize(undefined, s.fixedTerminalSizeMode, undefined);
+      const { term, fitAddon } = createTerminal(req.id, fixedSize);
+      if (req.initialText) {
+        // The watch buffer is ANSI-stripped plain text with bare LF line ends;
+        // xterm needs CRLF or every line would start where the previous ended.
+        term.write(req.initialText.replace(/\r?\n/g, '\r\n'));
+      }
+      const displayName = (req.displayName ?? '').trim() || i18n.t('sessionDialog.defaultSessionName', { protocol: req.protocol });
+      const rec: SessionRecord = {
+        id: req.id,
+        displayName,
+        protocol: req.protocol,
+        status: req.status,
+        errorMessage: req.errorMessage,
+        term,
+        fitAddon,
+        connectionConfig: req.config,
+        fixedSize,
+      };
+      setSessions((prev) => {
+        const next = new Map(prev);
+        next.set(req.id, rec);
+        return next;
+      });
+    },
+    [createTerminal]
   );
 
   const closeSession = useCallback(async (id: string) => {
@@ -605,5 +676,5 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
     });
   }, []);
 
-  return { sessions, openSession, closeSession, getSession, setSessionFixedSize };
+  return { sessions, openSession, adoptSession, closeSession, getSession, setSessionFixedSize };
 }

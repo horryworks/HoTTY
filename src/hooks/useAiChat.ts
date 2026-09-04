@@ -1,13 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { PersonaDefinition, ChatImage } from '../types/appTypes';
+import type { PersonaDefinition, ChatImage, SessionInfo } from '../types/appTypes';
 import type { SessionRecord } from './useSessionManager';
 import type { FeaturePaneInfo } from '../utils/paneTypes';
-import { buildExecutionRules, languageDirective, resolveAiLanguage, watchedOutputSection, buildWatchTargetsBlock } from '../constants/aiPrompts';
+import { buildExecutionRules, languageDirective, resolveAiLanguage, watchedOutputSection, buildWatchTargetsBlock, buildConnectCapabilityBlock } from '../constants/aiPrompts';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useAiWorkerSessionStore } from '../stores/aiWorkerSessionStore';
 import { tauriService } from '../services/tauriService';
 import { sessionBindingKey } from '../utils/sessionBindingKey';
 import { redactSecrets } from '../utils/redaction';
-import { buildAliasEntries } from '../utils/terminalAlias';
+import { lookupSession } from '../utils/sessionLookup';
+import { buildWatchedViews, buildConnectCapabilityInput } from '../utils/aiConnectContext';
+import { isMachineEnvelope } from '../components/AIChatPane/terminalOutputUtils';
 
 // -- Types --
 
@@ -30,6 +33,12 @@ export interface PendingUserMessage {
 export interface WatchedTerminal {
   sessionId: string;
   bindingKey?: string;
+  /**
+   * The AI opened this terminal itself (a worker session, or one later
+   * materialized into a tab — ADR-AI-007). Counts toward the per-conversation
+   * cap and marks the chip in the tray. Never set for a user-linked terminal.
+   */
+  aiOpened?: boolean;
 }
 
 /**
@@ -113,6 +122,13 @@ interface UseAiChatOptions {
    */
   ensureAiConsent: () => Promise<boolean>;
   createAiChatPane: () => string | undefined;
+  /**
+   * Other windows' live sessions, as a ref because this hook is created before
+   * the orchestrator that owns the list. Resolving watched terminals against the
+   * same set as the orchestrator and the pane is what keeps one alias per
+   * terminal across the prompt, the resolver and the envelope (ADR-AI-007).
+   */
+  crossWindowSessionsRef?: React.RefObject<readonly SessionInfo[]>;
   lastTerminalSessionId: string | null;
   paneAllocations: Record<string, string | null>;
   activePaneId: string | null;
@@ -137,8 +153,9 @@ interface UseAiChatReturn {
   /** Remove an entire pane's chat state + free its per-tab backend histories. */
   removeAiChatState: (aiSessionId: string) => void;
   setActiveTab: (aiSessionId: string, tabId: string) => void;
-  /** Add a terminal to a tab's watched set (and mark it the default execute target). */
-  addTabLink: (aiSessionId: string, tabId: string, sessionId: string) => void;
+  /** Add a terminal to a tab's watched set (and mark it the default execute target).
+   *  `aiOpened` flags a terminal the AI opened itself (ADR-AI-007). */
+  addTabLink: (aiSessionId: string, tabId: string, sessionId: string, opts?: { aiOpened?: boolean }) => void;
   /** Remove a terminal from a tab's watched set (explicit user unlink). */
   removeTabLink: (aiSessionId: string, tabId: string, sessionId: string) => void;
   /** Swap a dead entry's session id in place on reconnect (auto-rebind). */
@@ -194,7 +211,9 @@ function deriveTabTitle(
 ): string {
   const primaryId = linkedSessions[0]?.sessionId;
   if (!primaryId) return '';
-  const name = sessions.get(primaryId)?.displayName;
+  // An AI worker session has no record in `sessions` — its name lives in the worker store.
+  const name = sessions.get(primaryId)?.displayName
+    ?? useAiWorkerSessionStore.getState().workers[primaryId]?.displayName;
   if (!name) return '';
   const extra = linkedSessions.length - 1;
   const suffix = extra > 0 ? ` +${extra}` : '';
@@ -243,6 +262,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     takeWatchBuffer,
     ensureAiConsent,
     createAiChatPane,
+    crossWindowSessionsRef,
     lastTerminalSessionId,
     paneAllocations,
     activePaneId,
@@ -502,23 +522,31 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
    * changed tab (both the gaining tab and any losing tab). No-op if the session is
    * already the target tab's last-focused link and no other tab holds it.
    */
-  const addTabLink = useCallback((aiSessionId: string, tabId: string, sessionId: string) => {
+  const addTabLink = useCallback((aiSessionId: string, tabId: string, sessionId: string, opts?: { aiOpened?: boolean }) => {
     setAiChatStates((prev) => {
       const existing = prev.get(aiSessionId);
       if (!existing) return prev;
       const rec = sessionsRef.current.get(sessionId);
       const bindingKey = rec ? sessionBindingKey(rec) : undefined;
+      const aiOpened = !!opts?.aiOpened;
       let changed = false;
       const updatedTabs = existing.tabs.map((t) => {
         if (t.id === tabId) {
-          if (t.linkedSessions.some((w) => w.sessionId === sessionId)) {
-            // Already watched here — just (re)mark it last-focused.
-            if (t.lastFocusedWatchId === sessionId) return t;
+          const already = t.linkedSessions.find((w) => w.sessionId === sessionId);
+          if (already) {
+            // Already watched here — just (re)mark it last-focused (and record the
+            // AI-opened flag if this call is the one that knows it).
+            const flagIt = aiOpened && !already.aiOpened;
+            if (t.lastFocusedWatchId === sessionId && !flagIt) return t;
             changed = true;
-            return { ...t, lastFocusedWatchId: sessionId };
+            const linkedSessions = flagIt
+              ? t.linkedSessions.map((w) => (w.sessionId === sessionId ? { ...w, aiOpened: true } : w))
+              : t.linkedSessions;
+            return { ...t, linkedSessions, lastFocusedWatchId: sessionId };
           }
           changed = true;
-          const linkedSessions = [...t.linkedSessions, { sessionId, bindingKey }];
+          const entry: WatchedTerminal = aiOpened ? { sessionId, bindingKey, aiOpened: true } : { sessionId, bindingKey };
+          const linkedSessions = [...t.linkedSessions, entry];
           return {
             ...t,
             linkedSessions,
@@ -641,14 +669,25 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     // reasons across every terminal this tab watches. Skip stale (disconnected)
     // and empty buffers. A machine-generated command-output envelope is never
     // re-wrapped (it already carries its own terminal context).
+    // Worker sessions (AI-opened, no tab) are looked up alongside this window's
+    // tabs, and other windows' sessions alongside both — the orchestrator and the
+    // pane resolve against the same three, so one terminal keeps one alias
+    // everywhere (ADR-AI-007). Omitting `crossWindow` here made this path fall
+    // back to the raw session id as the display name, and `target=<alias>` from
+    // the model then failed to resolve.
+    const lookupSources = {
+      sessions: sessionsRef.current,
+      workers: useAiWorkerSessionStore.getState().workers,
+      crossWindow: crossWindowSessionsRef?.current,
+    };
     let prependedContext = '';
-    if (!text.startsWith('Terminal Output (Command:')) {
-      const currentSessions = sessionsRef.current;
+    if (!isMachineEnvelope(text)) {
       for (const w of activeTab.linkedSessions) {
-        if (currentSessions.get(w.sessionId)?.status !== 'connected') continue;
+        const view = lookupSession(w.sessionId, lookupSources);
+        if (view?.status !== 'connected') continue;
         const buffer = await takeWatchBufferRef.current(w.sessionId);
         if (!buffer) continue;
-        const name = currentSessions.get(w.sessionId)?.displayName || w.sessionId;
+        const name = view.displayName || w.sessionId;
         // Redact secrets before this scrollback egresses to the third-party AI.
         prependedContext += `${watchedOutputSection(name)}\n${redactSecrets(buffer)}\n================\n`;
       }
@@ -658,12 +697,17 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     const selectedModel = chatState.selectedModel || 'Unspecified';
     // Append the watched-terminal alias list at send time (per sending tab) so the
     // AI can route a command via `target=<alias>`. Empty for 0–1 watched terminals,
-    // leaving the single-watch prompt unchanged.
-    const aliasEntries = buildAliasEntries(activeTab.linkedSessions.map((w) => {
-      const rec = sessionsRef.current.get(w.sessionId);
-      return { sessionId: w.sessionId, displayName: rec?.displayName || w.sessionId, status: rec?.status };
+    // leaving the single-watch prompt unchanged. The connect capability block
+    // (ADR-AI-007) follows it and lists the terminals regardless of count.
+    const { aliases: aliasEntries } = buildWatchedViews(activeTab.linkedSessions, lookupSources);
+    const st = useSettingsStore.getState();
+    const connectBlock = buildConnectCapabilityBlock(buildConnectCapabilityInput(activeTab.linkedSessions, lookupSources, {
+      policy: st.aiConnectPolicy ?? 'local-auto',
+      localShellType: st.aiLocalShellType ?? 'powershell',
+      maxOpened: st.aiMaxWorkerSessionsPerTab ?? 5,
+      idleMinutes: st.aiWorkerIdleTimeoutMins ?? 10,
     }));
-    const systemInstruction = (chatState.systemInstruction || 'You are a helpful assistant.') + buildWatchTargetsBlock(aliasEntries);
+    const systemInstruction = (chatState.systemInstruction || 'You are a helpful assistant.') + buildWatchTargetsBlock(aliasEntries) + connectBlock;
 
     const prepInfo = `useai-send-prep ${JSON.stringify({
       aiSessionId,
@@ -676,7 +720,9 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     tauriService.logDebug('info', 'AIExec', prepInfo)?.catch(() => {});
 
     tauriService.aiChatSend(aiBackendSessionId(aiSessionId, activeTab.id), finalMessage, selectedModel, systemInstruction, images);
-  }, []);
+    // `crossWindowSessionsRef` is a ref object, so its identity is stable and this
+    // stays a once-created callback; it is listed only to satisfy the hooks lint.
+  }, [crossWindowSessionsRef]);
 
   // -- askAi --
   // Inline terminal Ask AI: sends the user's typed question plus the selected

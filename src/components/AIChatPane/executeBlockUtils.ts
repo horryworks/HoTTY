@@ -4,6 +4,8 @@
 // boundary during streaming re-parses. Centralizes the fence parsing that was
 // previously duplicated in AIChatPane.tsx (extractExecuteCommands + MessageContent).
 
+import { parseConnectBody, type ConnectParseResult } from '../../utils/aiConnectRequest';
+
 // Splits on PAIRED (closed) fences; the captured group keeps the fenced block intact.
 const FENCE_SPLIT_RE = /(^```+[\s\S]*?^```+)/gm;
 // Matches a single closed fence: info string (language tag + attributes, e.g.
@@ -18,7 +20,25 @@ const OPEN_FENCE_RE = /^([\s\S]*?)(?:^|\n)```+([^\n]*)\n([\s\S]*)$/;
 export type ContentPart =
     | { kind: 'markdown'; key: string; text: string }
     | { kind: 'execute'; key: string; command: string; target?: string }
-    | { kind: 'execute-pending'; key: string; command: string; target?: string };
+    | { kind: 'execute-pending'; key: string; command: string; target?: string }
+    /** A closed ```connect fence — an AI request to open a terminal (ADR-AI-007).
+     *  Parsed once here so every consumer (card, gate, tests) sees one result. */
+    | { kind: 'connect'; key: string; body: string; parse: ConnectParseResult }
+    | { kind: 'connect-pending'; key: string; body: string };
+
+// The language tag is the first whitespace-delimited token of the info string.
+function fenceLang(info: string): string {
+    const infoTrim = info.trim();
+    const spaceIdx = infoTrim.search(/\s/);
+    return (spaceIdx === -1 ? infoTrim : infoTrim.slice(0, spaceIdx)).toLowerCase();
+}
+
+// A connect fence is recognized ONLY by its language tag — no inline fallback
+// (unlike execute), so a stray "connect" word in a plain code block can never
+// turn into a connection request.
+function isConnectFence(info: string): boolean {
+    return fenceLang(info) === 'connect';
+}
 
 // Decide whether a fence is an executable command block, normalize the command
 // (stripping an `execute` prefix when the language tag is absent/generic), and
@@ -68,17 +88,30 @@ export function segmentMessageContent(content: string): ContentPart[] {
     const pushExecute = (kind: 'execute' | 'execute-pending', command: string, target?: string) => {
         out.push({ kind, key: `${out.length}-exec`, command, ...(target ? { target } : {}) });
     };
+    const pushConnect = (body: string, closed: boolean) => {
+        if (closed) out.push({ kind: 'connect', key: `${out.length}-connect`, body, parse: parseConnectBody(body) });
+        else out.push({ kind: 'connect-pending', key: `${out.length}-connect`, body });
+    };
     content.split(FENCE_SPLIT_RE).forEach((part) => {
         const m = part.match(FENCE_MATCH_RE);
         if (m) {
+            if (isConnectFence(m[1])) {
+                pushConnect(m[2].trim(), true);
+                return;
+            }
             const { isExecute, command, target } = classifyExecute(m[1], m[2]);
             if (isExecute) pushExecute('execute', command, target);
             else pushMarkdown(part);
             return;
         }
-        // No closed-fence match — check for a trailing UNCLOSED execute opener (streaming tail).
+        // No closed-fence match — check for a trailing UNCLOSED opener (streaming tail).
         const o = part.match(OPEN_FENCE_RE);
         if (o) {
+            if (isConnectFence(o[2])) {
+                pushMarkdown(o[1]);
+                pushConnect(o[3].trim(), false);
+                return;
+            }
             const { isExecute, command, target } = classifyExecute(o[2], o[3]);
             if (isExecute) {
                 pushMarkdown(o[1]); // prose before the fence (skipped if empty)
@@ -104,4 +137,13 @@ export function extractExecuteBlocks(content: string): { command: string; target
     return segmentMessageContent(content)
         .filter((p): p is Extract<ContentPart, { kind: 'execute' }> => p.kind === 'execute')
         .map((p) => ({ command: p.command, target: p.target }));
+}
+
+// Completed ```connect blocks (pending ones excluded — never act on a half-streamed
+// request). The gate refuses a message with more than one, so callers usually
+// look at `.length` and `[0]`.
+export function extractConnectBlocks(content: string): { body: string; parse: ConnectParseResult }[] {
+    return segmentMessageContent(content)
+        .filter((p): p is Extract<ContentPart, { kind: 'connect' }> => p.kind === 'connect')
+        .map((p) => ({ body: p.body, parse: p.parse }));
 }

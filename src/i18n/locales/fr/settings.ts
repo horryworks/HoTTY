@@ -221,6 +221,25 @@ export const settings = {
     concurrentStreams: 'Réponses de chat IA en parallèle',
     concurrentStreamsHelp:
       "Combien d'onglets de conversation IA peuvent recevoir une réponse en même temps dans un volet. Les envois supplémentaires sont mis en file d'attente et démarrent à la fin des réponses. 1 = strictement une à la fois. Réduisez si votre fournisseur limite le débit (p. ex. l'offre gratuite de Gemini). Maximum 8. Par défaut : 3.",
+    connectPolicy: "Autoriser l'IA à ouvrir des terminaux",
+    connectPolicyHelp:
+      "L'IA peut demander à HoTTY d'ouvrir un shell du PC (pour lancer ping / tracert / nslookup) ou une session SSH/Telnet vers un voisin découvert via CDP/LLDP. Ces sessions n'ont pas d'onglet — leur sortie est capturée pour l'IA — et peuvent être ouvertes en onglet à tout moment. Désactivé : les demandes sont ignorées. Demander : chaque demande requiert votre accord dans la discussion. Shell local automatique : les shells du PC s'ouvrent sans demander, les connexions aux équipements demandent toujours. Local + arborescence d'hôtes automatique : ouvre aussi les sessions SSH/Telnet dont l'hôte correspond à une entrée de l'arborescence, avec ses identifiants enregistrés. L'ouverture automatique ne s'applique qu'en mode d'exécution automatique et utilise le compte à rebours d'exécution automatique. Par défaut : toujours demander.",
+    connectPolicyOff: 'Désactivé',
+    connectPolicyAsk: 'Toujours demander',
+    connectPolicyLocalAuto: 'Shell local automatique, équipements demandent',
+    connectPolicyHostTreeAuto: "Shell local + hôtes de l'arborescence automatiques",
+    connectLocalShell: "Shell du PC pour l'IA",
+    connectLocalShellHelp:
+      "Le shell que HoTTY ouvre lorsque l'IA demande un terminal local. Un par conversation : une seconde demande réutilise celui qui est ouvert.",
+    connectMaxPerTab: "Nombre maximal de terminaux ouverts par l'IA par conversation",
+    connectMaxPerTabHelp:
+      "Terminaux actifs que l'IA peut garder ouverts pour une conversation (y compris ceux transformés en onglets). Protège les lignes VTY limitées de l'équipement. En fermer un libère une place. 1–10. Par défaut : 5.",
+    connectIdleTimeout: 'Fermer les terminaux IA inactifs après (minutes)',
+    connectIdleTimeoutHelp:
+      "Un terminal ouvert par l'IA sans onglet que l'IA n'a pas utilisé pendant cette durée est déconnecté automatiquement. Les terminaux transformés en onglets vous appartiennent et restent ouverts. 0 = jamais. Par défaut : 10.",
+    connectReuseCredentials: "Autoriser la réutilisation des identifiants d'un terminal surveillé",
+    connectReuseCredentialsHelp:
+      "Lorsque l'IA nomme un terminal surveillé (via: <alias>) dans une demande, copie l'identifiant ET le mot de passe de cette session vers la nouvelle connexion SSH/Telnet. Demande toujours votre confirmation et indique de quel terminal proviennent les identifiants. Désactivé : seul l'identifiant est hérité. Désactivé par défaut, car un voisin CDP/LLDP usurpé pourrait diriger l'IA vers un hôte malveillant.",
     deviceResponseTimeout: "Délai de réponse de l'appareil (secondes)",
     deviceResponseTimeoutHelp:
       "Si l'appareil ne produit aucune nouvelle sortie pendant ce nombre de secondes après une commande, l'IA est informée que l'appareil a cessé de répondre afin que la boucle puisse continuer. 0 désactive la détection d'inactivité. Par défaut : 10.",

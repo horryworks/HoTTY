@@ -10,6 +10,7 @@ pub mod jumpbox;
 pub mod known_hosts;
 pub mod local;
 pub mod log_manager;
+pub mod net_validation;
 pub mod os_paths;
 pub mod path_safety;
 pub mod ping_monitor;

@@ -50,3 +50,47 @@ describe('settingsStore v29 migration (aiResponseLanguage)', () => {
     expect(s.aiResponseLanguage).toBe('Korean');
   });
 });
+
+describe('settingsStore v30 migration (AI-initiated terminal sessions)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('seeds the safe defaults for a pre-v30 install', async () => {
+    const s = await rehydrateFrom({ language: 'en', aiResponseLanguage: 'Auto' }, 29);
+    expect(s.aiConnectPolicy).toBe('ask');
+    expect(s.aiConnectReuseCredentials).toBe(false);
+    expect(s.aiMaxWorkerSessionsPerTab).toBe(5);
+    expect(s.aiWorkerIdleTimeoutMins).toBe(10);
+    expect(s.aiLocalShellType).toBe('powershell');
+  });
+
+  // Security: an upgrade must never silently grant the AI permission to open a
+  // shell on the user's PC. `aiConnectPolicy` is assigned unconditionally (not
+  // `??=`) so a stray pre-v30 value cannot carry auto-open across the upgrade.
+  it('forces aiConnectPolicy to ask on upgrade, even if a pre-v30 payload carried one', async () => {
+    const s = await rehydrateFrom({ language: 'en', aiConnectPolicy: 'local-auto' }, 29);
+    expect(s.aiConnectPolicy).toBe('ask');
+  });
+
+  it('leaves the other v30 keys alone when a pre-v30 payload already had them', async () => {
+    const s = await rehydrateFrom(
+      { language: 'en', aiConnectReuseCredentials: true, aiMaxWorkerSessionsPerTab: 2 },
+      29,
+    );
+    expect(s.aiConnectReuseCredentials).toBe(true);
+    expect(s.aiMaxWorkerSessionsPerTab).toBe(2);
+  });
+
+  it('keeps values that are already present', async () => {
+    const s = await rehydrateFrom(
+      { language: 'en', aiConnectPolicy: 'ask', aiConnectReuseCredentials: true, aiMaxWorkerSessionsPerTab: 2, aiWorkerIdleTimeoutMins: 0, aiLocalShellType: 'cmd' },
+      30,
+    );
+    expect(s.aiConnectPolicy).toBe('ask');
+    expect(s.aiConnectReuseCredentials).toBe(true);
+    expect(s.aiMaxWorkerSessionsPerTab).toBe(2);
+    expect(s.aiWorkerIdleTimeoutMins).toBe(0);
+    expect(s.aiLocalShellType).toBe('cmd');
+  });
+});

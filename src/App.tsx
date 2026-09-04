@@ -49,6 +49,8 @@ import { useAiAuthOwner } from './hooks/useAiAuthOwner';
 import { useAiChat, getActiveTab } from './hooks/useAiChat';
 import { useAiConsent } from './hooks/useAiConsent';
 import { useAiOrchestrator } from './hooks/useAiOrchestrator';
+import { useAiWorkerSessions } from './hooks/useAiWorkerSessions';
+import { connectDeclinedNote } from './components/AIChatPane/terminalOutputUtils';
 import { usePaneStore, gridPaneIds, SIDEBAR_PANE_IDS } from './stores/paneStore';
 import { initOverlayWatcher } from './stores/uiOverlayStore';
 import { useWebBrowserBookmarkStore } from './stores/webBrowserBookmarkStore';
@@ -63,11 +65,13 @@ import { usePaneKeyboardNav } from './hooks/usePaneKeyboardNav';
 import { useNewWindowShortcut } from './hooks/useNewWindowShortcut';
 import { initSharedStoreSync } from './stores/sharedStoreSync';
 import { IS_TAURI, WINDOW_LABEL } from './utils/windowLabel';
-import type { LinkableSession } from './types/appTypes';
+import { viewFromRecord } from './utils/sessionLookup';
+import type { LinkableSession, SessionDialogPrefill, SessionInfo } from './types/appTypes';
 import {
   makeFeaturePaneId,
   getPaneContentType,
   isFeaturePane,
+  isWorkerSessionId,
   getFeatureDisplayName,
   type FeaturePaneInfo,
   type FeaturePaneType,
@@ -125,7 +129,7 @@ function App() {
   // orchestrator (wired in an effect below) is sufficient.
   const handleSessionRemovedRef = useRef<(id: string) => void>(() => {});
   const onSessionRemoved = useCallback((id: string) => handleSessionRemovedRef.current(id), []);
-  const { sessions, openSession, closeSession, setSessionFixedSize } = useSessionManager({
+  const { sessions, openSession, adoptSession, closeSession, setSessionFixedSize } = useSessionManager({
     onPasteRequest: handlePasteRequest,
     onSessionRemoved,
   });
@@ -241,6 +245,11 @@ function App() {
     return id;
   }, [featurePanes, addSessionToStore]);
 
+  // Other windows' live sessions, owned by `useAiOrchestrator` below but needed by
+  // `useAiChat` above it. App holds the ref so both AI paths look sessions up
+  // against the same set (ADR-AI-007's single-source invariant).
+  const crossWindowSessionsRef = useRef<readonly SessionInfo[]>([]);
+
   const {
     aiChatStates,
     updateAiChatState,
@@ -262,6 +271,13 @@ function App() {
     sessions,
     featurePanes,
     aiPersonas,
+    // ADR-AI-007 invariant: the alias the model reads, the alias the resolver
+    // matches and the alias the envelope echoes come from ONE builder fed by the
+    // SAME sources. `useAiChat` runs before `useAiOrchestrator` (which owns the
+    // cross-window list), so App holds the ref and fills it in below — without it
+    // this path alone resolved a cross-window terminal to its raw session id
+    // while the other two resolved it to its host, and `target=` stopped matching.
+    crossWindowSessionsRef,
     takeWatchBuffer,
     ensureAiConsent: consent.ensureAiConsent,
     createAiChatPane,
@@ -269,6 +285,16 @@ function App() {
     paneAllocations,
     activePaneId,
     setActivePaneId,
+  });
+
+  // AI worker sessions (ADR-AI-007): backend sessions the AI opened on its own
+  // behalf that have no tab. Mounted once here; the orchestrator drives them.
+  const workers = useAiWorkerSessions({
+    adoptSession,
+    addSessionToStore,
+    // A worker that ended or was closed leaves its conversation's watched set
+    // (no keep-stale: a worker never auto-rebinds).
+    onWorkerGone: (w) => removeTabLink(w.paneId, w.tabId, w.id),
   });
 
   // AI Chat watch/command-execution lifecycle: capture toggling, cross-window
@@ -281,6 +307,8 @@ function App() {
     setActivePaneId,
     createAiChatPane,
     ensureConsent: consent.ensureAiConsent,
+    workers,
+    hostTree: hostManager.tree,
     aiChat: {
       aiChatStates,
       updateAiChatState,
@@ -307,6 +335,9 @@ function App() {
     openAiChatPane,
     clearRunCommandIntervals,
   } = aiOrch;
+  useEffect(() => {
+    crossWindowSessionsRef.current = crossWindowSessions;
+  }, [crossWindowSessions]);
 
   // Forward the orchestrator's session-removal cleanup to the delegate ref that
   // useSessionManager (constructed earlier) invokes on session removal.
@@ -315,6 +346,11 @@ function App() {
   }, [aiOrch.handleSessionRemoved]);
 
   const [connectOpen, setConnectOpen] = useState(false);
+  // An AI connect request that needs a human-supplied secret (ADR-AI-007) opens
+  // the connection dialog pre-filled; the intent remembers which conversation to
+  // link the resulting session to (or to tell that the user closed the dialog).
+  const [dialogPrefill, setDialogPrefill] = useState<SessionDialogPrefill | undefined>(undefined);
+  const [aiDialogIntent, setAiDialogIntent] = useState<{ paneId: string; tabId: string; key: string } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | undefined>(undefined);
   const openSettings = useCallback((tab?: SettingsTab) => {
@@ -403,15 +439,24 @@ function App() {
       ownerLabel: WINDOW_LABEL,
       isLocal: true,
       status: s.status,
+      // `host` feeds the AI connect duplicate guard (ADR-AI-007: one session per
+      // host per conversation). Without it a conversation reached through the
+      // link picker sees no address and opens a second worker to the same device.
+      host: viewFromRecord(s).host,
+      headless: false,
     })),
     ...crossWindowSessions
-      .filter((cs) => !!cs.ownerLabel && cs.ownerLabel !== WINDOW_LABEL)
+      // Another window's AI worker sessions belong to that window's conversation
+      // and are never offered here.
+      .filter((cs) => !!cs.ownerLabel && cs.ownerLabel !== WINDOW_LABEL && !isWorkerSessionId(cs.sessionId))
       .map((cs) => ({
         sessionId: cs.sessionId,
         displayName: cs.host || cs.sessionId,
         ownerLabel: cs.ownerLabel as string,
         isLocal: false,
         status: 'connected',
+        host: cs.host || undefined,
+        headless: false,
       })),
   ];
 
@@ -458,6 +503,14 @@ function App() {
     // The id is returned so the dialog can track this session's lifecycle.
     const id = openSession(payload);
     addSessionToStore(id);
+    // A pending AI connect intent adopts whatever the user submitted (even an
+    // edited host — a human choice wins): link it to the conversation and wait
+    // for its prompt exactly like an AI-opened worker.
+    if (aiDialogIntent) {
+      setAiDialogIntent(null);
+      setDialogPrefill(undefined);
+      aiOrch.adoptAiTerminal(aiDialogIntent.paneId, aiDialogIntent.tabId, id, aiDialogIntent.key);
+    }
     return id;
   };
 
@@ -523,6 +576,8 @@ function App() {
       }
       if (type === 'ai-chat') {
         clearRunCommandIntervals(id);
+        // AI-opened worker sessions die with the conversation pane that owns them.
+        workers.closeWorkersForPane(id);
         // Disable backend capture for EVERY session this (singleton) pane was
         // watching — else those watch entries leak after close.
         for (const sid of watchingSessionIdsRef.current) {
@@ -723,7 +778,11 @@ function App() {
               // inherits the last-focused terminal. Callers that want a linked tab
               // pass the session id explicitly (e.g. terminal "Watch with AI").
               onAddTab={(initialLink) => addTab(featureInfo.id, initialLink)}
-              onCloseTab={(tabId) => closeTab(featureInfo.id, tabId)}
+              onCloseTab={(tabId) => {
+                // Closing a conversation closes the worker sessions it opened.
+                workers.closeWorkersForTab(featureInfo.id, tabId);
+                closeTab(featureInfo.id, tabId);
+              }}
               onClosePane={() => handleCloseTab(featureInfo.id)}
               onSelectTab={(tabId) => setActiveTab(featureInfo.id, tabId)}
               onFlashSessionPane={flashSessionPane}
@@ -755,6 +814,16 @@ function App() {
                 removeTabLink(featureInfo.id, activeTab.id, sid);
               }}
               onOpenSettings={() => openSettings('ai')}
+              // ── AI-initiated terminal sessions (ADR-AI-007) ──
+              hostTree={hostManager.tree}
+              onOpenTerminal={(tabId, resolved) => aiOrch.openAiTerminal(featureInfo.id, tabId, resolved)}
+              onOpenTerminalInDialog={(tabId, prefill, key) => {
+                setAiDialogIntent({ paneId: featureInfo.id, tabId, key });
+                setDialogPrefill(prefill);
+                setConnectOpen(true);
+              }}
+              onMaterializeWorker={(sid) => { void workers.materializeWorker(sid); }}
+              onCloseWorker={(sid) => workers.closeWorkerSession(sid)}
             />
           ) : (
             <div className="pane-empty">
@@ -861,7 +930,16 @@ function App() {
         <Suspense fallback={null}>
           <SessionDialog
             open={connectOpen}
-            onClose={() => setConnectOpen(false)}
+            onClose={() => {
+              // Closing the dialog on a pending AI connect intent = the user declined.
+              if (aiDialogIntent) {
+                setAiDialogIntent(null);
+                enqueuePendingMessage(aiDialogIntent.paneId, aiDialogIntent.tabId, connectDeclinedNote(aiDialogIntent.key));
+              }
+              setDialogPrefill(undefined);
+              setConnectOpen(false);
+            }}
+            prefill={dialogPrefill}
             onConnect={handleConnectSubmit}
             onConnected={handleSessionConnected}
             onCancelConnect={handleCancelConnect}

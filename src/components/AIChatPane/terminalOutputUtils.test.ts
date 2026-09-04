@@ -1,5 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { TERMINAL_OUTPUT_RE, parseTerminalOutputMessage, notConnectedNote, declinedNote } from './terminalOutputUtils';
+import {
+  TERMINAL_OUTPUT_RE,
+  parseTerminalOutputMessage,
+  notConnectedNote,
+  declinedNote,
+  unknownTargetNote,
+  parseConnectEnvelope,
+  isMachineEnvelope,
+  connectedNote,
+  alreadyOpenNote,
+  connectFailedNote,
+  connectDeclinedNote,
+  connectRefusedNote,
+} from './terminalOutputUtils';
 
 describe('parseTerminalOutputMessage', () => {
   it('returns null when content does not start with the marker', () => {
@@ -77,5 +90,52 @@ describe('declinedNote', () => {
   it('preserves a multi-line command inside the parentheses', () => {
     const cmd = 'echo a\necho b';
     expect(parseTerminalOutputMessage(declinedNote(cmd))?.cmd).toBe(cmd);
+  });
+});
+
+describe('unknownTargetNote', () => {
+  it('is a Terminal Output envelope that says the command was NOT run', () => {
+    const note = unknownTargetNote('show ip route', 'sw-99');
+    const parsed = parseTerminalOutputMessage(note);
+    expect(parsed?.cmd).toBe('show ip route');
+    expect(parsed?.output).toContain('"sw-99"');
+    expect(parsed?.output).toContain('NOT run');
+  });
+});
+
+describe('connect envelopes', () => {
+  const key = 'ssh:alice@192.0.2.10:22';
+
+  it('round-trips every envelope kind through parseConnectEnvelope', () => {
+    const connected = parseConnectEnvelope(connectedNote(key, 'sw-01', 'sw-01', 'sw-01#'));
+    expect(connected).toMatchObject({ kind: 'connected', key, alias: 'sw-01' });
+    expect(connected?.body).toContain('target=sw-01');
+    expect(connected?.body.endsWith('sw-01#')).toBe(true);
+
+    expect(parseConnectEnvelope(alreadyOpenNote(key, 'core-01'))).toMatchObject({ kind: 'connected', key, alias: 'core-01' });
+    expect(parseConnectEnvelope(connectFailedNote(key, 'Connection refused'))).toMatchObject({ kind: 'failed', key, alias: undefined });
+    expect(parseConnectEnvelope(connectDeclinedNote(key))).toMatchObject({ kind: 'declined', key });
+    expect(parseConnectEnvelope(connectRefusedNote('local:powershell', 'Limit reached'))).toMatchObject({ kind: 'refused', key: 'local:powershell' });
+    expect(parseConnectEnvelope(connectRefusedNote('local:powershell', 'Limit reached'))?.body).toBe('[Limit reached]');
+  });
+
+  it('omits the tail line when there is no captured output', () => {
+    const note = connectedNote('local:powershell', 'powershell-ai', 'PowerShell (AI)', '');
+    expect(note.split('\n')).toHaveLength(2);
+  });
+
+  it('rejects prose that merely starts with a similar word', () => {
+    expect(parseConnectEnvelope('Connection to the device seems fine.')).toBeNull();
+    expect(parseConnectEnvelope('Terminal Connected but no parens')).toBeNull();
+    expect(parseConnectEnvelope('')).toBeNull();
+  });
+
+  it('isMachineEnvelope covers command results and every connect outcome, not user prose', () => {
+    expect(isMachineEnvelope('Terminal Output (Command: ls):\nfoo')).toBe(true);
+    expect(isMachineEnvelope(connectedNote(key, 'sw-01', 'sw-01', ''))).toBe(true);
+    expect(isMachineEnvelope(connectFailedNote(key, 'x'))).toBe(true);
+    expect(isMachineEnvelope(connectDeclinedNote(key))).toBe(true);
+    expect(isMachineEnvelope(connectRefusedNote(key, 'x'))).toBe(true);
+    expect(isMachineEnvelope('please connect to the switch')).toBe(false);
   });
 });

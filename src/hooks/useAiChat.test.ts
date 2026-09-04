@@ -538,7 +538,9 @@ describe('useAiChat', () => {
 
     // Session id is scoped to the active tab so each tab keeps its own history.
     const tabId = getActiveTab(result.current.aiChatStates.get('ai-1'))!.id;
-    expect(tauriService.aiChatSend).toHaveBeenCalledWith(`ai-1::${tabId}`, 'Hello', 'gpt-4o', 'Be helpful.', undefined);
+    // The system instruction gains send-time blocks (watch targets / connect capability),
+    // so only its head is pinned here.
+    expect(tauriService.aiChatSend).toHaveBeenCalledWith(`ai-1::${tabId}`, 'Hello', 'gpt-4o', expect.stringMatching(/^Be helpful./), undefined);
   });
 
   it('sendMessage does nothing without chat state', async () => {
@@ -588,7 +590,7 @@ describe('useAiChat', () => {
       `ai-1::${tabId}`,
       expect.stringContaining('Watched Terminal Output'),
       'gpt-4o',
-      'Be helpful.',
+      expect.stringMatching(/^Be helpful./),
       undefined,
     );
   });
@@ -695,10 +697,10 @@ describe('useAiChat', () => {
     // Each send used its own tab-scoped key → the backend keeps two separate
     // conversation histories, so the new tab starts clean.
     expect(tauriService.aiChatSend).toHaveBeenNthCalledWith(
-      1, `ai-1::${firstTabId}`, 'from tab one', 'gpt-4o', 'Be helpful.', undefined,
+      1, `ai-1::${firstTabId}`, 'from tab one', 'gpt-4o', expect.stringMatching(/^Be helpful./), undefined,
     );
     expect(tauriService.aiChatSend).toHaveBeenNthCalledWith(
-      2, `ai-1::${secondTabId}`, 'from tab two', 'gpt-4o', 'Be helpful.', undefined,
+      2, `ai-1::${secondTabId}`, 'from tab two', 'gpt-4o', expect.stringMatching(/^Be helpful./), undefined,
     );
   });
 });
@@ -719,3 +721,63 @@ describe('aiBackendSessionId', () => {
   });
 });
 
+describe('useAiChat — AI-initiated terminal sessions (ADR-AI-007)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useSettingsStore.getState().reset();
+  });
+
+  it('addTabLink records the aiOpened flag and keeps it when the link is re-added', () => {
+    const { result } = renderHook(() => useAiChat(makeDefaultOptions()));
+    act(() => { result.current.updateAiChatState('ai-1', createDefaultAiChatState('s-1', 'core-01')); });
+    const tabId = result.current.aiChatStates.get('ai-1')!.tabs[0].id;
+
+    act(() => { result.current.addTabLink('ai-1', tabId, 'h-1', { aiOpened: true }); });
+    let tab = result.current.aiChatStates.get('ai-1')!.tabs[0];
+    expect(tab.linkedSessions).toEqual([{ sessionId: 's-1', bindingKey: undefined }, { sessionId: 'h-1', bindingKey: undefined, aiOpened: true }]);
+    expect(tab.lastFocusedWatchId).toBe('h-1');
+
+    // A plain re-add (e.g. the user re-focuses it) must not drop the flag; a
+    // flagged re-add of a user link records it.
+    act(() => { result.current.addTabLink('ai-1', tabId, 'h-1'); });
+    act(() => { result.current.addTabLink('ai-1', tabId, 's-1', { aiOpened: true }); });
+    tab = result.current.aiChatStates.get('ai-1')!.tabs[0];
+    expect(tab.linkedSessions.find((w) => w.sessionId === 'h-1')?.aiOpened).toBe(true);
+    expect(tab.linkedSessions.find((w) => w.sessionId === 's-1')?.aiOpened).toBe(true);
+    // A user link never carries the flag unless asked.
+    act(() => { result.current.addTabLink('ai-1', tabId, 's-2'); });
+    expect(result.current.aiChatStates.get('ai-1')!.tabs[0].linkedSessions.find((w) => w.sessionId === 's-2')?.aiOpened).toBeUndefined();
+  });
+
+  it('sendMessage appends the connect capability block and lists a single watched terminal by host', async () => {
+    const { tauriService } = await import('../services/tauriService');
+    const sessions = new Map([['s-1', makeSessionRecord('s-1', {
+      displayName: 'core-01',
+      connectionConfig: { host: '192.0.2.1', port: 22, username: 'alice', encoding: 'utf8', keepaliveIntervalSecs: 0, connectTimeoutSecs: 5 },
+    })]]);
+    const { result } = renderHook(() => useAiChat(makeDefaultOptions({ sessions })));
+    act(() => { result.current.updateAiChatState('ai-1', createDefaultAiChatState('s-1', 'core-01')); });
+    await act(async () => { await result.current.sendMessage('ai-1', 'hello'); });
+
+    const sysInstr = (tauriService.aiChatSend as ReturnType<typeof vi.fn>).mock.calls[0][3] as string;
+    expect(sysInstr).toContain('[Terminal Connections]');
+    expect(sysInstr).toContain('core-01 (ssh 192.0.2.1)');
+    expect(sysInstr).toContain('PowerShell');
+    // Policy off → the capability is not even mentioned.
+    useSettingsStore.getState().update('aiConnectPolicy', 'off');
+    await act(async () => { await result.current.sendMessage('ai-1', 'again'); });
+    const sysInstr2 = (tauriService.aiChatSend as ReturnType<typeof vi.fn>).mock.calls[1][3] as string;
+    expect(sysInstr2).not.toContain('[Terminal Connections]');
+  });
+
+  it('sendMessage does not prepend watch buffers to a connect envelope (machine message)', async () => {
+    const takeWatchBuffer = vi.fn().mockResolvedValue('buffered output');
+    const sessions = new Map([['s-1', makeSessionRecord('s-1')]]);
+    const { result } = renderHook(() => useAiChat(makeDefaultOptions({ sessions, takeWatchBuffer })));
+    act(() => { result.current.updateAiChatState('ai-1', createDefaultAiChatState('s-1', 'S1')); });
+    await act(async () => { await result.current.sendMessage('ai-1', 'Connection Declined (local:powershell):\n[The user chose NOT to open this connection.]'); });
+    expect(takeWatchBuffer).not.toHaveBeenCalled();
+    await act(async () => { await result.current.sendMessage('ai-1', 'a human question'); });
+    expect(takeWatchBuffer).toHaveBeenCalledWith('s-1');
+  });
+});

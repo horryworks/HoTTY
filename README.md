@@ -60,6 +60,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 - Interactive Mode — AI suggests and executes terminal commands, gated by a managed Whitelist / Blacklist + AI safety classifier
 - Watch Mode — one AI Chat conversation can watch several terminals at once, with AI-suggested commands routed to the right one; captured output is sent to the AI for analysis
 - Cross-window linking — link an AI Chat to a terminal running in another window
+- AI-opened terminals — on request, the AI can open a PC shell (PowerShell / Command Prompt / Git Bash) or an SSH/Telnet session to a device it discovered, approved from a card in the chat; these sessions have no tab, are capped and idle-closed per conversation, and can be opened as a real tab at any time. Host Tree credentials are used without the AI ever seeing them; the default asks for every request (Settings → AI)
 - One-time data-sharing disclosure shown before terminal data is first sent to a provider (reviewable in Settings → AI)
 - Customizable personas
 

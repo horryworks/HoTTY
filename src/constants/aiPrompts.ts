@@ -1,11 +1,15 @@
-import type { LanguageId } from '../types/appTypes';
+import type { AiConnectPolicy, AiLocalShellType, LanguageId } from '../types/appTypes';
 
 /**
  * Build execution rules appended to every AI system instruction.
  * Includes proactive investigation instruction as a built-in rule.
+ *
+ * Rule 4 admits the ONE alternative fence — ```connect (ADR-AI-007) — but only
+ * when the send-time `[Terminal Connections]` block is present; with the policy
+ * off, no such block is sent and the rule is inert.
  */
 export function buildExecutionRules(): string {
-    return ' [ABSOLUTE MANDATORY RULES - NO EXCEPTIONS] 1. Answer ONLY what the user asked. Do NOT suggest next steps, additional commands, or follow-up actions unless explicitly requested. 2. After answering, STOP. Do not continue the conversation on your own. 3. ANY shell/terminal command MUST be placed in EXACTLY ONE ```execute block per response. 4. It is STRICTLY FORBIDDEN to use more than one ```execute block in a single response. 5. It is STRICTLY FORBIDDEN to write commands as inline code, plain text, or in ```bash/```sh/```shell blocks. 6. If multiple steps are needed, place each command on its own line within a single ```execute block. NEVER use && or ; to chain commands on one line. 7. Breaking these rules causes a critical application failure. If you need more information to fulfill the user\'s request, proactively suggest terminal commands using code blocks with the "execute" language tag, like this: ```execute\n[command]\n```. Do not just wait for user input if the information can be gathered via the terminal.';
+    return ' [ABSOLUTE MANDATORY RULES - NO EXCEPTIONS] 1. Answer ONLY what the user asked. Do NOT suggest next steps, additional commands, or follow-up actions unless explicitly requested. 2. After answering, STOP. Do not continue the conversation on your own. 3. ANY shell/terminal command MUST be placed in EXACTLY ONE ```execute block per response. 4. A response may contain EITHER one ```execute block OR one ```connect block (only when a [Terminal Connections] section is present below) - NEVER both, and NEVER more than one of either. 5. It is STRICTLY FORBIDDEN to write commands as inline code, plain text, or in ```bash/```sh/```shell blocks, and STRICTLY FORBIDDEN to use any other fenced block for commands. 6. If multiple steps are needed, place each command on its own line within a single ```execute block. NEVER use && or ; to chain commands on one line. 7. Breaking these rules causes a critical application failure. If you need more information to fulfill the user\'s request, proactively suggest terminal commands using code blocks with the "execute" language tag, like this: ```execute\n[command]\n```. Do not just wait for user input if the information can be gathered via the terminal.';
 }
 
 /**
@@ -32,6 +36,86 @@ export function buildWatchTargetsBlock(
         .map((t) => `${t.alias} (${t.displayName}${t.live ? '' : ', disconnected'})`)
         .join(', ');
     return `\n\n[Watched Terminals] You are watching ${terminals.length} terminals; their output is aggregated above under "[Watched Terminal Output: <name>]" sections. When your single \`\`\`execute block should run on a SPECIFIC terminal, tag the fence with that terminal's alias — e.g. \`\`\`execute target=${terminals[0].alias} — using ONLY an alias from this list and exactly ONE target. Aliases: ${list}. If you omit target=, the command runs on the most recently used terminal.`;
+}
+
+/** One watched terminal as described to the model in the connect capability block. */
+export interface ConnectCapabilityTerminal {
+    alias: string;
+    displayName: string;
+    live: boolean;
+    /** Connection target, when known (SSH/Telnet/worker) — lets the model avoid a duplicate. */
+    host?: string;
+    protocol?: string;
+    /** Opened by the AI itself (worker or materialized). */
+    aiOpened: boolean;
+}
+
+export interface ConnectCapabilityInput {
+    policy: AiConnectPolicy;
+    terminals: ConnectCapabilityTerminal[];
+    localShellType: AiLocalShellType;
+    /** Alias of the live AI-opened PC shell this tab already watches, if any. */
+    localShellOpen?: string;
+    /** How many more AI-opened terminals this conversation may hold. */
+    remainingSlots: number;
+    /** Idle auto-disconnect for AI-opened terminals (0 = never). */
+    idleMinutes: number;
+}
+
+const LOCAL_SHELL_LABELS: Record<AiLocalShellType, string> = {
+    powershell: 'PowerShell',
+    cmd: 'Command Prompt',
+    'git-bash': 'Git Bash',
+};
+
+/**
+ * System-prompt block (appended at SEND time, after the watch-targets block) that
+ * teaches the model it may ask HoTTY to OPEN a terminal — a PC shell or an
+ * SSH/Telnet session to a discovered neighbor — via a single ```connect fence
+ * (ADR-AI-007). Returns '' when the policy is `off` so the capability is not
+ * even mentioned. Unlike `buildWatchTargetsBlock` it lists the watched terminals
+ * even when there is only ONE, because `via:` and duplicate avoidance need the
+ * alias and host regardless of count. Kept out of i18n: an AI-prompt token.
+ */
+export function buildConnectCapabilityBlock(p: ConnectCapabilityInput): string {
+    if (p.policy === 'off') return '';
+    const shellLabel = LOCAL_SHELL_LABELS[p.localShellType];
+    const list = p.terminals.length === 0
+        ? 'none'
+        : p.terminals.map((t) => {
+            const target = [t.protocol, t.host].filter(Boolean).join(' ') || t.displayName;
+            const flags = `${t.aiOpened ? ', AI-opened' : ''}${t.live ? '' : ', disconnected'}`;
+            return `${t.alias} (${target}${flags})`;
+        }).join(', ');
+    const slots = p.remainingSlots > 0
+        ? `${p.remainingSlots} more terminal(s) may be opened for this conversation.`
+        : 'The per-conversation limit of AI-opened terminals is reached; do NOT request another connection.';
+    const local = p.localShellOpen
+        ? `A PC shell (${shellLabel}) is ALREADY open as alias "${p.localShellOpen}" - use target=${p.localShellOpen} instead of requesting a new one.`
+        : `The PC shell HoTTY would open is ${shellLabel}.`;
+    const idle = p.idleMinutes > 0
+        ? ` AI-opened terminals left unused for ${p.idleMinutes} minutes are closed automatically; request the connection again if you need one back.`
+        : '';
+    const F = '```';
+    return `\n\n[Terminal Connections] You may ask HoTTY to OPEN a new terminal when the investigation needs one: (a) a shell on the user's PC, to run ping / tracert / nslookup / Test-NetConnection from the PC itself; or (b) an SSH/Telnet session to a NEIGHBOR device you discovered (e.g. from \`show cdp neighbors detail\`, \`show lldp neighbors detail\`, \`display lldp neighbor-information verbose\`). AI-opened terminals have no visible tab; their output is captured for you. Request one with a single fenced block whose language tag is \`connect\` and whose body is \`key: value\` lines using ONLY these keys:
+type: local | ssh | telnet   (required)
+host: <hostname or IP>   (required for ssh/telnet; no spaces, no URLs)
+port: <1-65535>   (optional; default 22 / 23)
+user: <login name>   (optional)
+name: <short display name>   (optional, e.g. the CDP device id)
+via: <alias of a watched terminal>   (optional: inherit the login name - and, only if the user allowed it, the password - from that terminal)
+reason: <one line the user reads before approving>
+Example:
+${F}connect
+type: ssh
+host: 192.0.2.10
+user: alice
+name: sw-01
+via: core-01
+reason: follow the path to the next hop reported by CDP
+${F}
+Rules: at most ONE connect block per response, NEVER in the same response as an execute block, never include passwords, and only request a connection the task genuinely needs - say briefly why. Never request a connection to a host that is already watched; use its alias instead. The user must approve device logins. HoTTY answers with "Terminal Connected (<key> as <alias>)" - from then on run commands there with ${F}execute target=<alias> - or with "Connection Failed / Declined / Refused (<key>)": then do NOT ask again; explain and continue with the terminals you have. Whenever more than one terminal is watched, tag EVERY execute block with target=<alias>.
+Current status: ${slots} ${local}${idle} Watched terminals: ${list}.`;
 }
 
 /** The canonical language-selector value meaning "let the model decide". */

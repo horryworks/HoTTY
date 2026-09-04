@@ -17,13 +17,29 @@ import {
 import { STORAGE_KEYS } from '../../constants/storage';
 import { aiProviderLabelKey } from '../../constants/aiProviders';
 import { formatAICost } from '../../constants/aiPricing';
-import { buildExecutionRules, languageDirective, resolveAiLanguage, languageSwitchNotice, AUTO_LANGUAGE, NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP, buildWatchTargetsBlock, withTargetDirective } from '../../constants/aiPrompts';
+import { buildExecutionRules, languageDirective, resolveAiLanguage, languageSwitchNotice, AUTO_LANGUAGE, NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP, buildWatchTargetsBlock, withTargetDirective, buildConnectCapabilityBlock } from '../../constants/aiPrompts';
 import { SUPPORTED_LANGUAGES } from '../../i18n';
 import { ExecutionModeBar } from './ExecutionModeBar';
 import { TerminalOutputBlock } from './TerminalOutputBlock';
-import { parseTerminalOutputMessage, notConnectedNote, declinedNote } from './terminalOutputUtils';
-import { segmentMessageContent, extractExecuteCommands, extractExecuteBlocks } from './executeBlockUtils';
+import {
+    parseTerminalOutputMessage, notConnectedNote, declinedNote, unknownTargetNote,
+    parseConnectEnvelope, alreadyOpenNote, connectDeclinedNote, connectRefusedNote,
+    type ConnectEnvelope, type ConnectEnvelopeKind,
+} from './terminalOutputUtils';
+import { segmentMessageContent, extractExecuteCommands, extractExecuteBlocks, extractConnectBlocks } from './executeBlockUtils';
 import { buildAliasEntries, resolveAlias } from '../../utils/terminalAlias';
+import { ConnectRequestCard } from './ConnectRequestCard';
+import {
+    connectRequestReducer, emptyConnectState, getConnectBlock, hasConnectBlock, connectBlockKey,
+    type ConnectState, type ConnectAction, type ConnectBlock,
+} from '../../utils/connectRequestReducer';
+import {
+    resolveConnectRequest, decideConnectGate, summarizeAiOpened, describeParseErrors, connectRequestKey,
+    type ConnectParseResult, type GateDecision,
+} from '../../utils/aiConnectRequest';
+import { buildWatchedViews, buildConnectCapabilityInput } from '../../utils/aiConnectContext';
+import { lookupSession, type SessionSources } from '../../utils/sessionLookup';
+import { useAiWorkerSessionStore } from '../../stores/aiWorkerSessionStore';
 import { conversationColorIndex, conversationColorVar } from '../../utils/conversationColor';
 import { SystemPromptModal } from '../SystemPromptModal/SystemPromptModal';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
@@ -47,7 +63,8 @@ function execTargetOf(tab: ChatTab | undefined): string | undefined {
     return list[0]?.sessionId;
 }
 import type { SessionRecord } from '../../hooks/useSessionManager';
-import type { PersonaDefinition, AIModelInfo, LinkableSession, ChatImage } from '../../types/appTypes';
+import type { PersonaDefinition, AIModelInfo, LinkableSession, ChatImage, HostTreeNode, SessionDialogPrefill, AiConnectPolicy, AiLocalShellType } from '../../types/appTypes';
+import type { ResolvedConnect } from '../../utils/aiConnectRequest';
 import { TabStrip } from './TabStrip';
 import { groupLinkableSessions } from './linkPicker';
 import { MODEL_LOAD_RETRY_DELAYS_MS } from './modelLoadRetry';
@@ -60,6 +77,33 @@ import './AIChatPane.css';
 const IMAGE_ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5 MiB per image (decoded)
 const IMAGE_MAX_COUNT = 5; // per message
+
+// ── AI connect requests (ADR-AI-007) ──
+// A malformed request still needs a stable key so the refusal envelope and the
+// card can find each other.
+const INVALID_CONNECT_KEY = 'invalid-request';
+function connectPartKey(parse: ConnectParseResult, shell: AiLocalShellType): string {
+    return parse.ok ? connectRequestKey(parse.request, shell) : INVALID_CONNECT_KEY;
+}
+/** AI-facing reason inside a `Connection Refused` envelope (a prompt token, not UI text). */
+function connectRefusalReason(decision: Extract<GateDecision, { action: 'refuse' }>, maxOpened: number): string {
+    switch (decision.reason) {
+        case 'cap':
+            return `Limit reached: this conversation already has ${maxOpened} AI-opened terminal(s) (max ${maxOpened}). Close one or ask the user.`;
+        case 'invalid':
+            return `Invalid connect block: ${decision.errors ? describeParseErrors(decision.errors) : 'unreadable request'}. Fix the request and send it alone.`;
+        case 'with-execute':
+            return 'A connect block must be the only fenced block in a response and must not be combined with an execute block. Re-send the connect request alone.';
+        case 'multiple':
+            return 'Only one connect block per response is allowed. Re-send a single connect request.';
+    }
+}
+const CONNECT_ENVELOPE_LABEL_KEY: Record<ConnectEnvelopeKind, string> = {
+    connected: 'aiChat.connect.envelope.connected',
+    failed: 'aiChat.connect.envelope.failed',
+    declined: 'aiChat.connect.envelope.declined',
+    refused: 'aiChat.connect.envelope.refused',
+};
 
 /** Read a File into a `{ mimeType, dataBase64 }` (base64 WITHOUT the data: prefix). */
 function fileToChatImage(file: File): Promise<ChatImage> {
@@ -114,6 +158,17 @@ interface AIChatPaneProps {
     onOpenSettings?: () => void;
     /** Resolve the AI data-sharing consent gate (shows the modal if needed). */
     ensureConsent?: () => Promise<boolean>;
+    // ── AI-initiated terminal sessions (ADR-AI-007) ──
+    /** Open a worker session for a resolved, user-approved (or auto-approved) request. */
+    onOpenTerminal?: (tabId: string, resolved: ResolvedConnect) => void;
+    /** The request needs a human-supplied secret → open the pre-filled connection dialog. */
+    onOpenTerminalInDialog?: (tabId: string, prefill: SessionDialogPrefill, key: string) => void;
+    /** Turn an AI worker session into a real terminal tab (tray chip / card action). */
+    onMaterializeWorker?: (sessionId: string) => void;
+    /** Disconnect an AI worker session (tray chip). */
+    onCloseWorker?: (sessionId: string) => void;
+    /** Host Tree — credentials for connect requests that match a saved host. */
+    hostTree?: HostTreeNode[];
 }
 
 // ── AI Icon Component ──
@@ -271,7 +326,19 @@ const MessageContent: React.FC<{
     /** Resolve an execute block's `target=<alias>` to the terminal it will run on,
      *  so the label under each block shows the AUTO-DETECTED target (Phase 2). When
      *  omitted, the block falls back to the single targetTitle/targetId/targetLive. */
-    resolveBlockTarget?: (alias?: string) => { title?: string; id?: string; live: boolean };
+    resolveBlockTarget?: (alias?: string) => { title?: string; id?: string; live: boolean; headless?: boolean };
+    /** AI connect requests in this message (ADR-AI-007): transient state keyed by request key. */
+    connectBlocks?: ReadonlyMap<string, ConnectBlock>;
+    /** Final outcomes for this message's connect requests, derived from later transcript envelopes. */
+    connectOutcomes?: ReadonlyMap<string, ConnectEnvelope>;
+    connectPolicyOff?: boolean;
+    localShellType?: AiLocalShellType;
+    onOpenConnect?: (key: string) => void;
+    onOpenConnectInDialog?: (key: string) => void;
+    onDeclineConnect?: (key: string) => void;
+    onCancelConnectSchedule?: (key: string) => void;
+    onOpenWorkerAsTab?: (alias: string) => void;
+    isWorkerAlias?: (alias: string) => boolean;
     autoExecutedCommands?: Set<string>;
     declinedCommands?: Set<string>;
     /** command → auto-run deadline (epoch ms) for blocks in the pre-run countdown. */
@@ -282,7 +349,12 @@ const MessageContent: React.FC<{
     classifyingCommands?: Set<string>;
     limitReached?: boolean;
     sleepDelay?: ChatTab['sleepDelay'];
-}> = ({ content, onRun, onDecline, onHoverTarget, targetTitle, targetId, targetLive = true, resolveBlockTarget, autoExecutedCommands, declinedCommands, scheduledCommands, onCancelScheduled, verdictByCommand, classifyingCommands, limitReached, sleepDelay }) => {
+}> = ({
+    content, onRun, onDecline, onHoverTarget, targetTitle, targetId, targetLive = true, resolveBlockTarget,
+    connectBlocks, connectOutcomes, connectPolicyOff, localShellType = 'powershell',
+    onOpenConnect, onOpenConnectInDialog, onDeclineConnect, onCancelConnectSchedule, onOpenWorkerAsTab, isWorkerAlias,
+    autoExecutedCommands, declinedCommands, scheduledCommands, onCancelScheduled, verdictByCommand, classifyingCommands, limitReached, sleepDelay,
+}) => {
     const { t } = useTranslation();
     const parts = segmentMessageContent(content);
     // The run-target label for one block, resolved from its own `target=` alias when
@@ -291,7 +363,7 @@ const MessageContent: React.FC<{
         const bt = resolveBlockTarget ? resolveBlockTarget(blockTarget) : { title: targetTitle, id: targetId, live: targetLive };
         return bt.id
             ? (bt.live
-                ? <span className="ai-run-target">{t('aiChat.message.target', { title: bt.title || t('aiChat.message.unnamedTerminal') })}</span>
+                ? <span className={`ai-run-target${bt.headless ? ' ai-run-target-headless' : ''}`}>{t(bt.headless ? 'aiChat.message.targetHeadless' : 'aiChat.message.target', { title: bt.title || t('aiChat.message.unnamedTerminal') })}</span>
                 : <span className="ai-run-target ai-run-target-stale">{t('aiChat.message.targetStale', { title: bt.title || t('aiChat.message.unnamedTerminal') })}</span>)
             : <span className="ai-run-target no-target">{t('aiChat.message.noTarget')}</span>;
     };
@@ -299,6 +371,29 @@ const MessageContent: React.FC<{
     return (
         <>
             {parts.map((part) => {
+                if (part.kind === 'connect' || part.kind === 'connect-pending') {
+                    // An AI request to open a terminal (ADR-AI-007): the card IS the
+                    // confirmation step, rendered in place.
+                    const parse = part.kind === 'connect' ? part.parse : undefined;
+                    const key = parse ? connectPartKey(parse, localShellType) : undefined;
+                    return (
+                        <ConnectRequestCard
+                            key={part.key}
+                            body={part.body}
+                            parse={parse}
+                            block={key ? connectBlocks?.get(key) : undefined}
+                            outcome={key ? connectOutcomes?.get(key) : undefined}
+                            policyOff={connectPolicyOff}
+                            localShellType={localShellType}
+                            onOpen={key ? () => onOpenConnect?.(key) : undefined}
+                            onOpenInDialog={key ? () => onOpenConnectInDialog?.(key) : undefined}
+                            onDecline={key ? () => onDeclineConnect?.(key) : undefined}
+                            onCancelSchedule={key ? () => onCancelConnectSchedule?.(key) : undefined}
+                            onOpenAsTab={onOpenWorkerAsTab}
+                            canOpenAsTab={isWorkerAlias}
+                        />
+                    );
+                }
                 if (part.kind === 'execute-pending') {
                     // Streaming tail: render the styled block immediately with a disabled
                     // button so it updates in place (no jump) when the closing fence arrives.
@@ -445,6 +540,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     onRemoveLink,
     onRefreshSessions,
     onOpenSettings,
+    onOpenTerminal,
+    onOpenTerminalInDialog,
+    onMaterializeWorker,
+    onCloseWorker,
+    hostTree,
 }) => {
     const { t } = useTranslation();
     // Derive active tab from chatState (Phase 2: tabs[] + activeTabId; each tab
@@ -480,6 +580,16 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const maxConcurrentStreams = useSettingsStore(s => s.maxConcurrentStreams) ?? 3;
     const classifierStrategy = useSettingsStore(s => s.classifierStrategy);
     const aiClassifyConfidenceThreshold = useSettingsStore(s => s.aiClassifyConfidenceThreshold);
+    // AI-initiated terminal sessions (ADR-AI-007). `??` guards a store / test mock that
+    // predates these fields, like maxConcurrentStreams below.
+    const aiConnectPolicy: AiConnectPolicy = useSettingsStore(s => s.aiConnectPolicy) ?? 'local-auto';
+    const aiConnectReuseCredentials = useSettingsStore(s => s.aiConnectReuseCredentials) ?? false;
+    const aiMaxWorkerSessionsPerTab = useSettingsStore(s => s.aiMaxWorkerSessionsPerTab) ?? 5;
+    const aiWorkerIdleTimeoutMins = useSettingsStore(s => s.aiWorkerIdleTimeoutMins) ?? 10;
+    const aiLocalShellType: AiLocalShellType = useSettingsStore(s => s.aiLocalShellType) ?? 'powershell';
+    // AI worker sessions (opened by the AI, no tab in this window). Subscribed so
+    // the tray chips and target liveness re-render as workers connect / leave.
+    const workers = useAiWorkerSessionStore((s) => s.workers);
     const aiDataConsentAccepted = useSettingsStore(s => s.aiDataConsentAccepted);
     // Shared with terminal session logging — AI chat transcripts are written to
     // the same user-approved folder, gated by the same toggle.
@@ -543,6 +653,15 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         dispatchAutoExec(action);
     }, []);
     const [autoExecPaused, setAutoExecPaused] = useState(false);
+    // Per-tab TRANSIENT state of AI connect requests (asking / countdown / opening /
+    // dialog). Final outcomes come from transcript envelopes — see
+    // utils/connectRequestReducer. Same lockstep ref+dispatch pattern as autoExec.
+    const [connectState, dispatchConnect] = useReducer(connectRequestReducer, emptyConnectState);
+    const connectStateRef = useRef<ConnectState>(connectState);
+    const applyConnect = useCallback((action: ConnectAction) => {
+        connectStateRef.current = connectRequestReducer(connectStateRef.current, action);
+        dispatchConnect(action);
+    }, []);
 
     const [inputText, setInputText] = useState('');
     // Images the user has attached but not yet sent (per-window, ephemeral — like
@@ -617,16 +736,29 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         () => new Set((activeTab?.linkedSessions ?? []).map((w) => w.sessionId)),
         [activeTab?.linkedSessions],
     );
+    // AI worker sessions belong to the conversation that opened them and are never
+    // offered to another one, so they are excluded from the picker.
     const addLinkGroups = useMemo(
-        () => groupLinkableSessions((linkableSessions ?? []).filter((ls) => !watchedIdSet.has(ls.sessionId))),
+        () => groupLinkableSessions((linkableSessions ?? []).filter((ls) => !watchedIdSet.has(ls.sessionId) && !ls.headless)),
         [linkableSessions, watchedIdSet],
     );
+    // One name/status/host lookup across this window's tabs, AI workers and other
+    // windows' sessions (see utils/sessionLookup).
+    // ADR-AI-007: this must resolve every watched terminal to the SAME display
+    // name (hence alias) as `useAiChat`'s prompt sources and `useAiOrchestrator`'s
+    // envelope sources — an alias the model is given but the resolver rejects is
+    // now a hard refusal, not a fallback. `linkable` is App's merged picker list
+    // (this window's sessions + other windows' live ones), so for a cross-window
+    // session it yields the same `host`-derived name their `crossWindow` does.
+    const renderSources: SessionSources = { sessions, workers, linkable: linkableById };
 
     // Terminals the active tab watches (rendered as a chip row in the header).
     const watchedTerminals = activeTab?.linkedSessions ?? [];
+    // Live AI-opened terminals (workers + materialized) in this conversation — the tray counter.
+    const aiOpenedLive = summarizeAiOpened(buildWatchedViews(watchedTerminals, renderSources).views).liveCount;
     // Comma-joined watched-terminal names for the empty state.
     const watchedNamesLabel = watchedTerminals
-        .map((w) => sessions?.get(w.sessionId)?.displayName ?? linkableById.get(w.sessionId)?.displayName ?? t('aiChat.pane.terminalFallback'))
+        .map((w) => lookupSession(w.sessionId, renderSources)?.displayName ?? t('aiChat.pane.terminalFallback'))
         .join(', ');
 
     // Execute-target info derived from the active tab: the ONE terminal an AI
@@ -635,7 +767,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // Prefer the local session record; fall back to the cross-window linkable list.
     const lastTargetSessionId = execTargetOf(activeTab);
     const lastTargetSessionTitle = lastTargetSessionId
-        ? (sessions?.get(lastTargetSessionId)?.displayName ?? linkableById.get(lastTargetSessionId)?.displayName)
+        ? lookupSession(lastTargetSessionId, renderSources)?.displayName
         : undefined;
     // Liveness of the linked target. A link can point at a session that is
     // disconnected / reconnecting / gone (e.g. SSH dropped while watching), or
@@ -643,7 +775,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // and run-target label reflect this so the UI never looks "connected" when
     // commands can't actually reach the terminal.
     const lastTargetStatus = lastTargetSessionId
-        ? (sessions?.get(lastTargetSessionId)?.status ?? linkableById.get(lastTargetSessionId)?.status)
+        ? lookupSession(lastTargetSessionId, renderSources)?.status
         : undefined;
     const linkedLive = lastTargetStatus === 'connected';
     // Compact signal that changes whenever the active tab's watched SET or any
@@ -651,7 +783,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // to (re-)evaluate each watched device without depending on the whole `sessions`
     // map identity. `sid:1` = connected, `sid:0` = not.
     const watchLivenessKey = watchedTerminals
-        .map((w) => `${w.sessionId}:${(sessions?.get(w.sessionId)?.status ?? linkableById.get(w.sessionId)?.status) === 'connected' ? '1' : '0'}`)
+        .map((w) => `${w.sessionId}:${lookupSession(w.sessionId, renderSources)?.status === 'connected' ? '1' : '0'}`)
         .join(',');
 
     // Mirrors of values the async auto-exec effect must re-check AFTER its await
@@ -678,13 +810,31 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     linkableByIdRef.current = linkableById;
     const activeTabIdRef = useRef(activeTabId);
     activeTabIdRef.current = activeTabId;
+    const workersRef = useRef(workers);
+    workersRef.current = workers;
+    const hostTreeRef = useRef(hostTree);
+    hostTreeRef.current = hostTree;
+    const commandExecutionModeRef = useRef(commandExecutionMode);
+    commandExecutionModeRef.current = commandExecutionMode;
+    const connectSettingsRef = useRef({
+        policy: aiConnectPolicy, reuseCredentials: aiConnectReuseCredentials,
+        maxOpened: aiMaxWorkerSessionsPerTab, idleMinutes: aiWorkerIdleTimeoutMins, localShellType: aiLocalShellType,
+    });
+    connectSettingsRef.current = {
+        policy: aiConnectPolicy, reuseCredentials: aiConnectReuseCredentials,
+        maxOpened: aiMaxWorkerSessionsPerTab, idleMinutes: aiWorkerIdleTimeoutMins, localShellType: aiLocalShellType,
+    };
+    /** Fresh session lookup for callbacks that fire after an await / timer. */
+    const lookupSourcesNow = useCallback((): SessionSources => ({
+        sessions: sessionsRef.current,
+        workers: workersRef.current,
+        linkable: linkableByIdRef.current,
+    }), []);
 
     /** Display name of a watched terminal (this window's, else another's). */
     const resolveTerminalName = useCallback(
-        (sessionId: string) =>
-            sessionsRef.current?.get(sessionId)?.displayName
-            ?? linkableByIdRef.current.get(sessionId)?.displayName,
-        [],
+        (sessionId: string) => lookupSession(sessionId, lookupSourcesNow())?.displayName,
+        [lookupSourcesNow],
     );
     // Persist each conversation to a markdown transcript alongside the terminal
     // session logs (same Settings → General → Logging toggle and folder). Placed
@@ -707,32 +857,35 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
      *  falls back to the tab's exec target (last-focused, else first watched). The
      *  auto-exec continuation can complete on a background tab, so it resolves
      *  per-tab rather than from the active tab. */
-    const resolveTabTarget = useCallback((tabId: string, preferredAlias?: string) => {
+    const resolveTabTarget = useCallback((tabId: string, preferredAlias?: string): {
+        sid?: string; live: boolean; status?: string; headless?: boolean;
+        /** Set when `target=` named an alias this tab does not watch (the command must NOT run). */
+        unknownAlias?: string;
+    } => {
         const tab = chatStateRef.current?.tabs.find((t) => t.id === tabId);
+        const src = lookupSourcesNow();
         let sid: string | undefined;
         if (preferredAlias) {
-            const entries = buildAliasEntries((tab?.linkedSessions ?? []).map((w) => {
-                const rec = sessionsRef.current?.get(w.sessionId);
-                const ls = linkableByIdRef.current.get(w.sessionId);
-                return { sessionId: w.sessionId, displayName: rec?.displayName ?? ls?.displayName ?? w.sessionId, status: rec?.status ?? ls?.status };
-            }));
-            sid = resolveAlias(entries, preferredAlias);
+            const { aliases } = buildWatchedViews(tab?.linkedSessions ?? [], src);
+            sid = resolveAlias(aliases, preferredAlias);
+            // A target= this tab does not watch must never fall back to another
+            // terminal (ADR-AI-007): with AI-opened sessions coming and going, a command
+            // meant for a closed neighbor would otherwise land on the last-focused device.
+            if (!sid) return { sid: undefined, live: false, status: undefined, unknownAlias: preferredAlias };
         }
         if (!sid) sid = execTargetOf(tab);
-        if (!sid) return { sid: undefined as string | undefined, live: false, status: undefined as string | undefined };
-        const status = sessionsRef.current?.get(sid)?.status ?? linkableByIdRef.current.get(sid)?.status;
-        return { sid, live: status === 'connected', status };
-    }, []);
+        if (!sid) return { sid: undefined, live: false, status: undefined };
+        const view = lookupSession(sid, src);
+        return { sid, live: view?.status === 'connected', status: view?.status, headless: view?.headless };
+    }, [lookupSourcesNow]);
     /** Resolve an execute block's `target=` alias to a display target for the label
      *  under it (active tab). Passed to MessageContent so each block shows the
      *  terminal it will actually run on. */
     const resolveBlockTarget = useCallback((alias?: string) => {
-        const { sid, live } = resolveTabTarget(activeTabIdRef.current ?? '', alias);
-        const title = sid
-            ? (sessionsRef.current?.get(sid)?.displayName ?? linkableByIdRef.current.get(sid)?.displayName)
-            : undefined;
-        return { title, id: sid, live };
-    }, [resolveTabTarget]);
+        const { sid, live, headless } = resolveTabTarget(activeTabIdRef.current ?? '', alias);
+        const title = sid ? lookupSession(sid, lookupSourcesNow())?.displayName : undefined;
+        return { title, id: sid, live, headless };
+    }, [resolveTabTarget, lookupSourcesNow]);
     const autoExecPausedRef = useRef(autoExecPaused);
     autoExecPausedRef.current = autoExecPaused;
     const autoExecCountByTabRef = useRef(autoExecCountByTab);
@@ -783,6 +936,37 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             }
         }
     }, [applyAutoExec, clearCountdownTimer]);
+
+    // Pending auto-OPEN countdown timers for AI connect requests (ADR-AI-007), keyed
+    // like countdownTimersRef and cleared at the same lifecycle points.
+    const connectTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+    const connectTimerKey = (tabId: string, blockKey: string) => `${tabId} ${blockKey}`;
+    const clearConnectTimer = useCallback((tabId: string, blockKey: string) => {
+        const key = connectTimerKey(tabId, blockKey);
+        const timer = connectTimersRef.current.get(key);
+        if (timer) { clearTimeout(timer); connectTimersRef.current.delete(key); }
+    }, []);
+    const clearTabConnectTimers = useCallback((tabId: string) => {
+        const prefix = `${tabId} `;
+        for (const [key, timer] of connectTimersRef.current) {
+            if (key.startsWith(prefix)) { clearTimeout(timer); connectTimersRef.current.delete(key); }
+        }
+    }, []);
+    const clearAllConnectTimers = useCallback(() => {
+        for (const timer of connectTimersRef.current.values()) clearTimeout(timer);
+        connectTimersRef.current.clear();
+    }, []);
+    /** Stop every pending auto-open countdown, reverting each card to manual buttons. */
+    const cancelAllConnectScheduled = useCallback(() => {
+        for (const [tabId, blocks] of connectStateRef.current) {
+            for (const [blockKey, block] of blocks) {
+                if (block.status === 'scheduled') {
+                    clearConnectTimer(tabId, blockKey);
+                    applyConnect({ type: 'cancelSchedule', tabId, blockKey });
+                }
+            }
+        }
+    }, [applyConnect, clearConnectTimer]);
 
     // Guards against re-opening the consent modal on every effect re-run while a
     // pending message is parked awaiting consent (the send loop below). Cleared
@@ -969,11 +1153,15 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // Append the watched-terminal alias list (per dispatched tab) so a reply to
             // auto-exec output / kickoff can route via `target=<alias>`. Not stored —
             // the stored instruction stays persona+rules+lang; the list is send-only.
-            const targetsBlock = buildWatchTargetsBlock(buildAliasEntries((tab.linkedSessions ?? []).map((w) => {
-                const rec = sessions?.get(w.sessionId);
-                const ls = linkableById.get(w.sessionId);
-                return { sessionId: w.sessionId, displayName: rec?.displayName ?? ls?.displayName ?? w.sessionId, status: rec?.status ?? ls?.status };
-            })));
+            // …followed by the connect capability block (ADR-AI-007), which lists the
+            // watched terminals with their hosts even for a single one.
+            const linked = tab.linkedSessions ?? [];
+            const { aliases: tabAliases } = buildWatchedViews(linked, renderSources);
+            const targetsBlock = buildWatchTargetsBlock(tabAliases)
+                + buildConnectCapabilityBlock(buildConnectCapabilityInput(linked, renderSources, {
+                    policy: aiConnectPolicy, localShellType: aiLocalShellType,
+                    maxOpened: aiMaxWorkerSessionsPerTab, idleMinutes: aiWorkerIdleTimeoutMins,
+                }));
             // One-shot language-switch notice for this tab (send-only, never stored
             // or rendered — the transcript keeps the clean text, same convention as
             // the watched-terminal context prefix). Appended at the END so
@@ -1051,6 +1239,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     resetAllTabTrackingRef.current = () => {
         clearAllCountdownTimers();
         applyAutoExec({ type: 'resetAll' });
+        clearAllConnectTimers();
+        applyConnect({ type: 'resetAll' });
         kickedForDeviceRef.current.clear();
     };
     useEffect(() => {
@@ -1136,11 +1326,16 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             for (const id of [...m.keys()]) if (!liveIds.has(id)) m.delete(id);
         };
         applyAutoExec({ type: 'prune', liveTabIds: liveIds });
+        applyConnect({ type: 'prune', liveTabIds: liveIds });
         // Drop any pending countdown timers owned by tabs that just closed (timer key
         // is `${tabId} ${blockKey}`; a tab id never contains a space).
         for (const [key, timer] of [...countdownTimersRef.current]) {
             const tabId = key.slice(0, key.indexOf(' '));
             if (!liveIds.has(tabId)) { clearTimeout(timer); countdownTimersRef.current.delete(key); }
+        }
+        for (const [key, timer] of [...connectTimersRef.current]) {
+            const tabId = key.slice(0, key.indexOf(' '));
+            if (!liveIds.has(tabId)) { clearTimeout(timer); connectTimersRef.current.delete(key); }
         }
         pruneMap(kickedForDeviceRef.current as Map<string, unknown>);
         // Per-tab refs the send loop / Stop restore keep for each conversation.
@@ -1154,7 +1349,147 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             return changed ? next : prev;
         });
         pruneStreams(liveIds);
-    }, [tabIdsKey, applyAutoExec, pruneStreams]);
+    }, [tabIdsKey, applyAutoExec, applyConnect, pruneStreams]);
+
+    // ── AI connect requests (ADR-AI-007) ──
+    // Evaluated on stream completion in EVERY execution mode: parse the single
+    // connect fence, resolve where its credentials would come from, and gate it
+    // (policy × credential source × cap × mode). Ask → the card shows the buttons;
+    // auto → the same cancellable countdown as auto-exec; refuse / already-open →
+    // an envelope teaches the model at once.
+    const connectKeyOfParse = (parse: ConnectParseResult) => connectPartKey(parse, connectSettingsRef.current.localShellType);
+
+    const scheduleConnectOpen = (tabId: string, blockKey: string) => {
+        const fire = () => {
+            const b = getConnectBlock(connectStateRef.current, tabId, blockKey);
+            if (!b?.resolved || (b.status !== 'asking' && b.status !== 'scheduled')) return;
+            // Re-validate at fire time: mode / pause / streak may have changed meanwhile.
+            const streakCapped = maxConsecutiveAutoExecutionsRef.current > 0
+                && getAutoExecCount(tabId) >= maxConsecutiveAutoExecutionsRef.current;
+            // The countdown IS the mitigation for auto-open, and its Cancel button
+            // is only rendered for the active tab (the card is built from
+            // `connectState.get(activeTabId)`). Streams complete on background tabs
+            // — so firing there would open a session with nothing on screen and no
+            // way to intervene. Degrade to the manual Open the user sees on switch.
+            if (tabId !== activeTabIdRef.current) {
+                applyConnect({ type: 'cancelSchedule', tabId, blockKey });
+                return;
+            }
+            if (autoExecPausedRef.current || commandExecutionModeRef.current !== 'auto-execute-safe' || streakCapped) {
+                applyConnect({ type: 'cancelSchedule', tabId, blockKey });
+                return;
+            }
+            applyConnect({ type: 'open', tabId, blockKey, auto: true });
+            setAutoExecCountForTab(tabId, (prev) => prev + 1); // an auto-open spends one auto-run
+            onOpenTerminal?.(tabId, b.resolved);
+        };
+        const rawCountdown = aiAutoExecCountdownSecsRef.current;
+        const countdownSecs = Number.isFinite(rawCountdown) ? Math.max(0, Math.min(10, rawCountdown)) : 0;
+        if (countdownSecs <= 0) { fire(); return; }
+        applyConnect({ type: 'schedule', tabId, blockKey, runAt: Date.now() + countdownSecs * 1000 });
+        const key = connectTimerKey(tabId, blockKey);
+        const timer = setTimeout(() => {
+            connectTimersRef.current.delete(key);
+            if (getConnectBlock(connectStateRef.current, tabId, blockKey)?.status !== 'scheduled') return;
+            fire();
+        }, countdownSecs * 1000);
+        connectTimersRef.current.set(key, timer);
+    };
+
+    const handleConnectStreamComplete = (tabId: string, tabMessages: ChatMessage[]) => {
+        const lastMsg = tabMessages[tabMessages.length - 1];
+        if (!lastMsg || lastMsg.role !== 'model') return;
+        const blocks = extractConnectBlocks(lastMsg.content);
+        if (blocks.length === 0) return;
+        const messageIndex = tabMessages.length - 1;
+        const cs = connectSettingsRef.current;
+        const tab = chatStateRef.current?.tabs.find((t) => t.id === tabId);
+        const { views } = buildWatchedViews(tab?.linkedSessions ?? [], lookupSourcesNow());
+        const summary = summarizeAiOpened(views);
+        // Only the FIRST block is evaluated; a second one is exactly what the gate refuses.
+        const { parse } = blocks[0];
+        const resolved = parse.ok
+            ? resolveConnectRequest({
+                request: parse.request,
+                localShellType: cs.localShellType,
+                reuseCredentials: cs.reuseCredentials,
+                watched: views,
+                hostTree: hostTreeRef.current ?? [],
+            })
+            : undefined;
+        const key = connectKeyOfParse(parse);
+        const blockKey = connectBlockKey(messageIndex, key);
+        if (hasConnectBlock(connectStateRef.current, tabId, blockKey)) return;
+        const decision = decideConnectGate({
+            policy: cs.policy,
+            commandExecutionMode: commandExecutionModeRef.current,
+            autoExecPaused: autoExecPausedRef.current,
+            parse,
+            resolved,
+            openedLiveCount: summary.liveCount,
+            maxOpened: cs.maxOpened,
+            blockCountInMessage: blocks.length,
+            hasExecuteInSameMessage: extractExecuteBlocks(lastMsg.content).length > 0,
+        });
+        applyConnect({ type: 'evaluate', tabId, blockKey, key, resolved, decision });
+        switch (decision.action) {
+            case 'already-open':
+                onEnqueuePending?.(tabId, alreadyOpenNote(key, decision.alias));
+                break;
+            case 'refuse':
+                onEnqueuePending?.(tabId, connectRefusedNote(key, connectRefusalReason(decision, cs.maxOpened)));
+                break;
+            case 'auto':
+                scheduleConnectOpen(tabId, blockKey);
+                break;
+            default:
+                break; // inert: nothing to do; ask: the card offers Open / Don't open
+        }
+    };
+
+    const handleOpenConnect = (messageIndex: number, key: string) => {
+        if (!activeTabId) return;
+        const blockKey = connectBlockKey(messageIndex, key);
+        const b = getConnectBlock(connectStateRef.current, activeTabId, blockKey);
+        if (!b?.resolved) return;
+        clearConnectTimer(activeTabId, blockKey);
+        applyConnect({ type: 'open', tabId: activeTabId, blockKey });
+        resetAutoExecCountForTab(activeTabId); // a human intervened — reset the auto-run streak
+        onOpenTerminal?.(activeTabId, b.resolved);
+    };
+    const handleOpenConnectInDialog = (messageIndex: number, key: string) => {
+        if (!activeTabId) return;
+        const blockKey = connectBlockKey(messageIndex, key);
+        const b = getConnectBlock(connectStateRef.current, activeTabId, blockKey);
+        if (b?.resolved?.kind !== 'remote') return;
+        const r = b.resolved;
+        applyConnect({ type: 'dialog', tabId: activeTabId, blockKey });
+        onOpenTerminalInDialog?.(activeTabId, {
+            protocol: r.protocol, host: r.host, port: r.port, username: r.username, displayName: r.displayName, nonce: Date.now(),
+        }, key);
+    };
+    const handleDeclineConnect = (messageIndex: number, key: string) => {
+        if (!activeTabId) return;
+        const blockKey = connectBlockKey(messageIndex, key);
+        clearConnectTimer(activeTabId, blockKey);
+        applyConnect({ type: 'settle', tabId: activeTabId, blockKey });
+        resetAutoExecCountForTab(activeTabId);
+        onEnqueuePending?.(activeTabId, connectDeclinedNote(key));
+    };
+    const handleCancelConnectSchedule = (messageIndex: number, key: string) => {
+        if (!activeTabId) return;
+        const blockKey = connectBlockKey(messageIndex, key);
+        clearConnectTimer(activeTabId, blockKey);
+        applyConnect({ type: 'cancelSchedule', tabId: activeTabId, blockKey });
+        resetAutoExecCountForTab(activeTabId);
+    };
+    /** Resolve an alias (from a Terminal Connected envelope) to a live WORKER session id, if it still is one. */
+    const workerSessionIdForAlias = (alias: string): string | undefined => {
+        const tab = chatStateRef.current?.tabs.find((t) => t.id === activeTabIdRef.current);
+        const { aliases } = buildWatchedViews(tab?.linkedSessions ?? [], lookupSourcesNow());
+        const sid = aliases.find((a) => a.alias.toLowerCase() === alias.toLowerCase())?.sessionId;
+        return sid && workersRef.current[sid] ? sid : undefined;
+    };
 
     // ── Auto-execute safe commands ──
     // Assigned later; the effect calls it via ref (forward reference). Runs a
@@ -1171,6 +1506,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // closure (current settings). No effect-cleanup aborter is needed: the reserve
     // guard blocks a duplicate, and every run precondition is re-checked post-await.
     const handleStreamComplete = (tabId: string, tabMessages: ChatMessage[]) => {
+        // AI connect requests are evaluated in EVERY mode (in ask mode the card simply
+        // shows its buttons); the command auto-exec below is auto-execute-safe only.
+        handleConnectStreamComplete(tabId, tabMessages);
         if (commandExecutionMode !== 'auto-execute-safe') return;
         const lastMsg = tabMessages[tabMessages.length - 1];
         if (!lastMsg || lastMsg.role !== 'model') return;
@@ -1213,7 +1551,13 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // elsewhere.
             if (getBlock(autoExecStateRef.current, tabId, blockKey)?.status === 'declined') return;
             if (autoExecPausedRef.current) return;
-            if (!resolveTabTarget(tabId, target).live) return; // this tab's resolved target, not active
+            const tgt = resolveTabTarget(tabId, target); // this tab's resolved target, not active
+            if (tgt.unknownAlias) {
+                // target= names a terminal this tab does not watch: tell the model, never run elsewhere.
+                onEnqueuePending?.(tabId, unknownTargetNote(command, tgt.unknownAlias));
+                return;
+            }
+            if (!tgt.live) return;
             if (maxConsecutiveAutoExecutionsRef.current > 0
                 && getAutoExecCount(tabId) >= maxConsecutiveAutoExecutionsRef.current) return;
 
@@ -1228,6 +1572,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 handleRunCommandForTabRef.current(tabId, command, target);
                 return;
             }
+            // The countdown's Cancel button only exists on the active tab, and a
+            // stream can complete on a background one. Arming an invisible grace
+            // period is worse than not arming it: leave the block classified so
+            // the user gets a Run button when they switch to that tab.
+            if (tabId !== activeTabIdRef.current) return;
             const runAt = Date.now() + countdownSecs * 1000;
             applyAutoExec({ type: 'schedule', tabId, blockKey, runAt });
             const key = countdownTimerKey(tabId, blockKey);
@@ -1237,7 +1586,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 // cancelled/declined/cleared, the link dropped, auto-exec paused, or
                 // the streak cap reached while it ran.
                 if (getBlock(autoExecStateRef.current, tabId, blockKey)?.status !== 'scheduled') return;
-                if (autoExecPausedRef.current || !resolveTabTarget(tabId, target).live
+                if (tabId !== activeTabIdRef.current
+                    || autoExecPausedRef.current || !resolveTabTarget(tabId, target).live
                     || (maxConsecutiveAutoExecutionsRef.current > 0
                         && getAutoExecCount(tabId) >= maxConsecutiveAutoExecutionsRef.current)) {
                     applyAutoExec({ type: 'cancelSchedule', tabId, blockKey });
@@ -1258,18 +1608,23 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             setAutoExecCountByTab(new Map());   // nothing auto-runs → clear every tab's streak
             // Nothing auto-runs in ask mode → stop any in-flight countdowns.
             cancelAllScheduled();
+            cancelAllConnectScheduled();
         }
-    }, [commandExecutionMode, cancelAllScheduled]);
+    }, [commandExecutionMode, cancelAllScheduled, cancelAllConnectScheduled]);
 
     // Pausing auto-exec must also stop pending countdowns (each reverts to a manual
     // Run/Decline) — otherwise a scheduled command would still fire after Pause.
     useEffect(() => {
-        if (autoExecPaused) cancelAllScheduled();
-    }, [autoExecPaused, cancelAllScheduled]);
+        if (autoExecPaused) {
+            cancelAllScheduled();
+            cancelAllConnectScheduled();
+        }
+    }, [autoExecPaused, cancelAllScheduled, cancelAllConnectScheduled]);
 
     // Belt-and-braces: clear every countdown timer on unmount so a fired timer can't
     // touch a torn-down pane.
     useEffect(() => clearAllCountdownTimers, [clearAllCountdownTimers]);
+    useEffect(() => clearAllConnectTimers, [clearAllConnectTimers]);
 
     // ── Load models when authenticated ──
     // An empty/failed fetch retries with backoff (MODEL_LOAD_RETRY_DELAYS_MS)
@@ -1374,9 +1729,16 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // Run button (for the active tab) and by auto-exec (which can complete on a
     // background tab whose linked session differs from the active one).
     const handleRunCommandForTab = (tabId: string, command: string, target?: string) => {
-        const { sid, live, status } = resolveTabTarget(tabId, target);
-        if (!sid) return;
+        const { sid, live, status, unknownAlias } = resolveTabTarget(tabId, target);
         const cleanCmd = command.trim();
+        if (unknownAlias) {
+            // target= names a terminal this tab does not watch. Never fall back to another
+            // terminal (a command meant for a closed neighbor must not land on the core
+            // device) — feed the fact back to the model instead.
+            onEnqueuePending?.(tabId, unknownTargetNote(cleanCmd, unknownAlias));
+            return;
+        }
+        if (!sid) return;
         // Fail loudly when the linked terminal isn't live. Without this, sending to
         // a dead/stale session is a silent no-op (the backend has no such session,
         // and the send error is swallowed) — the exact symptom after an SSH drop +
@@ -1595,6 +1957,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // "Auto-executed" badge doesn't linger from the old chat.
             clearTabCountdownTimers(activeTabId);
             applyAutoExec({ type: 'clearTab', tabId: activeTabId });
+            clearTabConnectTimers(activeTabId);
+            applyConnect({ type: 'clearTab', tabId: activeTabId });
             resetAutoExecCountForTab(activeTabId);
             // Cancel any in-flight client-side sleep delay for this tab: clearing
             // sleepDelay invalidates the token its timer checks, so it no-ops.
@@ -1709,10 +2073,65 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     {isAuthenticated && (watchedTerminals.length > 0 || addLinkGroups.local.length + addLinkGroups.remote.length > 0) && (
                         <div className="ai-chat-link-row">
                             {watchedTerminals.map((w) => {
-                                const name = sessions?.get(w.sessionId)?.displayName ?? linkableById.get(w.sessionId)?.displayName;
-                                const status = sessions?.get(w.sessionId)?.status ?? linkableById.get(w.sessionId)?.status;
+                                const view = lookupSession(w.sessionId, renderSources);
+                                const name = view?.displayName;
+                                const status = view?.status;
                                 const stale = status !== 'connected';
                                 const label = name || t('aiChat.pane.terminalFallback');
+                                const worker = workers[w.sessionId];
+                                if (worker) {
+                                    // AI worker session (ADR-AI-007): no tab to jump to, so the chip
+                                    // offers "open as tab" and "disconnect" instead of focus / unwatch.
+                                    const connecting = worker.status === 'connecting';
+                                    const statusLabel = connecting ? t('aiChat.connect.statusConnecting') : (status ?? t('aiChat.pane.statusDisconnected'));
+                                    return (
+                                        <div
+                                            key={w.sessionId}
+                                            className={`ai-chat-link ai-chat-link-worker${stale && !connecting ? ' ai-chat-link-stale' : ''}`}
+                                            style={activeConvColor ? ({ '--accent-color': activeConvColor } as React.CSSProperties) : undefined}
+                                            data-testid="ai-worker-chip"
+                                        >
+                                            <span
+                                                className="ai-chat-linked-chip ai-chat-worker-chip"
+                                                title={t('aiChat.connect.trayChipTitle', { name: label, status: statusLabel })}
+                                            >
+                                                {/* robot icon: an AI-opened session */}
+                                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                                    <rect x="4" y="8" width="16" height="12" rx="2" />
+                                                    <path d="M12 2v6" />
+                                                    <circle cx="9" cy="14" r="1" />
+                                                    <circle cx="15" cy="14" r="1" />
+                                                </svg>
+                                                <span className="ai-chat-linked-chip-name">{label}</span>
+                                                {connecting && <span className="ai-chat-worker-spinner" aria-hidden="true" />}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                className="ai-chat-link-unlink ai-chat-worker-action"
+                                                title={t('aiChat.connect.trayOpenAsTab', { name: label })}
+                                                aria-label={t('aiChat.connect.trayOpenAsTab', { name: label })}
+                                                onClick={() => onMaterializeWorker?.(w.sessionId)}
+                                            >
+                                                {/* open-in-tab icon */}
+                                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                                    <rect x="3" y="5" width="18" height="14" rx="2" />
+                                                    <path d="M3 9h18" />
+                                                </svg>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="ai-chat-link-unlink"
+                                                title={t('aiChat.connect.trayDisconnect', { name: label })}
+                                                aria-label={t('aiChat.connect.trayDisconnect', { name: label })}
+                                                onClick={() => onCloseWorker?.(w.sessionId)}
+                                            >
+                                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                                                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    );
+                                }
                                 return (
                                     <div
                                         key={w.sessionId}
@@ -1762,6 +2181,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     </div>
                                 );
                             })}
+                            {aiOpenedLive > 0 && (
+                                <span
+                                    className="ai-chat-worker-counter"
+                                    title={t('aiChat.connect.trayCounterTitle', { count: aiOpenedLive, max: aiMaxWorkerSessionsPerTab })}
+                                >
+                                    {t('aiChat.connect.trayCounter', { count: aiOpenedLive, max: aiMaxWorkerSessionsPerTab })}
+                                </span>
+                            )}
                             {(addLinkGroups.local.length + addLinkGroups.remote.length) > 0 && (
                                 <div className="ai-chat-link-attach ai-chat-link-add">
                                     {/* plus icon */}
@@ -1924,6 +2351,25 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             let autoExecutedCommands: Set<string> | undefined;
                             let declinedCommands: Set<string> | undefined;
                             let scheduledCommands: Map<string, number> | undefined;
+                            // AI connect requests (ADR-AI-007): this message's transient card
+                            // states (reducer) and final outcomes (later transcript envelopes).
+                            let connectBlocksForMsg: Map<string, ConnectBlock> | undefined;
+                            let connectOutcomesForMsg: Map<string, ConnectEnvelope> | undefined;
+                            if (msg.role === 'model' && activeTabId && msg.content.includes('```connect')) {
+                                const prefix = `${idx}:connect:`;
+                                const tabBlocks = connectState.get(activeTabId);
+                                if (tabBlocks) {
+                                    for (const [bk, b] of tabBlocks) {
+                                        if (bk.startsWith(prefix)) (connectBlocksForMsg ??= new Map()).set(b.key, b);
+                                    }
+                                }
+                                for (let j = idx + 1; j < messages.length; j++) {
+                                    const m = messages[j];
+                                    if (m.role !== 'user') continue;
+                                    const env = parseConnectEnvelope(m.content);
+                                    if (env && !connectOutcomesForMsg?.has(env.key)) (connectOutcomesForMsg ??= new Map()).set(env.key, env);
+                                }
+                            }
                             if (msg.role === 'model' && activeTabId) {
                                 const commands = extractExecuteCommands(msg.content);
                                 const dec = collectMessageDecorations(autoExecState, activeTabId, idx, commands);
@@ -1974,9 +2420,20 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                             classifyingCommands={classifyingCommands}
                                             limitReached={commandExecutionMode === 'auto-execute-safe' && maxConsecutiveAutoExecutions > 0 && (activeTabId ? (autoExecCountByTab.get(activeTabId) ?? 0) : 0) >= maxConsecutiveAutoExecutions}
                                             sleepDelay={activeTab?.sleepDelay}
+                                            connectBlocks={connectBlocksForMsg}
+                                            connectOutcomes={connectOutcomesForMsg}
+                                            connectPolicyOff={aiConnectPolicy === 'off'}
+                                            localShellType={aiLocalShellType}
+                                            onOpenConnect={(key) => handleOpenConnect(idx, key)}
+                                            onOpenConnectInDialog={(key) => handleOpenConnectInDialog(idx, key)}
+                                            onDeclineConnect={(key) => handleDeclineConnect(idx, key)}
+                                            onCancelConnectSchedule={(key) => handleCancelConnectSchedule(idx, key)}
+                                            onOpenWorkerAsTab={(alias) => { const sid = workerSessionIdForAlias(alias); if (sid) onMaterializeWorker?.(sid); }}
+                                            isWorkerAlias={(alias) => !!workerSessionIdForAlias(alias)}
                                         />
                                     ) : (() => {
                                         const parsed = parseTerminalOutputMessage(msg.content);
+                                        const connectEnv = parsed ? null : parseConnectEnvelope(msg.content);
                                         return (
                                             <>
                                                 {msg.images && msg.images.length > 0 && (
@@ -1993,7 +2450,15 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                                 )}
                                                 {msg.content && (parsed
                                                     ? <TerminalOutputBlock cmd={parsed.cmd} output={parsed.output} />
-                                                    : <pre>{msg.content}</pre>)}
+                                                    : connectEnv
+                                                        ? (
+                                                            <TerminalOutputBlock
+                                                                label={t(CONNECT_ENVELOPE_LABEL_KEY[connectEnv.kind])}
+                                                                cmd={connectEnv.alias ? `${connectEnv.key} → ${connectEnv.alias}` : connectEnv.key}
+                                                                output={connectEnv.body}
+                                                            />
+                                                        )
+                                                        : <pre>{msg.content}</pre>)}
                                             </>
                                         );
                                     })()}
@@ -2027,6 +2492,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         targetId={lastTargetSessionId}
                                         targetLive={linkedLive}
                                         resolveBlockTarget={resolveBlockTarget}
+                                        connectPolicyOff={aiConnectPolicy === 'off'}
+                                        localShellType={aiLocalShellType}
                                     />
                                 </div>
                             </div>

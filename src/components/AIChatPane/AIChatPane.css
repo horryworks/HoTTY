@@ -1386,3 +1386,83 @@
     font-style: italic;
     color: var(--text-tertiary);
 }
+
+/* ── AI connect request card (ADR-AI-007) ──
+   Reuses the execute-block shell (.ai-execute-block, .ai-run-btn, .ai-decline-btn,
+   badges, tone bars); only the head / meta rows are new. */
+.ai-connect-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px 4px;
+}
+.ai-connect-icon {
+    display: inline-flex;
+    color: var(--accent-color);
+}
+.ai-connect-title {
+    font-weight: 600;
+    font-size: calc(var(--font-size-base) - 1px);
+}
+.ai-connect-target {
+    font-family: var(--font-family);
+    font-size: calc(var(--font-size-base) - 1px);
+    color: var(--text-primary);
+}
+.ai-connect-headless {
+    font-size: calc(var(--font-size-base) - 3px);
+    color: var(--text-tertiary);
+}
+.ai-execute-block pre.ai-connect-body {
+    margin: 0 12px 6px;
+}
+.ai-connect-meta {
+    list-style: none;
+    margin: 0;
+    padding: 0 12px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: calc(var(--font-size-base) - 2px);
+    color: var(--text-secondary);
+}
+.ai-connect-meta-warn {
+    color: var(--color-warning);
+    font-weight: 500;
+}
+.ai-connect-meta-danger {
+    color: var(--color-danger);
+}
+.ai-connect-failed-badge {
+    color: var(--color-danger);
+    background-color: color-mix(in srgb, var(--color-danger) 14%, transparent);
+}
+.ai-run-target-headless {
+    font-style: italic;
+}
+
+/* ── Tray: AI worker session chips + counter ── */
+.ai-chat-worker-chip {
+    cursor: default;
+}
+.ai-chat-worker-spinner {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: ai-worker-spin 0.8s linear infinite;
+}
+@keyframes ai-worker-spin {
+    to { transform: rotate(360deg); }
+}
+.ai-chat-worker-counter {
+    font-size: calc(var(--font-size-base) - 3px);
+    color: var(--text-tertiary);
+    padding: 2px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    white-space: nowrap;
+}

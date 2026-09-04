@@ -4,6 +4,9 @@ import {
   getPaneContentType,
   isFeaturePane,
   getFeatureDisplayName,
+  makeWorkerSessionId,
+  isWorkerSessionId,
+  WORKER_SESSION_PREFIX,
   type FeaturePaneType,
 } from './paneTypes';
 
@@ -75,6 +78,24 @@ describe('paneTypes', () => {
     it('returns false for the retired text-editor and file-explorer prefixes', () => {
       expect(isFeaturePane('te-abc')).toBe(false);
       expect(isFeaturePane('fe-abc')).toBe(false);
+    });
+  });
+
+  describe('AI worker session ids', () => {
+    it('mints ids with the h- prefix that are still plain sessions to the pane model', () => {
+      const id = makeWorkerSessionId();
+      expect(id.startsWith(WORKER_SESSION_PREFIX)).toBe(true);
+      expect(isWorkerSessionId(id)).toBe(true);
+      // A worker that is later materialized into a tab keeps its id, so the id
+      // must never resolve to a feature pane type.
+      expect(getPaneContentType(id)).toBe('session');
+      expect(isFeaturePane(id)).toBe(false);
+    });
+
+    it('does not mistake ordinary session or pane ids for workers', () => {
+      expect(isWorkerSessionId('s-m1abc-xyz')).toBe(false);
+      expect(isWorkerSessionId('ai-abc')).toBe(false);
+      expect(isWorkerSessionId('')).toBe(false);
     });
   });
 

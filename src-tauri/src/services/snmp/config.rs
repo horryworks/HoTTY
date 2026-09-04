@@ -22,7 +22,6 @@ use zeroize::{Zeroize, Zeroizing};
 /// the switch's control-plane CPU; hammering one at 1 s (which the Ping Monitor
 /// happily allows for ICMP) is genuinely abusive on a chassis with 200 ports.
 pub const MIN_INTERVAL_MS: u64 = 5_000;
-pub const DEFAULT_INTERVAL_MS: u64 = 10_000;
 
 const MIN_TIMEOUT_MS: u64 = 200;
 const MAX_TIMEOUT_MS: u64 = 10_000;

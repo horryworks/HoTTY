@@ -9,6 +9,8 @@ use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 
+use super::net_validation::validate_host;
+
 use super::jumpbox::{establish_tunnel, JumpboxConfig, JumpboxHandler};
 use super::read_pump::MAX_COALESCE_BYTES;
 use super::session_service::{
@@ -80,9 +82,7 @@ fn default_connect_timeout_secs() -> u32 {
 
 impl TelnetConfig {
     pub fn validate(&self) -> Result<(), SessionError> {
-        if self.host.trim().is_empty() {
-            return Err(SessionError::InvalidConfig("Host is required".into()));
-        }
+        validate_host(&self.host).map_err(SessionError::InvalidConfig)?;
         if self.port == 0 {
             return Err(SessionError::InvalidConfig("Port must be 1-65535".into()));
         }
@@ -814,6 +814,22 @@ mod tests {
         };
         let err = cfg.validate().unwrap_err();
         assert_eq!(err.to_string(), "Host is required");
+    }
+
+    #[test]
+    fn validate_rejects_host_with_metachars() {
+        let cfg = TelnetConfig {
+            host: "192.0.2.20; reboot".into(),
+            port: 23,
+            username: None,
+            password: None,
+            encoding: "utf8".into(),
+            keepalive_interval_secs: 0,
+            connect_timeout_secs: 5,
+            jumpbox: None,
+        };
+        let err = cfg.validate().unwrap_err();
+        assert_eq!(err.to_string(), "Host contains invalid characters");
     }
 
     #[test]

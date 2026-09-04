@@ -51,3 +51,22 @@ export function isFeaturePane(id: string): boolean {
 export function getFeatureDisplayName(type: FeaturePaneType): string {
   return FEATURE_DISPLAY_NAMES[type];
 }
+
+/**
+ * AI worker sessions: backend sessions the AI Chat opened on its own behalf that
+ * have NO tab and NO xterm in this window (their output lives only in the
+ * backend watch buffer). They carry a distinct id prefix so that (a) they can
+ * never be mistaken for a pane/tab id, and (b) other windows' link pickers can
+ * exclude them from `list_all_sessions`. `getPaneContentType` still reports
+ * 'session' for them — a worker session that is later "materialized" into a real
+ * tab keeps its id, so the id must remain a valid session id.
+ */
+export const WORKER_SESSION_PREFIX = 'h-';
+
+export function makeWorkerSessionId(): string {
+  return `${WORKER_SESSION_PREFIX}${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function isWorkerSessionId(id: string): boolean {
+  return id.startsWith(WORKER_SESSION_PREFIX);
+}

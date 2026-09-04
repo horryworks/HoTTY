@@ -14,7 +14,7 @@ import { useSidebarLayoutStore } from '../../stores/sidebarLayoutStore';
 import { useResize } from '../../hooks/useResize';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { SessionRecord } from '../../hooks/useSessionManager';
-import type { HostTreeNode, HostEntry, ProtocolId, Encoding, BookmarkNode } from '../../types/appTypes';
+import type { HostTreeNode, HostEntry, ProtocolId, Encoding, BookmarkNode, SessionDialogPrefill } from '../../types/appTypes';
 import type {
     SshConnectionConfig,
     TelnetConnectionConfig,
@@ -79,6 +79,13 @@ interface SessionDialogProps {
     /** Open a Web Browser pane from the Web tab and close the dialog. With a URL
      *  (a bookmark) it loads that site; without one it opens a blank tab. */
     onOpenBookmark?: (url?: string) => void;
+    /**
+     * Pre-fill the New Connection form (ADR-AI-007): an AI connect request whose
+     * host needs a human-supplied secret lands here with protocol / host / port /
+     * username set, so the user only types the password. Applied whenever the
+     * dialog is open and `nonce` changes.
+     */
+    prefill?: SessionDialogPrefill;
 }
 
 const PROTOCOLS: { value: ProtocolId; label: string }[] = [
@@ -101,6 +108,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     onCancelConnect,
     sessions,
     onOpenBookmark,
+    prefill,
 }) => {
     const { t } = useTranslation();
     const hostManager = useHostManager();
@@ -457,6 +465,30 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setPrivateKeyPassphrase('');
         setFixedTerminalSize('default');
     }, []);
+
+    // AI connect request needing a human-supplied secret (ADR-AI-007): pre-fill
+    // the New Connection form so the user only has to type the password. Keyed
+    // on the prefill NONCE (mirrored through a ref, synced in its own effect) so
+    // an identical request re-applies while a mere re-render of the same request
+    // leaves the user's edits alone — without an exhaustive-deps suppression,
+    // which would make the React Compiler skip this component.
+    const prefillRef = useRef(prefill);
+    useEffect(() => { prefillRef.current = prefill; }, [prefill]);
+    const prefillNonce = prefill?.nonce;
+    useEffect(() => {
+        const p = prefillRef.current;
+        if (!isOpen || !p || p.nonce !== prefillNonce) return;
+        /* eslint-disable react-hooks/set-state-in-effect */
+        setActiveSidebarTab('hosts');
+        setNewConnectionDraft(null);
+        resetForm();
+        setProtocol(p.protocol);
+        setPort(String(p.port));
+        setHost(p.host);
+        setUsername(p.username ?? '');
+        setDisplayName(p.displayName ?? '');
+        /* eslint-enable react-hooks/set-state-in-effect */
+    }, [isOpen, prefillNonce, resetForm, setActiveSidebarTab]);
 
     // Subscription effect: watches the parent's sessions map for any session
     // initiated from this dialog transitioning to 'connected'. For saved-host /

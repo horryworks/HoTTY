@@ -66,8 +66,22 @@ function makeAiChat(states: Map<string, AiChatState>): OrchestratorAiChatApi {
   } as unknown as OrchestratorAiChatApi;
 }
 
+// Worker-session API stub (the connect feature has its own test file).
+function makeWorkers(): UseAiOrchestratorOptions['workers'] {
+  return {
+    openWorkerSession: vi.fn(() => 'h-test'),
+    closeWorkerSession: vi.fn(),
+    closeWorkersForTab: vi.fn(),
+    closeWorkersForPane: vi.fn(),
+    materializeWorker: vi.fn().mockResolvedValue(true),
+    touchWorker: vi.fn(),
+  };
+}
+
 function makeOptions(overrides: Partial<UseAiOrchestratorOptions> = {}): UseAiOrchestratorOptions {
   return {
+    workers: makeWorkers(),
+    hostTree: [],
     sessions: makeSessions(),
     featurePanes: new Map<string, FeaturePaneInfo>([[PANE, { id: PANE, type: 'ai-chat', displayName: 'AI Chat' }]]),
     lastTerminalSessionId: null,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { segmentMessageContent, extractExecuteCommands, extractExecuteBlocks, type ContentPart } from './executeBlockUtils';
+import { segmentMessageContent, extractExecuteCommands, extractExecuteBlocks, extractConnectBlocks, type ContentPart } from './executeBlockUtils';
 
 // Triple-backtick fence, kept in a constant to avoid backtick juggling in test strings.
 const F = '```';
@@ -155,5 +155,48 @@ describe('extractExecuteCommands', () => {
     it('excludes pending (unclosed) execute blocks', () => {
         const content = `${F}execute\nls\n${F}\n\n${F}execute\npwd`; // second fence not closed
         expect(extractExecuteCommands(content)).toEqual(['ls']);
+    });
+});
+
+describe('connect fences (ADR-AI-007)', () => {
+    it('recognizes a closed connect block and parses its body once', () => {
+        const content = `Let me look at the neighbor.\n\n${F}connect\ntype: ssh\nhost: 192.0.2.10\nuser: alice\n${F}`;
+        const parts = segmentMessageContent(content);
+        const c = parts.find((p) => p.kind === 'connect') as Extract<ContentPart, { kind: 'connect' }>;
+        expect(c).toBeDefined();
+        expect(c.key.endsWith('-connect')).toBe(true);
+        expect(c.body).toBe('type: ssh\nhost: 192.0.2.10\nuser: alice');
+        expect(c.parse.ok).toBe(true);
+        if (c.parse.ok) expect(c.parse.request).toEqual({ type: 'ssh', host: '192.0.2.10', user: 'alice' });
+        expect(parts.some((p) => p.kind === 'execute')).toBe(false);
+    });
+
+    it('renders a trailing unclosed connect fence as connect-pending with a stable key', () => {
+        const streaming = segmentMessageContent(`intro\n${F}connect\ntype: local`);
+        const pending = streaming.find((p) => p.kind === 'connect-pending') as Extract<ContentPart, { kind: 'connect-pending' }>;
+        expect(pending).toBeDefined();
+        expect(pending.body).toBe('type: local');
+        const closed = segmentMessageContent(`intro\n${F}connect\ntype: local\n${F}`);
+        const done = closed.find((p) => p.kind === 'connect') as Extract<ContentPart, { kind: 'connect' }>;
+        expect(done.key).toBe(pending.key);
+    });
+
+    it('never promotes a plain code block that merely mentions connect', () => {
+        const parts = segmentMessageContent(`${F}bash\nconnect\ntype: ssh\n${F}`);
+        expect(parts.some((p) => p.kind === 'connect' || p.kind === 'connect-pending')).toBe(false);
+    });
+
+    it('keeps parse errors on the part so the card can show them', () => {
+        const parts = segmentMessageContent(`${F}connect\ntype: ssh\nhost: bad host\n${F}`);
+        const c = parts.find((p) => p.kind === 'connect') as Extract<ContentPart, { kind: 'connect' }>;
+        expect(c.parse.ok).toBe(false);
+    });
+
+    it('extractConnectBlocks returns closed blocks only and leaves execute extraction untouched', () => {
+        const content = `${F}connect\ntype: local\n${F}\n\n${F}execute\nping 192.0.2.1\n${F}\n\n${F}connect\ntype: ssh`;
+        const blocks = extractConnectBlocks(content);
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0].body).toBe('type: local');
+        expect(extractExecuteBlocks(content)).toEqual([{ command: 'ping 192.0.2.1', target: undefined }]);
     });
 });

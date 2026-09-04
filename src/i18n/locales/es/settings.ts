@@ -221,6 +221,25 @@ export const settings = {
     concurrentStreams: 'Respuestas de chat de IA en paralelo',
     concurrentStreamsHelp:
       'Cuántas pestañas de chat de IA pueden recibir una respuesta a la vez en un panel. Los envíos adicionales se ponen en cola y empiezan cuando terminan las respuestas. 1 = estrictamente de una en una. Redúcelo si tu proveedor limita la tasa (p. ej., el nivel gratuito de Gemini). Máximo 8. Predeterminado: 3.',
+    connectPolicy: 'Permitir que la IA abra terminales',
+    connectPolicyHelp:
+      'La IA puede pedir a HoTTY que abra una shell del PC (para ejecutar ping / tracert / nslookup) o una sesión SSH/Telnet a un vecino encontrado mediante CDP/LLDP. Estas sesiones no tienen pestaña (su salida se captura para la IA) y pueden abrirse como pestaña en cualquier momento. Desactivado: se ignoran las solicitudes. Preguntar: cada solicitud requiere su aprobación en el chat. Shell local automática: las shells del PC se abren sin preguntar; los inicios de sesión en dispositivos siguen preguntando. Local + árbol de hosts automático: también abre SSH/Telnet cuyo host coincide con una entrada del árbol de hosts, con sus credenciales guardadas. La apertura automática solo se aplica en el modo de ejecución automática y usa la cuenta atrás de ejecución automática. Predeterminado: preguntar siempre.',
+    connectPolicyOff: 'Desactivado',
+    connectPolicyAsk: 'Preguntar siempre',
+    connectPolicyLocalAuto: 'Shell local automática, dispositivos preguntan',
+    connectPolicyHostTreeAuto: 'Shell local + hosts del árbol automáticos',
+    connectLocalShell: 'Shell del PC para la IA',
+    connectLocalShellHelp:
+      'La shell que HoTTY abre cuando la IA solicita un terminal local. Una por conversación: una segunda solicitud reutiliza la abierta.',
+    connectMaxPerTab: 'Máximo de terminales abiertos por la IA por conversación',
+    connectMaxPerTabHelp:
+      'Terminales activos que la IA puede tener abiertos en una conversación (incluidos los convertidos en pestañas). Protege las limitadas líneas VTY del dispositivo. Cerrar uno libera un hueco. 1–10. Predeterminado: 5.',
+    connectIdleTimeout: 'Cerrar terminales de IA inactivos tras (minutos)',
+    connectIdleTimeoutHelp:
+      'Un terminal abierto por la IA sin pestaña que la IA no haya usado durante este tiempo se desconecta automáticamente. Los convertidos en pestaña son suyos y permanecen abiertos. 0 = nunca. Predeterminado: 10.',
+    connectReuseCredentials: 'Permitir reutilizar las credenciales de un terminal monitorizado',
+    connectReuseCredentialsHelp:
+      'Cuando la IA nombra un terminal monitorizado (via: <alias>) en una solicitud, copia el usuario Y la contraseña de esa sesión al nuevo inicio de sesión SSH/Telnet. Siempre pide confirmación e indica de qué terminal proceden las credenciales. Desactivado: solo se hereda el usuario. Desactivado por defecto porque un vecino CDP/LLDP falsificado podría dirigir a la IA a un host malicioso.',
     deviceResponseTimeout: 'Tiempo de espera de respuesta del dispositivo (segundos)',
     deviceResponseTimeoutHelp:
       'Si el dispositivo no produce nueva salida durante esta cantidad de segundos tras un comando, se informa a la IA de que el dispositivo dejó de responder para que el bucle pueda continuar. 0 desactiva la detección de inactividad. Predeterminado: 10.',

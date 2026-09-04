@@ -221,6 +221,25 @@ export const settings = {
     concurrentStreams: '병렬 AI 채팅 응답',
     concurrentStreamsHelp:
       '한 패널에서 동시에 응답을 받을 수 있는 AI 채팅 탭 수입니다. 초과 전송은 대기열에 들어가 응답이 끝나면 시작됩니다. 1은 한 번에 하나씩(기존 동작). 제공자가 속도를 제한하면(예: Gemini 무료 등급) 낮추세요. 최대 8. 기본값: 3.',
+    connectPolicy: 'AI가 터미널을 열도록 허용',
+    connectPolicyHelp:
+      'AI는 HoTTY에 PC 셸(ping / tracert / nslookup 실행용) 또는 CDP/LLDP로 발견한 인접 장비로의 SSH/Telnet 세션을 열도록 요청할 수 있습니다. 이 세션에는 탭이 없으며 출력은 AI용으로 캡처됩니다. 언제든지 탭으로 열 수 있습니다. 끄기: 요청을 무시합니다. 항상 확인: 모든 요청에 채팅에서 승인이 필요합니다. 로컬 셸 자동: PC 셸은 묻지 않고 열고, 장비 로그인은 확인합니다. 로컬 + 호스트 트리 자동: 호스트 트리 항목과 일치하는 SSH/Telnet도 저장된 자격 증명으로 엽니다. 자동 열기는 자동 실행 모드에서만 적용되며 자동 실행 카운트다운을 사용합니다. 기본값: 항상 확인.',
+    connectPolicyOff: '끄기',
+    connectPolicyAsk: '항상 확인',
+    connectPolicyLocalAuto: '로컬 셸 자동, 장비는 확인',
+    connectPolicyHostTreeAuto: '로컬 셸 + 호스트 트리 장비 자동',
+    connectLocalShell: 'AI용 PC 셸',
+    connectLocalShellHelp:
+      'AI가 로컬 터미널을 요청할 때 HoTTY가 여는 셸입니다. 대화당 하나이며, 두 번째 요청은 열려 있는 것을 재사용합니다.',
+    connectMaxPerTab: '대화당 AI가 여는 터미널 최대 수',
+    connectMaxPerTabHelp:
+      '한 대화에서 AI가 동시에 열어 둘 수 있는 터미널 수(탭으로 전환한 것 포함). 장비의 제한된 VTY 회선을 보호합니다. 하나를 닫으면 자리가 비워집니다. 1–10. 기본값: 5.',
+    connectIdleTimeout: '유휴 AI 터미널 닫기까지(분)',
+    connectIdleTimeoutHelp:
+      '탭이 없는 AI가 연 터미널을 AI가 이 시간 동안 사용하지 않으면 자동으로 연결을 끊습니다. 탭으로 전환한 터미널은 사용자의 것이며 열린 채로 남습니다. 0 = 끊지 않음. 기본값: 10.',
+    connectReuseCredentials: '감시 중인 터미널의 자격 증명 재사용 허용',
+    connectReuseCredentialsHelp:
+      'AI가 요청에서 감시 중인 터미널을 지정(via: <별칭>)하면 해당 세션의 로그인 이름과 비밀번호를 새 SSH/Telnet 로그인에 복사합니다. 항상 확인을 요청하며 어느 터미널의 자격 증명인지 표시합니다. 끄기: 로그인 이름만 상속합니다. 위조된 CDP/LLDP 인접 정보로 AI가 악성 호스트로 유도될 수 있으므로 기본값은 끄기입니다.',
     deviceResponseTimeout: '장치 응답 시간 초과 (초)',
     deviceResponseTimeoutHelp:
       '명령 실행 후 이 초 동안 장치에서 새 출력이 생성되지 않으면, 루프를 계속할 수 있도록 AI에게 장치가 응답을 멈췄다고 알립니다. 0이면 유휴 감지를 사용 안 함으로 설정합니다. 기본값: 10.',

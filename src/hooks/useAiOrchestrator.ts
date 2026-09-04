@@ -19,16 +19,37 @@ import {
   type AiChatState,
   type ChatTab,
 } from './useAiChat';
-import type { SessionInfo } from '../types/appTypes';
+import type {
+  HostTreeNode,
+  LocalConnectionConfig,
+  ProtocolId,
+  SessionInfo,
+  SshConnectionConfig,
+  TelnetConnectionConfig,
+} from '../types/appTypes';
 import type { FeaturePaneInfo } from '../utils/paneTypes';
-import { evaluateWatchPoll } from '../utils/aiCommandWatch';
+import type { AnyConfig } from './useSessionManager';
+import type { UseAiWorkerSessionsReturn } from './useAiWorkerSessions';
+import { useAiWorkerSessionStore } from '../stores/aiWorkerSessionStore';
+import { flattenHosts } from './useHostManager';
+import { lookupSession } from '../utils/sessionLookup';
+import { buildWatchedViews } from '../utils/aiConnectContext';
+import { localShellProtocol, summarizeAiOpened, type ResolvedConnect } from '../utils/aiConnectRequest';
+import { buildConfigFromHostNode } from '../utils/hostConnectConfig';
+import { slugifyAlias } from '../utils/terminalAlias';
+import { evaluateWatchPoll, PROMPT_PATTERN } from '../utils/aiCommandWatch';
 import { parseLeadingSleep, clampDelay, syntheticDelayMessage, type SleepDelayParse } from '../utils/aiCommandDelay';
 import { sessionBindingKey } from '../utils/sessionBindingKey';
 import { redactSecrets } from '../utils/redaction';
 import { selectAutoRebinds, type RebindSession, type RebindOrphanTab } from '../utils/autoRebind';
 import { decideWatchToggle, planWatchIn } from '../utils/watchRouting';
 import { conversationColorIndex } from '../utils/conversationColor';
-import { notConnectedNote } from '../components/AIChatPane/terminalOutputUtils';
+import {
+  connectedNote,
+  connectFailedNote,
+  connectRefusedNote,
+  notConnectedNote,
+} from '../components/AIChatPane/terminalOutputUtils';
 import { IS_TAURI } from '../utils/windowLabel';
 
 // Diagnostic logger for the AI command-execution pipeline.
@@ -62,7 +83,7 @@ export interface OrchestratorAiChatApi {
   addTab: (aiSessionId: string, initialLinkSessionId?: string) => string;
   closeTab: (aiSessionId: string, tabId: string) => void;
   setActiveTab: (aiSessionId: string, tabId: string) => void;
-  addTabLink: (aiSessionId: string, tabId: string, sessionId: string) => void;
+  addTabLink: (aiSessionId: string, tabId: string, sessionId: string, opts?: { aiOpened?: boolean }) => void;
   removeTabLink: (aiSessionId: string, tabId: string, sessionId: string) => void;
   rebindTabLink: (aiSessionId: string, tabId: string, bindingKey: string, newSessionId: string) => void;
 }
@@ -80,6 +101,10 @@ export interface UseAiOrchestratorOptions {
   /** One-time AI data-sharing consent gate (from useAiConsent). */
   ensureConsent: () => Promise<boolean>;
   aiChat: OrchestratorAiChatApi;
+  /** AI worker-session lifecycle (open / touch / materialize) — see useAiWorkerSessions. */
+  workers: UseAiWorkerSessionsReturn;
+  /** Host Tree, for AI connect requests that match a saved host (credentials). */
+  hostTree: HostTreeNode[];
 }
 
 /** Which conversation owns a watched session, and its color slot (single-owner). */
@@ -134,6 +159,19 @@ export interface UseAiOrchestratorReturn {
   onRunCommand: (targetId: string, cmd: string, originatingTabId: string, paneId: string) => void;
   /** Clear a pane's active poll intervals + pending sleep-delay timers. */
   clearRunCommandIntervals: (paneId: string) => void;
+  /**
+   * Open a terminal on the AI's behalf (ADR-AI-007): resolve the credentials
+   * (host tree / inherited / none), start a WORKER session (no tab), link it to
+   * the requesting conversation, wait for a shell prompt and report the outcome
+   * to the model as a connect envelope.
+   */
+  openAiTerminal: (paneId: string, tabId: string, resolved: ResolvedConnect) => void;
+  /**
+   * Adopt a session the USER just opened from the pre-filled connection dialog
+   * for a pending AI request: link it (flagged AI-opened) and run the same
+   * prompt wait / envelope as openAiTerminal.
+   */
+  adoptAiTerminal: (paneId: string, tabId: string, sessionId: string, key: string) => void;
 }
 
 /**
@@ -152,6 +190,8 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     createAiChatPane,
     ensureConsent,
     aiChat,
+    workers,
+    hostTree,
   } = options;
   const { aiChatStates, enqueuePendingMessage, updateTabById } = aiChat;
 
@@ -159,6 +199,10 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
   // closed `sessions` map is stale by the time a sleep-delay timer fires).
   const sessionsRef = useRef(sessions);
   useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
+  // Same for the worker API and the host tree (read from async connect flows).
+  const workersRef = useRef(workers);
+  const hostTreeRef = useRef(hostTree);
+  useEffect(() => { workersRef.current = workers; hostTreeRef.current = hostTree; });
 
   // AI Watch mode. The watch buffer itself lives in the backend
   // (WatchBufferState), keyed by global session id, so any window's AI Chat can
@@ -541,6 +585,8 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     // whole buffer and removes all index math.
     await tauriService.clearWatchBuffer(targetId);
     const startLen = 0;
+    // An AI-opened worker session is "in use" — reset its idle clock (no-op otherwise).
+    workersRef.current.touchWorker(targetId);
 
     // Send command lines to terminal. Split on CR as well as LF so the units
     // dispatched here match exactly the units the safety classifier scored — a
@@ -755,9 +801,11 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
       // Accept a live remote session (owned by another window) too — see
       // onRunCommandImpl for why the local map alone is insufficient cross-window.
       const rec = sessionsRef.current.get(targetId);
+      const isWorkerLive =
+        !rec && useAiWorkerSessionStore.getState().workers[targetId]?.status === 'connected';
       const isRemoteLive =
-        !rec && crossWindowSessionsRef.current.some((cs) => cs.sessionId === targetId);
-      const isLive = (!!rec && rec.status === 'connected') || isRemoteLive;
+        !rec && !isWorkerLive && crossWindowSessionsRef.current.some((cs) => cs.sessionId === targetId);
+      const isLive = (!!rec && rec.status === 'connected') || isWorkerLive || isRemoteLive;
       const stillLinked = watchingSessionIdsRef.current.has(targetId);
       if (!isLive || !stillLinked) {
         aiExecLog('warn', 'sleep-delay-target-not-live', {
@@ -805,9 +853,12 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     // wrongly refused as "not connected".
     const targetRec = sessions.get(targetId);
     const isLocalConnected = !!targetRec && targetRec.status === 'connected';
+    // An AI worker session (no tab) lives in the worker store, not `sessions`.
+    const isWorkerLive =
+      !targetRec && useAiWorkerSessionStore.getState().workers[targetId]?.status === 'connected';
     const isRemoteLive =
-      !targetRec && crossWindowSessionsRef.current.some((cs) => cs.sessionId === targetId);
-    if (!isLocalConnected && !isRemoteLive) {
+      !targetRec && !isWorkerLive && crossWindowSessionsRef.current.some((cs) => cs.sessionId === targetId);
+    if (!isLocalConnected && !isWorkerLive && !isRemoteLive) {
       aiExecLog('warn', 'run-target-not-live', {
         cmd: trimCmdForLog(cmd),
         targetId,
@@ -828,6 +879,287 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     scheduleSleepDelay(targetId, cmd, parsed, originatingTabId, paneId);
   };
 
+  // ── AI-initiated terminal sessions (ADR-AI-007) ─────────────────────────────
+
+  /** Alias the model uses for `sid` in this tab — produced by the SAME builder as the
+   *  prompt list, so the envelope names exactly what the model was shown. */
+  const aliasForSession = (paneId: string, tabId: string, sid: string, fallbackName: string): string => {
+    const tab = aiChatStatesRef.current.get(paneId)?.tabs.find((t) => t.id === tabId);
+    const { aliases } = buildWatchedViews(tab?.linkedSessions ?? [], {
+      sessions: sessionsRef.current,
+      workers: useAiWorkerSessionStore.getState().workers,
+      crossWindow: crossWindowSessionsRef.current,
+    });
+    return aliases.find((a) => a.sessionId === sid)?.alias ?? slugifyAlias(fallbackName);
+  };
+
+  /** Last ~40 lines / 2000 chars of captured output — enough to show the banner and prompt. */
+  const tailOf = (text: string): string => {
+    const lines = text.trimEnd().split('\n');
+    const tail = lines.slice(-CONNECT_TAIL_LINES).join('\n');
+    return tail.length > CONNECT_TAIL_CHARS ? tail.slice(-CONNECT_TAIL_CHARS) : tail;
+  };
+
+  /**
+   * Poll a freshly opened (or adopted) session until a shell prompt shows up,
+   * then hand the model a `Terminal Connected` envelope — or a `Connection Failed` one
+   * when the session errors / closes / never prompts. Mirrors sendAndWatch's
+   * interval bookkeeping so clearRunCommandIntervals(paneId) tears it down too.
+   *
+   * No client-side timeout while still `connecting`: the SSH host-key modal can
+   * legitimately hold that state for up to 300 s and the backend owns the real
+   * TCP/auth timeouts; only a 10-minute safety cap applies.
+   */
+  const openAndWatch = (
+    paneId: string,
+    tabId: string,
+    key: string,
+    sid: string,
+    displayName: string,
+    manualLogin: boolean,
+  ) => {
+    const startedAt = Date.now();
+    let connectedAt: number | null = null;
+    let lastLen = 0;
+    let lastChangeAt = startedAt;
+    const idleSecs = useSettingsStore.getState().aiCommandIdleTimeoutSecs;
+    const idleMs = Math.max(CONNECT_MIN_IDLE_MS, idleSecs > 0 ? idleSecs * 1000 : 0);
+    const promptWaitMs = manualLogin ? CONNECT_MANUAL_LOGIN_WAIT_MS : CONNECT_PROMPT_WAIT_MS;
+    let set = runCommandIntervalsRef.current.get(paneId);
+    if (!set) {
+      set = new Set();
+      runCommandIntervalsRef.current.set(paneId, set);
+    }
+    const intervalSet = set;
+    aiExecLog('info', 'connect-watch-begin', { key, sid, manualLogin, promptWaitMs, tabId });
+    let polling = false;
+    const interval = setInterval(() => {
+      if (polling) return;
+      polling = true;
+      void (async () => {
+        try {
+          const now = Date.now();
+          const stop = () => {
+            clearInterval(interval);
+            intervalSet.delete(interval);
+          };
+          const finish = (message: string, event: string) => {
+            stop();
+            aiExecLog(event.startsWith('connect-failed') ? 'warn' : 'info', event, { key, sid, tabId });
+            enqueuePendingMessage(paneId, tabId, message);
+          };
+          // The originating conversation is gone — nobody to report to.
+          const tab = aiChatStatesRef.current.get(paneId)?.tabs.find((t) => t.id === tabId);
+          if (!tab) {
+            stop();
+            aiExecLog('warn', 'connect-tab-gone', { key, sid, tabId });
+            return;
+          }
+          const view = lookupSession(sid, {
+            sessions: sessionsRef.current,
+            workers: useAiWorkerSessionStore.getState().workers,
+          });
+          if (!view) {
+            // An adopted tab's record lands via setState a tick later — give it a moment.
+            if (now - startedAt < CONNECT_APPEAR_GRACE_MS) return;
+            finish(connectFailedNote(key, 'the terminal was closed before it connected'), 'connect-failed-gone');
+            return;
+          }
+          if (view.status === 'error') {
+            finish(connectFailedNote(key, view.errorMessage || 'the connection failed'), 'connect-failed-error');
+            return;
+          }
+          if (view.status === 'disconnected') {
+            finish(connectFailedNote(key, 'the connection closed before a shell prompt appeared'), 'connect-failed-closed');
+            return;
+          }
+          if (view.status === 'connecting') {
+            if (now - startedAt > CONNECT_CONNECTING_CAP_MS) {
+              finish(connectFailedNote(key, 'the connection was still being established after 10 minutes'), 'connect-failed-stuck');
+            }
+            return;
+          }
+          // connected
+          if (connectedAt === null) {
+            connectedAt = now;
+            lastChangeAt = now;
+          }
+          const buf = await tauriService.getWatchBuffer(sid);
+          if (buf.length > lastLen) {
+            lastLen = buf.length;
+            lastChangeAt = now;
+          }
+          const alias = aliasForSession(paneId, tabId, sid, displayName);
+          const succeed = (note?: string) => {
+            const tail = tailOf(redactSecrets(buf));
+            finish(connectedNote(key, alias, displayName, note ? `${tail}\n${note}` : tail), 'connect-ready');
+            void tauriService.clearWatchBuffer(sid);
+            workersRef.current.touchWorker(sid);
+          };
+          if (PROMPT_PATTERN.test(buf)) {
+            succeed();
+            return;
+          }
+          // Idle fallback (banner without a prompt char) — never for a manual login,
+          // where a stalled "Username:" means the human has not typed yet.
+          if (!manualLogin && buf.length > 0 && now - lastChangeAt >= idleMs) {
+            succeed('[no shell prompt detected yet - the device may be waiting for input]');
+            return;
+          }
+          if (now - connectedAt >= promptWaitMs) {
+            finish(connectFailedNote(
+              key,
+              `connected, but no shell prompt appeared within ${Math.round(promptWaitMs / 1000)} seconds; the terminal stays open as alias "${alias}" and the user may need to log in by hand`,
+            ), 'connect-failed-no-prompt');
+          }
+        } finally {
+          polling = false;
+        }
+      })();
+    }, 200);
+    intervalSet.add(interval);
+  };
+
+  type OpenPlan =
+    | { protocol: ProtocolId; config: AnyConfig; displayName: string; host: string; port?: number; username?: string; manualLogin: boolean }
+    | { error: string };
+
+  /**
+   * Turn a resolved request into a connect config. This is the ONLY place the
+   * credentials are materialized, right before `connect_session`: from the Host Tree
+   * (decrypted here), copied from the source terminal's in-memory config (`via:`),
+   * or none at all (Telnet, manual login). Never logged.
+   */
+  const buildOpenPlan = async (r: ResolvedConnect): Promise<OpenPlan> => {
+    const s = useSettingsStore.getState();
+    if (r.kind === 'local') {
+      let shellPath: string | undefined;
+      if (r.shellType === 'git-bash') {
+        const found = await tauriService.detectGitBash().catch(() => null);
+        if (!found) return { error: 'Git Bash was not found on this PC' };
+        shellPath = found;
+      }
+      const config: LocalConnectionConfig = { shellType: r.shellType, shellPath, encoding: s.globalEncoding };
+      return { protocol: localShellProtocol(r.shellType), config, displayName: r.displayName, host: '', manualLogin: false };
+    }
+    const cs = r.credentialSource;
+    if (cs.kind === 'host-tree') {
+      const node = flattenHosts(hostTreeRef.current).find((n) => n.id === cs.nodeId);
+      if (!node) return { error: 'the Host Tree entry no longer exists' };
+      const built = await buildConfigFromHostNode(node, r.username);
+      if (!built) return { error: 'the Host Tree entry cannot be used for this connection' };
+      // The saved entry supplies the credentials AND the port. The port is NOT
+      // taken from the request: `findHostNodesByAddress` only returns this node
+      // when the request's explicit port matched it, so overriding here could
+      // only ever replay the saved credentials to a port the entry was not saved
+      // for (with `r.port` falling back to the protocol default when the model
+      // omitted one, silently rewriting an entry saved on e.g. 2222).
+      const port = built.config.port ?? r.port;
+      const config = { ...built.config, host: r.host, port };
+      return {
+        protocol: built.protocol,
+        config,
+        displayName: r.displayName,
+        host: r.host,
+        port,
+        username: config.username || undefined,
+        manualLogin: r.manualLogin,
+      };
+    }
+    if (cs.kind === 'inherit' || cs.kind === 'inherit-username') {
+      const src = sessionsRef.current.get(cs.sessionId)?.connectionConfig as Partial<SshConnectionConfig> | undefined;
+      if (!src) return { error: `the source terminal "${cs.alias}" is no longer available` };
+      const username = r.username ?? src.username ?? '';
+      const full = cs.kind === 'inherit';
+      if (r.protocol === 'ssh') {
+        const config: SshConnectionConfig = {
+          host: r.host,
+          port: r.port,
+          username,
+          password: full ? src.password : undefined,
+          privateKeyPath: full ? src.privateKeyPath : undefined,
+          privateKeyPassphrase: full ? src.privateKeyPassphrase : undefined,
+          encoding: s.globalEncoding,
+          keepaliveIntervalSecs: s.sshKeepAliveEnabled ? s.sshKeepAliveInterval : 0,
+          connectTimeoutSecs: s.sshConnectTimeoutSecs,
+        };
+        return { protocol: 'ssh', config, displayName: r.displayName, host: r.host, port: r.port, username, manualLogin: r.manualLogin };
+      }
+      const config: TelnetConnectionConfig = {
+        host: r.host,
+        port: r.port,
+        username: username || undefined,
+        password: full ? src.password : undefined,
+        encoding: s.globalEncoding,
+        keepaliveIntervalSecs: s.telnetKeepAliveEnabled ? s.telnetKeepAliveInterval : 0,
+        connectTimeoutSecs: s.telnetConnectTimeoutSecs,
+      };
+      return { protocol: 'telnet', config, displayName: r.displayName, host: r.host, port: r.port, username: username || undefined, manualLogin: r.manualLogin };
+    }
+    // No credential source at all.
+    if (r.protocol === 'ssh') return { error: 'no credentials are available for this SSH host' };
+    const config: TelnetConnectionConfig = {
+      host: r.host,
+      port: r.port,
+      username: r.username,
+      encoding: s.globalEncoding,
+      keepaliveIntervalSecs: s.telnetKeepAliveEnabled ? s.telnetKeepAliveInterval : 0,
+      connectTimeoutSecs: s.telnetConnectTimeoutSecs,
+    };
+    return { protocol: 'telnet', config, displayName: r.displayName, host: r.host, port: r.port, username: r.username, manualLogin: true };
+  };
+
+  const openAiTerminal = (paneId: string, tabId: string, resolved: ResolvedConnect) => {
+    void (async () => {
+      const tab = aiChatStatesRef.current.get(paneId)?.tabs.find((t) => t.id === tabId);
+      if (!tab) return;
+      // Re-check the cap at open time: the card may have waited on the user for a while.
+      const max = useSettingsStore.getState().aiMaxWorkerSessionsPerTab ?? 5;
+      const { views } = buildWatchedViews(tab.linkedSessions, {
+        sessions: sessionsRef.current,
+        workers: useAiWorkerSessionStore.getState().workers,
+        crossWindow: crossWindowSessionsRef.current,
+      });
+      if (summarizeAiOpened(views).liveCount >= max) {
+        enqueuePendingMessage(paneId, tabId, connectRefusedNote(
+          resolved.key,
+          `Limit reached: this conversation already has ${max} AI-opened terminal(s) (max ${max}). Close one or ask the user.`,
+        ));
+        return;
+      }
+      const plan = await buildOpenPlan(resolved);
+      if ('error' in plan) {
+        aiExecLog('warn', 'connect-plan-failed', { key: resolved.key, error: plan.error, tabId });
+        enqueuePendingMessage(paneId, tabId, connectFailedNote(resolved.key, plan.error));
+        return;
+      }
+      const sid = workersRef.current.openWorkerSession({
+        paneId,
+        tabId,
+        key: resolved.key,
+        displayName: plan.displayName,
+        protocol: plan.protocol,
+        config: plan.config,
+        host: plan.host,
+        port: plan.port,
+        username: plan.username,
+        manualLogin: plan.manualLogin,
+      });
+      // Watched from the start (capture begins before the session exists, so the
+      // login banner is captured) and flagged as AI-opened for the cap and the tray.
+      addTabLinkRef.current?.(paneId, tabId, sid, { aiOpened: true });
+      aiExecLog('info', 'connect-open', { key: resolved.key, sid, protocol: plan.protocol, manualLogin: plan.manualLogin, tabId });
+      openAndWatch(paneId, tabId, resolved.key, sid, plan.displayName, plan.manualLogin);
+    })();
+  };
+
+  const adoptAiTerminal = (paneId: string, tabId: string, sessionId: string, key: string) => {
+    addTabLinkRef.current?.(paneId, tabId, sessionId, { aiOpened: true });
+    const rec = sessionsRef.current.get(sessionId);
+    aiExecLog('info', 'connect-adopt', { key, sid: sessionId, tabId });
+    openAndWatch(paneId, tabId, key, sessionId, rec?.displayName ?? sessionId, false);
+  };
+
   return {
     watchingSessionId,
     setWatchingSessionId,
@@ -842,5 +1174,21 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     openAiChatPane,
     onRunCommand: onRunCommandImpl,
     clearRunCommandIntervals,
+    openAiTerminal,
+    adoptAiTerminal,
   };
 }
+
+// ── Connect-wait tuning (ADR-AI-007) ─────────────────────────────────────────
+/** Hard cap while a session is still `connecting` (the host-key modal alone may take 300 s). */
+const CONNECT_CONNECTING_CAP_MS = 10 * 60 * 1000;
+/** After `connected`: how long to wait for a shell prompt when HoTTY supplied the credentials. */
+const CONNECT_PROMPT_WAIT_MS = 120 * 1000;
+/** …and when the USER has to type the login by hand (Telnet without saved credentials). */
+const CONNECT_MANUAL_LOGIN_WAIT_MS = 300 * 1000;
+/** Floor for the "output stopped but no prompt matched" fallback. */
+const CONNECT_MIN_IDLE_MS = 3000;
+/** Grace for an adopted tab's record to land in React state before "gone" is concluded. */
+const CONNECT_APPEAR_GRACE_MS = 2000;
+const CONNECT_TAIL_LINES = 40;
+const CONNECT_TAIL_CHARS = 2000;

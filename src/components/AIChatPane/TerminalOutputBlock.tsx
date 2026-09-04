@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-export const TerminalOutputBlock: React.FC<{ cmd: string; output: string }> = ({ cmd, output }) => {
+/** `label` overrides the "Terminal output" head — the connect envelopes reuse this block. */
+export const TerminalOutputBlock: React.FC<{ cmd: string; output: string; label?: string }> = ({ cmd, output, label }) => {
     const { t } = useTranslation();
     const [expanded, setExpanded] = useState(false);
     const firstLine = cmd.split('\n')[0];
@@ -29,7 +30,7 @@ export const TerminalOutputBlock: React.FC<{ cmd: string; output: string }> = ({
                 <svg className="ai-terminal-output-chevron" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
                     <path d="M9 6l6 6-6 6z" />
                 </svg>
-                <span className="ai-terminal-output-label">{t('aiChat.outputBlock.label')}</span>
+                <span className="ai-terminal-output-label">{label ?? t('aiChat.outputBlock.label')}</span>
                 <span className="ai-terminal-output-cmd">{firstLine}</span>
                 <span className="ai-terminal-output-meta">{t('aiChat.outputBlock.meta', { lines: lineCount, chars: charCount })}</span>
             </div>

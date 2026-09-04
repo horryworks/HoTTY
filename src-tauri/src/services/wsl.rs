@@ -11,7 +11,8 @@ use tokio_util::sync::CancellationToken;
 use super::read_pump::{spawn_read_pump, ReadStep};
 use super::session_service::{
     abort_all, emit_session_status, encoding_for, humanize_pty_error, humanize_read_error,
-    humanize_spawn_error, join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
+    humanize_spawn_error, join_or_abort, resolve_initial_pty_size, SessionError, SessionService,
+    DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -124,11 +125,14 @@ impl SessionService for WslSession {
             .unwrap_or("(default)");
         log::info!("wsl: spawning distribution={distro_desc} (session {session_id})");
 
+        // Same pre-connect sizing contract as SSH/Telnet/local (ADR-016): use the
+        // grid the renderer already reported rather than a hardcoded 80x24.
+        let (pty_cols, pty_rows) = resolve_initial_pty_size(&app, &session_id).await;
         let pty_system = native_pty_system();
         let pty_pair = pty_system
             .openpty(PtySize {
-                rows: 24,
-                cols: 80,
+                rows: pty_rows,
+                cols: pty_cols,
                 pixel_width: 0,
                 pixel_height: 0,
             })

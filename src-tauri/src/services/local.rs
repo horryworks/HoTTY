@@ -12,7 +12,8 @@ use super::path_safety::is_unc_path;
 use super::read_pump::{spawn_read_pump, ReadStep};
 use super::session_service::{
     abort_all, emit_session_status, encoding_for, humanize_pty_error, humanize_read_error,
-    humanize_spawn_error, join_or_abort, SessionError, SessionService, DISCONNECT_DRAIN_MS,
+    humanize_spawn_error, join_or_abort, resolve_initial_pty_size, SessionError, SessionService,
+    DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -140,11 +141,17 @@ impl SessionService for LocalSession {
             self.config.shell_type
         );
 
+        // Honour the pre-connect `term_resize` the way SSH/Telnet do (ADR-016).
+        // A tab reports its measured grid before connect; an AI worker session has
+        // no xterm at all and seeds a deliberate 160x50 so device output is not
+        // wrapped in the capture. Opening at a hardcoded 80x24 ignored both, and
+        // nothing resizes a worker afterwards.
+        let (pty_cols, pty_rows) = resolve_initial_pty_size(&app, &session_id).await;
         let pty_system = native_pty_system();
         let pty_pair = pty_system
             .openpty(PtySize {
-                rows: 24,
-                cols: 80,
+                rows: pty_rows,
+                cols: pty_cols,
                 pixel_width: 0,
                 pixel_height: 0,
             })

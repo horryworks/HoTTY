@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildExecutionRules,
+  buildConnectCapabilityBlock,
   languageDirective,
   languageSwitchNotice,
   resolveAiLanguage,
@@ -123,5 +124,67 @@ describe('languageSwitchNotice', () => {
     expect(notice.startsWith('\n\n')).toBe(true);
     expect(notice).toContain('[Language switched]');
     expect(notice).toContain('Japanese');
+  });
+});
+
+describe('buildExecutionRules (connect fence)', () => {
+  it('admits exactly one connect block as the alternative to execute, never both', () => {
+    const rules = buildExecutionRules();
+    expect(rules).toContain('```connect');
+    expect(rules).toContain('NEVER both');
+    expect(rules).toContain('[Terminal Connections]');
+  });
+});
+
+describe('buildConnectCapabilityBlock', () => {
+  const base = {
+    policy: 'local-auto' as const,
+    terminals: [
+      { alias: 'core-01', displayName: 'core-01', live: true, host: '192.0.2.1', protocol: 'ssh', aiOpened: false },
+      { alias: 'sw-01', displayName: 'sw-01', live: false, host: '192.0.2.10', protocol: 'ssh', aiOpened: true },
+    ],
+    localShellType: 'powershell' as const,
+    remainingSlots: 3,
+    idleMinutes: 10,
+  };
+
+  it('returns nothing when the policy is off', () => {
+    expect(buildConnectCapabilityBlock({ ...base, policy: 'off' })).toBe('');
+  });
+
+  it('teaches the fence grammar and the envelope contract', () => {
+    const block = buildConnectCapabilityBlock(base);
+    expect(block).toContain('[Terminal Connections]');
+    expect(block).toContain('```connect');
+    expect(block).toContain('type: local | ssh | telnet');
+    expect(block).toContain('Terminal Connected (<key> as <alias>)');
+    expect(block).toContain('Connection Failed / Declined / Refused');
+    expect(block).toContain('show cdp neighbors detail');
+  });
+
+  it('lists watched terminals with host, AI-opened and disconnected flags even for one terminal', () => {
+    const block = buildConnectCapabilityBlock({ ...base, terminals: [base.terminals[0]] });
+    expect(block).toContain('core-01 (ssh 192.0.2.1)');
+    const both = buildConnectCapabilityBlock(base);
+    expect(both).toContain('sw-01 (ssh 192.0.2.10, AI-opened, disconnected)');
+  });
+
+  it('names the shell, the remaining slots and the idle timeout', () => {
+    const block = buildConnectCapabilityBlock(base);
+    expect(block).toContain('PowerShell');
+    expect(block).toContain('3 more terminal(s)');
+    expect(block).toContain('10 minutes');
+  });
+
+  it('points at an already-open PC shell instead of offering a new one', () => {
+    const block = buildConnectCapabilityBlock({ ...base, localShellOpen: 'powershell-ai' });
+    expect(block).toContain('ALREADY open as alias "powershell-ai"');
+    expect(block).toContain('target=powershell-ai');
+  });
+
+  it('forbids further requests once the cap is reached and omits the idle note at 0', () => {
+    const block = buildConnectCapabilityBlock({ ...base, remainingSlots: 0, idleMinutes: 0 });
+    expect(block).toContain('limit of AI-opened terminals is reached');
+    expect(block).not.toContain('closed automatically');
   });
 });

@@ -19,9 +19,6 @@ const MIN_INTERVAL_MS: u64 = 1000;
 /// Kill timeout for each ping subprocess (5 seconds).
 const PING_KILL_TIMEOUT_MS: u64 = 5000;
 
-/// Maximum target hostname/IP length.
-const MAX_TARGET_LEN: usize = 253;
-
 /// How many pings may be in flight at once within a single cycle.
 ///
 /// Each ping is its own `ping` subprocess, so this is also the ceiling on
@@ -116,17 +113,9 @@ async fn shutdown(handle: MonitorHandle) {
 // ---------------------------------------------------------------------------
 
 /// Validate that a target is a reasonable hostname/IP (no shell metacharacters).
+/// The rule lives in `net_validation` so the SSH/Telnet connect configs share it.
 pub fn is_valid_ping_target(target: &str) -> bool {
-    if target.is_empty() || target.len() > MAX_TARGET_LEN {
-        return false;
-    }
-
-    use std::sync::OnceLock;
-    static RE: OnceLock<regex_lite::Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| {
-        regex_lite::Regex::new(r"^[a-zA-Z0-9:][a-zA-Z0-9.:\-]{0,251}[a-zA-Z0-9.:]?$").unwrap()
-    });
-    re.is_match(target)
+    crate::services::net_validation::is_valid_host_target(target)
 }
 
 // ---------------------------------------------------------------------------

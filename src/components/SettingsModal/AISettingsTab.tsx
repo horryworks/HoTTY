@@ -7,7 +7,7 @@ import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import HelpTooltip from '../HelpTooltip/HelpTooltip';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { AI_PROVIDERS } from '../../constants/aiProviders';
-import type { PersonaDefinition } from '../../types/appTypes';
+import type { PersonaDefinition, AiConnectPolicy, AiLocalShellType } from '../../types/appTypes';
 import { DEFAULT_PERSONAS } from '../../stores/settingsStore';
 import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from '../../utils/commandLists';
 import { AuthenticationPanel } from './AuthenticationPanel';
@@ -403,6 +403,80 @@ export function AISettingsTab() {
             update('maxConcurrentStreams', Number.isFinite(parsed) ? Math.max(1, Math.min(8, parsed)) : 1);
           }}
         />
+      </div>
+
+      {/* AI-opened terminals (ADR-AI-007): policy, shell, cap, idle timeout, credential reuse */}
+      <div className="settings-group">
+        <label>
+          {t('settings.ai.connectPolicy')}
+          <HelpTooltip text={t('settings.ai.connectPolicyHelp')} />
+        </label>
+        <select
+          value={settings.aiConnectPolicy ?? 'local-auto'}
+          onChange={(e) => update('aiConnectPolicy', e.target.value as AiConnectPolicy)}
+        >
+          <option value="off">{t('settings.ai.connectPolicyOff')}</option>
+          <option value="ask">{t('settings.ai.connectPolicyAsk')}</option>
+          <option value="local-auto">{t('settings.ai.connectPolicyLocalAuto')}</option>
+          <option value="local-and-host-tree-auto">{t('settings.ai.connectPolicyHostTreeAuto')}</option>
+        </select>
+      </div>
+      <div className="settings-group">
+        <label>
+          {t('settings.ai.connectLocalShell')}
+          <HelpTooltip text={t('settings.ai.connectLocalShellHelp')} />
+        </label>
+        <select
+          value={settings.aiLocalShellType ?? 'powershell'}
+          onChange={(e) => update('aiLocalShellType', e.target.value as AiLocalShellType)}
+        >
+          <option value="powershell">PowerShell</option>
+          <option value="cmd">Command Prompt</option>
+          <option value="git-bash">Git Bash</option>
+        </select>
+      </div>
+      <div className="settings-group">
+        <label>
+          {t('settings.ai.connectMaxPerTab')}
+          <HelpTooltip text={t('settings.ai.connectMaxPerTabHelp')} />
+        </label>
+        <input
+          type="number"
+          min={1}
+          max={10}
+          value={settings.aiMaxWorkerSessionsPerTab ?? 5}
+          onChange={(e) => {
+            const parsed = parseInt(e.target.value, 10);
+            update('aiMaxWorkerSessionsPerTab', Number.isFinite(parsed) ? Math.max(1, Math.min(10, parsed)) : 1);
+          }}
+        />
+      </div>
+      <div className="settings-group">
+        <label>
+          {t('settings.ai.connectIdleTimeout')}
+          <HelpTooltip text={t('settings.ai.connectIdleTimeoutHelp')} />
+        </label>
+        <input
+          type="number"
+          min={0}
+          max={1440}
+          value={settings.aiWorkerIdleTimeoutMins ?? 10}
+          onChange={(e) => {
+            const parsed = parseInt(e.target.value, 10);
+            update('aiWorkerIdleTimeoutMins', Number.isFinite(parsed) && parsed > 0 ? Math.min(1440, parsed) : 0);
+          }}
+        />
+      </div>
+      <div className="settings-group">
+        <label className="settings-checkbox">
+          <input
+            type="checkbox"
+            checked={settings.aiConnectReuseCredentials ?? false}
+            onChange={(e) => update('aiConnectReuseCredentials', e.target.checked)}
+          />
+          {t('settings.ai.connectReuseCredentials')}
+          <HelpTooltip text={t('settings.ai.connectReuseCredentialsHelp')} />
+        </label>
       </div>
 
       {/* Device Response Timeout */}

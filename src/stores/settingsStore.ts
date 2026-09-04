@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Encoding, FeatureId, FileServerConfig, PromptPattern, ThemeId, LanguageId, CommandExecutionMode, ClassifierStrategy, PersonaDefinition } from '../types/appTypes';
+import type { Encoding, FeatureId, FileServerConfig, PromptPattern, ThemeId, LanguageId, CommandExecutionMode, ClassifierStrategy, PersonaDefinition, AiConnectPolicy, AiLocalShellType } from '../types/appTypes';
 import { DEFAULT_THEMES } from '../themes/defaults';
 import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from '../utils/commandLists';
 import { AUTO_LANGUAGE } from '../constants/aiPrompts';
@@ -166,6 +166,22 @@ interface SettingsState {
    *  settings store is cross-window synced), which is what lets a switch reach a
    *  conversation that is already in progress. */
   aiResponseLanguage: string;
+  /** How AI-requested terminal connections (the `connect` fence) are gated —
+   *  see `AiConnectPolicy`. Default: PC shells open without asking, device
+   *  logins ask. Auto-open only applies in `auto-execute-safe` mode. */
+  aiConnectPolicy: AiConnectPolicy;
+  /** Allow an AI connect request that names a watched terminal (`via:`) to copy
+   *  that session's PASSWORD, not just its login name. Off by default; when on,
+   *  every such open still asks for confirmation and names the source. */
+  aiConnectReuseCredentials: boolean;
+  /** Cap on live AI-opened terminals (workers + materialized) per conversation.
+   *  Protects the device's scarce VTY lines as much as the UI. Clamped to 1–10. */
+  aiMaxWorkerSessionsPerTab: number;
+  /** Minutes an AI-opened worker session may sit unused before it is closed
+   *  automatically. 0 = never. */
+  aiWorkerIdleTimeoutMins: number;
+  /** Which PC shell the AI gets when it asks for a local terminal. */
+  aiLocalShellType: AiLocalShellType;
 }
 
 interface SettingsActions {
@@ -239,6 +255,15 @@ const DEFAULTS: SettingsState = {
   aiSleepMaxDelaySecs: 900,
   aiDataConsentAccepted: false,
   aiResponseLanguage: AUTO_LANGUAGE,
+  // Opening a session is a NEW trust boundary: `auto-execute-safe` used to mean
+  // "run safe commands on terminals I attached", never "create a shell on my PC".
+  // Watched device output is a prompt-injection surface (see commandLists.ts), so
+  // the shipped default asks. `local-auto` stays available as an explicit opt-in.
+  aiConnectPolicy: 'ask',
+  aiConnectReuseCredentials: false,
+  aiMaxWorkerSessionsPerTab: 5,
+  aiWorkerIdleTimeoutMins: 10,
+  aiLocalShellType: 'powershell',
 };
 
 export const useSettingsStore = create<SettingsState & SettingsActions>()(
@@ -250,7 +275,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 29,
+      version: 30,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -414,6 +439,20 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
               ? (legacy === '日本語' ? 'Japanese' : legacy)
               : DEFAULTS.aiResponseLanguage;
           }
+        }
+        if (version < 30) {
+          // AI-initiated terminal sessions (the `connect` fence, ADR-AI-007).
+          // Safe defaults: every open asks, credential reuse is opt-in, 5 workers
+          // per conversation, 10-min idle.
+          // Assigned UNCONDITIONALLY (not `??=`): no pre-v30 install can have a
+          // meaningful value here, and an upgrade must never silently grant the
+          // AI permission to open a shell on the user's PC. Auto-open is opted
+          // into from Settings → AI after the user has seen what it does.
+          state.aiConnectPolicy = DEFAULTS.aiConnectPolicy;
+          state.aiConnectReuseCredentials ??= DEFAULTS.aiConnectReuseCredentials;
+          state.aiMaxWorkerSessionsPerTab ??= DEFAULTS.aiMaxWorkerSessionsPerTab;
+          state.aiWorkerIdleTimeoutMins ??= DEFAULTS.aiWorkerIdleTimeoutMins;
+          state.aiLocalShellType ??= DEFAULTS.aiLocalShellType;
         }
         return state as SettingsState;
       },

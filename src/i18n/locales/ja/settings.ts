@@ -222,6 +222,26 @@ export const settings = {
     concurrentStreams: 'AI チャットの並列応答数',
     concurrentStreamsHelp:
       '1 つのペインで同時に応答を受信できる AI チャットのタブ数です。超過分はキューに入り、応答が終わり次第開始します。1 で従来どおり一度に 1 件のみ。プロバイダのレート制限（例: Gemini 無料枠）に掛かる場合は下げてください。最大8。既定: 3。',
+    // AI が開くターミナル（ADR-AI-007）
+    connectPolicy: 'AI にターミナルを開かせる',
+    connectPolicyHelp:
+      'AI は HoTTY に、PC のシェル（ping / tracert / nslookup の実行用）や、CDP/LLDP で見つけた隣接機器への SSH/Telnet セッションを開くよう要求できます。これらのセッションにはタブがなく、出力は AI 用に取り込まれます。いつでもタブとして開けます。オフ: 要求を無視します。すべて確認: 毎回チャット内で承認が必要です。ローカルのみ自動: PC のシェルは確認なしで開き、機器へのログインは確認します。ローカル + ホストツリー自動: さらに、ホストツリーの項目と一致する SSH/Telnet を保存済みの認証情報で開きます。自動で開くのは「安全なコマンドは自動実行」モードのときだけで、自動実行のカウントダウンを使います。既定: すべて確認。',
+    connectPolicyOff: 'オフ',
+    connectPolicyAsk: 'すべて確認する',
+    connectPolicyLocalAuto: 'ローカルのシェルは自動、機器は確認',
+    connectPolicyHostTreeAuto: 'ローカルのシェル + ホストツリーの機器は自動',
+    connectLocalShell: 'AI 用の PC シェル',
+    connectLocalShellHelp:
+      'AI がローカルのターミナルを要求したときに HoTTY が開くシェル。会話ごとに 1 つで、2 回目以降の要求は開いているものを再利用します。',
+    connectMaxPerTab: '会話あたりの AI が開くターミナルの上限',
+    connectMaxPerTabHelp:
+      '1 つの会話で AI が同時に開いていられるターミナル数（タブ化したものを含む）。機器側の限られた VTY 回線を守ります。閉じれば枠が空きます。1〜10。既定: 5。',
+    connectIdleTimeout: 'アイドルの AI ターミナルを閉じるまで（分）',
+    connectIdleTimeoutHelp:
+      'タブのない AI が開いたターミナルを、AI がこの時間使わなかったら自動で切断します。タブ化したものはあなたのものとして残ります。0 = 切断しない。既定: 10。',
+    connectReuseCredentials: '監視中の端末の認証情報の流用を許可',
+    connectReuseCredentialsHelp:
+      'AI が要求で監視中の端末を指定（via: <エイリアス>）したとき、そのセッションのログイン名とパスワードを新しい SSH/Telnet ログインにコピーします。必ず確認を求め、どの端末の認証情報かを表示します。オフ: ログイン名のみ引き継ぎます。偽装された CDP/LLDP 隣接情報で AI が偽ホストへ誘導される可能性があるため、既定はオフです。',
     deviceResponseTimeout: 'デバイス応答タイムアウト（秒）',
     deviceResponseTimeoutHelp:
       'コマンド後にデバイスがこの秒数の間新しい出力を生成しない場合、ループを継続できるように、デバイスが応答を停止したことが AI に伝えられます。0 でアイドル検出を無効にします。デフォルト: 10。',

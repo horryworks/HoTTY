@@ -221,6 +221,25 @@ export const settings = {
     concurrentStreams: 'AI 聊天並行回覆數',
     concurrentStreamsHelp:
       '一個窗格中可同時接收回覆的 AI 聊天分頁數量。超出的傳送會排入佇列，並在回覆完成後開始。1 表示嚴格一次一個（舊行為）。若你的供應商有速率限制（如 Gemini 免費層），請調低。最大 8。預設：3。',
+    connectPolicy: '允許 AI 開啟終端機',
+    connectPolicyHelp:
+      'AI 可以要求 HoTTY 開啟本機 Shell（用於執行 ping / tracert / nslookup），或開啟到透過 CDP/LLDP 發現的鄰接裝置的 SSH/Telnet 工作階段。這些工作階段沒有分頁（輸出為 AI 擷取），可隨時以分頁開啟。關閉：忽略要求。總是詢問：每個要求都需要在聊天中核准。本機 Shell 自動：本機 Shell 不詢問即開啟，裝置登入仍需確認。本機 + 主機樹自動：還會使用已儲存的認證資訊開啟主機與主機樹項目相符的 SSH/Telnet。自動開啟僅在自動執行模式下生效，並使用自動執行倒數。預設：一律詢問。',
+    connectPolicyOff: '關閉',
+    connectPolicyAsk: '總是詢問',
+    connectPolicyLocalAuto: '本機 Shell 自動，裝置需確認',
+    connectPolicyHostTreeAuto: '本機 Shell + 主機樹裝置自動',
+    connectLocalShell: 'AI 使用的本機 Shell',
+    connectLocalShellHelp:
+      'AI 要求本機終端機時 HoTTY 開啟的 Shell。每個對話一個，再次要求時會重複使用已開啟的 Shell。',
+    connectMaxPerTab: '每個對話中 AI 開啟終端機的上限',
+    connectMaxPerTabHelp:
+      '一個對話中 AI 可同時保持開啟的終端機數（包括已轉為分頁的）。保護裝置有限的 VTY 線路。關閉一個即可釋出名額。1–10。預設：5。',
+    connectIdleTimeout: '閒置的 AI 終端機關閉時間（分鐘）',
+    connectIdleTimeoutHelp:
+      '沒有分頁且 AI 在此時間內未使用的 AI 開啟終端機將自動中斷連線。已轉為分頁的終端機屬於您，將保持開啟。0 = 永不。預設：10。',
+    connectReuseCredentials: '允許沿用監看中終端機的認證資訊',
+    connectReuseCredentialsHelp:
+      '當 AI 在要求中指定監看中的終端機（via: <別名>）時，會將該工作階段的登入名稱與密碼複製到新的 SSH/Telnet 登入。始終要求您確認，並說明認證資訊來自哪個終端機。關閉：僅沿用登入名稱。預設關閉，因為偽造的 CDP/LLDP 鄰接資訊可能把 AI 引向惡意主機。',
     deviceResponseTimeout: '裝置回應逾時（秒）',
     deviceResponseTimeoutHelp:
       '若裝置在指令後的這麼多秒內未產生新輸出，系統會告知 AI 裝置已停止回應，以便迴圈得以繼續。0 會停用閒置偵測。預設值：10。',

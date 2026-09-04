@@ -119,6 +119,12 @@ export interface LinkableSession {
   ownerLabel: string;
   isLocal: boolean;
   status: string;
+  /** True for an AI worker session (no tab / xterm in this window; see
+   *  `WORKER_SESSION_PREFIX`). Drives the tray chip variant and the AI prompt. */
+  headless?: boolean;
+  /** Connection target host, when known locally (SSH/Telnet/worker). Lets the
+   *  AI prompt list terminals by address so a duplicate connection is avoided. */
+  host?: string;
 }
 
 export interface SessionErrorPayload {
@@ -776,4 +782,32 @@ export interface PersonaDefinition {
   id: string;
   label: string;
   systemPrompt: string;
+}
+
+/**
+ * How AI-requested terminal connections (the `connect` fence) are gated.
+ * - `off`   — the capability is not offered to the AI; a connect fence renders inert.
+ * - `ask`   — every request needs the user's approval in the chat.
+ * - `local-auto` — a PC shell opens without asking; device logins still ask (default).
+ * - `local-and-host-tree-auto` — additionally, SSH/Telnet whose host matches a
+ *   Host Tree entry opens with that entry's credentials without asking.
+ * Auto-open only applies in `auto-execute-safe` mode; reused credentials always ask.
+ */
+export type AiConnectPolicy = 'off' | 'ask' | 'local-auto' | 'local-and-host-tree-auto';
+
+/** Which local shell the AI gets when it asks for a PC terminal. */
+export type AiLocalShellType = 'powershell' | 'cmd' | 'git-bash';
+
+/**
+ * Pre-filled connection-dialog fields for an AI connect request that needs a
+ * human to supply a secret (an SSH host with no saved password or key). `nonce`
+ * changes per request so an identical prefill is re-applied.
+ */
+export interface SessionDialogPrefill {
+  protocol: 'ssh' | 'telnet';
+  host: string;
+  port: number;
+  username?: string;
+  displayName?: string;
+  nonce: number;
 }

@@ -41,6 +41,7 @@ vi.mock('./services/tauriService', () => ({
     setWindowTitle: vi.fn().mockResolvedValue(undefined),
     onSessionData: vi.fn().mockResolvedValue(() => {}),
     onSessionStatus: vi.fn().mockResolvedValue(() => {}),
+    onSessionError: vi.fn().mockResolvedValue(() => {}),
     confirmDialog: vi.fn().mockResolvedValue(false),
     showContextMenu: vi.fn().mockResolvedValue(null),
     logDebug: vi.fn().mockResolvedValue(undefined),

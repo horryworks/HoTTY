@@ -222,6 +222,26 @@ export const settings = {
     concurrentStreams: 'Parallel AI Chat replies',
     concurrentStreamsHelp:
       'How many AI Chat conversation tabs may receive a reply at the same time in one pane. Extra sends queue and start as replies finish. 1 = strictly one at a time (the old behaviour). Lower this if your provider rate-limits (e.g. Gemini free tier). Max 8. Default: 3.',
+    // AI-opened terminals (ADR-AI-007)
+    connectPolicy: 'Let the AI open terminals',
+    connectPolicyHelp:
+      'The AI may ask HoTTY to open a PC shell (to run ping / tracert / nslookup) or an SSH/Telnet session to a neighbour it found via CDP/LLDP. These sessions have no tab — their output is captured for the AI — and can be opened as a tab any time. Off: requests are ignored. Ask: every request needs your approval in the chat. Local shell auto: PC shells open without asking, device logins still ask. Local + Host Tree auto: also opens SSH/Telnet whose host matches a Host Tree entry, with its saved credentials. Automatic opening only applies in Auto-execute mode and uses the auto-run countdown. Default: Ask for everything.',
+    connectPolicyOff: 'Off',
+    connectPolicyAsk: 'Ask for everything',
+    connectPolicyLocalAuto: 'Local shell auto, devices ask',
+    connectPolicyHostTreeAuto: 'Local shell + Host Tree hosts auto',
+    connectLocalShell: 'PC shell for the AI',
+    connectLocalShellHelp:
+      'The shell HoTTY opens when the AI asks for a local terminal. One per conversation — a second request reuses the open one.',
+    connectMaxPerTab: 'Max AI-opened terminals per conversation',
+    connectMaxPerTabHelp:
+      "Live terminals the AI may have open for one conversation (including ones turned into tabs). Protects the device's limited VTY lines. Closing one frees a slot. 1–10. Default: 5.",
+    connectIdleTimeout: 'Close idle AI terminals after (minutes)',
+    connectIdleTimeoutHelp:
+      'An AI-opened terminal without a tab that the AI has not used for this long is disconnected automatically. Terminals turned into tabs are yours and stay open. 0 = never. Default: 10.',
+    connectReuseCredentials: "Allow reusing a watched terminal's credentials",
+    connectReuseCredentialsHelp:
+      "When the AI names a watched terminal (via: <alias>) in a request, copy that session's login name AND password to the new SSH/Telnet login. Always asks for your confirmation and says which terminal the credentials come from. Off: only the login name is inherited. Off by default because a spoofed CDP/LLDP neighbour could point the AI at a rogue host.",
     deviceResponseTimeout: 'Device Response Timeout (seconds)',
     deviceResponseTimeoutHelp:
       'If the device produces no new output for this many seconds after a command, the AI is told the device stopped responding so the loop can continue. 0 disables idle detection. Default: 10.',
