@@ -11,6 +11,13 @@ export const hostTree = {
   newConnection: '新規接続',
   newConnectionTitle: '新しい接続を開始（フォームをクリアします）',
   empty: '右クリックまたは上部の + ボタンでホストやフォルダを追加してください',
+  filter: {
+    placeholder: 'フォルダ・ホストを絞り込み',
+    ariaLabel: 'フォルダ・ホストを絞り込み',
+    clear: '絞り込みを解除',
+    // {{query}} はユーザーが入力した文字列。
+    noMatches: '「{{query}}」に一致するフォルダ・ホストはありません',
+  },
   contextMenu: {
     openAll: 'すべて開く',
     addFolder: 'フォルダを追加',

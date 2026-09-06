@@ -40,7 +40,7 @@ export const notifications = {
     pingMonitorListener: '无法接收 Ping 监视器事件',
     fileServerListener: '无法接收文件服务器事件',
     credentialBatch: '无法处理 {{label}} 凭据',
-    hostTreeEncrypt: '无法加密主机树',
+    hostTreeEncrypt: '无法加密凭据 — 主机树未保存',
     credentialMigration: '凭据迁移失败',
     credentialPreload: '后台凭据解密失败',
     sessionLoggingUpdate: '无法更新会话日志记录',

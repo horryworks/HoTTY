@@ -18,6 +18,7 @@ export const help = {
     paste: 'Paste to terminal (with security check)',
     sendMessage: 'Send message in Ask AI dialog',
     findInLog: 'Search in the open log (Log Viewer pane)',
+    filterHosts: 'Filter the host tree (New Session dialog)',
     closeModal: 'Close modal / dialog',
   },
 
@@ -27,6 +28,8 @@ export const help = {
       'Open the connection dialog via <0>Ctrl + N</0> or the <1>"New"</1> button in the sidebar. You can manage your hosts and folders in the host tree.',
     doubleClick:
       '<0>Double-click:</0> Double-click a host in the tree to connect immediately.',
+    hostFilter:
+      '<0>Filter:</0> Type in the box above the host tree to narrow it down by folder name, host name or address. <1>Ctrl + F</1> jumps to it. Enter selects the first match; Escape clears the box. Matching hosts inside a collapsed folder are revealed, and clearing the filter puts every folder back the way you had it.',
     supportedTypes: '<0>Supported connection types:</0>',
     typeSsh:
       '<0>SSH</0> — Encrypted remote shell (password or key authentication)',

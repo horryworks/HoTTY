@@ -40,7 +40,7 @@ export const notifications = {
     pingMonitorListener: 'Ping 모니터 이벤트를 수신하지 못했습니다',
     fileServerListener: '파일 서버 이벤트를 수신하지 못했습니다',
     credentialBatch: '{{label}} 자격 증명을 처리하지 못했습니다',
-    hostTreeEncrypt: '호스트 트리를 암호화하지 못했습니다',
+    hostTreeEncrypt: '자격 증명을 암호화하지 못했습니다 — 호스트 트리가 저장되지 않았습니다',
     credentialMigration: '자격 증명 마이그레이션에 실패했습니다',
     credentialPreload: '백그라운드 자격 증명 복호화에 실패했습니다',
     sessionLoggingUpdate: '세션 로깅을 업데이트하지 못했습니다',

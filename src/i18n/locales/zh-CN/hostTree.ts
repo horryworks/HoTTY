@@ -11,6 +11,13 @@ export const hostTree = {
   newConnection: '新建连接',
   newConnectionTitle: '开始新的连接（清空表单）',
   empty: '右键单击或使用上方的 + 按钮添加主机和文件夹',
+  filter: {
+    placeholder: '筛选文件夹和主机',
+    ariaLabel: '筛选文件夹和主机',
+    clear: '清除筛选',
+    // {{query}} = 用户输入的文本。
+    noMatches: '没有与“{{query}}”匹配的文件夹或主机',
+  },
   contextMenu: {
     openAll: '全部打开',
     addFolder: '添加文件夹',

@@ -234,4 +234,123 @@ describe('HostTree', () => {
       expect(screen.getByText('New Connection')).toBeTruthy();
     });
   });
+
+  describe('expand / collapse', () => {
+    it('collapses a folder on the first click and reopens it on the second', () => {
+      render(<HostTree {...defaultProps} />);
+      expect(screen.getByText('Web Server')).toBeTruthy();
+
+      fireEvent.click(screen.getByText('Production'));
+      expect(screen.queryByText('Web Server')).toBeNull();
+
+      fireEvent.click(screen.getByText('Production'));
+      expect(screen.getByText('Web Server')).toBeTruthy();
+    });
+
+    it('collapses from the chevron without selecting the folder', () => {
+      const onSelect = vi.fn();
+      render(<HostTree {...defaultProps} onSelect={onSelect} />);
+      const chevron = screen
+        .getByText('Production')
+        .closest('.host-tree-row')
+        ?.querySelector('.tree-icon') as HTMLElement;
+      fireEvent.click(chevron);
+      expect(screen.queryByText('Web Server')).toBeNull();
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('filter', () => {
+    const typeFilter = (value: string) => {
+      const input = screen.getByLabelText('Filter folders and hosts') as HTMLInputElement;
+      fireEvent.change(input, { target: { value } });
+      return input;
+    };
+
+    it('hides nodes that do not match', () => {
+      render(<HostTree {...defaultProps} />);
+      typeFilter('Dev');
+      expect(screen.getByText('Dev Box')).toBeTruthy();
+      expect(screen.queryByText('Production')).toBeNull();
+      expect(screen.queryByText('Web Server')).toBeNull();
+    });
+
+    it('keeps every child when the folder name matches', () => {
+      render(<HostTree {...defaultProps} />);
+      typeFilter('production');
+      expect(screen.getByText('Production')).toBeTruthy();
+      // "Web Server" does not contain "production" — it survives via its folder.
+      expect(screen.getByText('Web Server')).toBeTruthy();
+      expect(screen.queryByText('Dev Box')).toBeNull();
+    });
+
+    it('matches on the host address', () => {
+      render(<HostTree {...defaultProps} />);
+      typeFilter('10.0.0.2');
+      expect(screen.getByText('Dev Box')).toBeTruthy();
+      expect(screen.queryByText('Web Server')).toBeNull();
+    });
+
+    it('shows a no-matches message distinct from the empty-tree hint', () => {
+      render(<HostTree {...defaultProps} />);
+      typeFilter('zzz');
+      expect(screen.getByText('No folders or hosts match "zzz"')).toBeTruthy();
+      expect(screen.queryByText(/Right-click or use the \+ buttons/)).toBeNull();
+    });
+
+    it('restores the full tree when cleared', () => {
+      render(<HostTree {...defaultProps} />);
+      typeFilter('Dev');
+      expect(screen.queryByText('Web Server')).toBeNull();
+      fireEvent.click(screen.getByLabelText('Clear filter'));
+      expect(screen.getByText('Web Server')).toBeTruthy();
+      expect(screen.getByText('Dev Box')).toBeTruthy();
+    });
+
+    it('reveals a match inside a collapsed folder, then re-collapses it', () => {
+      render(<HostTree {...defaultProps} />);
+      fireEvent.click(screen.getByText('Production'));
+      expect(screen.queryByText('Web Server')).toBeNull();
+
+      typeFilter('Web');
+      expect(screen.getByText('Web Server')).toBeTruthy();
+
+      fireEvent.click(screen.getByLabelText('Clear filter'));
+      expect(screen.queryByText('Web Server')).toBeNull();
+    });
+
+    it('selects the first match on Enter without submitting', () => {
+      const onSelect = vi.fn();
+      render(<HostTree {...defaultProps} onSelect={onSelect} />);
+      const input = typeFilter('10.0.0.');
+      fireEvent.keyDown(input, { key: 'Enter' });
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'host-1' }));
+    });
+
+    it('clears on Escape before giving the key up', () => {
+      render(<HostTree {...defaultProps} />);
+      const input = typeFilter('Dev');
+      fireEvent.keyDown(input, { key: 'Escape' });
+      expect(input.value).toBe('');
+      expect(screen.getByText('Web Server')).toBeTruthy();
+    });
+
+    it('stops dragging while a filter is active', () => {
+      render(<HostTree {...defaultProps} />);
+      const before = screen.getByText('Dev Box').closest('.host-tree-row') as HTMLElement;
+      expect(before.getAttribute('draggable')).toBe('true');
+      typeFilter('Dev');
+      const during = screen.getByText('Dev Box').closest('.host-tree-row') as HTMLElement;
+      expect(during.getAttribute('draggable')).toBe('false');
+    });
+
+    it('focuses the filter box on Ctrl+F', () => {
+      render(<HostTree {...defaultProps} />);
+      const input = screen.getByLabelText('Filter folders and hosts');
+      expect(document.activeElement).not.toBe(input);
+      fireEvent.keyDown(window, { key: 'f', ctrlKey: true });
+      expect(document.activeElement).toBe(input);
+    });
+  });
 });

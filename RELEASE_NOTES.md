@@ -1,5 +1,21 @@
 # Release Notes
 
+## v2.1.0-beta3
+
+**The host tree has a filter box.** A tree that has grown past a screenful is faster to search than to scroll, so there is now a box above it: type, and only the folders and hosts that match stay on screen. This release also closes a hole in how saved credentials were written to disk — if Windows' encryption call failed, HoTTY used to save the password anyway, in the clear.
+
+### New Features
+
+- **Filter the host tree.** The New Session dialog's host tree now has a filter box above it. Typing narrows the tree to what matches, by folder name, host name or address — an IAP host also matches on its project and instance, since that is what its row shows instead of an address. The username is deliberately not searched: it is not on screen, and matching on something invisible makes the results look arbitrary. Name a folder and you get that folder whole, children included, so it doubles as a way to jump to a folder and browse it. A match inside a folder you had collapsed is revealed rather than hidden, and clearing the filter puts every folder back exactly as you left it — the filter shows things open, it does not expand them. **Ctrl + F** moves to the box, Enter picks the first match and hands focus to its row so a second Enter connects, Down arrow steps into the list without selecting, and Escape clears the box before it gives the key back to the dialog. Drag-to-reorder switches off while a filter is active, because "drop after this host" cannot mean anything reliable when the hosts in between are hidden.
+
+### Bug Fixes
+
+- **Collapsing a folder takes one click again.** Folders are drawn open until you say otherwise, but nothing was recorded for a folder you had never touched. The first click read that missing entry as "closed" and wrote "open" — which is what was already on screen, so nothing moved and the folder only collapsed on the second click.
+
+### Security
+
+- **A failed encryption can no longer save a password in the clear.** Saved usernames, passwords and key passphrases are encrypted with Windows DPAPI before the host tree is written to disk. That encryption runs as one batch call, and a single failure fails the whole batch — but the failure was being swallowed, and the *unencrypted* values were handed back to the caller, which had no way to tell and stored them as if they were ciphertext. The plaintext then went to disk and was broadcast to every open HoTTY window, while the only sign was a generic error toast. Encryption now fails closed: if it cannot encrypt, nothing is written and nothing is broadcast, and the message says the host tree was not saved. Values that come back not looking like ciphertext are rejected too, so a malformed reply cannot take the same path. Decryption deliberately still fails open — leaving an unreadable credential as ciphertext is harmless, and failing there would lock you out of hosts over one bad blob.
+
 ## v2.1.0-beta2
 
 **HoTTY can now change its own version.** Updating used to mean opening the release page, downloading the installer by hand and running it — and going back to an older build meant hunting for the tag first. Settings has a new **Versions** tab that lists every published release with its notes and installs the one you pick, forward or back. Separately, the startup update check was asking GitHub for the *latest* release, which excludes pre-releases server-side — so anyone running a beta was never notified of anything at all, including the stable release that superseded their beta. That is fixed too.

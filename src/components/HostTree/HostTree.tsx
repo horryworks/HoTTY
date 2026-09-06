@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HostTreeNode, HostEntry } from '../../types/appTypes';
 import { type FixedSizeTri, triToBool } from '../../utils/fixedTerminalSize';
+import { filterHostTree } from '../../utils/hostTreeFilter';
 import { flattenHosts, getJumpboxReferences } from '../../hooks/useHostManager';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useModalState } from '../../hooks/useModalState';
@@ -60,6 +61,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
 }) => {
     const { t } = useTranslation();
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+    const [filterQuery, setFilterQuery] = useState('');
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
     const [exportNode, setExportNode] = useState<HostTreeNode | null>(null);
     const [editModalOpen, openEditModal, closeEditModal, editModal] = useModalState<EditModalState>();
@@ -98,8 +100,61 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const containerRef = useRef<HTMLDivElement>(null);
     const editModalRef = useRef<HTMLDivElement>(null);
     const contextMenuRef = useRef<HTMLDivElement>(null);
+    const filterInputRef = useRef<HTMLInputElement>(null);
 
     useFocusTrap(editModalRef, editModalOpen);
+
+    /** The tree as the user currently sees it. An empty filter passes `tree`
+     *  through by reference, so the common case costs nothing. */
+    const isFiltering = filterQuery.trim() !== '';
+    const visibleTree = useMemo(() => filterHostTree(tree, filterQuery), [tree, filterQuery]);
+
+    /** Move focus to a rendered row so the arrow keys / Enter continue from
+     *  there. The row is keyed by `data-node-id`; hosts carry `tabIndex={0}`. */
+    const focusRow = useCallback((nodeId: string) => {
+        const rows = containerRef.current?.querySelectorAll<HTMLElement>('.host-tree-row');
+        if (!rows) return;
+        for (const row of rows) {
+            if (row.dataset.nodeId === nodeId) {
+                row.focus();
+                return;
+            }
+        }
+    }, []);
+
+    /** First host in the filtered tree, depth-first — what Enter selects. */
+    const firstVisibleHost = useMemo(() => {
+        const find = (nodes: HostTreeNode[]): HostTreeNode | null => {
+            for (const n of nodes) {
+                if (n.type === 'host') return n;
+                const hit = n.children ? find(n.children) : null;
+                if (hit) return hit;
+            }
+            return null;
+        };
+        return find(visibleTree);
+    }, [visibleTree]);
+
+    // Ctrl+F focuses the filter box.
+    //
+    // Registered on `window` in the CAPTURE phase on purpose: `usePaneFindShortcut`
+    // owns Ctrl+F on `document` (also capture) and calls stopImmediatePropagation
+    // without checking whether a modal is open, so a background pane would
+    // otherwise swallow the chord. Capture descends window → document, so the
+    // window listener wins. This component only exists while the New Session
+    // dialog's Hosts tab is showing, which scopes the override for free.
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (e.altKey || e.metaKey || e.shiftKey) return;
+            if (!e.ctrlKey || (e.key !== 'f' && e.key !== 'F')) return;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            filterInputRef.current?.focus();
+            filterInputRef.current?.select();
+        };
+        window.addEventListener('keydown', handler, true);
+        return () => window.removeEventListener('keydown', handler, true);
+    }, []);
 
     useEffect(() => {
         const handler = () => setContextMenu(null);
@@ -136,7 +191,11 @@ export const HostTree: React.FC<HostTreeProps> = ({
         }
     }, [contextMenu]);
 
-    const toggle = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+    // Folders render open until the user says otherwise, so an untouched folder
+    // has no entry here at all. Flip against that default (`?? true`) — reading
+    // the missing entry as `false` made the first click on a folder write `true`
+    // and change nothing on screen, so it took two clicks to collapse.
+    const toggle = (id: string) => setExpanded(prev => ({ ...prev, [id]: !(prev[id] ?? true) }));
 
     const getTargetParentId = useCallback(() => {
         if (!selectedId) return null;
@@ -323,7 +382,11 @@ export const HostTree: React.FC<HostTreeProps> = ({
     };
 
     const renderNode = (node: HostTreeNode, depth: number): React.ReactNode => {
-        const isExpanded = expanded[node.id] ?? true;
+        // While filtering, every surviving folder is shown open — otherwise a
+        // match hidden inside a folder the user had collapsed would not appear.
+        // `expanded` itself is left untouched, so clearing the filter restores
+        // exactly the open/closed state the user had.
+        const isExpanded = isFiltering || (expanded[node.id] ?? true);
         const isSelected = selectedId === node.id;
         const isDragging = draggedNodeId === node.id;
         const isDropTarget = dropTarget?.nodeId === node.id;
@@ -341,8 +404,11 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 <div
                     className={`host-tree-row ${isSelected ? 'selected' : ''} ${dragClasses}`}
                     style={{ paddingLeft: `${depth * 14 + 8}px` }}
+                    data-node-id={node.id}
                     tabIndex={node.type === 'host' ? 0 : undefined}
-                    draggable
+                    // Reordering is disabled while filtering: "before"/"after" is
+                    // read off the visible order, which hides siblings here.
+                    draggable={!isFiltering}
                     onDragStart={(e) => {
                         setDraggedNodeId(node.id);
                         e.dataTransfer.effectAllowed = 'move';
@@ -592,6 +658,57 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 </div>
             </div>
 
+            {/* Filter */}
+            <div className="host-tree-filter">
+                <input
+                    ref={filterInputRef}
+                    type="text"
+                    className="host-tree-filter-input"
+                    placeholder={t('hostTree.filter.placeholder')}
+                    aria-label={t('hostTree.filter.ariaLabel')}
+                    value={filterQuery}
+                    onChange={(e) => setFilterQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                        // Both keys are claimed by SessionDialog's document-level
+                        // handler (Enter connects, Escape closes the dialog), so
+                        // every branch below must stop the event itself.
+                        if (e.key === 'Escape') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (filterQuery) setFilterQuery('');
+                            else filterInputRef.current?.blur();
+                        } else if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            // Pick the first match and hand focus to its row —
+                            // a second Enter there connects via the normal path.
+                            if (firstVisibleHost) {
+                                onSelect(firstVisibleHost);
+                                focusRow(firstVisibleHost.id);
+                            }
+                        } else if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (firstVisibleHost) focusRow(firstVisibleHost.id);
+                        }
+                    }}
+                />
+                {filterQuery && (
+                    <button
+                        type="button"
+                        className="host-tree-filter-clear"
+                        title={t('hostTree.filter.clear')}
+                        aria-label={t('hostTree.filter.clear')}
+                        onClick={() => {
+                            setFilterQuery('');
+                            filterInputRef.current?.focus();
+                        }}
+                    >
+                        {'×'}
+                    </button>
+                )}
+            </div>
+
             {/* Tree */}
             <div className="host-tree-body">
                 {onNewConnection && (
@@ -621,7 +738,12 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 {tree.length === 0 && (
                     <div className="host-tree-empty">{t('hostTree.empty')}</div>
                 )}
-                {tree.map(node => renderNode(node, 0))}
+                {tree.length > 0 && isFiltering && visibleTree.length === 0 && (
+                    <div className="host-tree-empty">
+                        {t('hostTree.filter.noMatches', { query: filterQuery.trim() })}
+                    </div>
+                )}
+                {visibleTree.map(node => renderNode(node, 0))}
             </div>
 
             {/* Context Menu */}

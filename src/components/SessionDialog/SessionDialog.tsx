@@ -1240,7 +1240,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 }}
                 onClick={(e) => {
                     const target = e.target as HTMLElement;
-                    if (target.closest('.form-panel, .host-tree-row, .host-tree-toolbar, .context-menu, .host-edit-modal-overlay, .confirm-modal-overlay')) return;
+                    if (target.closest('.form-panel, .host-tree-row, .host-tree-toolbar, .host-tree-filter, .context-menu, .host-edit-modal-overlay, .confirm-modal-overlay')) return;
                     handleNewConnectionRequest();
                 }}
             >

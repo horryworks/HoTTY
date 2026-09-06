@@ -12,6 +12,13 @@ export const hostTree = {
   newConnection: 'Nueva conexión',
   newConnectionTitle: 'Iniciar una nueva conexión (limpia el formulario)',
   empty: 'Haga clic con el botón derecho o use los botones + de arriba para añadir hosts y carpetas',
+  filter: {
+    placeholder: 'Filtrar carpetas y hosts',
+    ariaLabel: 'Filtrar carpetas y hosts',
+    clear: 'Borrar filtro',
+    // {{query}} = el texto que escribió el usuario.
+    noMatches: 'Ninguna carpeta ni host coincide con «{{query}}»',
+  },
   contextMenu: {
     openAll: 'Abrir todo',
     addFolder: 'Añadir carpeta',

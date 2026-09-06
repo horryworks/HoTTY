@@ -18,6 +18,7 @@ export const help = {
     paste: 'Coller dans le terminal (avec vérification de sécurité)',
     sendMessage: "Envoyer le message dans la boîte de dialogue Demander à l'IA",
     findInLog: 'Rechercher dans le journal ouvert (volet Visionneuse de journaux)',
+    filterHosts: "Filtrer l'arborescence des hôtes (dialogue Nouvelle session)",
     closeModal: 'Fermer la fenêtre modale / boîte de dialogue',
   },
 
@@ -27,6 +28,8 @@ export const help = {
       'Ouvrez la boîte de dialogue de connexion via <0>Ctrl + N</0> ou le bouton <1>« Nouveau »</1> dans la barre latérale. Vous pouvez gérer vos hôtes et dossiers dans l\'arborescence des hôtes.',
     doubleClick:
       '<0>Double-clic :</0> double-cliquez sur un hôte dans l\'arborescence pour vous connecter immédiatement.',
+    hostFilter:
+      "<0>Filtre :</0> Saisissez du texte dans le champ au-dessus de l'arborescence pour la restreindre par nom de dossier, nom d'hôte ou adresse. <1>Ctrl + F</1> place le focus dans ce champ. Entrée sélectionne la première correspondance ; Échap efface le champ. Les correspondances situées dans un dossier replié sont révélées, et effacer le filtre restaure l'état d'ouverture des dossiers.",
     supportedTypes: '<0>Types de connexion pris en charge :</0>',
     typeSsh:
       '<0>SSH</0> — Shell distant chiffré (authentification par mot de passe ou par clé)',

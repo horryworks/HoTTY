@@ -40,7 +40,7 @@ export const notifications = {
     pingMonitorListener: 'Не удалось получить события монитора ping',
     fileServerListener: 'Не удалось получить события файлового сервера',
     credentialBatch: 'Не удалось обработать учётные данные {{label}}',
-    hostTreeEncrypt: 'Не удалось зашифровать дерево хостов',
+    hostTreeEncrypt: 'Не удалось зашифровать учётные данные — дерево хостов не сохранено',
     credentialMigration: 'Не удалось перенести учётные данные',
     credentialPreload: 'Не удалось расшифровать учётные данные в фоновом режиме',
     sessionLoggingUpdate: 'Не удалось обновить журнал сеанса',

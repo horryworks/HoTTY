@@ -45,6 +45,60 @@
     opacity: 1;
 }
 
+/* --- Filter --- */
+.host-tree-filter {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    min-width: 0;
+}
+
+.host-tree-filter-input {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 8px;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 1px);
+    outline: none;
+    transition: border-color 0.2s;
+    /* The container sets user-select: none for the tree rows; the field itself
+       still has to allow selecting what was typed. */
+    user-select: text;
+}
+
+.host-tree-filter-input:focus {
+    border-color: var(--accent-color);
+}
+
+.host-tree-filter-input::placeholder {
+    color: var(--placeholder-color);
+}
+
+.host-tree-filter-clear {
+    flex-shrink: 0;
+    padding: 2px 6px;
+    background: var(--btn-secondary-bg);
+    border: none;
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: var(--ui-font-family);
+    font-size: var(--font-size-base);
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.1s;
+}
+
+.host-tree-filter-clear:hover {
+    background: var(--btn-secondary-hover-bg);
+}
+
 /* --- Tree Body --- */
 .host-tree-body {
     flex: 1;

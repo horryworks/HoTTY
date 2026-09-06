@@ -11,6 +11,13 @@ export const hostTree = {
   newConnection: '새 연결',
   newConnectionTitle: '새 연결 시작 (양식을 지웁니다)',
   empty: '마우스 오른쪽 버튼을 클릭하거나 위의 + 버튼을 사용하여 호스트와 폴더를 추가하세요',
+  filter: {
+    placeholder: '폴더·호스트 필터',
+    ariaLabel: '폴더·호스트 필터',
+    clear: '필터 지우기',
+    // {{query}} = 사용자가 입력한 텍스트.
+    noMatches: '"{{query}}"과(와) 일치하는 폴더나 호스트가 없습니다',
+  },
   contextMenu: {
     openAll: '모두 열기',
     addFolder: '폴더 추가',

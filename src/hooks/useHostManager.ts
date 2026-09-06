@@ -41,11 +41,18 @@ function generateId(): string {
  * back into their original positions. Shared by encrypt/decrypt (which were
  * byte-identical apart from the RPC and the log label) so the index-mapping
  * logic and its empty-input guards live in one place.
+ *
+ * `failClosed` picks what an RPC failure means, and the two directions need
+ * opposite answers. Decrypting fails **open**: returning the input leaves the
+ * ciphertext in place, which is harmless. Encrypting must fail **closed** —
+ * returning the input there hands plaintext secrets back to a caller that
+ * believes they are encrypted, and the caller persists and broadcasts them.
  */
 async function mapDefinedBatch(
     values: (string | undefined)[],
     rpc: (defined: string[]) => Promise<string[]>,
     label: string,
+    failClosed = false,
 ): Promise<(string | undefined)[]> {
     if (values.length === 0) return values;
 
@@ -69,13 +76,21 @@ async function mapDefinedBatch(
         return result;
     } catch (err) {
         logError('HostManager', i18n.t('notifications.errors.credentialBatch', { label }), err);
+        if (failClosed) throw err;
         return values;
     }
 }
 
-/** Encrypt credential strings via the Tauri backend (Windows DPAPI). */
+/**
+ * Encrypt credential strings via the Tauri backend (Windows DPAPI).
+ *
+ * Fails closed: `dpapi_encrypt_batch` collects into a `Result`, so one bad value
+ * — or any IPC-layer rejection — fails the whole batch. Swallowing that and
+ * returning the input would let `encryptTree` splice plaintext back into the
+ * entries and `saveRawTree` write it to disk and broadcast it to every window.
+ */
 async function encryptBatch(values: (string | undefined)[]): Promise<(string | undefined)[]> {
-    return mapDefinedBatch(values, (v) => tauriService.dpapiEncryptBatch(v), 'encrypt');
+    return mapDefinedBatch(values, (v) => tauriService.dpapiEncryptBatch(v), 'encrypt', true);
 }
 
 /**
@@ -134,7 +149,16 @@ async function encryptTree(nodes: HostTreeNode[]): Promise<HostTreeNode[]> {
     const encryptedSecrets = await encryptBatch(secrets);
 
     for (let i = 0; i < encryptedSecrets.length; i++) {
-        setters[i](encryptedSecrets[i]);
+        const val = encryptedSecrets[i];
+        // Second line of defence behind `encryptBatch`'s fail-closed throw: a
+        // short or malformed response would otherwise leave a plaintext secret
+        // (or `undefined`, wiping a saved credential) in the tree handed to
+        // `saveRawTree`, which persists it AND broadcasts it to every window.
+        // Only values that came back as ciphertext are allowed through.
+        if (val === undefined || !isEncrypted(val)) {
+            throw new Error(`encryptTree: credential ${i} did not come back encrypted`);
+        }
+        setters[i](val);
     }
 
     return newTree;
@@ -481,9 +505,18 @@ export function useHostManager() {
 
     const persistAndSet = useCallback(async (decryptedTree: HostTreeNode[]) => {
         const myId = ++treeWriteSeq;
-        const encrypted = await encryptTree(decryptedTree);
-        if (treeWriteSeq === myId) {
-            saveRawTree(encrypted);
+        try {
+            const encrypted = await encryptTree(decryptedTree);
+            if (treeWriteSeq === myId) {
+                saveRawTree(encrypted);
+            }
+        } catch (err) {
+            // `encryptTree` now fails closed, so reaching here means nothing was
+            // written — which is the point. Report it and keep going: the caller
+            // (`saveTree`, awaited inside the connect flow) must not be rejected,
+            // and the in-memory tree is still broadcast below so the edit stays
+            // on screen. This mirrors how `persistEncryptedAsync` behaves.
+            logError('HostManager', i18n.t('notifications.errors.hostTreeEncrypt'), err);
         }
         // Broadcast first so every instance (including this one) updates via
         // the same listener path — keeps source and mirror state-change paths

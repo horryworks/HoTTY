@@ -303,7 +303,7 @@ describe('SessionDialog', () => {
       await act(async () => {
         fireEvent.change(hostInput, { target: { value: '10.0.0.99' } });
       });
-      const usernameInput = container.querySelectorAll('input[type="text"]')[1] as HTMLInputElement;
+      const usernameInput = container.querySelectorAll('.form-panel input[type="text"]')[1] as HTMLInputElement;
       await act(async () => {
         fireEvent.change(usernameInput, { target: { value: 'bob' } });
       });
@@ -375,7 +375,7 @@ describe('SessionDialog', () => {
       await act(async () => {
         fireEvent.change(hostInput, { target: { value: '10.0.0.42' } });
       });
-      const usernameInput = container.querySelectorAll('input[type="text"]')[1] as HTMLInputElement;
+      const usernameInput = container.querySelectorAll('.form-panel input[type="text"]')[1] as HTMLInputElement;
       await act(async () => {
         fireEvent.change(usernameInput, { target: { value: 'carol' } });
       });
@@ -393,7 +393,7 @@ describe('SessionDialog', () => {
         rerender(<SessionDialog {...defaultProps} onConnect={onConnect} sessions={sessions} />);
       });
       const hostAfter = container.querySelector('input[placeholder="example.com"]') as HTMLInputElement;
-      const usernameAfter = container.querySelectorAll('input[type="text"]')[1] as HTMLInputElement;
+      const usernameAfter = container.querySelectorAll('.form-panel input[type="text"]')[1] as HTMLInputElement;
       const passwordAfter = container.querySelector('input[type="password"]') as HTMLInputElement;
       expect(hostAfter.value).toBe('10.0.0.42');
       expect(usernameAfter.value).toBe('carol');
@@ -527,7 +527,7 @@ describe('SessionDialog', () => {
     const fillNewSsh = async (container: HTMLElement, host = '10.0.0.100', user = 'root') => {
       const hostInput = container.querySelector('input[placeholder="example.com"]') as HTMLInputElement;
       await act(async () => { fireEvent.change(hostInput, { target: { value: host } }); });
-      const usernameInput = container.querySelectorAll('input[type="text"]')[1] as HTMLInputElement;
+      const usernameInput = container.querySelectorAll('.form-panel input[type="text"]')[1] as HTMLInputElement;
       await act(async () => { fireEvent.change(usernameInput, { target: { value: user } }); });
     };
 

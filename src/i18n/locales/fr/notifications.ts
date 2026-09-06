@@ -40,7 +40,7 @@ export const notifications = {
     pingMonitorListener: 'Impossible de recevoir les événements du moniteur ping',
     fileServerListener: 'Impossible de recevoir les événements du serveur de fichiers',
     credentialBatch: 'Impossible de traiter les identifiants {{label}}',
-    hostTreeEncrypt: "Impossible de chiffrer l'arborescence des hôtes",
+    hostTreeEncrypt: "Impossible de chiffrer les identifiants — l'arborescence des hôtes n'a pas été enregistrée",
     credentialMigration: 'Échec de la migration des identifiants',
     credentialPreload: 'Échec du déchiffrement des identifiants en arrière-plan',
     sessionLoggingUpdate: 'Impossible de mettre à jour la journalisation de la session',

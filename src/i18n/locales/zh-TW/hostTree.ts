@@ -10,6 +10,13 @@ export const hostTree = {
   newConnection: '新連線',
   newConnectionTitle: '開始新連線（清除表單）',
   empty: '在上方按右鍵或使用 + 按鈕來新增主機與資料夾',
+  filter: {
+    placeholder: '篩選資料夾與主機',
+    ariaLabel: '篩選資料夾與主機',
+    clear: '清除篩選',
+    // {{query}} = 使用者輸入的文字。
+    noMatches: '沒有符合「{{query}}」的資料夾或主機',
+  },
   contextMenu: {
     openAll: '全部開啟',
     addFolder: '新增資料夾',

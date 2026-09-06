@@ -11,6 +11,13 @@ export const hostTree = {
   newConnection: 'New Connection',
   newConnectionTitle: 'Start a new connection (clears the form)',
   empty: 'Right-click or use the + buttons above to add hosts and folders',
+  filter: {
+    placeholder: 'Filter folders and hosts',
+    ariaLabel: 'Filter folders and hosts',
+    clear: 'Clear filter',
+    // {{query}} = the text the user typed.
+    noMatches: 'No folders or hosts match "{{query}}"',
+  },
   contextMenu: {
     openAll: 'Open All',
     addFolder: 'Add Folder',

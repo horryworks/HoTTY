@@ -55,6 +55,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                 <li><code>Ctrl + V</code> {t('help.shortcuts.paste')}</li>
                 <li><code>Ctrl + Enter</code> {t('help.shortcuts.sendMessage')}</li>
                 <li><code>Ctrl + F</code> {t('help.shortcuts.findInLog')}</li>
+                <li><code>Ctrl + F</code> {t('help.shortcuts.filterHosts')}</li>
                 <li><code>Escape</code> {t('help.shortcuts.closeModal')}</li>
               </ul>
             </div>
@@ -68,6 +69,9 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               </p>
               <p className="help-text">
                 <Trans i18nKey="help.gettingStarted.doubleClick" components={[<strong key="0" />]} />
+              </p>
+              <p className="help-text">
+                <Trans i18nKey="help.gettingStarted.hostFilter" components={[<strong key="0" />, <code key="1" />]} />
               </p>
               <p className="help-text">
                 <Trans i18nKey="help.gettingStarted.supportedTypes" components={[<strong key="0" />]} />

@@ -432,3 +432,94 @@ describe('useHostManager', () => {
     expect(names).toEqual(['Beta', 'Alpha', 'Zulu', 'Alpha']);
   });
 });
+
+// Credential encryption must fail CLOSED. `mapDefinedBatch` used to swallow an
+// RPC failure and return its input unchanged; on the encrypt path that handed
+// plaintext back to `encryptTree`, which spliced it into the entries and let
+// `saveRawTree` write it to localStorage and broadcast it to every window.
+describe('useHostManager — credential encryption fails closed', () => {
+  const encryptMock = () => vi.mocked(tauriService.dpapiEncryptBatch);
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(tauriService.migrateHostTreeCredentials).mockImplementation(async (j: string) => j);
+    encryptMock().mockReset();
+    encryptMock().mockImplementation(async (values: string[]) => values.map(v => `[SAFE]${v}`));
+  });
+
+  const treeWithSecret: HostTreeNode[] = [
+    {
+      id: 'host-1',
+      type: 'host',
+      name: 'Web Server',
+      entry: { protocol: 'ssh', host: '10.0.0.1', port: 22, username: 'alice', password: 'hunter2' },
+    },
+  ];
+
+  const stored = () => localStorage.getItem('hotty_host_tree') ?? '';
+
+  it('encrypts and persists normally when the backend succeeds', async () => {
+    const { result } = renderHook(() => useHostManager());
+    await act(async () => {
+      await result.current.saveTree(treeWithSecret);
+    });
+    await waitFor(() => expect(stored()).toContain('[SAFE]hunter2'));
+    expect(stored()).not.toContain('"hunter2"');
+  });
+
+  it('does not persist anything when the encrypt RPC rejects', async () => {
+    encryptMock().mockRejectedValue(new Error('DPAPI unavailable'));
+    const { result } = renderHook(() => useHostManager());
+    await act(async () => {
+      await result.current.saveTree(treeWithSecret);
+    });
+    // The whole point: no plaintext on disk, and no half-written tree either.
+    expect(stored()).not.toContain('hunter2');
+    expect(stored()).not.toContain('alice');
+    expect(stored()).toBe('');
+  });
+
+  it('keeps the edit on screen even though it was not persisted', async () => {
+    encryptMock().mockRejectedValue(new Error('DPAPI unavailable'));
+    const { result } = renderHook(() => useHostManager());
+    await act(async () => {
+      await result.current.saveTree(treeWithSecret);
+    });
+    // saveTree must resolve rather than reject — it is awaited inside the
+    // connect flow, so a rejection would abort an unrelated operation.
+    expect(result.current.tree).toHaveLength(1);
+    expect(result.current.tree[0].id).toBe('host-1');
+  });
+
+  it('does not persist when the backend returns plaintext instead of ciphertext', async () => {
+    // A short or malformed response must not slip past the fail-closed throw.
+    encryptMock().mockImplementation(async (values: string[]) => values);
+    const { result } = renderHook(() => useHostManager());
+    await act(async () => {
+      await result.current.saveTree(treeWithSecret);
+    });
+    expect(stored()).not.toContain('hunter2');
+    expect(stored()).toBe('');
+  });
+
+  it('does not persist plaintext when a mutation triggers the async save', async () => {
+    localStorage.setItem('hotty_host_tree', JSON.stringify(treeWithSecret));
+    encryptMock().mockRejectedValue(new Error('DPAPI unavailable'));
+    const { result } = renderHook(() => useHostManager());
+    act(() => {
+      result.current.editNode('host-1', {
+        entry: { protocol: 'ssh', host: '10.0.0.1', port: 22, password: 'new-secret' },
+      });
+    });
+    // persistEncryptedAsync's .catch skips saveRawTree, so the stored blob is
+    // still the pre-edit one — never the new plaintext.
+    await waitFor(() => expect(stored()).not.toContain('new-secret'));
+  });
+
+  it('still fails open when DECRYPTING, so one bad blob keeps the ciphertext', async () => {
+    vi.mocked(tauriService.dpapiDecryptBatch).mockRejectedValueOnce(new Error('nope'));
+    const { decryptBatch } = await import('./useHostManager');
+    const values = ['[SAFE]abc', undefined];
+    await expect(decryptBatch(values)).resolves.toEqual(values);
+  });
+});

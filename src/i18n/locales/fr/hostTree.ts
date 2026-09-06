@@ -11,6 +11,13 @@ export const hostTree = {
   newConnection: 'Nouvelle connexion',
   newConnectionTitle: 'Démarrer une nouvelle connexion (efface le formulaire)',
   empty: 'Cliquez avec le bouton droit ou utilisez les boutons + ci-dessus pour ajouter des hôtes et des dossiers',
+  filter: {
+    placeholder: 'Filtrer les dossiers et les hôtes',
+    ariaLabel: 'Filtrer les dossiers et les hôtes',
+    clear: 'Effacer le filtre',
+    // {{query}} = le texte saisi par l’utilisateur.
+    noMatches: 'Aucun dossier ni hôte ne correspond à « {{query}} »',
+  },
   contextMenu: {
     openAll: 'Tout ouvrir',
     addFolder: 'Ajouter un dossier',

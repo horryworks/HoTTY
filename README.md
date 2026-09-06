@@ -49,6 +49,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 - Per-session encoding selection
 - Fixed terminal size — pin the terminal to the width negotiated at connect for devices that latch it and ignore later resizes (e.g. Huawei USG/VRP); auto-detected by default, with per-connection and per-tab overrides
 - Session logging to file — terminal output as `.txt`, and AI chat conversations as Markdown transcripts in the same folder
+- Host tree filter — narrow the tree by folder name, host name or address (`Ctrl+F`); a match inside a collapsed folder is revealed, and clearing the filter restores your folder state
 - Connection host tree export/import (encrypted .htree format)
 
 ### AI Integration

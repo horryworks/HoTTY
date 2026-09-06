@@ -40,7 +40,7 @@ export const notifications = {
     pingMonitorListener: 'Could not listen for ping monitor events',
     fileServerListener: 'Could not listen for file server events',
     credentialBatch: 'Could not process {{label}} credentials',
-    hostTreeEncrypt: 'Could not encrypt the host tree',
+    hostTreeEncrypt: 'Could not encrypt credentials — the host tree was not saved',
     credentialMigration: 'Credential migration failed',
     credentialPreload: 'Background credential decryption failed',
     sessionLoggingUpdate: 'Could not update session logging',

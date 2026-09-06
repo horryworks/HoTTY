@@ -18,6 +18,7 @@ export const help = {
     paste: 'Pegar en el terminal (con comprobación de seguridad)',
     sendMessage: 'Enviar mensaje en el diálogo Preguntar a la IA',
     findInLog: 'Buscar en el registro abierto (panel Visor de registros)',
+    filterHosts: 'Filtrar el árbol de hosts (diálogo Nueva sesión)',
     closeModal: 'Cerrar modal / diálogo',
   },
 
@@ -27,6 +28,8 @@ export const help = {
       'Abra el diálogo de conexión mediante <0>Ctrl + N</0> o el botón <1>"Nueva"</1> de la barra lateral. Puede gestionar sus hosts y carpetas en el árbol de hosts.',
     doubleClick:
       '<0>Doble clic:</0> haga doble clic en un host del árbol para conectarse inmediatamente.',
+    hostFilter:
+      '<0>Filtro:</0> Escribe en el cuadro situado sobre el árbol de hosts para acotarlo por nombre de carpeta, nombre de host o dirección. <1>Ctrl + F</1> lleva el foco al cuadro. Enter selecciona la primera coincidencia; Escape borra el texto. Las coincidencias dentro de una carpeta contraída se muestran, y al borrar el filtro las carpetas vuelven a como estaban.',
     supportedTypes: '<0>Tipos de conexión admitidos:</0>',
     typeSsh:
       '<0>SSH</0> — Shell remoto cifrado (autenticación por contraseña o clave)',

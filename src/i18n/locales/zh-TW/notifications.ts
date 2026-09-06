@@ -39,7 +39,7 @@ export const notifications = {
     pingMonitorListener: '無法接收 Ping 監視器事件',
     fileServerListener: '無法接收檔案伺服器事件',
     credentialBatch: '無法處理 {{label}} 認證資訊',
-    hostTreeEncrypt: '無法加密主機樹狀結構',
+    hostTreeEncrypt: '無法加密認證資訊 — 主機樹狀結構未儲存',
     credentialMigration: '認證資訊移轉失敗',
     credentialPreload: '背景認證資訊解密失敗',
     sessionLoggingUpdate: '無法更新工作階段記錄',

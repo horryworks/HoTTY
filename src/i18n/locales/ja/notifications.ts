@@ -39,7 +39,7 @@ export const notifications = {
     pingMonitorListener: 'Ping モニターの通知を受信できませんでした',
     fileServerListener: 'ファイルサーバーの通知を受信できませんでした',
     credentialBatch: '{{label}} の認証情報を処理できませんでした',
-    hostTreeEncrypt: 'ホストツリーを暗号化できませんでした',
+    hostTreeEncrypt: '認証情報を暗号化できませんでした。ホストツリーは保存されていません',
     credentialMigration: '認証情報の移行に失敗しました',
     credentialPreload: 'バックグラウンドでの認証情報の復号に失敗しました',
     sessionLoggingUpdate: 'セッションのログ設定を更新できませんでした',

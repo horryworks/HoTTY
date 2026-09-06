@@ -39,7 +39,7 @@ export const notifications = {
     pingMonitorListener: 'No se pudieron recibir los eventos del monitor de ping',
     fileServerListener: 'No se pudieron recibir los eventos del servidor de archivos',
     credentialBatch: 'No se pudieron procesar las credenciales de {{label}}',
-    hostTreeEncrypt: 'No se pudo cifrar el árbol de hosts',
+    hostTreeEncrypt: 'No se pudieron cifrar las credenciales: el árbol de hosts no se guardó',
     credentialMigration: 'Error en la migración de credenciales',
     credentialPreload: 'Error al descifrar las credenciales en segundo plano',
     sessionLoggingUpdate: 'No se pudo actualizar el registro de la sesión',
