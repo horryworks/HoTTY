@@ -164,9 +164,11 @@ impl SessionService for LocalSession {
             cmd.arg("--login");
         }
 
-        // Set CWD to USERPROFILE
-        if let Ok(home) = std::env::var("USERPROFILE") {
-            cmd.cwd(home);
+        // Start in the user's home directory. Resolved via `os_paths` rather
+        // than reading USERPROFILE here: that had no fallback, so off Windows
+        // the shell would silently start wherever the app happened to be.
+        if let Some(home) = crate::services::os_paths::home_dir() {
+            cmd.cwd(home.to_string_lossy().as_ref());
         }
 
         // Sanitized environment

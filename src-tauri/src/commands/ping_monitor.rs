@@ -35,6 +35,7 @@ fn logging_requested(logging_enabled: bool, logging_path: &str) -> bool {
 #[allow(clippy::too_many_arguments)]
 pub async fn ping_monitor_start(
     app: AppHandle,
+    window: tauri::Window,
     state: State<'_, PingMonitorState>,
     log_manager: State<'_, LogManager>,
     session_id: String,
@@ -66,6 +67,7 @@ pub async fn ping_monitor_start(
             interval_ms,
             logging_enabled: effective_logging_enabled,
             logging_path,
+            window_label: window.label().to_string(),
         },
     )
     .await;

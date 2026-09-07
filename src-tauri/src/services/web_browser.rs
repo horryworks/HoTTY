@@ -78,6 +78,13 @@ pub struct ClearDataOptions {
 /// which statically imports comctl32-v6 entrypoints the manifest-less `cargo
 /// test` harness can't resolve (load-time 0xC0000139). With the feature off the
 /// state is an empty marker — see the module docs.
+/// A running cookie sweeper: how to ask it to stop, and how to wait for it.
+#[cfg(feature = "embedded-webview")]
+pub struct SweeperHandle {
+    cancel: tokio_util::sync::CancellationToken,
+    join: tokio::task::JoinHandle<()>,
+}
+
 #[derive(Default)]
 pub struct WebBrowserState {
     #[cfg(feature = "embedded-webview")]
@@ -87,11 +94,16 @@ pub struct WebBrowserState {
     /// to restore them when it is shown again.
     #[cfg(feature = "embedded-webview")]
     last_bounds: Mutex<HashMap<String, BrowserRect>>,
-    /// Set once the background cookie-persistence sweeper has been spawned, so
-    /// exactly one runs for the whole app lifetime. It is started lazily on the
-    /// first `create` — see `maybe_start_cookie_sweeper`.
+    /// The background cookie-persistence sweeper, while one is running.
+    ///
+    /// Holding the cancel token **and** the `JoinHandle` is what ADR-011 asks
+    /// for: a token only *asks* the loop to stop, so without the handle a task
+    /// that never observes it would outlive everything. `Some` also serves as
+    /// the "already started" flag the `AtomicBool` used to be. It is started
+    /// lazily on the first `create` and stopped when the last browser pane
+    /// closes — see `maybe_start_cookie_sweeper` / `stop_cookie_sweeper_if_idle`.
     #[cfg(feature = "embedded-webview")]
-    sweeper_started: std::sync::atomic::AtomicBool,
+    sweeper: Mutex<Option<SweeperHandle>>,
     /// Pane ids whose `destroy` arrived while `create` was still inside the slow
     /// `add_child` (so the map was empty and nothing was removed). `create`
     /// checks this before inserting and, if its pane is tombstoned here, closes
@@ -178,6 +190,12 @@ fn off_screen_rect() -> (PhysicalPosition<i32>, PhysicalSize<u32>) {
 
 /// Supported zoom range (percent) for the embedded browser. Mirrors the UI
 /// stepper's `ZOOM_STEPS` bounds so backend and frontend agree on the limits.
+/// How long a stopped cookie sweeper is given to wind down before it is
+/// aborted. Shares the fleet-wide poller grace so teardown timing is one
+/// decision, not several.
+#[cfg(feature = "embedded-webview")]
+const SWEEPER_SHUTDOWN_GRACE_MS: u64 = crate::services::session_service::POLLER_STOP_GRACE_MS;
+
 pub const MIN_ZOOM_PERCENT: u32 = 25;
 pub const MAX_ZOOM_PERCENT: u32 = 500;
 
@@ -288,7 +306,7 @@ mod disabled {
 mod enabled {
     use super::{
         is_allowed_navigation, label_for_pane, off_screen_rect, rect_to_physical, BrowserRect,
-        ClearDataOptions, WebBrowserState,
+        ClearDataOptions, SweeperHandle, WebBrowserState, SWEEPER_SHUTDOWN_GRACE_MS,
     };
 
     use serde::Serialize;
@@ -638,16 +656,26 @@ mod enabled {
     /// `on_page_load` fast path: a SPA that sets its auth cookie via a late XHR is
     /// still captured within one sweep interval.
     fn maybe_start_cookie_sweeper(app: &AppHandle, state: &WebBrowserState) {
-        use std::sync::atomic::Ordering;
+        let Ok(mut slot) = state.sweeper.lock() else {
+            return;
+        };
         // Win the race to be the single sweeper; later calls become no-ops.
-        if state.sweeper_started.swap(true, Ordering::SeqCst) {
+        if slot.is_some() {
             return;
         }
+        let cancel = tokio_util::sync::CancellationToken::new();
         let app = app.clone();
-        tauri::async_runtime::spawn(async move {
+        let loop_cancel = cancel.clone();
+        let join = tokio::spawn(async move {
             let mut ticker = tokio::time::interval(std::time::Duration::from_secs(20));
             loop {
-                ticker.tick().await;
+                // Cancellation is observed at the only await that can block for
+                // 20 seconds, so a stop is acted on immediately rather than at
+                // the end of the current interval.
+                tokio::select! {
+                    _ = loop_cancel.cancelled() => break,
+                    _ = ticker.tick() => {}
+                }
                 let state = app.state::<WebBrowserState>();
                 // Clone handles out under the lock, then release it before any COM
                 // work (cookie persistence dispatches onto the webview thread).
@@ -659,6 +687,43 @@ mod enabled {
                     persist_session_cookies(&webview);
                 }
             }
+        });
+        *slot = Some(SweeperHandle { cancel, join });
+    }
+
+    /// Stop the sweeper once the last browser pane has gone.
+    ///
+    /// There is nothing left to sweep, and leaving an unstoppable 20-second
+    /// loop running for the rest of the process is exactly the shape ADR-011
+    /// rules out. `maybe_start_cookie_sweeper` starts a fresh one if a browser
+    /// pane is opened again.
+    fn stop_cookie_sweeper_if_idle(state: &WebBrowserState) {
+        let still_open = match state.webviews.lock() {
+            Ok(map) => !map.is_empty(),
+            // Lock poisoned: leave the sweeper alone rather than tear down on a
+            // count we cannot trust.
+            Err(_) => return,
+        };
+        if still_open {
+            return;
+        }
+        let Ok(mut slot) = state.sweeper.lock() else {
+            return;
+        };
+        let Some(handle) = slot.take() else {
+            return;
+        };
+        handle.cancel.cancel();
+        // `destroy` is synchronous, so the join happens on the runtime. The
+        // shared helper is what forces a task that ignored the token to stop,
+        // and it logs when it had to.
+        tokio::spawn(async move {
+            crate::services::session_service::join_or_abort(
+                vec![handle.join],
+                "web browser cookie sweeper",
+                SWEEPER_SHUTDOWN_GRACE_MS,
+            )
+            .await;
         });
     }
 
@@ -1106,6 +1171,7 @@ mod enabled {
             let _ = webview.close();
             log::info!("web-browser: destroyed child webview for pane {pane_id}");
         }
+        stop_cookie_sweeper_if_idle(state);
         Ok(())
     }
 }

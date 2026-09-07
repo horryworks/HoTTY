@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
 import type { Theme, ThemeTerminalColors } from '../../types/appTypes';
 import { nameToKey } from './nameToKey';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useModalEscape } from '../../hooks/useModalEscape';
 import './CustomThemeCreator.css';
 
 interface CustomThemeCreatorProps {
@@ -271,12 +273,20 @@ export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
         setTerminal(prev => ({ ...prev, [key]: value }));
     };
 
+    const modalRef = useRef<HTMLDivElement>(null);
+
     const handleCancel = () => {
         if (Object.keys(originalVariables).length > 0) {
             applyVariables(originalVariables);
         }
         onCancel();
     };
+
+    // Escape restores the pre-edit variables, exactly as the ✕ button does —
+    // a live theme preview that stayed applied after cancelling would be worse
+    // than no shortcut at all.
+    useModalEscape(isOpen ? handleCancel : null);
+    useFocusTrap(modalRef, isOpen);
 
     const handleSave = async () => {
         const name = displayName.trim();
@@ -326,7 +336,7 @@ export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
 
     return (
         <div className="ctc-overlay">
-            <div className="ctc-modal">
+            <div className="ctc-modal" ref={modalRef}>
                 <div className="ctc-header">
                     <h2>{t('settings.customTheme.title')}</h2>
                     <button className="ctc-close-btn" onClick={handleCancel} title={t('settings.customTheme.cancel')}>✕</button>

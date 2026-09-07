@@ -147,6 +147,17 @@ fn cleanup_window_snmp_watchers(app: &tauri::AppHandle, label: &str) {
     });
 }
 
+/// Stop the ping monitors a closing window owned, so their ping loops don't
+/// keep running after the window is gone. Mirrors [`cleanup_window_snmp_watchers`];
+/// a window with no monitor is a cheap no-op.
+fn cleanup_window_ping_monitors(app: &tauri::AppHandle, label: &str) {
+    let monitors = app.state::<PingMonitorState>().monitors.clone();
+    let label = label.to_string();
+    tauri::async_runtime::spawn(async move {
+        services::ping_monitor::stop_monitors_for_window(&monitors, &label).await;
+    });
+}
+
 /// Format the main window's title for a given app version (e.g. `HoTTY v2.0.9`).
 /// Extracted from `setup` so the title contract has unit coverage without
 /// booting a Tauri runtime.
@@ -214,13 +225,14 @@ pub fn run() {
         .manage(Arc::new(GcloudCacheState::new()))
         .manage(UpdaterState::new())
         // When a window closes, tear down only the sessions, File Server
-        // instances and SNMP watchers it owned (other windows keep running in
-        // this shared process).
+        // instances, SNMP watchers and ping monitors it owned (other windows
+        // keep running in this shared process).
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
                 cleanup_window_sessions(window.app_handle(), window.label());
                 cleanup_window_file_servers(window.app_handle(), window.label());
                 cleanup_window_snmp_watchers(window.app_handle(), window.label());
+                cleanup_window_ping_monitors(window.app_handle(), window.label());
                 // A version switch downloads in the background and then exits
                 // the whole app. If the window that asked for one is gone,
                 // stop it rather than let it close the windows still open.

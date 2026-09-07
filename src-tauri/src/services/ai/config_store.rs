@@ -9,6 +9,7 @@
 
 use crate::services::atomic_file::atomic_write;
 use crate::services::dpapi;
+use crate::services::session_service::humanize_fs_error;
 use std::path::{Path, PathBuf};
 
 pub struct EncryptedConfigStore {
@@ -28,13 +29,20 @@ impl EncryptedConfigStore {
         &self.path
     }
 
+    /// How this store is named in a user-facing message. The tag is the
+    /// provider slug ("netbox", "openai", …), which is what the user was
+    /// looking at when the failure happened.
+    fn what(&self) -> String {
+        format!("the saved {} settings", self.tag)
+    }
+
     /// Encrypt `plaintext` with DPAPI and write it to disk.
     pub fn save(&self, plaintext: &str) -> Result<(), String> {
         let encrypted = dpapi::encrypt_string(plaintext)?;
         // Atomic write so a crash or a concurrent save from another window can
         // never leave a truncated (unloadable) credential file.
         atomic_write(&self.path, encrypted.as_bytes())
-            .map_err(|e| format!("Failed to save config: {e}"))?;
+            .map_err(|e| humanize_fs_error(&self.what(), &e))?;
         log::debug!("[{}] Config saved", self.tag);
         Ok(())
     }
@@ -45,8 +53,8 @@ impl EncryptedConfigStore {
         if !self.path.exists() {
             return Ok(None);
         }
-        let encrypted = std::fs::read_to_string(&self.path)
-            .map_err(|e| format!("Failed to read config: {e}"))?;
+        let encrypted =
+            std::fs::read_to_string(&self.path).map_err(|e| humanize_fs_error(&self.what(), &e))?;
         // Trusted in-process read of HoTTY's own store, so pre-entropy blobs
         // written by a dev build before v2.0.0 are still accepted here.
         let plaintext = dpapi::decrypt_string_allow_legacy(&encrypted)?;

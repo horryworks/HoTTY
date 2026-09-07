@@ -43,12 +43,16 @@
     border: none;
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: calc(var(--font-size-base) + 5px);
+    font-size: calc(var(--font-size-base) + 4px);
     line-height: 1;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background-color 0.1s;
     z-index: 1;
 }
 
 .session-dialog-close:hover {
+    background-color: var(--btn-secondary-hover-bg);
     color: var(--text-primary);
 }
 
@@ -352,7 +356,7 @@
     justify-content: flex-end;
     align-items: center;
     gap: 8px;
-    margin-top: 12px;
+    margin-top: 16px;
 }
 
 .connect-form-inline {

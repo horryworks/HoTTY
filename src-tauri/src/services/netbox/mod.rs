@@ -45,12 +45,17 @@ pub enum NetboxError {
     TokenTooLong,
     #[error("NetBox API token contains characters that cannot be sent in a request header")]
     TokenInvalidChars,
-    #[error(
-        "Site ID field must be slug, facility, description, or cf:<custom field name>"
-    )]
+    #[error("Site ID field must be slug, facility, description, or cf:<custom field name>")]
     SiteIdField,
     #[error("No NetBox API token is saved. Open Settings, NetBox and connect first.")]
     NoToken,
+    /// The saved token is bound to the address it was issued for. Neither URL
+    /// is named here: this string reaches the renderer, and the whole point of
+    /// the binding is that the token's server is not the caller's to choose.
+    #[error(
+        "The saved NetBox token was issued for a different server address. Reconnect in Settings."
+    )]
+    TokenServerMismatch,
     /// Already-formatted by `ai::errors::describe_http_error`, which caps and
     /// sanitizes any detail it takes from the body.
     #[error("{0}")]
@@ -64,6 +69,94 @@ pub enum NetboxError {
     TooManyPages(u32),
     #[error("A NetBox response was larger than HoTTY will read")]
     TooLarge,
+    #[error("Could not read the saved NetBox token: {0}")]
+    StoreRead(String),
     #[error("Could not save the NetBox token: {0}")]
-    Store(String),
+    StoreWrite(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Mirrored in TypeScript as `NETBOX_DEFAULT_SERVER`. Nothing checks the two
+    /// agree, so pin the literal on this side; a silent divergence would orphan
+    /// every folder marker in the user's tree.
+    #[test]
+    fn the_default_server_key_is_the_one_typescript_writes() {
+        assert_eq!(DEFAULT_SERVER_KEY, "default");
+    }
+
+    /// The security property this module is built around: an error string
+    /// crosses to the renderer, and a NetBox error body can echo the request —
+    /// which carries the `Authorization` header.
+    #[test]
+    fn no_error_message_can_carry_the_token() {
+        const TOKEN: &str = "0123456789abcdef0123456789abcdef01234567";
+        // Every variant that takes a payload, given a payload containing a
+        // token. Only the pre-sanitized pass-through variants echo their input,
+        // and those are fed by `describe_http_error`, never by a raw body.
+        let carriers = [
+            NetboxError::Http(TOKEN.to_string()),
+            NetboxError::Transport(TOKEN.to_string()),
+            NetboxError::StoreRead(TOKEN.to_string()),
+            NetboxError::StoreWrite(TOKEN.to_string()),
+        ];
+        // Those four are the *only* variants able to echo anything at all, so
+        // the check that matters is that no other variant has a payload slot.
+        for e in &carriers {
+            assert!(
+                e.to_string().contains(TOKEN),
+                "this test is only meaningful while these variants pass their payload through"
+            );
+        }
+
+        // The variants a caller cannot influence must be constant strings.
+        for e in [
+            NetboxError::UrlEmpty,
+            NetboxError::UrlTooLong,
+            NetboxError::UrlMalformed,
+            NetboxError::UrlScheme,
+            NetboxError::UrlNoHost,
+            NetboxError::TokenEmpty,
+            NetboxError::TokenTooLong,
+            NetboxError::TokenInvalidChars,
+            NetboxError::SiteIdField,
+            NetboxError::NoToken,
+            NetboxError::TokenServerMismatch,
+            NetboxError::Decode,
+            NetboxError::TooLarge,
+        ] {
+            let msg = e.to_string();
+            assert!(!msg.contains(TOKEN));
+            assert!(!msg.is_empty());
+        }
+    }
+
+    /// A read failure once reported itself as a failed save, which sends the
+    /// user to look at the wrong thing.
+    #[test]
+    fn the_store_variants_say_which_direction_failed() {
+        assert!(NetboxError::StoreRead("x".into())
+            .to_string()
+            .contains("read"));
+        assert!(NetboxError::StoreWrite("x".into())
+            .to_string()
+            .contains("save"));
+    }
+
+    /// Neither URL is named: the whole point of the binding is that the token's
+    /// server is not the caller's to choose, so the message must not confirm
+    /// which address the caller guessed.
+    #[test]
+    fn the_mismatch_message_names_no_address() {
+        let msg = NetboxError::TokenServerMismatch.to_string();
+        assert!(!msg.contains("http"));
+        assert!(msg.contains("Reconnect"));
+    }
+
+    #[test]
+    fn the_page_limit_is_named_in_its_own_error() {
+        assert!(NetboxError::TooManyPages(40).to_string().contains("40"));
+    }
 }

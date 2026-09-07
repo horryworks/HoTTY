@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useModalEscape } from '../../hooks/useModalEscape';
 import { tauriService } from '../../services/tauriService';
 import type { ThirdPartyLicenses } from '../../types/appTypes';
@@ -20,7 +21,10 @@ export function ThirdPartyLicensesModal({ onClose }: ThirdPartyLicensesModalProp
   const [data, setData] = useState<ThirdPartyLicenses | null>(null);
   const [error, setError] = useState(false);
 
+  const modalRef = useRef<HTMLDivElement>(null);
+
   useModalEscape(onClose);
+  useFocusTrap(modalRef, true);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,7 +40,13 @@ export function ThirdPartyLicensesModal({ onClose }: ThirdPartyLicensesModalProp
 
   return (
     <div className="tpl-overlay">
-      <div className="tpl-modal" role="dialog" aria-modal="true" aria-labelledby="tpl-title">
+      <div
+        className="tpl-modal"
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tpl-title"
+      >
         <div className="tpl-header">
           <span id="tpl-title">{t('settings.about.thirdPartyLicensesTitle')}</span>
           <button

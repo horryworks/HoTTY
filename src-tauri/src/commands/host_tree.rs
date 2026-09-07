@@ -13,6 +13,7 @@ use tokio::sync::Mutex;
 use crate::services::dpapi::{
     decrypt_string, decrypt_string_allow_legacy, decrypt_v1_safe_string, encrypt_string,
 };
+use crate::services::session_service::humanize_fs_error;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -367,7 +368,7 @@ pub async fn export_htree(
     let path_ref = path
         .as_path()
         .ok_or_else(|| "invalid export path".to_string())?;
-    std::fs::write(path_ref, &payload).map_err(|e| format!("failed to write file: {e}"))?;
+    std::fs::write(path_ref, &payload).map_err(|e| humanize_fs_error("the export file", &e))?;
 
     Ok(ExportResult {
         success: true,
@@ -431,7 +432,7 @@ pub async fn decrypt_import_file(
         .ok_or("no import file selected — call select_import_file first")?;
 
     // Read file
-    let data = std::fs::read(&path_str).map_err(|e| format!("failed to read file: {e}"))?;
+    let data = std::fs::read(&path_str).map_err(|e| humanize_fs_error("the import file", &e))?;
 
     // Parse header (format is detected from the magic number)
     let (format, salt, nonce, ciphertext_with_tag) = parse_htree_payload(&data)?;

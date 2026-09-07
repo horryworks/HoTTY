@@ -56,7 +56,7 @@
 
 .save-to-tree-modal h3 {
     margin: 0;
-    font-size: calc(var(--font-size-base) + 2px);
+    font-size: var(--font-size-base);
     font-weight: 600;
     color: var(--text-primary);
     font-family: var(--ui-font-family);

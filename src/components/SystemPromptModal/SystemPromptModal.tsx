@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useModalEscape } from '../../hooks/useModalEscape';
 import './SystemPromptModal.css';
 
@@ -16,6 +17,7 @@ export const SystemPromptModal: React.FC<SystemPromptModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -23,6 +25,7 @@ export const SystemPromptModal: React.FC<SystemPromptModalProps> = ({
   }, []);
 
   useModalEscape(onClose);
+  useFocusTrap(modalRef, true);
 
   const handleCopy = async () => {
     try {
@@ -46,7 +49,7 @@ export const SystemPromptModal: React.FC<SystemPromptModalProps> = ({
       aria-label={t('dialogs.systemPrompt.ariaLabel')}
       onClick={handleOverlayClick}
     >
-      <div className="system-prompt-modal">
+      <div className="system-prompt-modal" ref={modalRef}>
         <div className="system-prompt-modal-header">
           <span className="system-prompt-modal-title">
             {t('dialogs.systemPrompt.title', { persona: personaLabel })}

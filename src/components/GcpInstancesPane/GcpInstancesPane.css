@@ -40,9 +40,11 @@
   padding: 3px 8px;
   cursor: pointer;
   font-size: calc(var(--font-size-base) - 2px);
-  line-height: 1;
   transition: background-color 0.1s;
   font-family: var(--ui-font-family);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .gcp-refresh-btn:hover:not(:disabled),

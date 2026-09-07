@@ -66,3 +66,29 @@ describe('IapVmStartModal', () => {
     expect(gceIapRespondVmStart).toHaveBeenCalledWith('sess-iap-1', false);
   });
 });
+
+describe('IapVmStartModal — Escape', () => {
+  beforeEach(() => {
+    gceIapRespondVmStart.mockClear();
+    emit = null;
+  });
+
+  // Starting a VM costs money, so the dismissive answer must be the one that
+  // does nothing.
+  it('declines rather than starting the VM', async () => {
+    render(<IapVmStartModal />);
+    await waitFor(() => expect(emit).not.toBeNull());
+    act(() => emit!(samplePayload));
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    await waitFor(() => expect(gceIapRespondVmStart).toHaveBeenCalledTimes(1));
+    expect(gceIapRespondVmStart).toHaveBeenCalledWith('sess-iap-1', false);
+  });
+
+  it('does nothing when no prompt is showing', () => {
+    render(<IapVmStartModal />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(gceIapRespondVmStart).not.toHaveBeenCalled();
+  });
+});

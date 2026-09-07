@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useModalEscape } from '../../hooks/useModalEscape';
 import './ConfirmModal.css';
 
@@ -14,6 +15,7 @@ interface ConfirmModalProps {
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({ title, message, confirmLabel, onConfirm, onCancel }) => {
     const { t } = useTranslation();
     const cancelButtonRef = useRef<HTMLButtonElement>(null);
+    const modalRef = useRef<HTMLDivElement>(null);
     const resolvedTitle = title ?? t('dialogs.confirm.title');
     const resolvedConfirmLabel = confirmLabel ?? t('dialogs.confirm.confirmLabel');
 
@@ -24,10 +26,11 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({ title, message, conf
     }, []);
 
     useModalEscape(onCancel);
+    useFocusTrap(modalRef, true);
 
     return (
         <div className="confirm-modal-overlay">
-            <div className="confirm-modal">
+            <div className="confirm-modal" ref={modalRef}>
                 <h3>
                     <span>&#10067;</span> {resolvedTitle}
                 </h3>

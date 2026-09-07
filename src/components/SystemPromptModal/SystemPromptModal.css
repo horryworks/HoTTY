@@ -101,6 +101,11 @@
   transition: background-color 0.1s;
 }
 
+.system-prompt-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .system-prompt-btn.secondary {
   background: var(--btn-secondary-bg);
   color: var(--text-primary);

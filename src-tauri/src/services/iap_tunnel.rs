@@ -282,8 +282,7 @@ async fn run_gcloud_with_timeout(args: &[&str], timeout_secs: u64) -> Result<Str
 
     #[cfg(target_os = "windows")]
     {
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.creation_flags(crate::services::os_paths::CREATE_NO_WINDOW);
     }
 
     // Inherit a sanitized environment, matching gcloud_iap::build_gcloud_command.
@@ -406,8 +405,7 @@ pub async fn run_auth_login() -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.creation_flags(crate::services::os_paths::CREATE_NO_WINDOW);
     }
 
     // Same sanitized-env policy as run_gcloud, so gcloud finds its bundled python

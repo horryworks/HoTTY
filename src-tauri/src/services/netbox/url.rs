@@ -33,7 +33,10 @@ pub fn validate_base_url(raw: &str) -> Result<String, NetboxError> {
     }
     // `host_str` returns an IPv6 literal already bracketed (`[fd00::1]`), so
     // rebuilding from it round-trips without parsing the address ourselves.
-    let host = url.host_str().filter(|h| !h.is_empty()).ok_or(NetboxError::UrlNoHost)?;
+    let host = url
+        .host_str()
+        .filter(|h| !h.is_empty())
+        .ok_or(NetboxError::UrlNoHost)?;
 
     let mut out = format!("{}://{}", url.scheme(), host);
     if let Some(port) = url.port() {
@@ -144,7 +147,10 @@ mod tests {
     #[test]
     fn rejects_empty_and_blank() {
         assert!(matches!(validate_base_url(""), Err(NetboxError::UrlEmpty)));
-        assert!(matches!(validate_base_url("   "), Err(NetboxError::UrlEmpty)));
+        assert!(matches!(
+            validate_base_url("   "),
+            Err(NetboxError::UrlEmpty)
+        ));
     }
 
     #[test]
@@ -174,7 +180,10 @@ mod tests {
     #[test]
     fn rejects_an_over_long_url() {
         let long = format!("https://{}.example.com", "a".repeat(MAX_URL_LEN));
-        assert!(matches!(validate_base_url(&long), Err(NetboxError::UrlTooLong)));
+        assert!(matches!(
+            validate_base_url(&long),
+            Err(NetboxError::UrlTooLong)
+        ));
     }
 
     #[test]

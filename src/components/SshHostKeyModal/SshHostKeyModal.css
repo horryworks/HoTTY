@@ -19,6 +19,7 @@
   overflow: hidden;
   width: 520px;
   max-width: 90vw;
+  max-height: 90vh;
   color: var(--text-primary);
   font-family: var(--ui-font-family);
   font-size: var(--font-size-base);
@@ -85,6 +86,13 @@
   font-family: var(--ui-font-family);
   font-size: calc(var(--font-size-base) - 1px);
   transition: background-color 0.1s;
+}
+
+.ssh-host-key-btn-primary:disabled,
+.ssh-host-key-btn-secondary:disabled,
+.ssh-host-key-btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .ssh-host-key-btn-primary {

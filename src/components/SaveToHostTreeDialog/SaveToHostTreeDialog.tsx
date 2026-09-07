@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useHostManager } from '../../hooks/useHostManager';
 import { buildHostEntryFromConfig } from './buildHostEntry';
 import type { HostTreeNode, ProtocolId } from '../../types/appTypes';
@@ -48,6 +49,9 @@ export const SaveToHostTreeDialog: React.FC<SaveToHostTreeDialogProps> = ({
     const [newFolderName, setNewFolderName] = useState('');
     const nameInputRef = useRef<HTMLInputElement>(null);
     const newFolderInputRef = useRef<HTMLInputElement>(null);
+    const modalRef = useRef<HTMLDivElement>(null);
+
+    useFocusTrap(modalRef, open);
 
     useEffect(() => {
         if (open) {
@@ -108,6 +112,7 @@ export const SaveToHostTreeDialog: React.FC<SaveToHostTreeDialogProps> = ({
         <div className="save-to-tree-overlay" onClick={onClose}>
             <div
                 className="save-to-tree-modal"
+                ref={modalRef}
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => {
                     e.stopPropagation();

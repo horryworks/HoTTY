@@ -42,7 +42,6 @@ interface PaneActions {
   removeSession: (sessionId: string) => void;
   reorderSession: (fromIndex: number, toIndex: number) => void;
   moveSessionToPane: (sessionId: string, targetPaneId: string) => void;
-  setPaneAllocations: (next: Record<string, string | null>) => void;
 }
 
 function findEmptyGridPane(
@@ -210,7 +209,6 @@ export const usePaneStore = create<PaneState & PaneActions>()(
           return { paneAllocations, activePaneId: targetPaneId };
         }),
 
-      setPaneAllocations: (next) => set({ paneAllocations: next }),
     }),
     {
       // Per-window: each window keeps its own pane layout. The initial "main"

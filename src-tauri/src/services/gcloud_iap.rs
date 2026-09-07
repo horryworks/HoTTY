@@ -273,9 +273,7 @@ use super::sensitive_env::sanitized_env;
 // ---------------------------------------------------------------------------
 
 fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("USERPROFILE")
-        .or_else(|| std::env::var_os("HOME"))
-        .map(PathBuf::from)
+    crate::services::os_paths::home_dir()
 }
 
 fn ssh_key_paths() -> Option<(PathBuf, PathBuf)> {
@@ -344,8 +342,7 @@ fn build_gcloud_command(args: &[String]) -> TokioCommand {
     {
         // tokio::process::Command exposes creation_flags as an inherent method
         // on Windows; no CommandExt import needed.
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.creation_flags(crate::services::os_paths::CREATE_NO_WINDOW);
     }
     // Inherit a sanitized environment so gcloud can find its bundled python
     // and read %APPDATA%/gcloud for auth.
@@ -1096,8 +1093,7 @@ async fn ensure_ssh_key() -> Result<(PathBuf, bool), SessionError> {
     {
         // tokio::process::Command exposes creation_flags as an inherent method
         // on Windows; no CommandExt import needed.
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.creation_flags(crate::services::os_paths::CREATE_NO_WINDOW);
     }
     let output = timeout(Duration::from_secs(30), cmd.output())
         .await
@@ -1150,8 +1146,7 @@ async fn ensure_key_permissions(priv_path: &Path) -> Result<(), SessionError> {
     cmd.stdout(Stdio::null());
     cmd.stderr(Stdio::piped());
     {
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.creation_flags(crate::services::os_paths::CREATE_NO_WINDOW);
     }
     let output = timeout(Duration::from_secs(10), cmd.output())
         .await

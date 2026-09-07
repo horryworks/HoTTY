@@ -47,7 +47,9 @@ impl SiteIdField {
             "description" => return Ok(Some(Self::Description)),
             _ => {}
         }
-        let key = t.strip_prefix(CUSTOM_PREFIX).ok_or(NetboxError::SiteIdField)?;
+        let key = t
+            .strip_prefix(CUSTOM_PREFIX)
+            .ok_or(NetboxError::SiteIdField)?;
         if key.is_empty() || key.len() > MAX_CUSTOM_KEY_LEN {
             return Err(NetboxError::SiteIdField);
         }
@@ -162,7 +164,10 @@ mod tests {
     #[test]
     fn parses_every_built_in() {
         assert_eq!(SiteIdField::parse("slug").unwrap(), Some(SiteIdField::Slug));
-        assert_eq!(SiteIdField::parse("facility").unwrap(), Some(SiteIdField::Facility));
+        assert_eq!(
+            SiteIdField::parse("facility").unwrap(),
+            Some(SiteIdField::Facility)
+        );
         assert_eq!(
             SiteIdField::parse("description").unwrap(),
             Some(SiteIdField::Description)
@@ -188,7 +193,10 @@ mod tests {
         for raw in ["slug", "facility", "description", "cf:site_code"] {
             let parsed = SiteIdField::parse(raw).unwrap().unwrap();
             assert_eq!(parsed.as_stored(), raw);
-            assert_eq!(SiteIdField::parse(&parsed.as_stored()).unwrap(), Some(parsed));
+            assert_eq!(
+                SiteIdField::parse(&parsed.as_stored()).unwrap(),
+                Some(parsed)
+            );
         }
     }
 
@@ -225,7 +233,10 @@ mod tests {
     fn reads_a_built_in_value_and_trims_it() {
         let mut site = site_with(BTreeMap::new());
         site.slug = "  site-01  ".to_string();
-        assert_eq!(SiteIdField::Slug.value_of(&site), Some("site-01".to_string()));
+        assert_eq!(
+            SiteIdField::Slug.value_of(&site),
+            Some("site-01".to_string())
+        );
     }
 
     #[test]
@@ -281,7 +292,10 @@ mod tests {
     #[test]
     fn an_absent_custom_field_is_none() {
         let site = site_with(BTreeMap::new());
-        assert_eq!(SiteIdField::Custom("nope".to_string()).value_of(&site), None);
+        assert_eq!(
+            SiteIdField::Custom("nope".to_string()).value_of(&site),
+            None
+        );
     }
 
     fn def(data_type: &str, object_types: &[&str], content_types: &[&str]) -> CustomFieldDef {

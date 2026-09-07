@@ -61,3 +61,25 @@ describe('HelpModal', () => {
     expect(document.querySelector('.help-auth-table')).toBeTruthy();
   });
 });
+
+describe('HelpModal — Escape', () => {
+  // The modal lists "Escape — close dialog" among the shortcuts it documents,
+  // so this is the app agreeing with its own help.
+  it('closes on Escape', () => {
+    const onClose = vi.fn();
+    render(<HelpModal open={true} onClose={onClose} />);
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fire Escape while closed', () => {
+    const onClose = vi.fn();
+    render(<HelpModal open={false} onClose={onClose} />);
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});

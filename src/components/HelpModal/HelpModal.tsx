@@ -1,5 +1,8 @@
 import type React from 'react';
+import { useRef } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useModalEscape } from '../../hooks/useModalEscape';
 import './HelpModal.css';
 
 const FeaturesIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
@@ -25,12 +28,18 @@ interface HelpModalProps {
 
 export function HelpModal({ open, onClose }: HelpModalProps) {
   const { t } = useTranslation();
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  // This modal lists "Escape — close dialog" among the shortcuts it documents,
+  // so not implementing it was the one place the app contradicted its own help.
+  useModalEscape(open ? onClose : null);
+  useFocusTrap(modalRef, open);
 
   if (!open) return null;
 
   return (
     <div className="settings-modal-overlay" onClick={onClose}>
-      <div className="settings-modal help-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="settings-modal help-modal" ref={modalRef} onClick={(e) => e.stopPropagation()}>
         <div className="settings-modal-header">
           <span>{t('help.title')}</span>
           <button className="help-modal-close" onClick={onClose}>

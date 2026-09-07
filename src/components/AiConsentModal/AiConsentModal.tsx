@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useModalEscape } from '../../hooks/useModalEscape';
 import './AiConsentModal.css';
 
@@ -18,16 +19,19 @@ interface AiConsentModalProps {
 export function AiConsentModal({ onAccept, onCancel }: AiConsentModalProps) {
   const { t } = useTranslation();
   const acceptButtonRef = useRef<HTMLButtonElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     acceptButtonRef.current?.focus();
   }, []);
 
   useModalEscape(onCancel);
+  useFocusTrap(modalRef, true);
 
   return (
     <div className="ai-consent-overlay">
       <div
+        ref={modalRef}
         className="ai-consent-modal"
         role="dialog"
         aria-modal="true"

@@ -238,7 +238,11 @@ impl<'a> NetboxClient<'a> {
     /// 403 cannot tell them apart, and guessing sends the user to edit the
     /// field that was already correct.
     pub async fn probe(&self) -> Result<Probe, NetboxError> {
-        let resp = self.get(STATUS_PATH).send().await.map_err(transport_error)?;
+        let resp = self
+            .get(STATUS_PATH)
+            .send()
+            .await
+            .map_err(transport_error)?;
         let status = resp.status();
         // Read the header before the body is consumed.
         let api_version = resp
@@ -367,10 +371,7 @@ impl<'a> NetboxClient<'a> {
             let resp = self.get(&target).send().await.map_err(transport_error)?;
             let status = resp.status();
             if !status.is_success() {
-                if tolerate_denied
-                    && page == 0
-                    && matches!(status.as_u16(), 401 | 403 | 404)
-                {
+                if tolerate_denied && page == 0 && matches!(status.as_u16(), 401 | 403 | 404) {
                     return Ok(None);
                 }
                 let body = read_capped_text(resp).await;
@@ -476,10 +477,7 @@ mod tests {
 
     #[test]
     fn a_listing_asks_for_the_maximum_page_size() {
-        assert_eq!(
-            first_page_target(SITES_PATH),
-            "/api/dcim/sites/?limit=250"
-        );
+        assert_eq!(first_page_target(SITES_PATH), "/api/dcim/sites/?limit=250");
     }
 
     #[test]
@@ -547,10 +545,30 @@ mod tests {
     #[test]
     fn regions_are_ordered_parents_before_children() {
         let mut rows = [
-            RawRegion { id: 3, name: "Kanto".into(), parent: None, depth: 2 },
-            RawRegion { id: 1, name: "Asia".into(), parent: None, depth: 0 },
-            RawRegion { id: 5, name: "Japan".into(), parent: None, depth: 1 },
-            RawRegion { id: 2, name: "Europe".into(), parent: None, depth: 0 },
+            RawRegion {
+                id: 3,
+                name: "Kanto".into(),
+                parent: None,
+                depth: 2,
+            },
+            RawRegion {
+                id: 1,
+                name: "Asia".into(),
+                parent: None,
+                depth: 0,
+            },
+            RawRegion {
+                id: 5,
+                name: "Japan".into(),
+                parent: None,
+                depth: 1,
+            },
+            RawRegion {
+                id: 2,
+                name: "Europe".into(),
+                parent: None,
+                depth: 0,
+            },
         ];
         rows.sort_by(|a, b| a.depth.cmp(&b.depth).then_with(|| a.id.cmp(&b.id)));
         let ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
@@ -572,9 +590,15 @@ mod tests {
     #[test]
     fn rejects_an_empty_or_over_long_token() {
         assert!(matches!(validate_token(""), Err(NetboxError::TokenEmpty)));
-        assert!(matches!(validate_token("   \n"), Err(NetboxError::TokenEmpty)));
+        assert!(matches!(
+            validate_token("   \n"),
+            Err(NetboxError::TokenEmpty)
+        ));
         let long = "a".repeat(MAX_TOKEN_LEN + 1);
-        assert!(matches!(validate_token(&long), Err(NetboxError::TokenTooLong)));
+        assert!(matches!(
+            validate_token(&long),
+            Err(NetboxError::TokenTooLong)
+        ));
     }
 
     #[test]

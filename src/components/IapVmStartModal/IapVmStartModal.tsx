@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useModalEscape } from '../../hooks/useModalEscape';
 import { tauriService } from '../../services/tauriService';
 import { logError } from '../../utils/logger';
 import type { IapVmStartPromptPayload } from '../../types/appTypes';
@@ -10,6 +12,7 @@ export function IapVmStartModal() {
   const { t } = useTranslation();
   const [prompt, setPrompt] = useState<IapVmStartPromptPayload | null>(null);
   const [busy, setBusy] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -26,24 +29,35 @@ export function IapVmStartModal() {
     };
   }, []);
 
-  if (!prompt) return null;
+  const respond = useCallback(
+    async (approved: boolean) => {
+      if (!prompt || busy) return;
+      setBusy(true);
+      try {
+        await tauriService.gceIapRespondVmStart(prompt.sessionId, approved);
+      } catch (e) {
+        logError('IAP', i18n.t('notifications.errors.iapVmPromptRespond'), e);
+      } finally {
+        setBusy(false);
+        setPrompt(null);
+      }
+    },
+    [prompt, busy],
+  );
 
-  const respond = async (approved: boolean) => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await tauriService.gceIapRespondVmStart(prompt.sessionId, approved);
-    } catch (e) {
-      logError('IAP', i18n.t('notifications.errors.iapVmPromptRespond'), e);
-    } finally {
-      setBusy(false);
-      setPrompt(null);
-    }
-  };
+  // Escape declines: starting a VM costs money, so the dismissive answer must
+  // be the one that does nothing.
+  const declineOnEscape = useCallback(() => {
+    void respond(false);
+  }, [respond]);
+  useModalEscape(prompt ? declineOnEscape : null);
+  useFocusTrap(modalRef, prompt !== null);
+
+  if (!prompt) return null;
 
   return (
     <div className="iap-vm-start-overlay">
-      <div className="iap-vm-start-modal">
+      <div className="iap-vm-start-modal" ref={modalRef}>
         <div className="iap-vm-start-header">
           <span>{t('dialogs.iapVmStart.title')}</span>
         </div>

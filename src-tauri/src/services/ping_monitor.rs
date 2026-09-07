@@ -96,6 +96,10 @@ pub struct MonitorHandle {
     targets: Arc<Mutex<Vec<String>>>,
     interval_ms: Arc<Mutex<u64>>,
     join: tokio::task::JoinHandle<()>,
+    /// The window that started this monitor, so closing that window stops it
+    /// (ADR-011). Without it a Ping Monitor pane's loop kept pinging after its
+    /// window was gone, in this single-process/multi-window app.
+    window_label: String,
 }
 
 /// Signal a monitor to stop, wait briefly for the loop to wind down, then force
@@ -195,7 +199,7 @@ async fn execute_ping(target: &str) -> PingResult {
     #[cfg(windows)]
     let output = Command::new("ping")
         .args(["-n", "1", "-w", "3000", target])
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW
+        .creation_flags(crate::services::os_paths::CREATE_NO_WINDOW)
         .kill_on_drop(true)
         .output()
         .await;
@@ -329,6 +333,8 @@ pub struct StartMonitorConfig {
     pub interval_ms: u64,
     pub logging_enabled: bool,
     pub logging_path: String,
+    /// Label of the window that owns this monitor.
+    pub window_label: String,
 }
 
 /// Start a ping monitor for a session.
@@ -352,6 +358,7 @@ pub async fn start_monitor(
     }
 
     let session_id = config.session_id;
+    let window_label = config.window_label;
 
     // Stop existing monitor. Fully tear it down (cancel, then abort if it does
     // not stop) before starting the replacement — dropping the handle alone
@@ -450,6 +457,7 @@ pub async fn start_monitor(
             targets: targets_for_handle,
             interval_ms: interval_for_handle,
             join,
+            window_label,
         },
     );
 
@@ -461,6 +469,23 @@ pub async fn stop_monitor(monitors: &mut HashMap<String, MonitorHandle>, session
     if let Some(handle) = monitors.remove(session_id) {
         shutdown(handle).await;
         log::info!("ping-monitor: stopped session {session_id}");
+    }
+}
+
+/// Stop every monitor a closing window owned. Mirrors
+/// `snmp::stop_watchers_for_window`; a window that ran no monitor is a no-op.
+pub async fn stop_monitors_for_window(
+    monitors: &Arc<Mutex<HashMap<String, MonitorHandle>>>,
+    label: &str,
+) {
+    let mut guard = monitors.lock().await;
+    let ids: Vec<String> = guard
+        .iter()
+        .filter(|(_, h)| h.window_label == label)
+        .map(|(id, _)| id.clone())
+        .collect();
+    for id in ids {
+        stop_monitor(&mut guard, &id).await;
     }
 }
 
@@ -670,6 +695,38 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[tokio::test]
+    async fn stop_monitors_for_window_stops_only_that_windows_monitors() {
+        // ADR-011: closing one window must not stop another window's pane.
+        let monitors: Arc<Mutex<HashMap<String, MonitorHandle>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        {
+            let mut guard = monitors.lock().await;
+            guard.insert("ping-main".to_string(), spawn_parked("main"));
+            guard.insert("ping-second".to_string(), spawn_parked("win-2"));
+        }
+
+        stop_monitors_for_window(&monitors, "main").await;
+
+        let guard = monitors.lock().await;
+        assert!(!guard.contains_key("ping-main"));
+        assert!(guard.contains_key("ping-second"));
+    }
+
+    #[tokio::test]
+    async fn stop_monitors_for_window_is_a_no_op_for_a_window_with_none() {
+        let monitors: Arc<Mutex<HashMap<String, MonitorHandle>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        {
+            let mut guard = monitors.lock().await;
+            guard.insert("ping-main".to_string(), spawn_parked("main"));
+        }
+
+        stop_monitors_for_window(&monitors, "win-9").await;
+
+        assert!(monitors.lock().await.contains_key("ping-main"));
+    }
+
     #[test]
     fn setup_csv_logging_nonexistent_dir() {
         assert!(setup_csv_logging("/nonexistent/dir/path").is_none());
@@ -812,7 +869,7 @@ mod tests {
 
     /// A handle whose task parks on the cancel channel, so joining completes as
     /// soon as it is signalled.
-    fn spawn_parked() -> MonitorHandle {
+    fn spawn_parked(window_label: &str) -> MonitorHandle {
         let (cancel, mut rx) = tokio::sync::watch::channel(false);
         let join = tokio::spawn(async move {
             let _ = rx.changed().await;
@@ -822,13 +879,14 @@ mod tests {
             targets: Arc::new(Mutex::new(vec!["192.168.1.1".to_string()])),
             interval_ms: Arc::new(Mutex::new(10_000)),
             join,
+            window_label: window_label.to_string(),
         }
     }
 
     #[tokio::test]
     async fn stop_monitor_removes_and_cancels() {
         let mut map = HashMap::new();
-        map.insert("ping-1".to_string(), spawn_parked());
+        map.insert("ping-1".to_string(), spawn_parked("main"));
         stop_monitor(&mut map, "ping-1").await;
         assert!(map.is_empty());
     }
@@ -836,7 +894,7 @@ mod tests {
     #[tokio::test]
     async fn stop_monitor_is_noop_for_unknown_session() {
         let mut map = HashMap::new();
-        map.insert("ping-1".to_string(), spawn_parked());
+        map.insert("ping-1".to_string(), spawn_parked("main"));
         stop_monitor(&mut map, "ping-nope").await;
         assert_eq!(map.len(), 1);
     }
@@ -857,6 +915,7 @@ mod tests {
                 targets: Arc::new(Mutex::new(Vec::new())),
                 interval_ms: Arc::new(Mutex::new(10_000)),
                 join,
+                window_label: "main".to_string(),
             },
         );
 

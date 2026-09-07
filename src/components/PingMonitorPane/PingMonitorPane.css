@@ -34,6 +34,8 @@
 }
 
 .ping-monitor-toolbar-btn {
+  background: var(--btn-secondary-bg);
+  color: var(--text-primary);
   padding: 3px 8px;
   transition: background-color 0.1s;
   border: none;

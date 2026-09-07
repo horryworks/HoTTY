@@ -90,10 +90,10 @@ pub fn is_unc_path(path: &str) -> bool {
     trimmed.starts_with(r"\\") || trimmed.starts_with("//")
 }
 
+/// The user's home directory as a string. Resolution itself lives in
+/// `os_paths`, which is the one module allowed to know OS path conventions.
 pub fn dirs_home() -> Option<String> {
-    std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .ok()
+    crate::services::os_paths::home_dir().map(|p| p.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useModalEscape } from '../../hooks/useModalEscape';
 import './PasteConfirmationModal.css';
 
@@ -12,6 +13,7 @@ interface PasteConfirmationModalProps {
 export function PasteConfirmationModal({ content, onConfirm, onCancel }: PasteConfirmationModalProps) {
   const { t } = useTranslation();
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     confirmButtonRef.current?.focus();
@@ -26,12 +28,13 @@ export function PasteConfirmationModal({ content, onConfirm, onCancel }: PasteCo
   }, [onConfirm]);
 
   useModalEscape(onCancel);
+  useFocusTrap(modalRef, true);
 
   const hasNewlines = /\r\n|\n|\r/.test(content);
 
   return (
     <div className="paste-modal-overlay">
-      <div className={`paste-modal${hasNewlines ? ' has-newlines' : ''}`}>
+      <div className={`paste-modal${hasNewlines ? ' has-newlines' : ''}`} ref={modalRef}>
         <div className="paste-modal-header">{t('dialogs.paste.header')}</div>
         {hasNewlines && (
           <div className="paste-warning" role="alert">

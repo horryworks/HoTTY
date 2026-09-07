@@ -1,5 +1,33 @@
 # Release Notes
 
+## v2.1.0-beta4
+
+**The host tree can mirror NetBox.** If your organisation already keeps its sites in NetBox, the folder structure in the New Session dialog no longer has to be maintained by hand a second time: point HoTTY at your NetBox, and its Regions and Sites appear as folders that stay in step from then on.
+
+### New Features
+
+- **NetBox folder sync.** Settings has a new **NetBox** tab. Give it your NetBox address and an API token, press Connect once, and HoTTY mirrors that server's Regions and Sites into a single folder named **NetBox** at the bottom of the host tree. Nested regions come through nested. Sync runs from a button on the host tree toolbar and once at startup, and you can turn the startup one off.
+
+  **Site folders are named `<code> <site name>`, and you choose which NetBox field holds the code** — `slug`, `facility`, `description`, or any custom field on Site. HoTTY reads the custom-field definitions off your server and lists them, so you pick from what you actually have rather than typing a guess; if the token cannot read those definitions, it says so and lets you type the key instead. Getting this wrong is normally silent — no error, no failure, just names that never change — so the tab reports how many sites had no value for the field you picked. Leave the field unset and folders keep NetBox's plain site name.
+
+  **The split of ownership is fixed and deliberate.** NetBox owns the folder names and where folders sit *inside* the NetBox folder; you own everything else. Hosts you file into a site folder are never read, moved or reordered by a sync. Drag a folder out of the NetBox container and it stops being rearranged — only its name is kept current. Sibling order is yours after a folder is created. **Nothing is ever deleted:** a site that disappears from NetBox is greyed out and marked "not in NetBox" rather than removed, because your hosts are inside it. Renaming a region or site folder is blocked, since the next sync would undo it — a button that silently reverts itself is worse than no button. Deleting one is allowed, with a warning that the folder comes back empty on the next sync.
+
+  The API token is encrypted with Windows DPAPI and never reaches the interface; it is stored together with the address it was issued for, so it can only ever be sent back to that server. Certificates are trusted through the Windows certificate store, and there is no option to skip verification. Only `GET` requests are ever made — HoTTY never writes to NetBox.
+
+### Improvements
+
+- **Dialogs keep the keyboard.** Tab now stays inside an open dialog instead of walking out into the terminal behind it, and Escape closes Settings, the theme creator and the help sheet — the help sheet had been listing "Escape — close dialog" among its own shortcuts without doing it. Where Escape answers a question it answers it the cautious way: dismissing an SSH host-key prompt rejects the key, and dismissing a "start this VM?" prompt does not start it.
+
+- **File errors read like sentences.** Failing to read or write a log, a host-tree export, or saved provider settings used to surface the raw operating-system text — `Access is denied. (os error 5)`. These now say what happened to what: "Access denied to the log file".
+
+### Bug Fixes
+
+- **Closing a window stops the ping monitors it owned.** HoTTY runs every window in one process. A Ping Monitor pane's loop was not tied to its window, so closing a window left it pinging in the background for the rest of the session. Sessions, File Server instances and SNMP watchers were already cleaned up this way; ping monitors now are too.
+
+- **A long host key no longer pushes the buttons off-screen.** The SSH host-key prompt and the "start this VM?" prompt had a scrolling body but no height limit, so a long key or a long name grew the dialog past the bottom of the screen instead of scrolling inside it — taking the Accept and Reject buttons with it.
+
+- **The Web Browser's cookie keeper stops when the last browser pane closes.** It was started on the first browser pane and then ran every 20 seconds for the life of the app, with no way to stop it and nothing left to do.
+
 ## v2.1.0-beta3
 
 **The host tree has a filter box.** A tree that has grown past a screenful is faster to search than to scroll, so there is now a box above it: type, and only the folders and hosts that match stay on screen. This release also closes a hole in how saved credentials were written to disk — if Windows' encryption call failed, HoTTY used to save the password anyway, in the clear.

@@ -82,3 +82,29 @@ describe('SshHostKeyModal', () => {
     expect(respondSshHostKey).toHaveBeenCalledWith('sess-1', true, true);
   });
 });
+
+describe('SshHostKeyModal — Escape', () => {
+  beforeEach(() => {
+    respondSshHostKey.mockClear();
+    emit = null;
+  });
+
+  // A host-key prompt must fail closed. Treating a stray Escape as consent
+  // would defeat the check the dialog exists to make.
+  it('rejects the key rather than accepting it', async () => {
+    render(<SshHostKeyModal />);
+    await waitFor(() => expect(emit).not.toBeNull());
+    act(() => emit!(samplePayload));
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    await waitFor(() => expect(respondSshHostKey).toHaveBeenCalledTimes(1));
+    expect(respondSshHostKey).toHaveBeenCalledWith('sess-1', false, false);
+  });
+
+  it('does nothing when no prompt is showing', () => {
+    render(<SshHostKeyModal />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(respondSshHostKey).not.toHaveBeenCalled();
+  });
+});

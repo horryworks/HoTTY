@@ -3,7 +3,6 @@ import type { HostTreeNode, NetboxNodeLink, NetboxSnapshot } from '../types/appT
 import {
     NETBOX_DEFAULT_SERVER,
     isNetboxNamed,
-    isNetboxNode,
     netboxRef,
     reconcileNetboxTree,
     siteFolderName,
@@ -133,21 +132,6 @@ describe('siteFolderName', () => {
 
     it('treats a whitespace-only code as absent', () => {
         expect(siteFolderName(site(1, 'Example Site', null, '   '))).toBe('Example Site');
-    });
-});
-
-describe('isNetboxNode', () => {
-    it('is false for a hand-made folder and true for a managed one', () => {
-        expect(isNetboxNode(folder('f', 'Mine'))).toBe(false);
-        expect(isNetboxNode(managed('f', 'Mine', { kind: 'site', objectId: 1 }))).toBe(true);
-    });
-
-    it('is false for a folder belonging to another server', () => {
-        const n: HostTreeNode = {
-            id: 'f', type: 'folder', name: 'Other',
-            netbox: { server: 'other', kind: 'site', objectId: 1 },
-        };
-        expect(isNetboxNode(n, SERVER)).toBe(false);
     });
 });
 

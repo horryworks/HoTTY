@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useModalEscape } from '../../hooks/useModalEscape';
 import { tauriService } from '../../services/tauriService';
 import { logError } from '../../utils/logger';
 import i18n from '../../i18n';
@@ -9,6 +11,7 @@ import './SshHostKeyModal.css';
 export function SshHostKeyModal() {
   const { t } = useTranslation();
   const [prompt, setPrompt] = useState<SshHostKeyPromptPayload | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -22,18 +25,31 @@ export function SshHostKeyModal() {
     };
   }, []);
 
-  if (!prompt) return null;
+  const respond = useCallback(
+    async (accept: boolean, remember: boolean) => {
+      if (!prompt) return;
+      await tauriService.respondSshHostKey(prompt.sessionId, accept, remember);
+      setPrompt(null);
+    },
+    [prompt],
+  );
 
-  const respond = async (accept: boolean, remember: boolean) => {
-    await tauriService.respondSshHostKey(prompt.sessionId, accept, remember);
-    setPrompt(null);
-  };
+  // Escape rejects. A host-key prompt must fail closed: "I did not expect this"
+  // is precisely what dismissing it means, and the alternative — treating a
+  // stray Escape as consent — would defeat the check entirely.
+  const rejectOnEscape = useCallback(() => {
+    void respond(false, false);
+  }, [respond]);
+  useModalEscape(prompt ? rejectOnEscape : null);
+  useFocusTrap(modalRef, prompt !== null);
+
+  if (!prompt) return null;
 
   const isChanged = prompt.kind === 'changed';
 
   return (
     <div className="ssh-host-key-overlay">
-      <div className="ssh-host-key-modal">
+      <div className="ssh-host-key-modal" ref={modalRef}>
         <div className="ssh-host-key-header">
           <span>{isChanged ? t('dialogs.sshHostKey.titleChanged') : t('dialogs.sshHostKey.titleUnknown')}</span>
         </div>

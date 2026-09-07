@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useModalEscape } from '../../hooks/useModalEscape';
 import { useResize } from '../../hooks/useResize';
 import { useTabKeyboardNav } from '../../hooks/useTabKeyboardNav';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -80,6 +82,9 @@ export function SettingsModal({
   const storedHeight = useSettingsStore((s) => s.settingsModalHeight);
   const updateSetting = useSettingsStore((s) => s.update);
   const modalRef = useRef<HTMLDivElement | null>(null);
+  useModalEscape(onClose);
+  useFocusTrap(modalRef, true);
+
   const dragStart = useRef({ w: 0, h: 0 });
   const dragResult = useRef<{ w: number; h: number } | null>(null);
 

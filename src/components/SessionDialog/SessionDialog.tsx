@@ -12,6 +12,7 @@ import { GcpInstancesPane, type VmSelection } from '../GcpInstancesPane/GcpInsta
 import { BookmarkTree } from '../BookmarkTree/BookmarkTree';
 import { flattenBookmarks } from '../BookmarkTree/bookmarkTreeHelpers';
 import { useSidebarLayoutStore } from '../../stores/sidebarLayoutStore';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useResize } from '../../hooks/useResize';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { SessionRecord } from '../../hooks/useSessionManager';
@@ -138,6 +139,11 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     // Ref to the connection form for programmatic submission
     const formRef = useRef<HTMLFormElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+
+    // Escape is handled by this dialog's own key handler (it has to distinguish
+    // an open inline editor from the dialog itself); the trap is what keeps Tab
+    // from walking out into the terminal behind it.
+    useFocusTrap(containerRef, isOpen);
     const selectedHostIdRef = useRef<string | null>(null);
     useEffect(() => {
         selectedHostIdRef.current = selectedHostId;

@@ -33,9 +33,7 @@ fn validated_inputs(
 /// The listing is attempted only once authenticated: a 403 on the definitions
 /// has two meanings, and asking after a refused token would make "not readable"
 /// the answer for a server whose real problem is the token.
-async fn probe_and_list(
-    client: &NetboxClient<'_>,
-) -> Result<NetboxProbeResult, NetboxError> {
+async fn probe_and_list(client: &NetboxClient<'_>) -> Result<NetboxProbeResult, NetboxError> {
     let probe = client.probe().await?;
     let site_id_fields = if probe.authenticated {
         let defs = client.site_custom_fields().await?;
@@ -49,7 +47,10 @@ async fn probe_and_list(
                     label: d.display_label(),
                 })
                 .collect(),
-            built_ins: SiteIdField::BUILT_INS.iter().map(|s| s.to_string()).collect(),
+            built_ins: SiteIdField::BUILT_INS
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
         })
     } else {
         None
@@ -79,11 +80,14 @@ pub async fn netbox_connect(
     // The single trim: what we probe with is exactly what we save.
     let token = validate_token(&token).map_err(|e| e.to_string())?;
 
-    let client = NetboxClient::new(state.http(), base, token.clone());
+    let client = NetboxClient::new(state.http(), base.clone(), token.clone());
     let result = probe_and_list(&client).await.map_err(|e| e.to_string())?;
 
     if result.authenticated {
-        if let Err(e) = state.save_token(&token) {
+        // The URL is saved with the token: a token issued by one NetBox must
+        // never be sent to another, and `base_url` arrives as a parameter on
+        // every later call. See `NetboxState::token_for`.
+        if let Err(e) = state.save_credentials(&base, &token) {
             // Mirrors the AI providers: the connection is good for this
             // session; only persistence failed, and saying so is more useful
             // than refusing a working connection.
@@ -105,7 +109,9 @@ pub async fn netbox_probe(
     base_url: String,
 ) -> Result<NetboxProbeResult, String> {
     let base = validate_base_url(&base_url).map_err(|e| e.to_string())?;
-    let token = state.token().map_err(|e| e.to_string())?;
+    // Not `state.token()`: the saved token is released only for the address it
+    // was issued for, so a caller cannot name a host and be handed the token.
+    let token = state.token_for(&base).map_err(|e| e.to_string())?;
     let client = NetboxClient::new(state.http(), base, token);
     probe_and_list(&client).await.map_err(|e| e.to_string())
 }
@@ -136,7 +142,7 @@ pub async fn netbox_fetch_snapshot(
 ) -> Result<NetboxSnapshot, String> {
     let (base, field) =
         validated_inputs(&base_url, site_id_field.as_deref()).map_err(|e| e.to_string())?;
-    let token = state.token().map_err(|e| e.to_string())?;
+    let token = state.token_for(&base).map_err(|e| e.to_string())?;
     let client = NetboxClient::new(state.http(), base, token);
     client
         .snapshot(DEFAULT_SERVER_KEY, field.as_ref())
@@ -158,7 +164,10 @@ mod tests {
             validated_inputs("ftp://netbox.example.com", None),
             Err(NetboxError::UrlScheme)
         ));
-        assert!(matches!(validated_inputs("", None), Err(NetboxError::UrlEmpty)));
+        assert!(matches!(
+            validated_inputs("", None),
+            Err(NetboxError::UrlEmpty)
+        ));
     }
 
     #[test]

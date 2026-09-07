@@ -96,11 +96,6 @@ export function netboxRef(link: NetboxNodeLink): string | null {
     return `${link.server}:${link.kind}:${link.objectId}`;
 }
 
-/** Whether a node is a folder mirrored from `server`. */
-export function isNetboxNode(node: HostTreeNode, server: string = NETBOX_DEFAULT_SERVER): boolean {
-    return node.type === 'folder' && node.netbox?.server === server;
-}
-
 /**
  * Whether NetBox owns this folder's name.
  *

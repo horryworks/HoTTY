@@ -782,7 +782,7 @@ pub async fn firewall_status(protocol: &str, port: u16) -> FirewallReport {
         .env("HOTTY_EXE", &exe)
         .env("HOTTY_PROTO", proto)
         .env("HOTTY_PORT", port.to_string())
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW
+        .creation_flags(crate::services::os_paths::CREATE_NO_WINDOW)
         .kill_on_drop(true)
         .output();
 
@@ -883,7 +883,7 @@ pub async fn firewall_allow(protocol: &str, port: u16) -> Result<(), String> {
 
     let output = Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-Command", &outer])
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW
+        .creation_flags(crate::services::os_paths::CREATE_NO_WINDOW)
         .output()
         .await
         .map_err(|e| format!("Failed to launch firewall command: {e}"))?;

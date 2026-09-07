@@ -50,14 +50,15 @@
     border: none;
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: calc(var(--font-size-base) + 3px);
-    padding: 4px 8px;
+    font-size: calc(var(--font-size-base) + 4px);
+    padding: 2px 6px;
     border-radius: 4px;
     line-height: 1;
+    transition: background-color 0.1s;
 }
 
 .ctc-close-btn:hover {
-    background: var(--hover-bg);
+    background: var(--btn-secondary-hover-bg);
     color: var(--text-primary);
 }
 
@@ -284,7 +285,6 @@
     font-family: var(--ui-font-family);
     font-size: calc(var(--font-size-base) - 1px);
     cursor: pointer;
-    font-weight: 600;
     transition: background-color 0.1s;
 }
 
