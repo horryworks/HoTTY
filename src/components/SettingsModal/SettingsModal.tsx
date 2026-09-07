@@ -10,6 +10,7 @@ import { AppearanceTab } from './AppearanceTab';
 import { GeneralTab } from './GeneralTab';
 import { ProtocolsTab } from './ProtocolsTab';
 import { FeaturesTab } from './FeaturesTab';
+import { NetboxTab } from './NetboxTab';
 import { VersionsTab } from './VersionsTab';
 import type { Theme } from '../../types/appTypes';
 import './SettingsModal.css';
@@ -19,6 +20,7 @@ export type SettingsTab =
   | 'appearance'
   | 'protocols'
   | 'features'
+  | 'netbox'
   | 'ai'
   | 'versions'
   | 'about';
@@ -47,6 +49,7 @@ const TAB_IDS: SettingsTab[] = [
   'appearance',
   'protocols',
   'features',
+  'netbox',
   'ai',
   'versions',
   'about',
@@ -192,6 +195,7 @@ export function SettingsModal({
           )}
           {tab === 'protocols' && <ProtocolsTab />}
           {tab === 'features' && <FeaturesTab />}
+          {tab === 'netbox' && <NetboxTab />}
           {tab === 'ai' && <AISettingsTab />}
           {tab === 'versions' && <VersionsTab />}
           {tab === 'about' && <AboutTab />}

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Encoding, FeatureId, FileServerConfig, PromptPattern, ThemeId, LanguageId, CommandExecutionMode, ClassifierStrategy, PersonaDefinition, AiConnectPolicy, AiLocalShellType } from '../types/appTypes';
+import type { Encoding, FeatureId, FileServerConfig, NetboxConfig, PromptPattern, ThemeId, LanguageId, CommandExecutionMode, ClassifierStrategy, PersonaDefinition, AiConnectPolicy, AiLocalShellType } from '../types/appTypes';
 import { DEFAULT_THEMES } from '../themes/defaults';
 import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from '../utils/commandLists';
 import { AUTO_LANGUAGE } from '../constants/aiPrompts';
@@ -128,6 +128,10 @@ interface SettingsState {
   // File Server (TFTP / SFTP) — persisted config (password excluded)
   fileServerConfig: FileServerConfig;
 
+  // NetBox — folder tree mirrored from a NetBox server (token lives in the
+  // backend store, never here)
+  netbox: NetboxConfig;
+
   // AI
   activeAiProvider: string;
   commandExecutionMode: CommandExecutionMode;
@@ -248,6 +252,13 @@ const DEFAULTS: SettingsState = {
     sftpUsername: 'hotty',
     sftpAllowWrite: false,
   },
+  netbox: {
+    baseUrl: '',
+    siteIdField: '',
+    syncOnStartup: true,
+    lastSyncAt: null,
+    lastSyncError: null,
+  },
   activeAiProvider: 'gemini',
   commandExecutionMode: 'ask-before-execute',
   whitelistCommands: [...DEFAULT_WHITELIST],
@@ -288,7 +299,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 31,
+      version: 32,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -472,6 +483,13 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           // the auto-sized dialog it has always had until the user drags it.
           state.settingsModalWidth ??= DEFAULTS.settingsModalWidth;
           state.settingsModalHeight ??= DEFAULTS.settingsModalHeight;
+        }
+        if (version < 32) {
+          // New NetBox integration. `??=` (the fileServerConfig/v18 pattern):
+          // an upgrade gets the whole default object. `syncOnStartup: true`
+          // costs an unconfigured install nothing — the sync bails at once
+          // when there is no base URL or no saved token.
+          state.netbox ??= DEFAULTS.netbox;
         }
         return state as SettingsState;
       },

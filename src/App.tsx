@@ -17,6 +17,10 @@ import { ConnectingOverlay } from './components/ConnectingOverlay/ConnectingOver
 // is fine — `verbatimModuleSyntax: true` erases it entirely — but a plain
 // `import { X, type Y }` would keep the VALUE import alive and silently defeat
 // the split. That is why the two type imports below are separate statements.
+/** Startup NetBox sync delay. The architecture doc keeps a startup-time
+ *  budget, and a network round trip does not belong inside it. */
+const NETBOX_STARTUP_SYNC_DELAY_MS = 1500;
+
 const LogViewerPane = lazy(() => import('./components/LogViewerPane/LogViewerPane').then((m) => ({ default: m.LogViewerPane })));
 const PingMonitorPane = lazy(() => import('./components/PingMonitorPane/PingMonitorPane').then((m) => ({ default: m.PingMonitorPane })));
 const InterfaceTrafficPane = lazy(() => import('./components/InterfaceTrafficPane/InterfaceTrafficPane').then((m) => ({ default: m.InterfaceTrafficPane })));
@@ -45,6 +49,7 @@ import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary';
 import { tauriService } from './services/tauriService';
 import { useSessionManager, type SessionRecord } from './hooks/useSessionManager';
 import { useHostManager, flattenHosts } from './hooks/useHostManager';
+import { useNetboxSync } from './hooks/useNetboxSync';
 import { useAiAuthOwner } from './hooks/useAiAuthOwner';
 import { useAiChat, getActiveTab } from './hooks/useAiChat';
 import { useAiConsent } from './hooks/useAiConsent';
@@ -143,6 +148,23 @@ function App() {
   // a session was opened from. This instance shares state with the SessionDialog's
   // (useHostManager is multi-instance-safe and syncs across windows).
   const hostManager = useHostManager();
+  const netboxSync = useNetboxSync();
+  const netboxSyncOnStartup = useSettingsStore((s) => s.netbox.syncOnStartup);
+  const startupSyncStarted = useRef(false);
+
+  // One NetBox sync per launch, in the MAIN window only: `useHostManager` is
+  // instantiated in every window, and three windows would hit NetBox three
+  // times and race each other's saveTree. Held until the host tree's own
+  // load-time migrations have settled, then delayed so a network call does
+  // not sit in the startup path.
+  useEffect(() => {
+    if (startupSyncStarted.current) return;
+    if (WINDOW_LABEL !== 'main') return;
+    if (!hostManager.ready || !netboxSyncOnStartup || !netboxSync.configured) return;
+    startupSyncStarted.current = true;
+    const timer = setTimeout(() => { void netboxSync.sync('startup'); }, NETBOX_STARTUP_SYNC_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [hostManager.ready, netboxSyncOnStartup, netboxSync]);
 
   const layoutMode = usePaneStore((s) => s.layoutMode);
   const activePaneId = usePaneStore((s) => s.activePaneId);

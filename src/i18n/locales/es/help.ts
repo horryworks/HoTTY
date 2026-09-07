@@ -80,6 +80,10 @@ export const help = {
       '<0>Guardar una sesión ad hoc en el árbol de hosts:</0> después de conectarse mediante <1>Nueva conexión</1>, haga clic con el botón derecho en la pestaña de la sesión y elija <2>Guardar en el árbol de hosts…</2> para conservar la conexión para más tarde. Se admiten sesiones SSH y Telnet (se conservan la ruta de la clave privada y la frase de contraseña). En el diálogo de guardado, las carpetas del árbol de hosts se muestran como una vista de árbol para que pueda elegir la carpeta de destino directamente, y <3>+ Nueva carpeta</3> crea una carpeta bajo la seleccionada actualmente — anidable tan profundamente como desee.',
     openAll:
       '<0>Abrir todo en una carpeta:</0> Haz clic derecho en una carpeta del árbol de hosts y elige <1>Abrir todo</1> para conectarte a todos los hosts que contiene a la vez, incluidos los de las subcarpetas. Si la carpeta tiene 5 o más hosts, se te pide confirmación primero.',
+    netbox:
+      '<0>Sincronizar carpetas desde NetBox:</0> En <1>Ajustes, NetBox</1> introduce la dirección de tu NetBox y un token de API, y HoTTY reflejará sus Regions y Sites en una carpeta llamada <2>NetBox</2> al final del árbol. Solo lee; nunca escribe nada de vuelta. Pulsa el botón de flechas circulares en la barra del árbol de hosts para sincronizar, o deja que se ejecute una vez cada arranque. Las carpetas de sitio se nombran "código nombre del sitio"; qué campo de NetBox contiene el código lo eliges tú, porque varía según la organización.',
+    netboxOwnership:
+      '<0>Qué gestiona la sincronización:</0> Los nombres y la disposición dentro de la carpeta NetBox pertenecen a NetBox y se reescriben en cada sincronización, así que esas carpetas no pueden renombrarse aquí. Los hosts que añadas dentro de una carpeta de sitio nunca se tocan. Nunca se borra nada: una carpeta que desaparece de NetBox se marca como "no está en NetBox" y se conserva, porque puede contener hosts añadidos por ti. Si sacas una carpeta de la carpeta NetBox, la sincronización deja de reubicarla: solo mantiene el nombre al día.',
   },
 
   layout: {

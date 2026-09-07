@@ -80,6 +80,10 @@ export const help = {
       '<0>Save an ad-hoc session to the Host Tree:</0> After connecting via <1>New Connection</1>, right-click the session\'s tab and choose <2>Save to Host Tree…</2> to keep the connection for later. SSH and Telnet sessions are supported (private-key path and passphrase are preserved). In the save dialog the host-tree folders are shown as a tree view so you can pick the destination folder directly, and <3>+ New Folder</3> creates a folder under the currently-selected one — nestable as deep as you like.',
     openAll:
       '<0>Open All in a folder:</0> Right-click a host-tree folder and choose <1>Open All</1> to connect to every host inside it at once, including hosts in sub-folders. When a folder holds 5 or more hosts you are asked to confirm first.',
+    netbox:
+      '<0>Sync folders from NetBox:</0> In <1>Settings, NetBox</1> enter your NetBox address and an API token, and HoTTY mirrors its Regions and Sites into a folder called <2>NetBox</2> at the bottom of the tree. It reads only — nothing is ever written back. Press the circular-arrows button in the host-tree toolbar to sync, or let it run once each time HoTTY starts. Site folders are named "code site name"; which NetBox field holds the code is yours to choose, because it differs per organisation.',
+    netboxOwnership:
+      '<0>What the sync owns:</0> Names and the arrangement inside the NetBox folder belong to NetBox and are rewritten on every sync, so those folders cannot be renamed here. Hosts you add inside a site folder are never touched. Nothing is ever deleted: a folder that disappears from NetBox is marked "not in NetBox" and kept, because it may hold hosts you added. Drag a folder out of the NetBox folder and the sync stops re-arranging it — it only keeps the name up to date.',
   },
 
   layout: {

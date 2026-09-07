@@ -645,12 +645,46 @@ export interface HostEntry {
   fixedTerminalSize?: boolean;
 }
 
+/** What a NetBox-managed folder mirrors. `root` is the single container folder
+ *  HoTTY creates to hold everything it pulled — NetBox knows nothing about it. */
+export type NetboxObjectKind = 'root' | 'region' | 'site';
+
+/**
+ * Marks a folder as mirrored from a NetBox server. Absent on every hand-made
+ * node — its presence IS what makes a folder "synced". Never set on a host.
+ *
+ * Lives on the node rather than in a side table keyed by node id, because
+ * `useHostManager.importData` reassigns every id on import; a side table would
+ * lose the correspondence while the marker rides along.
+ */
+export interface NetboxNodeLink {
+  /** Which configured NetBox this folder came from. Exactly one server is
+   *  configurable today (always `NETBOX_DEFAULT_SERVER`); the field exists so a
+   *  second server could never silently claim another server's folders. */
+  server: string;
+  kind: NetboxObjectKind;
+  /** NetBox's own object id. Absent for `kind: 'root'`. */
+  objectId?: number;
+  /** Set when a sync did not see this object in NetBox. Never causes a delete —
+   *  the folder may hold hosts the user added. Cleared when it comes back.
+   *
+   *  There is deliberately no "last seen" stamp for the healthy case: writing
+   *  one on every sync would make every run a change, and the sync would
+   *  re-encrypt and re-persist the whole tree even when nothing moved. */
+  missing?: true;
+  /** ISO-8601 stamp of the sync that first found this object gone. Written
+   *  with `missing`, cleared with it. */
+  missingSince?: string;
+}
+
 export interface HostTreeNode {
   id: string;
   type: 'folder' | 'host';
   name: string;
   entry?: HostEntry;
   children?: HostTreeNode[];
+  /** Present only on folders mirrored from NetBox. */
+  netbox?: NetboxNodeLink;
 }
 
 /** A node in the Web bookmarks tree (SessionDialog "Web" tab). Mirrors
@@ -662,6 +696,96 @@ export interface BookmarkNode {
   name: string;
   url?: string; // only when type === 'bookmark'
   children?: BookmarkNode[];
+}
+
+// ---------------------------------------------------------------------------
+// NetBox
+// ---------------------------------------------------------------------------
+
+/**
+ * Persisted NetBox settings.
+ *
+ * The API token is deliberately NOT here: `settingsStore` is written to
+ * localStorage and broadcast across windows, so a token in it would cross
+ * the event bus. It lives DPAPI-sealed in the backend store instead, and
+ * the renderer only ever learns whether one exists.
+ */
+export interface NetboxConfig {
+  /** Base URL, as the backend normalized it on the last successful connect. */
+  baseUrl: string;
+  /** '' | 'slug' | 'facility' | 'description' | `cf:<key>`. '' = no prefix. */
+  siteIdField: string;
+  /** Sync once at startup (main window only). */
+  syncOnStartup: boolean;
+  /** ISO stamp of the last completed sync. */
+  lastSyncAt: string | null;
+  /** Human text of the last failure; cleared on success. Also drives the
+   *  error dot on the Host Tree's sync button. */
+  lastSyncError: string | null;
+}
+
+/** One NetBox custom field offered as a Site ID source. */
+export interface SiteIdCustomField {
+  /** Stored verbatim as the Site ID field setting, e.g. `cf:site_code`. */
+  value: string;
+  /** NetBox's own label for the field, or its key. NOT translatable. */
+  label: string;
+}
+
+export interface SiteIdFieldChoices {
+  /**
+   * `false` means the API token MAY NOT READ `/api/extras/custom-fields/`.
+   * It does NOT mean "there are none" — collapsing the two tells a user their
+   * NetBox defines no custom fields and they never find the type-it-in box.
+   */
+  customFieldsReadable: boolean;
+  customFields: SiteIdCustomField[];
+  /** The built-in choices, from the Rust parser, so the set has one author. */
+  builtIns: string[];
+}
+
+export interface NetboxProbeResult {
+  /** Something at that URL answered as a NetBox API — true even when the token
+   *  was refused. This is what separates "wrong address" from "wrong token". */
+  reachable: boolean;
+  authenticated: boolean;
+  /** The `API-Version` response header. Present even when the token was
+   *  refused; that is the whole point of reading it. */
+  apiVersion: string | null;
+  /** From the `/api/status/` body — only once authenticated. */
+  netboxVersion: string | null;
+  /** The HTTP status, when one came back. Lets the UI say "something is there
+   *  but it is not a NetBox API (HTTP 404)" instead of "could not reach". */
+  httpStatus: number | null;
+  /** `null` when the token was refused — nothing to list if we never got in. */
+  siteIdFields: SiteIdFieldChoices | null;
+}
+
+export interface NetboxRegionDto {
+  id: number;
+  name: string;
+  parentId: number | null;
+  depth: number;
+}
+
+export interface NetboxSiteDto {
+  id: number;
+  name: string;
+  regionId: number | null;
+  /** The configured Site ID field's value, trimmed. Null when the field is
+   *  unset, empty on this site, or held a non-scalar JSON value. */
+  siteId: string | null;
+}
+
+/** Everything one sync needs, fetched by the backend in one call. */
+export interface NetboxSnapshot {
+  serverKey: string;
+  /** Echoed back so the reconcile can report "no Site ID" only when one was
+   *  actually asked for. */
+  siteIdField: string | null;
+  /** Sorted by depth, then id — a parent always precedes its children. */
+  regions: NetboxRegionDto[];
+  sites: NetboxSiteDto[];
 }
 
 // ---------------------------------------------------------------------------

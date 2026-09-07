@@ -429,3 +429,55 @@
     outline: none;
     box-shadow: 0 0 0 2px var(--color-danger-bg);
 }
+
+/* ── NetBox-synced folders ──────────────────────────────────────────────── */
+
+/* Deliberately quiet: a badge on forty rows is noise, and the folder name
+   already carries the information. A thin accent edge is enough to say which
+   part of the tree the sync owns. */
+.host-tree-row.netbox-managed {
+  box-shadow: inset 2px 0 0 var(--accent-color);
+}
+
+/* Gone from NetBox, kept because it may hold hosts the user added. This one
+   DOES need to be visible — it is the only sign the source of truth changed. */
+.host-tree-row.netbox-missing .tree-label {
+  color: var(--text-tertiary);
+}
+
+.host-tree-row.netbox-missing {
+  box-shadow: inset 2px 0 0 var(--color-warning);
+}
+
+.tree-meta-missing {
+  color: var(--color-warning);
+}
+
+.tree-toolbar-btn.netbox-syncing svg {
+  animation: netbox-sync-spin 1s linear infinite;
+}
+
+.tree-toolbar-btn.netbox-syncing {
+  pointer-events: none;
+}
+
+/* A startup sync fails without a popup, so the button carries the mark. */
+.tree-toolbar-btn.netbox-error {
+  position: relative;
+}
+
+.tree-toolbar-btn.netbox-error::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-danger);
+}
+
+@keyframes netbox-sync-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

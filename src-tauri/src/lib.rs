@@ -29,6 +29,9 @@ use commands::iap_tunnel::{
 };
 use commands::licenses::get_third_party_licenses;
 use commands::log_viewer::{confirm_log_dir, list_log_files, read_log_file};
+use commands::netbox::{
+    netbox_connect, netbox_disconnect, netbox_fetch_snapshot, netbox_has_token, netbox_probe,
+};
 use commands::ping_monitor::{
     ping_monitor_start, ping_monitor_stop, ping_monitor_update_interval,
     ping_monitor_update_targets,
@@ -67,6 +70,7 @@ use services::ai::{AIProviderRegistry, AIService};
 use services::file_server::FileServerState;
 use services::iap_tunnel::GcloudCacheState;
 use services::log_manager::LogManager;
+use services::netbox::NetboxState;
 use services::ping_monitor::PingMonitorState;
 use services::session_service::{PendingSizes, SessionOwners};
 use services::snmp::SnmpWatcherState;
@@ -265,6 +269,8 @@ pub fn run() {
                 gcp_cache.load_persisted();
             }
 
+            app.manage(NetboxState::new(&app_data_dir));
+
             let mut registry = AIProviderRegistry::new();
             registry.register(Box::new(OpenAIProvider::new(app_data_dir.clone())));
             registry.register(Box::new(AnthropicProvider::new(app_data_dir.clone())));
@@ -391,6 +397,12 @@ pub fn run() {
             ai_set_provider,
             ai_set_location,
             select_service_account_key_file,
+            // NetBox
+            netbox_connect,
+            netbox_probe,
+            netbox_disconnect,
+            netbox_has_token,
+            netbox_fetch_snapshot,
             // Updater
             check_for_updates,
             updater_list_releases,

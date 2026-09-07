@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useHostManager, decryptBatch, getCachedCredential, clearDecryptedCache, flattenHosts } from '../../hooks/useHostManager';
+import { useNetboxSync } from '../../hooks/useNetboxSync';
 import { type FixedSizeTri, triToBool, boolToTri } from '../../utils/fixedTerminalSize';
 import { resolveIapUsername } from '../../utils/iapUsername';
 import { isEncrypted } from '../../services/tauriService';
@@ -112,6 +113,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
 }) => {
     const { t } = useTranslation();
     const hostManager = useHostManager();
+    const netboxSync = useNetboxSync();
     const settings = useSettingsStore();
     const activeSidebarTab = useSidebarLayoutStore((s) => s.activeSidebarTab);
     const setActiveSidebarTab = useSidebarLayoutStore((s) => s.setActiveSidebarTab);
@@ -1346,6 +1348,10 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                         onMoveNode={hostManager.moveNode}
                                         onSortFolder={hostManager.sortFolder}
                                         onImportData={hostManager.importData}
+                                        onNetboxSync={() => void netboxSync.sync('manual')}
+                                        netboxSyncing={netboxSync.syncing}
+                                        netboxConfigured={netboxSync.configured}
+                                        netboxLastError={netboxSync.lastError}
                                     />
                                 </div>
                                 <div className="panel-divider" onMouseDown={handlePanelDividerMouseDownWrapped} />

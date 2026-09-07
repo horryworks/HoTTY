@@ -319,6 +319,10 @@ function sortNodes(nodes: HostTreeNode[], direction: 'asc' | 'desc' = 'asc'): Ho
 
 export function useHostManager() {
     const [tree, setTree] = useState<HostTreeNode[]>([]);
+    // Whether the load-time migration chain has finished. A NetBox sync
+    // must not reconcile a pre-migration tree and then write over what the
+    // migration was about to save.
+    const [ready, setReady] = useState(false);
 
     const persistEncryptedAsync = useCallback((nodes: HostTreeNode[]) => {
         // Mirror the change into every other useHostManager instance before
@@ -500,7 +504,8 @@ export function useHostManager() {
             .then(eagerDecryptTree)
             .catch(err => {
                 logError('HostManager', i18n.t('notifications.errors.credentialPreload'), err);
-            });
+            })
+            .finally(() => setReady(true));
     }, [persistEncryptedAsync]);
 
     const persistAndSet = useCallback(async (decryptedTree: HostTreeNode[]) => {
@@ -760,5 +765,5 @@ export function useHostManager() {
         return targetFolderId;
     }, [persistEncryptedAsync]);
 
-    return { tree, addFolder, addHost, editNode, deleteNode, saveTree, moveNode, sortFolder, importData };
+    return { tree, ready, addFolder, addHost, editNode, deleteNode, saveTree, moveNode, sortFolder, importData };
 }

@@ -7,6 +7,7 @@ import { flattenHosts, getJumpboxReferences } from '../../hooks/useHostManager';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useModalState } from '../../hooks/useModalState';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
+import { isNetboxNamed } from '../../utils/netboxSync';
 import { tauriService } from '../../services/tauriService';
 import './HostTree.css';
 
@@ -41,6 +42,13 @@ interface HostTreeProps {
     onSortFolder?: (folderId: string | null, direction?: 'asc' | 'desc') => void;
     onImportData?: (nodes: HostTreeNode[], folderName: string, parentId: string | null) => Promise<string | undefined> | void;
     onShowMessage?: (type: 'error' | 'success' | 'info', title: string | undefined, message: string) => void;
+    /** Run a NetBox sync. Absent when the integration is not configured. */
+    onNetboxSync?: () => void;
+    netboxSyncing?: boolean;
+    /** A NetBox base URL is set, so the sync button is worth showing. */
+    netboxConfigured?: boolean;
+    /** Last sync failure, shown as a mark on the button rather than a popup. */
+    netboxLastError?: string | null;
 }
 
 export const HostTree: React.FC<HostTreeProps> = ({
@@ -58,6 +66,10 @@ export const HostTree: React.FC<HostTreeProps> = ({
     onSortFolder,
     onImportData,
     onShowMessage,
+    onNetboxSync,
+    netboxSyncing = false,
+    netboxConfigured = false,
+    netboxLastError = null,
 }) => {
     const { t } = useTranslation();
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -402,7 +414,14 @@ export const HostTree: React.FC<HostTreeProps> = ({
         return (
             <div key={node.id} className="host-tree-node">
                 <div
-                    className={`host-tree-row ${isSelected ? 'selected' : ''} ${dragClasses}`}
+                    className={`host-tree-row ${isSelected ? 'selected' : ''} ${dragClasses}${node.netbox ? ' netbox-managed' : ''}${node.netbox?.missing ? ' netbox-missing' : ''}`}
+                    title={
+                        node.netbox?.missing
+                            ? t('hostTree.netbox.missingTitle')
+                            : node.netbox
+                                ? t('hostTree.netbox.managedTitle')
+                                : undefined
+                    }
                     style={{ paddingLeft: `${depth * 14 + 8}px` }}
                     data-node-id={node.id}
                     tabIndex={node.type === 'host' ? 0 : undefined}
@@ -500,7 +519,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                             const x = containerRect ? rect.left - containerRect.left : rect.left;
                             const y = containerRect ? rect.bottom - containerRect.top : rect.bottom;
                             setContextMenu({ x, y, node });
-                        } else if (e.key === 'F2') {
+                        } else if (e.key === 'F2' && !isNetboxNamed(node)) {
                             e.preventDefault();
                             e.stopPropagation();
                             setEditingNodeId(node.id);
@@ -547,7 +566,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                 onKeyDown={(e) => {
                                     e.stopPropagation();
                                     if (e.key === 'Enter') {
-                                        if (editingName.trim() && editingName !== node.name) {
+                                        if (editingName.trim() && editingName !== node.name && !isNetboxNamed(node)) {
                                             onEditNode(node.id, { name: editingName.trim() });
                                         }
                                         setEditingNodeId(null);
@@ -556,7 +575,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                     }
                                 }}
                                 onBlur={() => {
-                                    if (editingName.trim() && editingName !== node.name) {
+                                    if (editingName.trim() && editingName !== node.name && !isNetboxNamed(node)) {
                                         onEditNode(node.id, { name: editingName.trim() });
                                     }
                                     setEditingNodeId(null);
@@ -565,6 +584,11 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         ) : (
                             <>
                                 {node.name}
+                                {node.netbox?.missing && (
+                                    <span className="tree-meta tree-meta-missing">
+                                        {' '}{t('hostTree.netbox.missing')}
+                                    </span>
+                                )}
                                 {node.type === 'host' && node.entry && (
                                     <span className="tree-meta">
                                         {node.entry.protocol === 'gcloud-iap' ? (
@@ -630,6 +654,27 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     </svg>
                 </div>
                 <div style={{ flex: 1 }} />
+                {netboxConfigured && onNetboxSync && (
+                    <div
+                        className={`tree-toolbar-btn${netboxSyncing ? ' netbox-syncing' : ''}${netboxLastError ? ' netbox-error' : ''}`}
+                        role="button"
+                        title={
+                            netboxLastError
+                                ? `${t('hostTree.netbox.syncFailed')}: ${netboxLastError}`
+                                : netboxSyncing
+                                    ? t('hostTree.netbox.syncing')
+                                    : t('hostTree.netbox.syncTitle')
+                        }
+                        onClick={() => { if (!netboxSyncing) onNetboxSync(); }}
+                        style={{ cursor: netboxSyncing ? 'default' : 'pointer' }}
+                    >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-color)' }}>
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <polyline points="1 20 1 14 7 14"></polyline>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                    </div>
+                )}
                 <div
                     className="tree-toolbar-btn"
                     role="button"
@@ -797,7 +842,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     {contextMenu.node && (
                         <>
                             {contextMenu.node.type === 'folder' && <div className="context-menu-separator" />}
-                            {contextMenu.node && (
+                            {contextMenu.node && !isNetboxNamed(contextMenu.node) && (
                                 <button
                                     onClick={() => {
                                         setEditingNodeId(contextMenu.node!.id);
@@ -1056,10 +1101,14 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 const refWarning = jumpboxRefs.length > 0
                     ? t('hostTree.delete.jumpboxWarning', { count: jumpboxRefs.length, names: jumpboxRefs.map(r => r.name).join(', ') })
                     : '';
+                // Deleting is allowed — the sync recreates the folder — but the
+                // hosts the user put inside it do not come back.
+                const netboxWarning = isNetboxNamed(nodeToDelete) ? t('hostTree.netbox.deleteWarning') : '';
+                const warning = [refWarning, netboxWarning].filter(Boolean).join(' ');
                 return (
                 <ConfirmModal
                     title={nodeToDelete.type === 'folder' ? t('hostTree.delete.titleFolder') : t('hostTree.delete.titleHost')}
-                    message={t('hostTree.delete.message', { name: nodeToDelete.name, warning: refWarning })}
+                    message={t('hostTree.delete.message', { name: nodeToDelete.name, warning })}
                     onConfirm={() => {
                         for (const ref of jumpboxRefs) {
                             onEditNode(ref.id, { entry: { ...ref.entry!, jumpboxId: undefined } });

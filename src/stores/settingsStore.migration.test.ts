@@ -94,3 +94,40 @@ describe('settingsStore v30 migration (AI-initiated terminal sessions)', () => {
     expect(s.aiLocalShellType).toBe('cmd');
   });
 });
+
+describe('settingsStore v32 migration (NetBox)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('seeds the whole NetBox config for a pre-v32 install', async () => {
+    const s = await rehydrateFrom({ language: 'en' }, 31);
+    expect(s.netbox).toEqual({
+      baseUrl: '',
+      siteIdField: '',
+      syncOnStartup: true,
+      lastSyncAt: null,
+      lastSyncError: null,
+    });
+  });
+
+  it('leaves an existing NetBox config alone', async () => {
+    const existing = {
+      baseUrl: 'https://netbox.example.com',
+      siteIdField: 'cf:site_code',
+      syncOnStartup: false,
+      lastSyncAt: '2026-01-01T00:00:00.000Z',
+      lastSyncError: null,
+    };
+    const s = await rehydrateFrom({ language: 'en', netbox: existing }, 31);
+    expect(s.netbox).toEqual(existing);
+  });
+
+  it('does not disturb settings from earlier versions', async () => {
+    // The migration ladder is cumulative: a v18 install runs 19..32 in order.
+    const s = await rehydrateFrom({ language: 'ja', theme: 'dark' }, 18);
+    expect(s.language).toBe('ja');
+    expect(s.netbox.baseUrl).toBe('');
+    expect(s.fileServerConfig).toBeDefined();
+  });
+});

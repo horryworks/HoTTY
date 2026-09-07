@@ -6,6 +6,7 @@ pub mod host_tree;
 pub mod iap_tunnel;
 pub mod licenses;
 pub mod log_viewer;
+pub mod netbox;
 pub mod ping_monitor;
 pub mod session;
 pub mod snmp_watcher;

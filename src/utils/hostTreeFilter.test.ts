@@ -117,3 +117,34 @@ describe('filterHostTree', () => {
         expect(filterHostTree([folder('f-empty', 'Empty', [])], 'x')).toEqual([]);
     });
 });
+
+describe('filterHostTree with NetBox-named folders', () => {
+    const netboxTree: HostTreeNode[] = [
+        folder('nb', 'NetBox', [
+            folder('r1', 'Asia', [
+                folder('s1', 'SITE-01 Example Site', [host('h1', 'web-01', '10.0.0.1')]),
+                folder('s2', 'SITE-02 Other Site', []),
+            ]),
+        ]),
+    ];
+
+    it('matches a folder by its Site ID prefix', () => {
+        // The code is part of the name, so the existing filter already finds it.
+        const out = filterHostTree(netboxTree, 'SITE-01');
+        expect(out).toHaveLength(1);
+        const region = out[0].children![0];
+        expect(region.children!.map(n => n.name)).toEqual(['SITE-01 Example Site']);
+    });
+
+    it('matches a folder by the site name after the code', () => {
+        const out = filterHostTree(netboxTree, 'Other Site');
+        const region = out[0].children![0];
+        expect(region.children!.map(n => n.name)).toEqual(['SITE-02 Other Site']);
+    });
+
+    it('keeps a matched site folder whole, so its hosts stay browsable', () => {
+        const out = filterHostTree(netboxTree, 'SITE-01');
+        const site = out[0].children![0].children![0];
+        expect(site.children!.map(n => n.name)).toEqual(['web-01']);
+    });
+});

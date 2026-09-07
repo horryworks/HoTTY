@@ -203,6 +203,15 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               </p>
               <p className="help-text">
                 <Trans
+                  i18nKey="help.hostTree.netbox"
+                  components={[<strong key="0" />, <strong key="1" />, <strong key="2" />]}
+                />
+              </p>
+              <p className="help-text">
+                <Trans i18nKey="help.hostTree.netboxOwnership" components={[<strong key="0" />]} />
+              </p>
+              <p className="help-text">
+                <Trans
                   i18nKey="help.hostTree.saveAdHoc"
                   components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />]}
                 />

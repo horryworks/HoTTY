@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { HostTree } from './HostTree';
 import type { HostTreeNode } from '../../types/appTypes';
 
@@ -352,5 +352,183 @@ describe('HostTree', () => {
       fireEvent.keyDown(window, { key: 'f', ctrlKey: true });
       expect(document.activeElement).toBe(input);
     });
+  });
+});
+
+describe('HostTree — NetBox-synced folders', () => {
+  const netboxTree: HostTreeNode[] = [
+    {
+      id: 'u1',
+      type: 'folder',
+      name: 'My hosts',
+      children: [],
+    },
+    {
+      id: 'nb-root',
+      type: 'folder',
+      name: 'NetBox',
+      netbox: { server: 'default', kind: 'root' },
+      children: [
+        {
+          id: 'nb-region',
+          type: 'folder',
+          name: 'Asia',
+          netbox: { server: 'default', kind: 'region', objectId: 1 },
+          children: [
+            {
+              id: 'nb-site',
+              type: 'folder',
+              name: 'SITE-01 Example Site',
+              netbox: { server: 'default', kind: 'site', objectId: 10 },
+              children: [
+                {
+                  id: 'nb-host',
+                  type: 'host',
+                  name: 'web-01',
+                  entry: { protocol: 'ssh', host: '10.0.0.9', port: 22 },
+                },
+              ],
+            },
+            {
+              id: 'nb-gone',
+              type: 'folder',
+              name: 'SITE-02 Old Site',
+              netbox: {
+                server: 'default',
+                kind: 'site',
+                objectId: 11,
+                missing: true,
+                missingSince: '2026-01-01T00:00:00.000Z',
+              },
+              children: [],
+            },
+          ],
+        },
+      ],
+    },
+  ];
+
+  const netboxProps = { ...defaultProps, tree: netboxTree };
+
+  const rowFor = (name: string) =>
+    screen.getByText(name, { exact: false }).closest('.host-tree-row') as HTMLElement;
+
+  describe('the sync button', () => {
+    it('is absent when NetBox is not configured', () => {
+      render(<HostTree {...netboxProps} onNetboxSync={vi.fn()} netboxConfigured={false} />);
+      expect(screen.queryByTitle('Sync from NetBox')).toBeNull();
+    });
+
+    it('appears once a base URL is set, and runs a sync when pressed', () => {
+      const onNetboxSync = vi.fn();
+      render(<HostTree {...netboxProps} onNetboxSync={onNetboxSync} netboxConfigured />);
+      const button = screen.getByTitle('Sync from NetBox');
+      fireEvent.click(button);
+      expect(onNetboxSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not fire a second sync while one is running', () => {
+      const onNetboxSync = vi.fn();
+      render(
+        <HostTree {...netboxProps} onNetboxSync={onNetboxSync} netboxConfigured netboxSyncing />,
+      );
+      fireEvent.click(screen.getByTitle('Syncing from NetBox…'));
+      expect(onNetboxSync).not.toHaveBeenCalled();
+    });
+
+    it('carries the last failure, since a startup sync never pops one up', () => {
+      render(
+        <HostTree
+          {...netboxProps}
+          onNetboxSync={vi.fn()}
+          netboxConfigured
+          netboxLastError="NetBox refused the API token"
+        />,
+      );
+      const button = screen.getByTitle(/NetBox refused the API token/);
+      expect(button.className).toContain('netbox-error');
+    });
+  });
+
+  describe('how a synced folder looks', () => {
+    it('marks a managed folder without shouting about it', () => {
+      render(<HostTree {...netboxProps} />);
+      expect(rowFor('Asia').className).toContain('netbox-managed');
+      expect(rowFor('My hosts').className).not.toContain('netbox-managed');
+    });
+
+    it('says plainly when a folder is gone from NetBox', () => {
+      render(<HostTree {...netboxProps} />);
+      expect(screen.getByText('not in NetBox')).toBeTruthy();
+      expect(rowFor('SITE-02 Old Site').className).toContain('netbox-missing');
+      // Kept, not deleted — it may hold hosts the user added.
+      expect(screen.getByText(/SITE-02 Old Site/)).toBeTruthy();
+    });
+
+    it('leaves a live synced folder unmarked', () => {
+      render(<HostTree {...netboxProps} />);
+      expect(rowFor('SITE-01 Example Site').className).not.toContain('netbox-missing');
+    });
+  });
+
+  describe('renaming', () => {
+    it('refuses F2 on a folder NetBox names', () => {
+      // Allowing it would ship a control that silently undoes itself on the
+      // next sync.
+      render(<HostTree {...netboxProps} />);
+      fireEvent.keyDown(rowFor('SITE-01 Example Site'), { key: 'F2' });
+      expect(document.querySelector('.tree-label-edit-input')).toBeNull();
+    });
+
+    it('still allows F2 on the container, whose name is the user\'s', () => {
+      const { container } = render(<HostTree {...netboxProps} />);
+      const row = container.querySelector('[data-node-id="nb-root"]') as HTMLElement;
+      fireEvent.keyDown(row, { key: 'F2' });
+      expect(container.querySelector('.tree-label-edit-input')).toBeTruthy();
+    });
+
+    it('still allows F2 on a hand-made folder', () => {
+      render(<HostTree {...netboxProps} />);
+      fireEvent.keyDown(rowFor('My hosts'), { key: 'F2' });
+      expect(document.querySelector('.tree-label-edit-input')).toBeTruthy();
+    });
+
+    it('hides the Rename menu item for a synced folder', () => {
+      render(<HostTree {...netboxProps} />);
+      fireEvent.contextMenu(rowFor('Asia'));
+      expect(screen.queryByText('Rename (F2)')).toBeNull();
+      // The other folder actions are still offered.
+      expect(screen.getByText('Delete')).toBeTruthy();
+    });
+
+    it('offers Rename on the container', () => {
+      const { container } = render(<HostTree {...netboxProps} />);
+      const row = container.querySelector('[data-node-id="nb-root"]') as HTMLElement;
+      fireEvent.contextMenu(row);
+      expect(within(container).getByText('Rename (F2)')).toBeTruthy();
+    });
+  });
+
+  describe('deleting', () => {
+    it('warns that the sync recreates the folder empty', () => {
+      render(<HostTree {...netboxProps} />);
+      fireEvent.contextMenu(rowFor('SITE-01 Example Site'));
+      fireEvent.click(screen.getByText('Delete'));
+      expect(screen.getByText(/recreate it empty/)).toBeTruthy();
+    });
+
+    it('does not add that warning for a hand-made folder', () => {
+      render(<HostTree {...netboxProps} />);
+      fireEvent.contextMenu(rowFor('My hosts'));
+      fireEvent.click(screen.getByText('Delete'));
+      expect(screen.queryByText(/recreate it empty/)).toBeNull();
+    });
+  });
+
+  it('lets a synced folder still be dragged out', () => {
+    // Moving one out of the container is a deliberate act; the reconcile then
+    // leaves its position alone forever.
+    render(<HostTree {...netboxProps} />);
+    expect(rowFor('SITE-01 Example Site').getAttribute('draggable')).toBe('true');
   });
 });

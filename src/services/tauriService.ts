@@ -10,6 +10,8 @@ import { ask as dialogAsk, open as dialogOpen } from '@tauri-apps/plugin-dialog'
 import { redactSensitive } from '../utils/redaction';
 import { WINDOW_LABEL } from '../utils/windowLabel';
 import type {
+  NetboxProbeResult,
+  NetboxSnapshot,
   ProtocolId,
   SshConnectionConfig,
   TelnetConnectionConfig,
@@ -743,6 +745,40 @@ export const tauriService = {
    */
   async openExternal(url: string): Promise<void> {
     await invoke('open_external', { url });
+  },
+
+  // -----------------------------------------------------------------------
+  // NetBox
+  // -----------------------------------------------------------------------
+
+  /**
+   * Validate, probe, and save the token only if NetBox accepted it.
+   *
+   * A refused token comes back as a normal result (`authenticated: false`),
+   * not an error — the caller needs to see which field is wrong.
+   */
+  async netboxConnect(baseUrl: string, token: string): Promise<NetboxProbeResult> {
+    return invoke<NetboxProbeResult>('netbox_connect', { baseUrl, token });
+  },
+
+  /** Re-probe with the SAVED token. The renderer never holds it, so this is
+   *  the only way to refresh the custom-field list after a restart. */
+  async netboxProbe(baseUrl: string): Promise<NetboxProbeResult> {
+    return invoke<NetboxProbeResult>('netbox_probe', { baseUrl });
+  },
+
+  /** Forget the token. The folders it created stay in the tree. */
+  async netboxDisconnect(): Promise<void> {
+    await invoke('netbox_disconnect');
+  },
+
+  async netboxHasToken(): Promise<boolean> {
+    return invoke<boolean>('netbox_has_token');
+  },
+
+  /** Fetch the Regions and Sites one sync needs. */
+  async netboxFetchSnapshot(baseUrl: string, siteIdField: string | null): Promise<NetboxSnapshot> {
+    return invoke<NetboxSnapshot>('netbox_fetch_snapshot', { baseUrl, siteIdField });
   },
 
   // -----------------------------------------------------------------------
