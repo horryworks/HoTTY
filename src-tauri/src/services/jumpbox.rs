@@ -27,7 +27,7 @@ use super::known_hosts::{
 };
 use super::path_safety::is_unc_path;
 use super::session_service::{emit_to_owner, SessionError};
-use super::ssh::{humanize_ssh_error, HostKeyDecision};
+use super::ssh::{humanize_ssh_error, should_try_keyboard_interactive, HostKeyDecision};
 
 // ---------------------------------------------------------------------------
 // Config
@@ -326,6 +326,16 @@ async fn authenticate_jumpbox(
             })?;
         if matches!(res, russh::client::AuthResult::Success) {
             return Ok(());
+        }
+
+        // Same rule as the target-host path: never offer keyboard-interactive
+        // unless the server's failure reply still lists it. A bastion is the
+        // worst place to burn a second failed auth — it is usually the host
+        // with the strictest lockout policy.
+        if !should_try_keyboard_interactive(&res) {
+            return Err(SessionError::AuthFailed(
+                "Jumpbox: Authentication failed".into(),
+            ));
         }
 
         let mut kb = handle

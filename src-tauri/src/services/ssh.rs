@@ -11,7 +11,7 @@ use std::time::Duration;
 use russh::client::{self, Handle, Handler};
 use russh::keys::ssh_key;
 use russh::keys::{load_secret_key, HashAlg, PrivateKey, PrivateKeyWithHashAlg};
-use russh::{cipher, kex, mac, ChannelMsg, Disconnect, Preferred};
+use russh::{cipher, kex, mac, ChannelMsg, Disconnect, MethodKind, Preferred};
 use tauri::AppHandle;
 use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 use tokio::task::JoinHandle;
@@ -723,6 +723,26 @@ fn humanize_auth_error(stage: &str, raw: &str) -> String {
     }
 }
 
+/// Whether a keyboard-interactive attempt should follow a failed password auth.
+///
+/// A server's USERAUTH_FAILURE names the methods that may still be tried.
+/// Offering one it did not name cannot succeed, and it is not free: it is a
+/// second failed authentication. Network gear counts that a second time against
+/// its login-failure lockout (the exact protection a Huawei USG applies), and a
+/// stock OpenSSH server charges the PAM failure delay again. OpenSSH's own
+/// client only offers methods the server advertised; this matches it.
+///
+/// `Success` never reaches here in practice — the caller returns first — but it
+/// maps to `false` so the helper is total.
+pub(crate) fn should_try_keyboard_interactive(result: &client::AuthResult) -> bool {
+    match result {
+        client::AuthResult::Success => false,
+        client::AuthResult::Failure {
+            remaining_methods, ..
+        } => remaining_methods.contains(&MethodKind::KeyboardInteractive),
+    }
+}
+
 async fn try_authenticate(
     handle: &mut Handle<SshHandler>,
     cfg: &SshConfig,
@@ -764,6 +784,11 @@ async fn try_authenticate(
         }
 
         // 3. Keyboard-interactive — single-round using password as response.
+        // Only when the server's failure reply still lists it; see
+        // should_try_keyboard_interactive.
+        if !should_try_keyboard_interactive(&res) {
+            return Err(SessionError::AuthFailed("Authentication failed".into()));
+        }
         let mut kb = handle
             .authenticate_keyboard_interactive_start(&cfg.username, None)
             .await
@@ -1270,6 +1295,43 @@ mod tests {
             h.insert((*k).to_string(), v.clone());
         }
         h
+    }
+
+    fn failure(methods: &[MethodKind]) -> client::AuthResult {
+        client::AuthResult::Failure {
+            remaining_methods: methods.into(),
+            partial_success: false,
+        }
+    }
+
+    #[test]
+    fn keyboard_interactive_follows_a_password_failure_only_when_offered() {
+        // Stock OpenSSH with KbdInteractiveAuthentication=no (e.g. Proxmox VE):
+        // the second attempt cannot succeed, so it must not be made.
+        assert!(!should_try_keyboard_interactive(&failure(&[
+            MethodKind::PublicKey,
+            MethodKind::Password
+        ])));
+        // A server that does offer it — keep the fallback, it is how several
+        // network devices and any PAM-challenge setup actually authenticate.
+        assert!(should_try_keyboard_interactive(&failure(&[
+            MethodKind::Password,
+            MethodKind::KeyboardInteractive
+        ])));
+    }
+
+    #[test]
+    fn keyboard_interactive_is_skipped_when_no_method_remains() {
+        // An empty list means nothing further can be tried; a second attempt
+        // would only spend another failed-login count on the server.
+        assert!(!should_try_keyboard_interactive(&failure(&[])));
+    }
+
+    #[test]
+    fn keyboard_interactive_is_not_attempted_after_success() {
+        assert!(!should_try_keyboard_interactive(
+            &client::AuthResult::Success
+        ));
     }
 
     #[test]

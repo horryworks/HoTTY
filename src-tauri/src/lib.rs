@@ -185,6 +185,22 @@ pub fn run() {
                 } else {
                     log::LevelFilter::Info
                 })
+                // russh's `client::encrypted` logs the raw userauth request it
+                // is about to write, at DEBUG: `enc: [0, 0, 0, 57, 50, ...]`.
+                // Those bytes are the SSH_MSG_USERAUTH_REQUEST — username and,
+                // for password auth, the PASSWORD IN CLEARTEXT. A debug build
+                // therefore wrote real credentials into the log file, and that
+                // file is shared with (and appended to by) release builds.
+                // Cap this one module at INFO so no build can do that. The
+                // russh diagnostics actually worth having — negotiated
+                // algorithms, kex progress, packet types — live in sibling
+                // modules and stay at DEBUG.
+                .level_for("russh::client::encrypted", log::LevelFilter::Info)
+                // Same class of leak, different module: the SSH-agent client
+                // dumps its request/response buffers at DEBUG. HoTTY does not
+                // use an agent today; capping it keeps that true if it ever
+                // does.
+                .level_for("russh::keys::agent", log::LevelFilter::Info)
                 // The plugin defaults to [Stdout, LogDir]. A release build sets
                 // `windows_subsystem = "windows"` and has no console attached,
                 // so every line was still being formatted and written to a
