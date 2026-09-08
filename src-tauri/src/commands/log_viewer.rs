@@ -4,6 +4,7 @@ use tauri::{AppHandle, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use crate::services::log_manager::LogManager;
+use crate::services::path_safety::is_unc_path;
 use crate::services::session_service::humanize_fs_error;
 
 // ---------------------------------------------------------------------------
@@ -120,6 +121,17 @@ pub async fn list_log_files(
 ) -> Result<ListLogFilesResult, String> {
     let folder = Path::new(&folder_path);
 
+    // Refuse UNC before the `is_dir()` below: on Windows that call makes the
+    // SMB redirector reach the remote host and authenticate, leaking an
+    // NTLMv2 hash, and it runs ahead of the approval check that would have
+    // rejected this path. Same guard as `LogManager::start_logging`.
+    if is_unc_path(&folder_path) {
+        return Ok(ListLogFilesResult {
+            files: None,
+            error: Some("folder not approved: please use Browse to select".into()),
+        });
+    }
+
     if !folder.is_dir() {
         return Ok(ListLogFilesResult {
             files: None,
@@ -201,6 +213,15 @@ pub async fn read_log_file(
         });
     }
 
+    // Refuse UNC before `resolve_real_path` canonicalizes it (see
+    // `list_log_files`); the allowed-directory check below runs too late.
+    if is_unc_path(&file_path) {
+        return Ok(ReadLogFileResult {
+            content: None,
+            error: Some("access denied: file is outside allowed directories".into()),
+        });
+    }
+
     // Resolve real path (follows symlinks)
     let real_path = match resolve_real_path(path) {
         Ok(p) => p,
@@ -275,6 +296,13 @@ pub async fn confirm_log_dir(
     path: String,
 ) -> Result<bool, String> {
     let folder = Path::new(&path);
+
+    // Refuse UNC before the `is_dir()` below (see `list_log_files`). Approving
+    // one is refused by `approve_dir` anyway, so there is nothing to gain by
+    // asking the user about it first.
+    if is_unc_path(&path) {
+        return Err("folder cannot be a UNC/network path".into());
+    }
 
     if log_manager.is_dir_approved(folder).await {
         return Ok(true);
@@ -388,5 +416,17 @@ mod tests {
         let json = serde_json::to_string(&err_result).unwrap();
         assert!(!json.contains("\"content\""));
         assert!(json.contains("\"error\""));
+    }
+
+    /// `list_log_files`, `read_log_file` and `confirm_log_dir` each refuse a
+    /// UNC path *before* their own `is_dir()` / `canonicalize()` call, because
+    /// on Windows that call makes the SMB redirector authenticate to the remote
+    /// host. This pins the shapes those guards have to catch.
+    #[test]
+    fn unc_paths_are_recognised_before_any_filesystem_touch() {
+        assert!(is_unc_path(r"\\attacker.example\share"));
+        assert!(is_unc_path("//attacker.example/share/log.txt"));
+        assert!(is_unc_path(r"\\?\UNC\attacker.example\share"));
+        assert!(!is_unc_path(r"C:\Users\me\logs\a.txt"));
     }
 }

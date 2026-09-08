@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import { VersionsTab } from './VersionsTab';
 import { tauriService } from '../../services/tauriService';
 import type { ReleaseEntry, UpdaterProgress } from '../../types/appTypes';
@@ -31,6 +31,7 @@ function entry(over: Partial<ReleaseEntry> & Pick<ReleaseEntry, 'version'>): Rel
 }
 
 const RELEASES: ReleaseEntry[] = [
+    entry({ version: '2.2.0', relation: 'newer', notes: '## Next stable\n\n- faster startup' }),
     entry({
         version: '2.1.0-beta1',
         prerelease: true,
@@ -40,6 +41,11 @@ const RELEASES: ReleaseEntry[] = [
     entry({ version: '2.0.18', notes: '## Stable build\n\n- markdown links fixed' }),
     entry({ version: '2.0.17', installable: false }),
 ];
+
+/** The row a version's name sits in, so a query can be scoped to just that row. */
+function rowOf(version: string): HTMLElement {
+    return screen.getByText(version).closest('.versions-row') as HTMLElement;
+}
 
 let progressCb: ((p: UpdaterProgress) => void) | null = null;
 
@@ -96,17 +102,54 @@ describe('VersionsTab', () => {
         expect(await screen.findByText(/hosts, themes and saved credentials are kept/)).toBeTruthy();
     });
 
-    it('does not warn when reinstalling the current version', async () => {
+    it('offers no action on the version already installed', async () => {
         render(<VersionsTab />);
-        fireEvent.click(await screen.findByText('2.1.0-beta1'));
+        await screen.findByText('2.1.0-beta1');
+        // Only the row's own select button — switching to where you already are
+        // is not on offer.
+        expect(within(rowOf('2.1.0-beta1')).getAllByRole('button')).toHaveLength(1);
+        expect(screen.queryByRole('button', { name: /Switch to v2\.1\.0-beta1/ })).toBeNull();
+
+        fireEvent.click(screen.getByText('2.1.0-beta1'));
         expect(screen.queryByText(/saved credentials are kept/)).toBeNull();
-        expect(await screen.findByText(/Reinstall v2\.1\.0-beta1/)).toBeTruthy();
+    });
+
+    it('labels a newer release Upgrade and an older one Downgrade', async () => {
+        render(<VersionsTab />);
+        await screen.findByText('2.2.0');
+
+        const up = within(rowOf('2.2.0')).getByRole('button', { name: /Switch to v2\.2\.0/ });
+        expect(up.textContent).toBe('Upgrade');
+        expect(up.className).toContain('upgrade');
+
+        const down = within(rowOf('2.0.18')).getByRole('button', { name: /Switch to v2\.0\.18/ });
+        expect(down.textContent).toBe('Downgrade');
+        expect(down.className).toContain('downgrade');
+    });
+
+    it('puts the download size in the action tooltip, not in the row', async () => {
+        render(<VersionsTab />);
+        await screen.findByText('2.0.18');
+        const row = rowOf('2.0.18');
+        expect(
+            within(row).getByRole('button', { name: /Switch to v2\.0\.18/ }).getAttribute('title'),
+        ).toBe('Switch to v2.0.18 (6.2 MB)');
+        expect(row.textContent).not.toContain('MB');
+    });
+
+    it('has no separate install button below the list', async () => {
+        const { container } = render(<VersionsTab />);
+        await screen.findByText('2.0.18');
+        expect(container.querySelector('.versions-actions')).toBeNull();
+        // Selecting a row must not bring one back.
+        fireEvent.click(screen.getByText('2.0.18'));
+        expect(container.querySelector('.versions-actions')).toBeNull();
     });
 
     it('sends only a tag and a language to the backend, never a URL', async () => {
         render(<VersionsTab />);
-        fireEvent.click(await screen.findByText('2.0.18'));
-        fireEvent.click(await screen.findByText(/Switch to v2\.0\.18/));
+        await screen.findByText('2.0.18');
+        fireEvent.click(within(rowOf('2.0.18')).getByRole('button', { name: /Switch to v2\.0\.18/ }));
 
         await waitFor(() => expect(tauriService.installVersion).toHaveBeenCalled());
         // The security contract: the renderer picks a tag, the backend resolves
@@ -116,13 +159,41 @@ describe('VersionsTab', () => {
         expect(JSON.stringify(args)).not.toContain('http');
     });
 
+    it('selects the row it acts on, so the downgrade caveat is on screen', async () => {
+        render(<VersionsTab />);
+        await screen.findByText('2.0.18');
+        // No prior click on the row: pressing Downgrade must select it too.
+        fireEvent.click(within(rowOf('2.0.18')).getByRole('button', { name: /Switch to v2\.0\.18/ }));
+        expect(await screen.findByText(/hosts, themes and saved credentials are kept/)).toBeTruthy();
+    });
+
     it('refuses to install a release with no published checksum', async () => {
         render(<VersionsTab />);
-        fireEvent.click(await screen.findByText('2.0.17'));
-        const button = (await screen.findByText(/Switch to v2\.0\.17/)).closest(
-            'button',
-        ) as HTMLButtonElement;
+        await screen.findByText('2.0.17');
+        const button = within(rowOf('2.0.17')).getByRole('button', {
+            name: /No published checksum/,
+        }) as HTMLButtonElement;
         expect(button.disabled).toBe(true);
+    });
+
+    it('locks every action and offers cancel while an install runs', async () => {
+        vi.mocked(tauriService.installVersion).mockReturnValueOnce(new Promise(() => {}));
+        const { container } = render(<VersionsTab />);
+        await screen.findByText('2.0.18');
+        fireEvent.click(within(rowOf('2.0.18')).getByRole('button', { name: /Switch to v2\.0\.18/ }));
+
+        // The running row says what it is doing; the others are locked out.
+        expect(await within(rowOf('2.0.18')).findByText('Installing…')).toBeTruthy();
+        const other = within(rowOf('2.2.0')).getByRole('button', {
+            name: /Switch to v2\.2\.0/,
+        }) as HTMLButtonElement;
+        expect(other.disabled).toBe(true);
+
+        const cancel = within(
+            container.querySelector('.versions-actions') as HTMLElement,
+        ).getByText('Cancel');
+        fireEvent.click(cancel);
+        expect(tauriService.cancelVersionInstall).toHaveBeenCalled();
     });
 
     it('reports download progress', async () => {
@@ -151,8 +222,8 @@ describe('VersionsTab', () => {
             new Error('checksum mismatch'),
         );
         render(<VersionsTab />);
-        fireEvent.click(await screen.findByText('2.0.18'));
-        fireEvent.click(await screen.findByText(/Switch to v2\.0\.18/));
+        await screen.findByText('2.0.18');
+        fireEvent.click(within(rowOf('2.0.18')).getByRole('button', { name: /Switch to v2\.0\.18/ }));
         expect(await screen.findByText(/checksum mismatch/)).toBeTruthy();
     });
 

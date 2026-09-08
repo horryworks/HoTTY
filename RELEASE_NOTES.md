@@ -1,5 +1,23 @@
 # Release Notes
 
+## v2.1.0-beta5
+
+**Two ways a credential could reach the disk are closed, and switching versions is one click again.** The SSH library HoTTY is built on logs the authentication request it is about to send — for password authentication, that is your username and your password, in the clear. Release builds never wrote it, because they log above the level it uses; a development build did, into the same file the Settings "Debug Log" entry asks you to attach to a bug report. Separately, the Versions tab now puts an Upgrade or Downgrade button on the version itself, instead of one install button below the list.
+
+### Improvements
+
+- **Every version in the list has its own button.** The Versions tab listed releases and put a single install button underneath, so choosing a version appeared to do nothing — the control that acted on the choice was somewhere else on screen. Each row now carries its own button, labelled **Upgrade** or **Downgrade** depending on which way it goes, and the version you are already running carries none, because there is nowhere to switch to. The download size moved into that button's tooltip so the list stays readable. Pressing it also selects the row, which puts the release notes — and the warning that comes with going backwards — on screen behind the confirmation dialog. Cancel now appears the moment an install starts, rather than only once the download has got far enough to report progress: the wait for the consent dialog is exactly when you might want to back out.
+
+### Bug Fixes
+
+- **A rejected password no longer costs a second failed login.** After a password was refused, HoTTY always tried keyboard-interactive authentication as well — even when the server's refusal did not list that method as available. Such an attempt cannot succeed, and it is not free: network equipment counts it as another failed login against its lockout threshold, and an OpenSSH server charges its failure delay again. HoTTY now offers only the methods the server said it accepts, on both direct and jump-host connections.
+
+### Security
+
+- **SSH credentials can no longer reach the log file.** The module in the SSH library that writes the authentication packet logs that packet's contents as it goes, at debug level. That is the username and, for password authentication, the password itself. A release build logs above that level and was never affected, but a development build wrote real credentials into the log directory — the same directory a bug report asks you to share. That module, and the SSH-agent client which dumps its buffers the same way, are now capped so that no build can write them. The SSH diagnostics that are worth having — negotiated algorithms, key-exchange progress, packet types — come from neighbouring modules and are untouched.
+
+- **Log folders are checked for a network path before Windows is asked about them.** Asking Windows to resolve a path that names a network share makes it connect to that host and authenticate first, which is enough to hand a password hash to whoever answers. HoTTY already refused such paths everywhere it *writes* a log, but five entry points that read — listing a log folder, opening a log file, the folder-approval prompt, the ping monitor's CSV path, and the AI chat transcript — resolved the path first and only then asked whether the folder was approved. A permission check that runs second is too late. All five now refuse a network path up front. Reaching them at all requires the interface itself to be compromised, so this shuts a door rather than fixing a leak in ordinary use.
+
 ## v2.1.0-beta4
 
 **The host tree can mirror NetBox.** If your organisation already keeps its sites in NetBox, the folder structure in the New Session dialog no longer has to be maintained by hand a second time: point HoTTY at your NetBox, and its Regions and Sites appear as folders that stay in step from then on.

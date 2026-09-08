@@ -378,6 +378,13 @@ impl LogManager {
     /// the user only sees the confirm dialog once per folder ever (rather
     /// than once per app launch).
     pub async fn approve_dir(&self, dir: &Path) {
+        // A UNC path must never enter the approved set: `start_logging` refuses
+        // to log to one anyway, so admitting it here could only widen what the
+        // read paths accept.
+        if is_network_path(dir) {
+            log::warn!("refusing to approve UNC log dir: {}", dir.display());
+            return;
+        }
         let mut inner = self.inner.lock().await;
         let canonical = canonicalize_for_compare(dir);
         if !inner.allowed_dirs.contains(&canonical) {
@@ -412,6 +419,9 @@ impl LogManager {
 
     /// Check if a directory has been user-approved.
     pub async fn is_dir_approved(&self, dir: &Path) -> bool {
+        if is_network_path(dir) {
+            return false;
+        }
         let inner = self.inner.lock().await;
         let canonical = canonicalize_for_compare(dir);
         inner.allowed_dirs.iter().any(|d| d == &canonical)
@@ -419,6 +429,9 @@ impl LogManager {
 
     /// Check if a path is within an approved directory.
     pub async fn is_path_allowed(&self, path: &Path) -> bool {
+        if is_network_path(path) {
+            return false;
+        }
         let inner = self.inner.lock().await;
         is_path_in_allowed_dirs(path, &inner.allowed_dirs)
     }
@@ -561,6 +574,9 @@ impl LogManager {
         meta: &ChatLogMeta,
         turns: &[ChatLogTurn],
     ) -> Result<(), String> {
+        if is_network_path(log_dir) {
+            return Err("log directory cannot be a UNC/network path".into());
+        }
         if turns.is_empty() {
             return Ok(());
         }
@@ -657,6 +673,36 @@ impl Clone for LogManager {
             active_logs: Arc::clone(&self.active_logs),
         }
     }
+}
+
+/// True when a path names a *remote* location, so nothing may touch it.
+///
+/// `canonicalize_for_compare` calls `Path::canonicalize`, and on Windows that
+/// makes the SMB redirector reach out to the named host and authenticate --
+/// leaking an NTLMv2 hash -- before an approval check can reject the path.
+/// Being unapproved does not help, because the damage is done during the
+/// lookup itself. So every renderer-reachable entry point refuses one up
+/// front, the same way `start_logging` does.
+///
+/// Deliberately narrower than `path_safety::is_unc_path`, which also flags
+/// Windows' verbatim *local* spelling. That spelling is exactly what
+/// `Path::canonicalize` returns for an ordinary local file, and
+/// `is_path_allowed` is handed such a path by `read_log_file` -- the blunt
+/// check would reject every legitimate log file. Only the verbatim `UNC`
+/// spelling is remote.
+fn is_network_path(p: &Path) -> bool {
+    let raw = p.to_string_lossy();
+    if !crate::services::path_safety::is_unc_path(&raw) {
+        return false;
+    }
+    // A verbatim path naming a drive letter is local; one naming UNC is not.
+    if let Some(rest) = raw.trim_start().strip_prefix(r"\\?\") {
+        let mut chars = rest.chars();
+        if let (Some(drive), Some(colon)) = (chars.next(), chars.next()) {
+            return !(drive.is_ascii_alphabetic() && colon == ':');
+        }
+    }
+    true
 }
 
 /// Canonicalize a path for use in allowed-directory comparisons.
@@ -1220,6 +1266,75 @@ mod tests {
                 "expected a UNC rejection for {dir}, got: {err}"
             );
         }
+    }
+
+    /// The approval lookups canonicalize their argument, and on Windows
+    /// canonicalizing a UNC path makes the SMB redirector authenticate to the
+    /// remote host. Returning "not approved" afterwards is too late -- the hash
+    /// has already left. So they must refuse before touching the filesystem.
+    #[tokio::test]
+    async fn approval_lookups_reject_unc_before_canonicalizing() {
+        let mgr = LogManager::new();
+        for p in [
+            r"\\attacker.example\share\logs",
+            "//attacker.example/share/logs",
+            r"  \\attacker.example\share",
+        ] {
+            assert!(
+                !mgr.is_dir_approved(Path::new(p)).await,
+                "is_dir_approved must refuse {p}"
+            );
+            assert!(
+                !mgr.is_path_allowed(Path::new(p)).await,
+                "is_path_allowed must refuse {p}"
+            );
+        }
+    }
+
+    /// The blunt `is_unc_path` check also flags Windows' verbatim *local*
+    /// spelling, which is exactly what `canonicalize` hands back for an
+    /// ordinary file -- see `registered_dir_matches_canonical_file_path`.
+    /// Only the verbatim UNC spelling names a remote host.
+    #[test]
+    fn is_network_path_separates_verbatim_local_from_verbatim_unc() {
+        assert!(is_network_path(Path::new(r"\\attacker.example\share")));
+        assert!(is_network_path(Path::new("//attacker.example/share")));
+        assert!(is_network_path(Path::new(
+            r"\\?\UNC\attacker.example\share"
+        )));
+        assert!(!is_network_path(Path::new(r"\\?\C:\Users\me\logs\a.txt")));
+        assert!(!is_network_path(Path::new(r"C:\Users\me\logs\a.txt")));
+    }
+
+    /// `approve_dir` is reached only after a real user click, but a folder
+    /// picked there still must not enter the allow-list: logging to it is
+    /// refused by `start_logging` anyway, so admitting it could only widen
+    /// what the read paths accept.
+    #[tokio::test]
+    async fn approve_dir_refuses_to_admit_a_unc_path() {
+        let mgr = LogManager::new();
+        let dir = r"\\attacker.example\share\logs";
+        mgr.approve_dir(Path::new(dir)).await;
+        assert!(
+            !mgr.is_dir_approved(Path::new(dir)).await,
+            "a UNC dir must never become approved"
+        );
+    }
+
+    #[tokio::test]
+    async fn append_chat_log_rejects_unc_dir() {
+        let mgr = LogManager::new();
+        let turns = vec![chat_turn(ChatLogRole::User, "hi")];
+        let err = mgr
+            .append_chat_log(
+                "k",
+                Path::new(r"\\attacker.example\share"),
+                &ChatLogMeta::default(),
+                &turns,
+            )
+            .await
+            .expect_err("UNC chat-log dir must be rejected");
+        assert!(err.contains("UNC"), "expected a UNC rejection, got: {err}");
     }
 
     #[test]

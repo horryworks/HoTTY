@@ -34,6 +34,12 @@ fn validate_args(log_key: &str, log_dir: &str) -> Result<(), String> {
     if log_dir.trim().is_empty() {
         return Err("log directory must not be empty".to_string());
     }
+    // Refuse UNC before `append_chat_log` canonicalizes it: on Windows that
+    // makes the SMB redirector reach the remote host and authenticate, leaking
+    // an NTLMv2 hash, before the approval check can reject the directory.
+    if crate::services::path_safety::is_unc_path(log_dir) {
+        return Err("log directory cannot be a UNC/network path".to_string());
+    }
     Ok(())
 }
 
@@ -111,6 +117,13 @@ mod tests {
     fn validate_args_rejects_empty_dir() {
         assert!(validate_args("ai-1::tab-1", "").is_err());
         assert!(validate_args("ai-1::tab-1", "  ").is_err());
+    }
+
+    #[test]
+    fn validate_args_rejects_unc_dir() {
+        assert!(validate_args("ai-1::tab-1", r"\\attacker\share").is_err());
+        assert!(validate_args("ai-1::tab-1", "//attacker/share").is_err());
+        assert!(validate_args("ai-1::tab-1", r"  \\attacker\share").is_err());
     }
 
     #[test]
