@@ -236,15 +236,39 @@ describe('HostTree', () => {
   });
 
   describe('expand / collapse', () => {
-    it('collapses a folder on the first click and reopens it on the second', () => {
+    it('leaves the folder open on a single click, and still selects it', () => {
+      const onSelect = vi.fn();
+      render(<HostTree {...defaultProps} onSelect={onSelect} />);
+
+      fireEvent.click(screen.getByText('Production'));
+
+      expect(screen.getByText('Web Server')).toBeTruthy();
+      expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ name: 'Production' }));
+    });
+
+    it('collapses a folder on double-click and reopens it on the next one', () => {
       render(<HostTree {...defaultProps} />);
       expect(screen.getByText('Web Server')).toBeTruthy();
 
-      fireEvent.click(screen.getByText('Production'));
+      fireEvent.doubleClick(screen.getByText('Production'));
       expect(screen.queryByText('Web Server')).toBeNull();
 
-      fireEvent.click(screen.getByText('Production'));
+      fireEvent.doubleClick(screen.getByText('Production'));
       expect(screen.getByText('Web Server')).toBeTruthy();
+    });
+
+    // fireEvent.doubleClick fires `dblclick` alone; a real browser sends
+    // click, click, dblclick. Spell that out so a toggle creeping back into
+    // the row's onClick shows up here as a folder that never closes.
+    it('collapses once when the two clicks before the double-click are real', () => {
+      render(<HostTree {...defaultProps} />);
+      const folder = screen.getByText('Production');
+
+      fireEvent.click(folder);
+      fireEvent.click(folder);
+      fireEvent.doubleClick(folder);
+
+      expect(screen.queryByText('Web Server')).toBeNull();
     });
 
     it('collapses from the chevron without selecting the folder', () => {
@@ -257,6 +281,37 @@ describe('HostTree', () => {
       fireEvent.click(chevron);
       expect(screen.queryByText('Web Server')).toBeNull();
       expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('lands back where it started when the chevron is clicked twice quickly', () => {
+      render(<HostTree {...defaultProps} />);
+      const chevron = screen
+        .getByText('Production')
+        .closest('.host-tree-row')
+        ?.querySelector('.tree-icon') as HTMLElement;
+
+      // Two toggles, then the dblclick the browser adds on top — which the
+      // chevron swallows, so it must not become a third toggle.
+      fireEvent.click(chevron);
+      fireEvent.click(chevron);
+      fireEvent.doubleClick(chevron);
+
+      expect(screen.getByText('Web Server')).toBeTruthy();
+    });
+
+    it('ignores the invisible chevron on a folder with no children', () => {
+      const emptyFolder: HostTreeNode = { id: 'folder-2', type: 'folder', name: 'Staging', children: [] };
+      render(<HostTree {...defaultProps} tree={[...sampleTree, emptyFolder]} />);
+      const chevron = screen
+        .getByText('Staging')
+        .closest('.host-tree-row')
+        ?.querySelector('.tree-icon') as HTMLElement;
+
+      expect(chevron.style.opacity).toBe('0');
+      fireEvent.click(chevron);
+      // Nothing to show either way — the point is that the row does not
+      // quietly flip a hidden control.
+      expect(screen.getByText('Staging')).toBeTruthy();
     });
   });
 
@@ -309,7 +364,7 @@ describe('HostTree', () => {
 
     it('reveals a match inside a collapsed folder, then re-collapses it', () => {
       render(<HostTree {...defaultProps} />);
-      fireEvent.click(screen.getByText('Production'));
+      fireEvent.doubleClick(screen.getByText('Production'));
       expect(screen.queryByText('Web Server')).toBeNull();
 
       typeFilter('Web');
@@ -530,5 +585,184 @@ describe('HostTree — NetBox-synced folders', () => {
     // leaves its position alone forever.
     render(<HostTree {...netboxProps} />);
     expect(rowFor('SITE-01 Example Site').getAttribute('draggable')).toBe('true');
+  });
+});
+
+describe('HostTree — NetBox prefix placement', () => {
+  /** Container, one site with a prefix, plus a plain folder to save into. */
+  const prefixTree: HostTreeNode[] = [
+    {
+      id: 'c', type: 'folder', name: 'NetBox',
+      netbox: { server: 'default', kind: 'root' },
+      children: [
+        {
+          id: 's1', type: 'folder', name: 'TOK Tokyo', children: [],
+          netbox: { server: 'default', kind: 'site', objectId: 10, prefixes: ['10.1.0.0/16'] },
+        },
+      ],
+    },
+    { id: 'mine', type: 'folder', name: 'Production', children: [] },
+  ];
+
+  const props = (over: Record<string, unknown> = {}) => ({
+    ...defaultProps,
+    tree: prefixTree,
+    netboxPlacement: true,
+    onAddHost: vi.fn(),
+    onApplyPlacements: vi.fn(() => 1),
+    ...over,
+  });
+
+  /** Open "Add Host" from the toolbar and type an address. */
+  function openAddHost(address: string, p = props()) {
+    render(<HostTree {...p} />);
+    fireEvent.click(screen.getByTitle('Add Host'));
+    fireEvent.change(screen.getAllByRole('textbox')[1], { target: { value: 'new-host' } });
+    fireEvent.change(screen.getByPlaceholderText('192.168.1.1'), { target: { value: address } });
+    return p;
+  }
+
+  it('suggests the matched site folder when the address falls inside a prefix', () => {
+    openAddHost('10.1.0.9');
+    expect(screen.getByText(/Matches NetBox 10\.1\.0\.0\/16/)).toBeTruthy();
+    expect(screen.getByLabelText('TOK Tokyo')).toBeTruthy();
+  });
+
+  it('adds the host to the suggested folder when the suggestion is left selected', () => {
+    const p = openAddHost('10.1.0.9');
+    fireEvent.click(screen.getByText('Save'));
+    expect(p.onAddHost).toHaveBeenCalledWith('s1', 'new-host', expect.objectContaining({ host: '10.1.0.9' }));
+  });
+
+  it('adds the host where it would have gone when the user picks the original location', () => {
+    const p = openAddHost('10.1.0.9');
+    fireEvent.click(screen.getByLabelText(/Here:/));
+    fireEvent.click(screen.getByText('Save'));
+    expect(p.onAddHost).toHaveBeenCalledWith(null, 'new-host', expect.objectContaining({ host: '10.1.0.9' }));
+  });
+
+  it('keeps the user choice when the address is edited again', () => {
+    // The stickiness matters: without it, every keystroke would silently undo
+    // the decision the user just made.
+    const p = openAddHost('10.1.0.9');
+    fireEvent.click(screen.getByLabelText(/Here:/));
+    fireEvent.change(screen.getByPlaceholderText('192.168.1.1'), { target: { value: '10.1.0.20' } });
+    fireEvent.click(screen.getByText('Save'));
+    expect(p.onAddHost).toHaveBeenCalledWith(null, 'new-host', expect.objectContaining({ host: '10.1.0.20' }));
+  });
+
+  it('says it will not choose when two folders claim the address', () => {
+    const tied: HostTreeNode[] = [
+      { id: 'a', type: 'folder', name: 'TOK Tokyo', children: [], netbox: { server: 'default', kind: 'site', objectId: 10, prefixes: ['10.1.0.0/16'] } },
+      { id: 'b', type: 'folder', name: 'OSA Osaka', children: [], netbox: { server: 'default', kind: 'site', objectId: 11, prefixes: ['10.1.0.0/16'] } },
+    ];
+    openAddHost('10.1.0.9', props({ tree: tied }));
+    expect(screen.getByText(/HoTTY will not choose/)).toBeTruthy();
+    expect(screen.queryByText(/Save to/)).toBeNull();
+  });
+
+  it('shows nothing at all when the tree carries no prefixes', () => {
+    openAddHost('10.1.0.9', props({ tree: sampleTree }));
+    expect(screen.queryByText(/Matches NetBox/)).toBeNull();
+    expect(screen.queryByText(/No NetBox folder covers/)).toBeNull();
+  });
+
+  it('shows nothing while the setting is off', () => {
+    openAddHost('10.1.0.9', props({ netboxPlacement: false }));
+    expect(screen.queryByText(/Matches NetBox/)).toBeNull();
+  });
+
+  it('does not resolve a hostname, so a name suggests nothing', () => {
+    openAddHost('router1.example.com');
+    expect(screen.queryByText(/Matches NetBox/)).toBeNull();
+    expect(screen.queryByText(/No NetBox folder covers/)).toBeNull();
+  });
+
+  it('says plainly when the address matches no prefix', () => {
+    openAddHost('203.0.113.9');
+    expect(screen.getByText(/No NetBox folder covers this address/)).toBeTruthy();
+  });
+
+  it('offers the bulk action on a folder and on the empty tree background', () => {
+    render(<HostTree {...props()} />);
+    fireEvent.contextMenu(screen.getByText('Production'));
+    expect(screen.getByText('Sort by IP Range…')).toBeTruthy();
+  });
+
+  it('hides the bulk action while the setting is off', () => {
+    render(<HostTree {...props({ netboxPlacement: false })} />);
+    fireEvent.contextMenu(screen.getByText('Production'));
+    expect(screen.queryByText('Sort by IP Range…')).toBeNull();
+  });
+
+  it('hides the bulk action when no folder carries a prefix', () => {
+    render(<HostTree {...props({ tree: sampleTree })} />);
+    fireEvent.contextMenu(screen.getByText('Production'));
+    expect(screen.queryByText('Sort by IP Range…')).toBeNull();
+  });
+
+  it('opens the bulk preview and applies only on demand', () => {
+    // The host sits inside Production, which is the folder right-clicked, so
+    // the scope of the action is the thing under test as well.
+    const withHost: HostTreeNode[] = [
+      prefixTree[0],
+      {
+        id: 'mine', type: 'folder', name: 'Production', children: [
+          { id: 'h1', type: 'host', name: 'tokyo-01', entry: { protocol: 'ssh', host: '10.1.0.9', port: 22 } },
+        ],
+      },
+    ];
+    const p = props({ tree: withHost });
+    render(<HostTree {...p} />);
+    fireEvent.contextMenu(screen.getByText('Production'));
+    fireEvent.click(screen.getByText('Sort by IP Range…'));
+    expect(screen.getByText(/Will move \(1\)/)).toBeTruthy();
+    expect(p.onApplyPlacements).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Move 1'));
+    expect(p.onApplyPlacements).toHaveBeenCalledWith([{ hostId: 'h1', targetFolderId: 's1' }]);
+  });
+});
+
+describe('NetBox folder icons', () => {
+  const netboxTree: HostTreeNode[] = [
+    { id: 'plain', type: 'folder', name: 'Lab', children: [] },
+    {
+      id: 'container', type: 'folder', name: 'NetBox', children: [
+        {
+          id: 'region', type: 'folder', name: 'Asia', children: [
+            {
+              id: 'site', type: 'folder', name: 'tok Tokyo', children: [],
+              netbox: { server: 'default', kind: 'site', objectId: 6, prefixes: ['10.6.0.0/16'] },
+            },
+          ],
+          netbox: { server: 'default', kind: 'region', objectId: 1 },
+        },
+      ],
+      netbox: { server: 'default', kind: 'root' },
+    },
+  ];
+
+  const iconOf = (name: string): string => {
+    const row = screen.getByText(name).closest('.host-tree-row') as HTMLElement;
+    // [chevron, object icon] — the object icon is the second .tree-icon.
+    return row.querySelectorAll('.tree-icon')[1].textContent ?? '';
+  };
+
+  it('gives regions, sites and hand-made folders different icons', () => {
+    render(<HostTree {...defaultProps} tree={netboxTree} />);
+    const icons = [iconOf('Lab'), iconOf('Asia'), iconOf('tok Tokyo')];
+    expect(new Set(icons).size).toBe(3);
+  });
+
+  it('leaves the NetBox container looking like a plain folder', () => {
+    // ADR-018 gives the container's name and position to the user.
+    render(<HostTree {...defaultProps} tree={netboxTree} />);
+    expect(iconOf('NetBox')).toBe(iconOf('Lab'));
+  });
+
+  it('puts the folder ranges in the row tooltip', () => {
+    render(<HostTree {...defaultProps} tree={netboxTree} />);
+    const row = screen.getByText('tok Tokyo').closest('.host-tree-row') as HTMLElement;
+    expect(row.getAttribute('title')).toContain('10.6.0.0/16');
   });
 });

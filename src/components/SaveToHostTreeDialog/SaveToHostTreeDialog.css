@@ -74,6 +74,17 @@
     line-height: 1.4;
 }
 
+/* One line above the folder list saying which prefix chose the selection.
+   Absent entirely when there is nothing to say. */
+.save-to-tree-netbox-hint {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--text-tertiary);
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 2px);
+    line-height: 1.4;
+}
+
 .save-to-tree-folder-list {
     border: 1px solid var(--border-color);
     border-radius: 4px;

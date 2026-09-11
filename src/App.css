@@ -21,6 +21,16 @@
   flex-direction: row-reverse;
 }
 
+/* A dedicated AI Chat window: one pane, no icon rail, no tab bar, no edge bars.
+   The active-pane border and glow are suppressed because there is nothing to
+   distinguish it from — a permanent highlight would just be chrome, and the
+   whole point of the window is to be a quiet chat column. */
+.app-container-chat > .main-layout > .content-area > .pane {
+  flex: 1;
+  border-color: transparent;
+  box-shadow: none;
+}
+
 .main-layout {
   flex: 1;
   display: flex;

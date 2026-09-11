@@ -21,6 +21,7 @@ export const chrome = {
     stopWatchAi: 'AI監視を停止',
     watchInTitle: '監視する会話',
     watchInNew: '新しい会話',
+    watchInAiWindow: '別ウィンドウの AI で見る',
     bookmark: 'ブックマークに追加…',
   },
   appSidebar: {

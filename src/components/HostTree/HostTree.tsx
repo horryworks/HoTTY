@@ -7,7 +7,12 @@ import { flattenHosts, getJumpboxReferences } from '../../hooks/useHostManager';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useModalState } from '../../hooks/useModalState';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
+import { MoveByPrefixModal } from '../MoveByPrefixModal/MoveByPrefixModal';
 import { isNetboxNamed } from '../../utils/netboxSync';
+import { nodeIcon } from '../../utils/nodeIcon';
+import { collectPrefixFolders, suggestFolderForHost, type PlacementResult } from '../../utils/netboxPlacement';
+import { formatPrefix } from '../../utils/cidr';
+import type { PlacementMove } from '../../hooks/useHostManager';
 import { tauriService } from '../../services/tauriService';
 import './HostTree.css';
 
@@ -49,6 +54,12 @@ interface HostTreeProps {
     netboxConfigured?: boolean;
     /** Last sync failure, shown as a mark on the button rather than a popup. */
     netboxLastError?: string | null;
+    /** Placement by NetBox IPAM prefix is on. Passed in rather than read from
+     *  the store so this component stays presentational and its tests keep
+     *  rendering it with plain props. */
+    netboxPlacement?: boolean;
+    /** Apply a batch of moves in one write. Absent ⇒ no bulk action offered. */
+    onApplyPlacements?: (moves: PlacementMove[]) => number;
 }
 
 export const HostTree: React.FC<HostTreeProps> = ({
@@ -70,6 +81,8 @@ export const HostTree: React.FC<HostTreeProps> = ({
     netboxSyncing = false,
     netboxConfigured = false,
     netboxLastError = null,
+    netboxPlacement = false,
+    onApplyPlacements,
 }) => {
     const { t } = useTranslation();
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -79,6 +92,19 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [editModalOpen, openEditModal, closeEditModal, editModal] = useModalState<EditModalState>();
     const [nodeToDeleteOpen, openNodeToDelete, closeNodeToDelete, nodeToDelete] = useModalState<HostTreeNode>();
     const [openAllConfirmOpen, openOpenAllConfirm, closeOpenAllConfirm, openAllNode] = useModalState<HostTreeNode>();
+    /** Scope for the bulk "sort by IP range" action: a folder id, or `null` for
+     *  the whole tree. Held as `{ id }` so `null` stays a real value. */
+    const [moveByPrefixScope, setMoveByPrefixScope] = useState<{ id: string | null } | null>(null);
+
+    /**
+     * Whether the suggestion in the add-host form is being used.
+     *
+     * `null` means "the user has not touched the choice", so the effective
+     * value follows whatever the address currently matches. The moment a radio
+     * is clicked it becomes a real boolean and editing the address again no
+     * longer overrides what the user chose.
+     */
+    const [useNetboxFolder, setUseNetboxFolder] = useState<boolean | null>(null);
 
     // Inline edit state
     const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -93,6 +119,46 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [formIsJumpbox, setFormIsJumpbox] = useState(false);
     const [formFixedTerminalSize, setFormFixedTerminalSize] = useState<FixedSizeTri>('default');
     const [importFilePath, setImportFilePath] = useState<string | null>(null);
+
+    /** Every prefix-carrying folder, recomputed only when the tree changes. */
+    const prefixFolders = useMemo(
+        () => (netboxPlacement ? collectPrefixFolders(tree) : []),
+        [tree, netboxPlacement],
+    );
+
+    /**
+     * What the address typed into the add-host form matches.
+     *
+     * Only ever computed for a NEW host: silently relocating a host the user
+     * opened to edit would cross the line this feature is careful to stay on
+     * the right side of.
+     */
+    const placement: PlacementResult = useMemo(() => {
+        if (!editModal || editModal.mode !== 'host' || editModal.existingNode) {
+            return { kind: 'noPrefixes' };
+        }
+        return suggestFolderForHost(prefixFolders, formHost);
+    }, [editModal, prefixFolders, formHost]);
+
+    /** The folder to save into, or `null` to use the form's own parent. */
+    const placementFolder =
+        placement.kind === 'one' && (useNetboxFolder ?? true) ? placement.folder : null;
+
+    /** Where the Add button would have put this host — named, so the radio can
+     *  offer both destinations by name rather than one of them as "not that". */
+    const currentParentName = useMemo(() => {
+        const id = editModal?.parentId ?? null;
+        if (id === null) return t('hostTree.netbox.placement.topLevel');
+        const walk = (nodes: HostTreeNode[]): string | null => {
+            for (const n of nodes) {
+                if (n.id === id) return n.name;
+                const hit = n.children ? walk(n.children) : null;
+                if (hit !== null) return hit;
+            }
+            return null;
+        };
+        return walk(tree) ?? t('hostTree.netbox.placement.topLevel');
+    }, [editModal, tree, t]);
     const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
     const [dropTarget, setDropTarget] = useState<{ nodeId: string; position: 'before' | 'after' | 'inside' } | null>(null);
     const modalInputRef = useRef<HTMLInputElement>(null);
@@ -255,6 +321,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
         setFormPassword('');
         setFormIsJumpbox(false);
         setFormFixedTerminalSize('default');
+        setUseNetboxFolder(null);
         openEditModal({ mode: 'host', parentId });
         setContextMenu(null);
     }, [openEditModal]);
@@ -387,7 +454,20 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,
                     fixedTerminalSize: triToBool(formFixedTerminalSize),
                 };
-                onAddHost(parentId, formName, entry);
+                // The NetBox folder only wins when it is both offered and
+                // selected; otherwise this is exactly where the host would
+                // have gone before.
+                const suggested = placementFolder;
+                if (suggested) {
+                    onAddHost(suggested.id, formName, entry);
+                    // ADR-018 (c): the tree's expanded state is component-local
+                    // and the NetBox subtree is collapsed every time the dialog
+                    // opens. Without this the new host lands inside a folded
+                    // folder and the save looks like it did nothing.
+                    setExpanded(prev => ({ ...prev, [suggested.id]: true }));
+                } else {
+                    onAddHost(parentId, formName, entry);
+                }
             }
         }
         closeEditModal();
@@ -399,6 +479,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
         // `expanded` itself is left untouched, so clearing the filter restores
         // exactly the open/closed state the user had.
         const isExpanded = isFiltering || (expanded[node.id] ?? true);
+        const hasChildren = !!node.children && node.children.length > 0;
         const isSelected = selectedId === node.id;
         const isDragging = draggedNodeId === node.id;
         const isDropTarget = dropTarget?.nodeId === node.id;
@@ -419,7 +500,13 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         node.netbox?.missing
                             ? t('hostTree.netbox.missingTitle')
                             : node.netbox
-                                ? t('hostTree.netbox.managedTitle')
+                                // The ranges are the one thing about a synced
+                                // folder that is invisible until it is selected;
+                                // hovering is the cheap way to peek at one.
+                                ? [
+                                    t('hostTree.netbox.managedTitle'),
+                                    ...(node.netbox.prefixes ?? []),
+                                ].join('\n')
                                 : undefined
                     }
                     style={{ paddingLeft: `${depth * 14 + 8}px` }}
@@ -503,12 +590,15 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         setDraggedNodeId(null);
                         setDropTarget(null);
                     }}
+                    // A click only selects. Expanding a folder used to ride along
+                    // here, which collapsed the tree under you whenever you picked
+                    // a folder just to right-click it or to aim the + buttons.
                     onClick={() => {
                         onSelect(node);
-                        if (node.type === 'folder') toggle(node.id);
                     }}
                     onDoubleClick={() => {
                         if (node.type === 'host') onDoubleClickHost?.(node);
+                        else toggle(node.id);
                     }}
                     onContextMenu={(e) => openContextMenu(e, node)}
                     onKeyDown={(e) => {
@@ -529,10 +619,14 @@ export const HostTree: React.FC<HostTreeProps> = ({
                 >
                     {node.type === 'folder' ? (
                         <>
+                            {/* Two quick clicks on the arrow are two toggles, so they
+                                must land back where they started. Without stopping the
+                                dblclick it would also reach the row and add a third. */}
                             <span
-                                className="tree-icon"
-                                onClick={(e) => { e.stopPropagation(); toggle(node.id); }}
-                                style={{ opacity: (!node.children || node.children.length === 0) ? 0 : 1, cursor: (!node.children || node.children.length === 0) ? 'default' : 'pointer' }}
+                                className="tree-icon tree-chevron-hit"
+                                onClick={(e) => { e.stopPropagation(); if (hasChildren) toggle(node.id); }}
+                                onDoubleClick={(e) => e.stopPropagation()}
+                                style={{ opacity: hasChildren ? 1 : 0, cursor: hasChildren ? 'pointer' : 'default' }}
                             >
                                 <svg
                                     className={`tree-chevron ${isExpanded ? 'expanded' : ''}`}
@@ -541,7 +635,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                     <polyline points="9 18 15 12 9 6"></polyline>
                                 </svg>
                             </span>
-                            <span className="tree-icon">{'\u{1F4C1}'}</span>
+                            <span className="tree-icon">{nodeIcon(node)}</span>
                         </>
                     ) : (
                         <>
@@ -550,7 +644,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                     <polyline points="9 18 15 12 9 6"></polyline>
                                 </svg>
                             </span>
-                            <span className="tree-icon">{node.entry?.isJumpbox ? '\u{1F517}' : '\u{1F5A5}'}</span>
+                            <span className="tree-icon">{nodeIcon(node)}</span>
                         </>
                     )}
                     <span className="tree-label">
@@ -837,6 +931,30 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                 </span>
                                 {t('hostTree.contextMenu.addHost')}
                             </button>
+                            {/* Right-click, not the toolbar: this action has a
+                                scope ("the hosts under this folder"), and a
+                                toolbar button has nowhere to say what it is.
+                                The empty background is `node === null`, which
+                                gives "the whole tree" for free. Hidden while
+                                the setting is off — a menu item that does the
+                                thing the user turned off is a contradiction. */}
+                            {netboxPlacement && onApplyPlacements && prefixFolders.length > 0 && (
+                                <button
+                                    onClick={() => {
+                                        setMoveByPrefixScope({ id: contextMenu.node?.id ?? null });
+                                        setContextMenu(null);
+                                    }}
+                                >
+                                    <span className="menu-icon-wrapper">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-folder)' }}>
+                                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                                            <line x1="3" y1="12" x2="15" y2="12"></line>
+                                            <line x1="3" y1="18" x2="9" y2="18"></line>
+                                        </svg>
+                                    </span>
+                                    {t('hostTree.contextMenu.moveByPrefix')}
+                                </button>
+                            )}
                         </>
                     )}
                     {contextMenu.node && (
@@ -1047,6 +1165,58 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                                 />
                                             </div>
                                         </div>
+                                        {/* One row, and only when there is something to say.
+                                            `noPrefixes` (the feature is not set up) and
+                                            `notAnAddress` (a hostname was typed) render
+                                            nothing at all, so the form keeps its old height
+                                            for everyone who is not using this. */}
+                                        {placement.kind === 'one' && (
+                                            <div className="host-edit-netbox-hint">
+                                                <span className="host-edit-netbox-matched">
+                                                    {t('hostTree.netbox.placement.matched', {
+                                                        prefix: formatPrefix(placement.folder.prefix),
+                                                    })}
+                                                </span>
+                                                <div className="host-edit-netbox-choice">
+                                                    <span className="host-edit-netbox-label">
+                                                        {t('hostTree.netbox.placement.saveTo')}
+                                                    </span>
+                                                    <label>
+                                                        <input
+                                                            type="radio"
+                                                            name="netbox-placement"
+                                                            checked={useNetboxFolder ?? true}
+                                                            onChange={() => setUseNetboxFolder(true)}
+                                                        />
+                                                        {placement.folder.name}
+                                                    </label>
+                                                    <label>
+                                                        <input
+                                                            type="radio"
+                                                            name="netbox-placement"
+                                                            checked={!(useNetboxFolder ?? true)}
+                                                            onChange={() => setUseNetboxFolder(false)}
+                                                        />
+                                                        {t('hostTree.netbox.placement.here', {
+                                                            name: currentParentName,
+                                                        })}
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {placement.kind === 'ambiguous' && (
+                                            <div className="host-edit-netbox-hint">
+                                                {t('hostTree.netbox.placement.ambiguous', {
+                                                    prefix: formatPrefix(placement.folders[0].prefix),
+                                                    folders: placement.folders.map(f => f.name).join(', '),
+                                                })}
+                                            </div>
+                                        )}
+                                        {placement.kind === 'unmatched' && (
+                                            <div className="host-edit-netbox-hint">
+                                                {t('hostTree.netbox.placement.unmatched')}
+                                            </div>
+                                        )}
                                         <div className="modal-form-group">
                                             <label>{t('hostTree.modal.usernameLabel')}</label>
                                             <input
@@ -1133,6 +1303,32 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         closeOpenAllConfirm();
                     }}
                     onCancel={closeOpenAllConfirm}
+                />
+            )}
+
+            {moveByPrefixScope && onApplyPlacements && (
+                <MoveByPrefixModal
+                    tree={tree}
+                    scopeFolderId={moveByPrefixScope.id}
+                    onClose={() => setMoveByPrefixScope(null)}
+                    onApply={(moves) => {
+                        const moved = onApplyPlacements(moves);
+                        setMoveByPrefixScope(null);
+                        // Open every folder that received something, for the
+                        // same reason the add form does: the NetBox subtree is
+                        // collapsed on every open, and a silent move into a
+                        // folded folder reads as nothing having happened.
+                        setExpanded(prev => {
+                            const next = { ...prev };
+                            for (const m of moves) next[m.targetFolderId] = true;
+                            return next;
+                        });
+                        onShowMessage?.(
+                            'success',
+                            t('dialogs.moveByPrefix.title'),
+                            t('dialogs.moveByPrefix.moved', { count: moved }),
+                        );
+                    }}
                 />
             )}
         </div>

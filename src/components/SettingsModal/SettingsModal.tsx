@@ -11,6 +11,7 @@ import { AISettingsTab } from './AISettingsTab';
 import { AppearanceTab } from './AppearanceTab';
 import { GeneralTab } from './GeneralTab';
 import { ProtocolsTab } from './ProtocolsTab';
+import { SshKeysTab } from './SshKeysTab';
 import { FeaturesTab } from './FeaturesTab';
 import { NetboxTab } from './NetboxTab';
 import { VersionsTab } from './VersionsTab';
@@ -21,6 +22,7 @@ export type SettingsTab =
   | 'general'
   | 'appearance'
   | 'protocols'
+  | 'sshKeys'
   | 'features'
   | 'netbox'
   | 'ai'
@@ -50,6 +52,7 @@ const TAB_IDS: SettingsTab[] = [
   'general',
   'appearance',
   'protocols',
+  'sshKeys',
   'features',
   'netbox',
   'ai',
@@ -199,6 +202,7 @@ export function SettingsModal({
             />
           )}
           {tab === 'protocols' && <ProtocolsTab />}
+          {tab === 'sshKeys' && <SshKeysTab />}
           {tab === 'features' && <FeaturesTab />}
           {tab === 'netbox' && <NetboxTab />}
           {tab === 'ai' && <AISettingsTab />}

@@ -19,6 +19,32 @@ export const hostTree = {
     deleteWarning: 'このフォルダは NetBox と同期しています。次の同期で空の状態で再作成されます。中に入れたホストは戻りません。',
     syncFailed: 'NetBox の同期に失敗しました',
     syncDone: 'NetBox の同期が完了しました',
+    // プレフィクスによる配置提案。ツリーに NetBox のプレフィクスがあり、かつ
+    // 入力されたアドレスが IP リテラルのときだけ表示する。それ以外は行ごと出さない。
+    placement: {
+      // {{prefix}} は一致した CIDR（例: 10.1.0.0/16）。
+      matched: 'NetBox の {{prefix}} に一致',
+      saveTo: '保存先',
+      // {{name}} は「追加」ボタンが本来使うはずだったフォルダ。
+      here: 'ここ: {{name}}',
+      topLevel: '最上位',
+      // {{prefix}} は複数のフォルダが同じだけ主張している CIDR。
+      ambiguous: '{{prefix}} を含む NetBox フォルダが複数あるため、HoTTY は選びません: {{folders}}',
+      unmatched: 'このアドレスを含む NetBox フォルダはありません。',
+    },
+  },
+  folderDetails: {
+    badge: 'NetBox · {{kind}}',
+    kindRegion: 'Region',
+    kindSite: 'Site',
+    missingSince: '{{when}} 以降 NetBox に見つかりません',
+    ipRanges: 'IP レンジ',
+    unreadableRanges: '読めなかったレンジが {{count}} 件あります',
+    contents: '中身',
+    counts: 'フォルダ {{folders}} ・ ホスト {{hosts}}',
+    empty: 'このフォルダは空です。',
+    outOfRange: 'レンジ外',
+    outOfRangeTitle: 'このアドレスは、このフォルダのどの IP レンジにも入っていません。NetBox にレンジが登録されていないだけの場合もあります。',
   },
   newConnection: '新規接続',
   newConnectionTitle: '新しい接続を開始（フォームをクリアします）',
@@ -39,6 +65,7 @@ export const hostTree = {
     import: 'インポート',
     sortAscending: '昇順で並べ替え',
     sortDescending: '降順で並べ替え',
+    moveByPrefix: 'IP レンジで振り分け…',
   },
   openAll: {
     confirmTitle: 'すべてのホストを開く',

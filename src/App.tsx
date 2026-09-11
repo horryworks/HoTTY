@@ -39,6 +39,7 @@ import { SshHostKeyModal } from './components/SshHostKeyModal/SshHostKeyModal';
 import { IapVmStartModal } from './components/IapVmStartModal/IapVmStartModal';
 import { PasteConfirmationModal } from './components/PasteConfirmationModal/PasteConfirmationModal';
 import { AiConsentModal } from './components/AiConsentModal/AiConsentModal';
+import { ConfirmModal } from './components/ConfirmModal/ConfirmModal';
 import { UpdateNotification } from './components/UpdateNotification/UpdateNotification';
 import { ErrorNotification } from './components/ErrorNotification/ErrorNotification';
 import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary';
@@ -51,9 +52,12 @@ import { useAiAuthOwner } from './hooks/useAiAuthOwner';
 import { useAiChat, getActiveTab } from './hooks/useAiChat';
 import { useAiConsent } from './hooks/useAiConsent';
 import { useAiOrchestrator } from './hooks/useAiOrchestrator';
-import { useAiWorkerSessions } from './hooks/useAiWorkerSessions';
+import { useAiChatWindow } from './hooks/useAiChatWindow';
+import { useAiWorkerSessions, configForAdopt } from './hooks/useAiWorkerSessions';
+import type { AiWorkerSession } from './stores/aiWorkerSessionStore';
+import { useSessionNameShare } from './hooks/useSessionNameShare';
 import { connectDeclinedNote } from './components/AIChatPane/terminalOutputUtils';
-import { usePaneStore, gridPaneIds, SIDEBAR_PANE_IDS } from './stores/paneStore';
+import { usePaneStore, gridPaneIds, AI_WINDOW_PANE_ID, SIDEBAR_PANE_IDS } from './stores/paneStore';
 import { initOverlayWatcher } from './stores/uiOverlayStore';
 import { useWebBrowserBookmarkStore } from './stores/webBrowserBookmarkStore';
 import { useWebBrowserZoomStore } from './stores/webBrowserZoomStore';
@@ -66,7 +70,8 @@ import { useThemes } from './hooks/useThemes';
 import { usePaneKeyboardNav } from './hooks/usePaneKeyboardNav';
 import { useNewWindowShortcut } from './hooks/useNewWindowShortcut';
 import { initSharedStoreSync } from './stores/sharedStoreSync';
-import { IS_TAURI, WINDOW_LABEL } from './utils/windowLabel';
+import { IS_AI_CHAT_WINDOW, IS_TAURI, WINDOW_LABEL } from './utils/windowLabel';
+import { AI_WINDOW_INITIAL_PANE } from './utils/aiWindowPane';
 import { viewFromRecord } from './utils/sessionLookup';
 import type { LinkableSession, SessionDialogPrefill, SessionInfo } from './types/appTypes';
 import {
@@ -112,7 +117,14 @@ function App() {
   const consent = useAiConsent();
 
   const [pasteReq, setPasteReq] = useState<{ sessionId: string; content: string } | null>(null);
-  const [featurePanes, setFeaturePanes] = useState<Map<string, FeaturePaneInfo>>(new Map());
+  // An AI Chat window is born holding one pane (installed into the layout store
+  // at module load by `aiWindowPane.ts`), so seed it here rather than creating
+  // it after mount — otherwise the window's first frame is empty.
+  const [featurePanes, setFeaturePanes] = useState<Map<string, FeaturePaneInfo>>(() =>
+    AI_WINDOW_INITIAL_PANE
+      ? new Map([[AI_WINDOW_INITIAL_PANE.id, AI_WINDOW_INITIAL_PANE]])
+      : new Map(),
+  );
 
   const handlePasteRequest = useCallback(async (sessionId: string) => {
     try {
@@ -167,6 +179,10 @@ function App() {
   const removeSessionFromStore = usePaneStore((s) => s.removeSession);
   const reorderSessionInStore = usePaneStore((s) => s.reorderSession);
   const moveSessionToPane = usePaneStore((s) => s.moveSessionToPane);
+
+  // Publish this window's terminal names and take in the other windows', so a
+  // popped-out AI Chat shows real names and can auto-rebind on reconnect.
+  useSessionNameShare(sessions);
 
   // Ctrl+Tab / Ctrl+Shift+Tab cycle keyboard focus between visible panes.
   usePaneKeyboardNav();
@@ -232,6 +248,9 @@ function App() {
       // "Last-seen terminal" is genuinely retained state — it must PERSIST when
       // the active pane becomes a non-terminal feature pane, so it can't be
       // derived during render (there is nothing to derive from at that point).
+      // (ESLint may flag this directive as unused — a false positive: the React
+      // Compiler plugin reports its diagnostics in a pass the unused-directive
+      // checker does not see. Removing it turns this line into a hard error.)
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLastTerminalSessionId(activePaneAllocation);
     }
@@ -244,20 +263,71 @@ function App() {
     [],
   );
 
-  const createAiChatPane = useCallback((): string | undefined => {
-    if (!useSettingsStore.getState().enabledFeatures['ai-chat']) return undefined;
-    // Only allow one AI chat pane at a time
-    const existing = Array.from(featurePanes.values()).find(p => p.type === 'ai-chat');
-    if (existing) return existing.id;
-    const id = makeFeaturePaneId('ai-chat');
+  /**
+   * Register an AI Chat pane under a KNOWN id and give it a slot.
+   *
+   * Split out of `createAiChatPane` because two callers must bypass its
+   * "feature enabled / one per window" gate: a dedicated AI Chat window, whose
+   * entire reason to exist is that pane, and a conversation arriving from
+   * another window, which MUST keep its original pane id — the backend chat
+   * history is keyed `paneId::tabId`, so a fresh id would orphan every turn.
+   *
+   * Idempotent: re-registering an id already in the layout is a no-op, which
+   * also makes StrictMode's double-mount harmless.
+   */
+  const registerAiChatPane = useCallback((id: string): string => {
+    if (usePaneStore.getState().sessionOrder.includes(id)) return id;
     setFeaturePanes((prev) => {
+      if (prev.has(id)) return prev;
       const next = new Map(prev);
       next.set(id, { id, type: 'ai-chat', displayName: getFeatureDisplayName('ai-chat') });
       return next;
     });
     addSessionToStore(id);
     return id;
-  }, [featurePanes, addSessionToStore]);
+  }, [addSessionToStore]);
+
+  /**
+   * Swap this window's AI Chat pane for one arriving from another window.
+   *
+   * The incoming pane keeps its own id (backend history is keyed
+   * `paneId::tabId`), so the pane a dedicated AI window opened with has to step
+   * aside rather than be reused.
+   */
+  const replaceAiChatPane = useCallback((oldId: string, newId: string) => {
+    if (oldId === newId) return;
+    setFeaturePanes((prev) => {
+      const next = new Map(prev);
+      next.delete(oldId);
+      next.set(newId, { id: newId, type: 'ai-chat', displayName: getFeatureDisplayName('ai-chat') });
+      return next;
+    });
+    removeSessionFromStore(oldId);
+    addSessionToStore(newId);
+  }, [addSessionToStore, removeSessionFromStore]);
+
+  /**
+   * Drop an AI Chat pane from this window after its conversations moved
+   * elsewhere. Unlike closing the pane, this must NOT free the backend chat
+   * history — the other window is still talking to it.
+   */
+  const removeAiChatPane = useCallback((paneId: string) => {
+    setFeaturePanes((prev) => {
+      if (!prev.has(paneId)) return prev;
+      const next = new Map(prev);
+      next.delete(paneId);
+      return next;
+    });
+    removeSessionFromStore(paneId);
+  }, [removeSessionFromStore]);
+
+  const createAiChatPane = useCallback((): string | undefined => {
+    if (!useSettingsStore.getState().enabledFeatures['ai-chat']) return undefined;
+    // Only allow one AI chat pane at a time
+    const existing = Array.from(featurePanes.values()).find(p => p.type === 'ai-chat');
+    if (existing) return existing.id;
+    return registerAiChatPane(makeFeaturePaneId('ai-chat'));
+  }, [featurePanes, registerAiChatPane]);
 
   // Other windows' live sessions, owned by `useAiOrchestrator` below but needed by
   // `useAiChat` above it. App holds the ref so both AI paths look sessions up
@@ -275,6 +345,9 @@ function App() {
     addTab,
     closeTab,
     removeAiChatState,
+    getAiChatState,
+    importAiChatState,
+    forgetAiChatState,
     setActiveTab,
     addTabLink,
     removeTabLink,
@@ -303,9 +376,14 @@ function App() {
 
   // AI worker sessions (ADR-AI-007): backend sessions the AI opened on its own
   // behalf that have no tab. Mounted once here; the orchestrator drives them.
+  // `aiWindow` is created further down (it needs `aiChatPaneId`), so the worker
+  // hook reaches its hand-off through a ref rather than a direct reference.
+  const handOffMaterializeRef = useRef<(w: AiWorkerSession) => boolean>(() => false);
+
   const workers = useAiWorkerSessions({
     adoptSession,
     addSessionToStore,
+    handOffMaterialize: (w) => handOffMaterializeRef.current(w),
     // A worker that ended or was closed leaves its conversation's watched set
     // (no keep-stale: a worker never auto-rebinds).
     onWorkerGone: (w) => removeTabLink(w.paneId, w.tabId, w.id),
@@ -347,6 +425,7 @@ function App() {
     toggleWatch,
     watchInConversation,
     openAiChatPane,
+    busyPaneIds,
     clearRunCommandIntervals,
   } = aiOrch;
   useEffect(() => {
@@ -482,6 +561,49 @@ function App() {
   // picker. Titles are resolved here (with the "Tab N" fallback) so TabBar needs no
   // aiChat i18n; the color matches each conversation's tab and its watched terminals.
   const aiChatPaneId = featurePanesList.find((f) => f.type === 'ai-chat')?.id;
+
+  const activeAiConversationTitle = aiChatPaneId
+    ? (() => {
+        const st = aiChatStates.get(aiChatPaneId);
+        return st?.tabs.find((tb) => tb.id === st.activeTabId)?.title || undefined;
+      })()
+    : undefined;
+
+  // Moving the AI Chat pane between this window and a dedicated AI Chat window.
+  // Declared here, below `aiChatPaneId`, for the reason above.
+  const aiWindow = useAiChatWindow({
+    aiChatPaneId,
+    getAiChatState,
+    importAiChatState,
+    forgetAiChatState,
+    registerAiChatPane,
+    replaceAiChatPane,
+    removeAiChatPane,
+    clearRunCommandIntervals,
+    activeConversationTitle: activeAiConversationTitle,
+    watchInConversation,
+    activeConversationTabId: aiChatPaneId ? aiChatStates.get(aiChatPaneId)?.activeTabId : undefined,
+    // Give a terminal handed over by an AI Chat window a real tab here. Same
+    // path a local materialize takes, so the id — and therefore the AI's link
+    // and its capture — carries on unchanged.
+    adoptRemoteSession: (w, history) => {
+      adoptSession({
+        id: w.id,
+        displayName: w.displayName,
+        protocol: w.protocol,
+        config: configForAdopt(w),
+        status: w.status,
+        errorMessage: w.errorMessage,
+        initialText: history,
+      });
+      addSessionToStore(w.id);
+    },
+  });
+
+  useEffect(() => {
+    handOffMaterializeRef.current = aiWindow.handOffMaterialize;
+  });
+
   const aiConversations: ConversationSummary[] = aiChatPaneId
     ? (aiChatStates.get(aiChatPaneId)?.tabs ?? []).map((tab) => ({
         id: tab.id,
@@ -639,6 +761,8 @@ function App() {
   // it loads that site; without one (the "New Web Browser" entry) it opens blank.
   // The callback closes over only stable setters + module fns, so the manual memo
   // is correct; the compiler can't prove it and would drop the memo, so keep it.
+  // (The "unused directive" warning on the next line is a false positive — see
+  // the note on the set-state-in-effect disable above.)
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const handleOpenBookmark = useCallback((url?: string) => {
     if (!useSettingsStore.getState().enabledFeatures['web-browser']) return;
@@ -838,6 +962,14 @@ function App() {
               }}
               onMaterializeWorker={(sid) => { void workers.materializeWorker(sid); }}
               onCloseWorker={(sid) => workers.closeWorkerSession(sid)}
+              // ── Moving this conversation between windows ──
+              onTranscriptPort={aiWindow.registerTranscriptPort}
+              onPopOutWindow={aiWindow.popOut}
+              onPopInWindow={aiWindow.popIn}
+              windowMoving={aiWindow.moving}
+              commandRunning={busyPaneIds.has(featureInfo.id)}
+              alwaysOnTop={aiWindow.alwaysOnTop}
+              onToggleAlwaysOnTop={aiWindow.toggleAlwaysOnTop}
             />
           ) : (
             <div className="pane-empty">
@@ -856,9 +988,18 @@ function App() {
 
   return (
     <div className="app-root">
-      <div className={`app-container app-container-${sidebarPosition}`}>
+      <div
+        className={
+          IS_AI_CHAT_WINDOW
+            ? 'app-container app-container-chat'
+            : `app-container app-container-${sidebarPosition}`
+        }
+      >
+        {!IS_AI_CHAT_WINDOW && (
         <AppSidebar onOpenSettings={() => setSettingsOpen(true)} onOpenHelp={() => setHelpOpen(true)} />
+        )}
         <div className="main-layout">
+          {!IS_AI_CHAT_WINDOW && (
           <TabBar
             tabItems={tabItems}
             activeTabId={activeTabId}
@@ -870,6 +1011,7 @@ function App() {
             onToggleWatch={toggleWatch}
             conversations={aiConversations}
             onWatchInConversation={watchInConversation}
+            onWatchInAiWindow={enabledFeatures['ai-chat'] ? aiWindow.watchInAiWindow : undefined}
             onSaveToHostTree={(id) => setSaveToTreeSessionId(id)}
             onToggleFixedSize={(id) => {
               const rec = sessionsRef.current.get(id);
@@ -902,7 +1044,15 @@ function App() {
             onNewFileServer={enabledFeatures['file-server'] ? () => handleNewFeaturePane('file-server') : undefined}
             onNewAiChat={enabledFeatures['ai-chat'] ? openAiChatPane : undefined}
           />
+          )}
           <div className="content-area">
+            {IS_AI_CHAT_WINDOW ? (
+              // One pane, no grid and no edge bars. It still goes through
+              // `renderPane`, so the AI Chat pane gets the identical props,
+              // ErrorBoundary and lazy-chunk boundary it has inside the grid.
+              renderPane(AI_WINDOW_PANE_ID)
+            ) : (
+            <>
             <Sidebar
               edge="left"
               onDropSession={(sid) => handleDropSession(sid, sidebarPaneId('left'))}
@@ -930,6 +1080,8 @@ function App() {
             >
               {renderPane(sidebarPaneId('right'))}
             </Sidebar>
+            </>
+            )}
           </div>
         </div>
       </div>
@@ -1034,6 +1186,24 @@ function App() {
         <AiConsentModal
           onAccept={consent.handleAiConsentAccept}
           onCancel={consent.handleAiConsentCancel}
+        />
+      )}
+      {/* Closing an AI Chat window ends its conversations, so it says what will
+          be lost in numbers. Only raised when there IS something to lose — an
+          empty chat closes straight away. */}
+      {aiWindow.closeRequest && (
+        <ConfirmModal
+          title={t('dialogs.closeAiWindow.title')}
+          message={[
+            t('dialogs.closeAiWindow.message', { count: aiWindow.closeRequest.conversations }),
+            aiWindow.closeRequest.workers > 0
+              ? t('dialogs.closeAiWindow.workers', { count: aiWindow.closeRequest.workers })
+              : '',
+            t('dialogs.closeAiWindow.hint'),
+          ].filter(Boolean).join('\n')}
+          confirmLabel={t('dialogs.closeAiWindow.confirmLabel')}
+          onConfirm={aiWindow.confirmClose}
+          onCancel={aiWindow.cancelClose}
         />
       )}
     </div>

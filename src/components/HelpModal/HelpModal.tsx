@@ -221,6 +221,18 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               </p>
               <p className="help-text">
                 <Trans
+                  i18nKey="help.hostTree.netboxPlacement"
+                  components={[<strong key="0" />, <strong key="1" />]}
+                />
+              </p>
+              <p className="help-text">
+                <Trans
+                  i18nKey="help.hostTree.sshKeys"
+                  components={[<strong key="0" />, <strong key="1" />, <code key="2" />, <code key="3" />, <code key="4" />]}
+                />
+              </p>
+              <p className="help-text">
+                <Trans
                   i18nKey="help.hostTree.saveAdHoc"
                   components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />]}
                 />
@@ -418,6 +430,11 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               </p>
               <p className="help-text">
                 <Trans i18nKey="help.aiFeatures.answerLanguage" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />]} />
+              </p>
+
+              <p className="help-text" style={{ marginBottom: '4px' }}><strong>{t('help.aiFeatures.ownWindowHeading')}</strong></p>
+              <p className="help-text">
+                {t('help.aiFeatures.ownWindowBody')}
               </p>
 
               <p className="help-text" style={{ marginBottom: '4px' }}><strong>{t('help.aiFeatures.askAiHeading')}</strong></p>

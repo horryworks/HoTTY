@@ -46,6 +46,10 @@ export const notifications = {
     sessionLoggingUpdate: 'Не удалось обновить журнал сеанса',
     sessionListener: 'Не удалось получить события сеанса',
     clipboardCopy: 'Не удалось скопировать выделенное',
+    aiWindowHandoverTimedOut: 'Не удалось переместить чат ИИ в другое окно — он остаётся здесь.',
+    aiWindowOpenFailed: 'Не удалось открыть окно чата ИИ',
+    aiWindowPopInFailed: 'Не удалось вернуть чат ИИ в окно',
+    aiWindowOpenAsTabFailed: 'Не удалось открыть этот терминал как вкладку',
   },
   errorBoundary: {
     title: 'Что-то пошло не так',

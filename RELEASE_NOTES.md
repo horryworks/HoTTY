@@ -1,5 +1,53 @@
 # Release Notes
 
+## v2.1.0-beta6
+
+**HoTTY can make your SSH keys, the AI Chat can have a window of its own, and NetBox can sort your hosts by IP address.** Three separate additions, each removing a job you currently do somewhere else: generating a key in another tool and copying the file path in, giving up the whole window to a conversation, and deciding by hand which site folder a host belongs in.
+
+### New Features
+
+- **SSH keys, made and managed inside HoTTY.** A new **SSH Keys** tab in Settings generates a key pair and lists the ones already in your `.ssh` folder. Ed25519, ECDSA (P-256/384/521) and RSA (2048/3072/4096) are offered; a passphrase is optional and the dialog says plainly what you give up by leaving it out. Keys are written as ordinary OpenSSH files, not a HoTTY-only format, so PuTTY, WinSCP and the `ssh` command read the same key — and each new key has its permissions tightened so only your account can open it. Every row can copy the public key, save it to a file, or show the single line to paste into `authorized_keys` on the server, which is the step that usually sends you looking for documentation. Deleting is restricted to keys HoTTY created: the tab will not remove a key it did not write, and says so rather than failing silently.
+
+  The connection form gained the other half of this. The private-key box is now a picker over the same keys, with **Generate a new key…** at the bottom — generate, and the key is filled into the connection you were in the middle of setting up.
+
+- **AI Chat in a window of its own.** The AI Chat pane can move out into its own window and back again, so a conversation no longer competes with the terminal for the same screen. Everything travels together: the conversations, the terminals they watch, and any terminals the AI opened for itself. That window can be pinned above other applications, and remembers where you put it and how big you made it.
+
+  The move is refused while a reply is streaming, a command is running, or something is waiting for your answer — one conversation exists in exactly one place, and interrupting it mid-thought would lose the part that has not arrived yet. Closing the AI Chat window asks first whenever there is something to lose, and counts it: how many conversations end, and how many terminals the AI opened go with them. A terminal tab's right-click menu also gained **Watch in the AI Chat window**, which hands that terminal over, opening the window if there is not one yet.
+
+- **Sort hosts into folders by IP address.** Turn on **Placing hosts by IP** in the NetBox tab and the sync also reads the prefixes registered against each Region and Site, which gives every synced folder a set of IP ranges. While it is off, prefixes are not fetched at all. Two things follow from turning it on.
+
+  In the New Session form, typing an address names the folder that covers it and preselects it, so saving lands in the right site without scrolling the tree. Where more than one folder covers the address, HoTTY names them and picks none — see below.
+
+  For hosts you already have, **Sort by IP Range…** on a folder's right-click menu (or the tree background, for everything) matches every host against those ranges and shows the result before doing anything: what would move and where, what is already in the right place, what no folder covers, and what more than one folder claims. Nothing moves until you press the button, and unticking a row leaves that host alone.
+
+  **Where two folders claim the same range, HoTTY does not choose.** Reusing the same private range at every site is normal, and a tool that guesses in that situation files hosts in the wrong place quietly. Those hosts are listed, left where they are, and the reason is stated — narrow the match to one folder's subtree, or fix the overlap in NetBox.
+
+- **A folder now shows what it holds.** Selecting a folder puts a details panel where the connection form sits: whether it came from NetBox and as what (Region or Site), the IP ranges on it, how many folders and hosts sit directly inside, and a marker on any host whose address falls outside every range on the folder. It is deliberately read-only — every action a folder has already lives on its right-click menu, with the confirmations that belong there. Region and Site folders also carry their own glyphs now, so a folder NetBox names is distinguishable from one you made at a glance.
+
+### Improvements
+
+- **Terminal names are shared between windows.** A terminal watched from another window used to read as a bare IP address, because only the backend's view of it — host and protocol — crossed the window boundary, and the name you gave it did not. This matters far more now that an AI Chat window watches nothing *but* other windows' terminals. Names now travel, and a reconnect rebinds to the right terminal again.
+
+- **The NetBox connection test says what actually happened.** Pressing Connect used to leave you guessing between a wrong address, a wrong token, and a server that is not a NetBox. It now distinguishes them: connected (naming the NetBox version), reached a NetBox that refused the token, something answered but is not a NetBox API, and nothing reachable at that address.
+
+- **The SSH algorithm list is grouped.** Server Host Key and Key Exchange are now separate, labelled categories instead of one long list.
+
+- **The NetBox tab reports what prefix placement actually did.** How many folders ended up carrying ranges, how many prefixes were skipped because they hang off something HoTTY does not mirror, and how many could not be read as a CIDR at all — each counted separately. This feature's quietest failure is a NetBox whose prefixes all hang off locations: no error, no changed folder, and "placement does nothing" looks exactly like "placement is broken". These numbers are the difference.
+
+### Bug Fixes
+
+- **A click inside the key-generation dialog no longer clears the connection behind it.** The new dialog was not registered with the connection dialog's click handling, so every click inside it — a text field, the algorithm list, even Cancel — reached through and deselected the host you were setting the key up for. Generating a key then filled it into a blank form instead of that host. The same reach-through cleared the form when the Sort by IP Range dialog was dismissed by clicking outside it.
+
+- **Two new dialogs now match the rest.** Their title and button text sized one step larger than every other dialog in the app, and one title inherited the browser's bold instead of the app's.
+
+### Security
+
+- **An IPC permission the app never used has been withdrawn.** The always-on-top permission granted to the web layer was left over: pinning goes through HoTTY's own backend command, which does not use that route at all. Removing it changes nothing you can see and narrows what the interface could ask for if it were ever compromised.
+
+- **Passphrases are redacted from diagnostics.** The interface's redaction list covered passwords but not the private-key passphrase, so it could survive into a copied diagnostic. Both `passphrase` and `privateKeyPassphrase` are now stripped alongside the rest.
+
+- **A failure to set key permissions no longer prints a raw OS error.** The message reaching the screen on a failed IAP connection could include the operating system's own wording; the detail now goes to the log and the message stays a sentence.
+
 ## v2.1.0-beta5
 
 **Two ways a credential could reach the disk are closed, and switching versions is one click again.** The SSH library HoTTY is built on logs the authentication request it is about to send — for password authentication, that is your username and your password, in the clear. Release builds never wrote it, because they log above the level it uses; a development build did, into the same file the Settings "Debug Log" entry asks you to attach to a bug report. Separately, the Versions tab now puts an Upgrade or Downgrade button on the version itself, instead of one install button below the list.

@@ -27,7 +27,7 @@ export const help = {
     openDialog:
       'Abra el diálogo de conexión mediante <0>Ctrl + N</0> o el botón <1>"Nueva"</1> de la barra lateral. Puede gestionar sus hosts y carpetas en el árbol de hosts.',
     doubleClick:
-      '<0>Doble clic:</0> haga doble clic en un host del árbol para conectarse inmediatamente.',
+      '<0>Doble clic:</0> haga doble clic en un host del árbol para conectarse inmediatamente. Haga doble clic en una carpeta —o clic en la flecha de su izquierda— para abrirla y cerrarla; un solo clic solo la selecciona.',
     hostFilter:
       '<0>Filtro:</0> Escribe en el cuadro situado sobre el árbol de hosts para acotarlo por nombre de carpeta, nombre de host o dirección. <1>Ctrl + F</1> lleva el foco al cuadro. Enter selecciona la primera coincidencia; Escape borra el texto. Las coincidencias dentro de una carpeta contraída se muestran, y al borrar el filtro las carpetas vuelven a como estaban.',
     supportedTypes: '<0>Tipos de conexión admitidos:</0>',
@@ -84,6 +84,10 @@ export const help = {
       '<0>Sincronizar carpetas desde NetBox:</0> En <1>Ajustes, NetBox</1> introduce la dirección de tu NetBox y un token de API, y HoTTY reflejará sus Regions y Sites en una carpeta llamada <2>NetBox</2> al final del árbol. Solo lee; nunca escribe nada de vuelta. Pulsa el botón de flechas circulares en la barra del árbol de hosts para sincronizar, o deja que se ejecute una vez cada arranque. Las carpetas de sitio se nombran "código nombre del sitio"; qué campo de NetBox contiene el código lo eliges tú, porque varía según la organización.',
     netboxOwnership:
       '<0>Qué gestiona la sincronización:</0> Los nombres y la disposición dentro de la carpeta NetBox pertenecen a NetBox y se reescriben en cada sincronización, así que esas carpetas no pueden renombrarse aquí. Los hosts que añadas dentro de una carpeta de sitio nunca se tocan. Nunca se borra nada: una carpeta que desaparece de NetBox se marca como "no está en NetBox" y se conserva, porque puede contener hosts añadidos por ti. Si sacas una carpeta de la carpeta NetBox, la sincronización deja de reubicarla: solo mantiene el nombre al día.',
+    netboxPlacement:
+      '<0>Clasificar hosts en carpetas por rango de IP:</0> Cuando la sincronización lee los prefijos, cada carpeta de NetBox recuerda los rangos de IP registrados en ella. Escriba una dirección en el formulario de Nueva sesión y HoTTY indicará la carpeta que la contiene y la preseleccionará. Para ordenar los hosts que ya tiene, haga clic derecho en una carpeta (o en el fondo del árbol) y elija <1>Ordenar por rango de IP…</1>: se muestra exactamente qué se movería, qué ya está bien y qué no coincide con ninguna carpeta o con más de una. Nada se mueve hasta que pulse el botón, y lo que desmarque se queda donde está. Cuando dos carpetas reclaman el mismo rango, HoTTY no elige: deja esos hosts intactos y lo indica.',
+    sshKeys:
+      '<0>Claves SSH:</0> <1>Ajustes, Claves SSH</1> genera un par de claves y gestiona las que ya están en su carpeta <2>.ssh</2>. Elija Ed25519 salvo que un dispositivo requiera otra cosa. Las claves se escriben como archivos OpenSSH normales, así que PuTTY, WinSCP y el comando <3>ssh</3> también las leen, y cada clave nueva queda restringida para que solo su cuenta pueda abrirla. Cada fila permite copiar la clave pública, guardarla en un archivo o mostrar la línea que hay que pegar en <4>authorized_keys</4> del servidor. Aquí solo se pueden borrar las claves creadas por HoTTY. El selector de clave del formulario de conexión muestra la misma lista y puede generar una sin salir del formulario.',
   },
 
   layout: {
@@ -226,6 +230,9 @@ export const help = {
       '<0>Adjuntar imágenes:</0> Pega una imagen (Ctrl + V), arrastra archivos de imagen al cuadro de mensaje o usa el botón de clip para enviar capturas a la IA. Se admiten PNG, JPEG, WebP y GIF (hasta 5 imágenes, 5 MB cada una). El modelo seleccionado debe admitir imágenes.',
     answerLanguage:
       '<0>Idioma de las respuestas:</0> De forma predeterminada, la IA responde en el idioma de la interfaz, así que cambiar <1>Ajustes → General → Idioma de la interfaz</1> también cambia las respuestas de la IA. Para fijar otro, abre <2>ajustes</2> en la parte superior del panel de Chat IA y elige un idioma: <3>Auto</3> sigue a la interfaz e indica cuál es ese idioma en cada momento. La elección se comparte con todas las conversaciones de todas las ventanas, incluidas las que ya están en curso, y se aplica a partir de tu siguiente mensaje. Los comandos, la salida del terminal, las rutas de archivo y los identificadores nunca se traducen.',
+    ownWindowHeading: "AI Chat en su propia ventana",
+    ownWindowBody:
+      "El botón junto al icono de papelera en la cabecera de AI Chat mueve todo el panel — cada conversación, sus terminales vigiladas y las que abrió la IA — a una ventana propia, dejando toda la ventana de HoTTY para el terminal. El mismo botón lo devuelve. En esa ventana, un botón de fijar la mantiene por encima de otras aplicaciones, y se recuerdan su posición y tamaño. Una conversación solo existe en un sitio, así que el botón se atenúa mientras llega una respuesta, se ejecuta un comando o algo espera tu confirmación. Cerrar la ventana termina sus conversaciones y pregunta antes si hay algo que perder. El menú contextual de una pestaña de terminal incluye además «Ver en la ventana de AI Chat».",
     askAiHeading: 'Preguntar a la IA (clic derecho)',
     askAiBody:
       'Seleccione texto en el terminal (o haga clic en un <0>Marcador de terminal</0> para seleccionar un bloque de salida completo), luego haga clic derecho y escriba su pregunta en el cuadro <1>"Preguntar a la IA"</1> — pulse Enter para enviar. HoTTY abre el chat de IA con su pregunta y el texto seleccionado.',

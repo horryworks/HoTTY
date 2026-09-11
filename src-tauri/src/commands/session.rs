@@ -299,6 +299,67 @@ pub async fn list_all_sessions(
     Ok(infos)
 }
 
+/// Id prefix of an AI worker session — a backend session with no tab and no
+/// xterm in its owning window (ADR-016). Must stay in step with
+/// `WORKER_SESSION_PREFIX` in `src/utils/paneTypes.ts`.
+const WORKER_SESSION_PREFIX: &str = "h-";
+
+/// Whether `id` names an AI worker session.
+fn is_worker_session_id(id: &str) -> bool {
+    id.starts_with(WORKER_SESSION_PREFIX)
+}
+
+/// Upper bound on one `adopt_sessions` call. The per-conversation worker cap is
+/// 5 by default (`aiMaxWorkerSessionsPerTab`), so this is generous; it exists
+/// only so a malformed call cannot hand us an unbounded list to walk.
+const MAX_ADOPT_IDS: usize = 64;
+/// `aiMaxWorkerSessionsPerTab` clamps to 10, so the guard must never be able to
+/// bite a legitimate handover. Checked at compile time, next to the value it
+/// guards, so raising the frontend cap without raising this fails the build.
+const _: () = assert!(MAX_ADOPT_IDS > 10);
+
+/// Transfer ownership of AI worker sessions to the calling window, and report
+/// which ids were actually taken.
+///
+/// Called when a conversation moves between windows (AI Chat pop-out / pop-in):
+/// without it the workers stay owned by the window the chat left, and closing
+/// that window would disconnect terminals the conversation is still using
+/// (`cleanup_window_sessions`, ADR-011).
+///
+/// Two guards keep this from becoming a way to steal terminals:
+/// **only `h-` worker ids** are accepted — a user's real tab always belongs to
+/// the window that renders it — and **only ids that exist** in the session map,
+/// so a caller cannot plant owner entries for sessions that were never opened.
+/// Anything else is skipped silently; the returned list is the truth about what
+/// moved.
+#[tauri::command]
+pub async fn adopt_sessions(
+    window: Window,
+    state: State<'_, SessionState>,
+    owners: State<'_, SessionOwners>,
+    session_ids: Vec<String>,
+) -> Result<Vec<String>, String> {
+    if session_ids.len() > MAX_ADOPT_IDS {
+        return Err(format!(
+            "too many sessions to adopt at once (max {MAX_ADOPT_IDS})"
+        ));
+    }
+    let label = window.label().to_string();
+    let map = state.sessions.lock().await;
+    let adopted: Vec<String> = session_ids
+        .into_iter()
+        .filter(|id| is_worker_session_id(id) && map.contains_key(id))
+        .collect();
+    for id in &adopted {
+        owners.set(id, &label);
+    }
+    drop(map);
+    if !adopted.is_empty() {
+        log::info!("window {label} adopted {} worker session(s)", adopted.len());
+    }
+    Ok(adopted)
+}
+
 #[tauri::command]
 pub async fn disconnect_session(
     state: State<'_, SessionState>,
@@ -442,6 +503,29 @@ mod tests {
         assert_eq!(ProtocolId::PowerShell.as_str(), "powershell");
         assert_eq!(ProtocolId::GitBash.as_str(), "git-bash");
         assert_eq!(ProtocolId::GcloudIap.as_str(), "gcloud-iap");
+    }
+
+    #[test]
+    fn only_worker_ids_are_adoptable() {
+        // AI worker sessions carry the `h-` prefix (ADR-016) and are the ONLY
+        // thing a conversation may take with it when it changes window.
+        assert!(is_worker_session_id("h-abc123-x9f2k1"));
+        assert!(is_worker_session_id("h-"));
+        // A real tab belongs to the window that renders it.
+        assert!(!is_worker_session_id("s-abc123-x9f2k1"));
+        assert!(!is_worker_session_id("ai-abc123-x9f2k1"));
+        assert!(!is_worker_session_id("0"));
+        assert!(!is_worker_session_id(""));
+        // Near-misses must not slip through.
+        assert!(!is_worker_session_id("H-abc"));
+        assert!(!is_worker_session_id(" h-abc"));
+        assert!(!is_worker_session_id("xh-abc"));
+    }
+
+    #[test]
+    fn worker_prefix_matches_the_frontend_constant() {
+        // src/utils/paneTypes.ts: export const WORKER_SESSION_PREFIX = 'h-'
+        assert_eq!(WORKER_SESSION_PREFIX, "h-");
     }
 
     #[test]

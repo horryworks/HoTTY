@@ -22,6 +22,7 @@ export const chrome = {
     stopWatchAi: '停止 AI 监控',
     watchInTitle: '监控到',
     watchInNew: '新对话',
+    watchInAiWindow: '在 AI Chat 窗口中查看',
     bookmark: '添加书签…',
   },
   appSidebar: {

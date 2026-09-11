@@ -37,13 +37,17 @@ use commands::ping_monitor::{
     ping_monitor_update_targets,
 };
 use commands::session::{
-    connect_session, disconnect_session, list_all_sessions, send_input, ssh_host_key_response,
-    term_resize, update_session_logging, SessionState,
+    adopt_sessions, connect_session, disconnect_session, list_all_sessions, send_input,
+    ssh_host_key_response, term_resize, update_session_logging, SessionState,
 };
 use commands::snmp_watcher::{
     snmp_list_interfaces, snmp_watcher_start, snmp_watcher_stop, snmp_watcher_update_interval,
 };
 use commands::ssh_algorithms::{get_ssh_algorithms, save_ssh_algorithms};
+use commands::ssh_keys::{
+    delete_ssh_key, export_ssh_public_key, generate_ssh_key, list_ssh_keys, open_ssh_key_folder,
+    read_ssh_public_key,
+};
 use commands::sync::broadcast_shared_change;
 use commands::system::{
     detect_git_bash, focus_window, list_serial_ports, list_system_fonts, list_wsl_distributions,
@@ -61,7 +65,10 @@ use commands::web_browser::{
     web_browser_import_bookmarks, web_browser_navigate, web_browser_reload, web_browser_set_bounds,
     web_browser_set_visible, web_browser_set_zoom, web_browser_stop,
 };
-use commands::window::{create_app_window, create_window, WindowCounterState};
+use commands::window::{
+    create_ai_chat_window, create_app_window, create_window, list_window_labels,
+    set_window_always_on_top, WindowCounterState,
+};
 use services::ai::providers::anthropic::AnthropicProvider;
 use services::ai::providers::gemini::GeminiProvider;
 use services::ai::providers::openai::OpenAIProvider;
@@ -317,6 +324,7 @@ pub fn run() {
             connect_session,
             disconnect_session,
             list_all_sessions,
+            adopt_sessions,
             send_input,
             term_resize,
             update_session_logging,
@@ -331,6 +339,9 @@ pub fn run() {
             open_debug_log_folder,
             open_external,
             create_window,
+            create_ai_chat_window,
+            list_window_labels,
+            set_window_always_on_top,
             broadcast_shared_change,
             set_watching,
             get_watch_buffer,
@@ -350,6 +361,13 @@ pub fn run() {
             // SSH algorithms
             get_ssh_algorithms,
             save_ssh_algorithms,
+            // SSH keys
+            list_ssh_keys,
+            generate_ssh_key,
+            read_ssh_public_key,
+            export_ssh_public_key,
+            open_ssh_key_folder,
+            delete_ssh_key,
             // Log viewer
             list_log_files,
             read_log_file,

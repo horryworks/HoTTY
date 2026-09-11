@@ -22,6 +22,7 @@ export const chrome = {
     stopWatchAi: 'Stop AI Watch',
     watchInTitle: 'Watch in',
     watchInNew: 'New conversation',
+    watchInAiWindow: 'Watch in the AI Chat window',
     bookmark: 'Add Bookmark…',
   },
   appSidebar: {

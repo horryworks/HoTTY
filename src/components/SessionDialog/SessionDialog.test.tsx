@@ -761,3 +761,112 @@ describe('SessionDialog prefill (AI connect request, ADR-AI-007)', () => {
     expect(screen.getByDisplayValue('23')).toBeTruthy();
   });
 });
+
+describe('SessionDialog — folder details', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    useSidebarLayoutStore.setState({ activeSidebarTab: 'hosts' });
+    useBookmarkStore.setState({ tree: [] });
+  });
+
+  const seed = () => localStorage.setItem(STORAGE_KEYS.HOST_TREE, JSON.stringify([
+    {
+      id: 'site-tok', type: 'folder', name: 'tok Tokyo',
+      netbox: { server: 'default', kind: 'site', objectId: 6, prefixes: ['10.6.0.0/16'] },
+      children: [
+        { id: 'h-in', type: 'host', name: 'web-01', entry: { protocol: 'ssh', host: '10.6.1.10', port: 22 } },
+        { id: 'h-out', type: 'host', name: 'old-01', entry: { protocol: 'ssh', host: '172.16.0.5', port: 22 } },
+      ],
+    },
+  ]));
+
+  it('replaces the connection form with the folder contents', async () => {
+    seed();
+    render(<SessionDialog {...defaultProps} />);
+    await act(async () => {
+      fireEvent.click(screen.getByText('tok Tokyo'));
+    });
+    // The form is gone...
+    expect(screen.queryByText('Protocol')).toBeNull();
+    // ...and the folder speaks for itself.
+    expect(screen.getByText('IP ranges')).toBeTruthy();
+    expect(screen.getByText('10.6.0.0/16')).toBeTruthy();
+    expect(screen.getByText('out of range')).toBeTruthy();
+  });
+
+  it('names the folder in the banner instead of claiming an edit', async () => {
+    seed();
+    const { container } = render(<SessionDialog {...defaultProps} />);
+    await act(async () => {
+      fireEvent.click(screen.getByText('tok Tokyo'));
+    });
+    expect(screen.queryByText(/Editing:/)).toBeNull();
+    expect(container.querySelector('.banner-editing-name')?.textContent).toBe('tok Tokyo');
+  });
+
+  it('goes back to the form when a host is selected again', async () => {
+    seed();
+    render(<SessionDialog {...defaultProps} />);
+    await act(async () => {
+      fireEvent.click(screen.getByText('tok Tokyo'));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getAllByText('web-01')[0]);
+    });
+    expect(screen.getByText('Protocol')).toBeTruthy();
+    expect(screen.queryByText('IP ranges')).toBeNull();
+  });
+
+  it('selects a child from the panel, not only from the tree', async () => {
+    seed();
+    const { container } = render(<SessionDialog {...defaultProps} />);
+    await act(async () => {
+      fireEvent.click(screen.getByText('tok Tokyo'));
+    });
+    const row = container.querySelector('.folder-details-row') as HTMLElement;
+    await act(async () => {
+      fireEvent.click(row);
+    });
+    expect(screen.getByText('Protocol')).toBeTruthy();
+  });
+});
+
+describe('SessionDialog — a folder row selects, and only selects', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    useSidebarLayoutStore.setState({ activeSidebarTab: 'hosts' });
+    useBookmarkStore.setState({ tree: [] });
+  });
+
+  it('does not connect when a panel row is double-clicked', async () => {
+    // The real sequence is click → click → dblclick. The first click selects the
+    // host, which swaps the panel out for the form, so the row is gone before
+    // the dblclick lands. A synthetic `fireEvent.doubleClick` alone would hide
+    // that, which is exactly how a dead double-click handler once shipped here.
+    localStorage.setItem(STORAGE_KEYS.HOST_TREE, JSON.stringify([
+      {
+        id: 'site-osa', type: 'folder', name: 'osa Osaka',
+        netbox: { server: 'default', kind: 'site', objectId: 7, prefixes: ['10.7.0.0/16'] },
+        children: [
+          { id: 'h-osa', type: 'host', name: 'osaka-01', entry: { protocol: 'ssh', host: '10.7.0.9', port: 22 } },
+        ],
+      },
+    ]));
+    const onConnect = vi.fn();
+    const { container } = render(<SessionDialog {...defaultProps} onConnect={onConnect} />);
+    await act(async () => {
+      fireEvent.click(screen.getByText('osa Osaka'));
+    });
+    const row = container.querySelector('.folder-details-row') as HTMLElement;
+    await act(async () => {
+      fireEvent.click(row);
+      fireEvent.click(row);
+      fireEvent.doubleClick(row);
+    });
+    expect(onConnect).not.toHaveBeenCalled();
+    // The click still did its one job.
+    expect(screen.getByText('Protocol')).toBeTruthy();
+  });
+});

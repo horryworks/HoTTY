@@ -7,12 +7,18 @@ import { resolveIapUsername } from '../../utils/iapUsername';
 import { isEncrypted } from '../../services/tauriService';
 import { tauriService } from '../../services/tauriService';
 import { HostTree } from '../HostTree/HostTree';
+import { FolderDetails } from '../FolderDetails/FolderDetails';
+import { findFolder } from '../../utils/netboxPlacement';
+import { nodeIcon } from '../../utils/nodeIcon';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { GcpInstancesPane, type VmSelection } from '../GcpInstancesPane/GcpInstancesPane';
 import { BookmarkTree } from '../BookmarkTree/BookmarkTree';
 import { flattenBookmarks } from '../BookmarkTree/bookmarkTreeHelpers';
 import { useSidebarLayoutStore } from '../../stores/sidebarLayoutStore';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useSshKeys } from '../../hooks/useSshKeys';
+import { suggestSshKeyName, uniqueSshKeyName } from '../../utils/sshKeyName';
+import { SshKeyGenerateModal } from '../SshKeyGenerateModal/SshKeyGenerateModal';
 import { useResize } from '../../hooks/useResize';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { SessionRecord } from '../../hooks/useSessionManager';
@@ -256,6 +262,10 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     // SSH-specific
     const [privateKeyPath, setPrivateKeyPath] = useState('');
     const [privateKeyPassphrase, setPrivateKeyPassphrase] = useState('');
+    const [generateKeyOpen, setGenerateKeyOpen] = useState(false);
+    // The keys in ~/.ssh, for the picker beside the private-key field. Only
+    // walked while an SSH form is actually on screen.
+    const sshKeys = useSshKeys(protocol === 'ssh');
 
     // Serial
     const [serialPorts, setSerialPorts] = useState<SerialPortInfo[]>([]);
@@ -356,6 +366,19 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         initiatedSessionsRef.current.delete(id);
         setConnectingSessionId(null);
     }, [onCancelConnect]);
+
+    /**
+     * The selected node when it is a folder, else undefined.
+     *
+     * `findFolder` only ever returns folders, so a hit is the whole test — the
+     * form panel shows the folder's contents instead of a connection form it
+     * would otherwise render blank, with the banner claiming an edit that is
+     * not happening.
+     */
+    const selectedFolder = useMemo(
+        () => (selectedHostId === null ? undefined : findFolder(hostManager.tree, selectedHostId)),
+        [hostManager.tree, selectedHostId],
+    );
 
     // Available jumpbox hosts
     const jumpboxHosts = useMemo(() =>
@@ -1209,6 +1232,21 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         }
     };
 
+    /**
+     * Sentinel for the picker's last entry. Cannot collide with a key's value,
+     * which is always an absolute path.
+     */
+    const GENERATE_KEY_OPTION = '__generate__';
+
+    const handlePickKey = (value: string) => {
+        if (value === '') return;
+        if (value === GENERATE_KEY_OPTION) {
+            setGenerateKeyOpen(true);
+            return;
+        }
+        setPrivateKeyPath(value);
+    };
+
     const canSubmit = (() => {
         switch (protocol) {
             case 'ssh':
@@ -1248,7 +1286,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 }}
                 onClick={(e) => {
                     const target = e.target as HTMLElement;
-                    if (target.closest('.form-panel, .host-tree-row, .host-tree-toolbar, .host-tree-filter, .context-menu, .host-edit-modal-overlay, .confirm-modal-overlay')) return;
+                    if (target.closest('.form-panel, .host-tree-row, .host-tree-toolbar, .host-tree-filter, .context-menu, .host-edit-modal-overlay, .confirm-modal-overlay, .skg-overlay, .mbp-overlay')) return;
                     handleNewConnectionRequest();
                 }}
             >
@@ -1358,6 +1396,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                         netboxSyncing={netboxSync.syncing}
                                         netboxConfigured={netboxSync.configured}
                                         netboxLastError={netboxSync.lastError}
+                                        netboxPlacement={settings.netbox.prefixPlacement}
+                                        onApplyPlacements={hostManager.applyPlacements}
                                     />
                                 </div>
                                 <div className="panel-divider" onMouseDown={handlePanelDividerMouseDownWrapped} />
@@ -1369,10 +1409,19 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 </span>
                             ) : (
                                 <>
-                                    <span className="banner-editing">
-                                        <span aria-hidden="true">{'\u{1F4DD} '}</span>
-                                        {t('sessionDialog.banner.editing')} <span className="banner-editing-name">{displayName || t('sessionDialog.banner.unnamed')}</span>
-                                    </span>
+                                    {selectedFolder ? (
+                                        // A folder is not being edited, and saying so
+                                        // was the old banner's only claim.
+                                        <span className="banner-editing">
+                                            <span aria-hidden="true">{nodeIcon(selectedFolder)}{' '}</span>
+                                            <span className="banner-editing-name">{selectedFolder.name}</span>
+                                        </span>
+                                    ) : (
+                                        <span className="banner-editing">
+                                            <span aria-hidden="true">{'\u{1F4DD} '}</span>
+                                            {t('sessionDialog.banner.editing')} <span className="banner-editing-name">{displayName || t('sessionDialog.banner.unnamed')}</span>
+                                        </span>
+                                    )}
                                     <button
                                         type="button"
                                         className="banner-clear-btn"
@@ -1383,6 +1432,12 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 </>
                             )}
                         </div>
+                        {selectedFolder ? (
+                            <FolderDetails
+                                folder={selectedFolder}
+                                onSelectChild={handleHostTreeSelect}
+                            />
+                        ) : (
                         <form ref={formRef} onSubmit={handleSubmit}>
                             <fieldset disabled={isDecrypting} style={{ border: 'none', padding: 0, margin: 0 }}>
                                 {/* Display Name (only when a host is selected) */}
@@ -1522,6 +1577,40 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                                 >
                                                     {t('common.browse')}
                                                 </button>
+                                            {/* The free-text field and Browse stay: plenty of
+                                                people keep keys outside ~/.ssh, and this picker
+                                                must not take that away. It resets to its
+                                                placeholder after each pick, because the field
+                                                above is what actually holds the choice. */}
+                                            {sshKeys.available && sshKeys.keys.length > 0 && (
+                                                <select
+                                                    className="connect-key-picker"
+                                                    value=""
+                                                    onChange={(e) => handlePickKey(e.target.value)}
+                                                    aria-label={t('sessionDialog.keyPickerLabel')}
+                                                >
+                                                    <option value="">
+                                                        {t('sessionDialog.keyPickerNone')}
+                                                    </option>
+                                                    {sshKeys.keys.map(k => (
+                                                        <option key={k.name} value={k.path}>
+                                                            {k.name}
+                                                        </option>
+                                                    ))}
+                                                    <option value={GENERATE_KEY_OPTION}>
+                                                        {t('sessionDialog.keyPickerGenerate')}
+                                                    </option>
+                                                </select>
+                                            )}
+                                            {sshKeys.available && sshKeys.keys.length === 0 && (
+                                                <button
+                                                    type="button"
+                                                    className="btn-secondary"
+                                                    onClick={() => setGenerateKeyOpen(true)}
+                                                >
+                                                    {t('sessionDialog.keyPickerGenerate')}
+                                                </button>
+                                            )}
                                             </div>
                                         </div>
                                         <div className="form-group">
@@ -1686,6 +1775,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 </button>
                             </div>
                         </form>
+                        )}
                     </div>
                             </div>
                         ) : activeSidebarTab === 'gcp' ? (
@@ -1718,6 +1808,28 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                         onCancel={() => setPendingSwitch(null)}
                     />
                 )}
+
+                <SshKeyGenerateModal
+                    open={generateKeyOpen}
+                    defaultName={uniqueSshKeyName(
+                        suggestSshKeyName('ed25519', host),
+                        sshKeys.keys.map(k => k.name),
+                    )}
+                    existingNames={sshKeys.keys.map(k => k.name)}
+                    offerUseForConnection
+                    onClose={() => {
+                        setGenerateKeyOpen(false);
+                        void sshKeys.refresh();
+                    }}
+                    onGenerated={(info, passphrase, useForConnection) => {
+                        if (!useForConnection) return;
+                        setPrivateKeyPath(info.path);
+                        // The passphrase goes into this form's existing field, so
+                        // saving the host puts it through the same DPAPI path as
+                        // any other credential. No new store, no new format.
+                        setPrivateKeyPassphrase(passphrase ?? '');
+                    }}
+                />
             </div>
         </div>
     );

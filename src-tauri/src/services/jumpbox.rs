@@ -16,7 +16,7 @@ use std::time::Duration;
 use base64::Engine;
 use russh::client::{self, Handle, Handler};
 use russh::keys::ssh_key;
-use russh::keys::{load_secret_key, HashAlg, PrivateKey, PrivateKeyWithHashAlg};
+use russh::keys::{load_secret_key, PrivateKey, PrivateKeyWithHashAlg};
 use russh::ChannelMsg;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
@@ -295,6 +295,7 @@ fn humanize_jumpbox_load_key(raw: &str) -> String {
 async fn authenticate_jumpbox(
     handle: &mut Handle<JumpboxHandler>,
     cfg: &JumpboxConfig,
+    allow_sha1_rsa: bool,
 ) -> Result<(), SessionError> {
     if let Some(key_path) = &cfg.private_key_path {
         if is_unc_path(key_path) {
@@ -304,16 +305,30 @@ async fn authenticate_jumpbox(
         }
         let pk: PrivateKey = load_secret_key(key_path, cfg.private_key_passphrase.as_deref())
             .map_err(|e| SessionError::AuthFailed(humanize_jumpbox_load_key(&e.to_string())))?;
-        let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(pk), Some(HashAlg::Sha256));
-        let res = handle
-            .authenticate_publickey(&cfg.username, key_with_hash)
-            .await
-            .map_err(|e| {
-                log::error!("jumpbox: publickey auth failed: {e}");
-                SessionError::AuthFailed("Jumpbox: Public key authentication failed".into())
-            })?;
-        if matches!(res, russh::client::AuthResult::Success) {
-            return Ok(());
+        let pk = Arc::new(pk);
+
+        // Shares `ssh::publickey_hash_algs` rather than repeating the ladder: a
+        // bastion is as likely to be old gear as the host behind it, and this
+        // module is already a near-copy of `ssh` — one shared helper is one less
+        // place for the two to drift.
+        let negotiated = if pk.algorithm().is_rsa() {
+            handle.best_supported_rsa_hash().await.ok().flatten()
+        } else {
+            None
+        };
+
+        for hash in super::ssh::publickey_hash_algs(&pk, negotiated, allow_sha1_rsa) {
+            let key_with_hash = PrivateKeyWithHashAlg::new(Arc::clone(&pk), hash);
+            let res = handle
+                .authenticate_publickey(&cfg.username, key_with_hash)
+                .await
+                .map_err(|e| {
+                    log::error!("jumpbox: publickey auth failed: {e}");
+                    SessionError::AuthFailed("Jumpbox: Public key authentication failed".into())
+                })?;
+            if matches!(res, russh::client::AuthResult::Success) {
+                return Ok(());
+            }
         }
     }
     if let Some(pw) = &cfg.password {
@@ -428,9 +443,17 @@ pub async fn establish_tunnel(
     let known_hosts_path = resolve_known_hosts_path(&app);
     let prompt_session_id = jumpbox_prompt_session_id(session_id_base);
 
+    let preferred = super::ssh::load_preferred(&app)?;
+    // Same reasoning as `ssh::connect`: the Protocols tab's `ssh-rsa` toggle is
+    // where a user says their network needs SHA-1 RSA, so it gates the SHA-1
+    // rung of the publickey ladder here too.
+    let allow_sha1_rsa = preferred
+        .key
+        .contains(&ssh_key::Algorithm::Rsa { hash: None });
+
     let russh_config = Arc::new(client::Config {
         inactivity_timeout: Some(Duration::from_secs(3600)),
-        preferred: super::ssh::load_preferred(&app)?,
+        preferred,
         ..client::Config::default()
     });
 
@@ -465,7 +488,7 @@ pub async fn establish_tunnel(
         SessionError::ConnectionFailed(format!("Jumpbox: {msg}"))
     })?;
 
-    authenticate_jumpbox(&mut handle, &cfg).await?;
+    authenticate_jumpbox(&mut handle, &cfg, allow_sha1_rsa).await?;
 
     // Zeroize jumpbox credentials after use.
     {

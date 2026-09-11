@@ -22,6 +22,7 @@ export const chrome = {
     stopWatchAi: 'Остановить ИИ-наблюдение',
     watchInTitle: 'Наблюдать в',
     watchInNew: 'Новый разговор',
+    watchInAiWindow: 'Смотреть в окне AI Chat',
     bookmark: 'Добавить закладку…',
   },
   appSidebar: {

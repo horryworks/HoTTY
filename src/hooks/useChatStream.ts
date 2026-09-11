@@ -40,7 +40,7 @@ export interface ChatMessage {
 }
 
 /** Running token/cost totals for one tab (cost is null until a priced model reports usage). */
-interface TabTokens {
+export interface TabTokens {
     input: number;
     output: number;
     cost: number | null;
@@ -85,6 +85,12 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
     // model at completion — so a tab switch shows that tab's running total and "New
     // chat" resets only the active tab's counter (not the whole pane's).
     const [tokensByTab, setTokensByTab] = useState<Map<string, TabTokens>>(() => new Map());
+    // Latest-value mirror, so `exportTranscripts` can snapshot totals from an
+    // event handler without closing over a render's state.
+    const tokensByTabRef = useRef(tokensByTab);
+    useEffect(() => {
+        tokensByTabRef.current = tokensByTab;
+    });
 
     // ── Active-tab views + helpers ──
     const activeTokens = activeTabId ? tokensByTab.get(activeTabId) : undefined;
@@ -276,6 +282,34 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
     }, [streamingTabIds]);
 
     // ── Bulk lifecycle ops ──
+    /**
+     * Snapshot every tab's transcript and token totals, in the wire form used to
+     * move a conversation to another window.
+     *
+     * Read from the mirror ref rather than state so a handover triggered from an
+     * event handler cannot capture a stale render's transcripts.
+     */
+    const exportTranscripts = useCallback((): {
+        messages: [string, ChatMessage[]][];
+        tokens: [string, TabTokens][];
+    } => ({
+        messages: Array.from(messagesByTabRef.current.entries()),
+        tokens: Array.from(tokensByTabRef.current.entries()),
+    }), []);
+
+    /**
+     * Install transcripts and token totals that arrived from another window.
+     * Replaces wholesale: a pane only imports right after it is created for the
+     * incoming conversation, so there is nothing of its own to merge with.
+     */
+    const importTranscripts = useCallback((
+        messages: [string, ChatMessage[]][],
+        tokens: [string, TabTokens][],
+    ) => {
+        setMessagesByTab(new Map(messages));
+        setTokensByTab(new Map(tokens));
+    }, []);
+
     const resetAllStreams = useCallback(() => {
         clearAllStreamWatchdogs();
         setMessagesByTab(new Map());
@@ -328,5 +362,6 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
         armStreamWatchdog, clearStreamWatchdog,
         totalInputTokens, totalOutputTokens, totalCost,
         resetAllStreams, pruneStreams, clearTabStream,
+        exportTranscripts, importTranscripts,
     };
 }

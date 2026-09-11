@@ -103,6 +103,18 @@ export function useNetboxSync(): UseNetboxSync {
                     const snapshot = await tauriService.netboxFetchSnapshot(
                         config.baseUrl,
                         config.siteIdField || null,
+                        // 🚨 Coerced, never passed through. `invoke` serializes
+                        // with JSON.stringify, which DROPS an `undefined` field
+                        // entirely, and the Rust command then fails to
+                        // deserialize a missing `with_prefixes` — taking the
+                        // whole sync down, regions and sites included. The
+                        // field is `undefined` in any store that has not been
+                        // through the v34 migration: a config persisted by an
+                        // older build, a rehydration that has not landed yet,
+                        // or a dev session whose store was hydrated before the
+                        // migration existed. `!== false` reads an absent value
+                        // as the default (on), which is what it means.
+                        config.prefixPlacement !== false,
                     );
                     const result = reconcileNetboxTree(treeRef.current, snapshot, {
                         now: new Date().toISOString(),

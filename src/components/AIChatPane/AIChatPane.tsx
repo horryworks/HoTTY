@@ -40,6 +40,8 @@ import {
 import { buildWatchedViews, buildConnectCapabilityInput } from '../../utils/aiConnectContext';
 import { lookupSession, type SessionSources } from '../../utils/sessionLookup';
 import { useAiWorkerSessionStore } from '../../stores/aiWorkerSessionStore';
+import { IS_AI_CHAT_WINDOW } from '../../utils/windowLabel';
+import type { ChatTranscriptPort } from '../../hooks/useAiChatWindow';
 import { conversationColorIndex, conversationColorVar } from '../../utils/conversationColor';
 import { SystemPromptModal } from '../SystemPromptModal/SystemPromptModal';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
@@ -169,6 +171,25 @@ interface AIChatPaneProps {
     onCloseWorker?: (sessionId: string) => void;
     /** Host Tree — credentials for connect requests that match a saved host. */
     hostTree?: HostTreeNode[];
+    // ── Moving this conversation between windows ──
+    /**
+     * Publish this pane's transcript accessors so a handover can read and write
+     * them; called with `null` on unmount. The pane owns its message state, so
+     * this port is how App reaches it without lifting every transcript up.
+     */
+    onTranscriptPort?: (paneId: string, port: ChatTranscriptPort | null) => void;
+    /** Move these conversations into a dedicated AI Chat window. */
+    onPopOutWindow?: () => void;
+    /** Move these conversations back into an ordinary window (AI window only). */
+    onPopInWindow?: () => void;
+    /** A handover is already in flight — the button stays disabled until it settles. */
+    windowMoving?: boolean;
+    /** An AI-issued command is running for this pane; moving now would strand it. */
+    commandRunning?: boolean;
+    /** Whether the AI Chat window is pinned above other applications. */
+    alwaysOnTop?: boolean;
+    /** Toggle that pin (AI Chat window only). */
+    onToggleAlwaysOnTop?: () => void;
 }
 
 // ── AI Icon Component ──
@@ -545,6 +566,13 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     onMaterializeWorker,
     onCloseWorker,
     hostTree,
+    onTranscriptPort,
+    onPopOutWindow,
+    onPopInWindow,
+    windowMoving,
+    commandRunning,
+    alwaysOnTop,
+    onToggleAlwaysOnTop,
 }) => {
     const { t } = useTranslation();
     // Derive active tab from chatState (Phase 2: tabs[] + activeTabId; each tab
@@ -700,12 +728,60 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         armStreamWatchdog, clearStreamWatchdog,
         totalInputTokens, totalOutputTokens, totalCost,
         resetAllStreams, pruneStreams, clearTabStream,
+        exportTranscripts, importTranscripts,
     } = useChatStream({
         paneId,
         activeTabId,
         selectedModelRef,
         onStreamComplete: (tabId, msgs) => streamCompleteHandlerRef.current(tabId, msgs),
     });
+
+    // ── Moving this conversation to another window ──────────────────────────
+    // A conversation may change window only while it is AT REST. That single
+    // rule removes the whole class of "which window does this in-flight event
+    // belong to" bugs: no stream to re-route, no poll to strand, no
+    // confirmation card whose answer would arrive in the window it left.
+    const windowMoveBlock: 'streaming' | 'running' | 'confirming' | null = (() => {
+        if (streamingTabIds.size > 0) return 'streaming';
+        if (commandRunning) return 'running';
+        // A command run whose client-side `sleep` countdown is still ticking.
+        if (chatState?.tabs.some((tb) => tb.sleepDelay)) return 'running';
+        for (const blocks of autoExecState.values()) {
+            for (const b of blocks.values()) {
+                if (b.status === 'classifying' || b.status === 'scheduled') return 'confirming';
+            }
+        }
+        for (const blocks of connectState.values()) {
+            for (const b of blocks.values()) {
+                if (b.status !== 'settled') return 'confirming';
+            }
+        }
+        return null;
+    })();
+    const canMoveWindow = !windowMoveBlock && !windowMoving;
+    const windowMoveTitle = windowMoving
+        ? t('aiChat.pane.windowMoving')
+        : windowMoveBlock === 'streaming'
+            ? t('aiChat.pane.moveBlockedStreaming')
+            : windowMoveBlock === 'running'
+                ? t('aiChat.pane.moveBlockedRunning')
+                : windowMoveBlock === 'confirming'
+                    ? t('aiChat.pane.moveBlockedConfirming')
+                    : IS_AI_CHAT_WINDOW
+                        ? t('aiChat.pane.popInTitle')
+                        : t('aiChat.pane.popOutTitle');
+
+    // Publish this pane's transcripts so a handover can read and write them.
+    // Registered per pane id because a window may briefly hold two AI Chat
+    // panes (one arriving, one of its own).
+    useEffect(() => {
+        if (!onTranscriptPort) return;
+        onTranscriptPort(paneId, {
+            export: exportTranscripts,
+            import: importTranscripts,
+        });
+        return () => onTranscriptPort(paneId, null);
+    }, [onTranscriptPort, paneId, exportTranscripts, importTranscripts]);
     const defaultExpertise = aiPersonas?.[0]?.label || 'General Assistant';
     const [selectedExpertise, setSelectedExpertise] = useState(chatState?.selectedExpertise || defaultExpertise);
     // The Network Expert persona carries a mandatory start-of-session protocol
@@ -2232,6 +2308,44 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     thing — the tab strip's + is what opens a new conversation.) */}
                 {isAuthenticated && (
                     <div className="ai-chat-header-right">
+                        {/* Pinning belongs to the AI Chat window alone: doing it
+                            to a terminal window would park the user's own work
+                            permanently over everything else. */}
+                        {IS_AI_CHAT_WINDOW && onToggleAlwaysOnTop && (
+                            <button
+                                type="button"
+                                className={`ai-chat-window-btn${alwaysOnTop ? ' active' : ''}`}
+                                onClick={onToggleAlwaysOnTop}
+                                aria-pressed={!!alwaysOnTop}
+                                title={alwaysOnTop ? t('aiChat.pane.unpinTitle') : t('aiChat.pane.pinTitle')}
+                                aria-label={alwaysOnTop ? t('aiChat.pane.unpinTitle') : t('aiChat.pane.pinTitle')}
+                            >
+                                {/* pin icon */}
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <path d="M12 17v5" />
+                                    <path d="M9 10.76V4h6v6.76a2 2 0 0 0 .59 1.42L18 14.5V17H6v-2.5l2.41-2.32A2 2 0 0 0 9 10.76z" />
+                                </svg>
+                            </button>
+                        )}
+                        {(IS_AI_CHAT_WINDOW ? onPopInWindow : onPopOutWindow) && (
+                            <button
+                                type="button"
+                                className="ai-chat-window-btn"
+                                onClick={IS_AI_CHAT_WINDOW ? onPopInWindow : onPopOutWindow}
+                                disabled={!canMoveWindow}
+                                title={windowMoveTitle}
+                                aria-label={windowMoveTitle}
+                            >
+                                {/* two overlapping frames: this pane, elsewhere */}
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <rect x="3" y="7" width="12" height="12" rx="2" />
+                                    <path d="M9 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2" />
+                                </svg>
+                                <span>
+                                    {IS_AI_CHAT_WINDOW ? t('aiChat.pane.popIn') : t('aiChat.pane.popOut')}
+                                </span>
+                            </button>
+                        )}
                         <button
                             type="button"
                             className="ai-chat-new-chat-btn"

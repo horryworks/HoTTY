@@ -27,6 +27,13 @@ export function gridPaneIds(mode: LayoutMode): string[] {
   return Array.from({ length: paneCount(mode) }, (_, i) => String(i));
 }
 
+/**
+ * The only pane slot a dedicated AI Chat window has — its layout is pinned to
+ * 1x1 and it renders no grid controls, so no other slot is reachable there.
+ * Derived from `gridPaneIds` so it cannot drift from the id scheme.
+ */
+export const AI_WINDOW_PANE_ID: string = gridPaneIds('1x1')[0];
+
 interface PaneState {
   layoutMode: LayoutMode;
   activePaneId: string;

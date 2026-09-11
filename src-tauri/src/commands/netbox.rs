@@ -133,19 +133,22 @@ pub async fn netbox_has_token(state: State<'_, NetboxState>) -> Result<bool, Str
     Ok(state.has_token())
 }
 
-/// Fetch the Regions and Sites one sync needs.
+/// Fetch the Regions and Sites one sync needs, plus the IPAM prefixes when
+/// prefix placement is on. `with_prefixes` comes from the setting: off means
+/// the largest of the three listings is never requested.
 #[tauri::command]
 pub async fn netbox_fetch_snapshot(
     state: State<'_, NetboxState>,
     base_url: String,
     site_id_field: Option<String>,
+    with_prefixes: bool,
 ) -> Result<NetboxSnapshot, String> {
     let (base, field) =
         validated_inputs(&base_url, site_id_field.as_deref()).map_err(|e| e.to_string())?;
     let token = state.token_for(&base).map_err(|e| e.to_string())?;
     let client = NetboxClient::new(state.http(), base, token);
     client
-        .snapshot(DEFAULT_SERVER_KEY, field.as_ref())
+        .snapshot(DEFAULT_SERVER_KEY, field.as_ref(), with_prefixes)
         .await
         .map_err(|e| e.to_string())
 }

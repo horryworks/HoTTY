@@ -58,6 +58,9 @@ const snapshot = (over: Partial<NetboxSnapshot> = {}): NetboxSnapshot => ({
     siteIdField: 'facility',
     regions: [],
     sites: [],
+    prefixes: null,
+    prefixesUnavailable: 'disabled',
+    prefixesSkipped: 0,
     ...over,
 });
 
@@ -571,5 +574,232 @@ describe('isNetboxNamed', () => {
     it('is false for a hand-made folder and for a host', () => {
         expect(isNetboxNamed(folder('f', 'Mine'))).toBe(false);
         expect(isNetboxNamed(host('h', 'web-01'))).toBe(false);
+    });
+});
+
+describe('reconcileNetboxTree — IPAM prefixes', () => {
+    const pfx = (prefix: string, scopeKind: 'region' | 'site', scopeId: number) =>
+        ({ prefix, scopeKind, scopeId });
+
+    /** A tree that already holds the container, region 1 and site 10. */
+    function synced(): HostTreeNode[] {
+        const { tree } = reconcileNetboxTree(
+            [],
+            snapshot({ regions: [region(1, 'Asia')], sites: [site(10, 'Tokyo', 1)] }),
+            opts(),
+        );
+        return tree;
+    }
+
+    /** The usual snapshot: region 1, site 10, and whatever prefixes are given. */
+    const withPfx = (prefixes: ReturnType<typeof pfx>[] | null) =>
+        snapshot({
+            regions: [region(1, 'Asia')],
+            sites: [site(10, 'Tokyo', 1)],
+            prefixes,
+            prefixesUnavailable: prefixes === null ? 'denied' : null,
+        });
+
+    it('writes the prefixes of a site onto its folder link', () => {
+        const { tree, report } = reconcileNetboxTree(
+            synced(),
+            withPfx([pfx('10.1.0.0/16', 'site', 10)]),
+            opts(),
+        );
+        expect(find(tree, 'Tokyo')?.netbox?.prefixes).toEqual(['10.1.0.0/16']);
+        expect(report.foldersWithPrefixes).toBe(1);
+        expect(report.prefixesChanged).toBe(1);
+        expect(report.changed).toBe(true);
+    });
+
+    it('writes the prefixes of a region too', () => {
+        const { tree } = reconcileNetboxTree(
+            synced(),
+            withPfx([pfx('10.0.0.0/8', 'region', 1)]),
+            opts(),
+        );
+        expect(find(tree, 'Asia')?.netbox?.prefixes).toEqual(['10.0.0.0/8']);
+    });
+
+    it('stores the network form, so a prefix written with host bits settles after one sync', () => {
+        const snap = withPfx([pfx('192.168.1.5/24', 'site', 10)]);
+        const first = reconcileNetboxTree(synced(), snap, opts());
+        expect(find(first.tree, 'Tokyo')?.netbox?.prefixes).toEqual(['192.168.1.0/24']);
+        const second = reconcileNetboxTree(first.tree, snap, opts());
+        expect(second.report.prefixesChanged).toBe(0);
+    });
+
+    it('reports no change and returns the SAME ARRAY on an unchanged re-run', () => {
+        // The whole persistence path hangs off this: a changed run re-encrypts
+        // the tree, writes localStorage and broadcasts to every window.
+        const snap = withPfx([pfx('10.1.0.0/16', 'site', 10), pfx('10.2.0.0/16', 'site', 10)]);
+        const first = reconcileNetboxTree(synced(), snap, opts());
+        const second = reconcileNetboxTree(first.tree, snap, opts());
+        expect(second.report.changed).toBe(false);
+        expect(second.tree).toBe(first.tree);
+    });
+
+    it('sorts the prefixes, so the same data in a different order is not a change', () => {
+        const base = reconcileNetboxTree(
+            synced(),
+            withPfx([pfx('10.2.0.0/16', 'site', 10), pfx('10.1.0.0/16', 'site', 10)]),
+            opts(),
+        );
+        expect(find(base.tree, 'Tokyo')?.netbox?.prefixes).toEqual(['10.1.0.0/16', '10.2.0.0/16']);
+        const again = reconcileNetboxTree(
+            base.tree,
+            withPfx([pfx('10.1.0.0/16', 'site', 10), pfx('10.2.0.0/16', 'site', 10)]),
+            opts(),
+        );
+        expect(again.report.changed).toBe(false);
+    });
+
+    it('drops a prefix NetBox lists twice for one folder', () => {
+        const { tree } = reconcileNetboxTree(
+            synced(),
+            withPfx([pfx('10.1.0.0/16', 'site', 10), pfx('10.1.0.5/16', 'site', 10)]),
+            opts(),
+        );
+        expect(find(tree, 'Tokyo')?.netbox?.prefixes).toEqual(['10.1.0.0/16']);
+    });
+
+    it('leaves every stored prefix alone when the list could not be read', () => {
+        // A token that loses `ipam.view_prefix`, or an IPAM past MAX_PAGES,
+        // must not clear the folders that already match.
+        const stored = reconcileNetboxTree(
+            synced(),
+            withPfx([pfx('10.1.0.0/16', 'site', 10)]),
+            opts(),
+        ).tree;
+
+        const denied = reconcileNetboxTree(stored, withPfx(null), opts());
+        expect(find(denied.tree, 'Tokyo')?.netbox?.prefixes).toEqual(['10.1.0.0/16']);
+        expect(denied.report.changed).toBe(false);
+        expect(denied.report.prefixesUnavailable).toBe('denied');
+    });
+
+    it('clears the prefixes of a folder when NetBox really returned none for it', () => {
+        const stored = reconcileNetboxTree(
+            synced(),
+            withPfx([pfx('10.1.0.0/16', 'site', 10)]),
+            opts(),
+        ).tree;
+
+        const { tree, report } = reconcileNetboxTree(stored, withPfx([]), opts());
+        expect(find(tree, 'Tokyo')?.netbox).not.toHaveProperty('prefixes');
+        expect(report.prefixesChanged).toBe(1);
+    });
+
+    it('stores nothing rather than an empty array for a folder with no prefix', () => {
+        // `prefixes: []` on every folder would make the first sync after an
+        // upgrade a change to write, for every folder in the tree.
+        const { tree, report } = reconcileNetboxTree(synced(), withPfx([]), opts());
+        expect(find(tree, 'Tokyo')?.netbox).not.toHaveProperty('prefixes');
+        expect(report.changed).toBe(false);
+        expect(report.foldersWithPrefixes).toBe(0);
+    });
+
+    it('keeps the prefixes of a folder that vanished from NetBox', () => {
+        const stored = reconcileNetboxTree(
+            synced(),
+            withPfx([pfx('10.1.0.0/16', 'site', 10)]),
+            opts(),
+        ).tree;
+
+        const gone = reconcileNetboxTree(
+            stored,
+            snapshot({
+                regions: [region(1, 'Asia')],
+                sites: [],
+                prefixes: [],
+                prefixesUnavailable: null,
+            }),
+            opts(),
+        );
+        const tokyo = find(gone.tree, 'Tokyo');
+        expect(tokyo?.netbox?.missing).toBe(true);
+        expect(tokyo?.netbox?.prefixes).toEqual(['10.1.0.0/16']);
+    });
+
+    it('keeps the prefixes of a folder that came back from missing', () => {
+        // The "it came back" branch rebuilds the link field by field. Dropping
+        // `prefixes` there would erase them on any sync that could not read the
+        // list, because the prefix pass is skipped entirely then.
+        const stored = reconcileNetboxTree(
+            synced(),
+            withPfx([pfx('10.1.0.0/16', 'site', 10)]),
+            opts(),
+        ).tree;
+
+        const gone = reconcileNetboxTree(
+            stored,
+            snapshot({
+                regions: [region(1, 'Asia')],
+                sites: [],
+                prefixes: null,
+                prefixesUnavailable: 'denied',
+            }),
+            opts(),
+        ).tree;
+
+        const back = reconcileNetboxTree(gone, withPfx(null), opts());
+        const tokyo = find(back.tree, 'Tokyo');
+        expect(tokyo?.netbox?.missing).toBeUndefined();
+        expect(tokyo?.netbox?.prefixes).toEqual(['10.1.0.0/16']);
+    });
+
+    it('counts a prefix whose CIDR text it could not read', () => {
+        const { tree, report } = reconcileNetboxTree(
+            synced(),
+            withPfx([pfx('not a prefix', 'site', 10), pfx('10.1.0.0/16', 'site', 10)]),
+            opts(),
+        );
+        expect(report.prefixesUnparsed).toBe(1);
+        expect(report.prefixes).toBe(2);
+        expect(find(tree, 'Tokyo')?.netbox?.prefixes).toEqual(['10.1.0.0/16']);
+    });
+
+    it('echoes the backend count of prefixes that belong to no folder here', () => {
+        const { report } = reconcileNetboxTree(
+            synced(),
+            snapshot({
+                regions: [region(1, 'Asia')],
+                sites: [site(10, 'Tokyo', 1)],
+                prefixes: [],
+                prefixesUnavailable: null,
+                prefixesSkipped: 4,
+            }),
+            opts(),
+        );
+        expect(report.prefixesSkipped).toBe(4);
+    });
+
+    it('never puts a prefix on the container or on a host', () => {
+        const { tree } = reconcileNetboxTree(
+            [managed('c', 'NetBox', { kind: 'root' }, [host('h', 'web-01')])],
+            snapshot({
+                regions: [],
+                sites: [],
+                prefixes: [pfx('10.1.0.0/16', 'site', 10)],
+                prefixesUnavailable: null,
+            }),
+            opts(),
+        );
+        expect(find(tree, 'NetBox')?.netbox).not.toHaveProperty('prefixes');
+        expect(find(tree, 'web-01')).not.toHaveProperty('netbox');
+    });
+
+    it('does not touch the folders of another server', () => {
+        const other: HostTreeNode = {
+            id: 'x', type: 'folder', name: 'Elsewhere',
+            netbox: { server: 'other', kind: 'site', objectId: 10 },
+        };
+        const { tree } = reconcileNetboxTree(
+            [other, ...synced()],
+            withPfx([pfx('10.1.0.0/16', 'site', 10)]),
+            opts(),
+        );
+        expect(find(tree, 'Elsewhere')?.netbox).not.toHaveProperty('prefixes');
+        expect(find(tree, 'Tokyo')?.netbox?.prefixes).toEqual(['10.1.0.0/16']);
     });
 });

@@ -304,6 +304,84 @@ function removeNode(nodes: HostTreeNode[], id: string): HostTreeNode[] {
         .map(n => n.children ? { ...n, children: removeNode(n.children, id) } : n);
 }
 
+/** One host to relocate, by id. */
+export interface PlacementMove {
+    hostId: string;
+    targetFolderId: string;
+}
+
+/**
+ * Move many hosts into their target folders in ONE pass.
+ *
+ * Deliberately not "call `moveNode` N times": each `moveNode` runs a
+ * `flushSync`, re-encrypts the whole tree, writes localStorage and broadcasts
+ * to every window. Two hundred hosts would do that two hundred times.
+ *
+ * Host nodes are carried **by reference** — the same discipline the NetBox
+ * reconcile follows — so no entry, and no stored credential, is copied or
+ * rewritten on the way. A move whose host or folder no longer exists, or whose
+ * host is already in the target, is skipped rather than failing the batch.
+ *
+ * Returns the input array unchanged (reference-equal) when nothing moved, so
+ * the caller can skip persisting entirely.
+ */
+export function applyPlacementMoves(
+    nodes: HostTreeNode[],
+    moves: PlacementMove[],
+): { tree: HostTreeNode[]; moved: number } {
+    // Which hosts genuinely need to move, and where to.
+    const wanted = new Map<string, string>();
+    for (const m of moves) wanted.set(m.hostId, m.targetFolderId);
+    if (wanted.size === 0) return { tree: nodes, moved: 0 };
+
+    const folderIds = new Set<string>();
+    const collectFolders = (list: HostTreeNode[]) => {
+        for (const n of list) {
+            if (n.type === 'folder') folderIds.add(n.id);
+            if (n.children) collectFolders(n.children);
+        }
+    };
+    collectFolders(nodes);
+
+    // Detach: pull out every host that has somewhere else to be.
+    const detached = new Map<string, HostTreeNode>();
+    const strip = (list: HostTreeNode[], parentId: string | null): HostTreeNode[] => {
+        const out: HostTreeNode[] = [];
+        for (const n of list) {
+            if (n.type === 'host') {
+                const target = wanted.get(n.id);
+                if (target !== undefined && folderIds.has(target) && target !== parentId) {
+                    detached.set(n.id, n);
+                    continue;
+                }
+                out.push(n);
+                continue;
+            }
+            out.push(n.children ? { ...n, children: strip(n.children, n.id) } : n);
+        }
+        return out;
+    };
+    const stripped = strip(nodes, null);
+    if (detached.size === 0) return { tree: nodes, moved: 0 };
+
+    // Re-attach at the end of each target folder, the way `addHost` does.
+    const attach = (list: HostTreeNode[]): HostTreeNode[] =>
+        list.map(n => {
+            if (n.type !== 'folder') return n;
+            const incoming: HostTreeNode[] = [];
+            for (const [hostId, node] of detached) {
+                if (wanted.get(hostId) === n.id) incoming.push(node);
+            }
+            const children = attach(n.children ?? []);
+            if (incoming.length === 0) {
+                return n.children ? { ...n, children } : n;
+            }
+            return { ...n, children: [...children, ...incoming] };
+        });
+
+    return { tree: attach(stripped), moved: detached.size };
+}
+
 // Descending reverses only the name order — folders stay grouped before hosts.
 function sortNodes(nodes: HostTreeNode[], direction: 'asc' | 'desc' = 'asc'): HostTreeNode[] {
     const sign = direction === 'desc' ? -1 : 1;
@@ -684,6 +762,30 @@ export function useHostManager() {
         }
     }, [persistEncryptedAsync]);
 
+    /**
+     * Relocate many hosts at once, in a single write.
+     *
+     * Same shape as `moveNode`, but the batch is applied by one pure function
+     * so N hosts cost one encrypt, one localStorage write and one broadcast
+     * rather than N of each. Returns how many actually moved.
+     */
+    const applyPlacements = useCallback((moves: PlacementMove[]): number => {
+        let next: HostTreeNode[] = [];
+        let moved = 0;
+        flushSync(() => {
+            setTree(prev => {
+                const result = applyPlacementMoves(prev, moves);
+                moved = result.moved;
+                next = result.tree;
+                return result.tree;
+            });
+        });
+        if (moved > 0) {
+            persistEncryptedAsync(next);
+        }
+        return moved;
+    }, [persistEncryptedAsync]);
+
     const sortFolder = useCallback((folderId: string | null, direction: 'asc' | 'desc' = 'asc') => {
         let next: HostTreeNode[] = [];
         flushSync(() => {
@@ -765,5 +867,5 @@ export function useHostManager() {
         return targetFolderId;
     }, [persistEncryptedAsync]);
 
-    return { tree, ready, addFolder, addHost, editNode, deleteNode, saveTree, moveNode, sortFolder, importData };
+    return { tree, ready, addFolder, addHost, editNode, deleteNode, saveTree, moveNode, applyPlacements, sortFolder, importData };
 }

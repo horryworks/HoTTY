@@ -99,6 +99,23 @@ export interface SessionPtySizePayload {
   deviceLatchesWidth: boolean;
 }
 
+/**
+ * A window rectangle in PHYSICAL pixels: `x`/`y` are the OUTER position and
+ * `width`/`height` the INNER size — the pair Tauri reports via
+ * `outerPosition()` / `innerSize()` and restores via `set_position` /
+ * `set_size`, so a save/restore round trip does not drift by the window frame.
+ *
+ * Physical throughout: monitors report physical pixels, so staying in one unit
+ * avoids scale-factor bugs on mixed-DPI multi-monitor setups. Mirrors
+ * `WindowRect` in `src-tauri/src/commands/window.rs`.
+ */
+export interface WindowRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /** A live session as seen across all windows (from `list_all_sessions`). */
 export interface SessionInfo {
   sessionId: string;
@@ -675,6 +692,16 @@ export interface NetboxNodeLink {
   /** ISO-8601 stamp of the sync that first found this object gone. Written
    *  with `missing`, cleared with it. */
   missingSince?: string;
+  /**
+   * IPAM prefixes NetBox attaches to this object, in canonical network form
+   * (`10.1.0.0/16`), de-duplicated and sorted. Absent — never `[]` — when the
+   * object has none: an empty array would be a change to write on the first
+   * sync after upgrading, for every folder in the tree.
+   *
+   * Used only to suggest where a newly added host belongs. A sync never moves
+   * a host on the strength of it; see ADR-020.
+   */
+  prefixes?: string[];
 }
 
 export interface HostTreeNode {
@@ -717,6 +744,18 @@ export interface NetboxConfig {
   siteIdField: string;
   /** Sync once at startup (main window only). */
   syncOnStartup: boolean;
+  /**
+   * Use NetBox IPAM prefixes to work out which folder a host belongs in.
+   *
+   * One flag covers three things — the suggestion when a host is added, the
+   * bulk "sort by IP range" action, and whether prefixes are fetched at all.
+   * Splitting them would allow combinations with no sensible explanation
+   * (a bulk action against a list nothing refreshes, say).
+   *
+   * Off means the prefix listing — much the largest of the three NetBox
+   * requests — is never issued.
+   */
+  prefixPlacement: boolean;
   /** ISO stamp of the last completed sync. */
   lastSyncAt: string | null;
   /** Human text of the last failure; cleared on success. Also drives the
@@ -777,6 +816,19 @@ export interface NetboxSiteDto {
   siteId: string | null;
 }
 
+/** One IPAM prefix and the region or site folder it hangs off. */
+export interface NetboxPrefixDto {
+  /** Verbatim from NetBox; may carry host bits (`192.168.1.5/24`) or a
+   *  notation this app cannot read. Parsed by `utils/cidr.ts`, not the backend. */
+  prefix: string;
+  scopeKind: 'region' | 'site';
+  scopeId: number;
+}
+
+/** Why a snapshot carries no prefix list. Wording only — behaviour is decided
+ *  by `prefixes === null` alone. */
+export type NetboxPrefixUnavailable = 'denied' | 'tooMany' | 'disabled';
+
 /** Everything one sync needs, fetched by the backend in one call. */
 export interface NetboxSnapshot {
   serverKey: string;
@@ -786,6 +838,16 @@ export interface NetboxSnapshot {
   /** Sorted by depth, then id — a parent always precedes its children. */
   regions: NetboxRegionDto[];
   sites: NetboxSiteDto[];
+  /** 🚨 `null` means THERE IS NO AUTHORITATIVE LIST — never "there are none".
+   *  A reconcile that treats the two alike wipes every stored prefix the moment
+   *  a token loses `ipam.view_prefix`, or an IPAM grows past what HoTTY pages
+   *  through. Kept nullable rather than a flag beside an empty array so the
+   *  type checker refuses the conflation. */
+  prefixes: NetboxPrefixDto[] | null;
+  prefixesUnavailable: NetboxPrefixUnavailable | null;
+  /** Prefixes NetBox returned that hang off something HoTTY mirrors no folder
+   *  for — a location, a site group, or nothing at all. */
+  prefixesSkipped: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -974,4 +1036,72 @@ export interface SessionDialogPrefill {
   username?: string;
   displayName?: string;
   nonce: number;
+}
+
+// ---------------------------------------------------------------------------
+// SSH keys (Settings -> SSH Keys, and the session dialog's key picker)
+// ---------------------------------------------------------------------------
+
+/**
+ * What to generate. Mirrors the Rust `SshKeyAlgorithm`, whose wire names are
+ * spelled out one by one for exactly this reason -- a single character of drift
+ * is a bug only the running app would find, so a Rust round-trip test pins them.
+ */
+export type SshKeyAlgorithm =
+  | 'ed25519'
+  | 'ecdsa-p256'
+  | 'ecdsa-p384'
+  | 'ecdsa-p521'
+  | 'rsa-2048'
+  | 'rsa-3072'
+  | 'rsa-4096';
+
+/** How a private key file is encoded. `unknown` means we could not tell. */
+export type SshKeyFormat = 'openssh' | 'pem' | 'ppk' | 'unknown';
+
+export interface SshKeyInfo {
+  /** File name inside `~/.ssh`. This, not `path`, is the handle every command takes. */
+  name: string;
+  /** Absolute path — for display, and to fill the session dialog's key field. */
+  path: string;
+  /** `ssh-ed25519`, `ssh-rsa`, `ecdsa-sha2-nistp256`… */
+  algorithm?: string;
+  /** RSA modulus size. Absent for the algorithms that have only one size. */
+  bits?: number;
+  fingerprint?: string;
+  comment?: string;
+  /** The private key is passphrase-protected. */
+  encrypted: boolean;
+  format: SshKeyFormat;
+  hasPublicFile: boolean;
+  /**
+   * HoTTY generated this key and the fingerprint still matches, so it may be
+   * deleted. A key made by any other tool is always false.
+   */
+  managed: boolean;
+  createdAt?: string;
+}
+
+export interface SshKeyListResult {
+  /**
+   * False when there is nowhere safe to keep keys — a network home, or no home
+   * at all. The tab then explains instead of showing an empty list. A missing
+   * `~/.ssh` is NOT this case: that is simply an empty list.
+   */
+  available: boolean;
+  unavailableReason?: string;
+  sshDir?: string;
+  keys: SshKeyInfo[];
+  /** The folder held more entries than we were willing to walk. */
+  truncated: boolean;
+}
+
+/**
+ * The non-secret half of a generate request. The passphrase travels as a
+ * separate argument so it never sits in an object something might log.
+ */
+export interface GenerateSshKeyRequest {
+  name: string;
+  algorithm: SshKeyAlgorithm;
+  comment?: string;
 }

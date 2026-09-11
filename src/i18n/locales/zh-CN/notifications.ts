@@ -46,6 +46,10 @@ export const notifications = {
     sessionLoggingUpdate: '无法更新会话日志记录',
     sessionListener: '无法接收会话事件',
     clipboardCopy: '无法复制所选内容',
+    aiWindowHandoverTimedOut: '无法将 AI 聊天移动到其他窗口，它将保留在此处。',
+    aiWindowOpenFailed: '无法打开 AI 聊天窗口',
+    aiWindowPopInFailed: '无法将 AI 聊天移回窗口',
+    aiWindowOpenAsTabFailed: '无法将该终端作为标签页打开',
   },
   errorBoundary: {
     title: '出现了问题',

@@ -1,0 +1,192 @@
+/* Follows the shared Modals conventions (`.claude/rules/ui-conventions.md`):
+   fixed overlay, 6px radius, the three-part header / body / footer split. */
+
+.mbp-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--modal-overlay-bg);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* Nested inside SessionDialog's overlay (z-index 10000), so it sits one tier above. */
+    z-index: 10001;
+}
+
+.mbp-modal {
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 16px var(--modal-shadow);
+    animation: fadeIn 0.1s ease-out;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    width: 640px;
+    max-width: 92vw;
+    max-height: 80vh;
+    font-family: var(--ui-font-family);
+}
+
+.mbp-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+
+.mbp-header h3 {
+    margin: 0;
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.mbp-scope {
+    color: var(--text-secondary);
+    font-size: calc(var(--font-size-base) - 1px);
+}
+
+.mbp-body {
+    padding: 15px 20px;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.mbp-section {
+    margin-bottom: 14px;
+}
+
+.mbp-section-title {
+    font-weight: 600;
+    font-size: calc(var(--font-size-base) - 1px);
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.mbp-muted {
+    color: var(--text-tertiary);
+}
+
+.mbp-hint,
+.mbp-empty {
+    margin: 0 0 6px;
+    color: var(--text-tertiary);
+    font-size: calc(var(--font-size-base) - 2px);
+    line-height: 1.5;
+}
+
+.mbp-radio {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: calc(var(--font-size-base) - 1px);
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 2px 0;
+}
+
+.mbp-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.mbp-row {
+    font-size: calc(var(--font-size-base) - 1px);
+    color: var(--text-primary);
+}
+
+.mbp-row label,
+.mbp-row.mbp-row-static {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    cursor: pointer;
+}
+
+.mbp-row.mbp-row-static {
+    cursor: default;
+}
+
+.mbp-row label:hover {
+    background: var(--bg-secondary);
+}
+
+.mbp-host {
+    flex-shrink: 0;
+    font-weight: 600;
+}
+
+/* An address is a machine string; it reads better in the monospace face and
+   lines up column-wise down the list. */
+.mbp-addr {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    font-family: var(--font-family);
+}
+
+.mbp-move {
+    flex: 1;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mbp-prefix {
+    flex-shrink: 0;
+    color: var(--text-tertiary);
+    font-family: var(--font-family);
+    font-size: calc(var(--font-size-base) - 3px);
+}
+
+.mbp-footer {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.mbp-btn {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 1px);
+    transition: background-color 0.1s;
+}
+
+.mbp-btn.secondary {
+    background: var(--btn-secondary-bg);
+    color: var(--text-primary);
+}
+
+.mbp-btn.secondary:hover:not(:disabled) {
+    background: var(--btn-secondary-hover-bg);
+}
+
+.mbp-btn.primary {
+    background: var(--accent-color);
+    color: var(--text-on-accent);
+}
+
+.mbp-btn.primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+.mbp-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

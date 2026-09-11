@@ -45,6 +45,10 @@ export const notifications = {
     sessionLoggingUpdate: 'No se pudo actualizar el registro de la sesión',
     sessionListener: 'No se pudieron recibir los eventos de sesión',
     clipboardCopy: 'No se pudo copiar la selección',
+    aiWindowHandoverTimedOut: 'No se pudo mover el chat de IA a otra ventana; permanece aquí.',
+    aiWindowOpenFailed: 'No se pudo abrir la ventana del chat de IA',
+    aiWindowPopInFailed: 'No se pudo devolver el chat de IA a una ventana',
+    aiWindowOpenAsTabFailed: 'No se pudo abrir ese terminal como pestaña',
   },
   errorBoundary: {
     title: 'Algo salió mal',

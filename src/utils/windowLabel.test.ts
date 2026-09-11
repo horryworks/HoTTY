@@ -66,4 +66,26 @@ describe('windowLabel', () => {
     const { IS_TAURI } = await import('./windowLabel');
     expect(IS_TAURI).toBe(false);
   });
+
+  it('IS_AI_CHAT_WINDOW is true for a win-ai-* label', async () => {
+    h.label = 'win-ai-3';
+    const { IS_AI_CHAT_WINDOW } = await import('./windowLabel');
+    expect(IS_AI_CHAT_WINDOW).toBe(true);
+  });
+
+  it('IS_AI_CHAT_WINDOW is false for main and for a plain secondary window', async () => {
+    h.label = 'main';
+    expect((await import('./windowLabel')).IS_AI_CHAT_WINDOW).toBe(false);
+
+    vi.resetModules();
+    h.label = 'win-2';
+    expect((await import('./windowLabel')).IS_AI_CHAT_WINDOW).toBe(false);
+  });
+
+  it('the AI window prefix stays inside the win-* capability glob', async () => {
+    // capabilities/default.json scopes permissions to ["main", "win-*"]; a label
+    // outside that glob gets none of them and fails silently at runtime.
+    const { AI_WINDOW_PREFIX } = await import('./windowLabel');
+    expect(AI_WINDOW_PREFIX.startsWith('win-')).toBe(true);
+  });
 });

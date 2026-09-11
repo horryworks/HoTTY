@@ -86,6 +86,10 @@ fn default_connect_timeout_secs() -> u32 {
 
 const MAX_CREDENTIAL_LEN: usize = 1024;
 const MAX_USERNAME_LEN: usize = 256;
+/// Windows's extended-length path limit. A renderer-supplied key path longer
+/// than this cannot name a real file, so refusing it early keeps a pathological
+/// string out of `canonicalize` and the log line that reports the failure.
+const MAX_KEY_PATH_LEN: usize = 4096;
 
 impl SshConfig {
     fn validate(&self) -> Result<(), SessionError> {
@@ -107,6 +111,13 @@ impl SshConfig {
         if let Some(pp) = &self.private_key_passphrase {
             if pp.len() > MAX_CREDENTIAL_LEN {
                 return Err(SessionError::InvalidConfig("Passphrase is too long".into()));
+            }
+        }
+        if let Some(path) = &self.private_key_path {
+            if path.len() > MAX_KEY_PATH_LEN {
+                return Err(SessionError::InvalidConfig(
+                    "Private key path is too long".into(),
+                ));
             }
         }
         Ok(())
@@ -743,9 +754,55 @@ pub(crate) fn should_try_keyboard_interactive(result: &client::AuthResult) -> bo
     }
 }
 
+/// The signature hashes to offer for `key`, in the order to try them.
+///
+/// Only RSA keys have a choice. `PrivateKeyWithHashAlg::new` drops the hash for
+/// every other algorithm, so ed25519 and ECDSA get a single rung and never pay
+/// for any of this.
+///
+/// `negotiated` is what `Handle::best_supported_rsa_hash()` returned:
+/// - `Some(Some(h))` — the server listed its signature algorithms and `h` is the
+///   best one we share. One rung, and it is the right one.
+/// - `Some(None)` — the server listed them and none is `rsa-sha2-*`. SHA-1 is
+///   what it has, by its own account, so that is what we send.
+/// - `None` — no EXT_INFO arrived. Nothing to go on, so walk a ladder.
+///
+/// Why this exists at all: `authenticate_publickey` was pinned to SHA-256, so an
+/// RSA key could only ever authenticate against a server that speaks
+/// `rsa-sha2-256`. The reason to hold an RSA key in the first place is gear too
+/// old for ed25519 — and that same gear is usually too old for `rsa-sha2-*` too.
+/// The failure was silent: a failed publickey attempt falls through to password
+/// auth, so the user just saw a password prompt for a host they had set a key up
+/// for.
+///
+/// The ladder is kept short on purpose. Every rung is a failed authentication,
+/// and network gear counts those against a login-failure lockout — the same
+/// reason `should_try_keyboard_interactive` exists. SHA-1 is a rung only when
+/// the user has enabled `ssh-rsa`, so a modern network never walks it.
+pub(crate) fn publickey_hash_algs(
+    key: &PrivateKey,
+    negotiated: Option<Option<HashAlg>>,
+    allow_sha1: bool,
+) -> Vec<Option<HashAlg>> {
+    if !key.algorithm().is_rsa() {
+        return vec![None];
+    }
+    match negotiated {
+        Some(hash) => vec![hash],
+        None => {
+            let mut ladder = vec![Some(HashAlg::Sha512), Some(HashAlg::Sha256)];
+            if allow_sha1 {
+                ladder.push(None);
+            }
+            ladder
+        }
+    }
+}
+
 async fn try_authenticate(
     handle: &mut Handle<SshHandler>,
     cfg: &SshConfig,
+    allow_sha1_rsa: bool,
 ) -> Result<(), SessionError> {
     // 1. Public key (if path provided)
     if let Some(key_path) = &cfg.private_key_path {
@@ -760,15 +817,28 @@ async fn try_authenticate(
             .map_err(|e| {
                 SessionError::AuthFailed(humanize_auth_error("load-key", &e.to_string()))
             })?;
-        let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(pk), Some(HashAlg::Sha256));
-        let res = handle
-            .authenticate_publickey(&cfg.username, key_with_hash)
-            .await
-            .map_err(|e| {
-                SessionError::AuthFailed(humanize_auth_error("publickey", &e.to_string()))
-            })?;
-        if matches!(res, russh::client::AuthResult::Success) {
-            return Ok(());
+        let pk = Arc::new(pk);
+
+        // Only RSA keys ask. `best_supported_rsa_hash` waits up to a second for
+        // an EXT_INFO that may never arrive, and ed25519/ECDSA have nothing to
+        // negotiate, so they must not pay that second.
+        let negotiated = if pk.algorithm().is_rsa() {
+            handle.best_supported_rsa_hash().await.ok().flatten()
+        } else {
+            None
+        };
+
+        for hash in publickey_hash_algs(&pk, negotiated, allow_sha1_rsa) {
+            let key_with_hash = PrivateKeyWithHashAlg::new(Arc::clone(&pk), hash);
+            let res = handle
+                .authenticate_publickey(&cfg.username, key_with_hash)
+                .await
+                .map_err(|e| {
+                    SessionError::AuthFailed(humanize_auth_error("publickey", &e.to_string()))
+                })?;
+            if matches!(res, russh::client::AuthResult::Success) {
+                return Ok(());
+            }
         }
     }
     // 2. Password
@@ -858,6 +928,16 @@ impl SessionService for SshSession {
 
         let preferred = load_preferred(&app)?;
 
+        // The Protocols tab's `ssh-rsa` toggle is nominally a host-key setting,
+        // but it is the one place a user says "this network has gear old enough
+        // to need SHA-1 RSA". Let it gate the SHA-1 rung of the publickey ladder
+        // too (see `publickey_hash_algs`) — the alternative was a second switch
+        // that means the same thing to everyone who would ever reach for it.
+        // Read here, before `preferred` moves into the client config.
+        let allow_sha1_rsa = preferred
+            .key
+            .contains(&ssh_key::Algorithm::Rsa { hash: None });
+
         let config = Arc::new(client::Config {
             inactivity_timeout: Some(Duration::from_secs(3600)),
             // Native SSH keepalive: russh sends keepalive@openssh.com global
@@ -946,7 +1026,7 @@ impl SessionService for SshSession {
             .map_err(|e| SessionError::ConnectionFailed(humanize_ssh_error(&e.to_string())))?
         };
 
-        let auth_result = try_authenticate(&mut handle, &self.config).await;
+        let auth_result = try_authenticate(&mut handle, &self.config, allow_sha1_rsa).await;
 
         // Zeroize credentials immediately after the auth attempt — whether it
         // succeeded or failed — so plaintext secrets do not linger in memory.
@@ -1552,6 +1632,27 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_an_overlong_private_key_path() {
+        // `private_key_path` was the one renderer-supplied string with no length
+        // bound at all -- the UNC guard in `try_authenticate` is a content check,
+        // not a size one. A path this long cannot name a real file, so refusing it
+        // here keeps it out of `canonicalize` and out of the failure log line.
+        let mut cfg = minimal_config("sw-01.example.com");
+        cfg.private_key_path = Some("a".repeat(MAX_KEY_PATH_LEN + 1));
+        assert_eq!(
+            cfg.validate().unwrap_err().to_string(),
+            "Private key path is too long"
+        );
+    }
+
+    #[test]
+    fn validate_accepts_an_ordinary_private_key_path() {
+        let mut cfg = minimal_config("sw-01.example.com");
+        cfg.private_key_path = Some(r"C:\Users\alice\.ssh\id_ed25519".into());
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
     fn debug_redacts_password_and_passphrase() {
         let cfg = SshConfig {
             host: "h".into(),
@@ -1640,8 +1741,89 @@ mod tests {
         );
     }
 
-    // -- humanize_auth_error tests --
+    // -- publickey_hash_algs: which RSA signature hashes to offer, in order --
 
+    fn test_ed25519_key() -> PrivateKey {
+        use rand::RngCore;
+        use russh::keys::ssh_key::private::{Ed25519Keypair, Ed25519PrivateKey, KeypairData};
+        let mut seed = [0u8; 32];
+        rand::rngs::OsRng.fill_bytes(&mut seed);
+        let kp = Ed25519Keypair::from(Ed25519PrivateKey::from_bytes(&seed));
+        PrivateKey::new(KeypairData::Ed25519(kp), "test").expect("build ed25519 test key")
+    }
+
+    fn test_rsa_key() -> PrivateKey {
+        use russh::keys::ssh_key::private::{KeypairData, RsaKeypair};
+        // 2048 is the smallest ssh-key will generate, and this only has to be a
+        // real RSA key -- nothing signs with it.
+        let mut rng = rand_v010::rng();
+        let kp = RsaKeypair::random(&mut rng, 2048).expect("generate RSA test key");
+        PrivateKey::new(KeypairData::Rsa(kp), "test").expect("build RSA test key")
+    }
+
+    #[test]
+    fn hash_algs_for_a_non_rsa_key_is_a_single_rung() {
+        // ed25519 ignores the hash entirely, so negotiating or laddering would
+        // just be a wasted round trip and a wasted authentication attempt.
+        let key = test_ed25519_key();
+        assert_eq!(publickey_hash_algs(&key, None, false), vec![None]);
+        assert_eq!(publickey_hash_algs(&key, None, true), vec![None]);
+        assert_eq!(
+            publickey_hash_algs(&key, Some(Some(HashAlg::Sha512)), false),
+            vec![None]
+        );
+    }
+
+    #[test]
+    fn a_negotiated_hash_is_used_alone() {
+        let key = test_rsa_key();
+        assert_eq!(
+            publickey_hash_algs(&key, Some(Some(HashAlg::Sha512)), false),
+            vec![Some(HashAlg::Sha512)]
+        );
+        assert_eq!(
+            publickey_hash_algs(&key, Some(Some(HashAlg::Sha256)), true),
+            vec![Some(HashAlg::Sha256)]
+        );
+    }
+
+    #[test]
+    fn a_server_that_names_no_rsa_sha2_gets_sha1_regardless_of_the_toggle() {
+        // `Some(None)` is the server saying, in its own EXT_INFO, that ssh-rsa is
+        // all it has. Taking it at its word is not the same as guessing, so the
+        // `ssh-rsa` toggle does not gate this rung.
+        let key = test_rsa_key();
+        assert_eq!(publickey_hash_algs(&key, Some(None), false), vec![None]);
+        assert_eq!(publickey_hash_algs(&key, Some(None), true), vec![None]);
+    }
+
+    #[test]
+    fn without_ext_info_the_ladder_stays_on_sha2_unless_sha1_is_enabled() {
+        let key = test_rsa_key();
+        assert_eq!(
+            publickey_hash_algs(&key, None, false),
+            vec![Some(HashAlg::Sha512), Some(HashAlg::Sha256)]
+        );
+        assert_eq!(
+            publickey_hash_algs(&key, None, true),
+            vec![Some(HashAlg::Sha512), Some(HashAlg::Sha256), None]
+        );
+    }
+
+    #[test]
+    fn the_ladder_never_grows_past_three_rungs() {
+        // Every rung is a failed authentication, and network gear counts those
+        // against a login-failure lockout. Three publickey attempts plus password
+        // plus keyboard-interactive still fits sshd's default MaxAuthTries of 6.
+        let rsa = test_rsa_key();
+        for negotiated in [None, Some(None), Some(Some(HashAlg::Sha512))] {
+            for allow_sha1 in [false, true] {
+                assert!(publickey_hash_algs(&rsa, negotiated, allow_sha1).len() <= 3);
+            }
+        }
+    }
+
+    // -- humanize_auth_error tests --
     #[test]
     fn humanize_auth_error_password_method() {
         assert_eq!(

@@ -19,6 +19,13 @@ const SENSITIVE_KEYS = [
   'community',
   'auth[_-]?password',
   'priv[_-]?password',
+  // Private-key passphrases. Both spellings are needed for the same reason as
+  // the SNMP pair above: the pattern anchors each key with \b, and there is no
+  // word boundary inside `privateKeyPassphrase`, so a bare `passphrase` entry
+  // would not match it. The Rust side already redacts `PASSPHRASE` in
+  // `sensitive_env.rs`; this closes the matching gap on the TypeScript side.
+  'private[_-]?key[_-]?passphrase',
+  'passphrase',
 ];
 
 const KEYED_VALUE_PATTERN = new RegExp(

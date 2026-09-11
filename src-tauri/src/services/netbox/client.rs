@@ -27,6 +27,7 @@ const STATUS_PATH: &str = "/api/status/";
 const REGIONS_PATH: &str = "/api/dcim/regions/";
 const SITES_PATH: &str = "/api/dcim/sites/";
 const CUSTOM_FIELDS_PATH: &str = "/api/extras/custom-fields/";
+const PREFIXES_PATH: &str = "/api/ipam/prefixes/";
 
 /// Shown when a transport failure looks like a certificate problem. HoTTY has
 /// no "skip verification" option and will not grow one; the fix is to trust the
@@ -72,6 +73,69 @@ pub struct RawSite {
     pub description: String,
     #[serde(default)]
     pub custom_fields: BTreeMap<String, serde_json::Value>,
+}
+
+/// Which NetBox object a prefix hangs off.
+///
+/// Two vocabularies stay separate on purpose: `netbox_scope_type()` is what
+/// NetBox puts on the wire and NetBox may extend it, while the serialized name
+/// (`region` / `site`) is HoTTY's own and must keep matching
+/// `NetboxObjectKind` in `src/types/appTypes.ts`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PrefixScope {
+    Region,
+    Site,
+}
+
+impl PrefixScope {
+    pub const ALL: [PrefixScope; 2] = [PrefixScope::Region, PrefixScope::Site];
+
+    /// What NetBox 4.x puts in `scope_type`.
+    pub fn netbox_scope_type(self) -> &'static str {
+        match self {
+            PrefixScope::Region => "dcim.region",
+            PrefixScope::Site => "dcim.site",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RawPrefix {
+    #[serde(default, deserialize_with = "null_as_empty")]
+    pub prefix: String,
+    /// 4.x: which *model* this prefix is attached to (`"dcim.site"`).
+    #[serde(default)]
+    pub scope_type: Option<String>,
+    /// 4.x: which object of that model.
+    #[serde(default)]
+    pub scope_id: Option<i64>,
+    /// 3.x: the only attachment a prefix had.
+    #[serde(default)]
+    pub site: Option<NestedRef>,
+}
+
+impl RawPrefix {
+    /// The folder this prefix belongs to, or `None` when HoTTY mirrors no such
+    /// folder.
+    ///
+    /// 🚨 The `return` sits INSIDE the `scope_type` branch on purpose. A 4.x
+    /// prefix scoped to something HoTTY does not mirror — `dcim.location`,
+    /// `dcim.sitegroup`, or nothing at all — must resolve to `None`. Some 4.x
+    /// builds still serialize the legacy `site` field, so falling through would
+    /// file a location's prefix under that location's site and place hosts in a
+    /// folder NetBox never claimed. The legacy field is read only when
+    /// `scope_type` is absent entirely, which is 3.x.
+    pub fn scope(&self) -> Option<(PrefixScope, i64)> {
+        if let Some(t) = self.scope_type.as_deref() {
+            let id = self.scope_id?;
+            return PrefixScope::ALL
+                .into_iter()
+                .find(|k| k.netbox_scope_type() == t)
+                .map(|k| (k, id));
+        }
+        self.site.as_ref().map(|s| (PrefixScope::Site, s.id))
+    }
 }
 
 /// NetBox sends `null` (not an absent key) for an unset text field, which a
@@ -146,6 +210,64 @@ pub struct NetboxSiteDto {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct NetboxPrefixDto {
+    /// Verbatim from NetBox, e.g. `10.1.0.0/16`. Deliberately not parsed here:
+    /// the frontend needs a CIDR parser anyway to match a host address against
+    /// it, and two implementations of the same rules would drift.
+    pub prefix: String,
+    pub scope_kind: PrefixScope,
+    pub scope_id: i64,
+}
+
+/// Why a snapshot carries no prefix list.
+///
+/// Chooses the wording only. Behaviour is decided by `prefixes: None` alone —
+/// one field, one job.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PrefixUnavailable {
+    /// The token may not read prefixes (`ipam.view_prefix`).
+    Denied,
+    /// More prefixes than HoTTY will page through.
+    TooMany,
+    /// Prefix placement is off, so none were asked for.
+    Disabled,
+}
+
+/// What `NetboxClient::prefixes` came back with.
+pub enum PrefixListing {
+    Rows(Vec<RawPrefix>),
+    Unavailable(PrefixUnavailable),
+}
+
+/// Narrow raw prefixes down to the ones HoTTY mirrors a folder for.
+///
+/// Returns the kept rows and how many had nowhere to go. That count is not
+/// cosmetic: "NetBox has prefixes, but they hang off locations HoTTY does not
+/// mirror" and "the feature is broken" look identical without it — the same
+/// role `sites_without_site_id` plays for the Site ID field.
+///
+/// The prefix text crosses verbatim, including text this side cannot read; the
+/// frontend counts that separately, so a user can tell a NetBox data problem
+/// from a notation HoTTY does not accept.
+pub fn prefix_dtos(rows: Vec<RawPrefix>) -> (Vec<NetboxPrefixDto>, u32) {
+    let mut out = Vec::with_capacity(rows.len());
+    let mut skipped = 0u32;
+    for r in rows {
+        match r.scope() {
+            Some((scope_kind, scope_id)) => out.push(NetboxPrefixDto {
+                prefix: r.prefix,
+                scope_kind,
+                scope_id,
+            }),
+            None => skipped += 1,
+        }
+    }
+    (out, skipped)
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NetboxSnapshot {
     pub server_key: String,
     /// Echoed back so the reconcile reports "no Site ID" only when one was
@@ -153,6 +275,17 @@ pub struct NetboxSnapshot {
     pub site_id_field: Option<String>,
     pub regions: Vec<NetboxRegionDto>,
     pub sites: Vec<NetboxSiteDto>,
+    /// 🚨 `None` means THERE IS NO AUTHORITATIVE LIST — never "there are none".
+    /// A reconcile that treats the two alike wipes every stored prefix the
+    /// moment a token loses `ipam.view_prefix`. An `Option` rather than a
+    /// `readable: bool` beside an empty `Vec` because TypeScript's
+    /// `strictNullChecks` then refuses to compile the conflation, which a
+    /// `.length === 0` test would wave through.
+    pub prefixes: Option<Vec<NetboxPrefixDto>>,
+    /// Why, when `prefixes` is `None`. Wording only.
+    pub prefixes_unavailable: Option<PrefixUnavailable>,
+    /// Prefixes NetBox returned that hang off something HoTTY has no folder for.
+    pub prefixes_skipped: u32,
 }
 
 /// What `/api/status/` told us.
@@ -297,6 +430,28 @@ impl<'a> NetboxClient<'a> {
         self.fetch_all(SITES_PATH).await
     }
 
+    /// IPAM prefixes.
+    ///
+    /// Never an `Err` for "could not read them": this listing is an addition to
+    /// a sync that already worked without it, so neither a missing permission
+    /// nor a NetBox too large to page through may take the region/site mirror
+    /// down with it.
+    ///   * 401/403/404 on the first page ⇒ `Denied`. `ipam.view_prefix` is a
+    ///     separate permission from `dcim.view_site`, so a token that syncs
+    ///     folders perfectly can still be refused here.
+    ///   * `MAX_PAGES` exceeded ⇒ `TooMany`. Sites rarely reach 10,000 rows;
+    ///     an IPAM realistically does.
+    pub async fn prefixes(&self) -> Result<PrefixListing, NetboxError> {
+        match self.fetch_pages::<RawPrefix>(PREFIXES_PATH, true).await {
+            Ok(Some(rows)) => Ok(PrefixListing::Rows(rows)),
+            Ok(None) => Ok(PrefixListing::Unavailable(PrefixUnavailable::Denied)),
+            Err(NetboxError::TooManyPages(_)) => {
+                Ok(PrefixListing::Unavailable(PrefixUnavailable::TooMany))
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     /// Custom-field **definitions** that could hold a site code.
     ///
     /// Fetched **unfiltered on purpose**: NetBox 4.x narrows by
@@ -321,13 +476,30 @@ impl<'a> NetboxClient<'a> {
     }
 
     /// Everything one sync needs, flattened for the frontend reconcile.
+    ///
+    /// `with_prefixes` is the placement setting. Off means the request is never
+    /// issued: the prefix listing is by far the largest of the three, and a user
+    /// who turned placement off should not pay for it on every startup sync.
     pub async fn snapshot(
         &self,
         server_key: &str,
         field: Option<&SiteIdField>,
+        with_prefixes: bool,
     ) -> Result<NetboxSnapshot, NetboxError> {
         let regions = self.regions().await?;
         let sites = self.sites().await?;
+        let listing = if with_prefixes {
+            self.prefixes().await?
+        } else {
+            PrefixListing::Unavailable(PrefixUnavailable::Disabled)
+        };
+        let (prefixes, prefixes_unavailable, prefixes_skipped) = match listing {
+            PrefixListing::Rows(rows) => {
+                let (dtos, skipped) = prefix_dtos(rows);
+                (Some(dtos), None, skipped)
+            }
+            PrefixListing::Unavailable(why) => (None, Some(why), 0),
+        };
         Ok(NetboxSnapshot {
             server_key: server_key.to_string(),
             site_id_field: field.map(|f| f.as_stored()),
@@ -349,6 +521,9 @@ impl<'a> NetboxClient<'a> {
                     name: s.name,
                 })
                 .collect(),
+            prefixes,
+            prefixes_unavailable,
+            prefixes_skipped,
         })
     }
 
@@ -469,7 +644,15 @@ mod tests {
     fn a_listing_asks_for_full_objects_never_brief() {
         // `brief` would drop `parent` and `custom_fields` while keeping
         // `_depth` — the tree would look correctly ordered and be entirely flat.
-        for path in [REGIONS_PATH, SITES_PATH, CUSTOM_FIELDS_PATH, STATUS_PATH] {
+        // For prefixes it is worse still: brief drops `scope` outright, so every
+        // prefix would come back belonging to nothing.
+        for path in [
+            REGIONS_PATH,
+            SITES_PATH,
+            CUSTOM_FIELDS_PATH,
+            PREFIXES_PATH,
+            STATUS_PATH,
+        ] {
             let target = first_page_target(path);
             assert!(!target.contains("brief"), "brief leaked into {target}");
         }
@@ -485,6 +668,7 @@ mod tests {
         assert_eq!(REGIONS_PATH, "/api/dcim/regions/");
         assert_eq!(SITES_PATH, "/api/dcim/sites/");
         assert_eq!(CUSTOM_FIELDS_PATH, "/api/extras/custom-fields/");
+        assert_eq!(PREFIXES_PATH, "/api/ipam/prefixes/");
         assert_eq!(STATUS_PATH, "/api/status/");
     }
 
@@ -619,5 +803,165 @@ mod tests {
     fn the_certificate_hint_never_suggests_skipping_verification() {
         assert!(CERT_HINT.contains("Trusted Root"));
         assert!(CERT_HINT.contains("does not offer an option to skip"));
+    }
+
+    // ── IPAM prefixes ──────────────────────────────────────────────────────
+
+    fn raw_prefix(json: &str) -> RawPrefix {
+        serde_json::from_str(json).unwrap()
+    }
+
+    #[test]
+    fn a_prefix_reads_a_netbox_4x_scope() {
+        let p =
+            raw_prefix(r#"{"id":1,"prefix":"10.1.0.0/16","scope_type":"dcim.site","scope_id":7}"#);
+        assert_eq!(p.scope(), Some((PrefixScope::Site, 7)));
+    }
+
+    #[test]
+    fn a_prefix_reads_a_netbox_3x_site() {
+        let p = raw_prefix(r#"{"id":1,"prefix":"10.1.0.0/16","site":{"id":7}}"#);
+        assert_eq!(p.scope(), Some((PrefixScope::Site, 7)));
+    }
+
+    #[test]
+    fn a_4x_prefix_scoped_to_a_location_never_falls_back_to_a_stale_site_field() {
+        // Some 4.x builds still serialize `site`. Reading it here would file a
+        // location's prefix under that location's site and place hosts in a
+        // folder NetBox never claimed.
+        let p = raw_prefix(
+            r#"{"id":1,"prefix":"10.1.0.0/16","scope_type":"dcim.location",
+                "scope_id":3,"site":{"id":7}}"#,
+        );
+        assert_eq!(p.scope(), None);
+    }
+
+    #[test]
+    fn a_prefix_scoped_to_a_region_is_kept_because_hotty_mirrors_region_folders() {
+        let p =
+            raw_prefix(r#"{"id":1,"prefix":"10.0.0.0/8","scope_type":"dcim.region","scope_id":2}"#);
+        assert_eq!(p.scope(), Some((PrefixScope::Region, 2)));
+    }
+
+    #[test]
+    fn a_global_prefix_belongs_to_no_folder() {
+        let p = raw_prefix(r#"{"id":1,"prefix":"10.0.0.0/8"}"#);
+        assert_eq!(p.scope(), None);
+    }
+
+    #[test]
+    fn a_prefix_with_a_scope_type_but_no_scope_id_belongs_to_no_folder() {
+        let p = raw_prefix(r#"{"id":1,"prefix":"10.0.0.0/8","scope_type":"dcim.site"}"#);
+        assert_eq!(p.scope(), None);
+    }
+
+    #[test]
+    fn the_scope_type_strings_are_the_ones_netbox_sends() {
+        assert_eq!(PrefixScope::Region.netbox_scope_type(), "dcim.region");
+        assert_eq!(PrefixScope::Site.netbox_scope_type(), "dcim.site");
+    }
+
+    #[test]
+    fn the_scope_kind_is_spelled_the_way_the_host_tree_marker_is() {
+        // These strings land in `NetboxNodeLink.kind` comparisons on the
+        // frontend (`src/types/appTypes.ts`); nothing else checks they agree.
+        let dto = NetboxPrefixDto {
+            prefix: "10.0.0.0/8".into(),
+            scope_kind: PrefixScope::Site,
+            scope_id: 7,
+        };
+        let json = serde_json::to_string(&dto).unwrap();
+        assert!(json.contains(r#""scopeKind":"site""#), "{json}");
+        assert!(json.contains(r#""scopeId":7"#), "{json}");
+    }
+
+    #[test]
+    fn the_prefix_text_crosses_to_the_frontend_verbatim() {
+        // Host bits and unusual spellings are the frontend parser's business.
+        // Normalising here would put the same rules in two languages.
+        let rows = vec![raw_prefix(
+            r#"{"id":1,"prefix":"192.168.1.5/24","scope_type":"dcim.site","scope_id":7}"#,
+        )];
+        let (dtos, skipped) = prefix_dtos(rows);
+        assert_eq!(dtos[0].prefix, "192.168.1.5/24");
+        assert_eq!(skipped, 0);
+    }
+
+    #[test]
+    fn prefixes_that_belong_to_nothing_are_counted_not_dropped_silently() {
+        // Without the count, "every prefix hangs off a location HoTTY does not
+        // mirror" is indistinguishable from "the feature is broken".
+        let rows = vec![
+            raw_prefix(r#"{"id":1,"prefix":"10.1.0.0/16","scope_type":"dcim.site","scope_id":7}"#),
+            raw_prefix(
+                r#"{"id":2,"prefix":"10.2.0.0/16","scope_type":"dcim.location","scope_id":3}"#,
+            ),
+            raw_prefix(r#"{"id":3,"prefix":"10.3.0.0/16"}"#),
+        ];
+        let (dtos, skipped) = prefix_dtos(rows);
+        assert_eq!(dtos.len(), 1);
+        assert_eq!(skipped, 2);
+    }
+
+    #[test]
+    fn an_unreadable_prefix_list_is_none_and_never_an_empty_list() {
+        // `Some(vec![])` would tell the reconcile that NetBox really has no
+        // prefixes, and every stored prefix would be cleared.
+        let s = snapshot_with(PrefixListing::Unavailable(PrefixUnavailable::Denied));
+        assert!(s.prefixes.is_none());
+        assert_eq!(s.prefixes_unavailable, Some(PrefixUnavailable::Denied));
+    }
+
+    #[test]
+    fn more_prefixes_than_hotty_will_read_never_fails_the_rest_of_the_sync() {
+        // `fetch_pages` returns `Err(TooManyPages)`. Letting that escape would
+        // stop the region and site mirror too — a regression for every user who
+        // has a large IPAM and never asked for placement.
+        let s = snapshot_with(PrefixListing::Unavailable(PrefixUnavailable::TooMany));
+        assert!(s.prefixes.is_none());
+        assert_eq!(s.prefixes_unavailable, Some(PrefixUnavailable::TooMany));
+        assert_eq!(s.sites.len(), 1, "the site listing survived");
+    }
+
+    #[test]
+    fn a_snapshot_not_asked_for_prefixes_says_disabled_rather_than_looking_denied() {
+        let s = snapshot_with(PrefixListing::Unavailable(PrefixUnavailable::Disabled));
+        assert_eq!(s.prefixes_unavailable, Some(PrefixUnavailable::Disabled));
+    }
+
+    #[test]
+    fn a_snapshot_that_read_prefixes_reports_no_reason() {
+        let s = snapshot_with(PrefixListing::Rows(vec![raw_prefix(
+            r#"{"id":1,"prefix":"10.1.0.0/16","scope_type":"dcim.site","scope_id":7}"#,
+        )]));
+        assert_eq!(s.prefixes.as_deref().map(<[_]>::len), Some(1));
+        assert_eq!(s.prefixes_unavailable, None);
+    }
+
+    /// Build the snapshot exactly as `NetboxClient::snapshot` does, minus the
+    /// HTTP. There is no request mock in this module, so the pure parts are
+    /// exercised directly — the same shape as `regions_are_ordered_parents_before_children`.
+    fn snapshot_with(listing: PrefixListing) -> NetboxSnapshot {
+        let (prefixes, prefixes_unavailable, prefixes_skipped) = match listing {
+            PrefixListing::Rows(rows) => {
+                let (dtos, skipped) = prefix_dtos(rows);
+                (Some(dtos), None, skipped)
+            }
+            PrefixListing::Unavailable(why) => (None, Some(why), 0),
+        };
+        NetboxSnapshot {
+            server_key: "default".into(),
+            site_id_field: None,
+            regions: vec![],
+            sites: vec![NetboxSiteDto {
+                id: 7,
+                name: "Example Site".into(),
+                region_id: None,
+                site_id: None,
+            }],
+            prefixes,
+            prefixes_unavailable,
+            prefixes_skipped,
+        }
     }
 }

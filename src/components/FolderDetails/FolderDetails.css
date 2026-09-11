@@ -1,0 +1,179 @@
+/* Folder details — shown in the form panel while a folder is the selected node.
+   Sits on the dialog surface, so the card uses --bg-tertiary the way
+   .settings-card does, and the key/value rhythm follows SshHostKeyModal. */
+
+.folder-details {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-family: var(--ui-font-family);
+    color: var(--text-primary);
+}
+
+.folder-details-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 24px;
+}
+
+.folder-details-icon {
+    flex-shrink: 0;
+    font-size: var(--font-size-base);
+}
+
+.folder-details-name {
+    font-size: calc(var(--font-size-base) + 2px);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.folder-details-badge {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: calc(var(--font-size-base) - 3px);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+/* Same shape as .settings-netbox-status--warn, so a NetBox problem reads the
+   same here as it does in Settings. */
+.folder-details-warning {
+    padding: 8px 12px;
+    border: 1px solid var(--color-warning);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: calc(var(--font-size-base) - 1px);
+    line-height: 1.5;
+}
+
+.folder-details-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.folder-details-section-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0;
+    padding: 0 0 0 8px;
+    border-left: 2px solid var(--accent-color);
+    font-size: calc(var(--font-size-base) - 3px);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.folder-details-counts {
+    letter-spacing: normal;
+    text-transform: none;
+    font-weight: normal;
+    color: var(--text-tertiary);
+}
+
+.folder-details-prefixes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/* Machine data: monospace, and selectable — the tree container sets
+   user-select: none, and a CIDR you cannot copy is half useful. */
+.folder-details-prefix {
+    font-family: var(--font-family);
+    font-size: calc(var(--font-size-base) - 1px);
+    color: var(--text-primary);
+    user-select: text;
+    word-break: break-all;
+}
+
+.folder-details-note {
+    font-size: calc(var(--font-size-base) - 2px);
+    color: var(--color-warning);
+}
+
+.folder-details-empty {
+    margin: 0;
+    font-size: calc(var(--font-size-base) - 1px);
+    color: var(--text-tertiary);
+}
+
+.folder-details-children {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.folder-details-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 3px 6px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 1px);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.1s;
+}
+
+.folder-details-row:hover {
+    background: var(--hover-bg);
+}
+
+.folder-details-row:focus-visible {
+    background: var(--hover-bg);
+    outline: none;
+}
+
+.folder-details-row-icon {
+    flex-shrink: 0;
+}
+
+.folder-details-row-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.folder-details-row-address {
+    margin-left: auto;
+    font-family: var(--font-family);
+    font-size: calc(var(--font-size-base) - 2px);
+    color: var(--tree-meta-color);
+    white-space: nowrap;
+}
+
+/* Deliberately worded as a fact, not an instruction: a host can sit outside
+   every range simply because the range is not in NetBox yet. */
+.folder-details-row-warn {
+    flex-shrink: 0;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: var(--color-danger-bg);
+    color: var(--color-warning);
+    font-size: calc(var(--font-size-base) - 3px);
+    font-weight: 600;
+    white-space: nowrap;
+}

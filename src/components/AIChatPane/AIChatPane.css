@@ -99,6 +99,42 @@
     cursor: not-allowed;
 }
 
+/* Move-between-windows and pin-on-top pills. Same shape as the clear pill, but
+   a neutral hover: neither action is destructive, and the accent blue stays
+   reserved for run/send. The "on" state reuses the sidebar's active-toggle tint
+   so every toggle in the app reads the same way. */
+.ai-chat-window-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    cursor: pointer;
+    white-space: nowrap;
+    font-size: calc(var(--font-size-base) - 1px);
+    font-family: var(--ui-font-family);
+    transition: background-color 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.ai-chat-window-btn:hover:not(:disabled) {
+    background-color: var(--btn-secondary-hover-bg);
+    color: var(--text-primary);
+}
+
+.ai-chat-window-btn.active {
+    background-color: var(--sidebar-btn-active-bg);
+    border-color: var(--accent-color);
+    color: var(--text-primary);
+}
+
+.ai-chat-window-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .ai-chat-header-divider {
     width: 1px;
     height: 22px;

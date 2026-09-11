@@ -1,4 +1,5 @@
-//! Wall-clock timestamp formatting shared by the polling features.
+//! Wall-clock timestamp formatting shared by the polling features and by
+//! anything else that needs a stamp without pulling in a date library.
 //!
 //! Extracted from `ping_monitor.rs` when the Interface Traffic Watcher needed
 //! the same "YYYY-MM-DD HH:MM:SS.mmm" stamp in its event payloads. The project
@@ -47,6 +48,30 @@ pub fn format_file_timestamp() -> String {
     let (year, month, day) = days_to_ymd(days);
 
     format!("{year:04}{month:02}{day:02}{hours:02}{minutes:02}{seconds:02}")
+}
+
+/// `YYYY-MM-DDTHH:MM:SSZ` in UTC — RFC3339, for stamps that are stored rather
+/// than shown. Used for the SSH key ledger's `createdAt`.
+///
+/// Second resolution, deliberately: a creation date does not need milliseconds,
+/// and the value is more readable when someone opens the JSON by hand.
+pub fn now_rfc3339() -> String {
+    use std::time::SystemTime;
+
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = now.as_secs();
+
+    let days = secs / 86400;
+    let time_of_day = secs % 86400;
+    let hours = time_of_day / 3600;
+    let minutes = (time_of_day % 3600) / 60;
+    let seconds = time_of_day % 60;
+
+    let (year, month, day) = days_to_ymd(days);
+
+    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}Z")
 }
 
 /// Days since the Unix epoch to `(year, month, day)`.

@@ -91,6 +91,31 @@ fn unix_gcloud_config_dir(home: Option<String>) -> PathBuf {
     PathBuf::from(home).join(".config").join("gcloud")
 }
 
+/// Open `dir` in the platform's file manager.
+///
+/// Two commands reveal a folder to the user -- the debug log folder and the
+/// SSH key folder -- and each would otherwise carry its own `explorer.exe` /
+/// `xdg-open` pair. The Non-goal on cross-platform support puts that branch
+/// here instead, in the one module meant to be swapped. This is the same
+/// reasoning that gave `file_perms` its single `icacls` invocation.
+///
+/// The folder only, never `/select,<file>`: selecting a file means passing a
+/// user-supplied name through `explorer.exe`'s comma-separated argument
+/// syntax, which quotes badly, and the folder answers the question either way.
+///
+/// Spawns and returns -- the file manager outlives this call, and nothing here
+/// waits on it.
+pub fn open_in_file_manager(dir: &std::path::Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    const PROGRAM: &str = "explorer.exe";
+    #[cfg(not(windows))]
+    const PROGRAM: &str = "xdg-open";
+
+    tokio::process::Command::new(PROGRAM)
+        .arg(dir.to_string_lossy().as_ref())
+        .spawn()
+        .map(|_| ())
+}
 #[cfg(test)]
 mod tests {
     use super::*;

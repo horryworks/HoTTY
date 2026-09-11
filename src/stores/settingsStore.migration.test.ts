@@ -106,12 +106,13 @@ describe('settingsStore v32 migration (NetBox)', () => {
       baseUrl: '',
       siteIdField: '',
       syncOnStartup: true,
+      prefixPlacement: true,
       lastSyncAt: null,
       lastSyncError: null,
     });
   });
 
-  it('leaves an existing NetBox config alone', async () => {
+  it('leaves the fields of an existing NetBox config alone', async () => {
     const existing = {
       baseUrl: 'https://netbox.example.com',
       siteIdField: 'cf:site_code',
@@ -120,7 +121,8 @@ describe('settingsStore v32 migration (NetBox)', () => {
       lastSyncError: null,
     };
     const s = await rehydrateFrom({ language: 'en', netbox: existing }, 31);
-    expect(s.netbox).toEqual(existing);
+    // v34 adds `prefixPlacement` on top; everything the user set survives.
+    expect(s.netbox).toEqual({ ...existing, prefixPlacement: true });
   });
 
   it('does not disturb settings from earlier versions', async () => {
@@ -128,6 +130,84 @@ describe('settingsStore v32 migration (NetBox)', () => {
     const s = await rehydrateFrom({ language: 'ja', theme: 'dark' }, 18);
     expect(s.language).toBe('ja');
     expect(s.netbox.baseUrl).toBe('');
+    expect(s.fileServerConfig).toBeDefined();
+  });
+});
+
+describe('settingsStore v33 migration (AI Chat window)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('seeds the AI window preferences for a pre-v33 install', async () => {
+    const s = await rehydrateFrom({ language: 'en' }, 32);
+    // Off by default: an upgrade must not start pinning a window over
+    // everything else without the user asking.
+    expect(s.aiWindowAlwaysOnTop).toBe(false);
+    // No remembered geometry yet, so the backend places the window itself.
+    expect(s.aiWindowBounds).toBeNull();
+  });
+
+  it('keeps AI window preferences the user already set', async () => {
+    const bounds = { x: 2100, y: 140, width: 520, height: 900 };
+    const s = await rehydrateFrom(
+      { language: 'en', aiWindowAlwaysOnTop: true, aiWindowBounds: bounds },
+      32,
+    );
+    expect(s.aiWindowAlwaysOnTop).toBe(true);
+    expect(s.aiWindowBounds).toEqual(bounds);
+  });
+
+  it('does not disturb settings from earlier versions', async () => {
+    // The ladder is cumulative: a v18 install runs 19..33 in order.
+    const s = await rehydrateFrom({ language: 'ja', theme: 'dark' }, 18);
+    expect(s.language).toBe('ja');
+    expect(s.aiWindowAlwaysOnTop).toBe(false);
+    expect(s.netbox.baseUrl).toBe('');
+  });
+});
+
+describe('settingsStore v34 migration (NetBox prefix placement)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('adds the placement flag to an existing NetBox config without touching the rest', async () => {
+    // The trap this pins: `state.netbox ??= DEFAULTS.netbox` does NOTHING here,
+    // because `netbox` already exists — the new key would stay `undefined`,
+    // which is falsy and so looks exactly like "the user turned it off".
+    const existing = {
+      baseUrl: 'https://netbox.example.com',
+      siteIdField: 'facility',
+      syncOnStartup: false,
+      lastSyncAt: '2026-01-01T00:00:00.000Z',
+      lastSyncError: 'boom',
+    };
+    const s = await rehydrateFrom({ language: 'en', netbox: existing }, 33);
+    expect(s.netbox.prefixPlacement).toBe(true);
+    expect(s.netbox.baseUrl).toBe('https://netbox.example.com');
+    expect(s.netbox.siteIdField).toBe('facility');
+    expect(s.netbox.syncOnStartup).toBe(false);
+    expect(s.netbox.lastSyncError).toBe('boom');
+  });
+
+  it('seeds the whole NetBox config, placement included, for a pre-v32 install', async () => {
+    const s = await rehydrateFrom({ language: 'en' }, 31);
+    expect(s.netbox.prefixPlacement).toBe(true);
+  });
+
+  it('keeps a placement flag the user already turned off', async () => {
+    const s = await rehydrateFrom(
+      { language: 'en', netbox: { baseUrl: '', siteIdField: '', syncOnStartup: true, prefixPlacement: false, lastSyncAt: null, lastSyncError: null } },
+      33,
+    );
+    expect(s.netbox.prefixPlacement).toBe(false);
+  });
+
+  it('does not disturb settings from earlier versions', async () => {
+    const s = await rehydrateFrom({ language: 'ja', theme: 'dark' }, 18);
+    expect(s.language).toBe('ja');
+    expect(s.netbox.prefixPlacement).toBe(true);
     expect(s.fileServerConfig).toBeDefined();
   });
 });

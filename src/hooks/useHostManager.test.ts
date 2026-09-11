@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { flattenHosts, getJumpboxReferences, getCachedCredential, useHostManager } from './useHostManager';
+import { flattenHosts, getJumpboxReferences, getCachedCredential, applyPlacementMoves, useHostManager } from './useHostManager';
 import { tauriService } from '../services/tauriService';
 import type { HostTreeNode } from '../types/appTypes';
 
@@ -521,5 +521,131 @@ describe('useHostManager — credential encryption fails closed', () => {
     const { decryptBatch } = await import('./useHostManager');
     const values = ['[SAFE]abc', undefined];
     await expect(decryptBatch(values)).resolves.toEqual(values);
+  });
+});
+
+describe('applyPlacementMoves', () => {
+  const tree = (): HostTreeNode[] => [
+    {
+      id: 'inbox', type: 'folder', name: 'Inbox', children: [
+        { id: 'h1', type: 'host', name: 'tokyo-01', entry: { protocol: 'ssh', host: '10.1.0.1', port: 22, password: 'p1' } },
+        { id: 'h2', type: 'host', name: 'osaka-01', entry: { protocol: 'ssh', host: '10.2.0.1', port: 22, jumpboxId: 'h3' } },
+      ],
+    },
+    { id: 'tok', type: 'folder', name: 'TOK Tokyo', children: [] },
+    { id: 'osa', type: 'folder', name: 'OSA Osaka', children: [] },
+    { id: 'h3', type: 'host', name: 'jump', entry: { protocol: 'ssh', host: '10.9.0.1', port: 22, isJumpbox: true } },
+  ];
+
+  const namesIn = (nodes: HostTreeNode[], folderId: string): string[] => {
+    const find = (list: HostTreeNode[]): HostTreeNode | undefined => {
+      for (const n of list) {
+        if (n.id === folderId) return n;
+        const hit = n.children ? find(n.children) : undefined;
+        if (hit) return hit;
+      }
+      return undefined;
+    };
+    return (find(nodes)?.children ?? []).map(n => n.name);
+  };
+
+  it('moves several hosts at once', () => {
+    const { tree: next, moved } = applyPlacementMoves(tree(), [
+      { hostId: 'h1', targetFolderId: 'tok' },
+      { hostId: 'h2', targetFolderId: 'osa' },
+    ]);
+    expect(moved).toBe(2);
+    expect(namesIn(next, 'inbox')).toEqual([]);
+    expect(namesIn(next, 'tok')).toEqual(['tokyo-01']);
+    expect(namesIn(next, 'osa')).toEqual(['osaka-01']);
+  });
+
+  it('carries the host node through untouched, credentials included', () => {
+    const before = tree();
+    const original = before[0].children![0];
+    const { tree: next } = applyPlacementMoves(before, [{ hostId: 'h1', targetFolderId: 'tok' }]);
+    const find = (list: HostTreeNode[]): HostTreeNode | undefined => {
+      for (const n of list) {
+        if (n.id === 'h1') return n;
+        const hit = n.children ? find(n.children) : undefined;
+        if (hit) return hit;
+      }
+      return undefined;
+    };
+    // The SAME object, not a copy: nothing re-encrypts or rewrites an entry.
+    expect(find(next)).toBe(original);
+    expect(find(next)?.entry?.password).toBe('p1');
+  });
+
+  it('keeps a jumpbox reference working after its user moved', () => {
+    const { tree: next } = applyPlacementMoves(tree(), [{ hostId: 'h2', targetFolderId: 'osa' }]);
+    expect(getJumpboxReferences(next, 'h3').map(n => n.id)).toEqual(['h2']);
+  });
+
+  it('ignores a move whose host or folder no longer exists', () => {
+    const { tree: next, moved } = applyPlacementMoves(tree(), [
+      { hostId: 'gone', targetFolderId: 'tok' },
+      { hostId: 'h1', targetFolderId: 'no-such-folder' },
+    ]);
+    expect(moved).toBe(0);
+    expect(namesIn(next, 'inbox')).toEqual(['tokyo-01', 'osaka-01']);
+  });
+
+  it('returns the same array when every move is a no-op', () => {
+    // Reference equality is the caller's signal to skip encrypt, write and
+    // broadcast entirely.
+    const before = tree();
+    expect(applyPlacementMoves(before, []).tree).toBe(before);
+    expect(applyPlacementMoves(before, [{ hostId: 'h1', targetFolderId: 'inbox' }]).tree).toBe(before);
+  });
+
+  it('appends at the end of the target folder, the way adding a host does', () => {
+    const withOne = tree();
+    withOne[1].children = [{ id: 'x', type: 'host', name: 'already-here', entry: { protocol: 'ssh', host: '10.1.0.9', port: 22 } }];
+    const { tree: next } = applyPlacementMoves(withOne, [{ hostId: 'h1', targetFolderId: 'tok' }]);
+    expect(namesIn(next, 'tok')).toEqual(['already-here', 'tokyo-01']);
+  });
+});
+
+describe('useHostManager applyPlacements', () => {
+  it('moves N hosts in ONE write, not one write per host', async () => {
+    localStorage.setItem('hotty_host_tree', JSON.stringify([
+      {
+        id: 'inbox', type: 'folder', name: 'Inbox', children: [
+          { id: 'h1', type: 'host', name: 'a', entry: { protocol: 'ssh', host: '10.1.0.1', port: 22, password: 'p' } },
+          { id: 'h2', type: 'host', name: 'b', entry: { protocol: 'ssh', host: '10.2.0.1', port: 22, password: 'p' } },
+        ],
+      },
+      { id: 'tok', type: 'folder', name: 'TOK', children: [] },
+    ]));
+    const { result } = renderHook(() => useHostManager());
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    vi.mocked(tauriService.dpapiEncryptBatch).mockClear();
+
+    let moved = 0;
+    act(() => {
+      moved = result.current.applyPlacements([
+        { hostId: 'h1', targetFolderId: 'tok' },
+        { hostId: 'h2', targetFolderId: 'tok' },
+      ]);
+    });
+    expect(moved).toBe(2);
+    await waitFor(() => expect(tauriService.dpapiEncryptBatch).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not persist when nothing moved', async () => {
+    localStorage.setItem('hotty_host_tree', JSON.stringify([
+      { id: 'tok', type: 'folder', name: 'TOK', children: [] },
+    ]));
+    const { result } = renderHook(() => useHostManager());
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    vi.mocked(tauriService.dpapiEncryptBatch).mockClear();
+
+    let moved = -1;
+    act(() => {
+      moved = result.current.applyPlacements([{ hostId: 'gone', targetFolderId: 'tok' }]);
+    });
+    expect(moved).toBe(0);
+    expect(tauriService.dpapiEncryptBatch).not.toHaveBeenCalled();
   });
 });

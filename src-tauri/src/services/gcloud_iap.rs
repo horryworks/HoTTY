@@ -1109,74 +1109,24 @@ async fn ensure_ssh_key() -> Result<(PathBuf, bool), SessionError> {
     Ok((priv_path, true))
 }
 
-/// On Windows, repair the NTFS ACL on the private key file so Windows OpenSSH
-/// will accept it. The ACL gcloud (and ssh-keygen) leave behind often inherits
-/// an `OWNER RIGHTS` ACE from the parent directory — which OpenSSH refuses
-/// because it isn't in the (owner, BUILTIN\Administrators, NT AUTHORITY\SYSTEM)
-/// whitelist. The user then sees:
-///     Permissions for '...\google_compute_engine' are too open.
-///     This private key will be ignored.
+/// Repair the permissions on the private key so the SSH client will accept it.
 ///
-/// We use `icacls` to strip inheritance and explicitly grant only the current
-/// user. SYSTEM/Administrators access is acceptable to OpenSSH and useful for
-/// other tools, so we leave the path quiet about those — `icacls /inheritance:r`
-/// removes inherited ACEs but our subsequent /grant:r only sets the user, so
-/// the resulting ACL is `<user>:F` only. That is the most conservative form
-/// and matches what `ssh-keygen` produces on Windows when run interactively.
+/// The real work lives in `services::file_perms`: `ssh_keys` needs exactly the
+/// same thing for user-generated keys, and one `icacls` invocation in the
+/// codebase is enough. This wrapper only converts the error into this module's
+/// type.
 ///
-/// Idempotent: re-running is safe even if the ACL is already correct.
-#[cfg(target_os = "windows")]
+/// Idempotent, which is why the connect path calls it unconditionally.
+///
+/// The old inline version logged the path and user on success. The caller
+/// already logs its own success line, and `file_perms` deliberately logs no
+/// paths -- a user's key paths are their own business -- so that line is gone
+/// rather than moved.
 async fn ensure_key_permissions(priv_path: &Path) -> Result<(), SessionError> {
-    let path_str = priv_path
-        .to_str()
-        .ok_or_else(|| SessionError::ConnectionFailed("non-UTF8 key path".into()))?
-        .to_string();
-    let user = std::env::var("USERNAME")
-        .or_else(|_| std::env::var("USER"))
-        .map_err(|_| SessionError::ConnectionFailed("USERNAME / USER env var not set".into()))?;
-
-    // `icacls <path> /inheritance:r /grant:r "<user>:F"` removes inherited
-    // permissions and replaces any existing ACE for <user> with a single
-    // FullControl entry. Combined, the file ends up with only <user>:F.
-    let mut cmd = TokioCommand::new(r"C:\Windows\System32\icacls.exe");
-    cmd.arg(&path_str)
-        .arg("/inheritance:r")
-        .arg("/grant:r")
-        .arg(format!("{user}:F"));
-    cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::piped());
-    {
-        cmd.creation_flags(crate::services::os_paths::CREATE_NO_WINDOW);
-    }
-    let output = timeout(Duration::from_secs(10), cmd.output())
+    use crate::services::file_perms::{restrict_to_owner, OwnerOnly};
+    restrict_to_owner(priv_path, OwnerOnly::File)
         .await
-        .map_err(|_| SessionError::ConnectionFailed("icacls timed out".into()))?
-        .map_err(|e| SessionError::ConnectionFailed(humanize_spawn_error("icacls", &e)))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(SessionError::ConnectionFailed(format!(
-            "icacls failed: {}",
-            stderr.trim()
-        )));
-    }
-    log::info!("gcloud-iap: tightened ACL on {path_str} (user={user})");
-    Ok(())
-}
-
-#[cfg(not(target_os = "windows"))]
-async fn ensure_key_permissions(priv_path: &Path) -> Result<(), SessionError> {
-    use std::os::unix::fs::PermissionsExt;
-    let metadata = std::fs::metadata(priv_path)
-        .map_err(|e| SessionError::ConnectionFailed(humanize_fs_error("the SSH key", &e)))?;
-    let mut perms = metadata.permissions();
-    if perms.mode() & 0o077 != 0 {
-        perms.set_mode(0o600);
-        std::fs::set_permissions(priv_path, perms).map_err(|e| {
-            SessionError::ConnectionFailed(humanize_fs_error("the SSH key permissions", &e))
-        })?;
-        log::info!("gcloud-iap: chmod 600 on {priv_path:?}");
-    }
-    Ok(())
+        .map_err(|e| SessionError::ConnectionFailed(e.to_string()))
 }
 
 /// Push the public key to OS Login, idempotently. Best-effort — if OS Login is

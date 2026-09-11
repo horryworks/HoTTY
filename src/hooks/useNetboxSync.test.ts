@@ -27,6 +27,9 @@ const snapshot = (over: Partial<NetboxSnapshot> = {}): NetboxSnapshot => ({
     siteIdField: null,
     regions: [{ id: 1, name: 'Asia', parentId: null, depth: 0 }],
     sites: [{ id: 10, name: 'Example Site', regionId: 1, siteId: null }],
+    prefixes: null,
+    prefixesUnavailable: 'disabled',
+    prefixesSkipped: 0,
     ...over,
 });
 
@@ -77,7 +80,7 @@ describe('useNetboxSync', () => {
         await act(async () => {
             await result.current.sync('manual');
         });
-        expect(netboxFetchSnapshot).toHaveBeenCalledWith('https://netbox.example.com', null);
+        expect(netboxFetchSnapshot).toHaveBeenCalledWith('https://netbox.example.com', null, true);
         const state = useSettingsStore.getState().netbox;
         expect(state.lastSyncAt).toBeTruthy();
         expect(state.lastSyncError).toBeNull();
@@ -93,7 +96,33 @@ describe('useNetboxSync', () => {
         expect(netboxFetchSnapshot).toHaveBeenCalledWith(
             'https://netbox.example.com',
             'cf:site_code',
+            true,
         );
+    });
+
+    it('always sends a real boolean, even when the stored config predates the flag', async () => {
+        // `invoke` drops an `undefined` field, and the Rust command then fails
+        // on a missing `with_prefixes` — which took the whole sync down,
+        // regions and sites with it.
+        configure({ prefixPlacement: undefined });
+        const { result } = renderHook(() => useNetboxSync());
+        await act(async () => {
+            await result.current.sync('manual');
+        });
+        const args = netboxFetchSnapshot.mock.calls[0];
+        expect(args[2]).toBe(true);
+        expect(typeof args[2]).toBe('boolean');
+    });
+
+    it('does not ask for prefixes when placement is off', async () => {
+        // The prefix listing is much the largest of the three requests; a user
+        // who turned placement off should not pay for it on every startup sync.
+        configure({ prefixPlacement: false });
+        const { result } = renderHook(() => useNetboxSync());
+        await act(async () => {
+            await result.current.sync('manual');
+        });
+        expect(netboxFetchSnapshot).toHaveBeenCalledWith('https://netbox.example.com', null, false);
     });
 
     it('sends null rather than an empty string when no field is configured', async () => {
@@ -102,7 +131,7 @@ describe('useNetboxSync', () => {
         await act(async () => {
             await result.current.sync('manual');
         });
-        expect(netboxFetchSnapshot).toHaveBeenCalledWith('https://netbox.example.com', null);
+        expect(netboxFetchSnapshot).toHaveBeenCalledWith('https://netbox.example.com', null, true);
     });
 
     it('does not persist when the reconcile changed nothing', async () => {

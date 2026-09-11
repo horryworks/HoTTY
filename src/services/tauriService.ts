@@ -10,6 +10,7 @@ import { ask as dialogAsk, open as dialogOpen } from '@tauri-apps/plugin-dialog'
 import { redactSensitive } from '../utils/redaction';
 import { WINDOW_LABEL } from '../utils/windowLabel';
 import type {
+  WindowRect,
   NetboxProbeResult,
   NetboxSnapshot,
   ProtocolId,
@@ -31,6 +32,9 @@ import type {
   ContextMenuItem,
   Theme,
   SshAlgorithms,
+  SshKeyInfo,
+  SshKeyListResult,
+  GenerateSshKeyRequest,
   SaveThemeResult,
   ThirdPartyLicenses,
   ListLogFilesResult,
@@ -105,6 +109,56 @@ export const tauriService = {
   },
 
   /**
+   * Open a window that hosts only an AI Chat pane; resolves to its label
+   * (`win-ai-N`). `bounds` is the user's remembered geometry in PHYSICAL
+   * pixels; omit it to have the backend place the window beside this one at the
+   * default chat-column size. Either way the backend fits the rectangle to an
+   * attached monitor, so a position saved on a since-unplugged display still
+   * opens somewhere reachable.
+   */
+  async createAiChatWindow(bounds?: WindowRect): Promise<string> {
+    return invoke<string>('create_ai_chat_window', { bounds: bounds ?? null });
+  },
+
+  /** Labels of every window currently open in this process. */
+  async listWindowLabels(): Promise<string[]> {
+    return invoke<string[]>('list_window_labels');
+  },
+
+  /** Keep this window above every other application, or stop doing so. */
+  async setAlwaysOnTop(onTop: boolean): Promise<void> {
+    await invoke('set_window_always_on_top', { onTop });
+  },
+
+  /**
+   * This window's current geometry in PHYSICAL pixels: OUTER position plus
+   * INNER size — the same pair `createAiChatWindow` restores, so a save/restore
+   * round trip does not drift by the window frame.
+   */
+  async getWindowRect(): Promise<WindowRect> {
+    const w = getCurrentWebviewWindow();
+    const [pos, size] = await Promise.all([w.outerPosition(), w.innerSize()]);
+    return { x: pos.x, y: pos.y, width: size.width, height: size.height };
+  },
+
+  /** Close this window (the same path as the title-bar X). */
+  async closeThisWindow(): Promise<void> {
+    await getCurrentWebviewWindow().close();
+  },
+
+  /**
+   * Run `handler` when the user tries to close this window, instead of closing.
+   * The handler owns the decision: it must call {@link closeThisWindow} to let
+   * the close through. Resolves to an unlisten function.
+   */
+  onCloseRequested(handler: () => void): Promise<UnlistenFn> {
+    return getCurrentWebviewWindow().onCloseRequested((event) => {
+      event.preventDefault();
+      handler();
+    });
+  },
+
+  /**
    * Broadcast a shared-store change to all windows (tagged with this window's
    * label as `origin`, which receivers use to ignore their own events).
    */
@@ -147,6 +201,19 @@ export const tauriService = {
    */
   async listAllSessions(): Promise<SessionInfo[]> {
     return invoke<SessionInfo[]>('list_all_sessions');
+  },
+
+  /**
+   * Transfer ownership of AI worker sessions to THIS window, and resolve to the
+   * ids actually taken. Used when a conversation moves between windows: without
+   * it the workers stay owned by the window the chat left, and closing that
+   * window would disconnect terminals the conversation still uses.
+   *
+   * The backend accepts only `h-` worker ids that actually exist, so the
+   * resolved list — not the requested one — is the truth about what moved.
+   */
+  async adoptSessions(sessionIds: string[]): Promise<string[]> {
+    return invoke<string[]>('adopt_sessions', { sessionIds });
   },
 
   async sendInput(sessionId: string, data: string): Promise<void> {
@@ -278,6 +345,56 @@ export const tauriService = {
 
   async saveSshAlgorithms(algorithms: SshAlgorithms): Promise<boolean> {
     return invoke<boolean>('save_ssh_algorithms', { algorithms });
+  },
+
+  // -----------------------------------------------------------------------
+  // SSH keys
+  // -----------------------------------------------------------------------
+
+  /**
+   * List the keys in `~/.ssh`. A missing folder comes back as an empty list;
+   * `available: false` means there is nowhere safe to keep keys at all.
+   */
+  async listSshKeys(): Promise<SshKeyListResult> {
+    return invoke<SshKeyListResult>('list_ssh_keys');
+  },
+
+  /**
+   * Generate a key pair. The passphrase is a separate argument rather than a
+   * field on `req`, so the request object carries no secret and stays safe to
+   * log or inspect. Pass null for an unprotected key.
+   */
+  async generateSshKey(
+    req: GenerateSshKeyRequest,
+    passphrase: string | null,
+  ): Promise<SshKeyInfo> {
+    return invoke<SshKeyInfo>('generate_ssh_key', { req, passphrase });
+  },
+
+  /** The single-line public key. There is deliberately no private counterpart. */
+  async readSshPublicKey(name: string): Promise<string> {
+    return invoke<string>('read_ssh_public_key', { name });
+  },
+
+  /**
+   * Save the public key through a native dialog. The chosen path stays in the
+   * backend. Resolves false when the user cancels.
+   */
+  async exportSshPublicKey(name: string): Promise<boolean> {
+    return invoke<boolean>('export_ssh_public_key', { name });
+  },
+
+  async openSshKeyFolder(): Promise<void> {
+    await invoke('open_ssh_key_folder');
+  },
+
+  /**
+   * Delete a key HoTTY generated. `expectedFingerprint` is what the caller
+   * believes it is deleting; the backend refuses unless it matches both the
+   * ledger and the file on disk.
+   */
+  async deleteSshKey(name: string, expectedFingerprint: string): Promise<void> {
+    await invoke('delete_ssh_key', { name, expectedFingerprint });
   },
 
   // -----------------------------------------------------------------------
@@ -776,9 +893,18 @@ export const tauriService = {
     return invoke<boolean>('netbox_has_token');
   },
 
-  /** Fetch the Regions and Sites one sync needs. */
-  async netboxFetchSnapshot(baseUrl: string, siteIdField: string | null): Promise<NetboxSnapshot> {
-    return invoke<NetboxSnapshot>('netbox_fetch_snapshot', { baseUrl, siteIdField });
+  /**
+   * Fetch the Regions and Sites one sync needs, plus the IPAM prefixes when
+   * `withPrefixes`. Off means the prefix listing is never requested — it is by
+   * far the largest of the three, and a user with placement off should not pay
+   * for it on every startup sync.
+   */
+  async netboxFetchSnapshot(
+    baseUrl: string,
+    siteIdField: string | null,
+    withPrefixes: boolean,
+  ): Promise<NetboxSnapshot> {
+    return invoke<NetboxSnapshot>('netbox_fetch_snapshot', { baseUrl, siteIdField, withPrefixes });
   },
 
   // -----------------------------------------------------------------------

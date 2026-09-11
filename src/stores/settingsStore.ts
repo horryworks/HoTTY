@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Encoding, FeatureId, FileServerConfig, NetboxConfig, PromptPattern, ThemeId, LanguageId, CommandExecutionMode, ClassifierStrategy, PersonaDefinition, AiConnectPolicy, AiLocalShellType } from '../types/appTypes';
+import type { Encoding, FeatureId, FileServerConfig, NetboxConfig, PromptPattern, ThemeId, LanguageId, CommandExecutionMode, ClassifierStrategy, PersonaDefinition, AiConnectPolicy, AiLocalShellType, WindowRect } from '../types/appTypes';
 import { DEFAULT_THEMES } from '../themes/defaults';
 import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from '../utils/commandLists';
 import { AUTO_LANGUAGE } from '../constants/aiPrompts';
@@ -186,6 +186,17 @@ interface SettingsState {
   aiWorkerIdleTimeoutMins: number;
   /** Which PC shell the AI gets when it asks for a local terminal. */
   aiLocalShellType: AiLocalShellType;
+  /** Keep a popped-out AI Chat window above every other application. Shared
+   *  across windows, so the choice sticks for the next one that opens. */
+  aiWindowAlwaysOnTop: boolean;
+  /**
+   * Where the AI Chat window was last left, in PHYSICAL pixels (outer position
+   * + inner size). `null` = never opened, so the backend places it beside the
+   * window that asks for it. The backend also fits it to an attached monitor,
+   * so geometry saved on a since-unplugged display still opens somewhere
+   * reachable.
+   */
+  aiWindowBounds: WindowRect | null;
   /**
    * Settings dialog size, in px, once the user has resized it. `null` means
    * "not resized" — the dialog uses the fixed default from its stylesheet.
@@ -256,6 +267,7 @@ const DEFAULTS: SettingsState = {
     baseUrl: '',
     siteIdField: '',
     syncOnStartup: true,
+    prefixPlacement: true,
     lastSyncAt: null,
     lastSyncError: null,
   },
@@ -286,6 +298,8 @@ const DEFAULTS: SettingsState = {
   aiMaxWorkerSessionsPerTab: 5,
   aiWorkerIdleTimeoutMins: 10,
   aiLocalShellType: 'powershell',
+  aiWindowAlwaysOnTop: false,
+  aiWindowBounds: null,
   settingsModalWidth: null,
   settingsModalHeight: null,
 };
@@ -299,7 +313,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 32,
+      version: 34,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -490,6 +504,21 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           // costs an unconfigured install nothing — the sync bails at once
           // when there is no base URL or no saved token.
           state.netbox ??= DEFAULTS.netbox;
+        }
+        if (version < 33) {
+          // AI Chat can now live in its own window. Both fields are per-user
+          // conveniences with safe "not set yet" defaults, so `??=` is right:
+          // an upgrade keeps anything already there and gains the rest.
+          state.aiWindowAlwaysOnTop ??= DEFAULTS.aiWindowAlwaysOnTop;
+          state.aiWindowBounds ??= DEFAULTS.aiWindowBounds;
+        }
+        if (version < 34) {
+          // NetBox prefix placement. 🚨 NOT `state.netbox ??= DEFAULTS.netbox`
+          // (the v32/v18 pattern): on any install already at v32 `netbox`
+          // exists, so `??=` does nothing and the new key stays `undefined` —
+          // which is falsy, and therefore indistinguishable from a user who
+          // turned the feature off. A nested field needs a per-field merge.
+          state.netbox = { ...DEFAULTS.netbox, ...(state.netbox ?? {}) };
         }
         return state as SettingsState;
       },

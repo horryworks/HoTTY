@@ -11,6 +11,7 @@ pub mod ping_monitor;
 pub mod session;
 pub mod snmp_watcher;
 pub mod ssh_algorithms;
+pub mod ssh_keys;
 pub mod sync;
 pub mod system;
 pub mod themes;

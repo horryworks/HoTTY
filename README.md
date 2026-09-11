@@ -43,6 +43,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 ### Security & Credentials
 - Windows DPAPI encryption for stored credentials
 - SSH host key verification with fingerprint display
+- SSH key management — generate Ed25519 / ECDSA (P-256/384/521) / RSA (2048/3072/4096) key pairs into your `.ssh` folder as ordinary OpenSSH files, with the file permissions tightened to your account alone; copy the public key, export it, or show the `authorized_keys` line, and pick a key straight from the connection form
 - Paste confirmation modal for clipboard content review
 
 ### Session Management
@@ -51,6 +52,8 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 - Session logging to file — terminal output as `.txt`, and AI chat conversations as Markdown transcripts in the same folder
 - Host tree filter — narrow the tree by folder name, host name or address (`Ctrl+F`); a match inside a collapsed folder is revealed, and clearing the filter restores your folder state
 - NetBox folder sync — mirror one NetBox server's Regions and Sites into the host tree as folders, named `<code> <site name>` with the field supplying the code configurable per organisation; read-only (`GET` only), never deletes anything, never touches the hosts you file inside, and keeps the DPAPI-encrypted API token bound to the server address it was issued for
+- NetBox IP-range placement — folders carry the prefixes registered against them, so the New Session form suggests the folder covering the address you typed, and **Sort by IP Range** matches existing hosts in bulk and shows every move before applying it; overlapping ranges are reported and left alone rather than guessed at
+- Folder details — selecting a folder shows its NetBox origin, IP ranges, direct contents, and any host whose address falls outside every range on it
 - Connection host tree export/import (encrypted .htree format)
 
 ### AI Integration
@@ -62,6 +65,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 - Interactive Mode — AI suggests and executes terminal commands, gated by a managed Whitelist / Blacklist + AI safety classifier
 - Watch Mode — one AI Chat conversation can watch several terminals at once, with AI-suggested commands routed to the right one; captured output is sent to the AI for analysis
 - Cross-window linking — link an AI Chat to a terminal running in another window
+- AI Chat in its own window — move the whole pane, its conversations, and the terminals it watches or opened into a dedicated window and back; pinnable above other applications, remembers its geometry, and refuses to move mid-reply so nothing is lost
 - AI-opened terminals — on request, the AI can open a PC shell (PowerShell / Command Prompt / Git Bash) or an SSH/Telnet session to a device it discovered, approved from a card in the chat; these sessions have no tab, are capped and idle-closed per conversation, and can be opened as a real tab at any time. Host Tree credentials are used without the AI ever seeing them; the default asks for every request (Settings → AI)
 - One-time data-sharing disclosure shown before terminal data is first sent to a provider (reviewable in Settings → AI)
 - Customizable personas

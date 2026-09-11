@@ -31,6 +31,20 @@ describe('redactSensitive', () => {
     expect(redactSensitive('refresh_token=abc')).toBe('refresh_token=<redacted>');
   });
 
+  it('redacts private-key passphrases in both spellings', () => {
+    // `privateKeyPassphrase` is the field name used throughout the host tree
+    // and the SSH connect path; `passphrase` is what a key-generation error
+    // or a bare form field would carry.
+    expect(redactSensitive('passphrase=hunter2')).toBe('passphrase=<redacted>');
+    expect(redactSensitive('privateKeyPassphrase=hunter2')).toBe(
+      'privateKeyPassphrase=<redacted>',
+    );
+    expect(redactSensitive('private_key_passphrase: "hunter2"')).toBe(
+      'private_key_passphrase: "<redacted>"',
+    );
+    expect(redactSecrets('{"privateKeyPassphrase":"hunter2"}')).not.toContain('hunter2');
+  });
+
   it('redacts Bearer tokens', () => {
     expect(redactSensitive('Authorization: Bearer eyJhbGc.payload.sig')).toBe(
       'Authorization: Bearer <redacted>',

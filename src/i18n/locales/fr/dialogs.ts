@@ -1,6 +1,15 @@
 // Modal dialogs — confirmation, paste, SSH host key, system prompt,
 // Ask AI, IAP VM start, and Save-to-Host-Tree. Grouped one key block per dialog.
 export const dialogs = {
+  closeAiWindow: {
+    title: 'Fermer AI Chat',
+    message_one: 'Fermer cette fenêtre met fin à {{count}} conversation.',
+    message_other: 'Fermer cette fenêtre met fin à {{count}} conversations.',
+    workers_one: 'Le terminal ouvert par l’IA sera également déconnecté.',
+    workers_other: 'Les {{count}} terminaux ouverts par l’IA seront également déconnectés.',
+    hint: 'Pour les garder, utilisez « Réintégrer ».',
+    confirmLabel: 'Fermer',
+  },
   confirm: {
     title: 'Confirmer',
     // Default confirm-button label when a caller does not pass one.
@@ -38,6 +47,29 @@ export const dialogs = {
     zone: 'Zone :',
     startVm: 'Démarrer la VM',
   },
+  moveByPrefix: {
+    title: 'Trier par plage IP',
+    scopeFolder: 'Hôtes dans {{name}}',
+    scopeTree: 'Tous les hôtes',
+    matchIn: 'Comparer avec',
+    matchScope: '{{name}} et son contenu ({{count}})',
+    matchTree: 'Tout l’arbre ({{count}})',
+    scopeHint: 'Restreindre la portée est la seule issue quand NetBox réutilise la même plage privée sur chaque site.',
+    willMove: 'À déplacer ({{count}})',
+    alreadyPlaced: 'Déjà dans le bon dossier ({{count}})',
+    ambiguous: 'Plusieurs dossiers les revendiquent ({{count}})',
+    ambiguousHint: 'Laissés en place : HoTTY ne tranche pas entre des dossiers qui revendiquent la même plage. Déplacez-les vous-même, ou corrigez le chevauchement dans NetBox.',
+    unmatched: 'Aucune correspondance ({{count}})',
+    reasonNotAnAddress: 'pas une adresse IP',
+    reasonNoMatch: 'hors de tous les préfixes',
+    moveRow: '{{from}} → {{to}}',
+    topLevel: 'Niveau supérieur',
+    noPrefixes: 'Aucun dossier de l’arbre ne porte encore de préfixe NetBox. Synchronisez avec NetBox en activant le placement par préfixe.',
+    nothingToDo: 'Chaque hôte est déjà là où son adresse l’indique.',
+    apply: 'Déplacer {{count}}',
+    cancel: 'Annuler',
+    moved: '{{count}} hôtes déplacés',
+  },
   saveToHostTree: {
     title: "Enregistrer dans l'arborescence des hôtes",
     unsupported:
@@ -48,5 +80,7 @@ export const dialogs = {
     newFolderPlaceholder: 'Nom du nouveau dossier',
     create: 'Créer',
     newFolder: '+ Nouveau dossier',
+    netboxSuggested: 'Dossier couvrant {{prefix}} sélectionné dans NetBox.',
+    netboxAmbiguous: 'Plusieurs dossiers NetBox couvrent {{prefix}}, aucun n’a donc été choisi : {{folders}}',
   },
 };

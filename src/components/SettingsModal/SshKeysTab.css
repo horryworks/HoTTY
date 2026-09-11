@@ -1,0 +1,136 @@
+.ssh-keys-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+/* A filesystem path, so monospace per the font rule. */
+.ssh-keys-folder-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  color: var(--text-secondary);
+}
+
+.ssh-keys-notice {
+  margin: 0 0 10px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-danger-border);
+  border-radius: 4px;
+  background: var(--color-danger-bg);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  color: var(--color-danger);
+}
+
+.ssh-keys-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ssh-keys-item {
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+}
+
+.ssh-keys-item-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ssh-keys-name {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+}
+
+.ssh-keys-algorithm {
+  margin-left: auto;
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  color: var(--text-secondary);
+}
+
+.ssh-keys-badge {
+  padding: 2px 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 3px);
+  color: var(--text-secondary);
+}
+
+/* Which keys this app may delete is the one distinction worth colour here. */
+.ssh-keys-badge--managed {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.ssh-keys-item-meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.ssh-keys-fingerprint {
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 3px);
+  color: var(--text-tertiary);
+}
+
+.ssh-keys-comment {
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-keys-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.ssh-keys-delete:hover:not(:disabled) {
+  background: var(--btn-danger-hover-bg);
+  color: var(--text-on-accent);
+}
+
+/* A literal line to paste into authorized_keys. */
+.ssh-keys-public {
+  width: 100%;
+  min-height: 60px;
+  margin-top: 6px;
+  resize: vertical;
+  padding: 5px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  outline: none;
+  word-break: break-all;
+}
+
+.ssh-keys-public:focus {
+  border-color: var(--accent-color);
+}

@@ -42,6 +42,8 @@ import { parseLeadingSleep, clampDelay, syntheticDelayMessage, type SleepDelayPa
 import { sessionBindingKey } from '../utils/sessionBindingKey';
 import { redactSecrets } from '../utils/redaction';
 import { selectAutoRebinds, type RebindSession, type RebindOrphanTab } from '../utils/autoRebind';
+import { remoteSessionName, subscribeSessionNames } from '../utils/sessionNameShare';
+import { isWorkerSessionId } from '../utils/paneTypes';
 import { decideWatchToggle, planWatchIn } from '../utils/watchRouting';
 import { conversationColorIndex } from '../utils/conversationColor';
 import {
@@ -157,6 +159,13 @@ export interface UseAiOrchestratorReturn {
   openAiChatPane: () => void;
   /** Run an AI-issued command against a target session (funnels sleep + watch). */
   onRunCommand: (targetId: string, cmd: string, originatingTabId: string, paneId: string) => void;
+  /**
+   * Panes with an AI-issued command run (or connect watch) polling right now.
+   * Drives the AI Chat header's "move to another window" button: a conversation
+   * may only change window while it is at rest, so a run in flight cannot be
+   * stranded in the window it is leaving.
+   */
+  busyPaneIds: ReadonlySet<string>;
   /** Clear a pane's active poll intervals + pending sleep-delay timers. */
   clearRunCommandIntervals: (paneId: string) => void;
   /**
@@ -246,18 +255,66 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
   // Track pending client-side sleep-delay timers (see scheduleSleepDelay), cleared
   // alongside the poll intervals when the pane closes or the app unmounts.
   const runCommandDelaysRef = useRef<Map<string, Set<ReturnType<typeof setTimeout>>>>(new Map());
+  /**
+   * Panes with an AI-issued command run (or connect watch) currently polling.
+   *
+   * Mirrors `runCommandIntervalsRef` as STATE because it drives UI: the AI Chat
+   * header's move-to-another-window button must go disabled the moment a run
+   * starts and enabled again the moment it ends, and a ref alone re-renders
+   * nothing. The ref stays the source of truth for teardown.
+   */
+  const [busyPaneIds, setBusyPaneIds] = useState<ReadonlySet<string>>(() => new Set());
+
+  // Ticks when another window republishes its terminal names, so the auto-rebind
+  // pass below re-runs once a remote terminal's binding key actually arrives.
+  const [sharedNamesTick, setSharedNamesTick] = useState(0);
+  useEffect(() => subscribeSessionNames(() => setSharedNamesTick((n) => n + 1)), []);
+
+  const markPaneBusy = useCallback((paneId: string, busy: boolean) => {
+    setBusyPaneIds((prev) => {
+      if (prev.has(paneId) === busy) return prev;
+      const next = new Set(prev);
+      if (busy) next.add(paneId); else next.delete(paneId);
+      return next;
+    });
+  }, []);
+
+  /** Register a poll interval as an in-flight run for `paneId`. */
+  const beginRun = useCallback((paneId: string, interval: ReturnType<typeof setInterval>) => {
+    let set = runCommandIntervalsRef.current.get(paneId);
+    if (!set) {
+      set = new Set();
+      runCommandIntervalsRef.current.set(paneId, set);
+    }
+    set.add(interval);
+    markPaneBusy(paneId, true);
+  }, [markPaneBusy]);
+
+  /** Stop one in-flight run: clears the timer AND untracks it, in one place so
+   *  no exit path can clear the interval while leaving the pane marked busy. */
+  const endRun = useCallback((paneId: string, interval: ReturnType<typeof setInterval>) => {
+    clearInterval(interval);
+    const set = runCommandIntervalsRef.current.get(paneId);
+    set?.delete(interval);
+    if (!set || set.size === 0) {
+      runCommandIntervalsRef.current.delete(paneId);
+      markPaneBusy(paneId, false);
+    }
+  }, [markPaneBusy]);
+
   const clearRunCommandIntervals = useCallback((paneId: string) => {
     const set = runCommandIntervalsRef.current.get(paneId);
     if (set) {
       set.forEach((id) => clearInterval(id));
       runCommandIntervalsRef.current.delete(paneId);
     }
+    markPaneBusy(paneId, false);
     const delays = runCommandDelaysRef.current.get(paneId);
     if (delays) {
       delays.forEach((id) => clearTimeout(id));
       runCommandDelaysRef.current.delete(paneId);
     }
-  }, []);
+  }, [markPaneBusy]);
   useEffect(() => {
     const intervals = runCommandIntervalsRef;
     const delays = runCommandDelaysRef;
@@ -415,6 +472,15 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     for (const rec of sessions.values()) {
       if (rec.status === 'connected') connected.push({ id: rec.id, key: sessionBindingKey(rec) });
     }
+    // Other windows' terminals count too — an AI Chat window has no local
+    // sessions at all, so without these a reconnect there would never re-link.
+    // Their binding key comes from the owning window (`sessionNameShare`); a
+    // session nobody has published a key for simply cannot be rebound.
+    for (const cw of crossWindowSessions) {
+      if (sessions.has(cw.sessionId) || isWorkerSessionId(cw.sessionId)) continue;
+      const key = remoteSessionName(cw.sessionId)?.bindingKey;
+      if (key) connected.push({ id: cw.sessionId, key });
+    }
     if (connected.length === 0) return;
 
     const connectedIds = new Set(connected.map((s) => s.id));
@@ -447,7 +513,7 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
       rebindTabLinkRef.current?.(r.paneId, r.tabId, key, r.sessionId);
       aiExecLog('info', 'auto-rebind', { paneId: r.paneId, tabId: r.tabId, sessionId: r.sessionId });
     }
-  }, [sessions]);
+  }, [sessions, crossWindowSessions, sharedNamesTick]);
 
   // Keep the cross-window session list fresh while an AI Chat pane is open, so
   // the link picker and remote-link liveness track other windows' connects.
@@ -633,12 +699,6 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
       let lastBufLen = startLen;
       let lastChangeAt = Date.now();
       const startedAt = Date.now();
-      let set = runCommandIntervalsRef.current.get(paneId);
-      if (!set) {
-        set = new Set();
-        runCommandIntervalsRef.current.set(paneId, set);
-      }
-      const intervalSet = set;
       let startLenWarned = false;
       aiExecLog('info', 'poll-begin', {
         cmd: trimCmdForLog(cmd),
@@ -666,8 +726,7 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
                 attempts,
                 originatingTabId,
               });
-              clearInterval(pollInterval);
-              intervalSet.delete(pollInterval);
+              endRun(paneId, pollInterval);
               return;
             }
             const buf = await tauriService.getWatchBuffer(targetId);
@@ -710,8 +769,7 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
                 newLen: newContent.length,
                 matchedAtEnd: result.matchedAtEnd,
               });
-              clearInterval(pollInterval);
-              intervalSet.delete(pollInterval);
+              endRun(paneId, pollInterval);
               void tauriService.clearWatchBuffer(targetId);
               // Redact secrets from the captured output before it egresses to the AI.
               const outputText = `Terminal Output (Command: ${cmd}):\n${redactSecrets(newContent.trim())}`;
@@ -726,8 +784,7 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
                 newLen: newContent.length,
                 idleSecs,
               });
-              clearInterval(pollInterval);
-              intervalSet.delete(pollInterval);
+              endRun(paneId, pollInterval);
               void tauriService.clearWatchBuffer(targetId);
               const reason = isIdle
                 ? `[no response from device for ${idleSecs} seconds]`
@@ -741,7 +798,7 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
           }
         })();
       }, 200);
-      intervalSet.add(pollInterval);
+      beginRun(paneId, pollInterval);
     }
   };
 
@@ -925,12 +982,6 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     const idleSecs = useSettingsStore.getState().aiCommandIdleTimeoutSecs;
     const idleMs = Math.max(CONNECT_MIN_IDLE_MS, idleSecs > 0 ? idleSecs * 1000 : 0);
     const promptWaitMs = manualLogin ? CONNECT_MANUAL_LOGIN_WAIT_MS : CONNECT_PROMPT_WAIT_MS;
-    let set = runCommandIntervalsRef.current.get(paneId);
-    if (!set) {
-      set = new Set();
-      runCommandIntervalsRef.current.set(paneId, set);
-    }
-    const intervalSet = set;
     aiExecLog('info', 'connect-watch-begin', { key, sid, manualLogin, promptWaitMs, tabId });
     let polling = false;
     const interval = setInterval(() => {
@@ -940,8 +991,7 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
         try {
           const now = Date.now();
           const stop = () => {
-            clearInterval(interval);
-            intervalSet.delete(interval);
+            endRun(paneId, interval);
           };
           const finish = (message: string, event: string) => {
             stop();
@@ -1017,7 +1067,7 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
         }
       })();
     }, 200);
-    intervalSet.add(interval);
+    beginRun(paneId, interval);
   };
 
   type OpenPlan =
@@ -1173,6 +1223,7 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     watchInConversation,
     openAiChatPane,
     onRunCommand: onRunCommandImpl,
+    busyPaneIds,
     clearRunCommandIntervals,
     openAiTerminal,
     adoptAiTerminal,

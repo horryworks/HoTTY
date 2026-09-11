@@ -45,6 +45,10 @@ export const notifications = {
     sessionLoggingUpdate: 'セッションのログ設定を更新できませんでした',
     sessionListener: 'セッションの通知を受信できませんでした',
     clipboardCopy: '選択範囲をコピーできませんでした',
+    aiWindowHandoverTimedOut: 'AI チャットを別のウィンドウへ移せませんでした。ここに残ります。',
+    aiWindowOpenFailed: 'AI チャットウィンドウを開けませんでした',
+    aiWindowPopInFailed: 'AI チャットをウィンドウへ戻せませんでした',
+    aiWindowOpenAsTabFailed: 'そのターミナルをタブとして開けませんでした',
   },
   errorBoundary: {
     title: '問題が発生しました',

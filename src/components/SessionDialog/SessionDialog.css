@@ -413,3 +413,10 @@
 .decrypting-placeholder {
     color: var(--color-danger) !important;
 }
+
+/* The key picker sits beside Browse in the private-key row. Content-width and
+   capped, so the path field keeps the space it needs. */
+.connect-key-picker {
+    max-width: 170px;
+    flex-shrink: 0;
+}

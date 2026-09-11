@@ -45,6 +45,10 @@ export const notifications = {
     sessionLoggingUpdate: '無法更新工作階段記錄',
     sessionListener: '無法接收工作階段事件',
     clipboardCopy: '無法複製所選內容',
+    aiWindowHandoverTimedOut: '無法將 AI 聊天移至其他視窗，它會保留在此處。',
+    aiWindowOpenFailed: '無法開啟 AI 聊天視窗',
+    aiWindowPopInFailed: '無法將 AI 聊天移回視窗',
+    aiWindowOpenAsTabFailed: '無法將該終端機以分頁開啟',
   },
   errorBoundary: {
     title: '發生錯誤',

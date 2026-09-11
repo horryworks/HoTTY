@@ -2,9 +2,11 @@ import type {
     HostEntry,
     HostTreeNode,
     NetboxNodeLink,
+    NetboxPrefixUnavailable,
     NetboxSiteDto,
     NetboxSnapshot,
 } from '../types/appTypes';
+import { comparePrefixes, formatPrefix, parseCidr } from './cidr';
 
 /**
  * Reconcile the Host Tree against a snapshot of a NetBox server's Regions and
@@ -77,6 +79,30 @@ export interface NetboxSyncReport {
      *  the shape an exported-then-imported tree comes back in. Demoted to
      *  ordinary folders, never deleted. */
     duplicatesAdopted: number;
+    /** Prefixes in the snapshot. Zero when the list could not be read — read
+     *  `prefixesUnavailable` before concluding NetBox has none. */
+    prefixes: number;
+    /** Set when the snapshot carried no authoritative prefix list. */
+    prefixesUnavailable: NetboxPrefixUnavailable | null;
+    /** Counted by the backend: prefixes hanging off something HoTTY mirrors no
+     *  folder for (a location, a site group, or nothing). */
+    prefixesSkipped: number;
+    /** Counted here: prefix text this app could not read as a CIDR. Kept apart
+     *  from `prefixesSkipped` so a user can tell a NetBox data problem from a
+     *  notation HoTTY refuses. */
+    prefixesUnparsed: number;
+    /** Folders whose stored prefix list this run rewrote. */
+    prefixesChanged: number;
+    /**
+     * Folders that ended up carrying at least one prefix.
+     *
+     * The antidote to this feature's quietest failure, the way
+     * `sitesWithoutSiteId` is for the Site ID field: a NetBox whose prefixes
+     * all hang off locations produces no error and no changed folder, so
+     * "placement does nothing" and "placement is broken" look identical
+     * without this number.
+     */
+    foldersWithPrefixes: number;
     rootCreated: boolean;
     /** `false` ⇒ the returned tree is REFERENCE-EQUAL to the input, and the
      *  caller can skip persisting entirely (no encrypt, no write, no broadcast). */
@@ -197,8 +223,19 @@ function emptyReport(): NetboxSyncReport {
         regions: 0, sites: 0, created: 0, renamed: 0, moved: 0, detached: 0,
         markedMissing: 0, unmarkedMissing: 0, stillMissing: 0,
         sitesWithoutSiteId: 0, duplicatesAdopted: 0,
+        prefixes: 0, prefixesUnavailable: null, prefixesSkipped: 0,
+        prefixesUnparsed: 0, prefixesChanged: 0, foldersWithPrefixes: 0,
         rootCreated: false, changed: false,
     };
+}
+
+/** Whether two already-sorted prefix lists hold the same strings. */
+function samePrefixes(a: readonly string[], b: readonly string[]): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
 }
 
 // ── the reconcile ──────────────────────────────────────────────────────────
@@ -353,7 +390,18 @@ export function reconcileNetboxTree(
 
         const link = existing.netbox!;
         if (link.missing) {
-            existing.netbox = { server: link.server, kind: link.kind, objectId: link.objectId };
+            // Rebuilt field by field rather than spread-and-delete, so a future
+            // field cannot silently survive the "it came back" reset. `prefixes`
+            // is carried over on purpose: the prefix pass below runs only when
+            // the snapshot has an authoritative list, so dropping them here
+            // would erase every stored prefix on a sync where NetBox could not
+            // be asked for them.
+            existing.netbox = {
+                server: link.server,
+                kind: link.kind,
+                objectId: link.objectId,
+                ...(link.prefixes ? { prefixes: link.prefixes } : {}),
+            };
             report.unmarkedMissing++;
             changed = true;
         }
@@ -374,7 +422,14 @@ export function reconcileNetboxTree(
         return existing;
     };
 
-    // 5. Regions, parents before children.
+    // 5. What the snapshot actually contains. Built before the upserts because
+    //    both the prefix pass and the vanished pass need it, and it depends on
+    //    nothing but the snapshot.
+    const seen = new Set<string>();
+    for (const r of snapshot.regions) seen.add(`${server}:region:${r.id}`);
+    for (const s of snapshot.sites) seen.add(`${server}:site:${s.id}`);
+
+    // 6. Regions, parents before children.
     //
     // The backend already returns them sorted by (depth, id) — a parent must
     // exist before its children are placed. Sorting again here costs nothing
@@ -389,7 +444,7 @@ export function reconcileNetboxTree(
         regionDrafts.set(r.id, upsert('region', r.id, r.name, parent));
     }
 
-    // 6. Sites. A site whose region was not returned — NetBox object
+    // 7. Sites. A site whose region was not returned — NetBox object
     //    permissions can hide a region while still listing its sites — lands at
     //    the container root rather than dangling against a folder that was
     //    never created.
@@ -400,11 +455,71 @@ export function reconcileNetboxTree(
         upsert('site', s.id, siteFolderName(s), parent);
     }
 
-    // 7. Mark what vanished. Never delete: a site folder may hold hosts the
+    // 8. IPAM prefixes onto the folders they hang off.
+    //
+    //    A pass of its own rather than a branch inside `upsert`, so `upsert`
+    //    keeps its one job — create, rename, re-parent — and the prefix rules
+    //    can be read in one place. `byRef` is the right thing to walk: `upsert`
+    //    registers folders it creates, so a first-ever sync reaches them too.
+    //
+    //    🚨 Skipped entirely when the snapshot has no authoritative list. A
+    //    token that loses `ipam.view_prefix`, or an IPAM that outgrows what
+    //    HoTTY pages through, must not clear every prefix the tree already
+    //    holds. This is the reason `snapshot.prefixes` is nullable.
+    report.prefixesUnavailable = snapshot.prefixesUnavailable ?? null;
+    report.prefixesSkipped = snapshot.prefixesSkipped ?? 0;
+    // Truthiness, not `!== null`: an older backend, or any caller that omits
+    // the field, sends `undefined`, and that means the same thing — no
+    // authoritative list. `[]` is truthy, so a genuine "NetBox has none" still
+    // runs the pass and clears what it should.
+    if (snapshot.prefixes) {
+        report.prefixes = snapshot.prefixes.length;
+        const desired = new Map<string, string[]>();
+        for (const p of snapshot.prefixes) {
+            const parsed = parseCidr(p.prefix);
+            if (parsed === null) {
+                report.prefixesUnparsed++;
+                continue;
+            }
+            const ref = `${server}:${p.scopeKind}:${p.scopeId}`;
+            const list = desired.get(ref);
+            if (list) list.push(formatPrefix(parsed));
+            else desired.set(ref, [formatPrefix(parsed)]);
+        }
+        // Canonical text, de-duplicated, one fixed order: two runs of the same
+        // NetBox data must compare equal, or every sync rewrites the tree.
+        for (const [ref, list] of desired) {
+            const sorted = [...new Set(list)].sort((a, b) =>
+                comparePrefixes(parseCidr(a)!, parseCidr(b)!));
+            desired.set(ref, sorted);
+        }
+
+        for (const [ref, d] of byRef) {
+            const link = d.netbox;
+            if (!link || link.kind === 'root') continue;
+            // A folder NetBox did not return this run keeps what it has; the
+            // pass below is about to mark it missing.
+            if (!seen.has(ref)) continue;
+            const next = desired.get(ref) ?? [];
+            const current = link.prefixes ?? [];
+            if (!samePrefixes(current, next)) {
+                if (next.length === 0) {
+                    // Absent, not `[]` — see `NetboxNodeLink.prefixes`.
+                    const { prefixes: _dropped, ...rest } = link;
+                    void _dropped;
+                    d.netbox = rest;
+                } else {
+                    d.netbox = { ...link, prefixes: next };
+                }
+                report.prefixesChanged++;
+                changed = true;
+            }
+            if (next.length > 0) report.foldersWithPrefixes++;
+        }
+    }
+
+    // 9. Mark what vanished. Never delete: a site folder may hold hosts the
     //    user added, and one mistaken click in NetBox would take them with it.
-    const seen = new Set<string>();
-    for (const r of snapshot.regions) seen.add(`${server}:region:${r.id}`);
-    for (const s of snapshot.sites) seen.add(`${server}:site:${s.id}`);
     for (const d of managed) {
         const link = d.netbox;
         if (!link || link.server !== server || link.kind === 'root') continue;

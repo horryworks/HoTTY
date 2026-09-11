@@ -127,15 +127,33 @@ describe('NetboxTab', () => {
             expect(await screen.findByText('Connected to NetBox 4.6.9.')).toBeTruthy();
         });
 
-        it('clears the token box once the token is sealed', async () => {
+        it('puts the token box away once the token is sealed', async () => {
+            // A blank "API token" box next to a Connect button reads as "your
+            // token is gone" — the token can never come back to the renderer,
+            // so that box would be blank forever. Say the state instead.
             await connectWith(probeResult());
-            await waitFor(() =>
-                expect(
-                    (screen.getByPlaceholderText('Paste the token') as HTMLInputElement).value,
-                ).toBe(''),
-            );
-            // And it is never repopulated from anywhere.
             expect(await screen.findByText('A token is saved.')).toBeTruthy();
+            await waitFor(() =>
+                expect(screen.queryByPlaceholderText('Paste the token')).toBeNull(),
+            );
+        });
+
+        it('offers to replace a saved token, and the box comes back empty', async () => {
+            await connectWith(probeResult());
+            expect(await screen.findByText('A token is saved.')).toBeTruthy();
+            fireEvent.click(screen.getByText('Replace token'));
+            const box = screen.getByPlaceholderText('Paste the token') as HTMLInputElement;
+            // Never repopulated from anywhere: the renderer does not have it.
+            expect(box.value).toBe('');
+        });
+
+        it('goes back to the saved state when a replacement is abandoned', async () => {
+            await connectWith(probeResult());
+            expect(await screen.findByText('A token is saved.')).toBeTruthy();
+            fireEvent.click(screen.getByText('Replace token'));
+            fireEvent.click(screen.getByText('Cancel'));
+            expect(screen.queryByPlaceholderText('Paste the token')).toBeNull();
+            expect(screen.getByText('A token is saved.')).toBeTruthy();
         });
     });
 
@@ -278,6 +296,97 @@ describe('NetboxTab', () => {
 
             fireEvent.click(screen.getByText('Sync now'));
             expect(await screen.findByText(/No Site ID value on any of the 2 sites/)).toBeTruthy();
+        });
+    });
+
+    describe('placement section', () => {
+        function syncWith(over: Record<string, unknown>) {
+            netboxHasToken.mockResolvedValue(true);
+            netboxFetchSnapshot.mockResolvedValue({
+                serverKey: 'default',
+                siteIdField: null,
+                regions: [],
+                sites: [{ id: 1, name: 'Tokyo', regionId: null, siteId: null }],
+                prefixes: [],
+                prefixesUnavailable: null,
+                prefixesSkipped: 0,
+                ...over,
+            });
+            useSettingsStore.getState().update('netbox', {
+                ...useSettingsStore.getState().netbox,
+                baseUrl: 'https://netbox.example.com',
+            });
+        }
+
+        it('offers the toggle, on by default', () => {
+            render(<NetboxTab />);
+            const box = screen.getByLabelText(/Use NetBox IP ranges to choose a folder/) as HTMLInputElement;
+            expect(box.checked).toBe(true);
+        });
+
+        it('remembers the toggle being turned off', () => {
+            render(<NetboxTab />);
+            fireEvent.click(screen.getByLabelText(/Use NetBox IP ranges to choose a folder/));
+            expect(useSettingsStore.getState().netbox.prefixPlacement).toBe(false);
+        });
+
+        it('says how many folders can now match a host', async () => {
+            // The one number that separates "does nothing" from "is broken".
+            syncWith({
+                prefixes: [{ prefix: '10.1.0.0/16', scopeKind: 'site', scopeId: 1 }],
+            });
+            render(<NetboxTab />);
+            await waitFor(() => expect(netboxHasToken).toHaveBeenCalled());
+            fireEvent.click(screen.getByText('Sync now'));
+            expect(await screen.findByText(/1 prefixes read; 1 folders can now match/)).toBeTruthy();
+        });
+
+        it('warns when prefixes were read but none landed on a folder', async () => {
+            syncWith({
+                prefixes: [{ prefix: '10.1.0.0/16', scopeKind: 'site', scopeId: 999 }],
+            });
+            render(<NetboxTab />);
+            await waitFor(() => expect(netboxHasToken).toHaveBeenCalled());
+            fireEvent.click(screen.getByText('Sync now'));
+            expect(await screen.findByText(/none landed on a folder/)).toBeTruthy();
+        });
+
+        it('distinguishes a refused prefix list from an oversized one', async () => {
+            // Both mean "nothing read, nothing cleared", but the fixes differ.
+            syncWith({ prefixes: null, prefixesUnavailable: 'denied' });
+            const { unmount } = render(<NetboxTab />);
+            await waitFor(() => expect(netboxHasToken).toHaveBeenCalled());
+            fireEvent.click(screen.getByText('Sync now'));
+            expect(await screen.findByText(/ipam.view_prefix/)).toBeTruthy();
+            unmount();
+
+            resetNetboxSyncState();
+            syncWith({ prefixes: null, prefixesUnavailable: 'tooMany' });
+            render(<NetboxTab />);
+            await waitFor(() => expect(netboxHasToken).toHaveBeenCalled());
+            fireEvent.click(screen.getByText('Sync now'));
+            expect(await screen.findByText(/more prefixes than HoTTY will read/)).toBeTruthy();
+        });
+
+        it('reports prefixes attached to something it has no folder for', async () => {
+            syncWith({ prefixesSkipped: 3 });
+            render(<NetboxTab />);
+            await waitFor(() => expect(netboxHasToken).toHaveBeenCalled());
+            fireEvent.click(screen.getByText('Sync now'));
+            expect(await screen.findByText(/Ignored 3 prefixes/)).toBeTruthy();
+        });
+
+        it('hides the counters while the toggle is off', async () => {
+            syncWith({ prefixes: [{ prefix: '10.1.0.0/16', scopeKind: 'site', scopeId: 1 }] });
+            useSettingsStore.getState().update('netbox', {
+                ...useSettingsStore.getState().netbox,
+                prefixPlacement: false,
+            });
+            render(<NetboxTab />);
+            await waitFor(() => expect(netboxHasToken).toHaveBeenCalled());
+            fireEvent.click(screen.getByText('Sync now'));
+            await waitFor(() => expect(netboxFetchSnapshot).toHaveBeenCalled());
+            expect(screen.queryByText(/folders can now match/)).toBeNull();
         });
     });
 });

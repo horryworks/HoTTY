@@ -46,6 +46,10 @@ export const notifications = {
     sessionLoggingUpdate: 'Could not update session logging',
     sessionListener: 'Could not listen for session events',
     clipboardCopy: 'Could not copy the selection',
+    aiWindowHandoverTimedOut: 'AI Chat could not be moved to another window — it stays here.',
+    aiWindowOpenFailed: 'Could not open the AI Chat window',
+    aiWindowPopInFailed: 'Could not move AI Chat back into a window',
+    aiWindowOpenAsTabFailed: 'Could not open that terminal as a tab',
   },
   errorBoundary: {
     title: 'Something went wrong',

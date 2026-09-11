@@ -22,6 +22,7 @@ export const chrome = {
     stopWatchAi: 'AI 모니터링 중지',
     watchInTitle: '모니터링할 대화',
     watchInNew: '새 대화',
+    watchInAiWindow: 'AI Chat 창에서 보기',
     bookmark: '북마크 추가…',
   },
   appSidebar: {

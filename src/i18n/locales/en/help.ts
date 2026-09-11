@@ -27,7 +27,7 @@ export const help = {
     openDialog:
       'Open the connection dialog via <0>Ctrl + N</0> or the <1>"New"</1> button in the sidebar. You can manage your hosts and folders in the host tree.',
     doubleClick:
-      '<0>Double-click:</0> Double-click a host in the tree to connect immediately.',
+      '<0>Double-click:</0> Double-click a host in the tree to connect immediately. Double-click a folder — or click the arrow to its left — to open and close it; a single click only selects it.',
     hostFilter:
       '<0>Filter:</0> Type in the box above the host tree to narrow it down by folder name, host name or address. <1>Ctrl + F</1> jumps to it. Enter selects the first match; Escape clears the box. Matching hosts inside a collapsed folder are revealed, and clearing the filter puts every folder back the way you had it.',
     supportedTypes: '<0>Supported connection types:</0>',
@@ -84,6 +84,10 @@ export const help = {
       '<0>Sync folders from NetBox:</0> In <1>Settings, NetBox</1> enter your NetBox address and an API token, and HoTTY mirrors its Regions and Sites into a folder called <2>NetBox</2> at the bottom of the tree. It reads only — nothing is ever written back. Press the circular-arrows button in the host-tree toolbar to sync, or let it run once each time HoTTY starts. Site folders are named "code site name"; which NetBox field holds the code is yours to choose, because it differs per organisation.',
     netboxOwnership:
       '<0>What the sync owns:</0> Names and the arrangement inside the NetBox folder belong to NetBox and are rewritten on every sync, so those folders cannot be renamed here. Hosts you add inside a site folder are never touched. Nothing is ever deleted: a folder that disappears from NetBox is marked "not in NetBox" and kept, because it may hold hosts you added. Drag a folder out of the NetBox folder and the sync stops re-arranging it — it only keeps the name up to date.',
+    netboxPlacement:
+      '<0>Put hosts in folders by IP range:</0> When the sync is set to read prefixes, each NetBox folder remembers the IP ranges registered against it. Type an address in the New Session form and HoTTY names the folder that covers it and preselects it. To sort hosts you already have, right-click a folder (or the tree background) and choose <1>Sort by IP Range…</1>: it lists exactly what would move, what is already right, and what no folder or more than one folder claims. Nothing moves until you press the button, and anything you untick stays where it is. Where two folders claim the same range HoTTY does not choose — it leaves those hosts alone and says so.',
+    sshKeys:
+      '<0>SSH keys:</0> <1>Settings, SSH Keys</1> generates a key pair and manages the ones already in your <2>.ssh</2> folder. Pick Ed25519 unless a device needs otherwise. Keys are written as ordinary OpenSSH files, so PuTTY, WinSCP and the <3>ssh</3> command read them too, and each new key is locked down so only your account can open it. Each row can copy the public key, save it to a file, or show the single line to paste into <4>authorized_keys</4> on the server. Only keys HoTTY created can be deleted here. The key box in the connection form lists the same keys, and can generate one without leaving the form.',
   },
 
   layout: {
@@ -226,6 +230,9 @@ export const help = {
       '<0>Attach images:</0> Paste an image (Ctrl + V), drop image files onto the message box, or use the paperclip button to send screenshots to the AI. PNG, JPEG, WebP and GIF are supported (up to 5 images, 5 MB each). The selected model must support image input.',
     answerLanguage:
       '<0>Answer language:</0> The AI replies in the app\'s display language by default, so switching <1>Settings → General → Display language</1> switches the AI\'s replies too. To pin a different one, open <2>settings</2> at the top of the AI Chat pane and choose a language — <3>Auto</3> follows the interface and shows which language that currently is. The choice is shared by every conversation in every window, including ones already under way, and applies from your next message onward. Commands, terminal output, file paths and identifiers are always left untranslated.',
+    ownWindowHeading: "AI Chat in Its Own Window",
+    ownWindowBody:
+      "The button beside the trash icon in the AI Chat header moves the whole pane — every conversation, its watched terminals and any terminals the AI opened — into a window of its own, so the terminal keeps the full HoTTY window. The same button moves it back. In that window a pin button keeps it above other applications, and its position and size are remembered for next time. A conversation only ever lives in one place, so the button is greyed out while a reply is streaming, a command is running, or something is waiting for your answer. Closing the AI Chat window ends its conversations, and asks first when there is anything to lose — use the move-back button to keep them. A terminal tab's right-click menu also has \"Watch in the AI Chat window\", which hands that terminal to the AI window (opening one if needed).",
     askAiHeading: 'Ask AI (Right-Click)',
     askAiBody:
       'Select text in the terminal (or click a <0>Terminal Marker</0> to select a whole output block), then right-click and type your question in the <1>"Ask AI"</1> box — press Enter to send. HoTTY opens the AI chat with your question and the selected text.',

@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { applySessionNames, buildSessionNames, resetSessionNames } from './sessionNameShare';
 import { lookupSession, toWatchedTerminalInfo, viewFromRecord, viewFromWorker } from './sessionLookup';
 import type { SessionRecord } from '../hooks/useSessionManager';
 import type { AiWorkerSession } from '../stores/aiWorkerSessionStore';
@@ -82,6 +83,37 @@ describe('sessionLookup', () => {
         const info = toWatchedTerminalInfo({
             displayName: 'sw-01', status: 'connected', protocol: 'ssh', host: '192.0.2.10',
             hasPassword: true, hasPrivateKey: true, headless: false, remote: true,
+        });
+        expect(info?.hasPassword).toBe(false);
+        expect(info?.hasPrivateKey).toBe(false);
+    });
+});
+
+describe('lookupSession — names shared by other windows', () => {
+    beforeEach(() => resetSessionNames());
+
+    it('prefers the owning window\u2019s display name over the bare host', () => {
+        // Without this, every terminal a popped-out AI Chat watches would read as
+        // an IP address: `list_all_sessions` only knows host and protocol.
+        applySessionNames(buildSessionNames('main', { 's-far': { displayName: 'core-sw01' } }));
+        const info = lookupSession('s-far', {
+            crossWindow: [{ sessionId: 's-far', host: '192.0.2.10', protocol: 'ssh', ownerLabel: 'main' }],
+        });
+        expect(info?.displayName).toBe('core-sw01');
+        expect(info?.remote).toBe(true);
+    });
+
+    it('falls back to the host while no window has published a name', () => {
+        const info = lookupSession('s-far', {
+            crossWindow: [{ sessionId: 's-far', host: '192.0.2.10', protocol: 'ssh', ownerLabel: 'main' }],
+        });
+        expect(info?.displayName).toBe('192.0.2.10');
+    });
+
+    it('never lets a shared name leak credential flags', () => {
+        applySessionNames(buildSessionNames('main', { 's-far': { displayName: 'core-sw01' } }));
+        const info = lookupSession('s-far', {
+            crossWindow: [{ sessionId: 's-far', host: '192.0.2.10', protocol: 'ssh', ownerLabel: 'main' }],
         });
         expect(info?.hasPassword).toBe(false);
         expect(info?.hasPrivateKey).toBe(false);

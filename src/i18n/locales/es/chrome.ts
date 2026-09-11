@@ -21,6 +21,7 @@ export const chrome = {
     stopWatchAi: 'Detener monitoreo de IA',
     watchInTitle: 'Monitorear en',
     watchInNew: 'Nueva conversación',
+    watchInAiWindow: 'Ver en la ventana de AI Chat',
     bookmark: 'Añadir marcador…',
   },
   appSidebar: {

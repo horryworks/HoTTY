@@ -1,0 +1,209 @@
+/* This modal opens from two places: the SSH Keys settings tab, and the session
+   dialog. Only the first has `SettingsModal.css` loaded (the settings modal is
+   lazy), so the form styles here are self-contained rather than borrowed from
+   `.settings-group` — otherwise the session-dialog route renders unstyled. */
+
+/* Nested inside the settings modal and, from the connection form, inside the
+   session dialog — hence 10001 rather than the usual 10000. */
+.skg-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--modal-overlay-bg);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10001;
+}
+
+.skg-modal {
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 16px var(--modal-shadow);
+  animation: fadeIn 0.1s ease-out;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  width: 420px;
+  max-width: 92vw;
+  max-height: 88vh;
+  font-family: var(--ui-font-family);
+}
+
+.skg-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.skg-header h3 {
+  margin: 0;
+  font-family: var(--ui-font-family);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.skg-body {
+  padding: 15px 20px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.skg-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* --- Form --- */
+
+.skg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.skg-field > label {
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  color: var(--text-secondary);
+}
+
+.skg-field input[type='text'],
+.skg-field input[type='password'],
+.skg-field select {
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.skg-field input:focus,
+.skg-field select:focus {
+  border-color: var(--accent-color);
+}
+
+.skg-field input:disabled,
+.skg-field select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* The passphrase pair reads as one question, so the confirm field sits tight
+   under the first rather than a full field-gap away. */
+.skg-field--tight {
+  margin-bottom: 4px;
+}
+
+/* Quieter than a label: guidance, not a thing to fill in. */
+.skg-hint {
+  margin: 0;
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.skg-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0 0;
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.skg-checkbox input {
+  cursor: pointer;
+}
+
+/* The generated public key, for copying into authorized_keys. Monospace,
+   because it is a literal line pasted elsewhere. */
+.skg-public {
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  padding: 5px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  outline: none;
+  word-break: break-all;
+}
+
+.skg-public:focus {
+  border-color: var(--accent-color);
+}
+
+.skg-field-error {
+  margin: 0;
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  line-height: 1.4;
+  color: var(--color-danger);
+}
+
+.skg-error {
+  margin: 12px 0 0;
+  padding: 6px 12px;
+  border: 1px solid var(--color-danger-border);
+  border-radius: 4px;
+  background: var(--color-danger-bg);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  color: var(--color-danger);
+}
+
+/* --- Buttons --- */
+.skg-footer button {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  transition: background-color 0.1s;
+}
+
+.skg-footer button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Own colours, not `.btn-primary` / `.btn-secondary`: those live in
+   `SessionDialog.css`, so they are only loaded on one of this modal's two
+   routes. Borrowing them would leave the settings route unstyled. */
+.skg-btn-primary {
+  background: var(--accent-color);
+  color: var(--text-on-accent);
+}
+
+.skg-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.skg-btn-secondary {
+  background: var(--btn-secondary-bg);
+  color: var(--text-primary);
+}
+
+.skg-btn-secondary:hover:not(:disabled) {
+  background: var(--btn-secondary-hover-bg);
+}

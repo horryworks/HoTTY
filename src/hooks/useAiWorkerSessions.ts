@@ -66,6 +66,13 @@ export interface UseAiWorkerSessionsOptions {
     onWorkerGone?: (worker: AiWorkerSession) => void;
     /** A worker was materialized into a tab (e.g. so the tab can be focused). */
     onWorkerMaterialized?: (worker: AiWorkerSession) => void;
+    /**
+     * Give the terminal to a window that HAS a tab strip, instead of adopting it
+     * here. Return true when handled. Supplied only by a dedicated AI Chat
+     * window, which has nowhere to put a tab — without it a Telnet worker that
+     * needs a human login would connect with no way to type into it.
+     */
+    handOffMaterialize?: (worker: AiWorkerSession) => boolean;
 }
 
 export interface UseAiWorkerSessionsReturn {
@@ -81,8 +88,9 @@ export interface UseAiWorkerSessionsReturn {
     touchWorker: (id: string) => void;
 }
 
-/** Secret-free config for the adopted record: enough for the binding key and Save-to-Host-Tree. */
-function configForAdopt(w: AiWorkerSession): AnyConfig {
+/** Secret-free config for the adopted record: enough for the binding key and Save-to-Host-Tree.
+ *  Exported because another window adopts a handed-off worker the same way. */
+export function configForAdopt(w: AiWorkerSession): AnyConfig {
     const encoding = useSettingsStore.getState().globalEncoding;
     if (w.protocol === 'cmd' || w.protocol === 'powershell' || w.protocol === 'git-bash') {
         return { shellType: w.protocol, encoding };
@@ -128,6 +136,18 @@ export function useAiWorkerSessions(options: UseAiWorkerSessionsOptions): UseAiW
     const materializeWorker = useCallback(async (id: string): Promise<boolean> => {
         const w = useAiWorkerSessionStore.getState().workers[id];
         if (!w) return false;
+        // A dedicated AI Chat window has no tab strip, so the terminal has to
+        // appear in a window that does. The session id is unchanged, so the
+        // conversation's link and its capture carry on uninterrupted.
+        if (optionsRef.current.handOffMaterialize?.(w)) {
+            const t0 = removeTimersRef.current.get(id);
+            if (t0) {
+                clearTimeout(t0);
+                removeTimersRef.current.delete(id);
+            }
+            useAiWorkerSessionStore.getState().remove(id);
+            return true;
+        }
         let history = '';
         try {
             history = await tauriService.getWatchBuffer(id);

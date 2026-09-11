@@ -46,6 +46,10 @@ export const notifications = {
     sessionLoggingUpdate: '세션 로깅을 업데이트하지 못했습니다',
     sessionListener: '세션 이벤트를 수신하지 못했습니다',
     clipboardCopy: '선택 영역을 복사하지 못했습니다',
+    aiWindowHandoverTimedOut: 'AI 채팅을 다른 창으로 옮기지 못했습니다. 여기에 남습니다.',
+    aiWindowOpenFailed: 'AI 채팅 창을 열지 못했습니다',
+    aiWindowPopInFailed: 'AI 채팅을 창으로 되돌리지 못했습니다',
+    aiWindowOpenAsTabFailed: '해당 터미널을 탭으로 열지 못했습니다',
   },
   errorBoundary: {
     title: '문제가 발생했습니다',

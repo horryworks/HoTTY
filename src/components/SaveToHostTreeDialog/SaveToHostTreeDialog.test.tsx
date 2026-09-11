@@ -8,6 +8,7 @@ import type {
     TelnetConnectionConfig,
     SerialConnectionConfig,
 } from '../../types/appTypes';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 // Mock tauriService so useHostManager (used inside the dialog) doesn't hit Tauri.
 vi.mock('../../services/tauriService', () => ({
@@ -460,5 +461,136 @@ describe('SaveToHostTreeDialog', () => {
             fireEvent.click(btn);
             expect(btn.disabled).toBe(true);
         });
+    });
+});
+
+describe('SaveToHostTreeDialog — NetBox prefix placement', () => {
+    const sshConfig: SshConnectionConfig = {
+        host: '10.1.0.9',
+        port: 22,
+        username: 'alice',
+        encoding: 'utf8',
+        keepaliveIntervalSecs: 0,
+        connectTimeoutSecs: 5,
+    };
+
+    /** Container, one site with a prefix, one plain folder. */
+    function seedTree(prefixes = ['10.1.0.0/16']) {
+        const tree: HostTreeNode[] = [
+            {
+                id: 'c', type: 'folder', name: 'NetBox',
+                netbox: { server: 'default', kind: 'root' },
+                children: [
+                    {
+                        id: 's1', type: 'folder', name: 'TOK Tokyo', children: [],
+                        netbox: { server: 'default', kind: 'site', objectId: 10, prefixes },
+                    },
+                ],
+            },
+            { id: 'mine', type: 'folder', name: 'Mine', children: [] },
+        ];
+        localStorage.setItem('hotty_host_tree', JSON.stringify(tree));
+    }
+
+    const open = (config: SshConnectionConfig = sshConfig) =>
+        render(
+            <SaveToHostTreeDialog
+                open
+                initialName="tokyo-01"
+                protocol="ssh"
+                config={config}
+                onClose={() => {}}
+            />,
+        );
+
+    beforeEach(() => {
+        localStorage.clear();
+        useSettingsStore.getState().reset();
+    });
+
+    const selectedRow = () =>
+        document.querySelector('.save-to-tree-folder-row.selected')?.textContent ?? '';
+
+    it('preselects the folder the address matches', async () => {
+        seedTree();
+        open();
+        await waitFor(() => expect(selectedRow()).toContain('TOK Tokyo'));
+    });
+
+    it('explains which prefix chose the folder', async () => {
+        seedTree();
+        open();
+        expect(await screen.findByText(/10\.1\.0\.0\/16/)).toBeTruthy();
+    });
+
+    it('falls back to the root when nothing matches', async () => {
+        seedTree(['192.168.9.0/24']);
+        open();
+        await waitFor(() => expect(selectedRow()).toContain('(Root)'));
+        expect(screen.queryByText(/Picked the folder/)).toBeNull();
+    });
+
+    it('shows nothing at all when the tree carries no prefixes', async () => {
+        localStorage.setItem('hotty_host_tree', JSON.stringify([
+            { id: 'mine', type: 'folder', name: 'Mine', children: [] },
+        ]));
+        open();
+        await waitFor(() => expect(selectedRow()).toContain('(Root)'));
+        expect(screen.queryByText(/NetBox/)).toBeNull();
+    });
+
+    it('does not resolve a name, so a hostname preselects nothing', async () => {
+        seedTree();
+        open({ ...sshConfig, host: 'router1.example.com' });
+        await waitFor(() => expect(selectedRow()).toContain('(Root)'));
+    });
+
+    it('will not choose when two folders claim the address', async () => {
+        localStorage.setItem('hotty_host_tree', JSON.stringify([
+            { id: 'a', type: 'folder', name: 'TOK Tokyo', children: [], netbox: { server: 'default', kind: 'site', objectId: 10, prefixes: ['10.1.0.0/16'] } },
+            { id: 'b', type: 'folder', name: 'OSA Osaka', children: [], netbox: { server: 'default', kind: 'site', objectId: 11, prefixes: ['10.1.0.0/16'] } },
+        ]));
+        open();
+        expect(await screen.findByText(/so none was picked/)).toBeTruthy();
+        await waitFor(() => expect(selectedRow()).toContain('(Root)'));
+    });
+
+    it('suggests nothing while the setting is off', async () => {
+        seedTree();
+        useSettingsStore.getState().update('netbox', {
+            ...useSettingsStore.getState().netbox,
+            prefixPlacement: false,
+        });
+        open();
+        await waitFor(() => expect(selectedRow()).toContain('(Root)'));
+    });
+
+    it('keeps a folder the user picked, and drops the explanation with it', async () => {
+        seedTree();
+        open();
+        await waitFor(() => expect(selectedRow()).toContain('TOK Tokyo'));
+        fireEvent.click(screen.getByText('Mine'));
+        expect(selectedRow()).toContain('Mine');
+        expect(screen.queryByText(/Picked the folder/)).toBeNull();
+    });
+
+    it('saves into the preselected folder', async () => {
+        seedTree();
+        const onClose = vi.fn();
+        render(
+            <SaveToHostTreeDialog
+                open
+                initialName="tokyo-01"
+                protocol="ssh"
+                config={sshConfig}
+                onClose={onClose}
+            />,
+        );
+        await waitFor(() => expect(selectedRow()).toContain('TOK Tokyo'));
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(onClose).toHaveBeenCalled());
+        const saved = JSON.parse(localStorage.getItem('hotty_host_tree') ?? '[]') as HostTreeNode[];
+        const site = saved[0].children?.[0];
+        expect(site?.children?.map((n) => n.name)).toEqual(['tokyo-01']);
     });
 });

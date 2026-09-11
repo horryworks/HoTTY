@@ -89,6 +89,7 @@ describe('SettingsModal', () => {
     expect(screen.getByText('General')).toBeTruthy();
     expect(screen.getByText('Appearance')).toBeTruthy();
     expect(screen.getByText('Protocols')).toBeTruthy();
+    expect(screen.getByText('SSH Keys')).toBeTruthy();
     expect(screen.getByText('Features')).toBeTruthy();
     expect(screen.getByText('Versions')).toBeTruthy();
     expect(screen.getByText('About')).toBeTruthy();

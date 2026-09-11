@@ -2,6 +2,7 @@ import type { LinkableSession, SessionInfo } from '../types/appTypes';
 import type { SessionRecord } from '../hooks/useSessionManager';
 import type { AiWorkerSession } from '../stores/aiWorkerSessionStore';
 import type { WatchedTerminalInfo } from './aiConnectRequest';
+import { remoteSessionName } from './sessionNameShare';
 
 /**
  * One place to answer "what do we know about session id X?" across the three
@@ -99,8 +100,13 @@ export function lookupSession(id: string, src: SessionSources): SessionView | un
     if (w) return viewFromWorker(w);
     const cw = src.crossWindow?.find((s) => s.sessionId === id);
     if (cw) {
+        // The backend knows only the host. The owning window publishes what the
+        // user actually calls this terminal (see `sessionNameShare`), so prefer
+        // that — otherwise every terminal an out-of-window AI Chat watches would
+        // read as a bare IP.
+        const shared = remoteSessionName(id);
         return {
-            displayName: cw.host || cw.sessionId,
+            displayName: shared?.displayName || cw.host || cw.sessionId,
             status: 'connected',
             protocol: cw.protocol,
             host: cw.host || undefined,

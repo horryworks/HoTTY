@@ -240,21 +240,8 @@ pub async fn open_debug_log_folder(app: AppHandle) -> Result<(), String> {
             .map_err(|e| format!("failed to create log directory: {e}"))?;
     }
 
-    #[cfg(windows)]
-    {
-        tokio::process::Command::new("explorer.exe")
-            .arg(log_dir.to_string_lossy().as_ref())
-            .spawn()
-            .map_err(|e| format!("failed to open log folder: {e}"))?;
-    }
-
-    #[cfg(not(windows))]
-    {
-        tokio::process::Command::new("xdg-open")
-            .arg(log_dir.to_string_lossy().as_ref())
-            .spawn()
-            .map_err(|e| format!("failed to open log folder: {e}"))?;
-    }
+    crate::services::os_paths::open_in_file_manager(&log_dir)
+        .map_err(|e| format!("failed to open log folder: {e}"))?;
 
     Ok(())
 }

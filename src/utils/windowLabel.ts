@@ -28,3 +28,23 @@ export const IS_TAURI: boolean =
 
 /** This window's label, resolved once at module load. */
 export const WINDOW_LABEL: string = resolveWindowLabel();
+
+/**
+ * Label prefix of a window that hosts ONLY an AI Chat pane — no tab bar, no
+ * grid, no sidebar. Minted by `create_ai_chat_window` in
+ * `src-tauri/src/commands/window.rs`; keep the two in step.
+ *
+ * It starts with `win-` on purpose so the window is still covered by the
+ * `"windows": ["main", "win-*"]` glob in `capabilities/default.json`. A label
+ * outside that glob gets zero permissions and fails silently at runtime.
+ */
+export const AI_WINDOW_PREFIX = 'win-ai-';
+
+/**
+ * Whether THIS window is a dedicated AI Chat window.
+ *
+ * Resolved from the label at module load (same as {@link WINDOW_LABEL}), so it
+ * is available synchronously to the first render — no URL parsing, no async
+ * probe, no flash of the wrong chrome.
+ */
+export const IS_AI_CHAT_WINDOW: boolean = WINDOW_LABEL.startsWith(AI_WINDOW_PREFIX);

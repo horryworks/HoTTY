@@ -46,6 +46,10 @@ export const notifications = {
     sessionLoggingUpdate: 'Impossible de mettre à jour la journalisation de la session',
     sessionListener: 'Impossible de recevoir les événements de session',
     clipboardCopy: 'Impossible de copier la sélection',
+    aiWindowHandoverTimedOut: 'Impossible de déplacer le chat IA vers une autre fenêtre ; il reste ici.',
+    aiWindowOpenFailed: "Impossible d'ouvrir la fenêtre du chat IA",
+    aiWindowPopInFailed: 'Impossible de ramener le chat IA dans une fenêtre',
+    aiWindowOpenAsTabFailed: "Impossible d'ouvrir ce terminal en tant qu'onglet",
   },
   errorBoundary: {
     title: "Une erreur s'est produite",

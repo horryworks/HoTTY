@@ -19,6 +19,39 @@ export const hostTree = {
     deleteWarning: 'This folder is synced from NetBox. The next sync will recreate it empty — any hosts you put inside it will not come back.',
     syncFailed: 'NetBox sync failed',
     syncDone: 'NetBox sync complete',
+    // Prefix placement. Shown only when the tree carries NetBox prefixes AND
+    // the typed address is an IP literal; otherwise the whole row is absent.
+    placement: {
+      // {{prefix}} = the CIDR that matched, e.g. 10.1.0.0/16.
+      matched: 'Matches NetBox {{prefix}}',
+      saveTo: 'Save to',
+      // {{name}} = the folder the Add button would have used.
+      here: 'Here: {{name}}',
+      topLevel: 'Top level',
+      // {{prefix}} = the CIDR two or more folders both claim.
+      ambiguous: 'More than one NetBox folder covers {{prefix}}, so HoTTY will not choose: {{folders}}',
+      unmatched: 'No NetBox folder covers this address.',
+    },
+  },
+  // The folder details panel that replaces the connection form while a folder
+  // is selected. Sections with nothing to say are not rendered at all.
+  folderDetails: {
+    // {{kind}} = kindRegion / kindSite below.
+    badge: 'NetBox · {{kind}}',
+    kindRegion: 'Region',
+    kindSite: 'Site',
+    // {{when}} = local date and time of the first sync that could not find it.
+    missingSince: 'Not found in NetBox since {{when}}',
+    ipRanges: 'IP ranges',
+    // {{count}} = stored ranges HoTTY could not read. Hidden when zero.
+    unreadableRanges: '{{count}} stored range(s) could not be read',
+    contents: 'Contents',
+    // {{folders}} / {{hosts}} = direct children only, not the whole subtree.
+    counts: 'Folders {{folders}} · Hosts {{hosts}}',
+    empty: 'This folder is empty.',
+    // Marker on a host whose address is inside none of the folder ranges.
+    outOfRange: 'out of range',
+    outOfRangeTitle: 'This address is not inside any IP range on this folder. It may simply mean the range is not registered in NetBox.',
   },
   newConnection: 'New Connection',
   newConnectionTitle: 'Start a new connection (clears the form)',
@@ -39,6 +72,7 @@ export const hostTree = {
     import: 'Import',
     sortAscending: 'Sort Ascending',
     sortDescending: 'Sort Descending',
+    moveByPrefix: 'Sort by IP Range…',
   },
   openAll: {
     confirmTitle: 'Open all hosts',

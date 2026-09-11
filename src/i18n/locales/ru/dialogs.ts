@@ -2,6 +2,15 @@
 // ключ хоста SSH, системный промпт, «Спросить ИИ», запуск ВМ через IAP и
 // сохранение в дерево хостов. По одному блоку ключей на диалог.
 export const dialogs = {
+  closeAiWindow: {
+    title: 'Закрыть AI Chat',
+    message_one: 'Закрытие окна завершит {{count}} беседу.',
+    message_other: 'Закрытие окна завершит бесед: {{count}}.',
+    workers_one: 'Открытый ИИ терминал также будет отключён.',
+    workers_other: 'Открытые ИИ терминалы ({{count}}) также будут отключены.',
+    hint: 'Чтобы сохранить их, используйте «Вернуть».',
+    confirmLabel: 'Закрыть',
+  },
   confirm: {
     title: 'Подтверждение',
     // Подпись кнопки подтверждения по умолчанию, если вызывающий код её не передал.
@@ -39,6 +48,29 @@ export const dialogs = {
     zone: 'Зона:',
     startVm: 'Запустить ВМ',
   },
+  moveByPrefix: {
+    title: 'Разложить по диапазонам IP',
+    scopeFolder: 'Узлы в {{name}}',
+    scopeTree: 'Все узлы',
+    matchIn: 'Сопоставлять с',
+    matchScope: '{{name}} и вложенное ({{count}})',
+    matchTree: 'Всё дерево ({{count}})',
+    scopeHint: 'Сузить область — единственный выход, когда NetBox использует один и тот же частный диапазон на каждой площадке.',
+    willMove: 'Будут перемещены ({{count}})',
+    alreadyPlaced: 'Уже в нужной папке ({{count}})',
+    ambiguous: 'На них претендует несколько папок ({{count}})',
+    ambiguousHint: 'Не трогаем: HoTTY не выбирает между папками, претендующими на один диапазон. Переместите вручную или устраните пересечение в NetBox.',
+    unmatched: 'Нет совпадений ({{count}})',
+    reasonNotAnAddress: 'не IP-адрес',
+    reasonNoMatch: 'вне всех префиксов',
+    moveRow: '{{from}} → {{to}}',
+    topLevel: 'Верхний уровень',
+    noPrefixes: 'Ни одна папка дерева ещё не несёт префикс NetBox. Включите размещение по префиксам и синхронизируйтесь с NetBox.',
+    nothingToDo: 'Все узлы уже там, куда указывает их адрес.',
+    apply: 'Переместить: {{count}}',
+    cancel: 'Отмена',
+    moved: 'Перемещено узлов: {{count}}',
+  },
   saveToHostTree: {
     title: 'Сохранить в дерево хостов',
     unsupported:
@@ -49,5 +81,7 @@ export const dialogs = {
     newFolderPlaceholder: 'Имя новой папки',
     create: 'Создать',
     newFolder: '+ Новая папка',
+    netboxSuggested: 'Выбрана папка NetBox, покрывающая {{prefix}}.',
+    netboxAmbiguous: '{{prefix}} покрывают несколько папок NetBox, поэтому ни одна не выбрана: {{folders}}',
   },
 };

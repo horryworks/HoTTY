@@ -152,6 +152,14 @@ interface UseAiChatReturn {
   closeTab: (aiSessionId: string, tabId: string) => void;
   /** Remove an entire pane's chat state + free its per-tab backend histories. */
   removeAiChatState: (aiSessionId: string) => void;
+  /** Snapshot a pane's conversation state (for moving it to another window). */
+  getAiChatState: (aiSessionId: string) => AiChatState | undefined;
+  /** Install a conversation set that arrived from another window; false if this
+   *  window already holds that pane (never silently overwrite a live chat). */
+  importAiChatState: (aiSessionId: string, state: AiChatState) => boolean;
+  /** Drop a pane's state WITHOUT freeing its backend history — the sending half
+   *  of a handover, where the conversation continues in the other window. */
+  forgetAiChatState: (aiSessionId: string) => void;
   setActiveTab: (aiSessionId: string, tabId: string) => void;
   /** Add a terminal to a tab's watched set (and mark it the default execute target).
    *  `aiOpened` flags a terminal the AI opened itself (ADR-AI-007). */
@@ -478,6 +486,62 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
         tauriService.aiChatClear(aiBackendSessionId(aiSessionId, t.id)).catch(() => {});
       }
     }
+    setAiChatStates((prev) => {
+      if (!prev.has(aiSessionId)) return prev;
+      const next = new Map(prev);
+      next.delete(aiSessionId);
+      return next;
+    });
+  }, []);
+
+  // -- Moving a conversation set between windows (pop-out / pop-in) --
+
+  /**
+   * This pane's conversation state right now, read from the mirror ref so an
+   * async handover can take a snapshot without closing over render state.
+   */
+  const getAiChatState = useCallback(
+    (aiSessionId: string): AiChatState | undefined => aiChatStatesRef.current.get(aiSessionId),
+    [],
+  );
+
+  /**
+   * Install a conversation set that arrived from another window.
+   *
+   * Keyed by the SENDER's pane id — the backend history lives at
+   * `paneId::tabId`, so reusing that id is what keeps every turn addressable.
+   * Refuses to overwrite a pane this window already holds: that would silently
+   * discard a live conversation, and the caller has a better answer (refuse the
+   * handover, so the sender keeps it).
+   */
+  const importAiChatState = useCallback((aiSessionId: string, state: AiChatState): boolean => {
+    if (aiChatStatesRef.current.has(aiSessionId)) return false;
+    // Mirror synchronously: the ack goes out before React commits, and a watch
+    // diff may read this in between.
+    aiChatStatesRef.current = new Map(aiChatStatesRef.current).set(aiSessionId, state);
+    setAiChatStates((prev) => {
+      if (prev.has(aiSessionId)) return prev;
+      const next = new Map(prev);
+      next.set(aiSessionId, state);
+      return next;
+    });
+    return true;
+  }, []);
+
+  /**
+   * Drop a pane's conversation state WITHOUT freeing its backend history.
+   *
+   * The counterpart to `removeAiChatState`, for the sending side of a handover:
+   * the conversation is not ending, it is continuing in another window, and
+   * clearing `paneId::tabId` here would wipe the very history the receiver is
+   * about to keep talking to.
+   */
+  const forgetAiChatState = useCallback((aiSessionId: string) => {
+    aiChatStatesRef.current = (() => {
+      const next = new Map(aiChatStatesRef.current);
+      next.delete(aiSessionId);
+      return next;
+    })();
     setAiChatStates((prev) => {
       if (!prev.has(aiSessionId)) return prev;
       const next = new Map(prev);
@@ -821,6 +885,9 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     addTab,
     closeTab,
     removeAiChatState,
+    getAiChatState,
+    importAiChatState,
+    forgetAiChatState,
     setActiveTab,
     addTabLink,
     removeTabLink,

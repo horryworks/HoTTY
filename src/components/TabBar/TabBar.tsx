@@ -20,6 +20,13 @@ interface TabBarProps {
   conversations?: ConversationSummary[];
   /** Route a terminal into a specific conversation (or 'new'); single-owner move. */
   onWatchInConversation?: (sessionId: string, target: string | 'new') => void;
+  /**
+   * Watch this terminal from the AI Chat WINDOW: hand it to the AI window if one
+   * is open, otherwise move AI Chat out into one first. A shortcut, not a new
+   * capability — the AI Chat link picker's "other windows" group can already do
+   * this in two steps.
+   */
+  onWatchInAiWindow?: (sessionId: string) => void;
   onSaveToHostTree?: (id: string) => void;
   onToggleFixedSize?: (id: string) => void;
   onBookmark?: (id: string) => void;
@@ -65,6 +72,7 @@ export function TabBar({
   onToggleWatch,
   conversations = [],
   onWatchInConversation,
+  onWatchInAiWindow,
   onSaveToHostTree,
   onToggleFixedSize,
   onBookmark,
@@ -455,6 +463,18 @@ export function TabBar({
               }}
             >
               {contextMenu.isWatching ? t('chrome.tabBar.stopWatchAi') : t('chrome.tabBar.watchAi')}
+            </div>
+          )}
+          {contextMenu.kind === 'session' && onWatchInAiWindow && (
+            <div
+              className="tab-context-menu-item"
+              role="menuitem"
+              onClick={() => {
+                onWatchInAiWindow(contextMenu.tabId);
+                setContextMenu(null);
+              }}
+            >
+              {t('chrome.tabBar.watchInAiWindow')}
             </div>
           )}
           {contextMenu.kind === 'session' && contextMenu.isSshOrTelnet && onSaveToHostTree && (

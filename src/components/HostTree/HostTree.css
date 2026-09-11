@@ -170,6 +170,17 @@
     transform: rotate(90deg);
 }
 
+/* The arrow is now the main way to open and close a folder, so make it worth
+   aiming at: the negative margin stretches the hit area over the row's own
+   2px vertical padding (.host-tree-row above), giving 16 x 22px instead of
+   16 x 16px. The width is untouched, so no label shifts. Keep these two
+   values in step with that row's padding. */
+.tree-chevron-hit {
+    align-self: stretch;
+    margin: -2px 0;
+    padding: 2px 0;
+}
+
 .tree-label {
     flex: 1;
     overflow: hidden;
@@ -480,4 +491,39 @@
 @keyframes netbox-sync-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* The add-host form's NetBox suggestion. One row, inserted after host/port and
+   absent entirely when there is nothing to suggest, so the form keeps exactly
+   the height it always had for anyone not using this. */
+.host-edit-netbox-hint {
+  margin: -4px 0 10px;
+  color: var(--text-tertiary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  line-height: 1.5;
+}
+
+.host-edit-netbox-matched {
+  display: block;
+}
+
+.host-edit-netbox-choice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 2px;
+}
+
+.host-edit-netbox-choice label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.host-edit-netbox-label {
+  color: var(--text-secondary);
 }

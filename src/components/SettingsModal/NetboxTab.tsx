@@ -28,6 +28,9 @@ export function NetboxTab() {
 
     const [tokenInput, setTokenInput] = useState('');
     const [hasToken, setHasToken] = useState(false);
+    /** The user asked to swap a saved token for a different one. Reset on a
+     *  successful connect, so the tab settles back to the "saved" state. */
+    const [replacingToken, setReplacingToken] = useState(false);
     const [connecting, setConnecting] = useState(false);
     const [probe, setProbe] = useState<NetboxProbeResult | null>(null);
     const [connectError, setConnectError] = useState<string | null>(null);
@@ -81,6 +84,7 @@ export function NetboxTab() {
                 // Never keep the token in renderer state once it is sealed.
                 setTokenInput('');
                 setHasToken(true);
+                setReplacingToken(false);
             }
         } catch (err) {
             setProbe(null);
@@ -106,6 +110,7 @@ export function NetboxTab() {
     const handleDisconnect = useCallback(async () => {
         await tauriService.netboxDisconnect();
         setHasToken(false);
+        setReplacingToken(false);
         setProbe(null);
     }, []);
 
@@ -150,32 +155,54 @@ export function NetboxTab() {
                         {t('settings.netbox.token')}
                         <HelpTooltip text={t('settings.netbox.tokenHelp')} />
                     </label>
-                    <div className="settings-netbox-row">
-                        <input
-                            type="password"
-                            value={tokenInput}
-                            onChange={(e) => setTokenInput(e.target.value)}
-                            placeholder={t('settings.netbox.tokenPlaceholder')}
-                            autoComplete="off"
-                        />
-                        <button
-                            type="button"
-                            onClick={handleConnect}
-                            disabled={connecting || !tokenInput || !netbox.baseUrl}
-                        >
-                            {connecting
-                                ? t('settings.netbox.connecting')
-                                : t('settings.netbox.connect')}
-                        </button>
-                    </div>
-                    {hasToken && (
+                    {/* 🚨 An empty password box is NOT shown while a token is
+                        saved. The token can never come back to the renderer, so
+                        that box is always blank — and a blank "API token" field
+                        with a Connect button beside it reads as "your token is
+                        gone", which sent a user to paste theirs in again three
+                        times in one sitting. Say the state instead, and make
+                        replacing it a deliberate step. */}
+                    {hasToken && !replacingToken ? (
                         <div className="settings-netbox-row settings-netbox-row--saved">
                             <span className="settings-help-text">
                                 {t('settings.netbox.tokenSaved')}
                             </span>
+                            <button type="button" onClick={() => setReplacingToken(true)}>
+                                {t('settings.netbox.replaceToken')}
+                            </button>
                             <button type="button" onClick={handleDisconnect}>
                                 {t('settings.netbox.disconnect')}
                             </button>
+                        </div>
+                    ) : (
+                        <div className="settings-netbox-row">
+                            <input
+                                type="password"
+                                value={tokenInput}
+                                onChange={(e) => setTokenInput(e.target.value)}
+                                placeholder={t('settings.netbox.tokenPlaceholder')}
+                                autoComplete="off"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleConnect}
+                                disabled={connecting || !tokenInput || !netbox.baseUrl}
+                            >
+                                {connecting
+                                    ? t('settings.netbox.connecting')
+                                    : t('settings.netbox.connect')}
+                            </button>
+                            {hasToken && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setReplacingToken(false);
+                                        setTokenInput('');
+                                    }}
+                                >
+                                    {t('common.cancel')}
+                                </button>
+                            )}
                         </div>
                     )}
                     <span className="settings-help-text">
@@ -351,6 +378,87 @@ export function NetboxTab() {
                         </div>
                     )}
                 </div>
+            </div>
+
+            {/* A section of its own rather than a line in Sync: the counters
+                below only make sense next to the control that explains them,
+                and folding them into the sync summary would mix two features
+                into one paragraph. */}
+            <div className="settings-card">
+                <h3 className="settings-section-title">{t('settings.netbox.placementSection')}</h3>
+
+                <label className="settings-checkbox">
+                    <input
+                        type="checkbox"
+                        checked={netbox.prefixPlacement}
+                        onChange={(e) =>
+                            update('netbox', { ...netbox, prefixPlacement: e.target.checked })
+                        }
+                    />
+                    {t('settings.netbox.placementToggle')}
+                    <HelpTooltip text={t('settings.netbox.placementHelp')} />
+                </label>
+
+                <span className="settings-help-text">
+                    {t('settings.netbox.placementFetchNote')}
+                </span>
+
+                {netbox.prefixPlacement && report && (
+                    <div className="settings-netbox-summary">
+                        {/* The one number that says whether this feature is
+                            actually doing anything. A NetBox whose prefixes all
+                            hang off locations produces no error and no changed
+                            folder, so without it "does nothing" and "is broken"
+                            read the same. */}
+                        {report.prefixes > 0 && (
+                            <div
+                                className={`settings-netbox-status settings-netbox-status--${report.foldersWithPrefixes === 0 ? 'warn' : 'info'
+                                    }`}
+                            >
+                                {report.foldersWithPrefixes === 0
+                                    ? t('settings.netbox.summaryPrefixesNoFolders', {
+                                        count: report.prefixes,
+                                    })
+                                    : t('settings.netbox.summaryPrefixes', {
+                                        count: report.prefixes,
+                                        folders: report.foldersWithPrefixes,
+                                    })}
+                            </div>
+                        )}
+                        {report.prefixesSkipped > 0 && (
+                            <span className="settings-help-text">
+                                {t('settings.netbox.summaryPrefixesSkipped', {
+                                    count: report.prefixesSkipped,
+                                })}
+                            </span>
+                        )}
+                        {report.prefixesUnparsed > 0 && (
+                            <span className="settings-help-text">
+                                {t('settings.netbox.summaryPrefixesUnparsed', {
+                                    count: report.prefixesUnparsed,
+                                })}
+                            </span>
+                        )}
+                        {/* `denied` and `tooMany` both mean "nothing was read,
+                            and nothing was cleared" — say which, because the
+                            fixes are completely different. */}
+                        {report.prefixesUnavailable === 'denied' && (
+                            <div className="settings-netbox-status settings-netbox-status--warn">
+                                {t('settings.netbox.prefixesDenied')}
+                            </div>
+                        )}
+                        {report.prefixesUnavailable === 'tooMany' && (
+                            <div className="settings-netbox-status settings-netbox-status--warn">
+                                {t('settings.netbox.prefixesTooMany')}
+                            </div>
+                        )}
+                        {report.prefixesUnavailable === 'disabled' && (
+                            <span className="settings-help-text">
+                                {t('settings.netbox.prefixesDisabled')}
+                            </span>
+                        )}
+                    </div>
+                )}
             </div>
         </>
     );
