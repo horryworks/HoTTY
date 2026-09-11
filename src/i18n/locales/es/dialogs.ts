@@ -68,7 +68,8 @@ export const dialogs = {
     nothingToDo: 'Todos los hosts ya están donde indica su dirección.',
     apply: 'Mover {{count}}',
     cancel: 'Cancelar',
-    moved: 'Se movieron {{count}} hosts',
+    moved_one: 'Se movió {{count}} host',
+    moved_other: 'Se movieron {{count}} hosts',
   },
   saveToHostTree: {
     title: 'Guardar en el árbol de hosts',

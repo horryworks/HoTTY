@@ -68,7 +68,8 @@ export const dialogs = {
     nothingToDo: '每台主機都已在其位址所指的位置。',
     apply: '移動 {{count}} 項',
     cancel: '取消',
-    moved: '已移動 {{count}} 台主機',
+    moved_one: '已移動 {{count}} 台主機',
+    moved_other: '已移動 {{count}} 台主機',
   },
   saveToHostTree: {
     title: '儲存至主機樹狀清單',

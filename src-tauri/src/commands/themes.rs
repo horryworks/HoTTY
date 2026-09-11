@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use tauri::AppHandle;
 use tauri::Manager;
 
+use crate::services::session_service::humanize_fs_error;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -47,7 +49,7 @@ fn custom_themes_dir(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| format!("failed to resolve app config dir: {e}"))?;
     let dir = config_dir.join("themes");
     if !dir.exists() {
-        std::fs::create_dir_all(&dir).map_err(|e| format!("failed to create themes dir: {e}"))?;
+        std::fs::create_dir_all(&dir).map_err(|e| humanize_fs_error("the themes folder", &e))?;
     }
     Ok(dir)
 }
@@ -127,13 +129,12 @@ fn validate_theme_data(data: &ThemeDef) -> Result<(), String> {
 
 /// Read and parse a theme JSON file.
 fn read_theme_file(path: &std::path::Path) -> Result<ThemeDef, String> {
-    let meta =
-        std::fs::metadata(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    let meta = std::fs::metadata(path).map_err(|e| humanize_fs_error("the theme file", &e))?;
     if meta.len() > MAX_THEME_FILE_SIZE {
         return Err(format!("theme file {} exceeds max size", path.display()));
     }
-    let contents = std::fs::read_to_string(path)
-        .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
+    let contents =
+        std::fs::read_to_string(path).map_err(|e| humanize_fs_error("the theme file", &e))?;
     serde_json::from_str(&contents).map_err(|e| format!("failed to parse {}: {e}", path.display()))
 }
 
@@ -233,7 +234,7 @@ pub async fn save_custom_theme(
     let path = custom_dir.join(format!("{theme_key}.json"));
     let json = serde_json::to_string_pretty(&theme_data)
         .map_err(|e| format!("failed to serialize theme: {e}"))?;
-    std::fs::write(&path, json).map_err(|e| format!("failed to write theme: {e}"))?;
+    std::fs::write(&path, json).map_err(|e| humanize_fs_error("the theme file", &e))?;
 
     log::info!("saved custom theme '{theme_key}' to {}", path.display());
     Ok(SaveThemeResult {
@@ -274,7 +275,7 @@ pub async fn delete_custom_theme(
         });
     }
 
-    std::fs::remove_file(&path).map_err(|e| format!("failed to delete theme: {e}"))?;
+    std::fs::remove_file(&path).map_err(|e| humanize_fs_error("the theme file", &e))?;
 
     log::info!("deleted custom theme '{theme_key}'");
     Ok(SaveThemeResult {

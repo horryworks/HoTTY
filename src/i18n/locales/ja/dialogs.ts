@@ -74,7 +74,8 @@ export const dialogs = {
     apply: '{{count}} 件を移動',
     cancel: 'キャンセル',
     // 適用後に出す。
-    moved: '{{count}} 件のホストを移動しました',
+    moved_one: '{{count}} 件のホストを移動しました',
+    moved_other: '{{count}} 件のホストを移動しました',
   },
   saveToHostTree: {
     title: 'ホストツリーに保存',

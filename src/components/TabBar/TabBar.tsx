@@ -4,6 +4,7 @@ import { useTabKeyboardNav } from '../../hooks/useTabKeyboardNav';
 import { ScrollStrip } from '../ScrollStrip/ScrollStrip';
 import { useUiOverlayStore } from '../../stores/uiOverlayStore';
 import { type TabItem, type ConversationSummary } from './tabBarHelpers';
+import { FEATURE_LABEL_KEYS } from '../../utils/paneTypes';
 import { conversationColorVar } from '../../utils/conversationColor';
 import './TabBar.css';
 
@@ -94,6 +95,16 @@ export function TabBar({
   const watchMenuRef = useRef<HTMLDivElement>(null);
 
   const visibleSet = new Set(visibleTabIds);
+
+  /**
+   * What the tab is called. A feature tab's generic name belongs to its *type*,
+   * not to the pane, so it is translated here instead of being stored in English
+   * when the pane is created — that is what left a Japanese UI opening "Log
+   * Viewer" from a translated Features menu. An explicit `displayName` still
+   * wins: a session's name, or the site a Web Browser pane is showing.
+   */
+  const tabLabel = (item: TabItem): string =>
+    item.displayName ?? (item.featureType ? t(FEATURE_LABEL_KEYS[item.featureType]) : '');
 
   const hasAnyFeatureCallback =
     onNewLogViewer ||
@@ -284,9 +295,9 @@ export function TabBar({
               onDragLeave={handleDragLeave}
               onDrop={handleDrop(i)}
               onDragEnd={handleDragEnd}
-              title={item.errorMessage ?? item.displayName}
+              title={item.errorMessage ?? tabLabel(item)}
             >
-              <span className="tab-label">{item.displayName}</span>
+              <span className="tab-label">{tabLabel(item)}</span>
               {item.kind === 'session' && onToggleWatch && (
                 <button
                   type="button"

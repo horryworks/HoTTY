@@ -95,4 +95,34 @@ describe('useModalEscape', () => {
     expect(c).toHaveBeenCalledTimes(3);
     expect(a).not.toHaveBeenCalled();
   });
+
+  it("keeps its place when a background modal re-renders with a new callback", () => {
+    // Every modal in this app passes an inline arrow, so the callback identity
+    // changes on every render. SettingsModal renders the scan preview, so an
+    // App re-render re-runs both effects — child first, parent second. If the
+    // stack were keyed on callback identity the parent would land on top and
+    // Escape would close the whole settings window instead of the preview.
+    const background = vi.fn();
+    const foreground = vi.fn();
+    const bg = renderHook(({ fn }) => useModalEscape(fn), {
+      initialProps: { fn: () => background() },
+    });
+    renderHook(() => useModalEscape(foreground));
+
+    bg.rerender({ fn: () => background() });
+
+    pressEscape();
+    expect(foreground).toHaveBeenCalledTimes(1);
+    expect(background).not.toHaveBeenCalled();
+  });
+
+  it("calls the latest callback, not the one captured at mount", () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const h = renderHook(({ fn }) => useModalEscape(fn), { initialProps: { fn: first } });
+    h.rerender({ fn: second });
+    pressEscape();
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+  });
 });

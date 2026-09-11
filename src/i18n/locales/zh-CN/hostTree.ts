@@ -61,6 +61,11 @@ export const hostTree = {
     sortAscending: '升序排序',
     sortDescending: '降序排序',
     moveByPrefix: '按 IP 网段归类…',
+    moveToRange: '移动到“{{name}}”',
+    moveAlreadyPlaced: '已在“{{name}}”中',
+    moveAmbiguous: '匹配到多个 IP 网段：{{names}}',
+    moveNoMatch: '没有匹配的 IP 网段',
+    moveNotAnAddress: '不是 IP 地址',
   },
   openAll: {
     confirmTitle: '打开所有主机',

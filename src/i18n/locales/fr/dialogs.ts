@@ -68,7 +68,8 @@ export const dialogs = {
     nothingToDo: 'Chaque hôte est déjà là où son adresse l’indique.',
     apply: 'Déplacer {{count}}',
     cancel: 'Annuler',
-    moved: '{{count}} hôtes déplacés',
+    moved_one: '{{count}} hôte déplacé',
+    moved_other: '{{count}} hôtes déplacés',
   },
   saveToHostTree: {
     title: "Enregistrer dans l'arborescence des hôtes",

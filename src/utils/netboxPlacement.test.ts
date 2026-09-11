@@ -3,6 +3,7 @@ import type { HostTreeNode, NetboxNodeLink } from '../types/appTypes';
 import { NETBOX_DEFAULT_SERVER } from './netboxSync';
 import {
     collectPrefixFolders,
+    findParentFolderId,
     planPlacements,
     suggestFolderForHost,
 } from './netboxPlacement';
@@ -239,5 +240,38 @@ describe('planPlacements', () => {
         const t = tree();
         const plan = planPlacements(t, null, collectPrefixFolders(t));
         for (const m of plan.move) expect(m.host.type).toBe('host');
+    });
+});
+
+describe('findParentFolderId', () => {
+    const tree = (): HostTreeNode[] => [
+        host('root-host', 'edge-01', '10.0.0.1'),
+        folder('outer', 'Outer', [
+            host('nested', 'core-01', '10.1.0.1'),
+            folder('inner', 'Inner', [host('deep', 'leaf-01', '10.2.0.1')]),
+        ]),
+    ];
+
+    it('reports null for a node sitting at the tree root', () => {
+        expect(findParentFolderId(tree(), 'root-host')).toBeNull();
+    });
+
+    it('reports the folder id for a nested node', () => {
+        expect(findParentFolderId(tree(), 'nested')).toBe('outer');
+    });
+
+    it('reports the nearest folder, not the outermost one', () => {
+        expect(findParentFolderId(tree(), 'deep')).toBe('inner');
+    });
+
+    it('reports undefined for a node the tree does not hold', () => {
+        // Distinct from null on purpose: "at the root" is a place a host can be
+        // moved out of, "not here" is not an answer to the same question.
+        expect(findParentFolderId(tree(), 'ghost')).toBeUndefined();
+    });
+
+    it('finds a folder as readily as a host', () => {
+        expect(findParentFolderId(tree(), 'inner')).toBe('outer');
+        expect(findParentFolderId(tree(), 'outer')).toBeNull();
     });
 });

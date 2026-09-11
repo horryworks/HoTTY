@@ -61,6 +61,11 @@ export const hostTree = {
     sortAscending: 'Trier par ordre croissant',
     sortDescending: 'Trier par ordre décroissant',
     moveByPrefix: 'Trier par plage IP…',
+    moveToRange: 'Déplacer vers « {{name}} »',
+    moveAlreadyPlaced: 'Déjà dans « {{name}} »',
+    moveAmbiguous: 'Plusieurs plages IP correspondent : {{names}}',
+    moveNoMatch: 'Aucune plage IP ne correspond',
+    moveNotAnAddress: "Ce n'est pas une adresse IP",
   },
   openAll: {
     confirmTitle: 'Ouvrir tous les hôtes',

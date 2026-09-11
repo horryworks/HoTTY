@@ -68,7 +68,8 @@ export const dialogs = {
     nothingToDo: '모든 호스트가 이미 주소대로의 위치에 있습니다.',
     apply: '{{count}}개 이동',
     cancel: '취소',
-    moved: '호스트 {{count}}개를 옮겼습니다',
+    moved_one: '호스트 {{count}}개를 옮겼습니다',
+    moved_other: '호스트 {{count}}개를 옮겼습니다',
   },
   saveToHostTree: {
     title: '호스트 트리에 저장',

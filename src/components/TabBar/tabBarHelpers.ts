@@ -4,7 +4,10 @@ import type { FeaturePaneInfo, FeaturePaneType } from '../../utils/paneTypes';
 
 export interface TabItem {
   id: string;
-  displayName: string;
+  /** A session tab always carries one. A feature tab carries one only when it
+   *  overrides its type's translated label — a Web Browser pane showing a site.
+   *  Otherwise TabBar resolves the label from `featureType` through `t()`. */
+  displayName?: string;
   kind: 'session' | 'feature';
   status?: string;
   errorMessage?: string;

@@ -111,6 +111,32 @@ export function collectPrefixFolders(
     return out;
 }
 
+/**
+ * The id of the folder `nodeId` currently sits in; `null` when it sits at the
+ * tree root, `undefined` when the tree holds no such node.
+ *
+ * The three answers are deliberately distinct: `null` is a real location a host
+ * can be moved out of, while `undefined` means the question was about something
+ * that is not there — folding them together would make "at the root" and "gone"
+ * look alike to a caller deciding whether a move is a no-op.
+ */
+export function findParentFolderId(
+    tree: HostTreeNode[],
+    nodeId: string,
+): string | null | undefined {
+    const walk = (nodes: HostTreeNode[], parentId: string | null): string | null | undefined => {
+        for (const n of nodes) {
+            if (n.id === nodeId) return parentId;
+            if (n.children) {
+                const hit = walk(n.children, n.id);
+                if (hit !== undefined) return hit;
+            }
+        }
+        return undefined;
+    };
+    return walk(tree, null);
+}
+
 /** The folder with this id, or undefined. */
 export function findFolder(tree: HostTreeNode[], id: string): HostTreeNode | undefined {
     for (const n of tree) {

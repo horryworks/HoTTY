@@ -12,6 +12,7 @@ export const chrome = {
     aiMonitorStartAria: 'Iniciar monitoreo de IA',
     logViewer: 'Visor de registros',
     pingMonitor: 'Monitor de Ping',
+    webBrowser: 'Navegador web',
 
     interfaceTraffic: 'Tráfico de interfaces',
     aiChat: 'Chat de IA',

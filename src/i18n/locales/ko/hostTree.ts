@@ -61,6 +61,11 @@ export const hostTree = {
     sortAscending: '오름차순 정렬',
     sortDescending: '내림차순 정렬',
     moveByPrefix: 'IP 대역으로 분류…',
+    moveToRange: '"{{name}}"(으)로 이동',
+    moveAlreadyPlaced: '이미 "{{name}}"에 있습니다',
+    moveAmbiguous: '여러 IP 대역이 일치: {{names}}',
+    moveNoMatch: '일치하는 IP 대역이 없습니다',
+    moveNotAnAddress: 'IP 주소가 아닙니다',
   },
   openAll: {
     confirmTitle: '모든 호스트 열기',

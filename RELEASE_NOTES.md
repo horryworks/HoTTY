@@ -1,5 +1,31 @@
 # Release Notes
 
+## v2.1.0-beta7
+
+**Sorting a host into its NetBox folder no longer means sorting the whole tree.** The IP-range placement added in beta6 could only be run over everything at once, and only from a right-click on the tree's empty background. That is the wrong shape for the common question — this one host, which folder does it belong in? — and the right-click on empty space is not a place anyone looks. Both are fixed here.
+
+### New Features
+
+- **Move one host by its IP range, from that host's own right-click menu.** The entry names the folder whose range covers the address. Clicking it moves the host and opens the receiving folder, so the move is visible rather than something you have to go and confirm. There is no preview step: the destination is written in the label, and reading it before clicking is the confirmation.
+
+  When the host will not move, the entry stays and says why instead of disappearing — it is already in that folder, no folder covers the address, more than one folder does, or what is in the address field is not an address. A menu that silently drops the option cannot answer "why did this one not move?". Where two folders claim the same range HoTTY still refuses to choose: it names both and moves nothing. The entry is hidden only when IP-range placement is switched off or nothing in the tree carries a range, where a line about matching would be noise.
+
+### Improvements
+
+- **The whole-tree sort is now a button in Settings, NetBox.** It is the same preview over the same scope that beta6 put on the tree's empty background; it has simply moved next to the setting that turns the feature on, which is where people were looking for it. It stays disabled until the host tree has finished decrypting at startup — a scan started before that reads an empty tree and reports nothing to do, which looks exactly like a feature that does not work.
+
+- **Tab names follow the interface language.** The Features menu was translated but the tabs it opened were not, so a Japanese interface offered "ログビューア" and then labelled the resulting tab "Log Viewer". A feature tab now takes its name from the same string as the menu entry that created it, in all eight languages. A Web Browser tab still shows the site it is on.
+
+- **A disabled button in Settings now looks disabled.** Settings buttons dim and refuse the cursor like every other button in the app. Until now a settings button that could not be pressed was pixel-identical to one that could — including the new whole-tree sort button above, which spends the first moment after the window opens waiting for the tree.
+
+### Bug Fixes
+
+- **Escape closed the whole Settings window instead of the dialog on top of it.** Every open dialog registers to receive Escape, and only the frontmost one should get it. The registration was keyed on the callback, which each dialog recreates on every render, so any repaint behind an open dialog quietly re-registered the window underneath as the frontmost recipient. A dialog's place in that order is now fixed when it opens, and nothing that happens afterwards can move it.
+
+- **"Moved 1 hosts."** Both the sort preview's result and the new per-host entry counted in the plural regardless of how many hosts moved.
+
+- **Theme and bookmark files report failures in words.** Saving or deleting a custom theme, and importing or exporting Web Browser bookmarks, could put the operating system's own wording on screen — "Access is denied. (os error 5)". These paths now go through the same conversion the rest of the app's file handling already used.
+
 ## v2.1.0-beta6
 
 **HoTTY can make your SSH keys, the AI Chat can have a window of its own, and NetBox can sort your hosts by IP address.** Three separate additions, each removing a job you currently do somewhere else: generating a key in another tool and copying the file path in, giving up the whole window to a conversation, and deciding by hand which site folder a host belongs in.

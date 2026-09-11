@@ -39,7 +39,9 @@ describe('aiWindowPane', () => {
     const a = makeAiWindowPane();
     const b = makeAiWindowPane();
     expect(a.type).toBe('ai-chat');
-    expect(a.displayName).toBe('AI Chat');
+    // No stored name: the tab label belongs to the type and is translated at
+    // render time, so carrying an English one here would pin it to English.
+    expect(a.displayName).toBeUndefined();
     expect(a.id.startsWith('ai-')).toBe(true);
     expect(a.id).not.toBe(b.id);
   });

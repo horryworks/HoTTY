@@ -265,6 +265,11 @@ export const settings = {
     placementToggle: 'Use NetBox IP ranges to choose a folder',
     placementHelp: 'When you add a host, HoTTY looks up its IP address in the IPAM prefixes attached to your regions and sites, and preselects the matching folder. It only ever suggests — you can pick a different folder before saving, and a sync never moves a host on its own.',
     placementFetchNote: 'While this is off, prefixes are not fetched at all. After turning it on, press "Sync now".',
+    placementScan: 'Sort all hosts by IP range…',
+    placementScanHelp: 'Matches every host in the Node Tree against the IP ranges and shows what would move. Nothing moves until you confirm, and you can untick any row first.',
+    // {{count}} = hosts actually moved.
+    placementScanMoved_one: 'Moved {{count}} host.',
+    placementScanMoved_other: 'Moved {{count}} hosts.',
     summaryPrefixes: '{{count}} prefixes read; {{folders}} folders can now match a host.',
     summaryPrefixesNoFolders: 'Read {{count}} prefixes, but none landed on a folder — nothing will match yet.',
     summaryPrefixesSkipped: 'Ignored {{count}} prefixes attached to something HoTTY has no folder for (a location, a site group, or nothing).',

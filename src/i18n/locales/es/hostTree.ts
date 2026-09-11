@@ -62,6 +62,11 @@ export const hostTree = {
     sortAscending: 'Ordenar ascendente',
     sortDescending: 'Ordenar descendente',
     moveByPrefix: 'Ordenar por rango de IP…',
+    moveToRange: 'Mover a "{{name}}"',
+    moveAlreadyPlaced: 'Ya está en "{{name}}"',
+    moveAmbiguous: 'Coinciden varios rangos de IP: {{names}}',
+    moveNoMatch: 'Ningún rango de IP coincide',
+    moveNotAnAddress: 'No es una dirección IP',
   },
   openAll: {
     confirmTitle: 'Abrir todos los hosts',

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { NetboxTab } from './NetboxTab';
 import { useSettingsStore } from '../../stores/settingsStore';
-import type { NetboxProbeResult } from '../../types/appTypes';
+import type { HostTreeNode, NetboxProbeResult } from '../../types/appTypes';
 import { resetNetboxSyncState } from '../../hooks/useNetboxSync';
 
 const netboxConnect = vi.fn();
@@ -388,5 +388,74 @@ describe('NetboxTab', () => {
             await waitFor(() => expect(netboxFetchSnapshot).toHaveBeenCalled());
             expect(screen.queryByText(/folders can now match/)).toBeNull();
         });
+    });
+});
+
+describe('NetboxTab — scan the whole tree', () => {
+    /** One site with a range, and a host outside it that belongs inside. */
+    const seeded: HostTreeNode[] = [
+        {
+            id: 's1', type: 'folder', name: 'TOK Tokyo', children: [],
+            netbox: { server: 'default', kind: 'site', objectId: 10, prefixes: ['10.1.0.0/16'] },
+        },
+        {
+            id: 'mine', type: 'folder', name: 'Production', children: [
+                { id: 'h1', type: 'host', name: 'tokyo-01', entry: { protocol: 'ssh', host: '10.1.0.9', port: 22 } },
+            ],
+        },
+    ];
+
+    beforeEach(() => {
+        localStorage.clear();
+        useSettingsStore.getState().reset();
+        resetNetboxSyncState();
+        vi.clearAllMocks();
+        netboxHasToken.mockResolvedValue(false);
+        localStorage.setItem('hotty_host_tree', JSON.stringify(seeded));
+    });
+
+    /** Render and wait for the tree's load-time decrypt to settle. */
+    async function ready() {
+        render(<NetboxTab />);
+        const button = await screen.findByText('Sort all hosts by IP range…');
+        await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+        return button;
+    }
+
+    it('offers the scan while placement is on', async () => {
+        expect(await ready()).toBeTruthy();
+    });
+
+    it('hides the scan while placement is off', () => {
+        useSettingsStore.getState().update('netbox', {
+            ...useSettingsStore.getState().netbox,
+            prefixPlacement: false,
+        });
+        render(<NetboxTab />);
+        expect(screen.queryByText('Sort all hosts by IP range…')).toBeNull();
+    });
+
+    it('opens the preview over the whole tree, and moves nothing yet', async () => {
+        fireEvent.click(await ready());
+        // "All hosts" is the modal's name for the whole-tree scope, which is
+        // the only scope the settings entry point ever uses.
+        expect(screen.getByText('All hosts')).toBeTruthy();
+        expect(screen.getByText('Will move (1)')).toBeTruthy();
+        expect(JSON.parse(localStorage.getItem('hotty_host_tree')!)).toEqual(seeded);
+    });
+
+    it('moves the host and reports the count once applied', async () => {
+        fireEvent.click(await ready());
+        fireEvent.click(screen.getByText('Move 1'));
+        // Singular: the key carries _one/_other, so one host is not "1 hosts".
+        await waitFor(() => expect(screen.getByText('Moved 1 host.')).toBeTruthy());
+        expect(screen.queryByText('Will move (1)')).toBeNull();
+    });
+
+    it('closes only the preview, leaving the tab in place', async () => {
+        fireEvent.click(await ready());
+        fireEvent.click(screen.getByText('Cancel'));
+        expect(screen.queryByText('Will move (1)')).toBeNull();
+        expect(screen.getByText('Sort all hosts by IP range…')).toBeTruthy();
     });
 });

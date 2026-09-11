@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useNetboxSync } from '../../hooks/useNetboxSync';
+import { useHostManager } from '../../hooks/useHostManager';
 import type { NetboxProbeResult } from '../../types/appTypes';
 import {
     SITE_ID_OTHER,
@@ -12,6 +13,7 @@ import {
     siteIdOptions,
     siteIdOutcome,
 } from '../../utils/netboxSiteIdField';
+import { MoveByPrefixModal } from '../MoveByPrefixModal/MoveByPrefixModal';
 import HelpTooltip from '../HelpTooltip/HelpTooltip';
 import './NetboxTab.css';
 
@@ -25,6 +27,13 @@ export function NetboxTab() {
     const update = useSettingsStore((s) => s.update);
     const { t } = useTranslation();
     const { syncing, sync, report } = useNetboxSync();
+    // Its own instance, the way SaveToHostTreeDialog takes one: every
+    // useHostManager shares the same persisted tree and mirrors writes into
+    // the others, and this tab is only mounted while it is the open tab.
+    const hostManager = useHostManager();
+    const [scanOpen, setScanOpen] = useState(false);
+    /** Hosts moved by the last scan, so the result lands next to the button. */
+    const [scanMoved, setScanMoved] = useState<number | null>(null);
 
     const [tokenInput, setTokenInput] = useState('');
     const [hasToken, setHasToken] = useState(false);
@@ -167,10 +176,10 @@ export function NetboxTab() {
                             <span className="settings-help-text">
                                 {t('settings.netbox.tokenSaved')}
                             </span>
-                            <button type="button" onClick={() => setReplacingToken(true)}>
+                            <button className="settings-button" type="button" onClick={() => setReplacingToken(true)}>
                                 {t('settings.netbox.replaceToken')}
                             </button>
-                            <button type="button" onClick={handleDisconnect}>
+                            <button className="settings-button" type="button" onClick={handleDisconnect}>
                                 {t('settings.netbox.disconnect')}
                             </button>
                         </div>
@@ -184,6 +193,7 @@ export function NetboxTab() {
                                 autoComplete="off"
                             />
                             <button
+                                className="settings-button"
                                 type="button"
                                 onClick={handleConnect}
                                 disabled={connecting || !tokenInput || !netbox.baseUrl}
@@ -194,6 +204,7 @@ export function NetboxTab() {
                             </button>
                             {hasToken && (
                                 <button
+                                    className="settings-button"
                                     type="button"
                                     onClick={() => {
                                         setReplacingToken(false);
@@ -279,6 +290,7 @@ export function NetboxTab() {
                 )}
 
                 <button
+                    className="settings-button"
                     type="button"
                     onClick={handleRefreshFields}
                     disabled={connecting || !hasToken || !netbox.baseUrl}
@@ -304,6 +316,7 @@ export function NetboxTab() {
                 </label>
 
                 <button
+                    className="settings-button"
                     type="button"
                     onClick={() => void sync('manual')}
                     disabled={syncing || !netbox.baseUrl || !hasToken}
@@ -402,6 +415,51 @@ export function NetboxTab() {
                 <span className="settings-help-text">
                     {t('settings.netbox.placementFetchNote')}
                 </span>
+
+                {/* The whole-tree scan already existed, on the tree's empty
+                    background right-click — where nobody found it. Same modal
+                    and the same whole-tree scope, just somewhere a user looking
+                    for the feature will actually look. Disabled until the tree
+                    has finished its load-time decrypt, or the scan would read an
+                    empty tree and report nothing to do. */}
+                {netbox.prefixPlacement && (
+                    <div className="settings-netbox-scan">
+                        <button
+                            className="settings-button"
+                            type="button"
+                            disabled={!hostManager.ready}
+                            onClick={() => {
+                                setScanMoved(null);
+                                setScanOpen(true);
+                            }}
+                        >
+                            {t('settings.netbox.placementScan')}
+                        </button>
+                        <span className="settings-help-text">
+                            {t('settings.netbox.placementScanHelp')}
+                        </span>
+                    </div>
+                )}
+
+                {scanMoved !== null && (
+                    <div className="settings-netbox-status settings-netbox-status--info">
+                        {t('settings.netbox.placementScanMoved', { count: scanMoved })}
+                    </div>
+                )}
+
+                {/* Rendered here only for tidiness — it is a fixed overlay at
+                    z-index 10001, one tier above the settings modal itself. */}
+                {scanOpen && (
+                    <MoveByPrefixModal
+                        tree={hostManager.tree}
+                        scopeFolderId={null}
+                        onClose={() => setScanOpen(false)}
+                        onApply={(moves) => {
+                            setScanMoved(hostManager.applyPlacements(moves));
+                            setScanOpen(false);
+                        }}
+                    />
+                )}
 
                 {netbox.prefixPlacement && report && (
                     <div className="settings-netbox-summary">

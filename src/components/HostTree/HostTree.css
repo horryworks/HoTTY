@@ -236,11 +236,15 @@
     flex-shrink: 0;
 }
 
+.context-menu button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
 .context-menu button svg {
     flex-shrink: 0;
 }
 
-.context-menu button:hover {
+.context-menu button:hover:not(:disabled) {
     background: var(--context-menu-hover-bg);
     color: var(--text-primary);
 }
@@ -249,7 +253,7 @@
     color: var(--color-danger);
 }
 
-.context-menu button.danger:hover {
+.context-menu button.danger:hover:not(:disabled) {
     background: var(--color-danger-bg);
     color: var(--color-danger);
 }

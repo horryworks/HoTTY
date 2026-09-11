@@ -10,7 +10,13 @@ import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { MoveByPrefixModal } from '../MoveByPrefixModal/MoveByPrefixModal';
 import { isNetboxNamed } from '../../utils/netboxSync';
 import { nodeIcon } from '../../utils/nodeIcon';
-import { collectPrefixFolders, suggestFolderForHost, type PlacementResult } from '../../utils/netboxPlacement';
+import {
+    collectPrefixFolders,
+    findParentFolderId,
+    suggestFolderForHost,
+    type PlacementResult,
+    type PrefixFolder,
+} from '../../utils/netboxPlacement';
 import { formatPrefix } from '../../utils/cidr';
 import type { PlacementMove } from '../../hooks/useHostManager';
 import { tauriService } from '../../services/tauriService';
@@ -125,6 +131,62 @@ export const HostTree: React.FC<HostTreeProps> = ({
         () => (netboxPlacement ? collectPrefixFolders(tree) : []),
         [tree, netboxPlacement],
     );
+
+    /**
+     * The "move this host into its IP-range folder" row, or `null` when there
+     * is no row to show.
+     *
+     * Computed only while the menu is open on a host, so a folder or the empty
+     * background costs nothing. Matched against the WHOLE tree's prefixes: a
+     * single host has no subtree to narrow to, unlike the bulk action.
+     *
+     * A `null` target renders the row disabled rather than hiding it — "why did
+     * this one not move?" is exactly the question a missing row cannot answer.
+     * The row disappears only when the feature is off or nothing in the tree
+     * carries a prefix, which is ADR-020's `noPrefixes` rule: a line about
+     * matching is noise to someone who has not set the feature up.
+     */
+    const hostPlacementItem = useMemo((): {
+        label: string;
+        target: PrefixFolder | null;
+    } | null => {
+        const node = contextMenu?.node;
+        if (!netboxPlacement || prefixFolders.length === 0) return null;
+        if (!node || node.type !== 'host' || !node.entry) return null;
+
+        const result = suggestFolderForHost(prefixFolders, node.entry.host);
+        switch (result.kind) {
+            case 'one': {
+                const here = findParentFolderId(tree, node.id) ?? null;
+                return result.folder.id === here
+                    ? {
+                        label: t('hostTree.contextMenu.moveAlreadyPlaced', {
+                            name: result.folder.name,
+                        }),
+                        target: null,
+                    }
+                    : {
+                        label: t('hostTree.contextMenu.moveToRange', {
+                            name: result.folder.name,
+                        }),
+                        target: result.folder,
+                    };
+            }
+            // Never split a tie (ADR-020): both names are shown, neither wins.
+            case 'ambiguous':
+                return {
+                    label: t('hostTree.contextMenu.moveAmbiguous', {
+                        names: result.folders.map((f) => f.name).join(', '),
+                    }),
+                    target: null,
+                };
+            case 'notAnAddress':
+                return { label: t('hostTree.contextMenu.moveNotAnAddress'), target: null };
+            // `noPrefixes` cannot reach here — `prefixFolders` is non-empty above.
+            default:
+                return { label: t('hostTree.contextMenu.moveNoMatch'), target: null };
+        }
+    }, [contextMenu, netboxPlacement, prefixFolders, tree, t]);
 
     /**
      * What the address typed into the add-host form matches.
@@ -955,6 +1017,50 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                     {t('hostTree.contextMenu.moveByPrefix')}
                                 </button>
                             )}
+                        </>
+                    )}
+                    {/* One host, one destination, named in the label. Reading
+                        it before clicking IS the confirmation ADR-020 requires,
+                        so the click moves straight away instead of opening the
+                        bulk preview for a single row. */}
+                    {hostPlacementItem && onApplyPlacements && contextMenu.node && (
+                        <>
+                            <button
+                                disabled={hostPlacementItem.target === null}
+                                title={
+                                    hostPlacementItem.target
+                                        ? formatPrefix(hostPlacementItem.target.prefix)
+                                        : undefined
+                                }
+                                onClick={() => {
+                                    const target = hostPlacementItem.target;
+                                    const hostId = contextMenu.node?.id;
+                                    if (!target || !hostId) return;
+                                    const moved = onApplyPlacements([
+                                        { hostId, targetFolderId: target.id },
+                                    ]);
+                                    setContextMenu(null);
+                                    // Open the receiving folder, for the same
+                                    // reason the bulk action does: a silent move
+                                    // into a folded folder reads as nothing
+                                    // having happened.
+                                    setExpanded(prev => ({ ...prev, [target.id]: true }));
+                                    onShowMessage?.(
+                                        'success',
+                                        t('dialogs.moveByPrefix.title'),
+                                        t('dialogs.moveByPrefix.moved', { count: moved }),
+                                    );
+                                }}
+                            >
+                                <span className="menu-icon-wrapper">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--icon-folder)' }}>
+                                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                        <circle cx="12" cy="10" r="3"></circle>
+                                    </svg>
+                                </span>
+                                {hostPlacementItem.label}
+                            </button>
+                            <div className="context-menu-separator" />
                         </>
                     )}
                     {contextMenu.node && (

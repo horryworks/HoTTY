@@ -60,6 +60,11 @@ export const hostTree = {
     sortAscending: '遞增排序',
     sortDescending: '遞減排序',
     moveByPrefix: '依 IP 網段歸類…',
+    moveToRange: '移動到「{{name}}」',
+    moveAlreadyPlaced: '已在「{{name}}」中',
+    moveAmbiguous: '符合多個 IP 網段：{{names}}',
+    moveNoMatch: '沒有符合的 IP 網段',
+    moveNotAnAddress: '不是 IP 位址',
   },
   openAll: {
     confirmTitle: '開啟所有主機',

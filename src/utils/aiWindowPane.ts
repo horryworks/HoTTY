@@ -1,5 +1,5 @@
 import { usePaneStore } from '../stores/paneStore';
-import { getFeatureDisplayName, makeFeaturePaneId, type FeaturePaneInfo } from './paneTypes';
+import { makeFeaturePaneId, type FeaturePaneInfo } from './paneTypes';
 import { IS_AI_CHAT_WINDOW } from './windowLabel';
 
 /**
@@ -12,7 +12,6 @@ export function makeAiWindowPane(): FeaturePaneInfo {
   return {
     id: makeFeaturePaneId('ai-chat'),
     type: 'ai-chat',
-    displayName: getFeatureDisplayName('ai-chat'),
   };
 }
 

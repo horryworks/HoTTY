@@ -12,6 +12,7 @@ export const chrome = {
     aiMonitorStartAria: 'AI監視を開始',
     logViewer: 'ログビューア',
     pingMonitor: 'Pingモニター',
+    webBrowser: 'Web ブラウザ',
 
     interfaceTraffic: 'インターフェース トラフィック',
     aiChat: 'AIチャット',

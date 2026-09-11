@@ -66,6 +66,11 @@ export const hostTree = {
     sortAscending: '昇順で並べ替え',
     sortDescending: '降順で並べ替え',
     moveByPrefix: 'IP レンジで振り分け…',
+    moveToRange: '「{{name}}」へ移動',
+    moveAlreadyPlaced: 'すでに「{{name}}」にあります',
+    moveAmbiguous: '複数の IP レンジが一致: {{names}}',
+    moveNoMatch: '一致する IP レンジがありません',
+    moveNotAnAddress: 'IP アドレスではありません',
   },
   openAll: {
     confirmTitle: 'すべてのホストを開く',

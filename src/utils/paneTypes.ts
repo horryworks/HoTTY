@@ -11,7 +11,17 @@ type PaneContentType = 'session' | FeaturePaneType;
 export interface FeaturePaneInfo {
   id: string;
   type: FeaturePaneType;
-  displayName: string;
+  /**
+   * A name that overrides the label belonging to `type`. Only a Web Browser
+   * pane sets one — the host of the site it is showing — and it goes back to
+   * `undefined` when there is no site.
+   *
+   * Left unset for every other pane on purpose. The generic name is a property
+   * of the type, not of the pane, so it is resolved through `t()` at render
+   * time; storing the English name here is what used to leave a Japanese UI
+   * with a "Log Viewer" tab hanging off a translated Features menu.
+   */
+  displayName?: string;
 }
 
 const FEATURE_PREFIXES: Record<FeaturePaneType, string> = {
@@ -23,14 +33,21 @@ const FEATURE_PREFIXES: Record<FeaturePaneType, string> = {
   'interface-traffic': 'if-',
 };
 
-const FEATURE_DISPLAY_NAMES: Record<FeaturePaneType, string> = {
-  'log-viewer': 'Log Viewer',
-  'ping-monitor': 'Ping Monitor',
-  'ai-chat': 'AI Chat',
-  'file-server': 'File Server',
-  'web-browser': 'Web Browser',
-  'interface-traffic': 'Interface Traffic',
-};
+/**
+ * The `chrome.tabBar` translation key naming each feature pane type. The same
+ * keys already label the Features menu that opens these panes, so a tab and the
+ * menu entry that produced it now read the same in every language.
+ */
+export const FEATURE_LABEL_KEYS = {
+  'log-viewer': 'chrome.tabBar.logViewer',
+  'ping-monitor': 'chrome.tabBar.pingMonitor',
+  'ai-chat': 'chrome.tabBar.aiChat',
+  'file-server': 'chrome.tabBar.fileServer',
+  'web-browser': 'chrome.tabBar.webBrowser',
+  'interface-traffic': 'chrome.tabBar.interfaceTraffic',
+  // `as const` keeps the values literal so `t()` still type-checks the key;
+  // `satisfies` keeps the map exhaustive when a new pane type is added.
+} as const satisfies Record<FeaturePaneType, string>;
 
 export function makeFeaturePaneId(type: FeaturePaneType): string {
   const prefix = FEATURE_PREFIXES[type];
@@ -48,9 +65,6 @@ export function isFeaturePane(id: string): boolean {
   return getPaneContentType(id) !== 'session';
 }
 
-export function getFeatureDisplayName(type: FeaturePaneType): string {
-  return FEATURE_DISPLAY_NAMES[type];
-}
 
 /**
  * AI worker sessions: backend sessions the AI Chat opened on its own behalf that

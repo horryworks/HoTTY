@@ -79,7 +79,6 @@ import {
   getPaneContentType,
   isFeaturePane,
   isWorkerSessionId,
-  getFeatureDisplayName,
   type FeaturePaneInfo,
   type FeaturePaneType,
 } from './utils/paneTypes';
@@ -280,7 +279,7 @@ function App() {
     setFeaturePanes((prev) => {
       if (prev.has(id)) return prev;
       const next = new Map(prev);
-      next.set(id, { id, type: 'ai-chat', displayName: getFeatureDisplayName('ai-chat') });
+      next.set(id, { id, type: 'ai-chat' });
       return next;
     });
     addSessionToStore(id);
@@ -299,7 +298,7 @@ function App() {
     setFeaturePanes((prev) => {
       const next = new Map(prev);
       next.delete(oldId);
-      next.set(newId, { id: newId, type: 'ai-chat', displayName: getFeatureDisplayName('ai-chat') });
+      next.set(newId, { id: newId, type: 'ai-chat' });
       return next;
     });
     removeSessionFromStore(oldId);
@@ -745,10 +744,9 @@ function App() {
   const handleNewFeaturePane = useCallback((type: FeaturePaneType) => {
     if (!useSettingsStore.getState().enabledFeatures[type]) return;
     const id = makeFeaturePaneId(type);
-    const displayName = getFeatureDisplayName(type);
     setFeaturePanes((prev) => {
       const next = new Map(prev);
-      next.set(id, { id, type, displayName });
+      next.set(id, { id, type });
       return next;
     });
     addSessionToStore(id);
@@ -767,9 +765,11 @@ function App() {
   const handleOpenBookmark = useCallback((url?: string) => {
     if (!useSettingsStore.getState().enabledFeatures['web-browser']) return;
     const id = makeFeaturePaneId('web-browser');
-    let displayName = getFeatureDisplayName('web-browser');
+    // Left undefined without a site, so the tab falls back to the translated
+    // "Web Browser" label rather than a stored English one.
+    let displayName: string | undefined;
     if (url) {
-      try { displayName = new URL(url).hostname || displayName; } catch { /* keep default */ }
+      try { displayName = new URL(url).hostname || undefined; } catch { /* no host: keep the generic label */ }
     }
     setFeaturePanes((prev) => {
       const next = new Map(prev);
@@ -791,9 +791,9 @@ function App() {
   // the host from the current URL (falls back to the generic name on parse fail
   // or about:blank). No-op if the pane no longer exists.
   const updateWebBrowserTabName = useCallback((paneId: string, url: string) => {
-    let name = getFeatureDisplayName('web-browser');
+    let name: string | undefined;
     if (url && url !== 'about:blank') {
-      try { name = new URL(url).hostname || name; } catch { /* keep default */ }
+      try { name = new URL(url).hostname || undefined; } catch { /* no host: keep the generic label */ }
     }
     setFeaturePanes((prev) => {
       const cur = prev.get(paneId);

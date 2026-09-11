@@ -3,12 +3,13 @@ import {
   makeFeaturePaneId,
   getPaneContentType,
   isFeaturePane,
-  getFeatureDisplayName,
+  FEATURE_LABEL_KEYS,
   makeWorkerSessionId,
   isWorkerSessionId,
   WORKER_SESSION_PREFIX,
   type FeaturePaneType,
 } from './paneTypes';
+import { en } from '../i18n/locales/en';
 
 describe('paneTypes', () => {
   describe('makeFeaturePaneId', () => {
@@ -99,14 +100,25 @@ describe('paneTypes', () => {
     });
   });
 
-  describe('getFeatureDisplayName', () => {
-    it('returns display names for each type', () => {
-      expect(getFeatureDisplayName('log-viewer')).toBe('Log Viewer');
-      expect(getFeatureDisplayName('ping-monitor')).toBe('Ping Monitor');
-      expect(getFeatureDisplayName('ai-chat')).toBe('AI Chat');
-      expect(getFeatureDisplayName('file-server')).toBe('File Server');
-      expect(getFeatureDisplayName('web-browser')).toBe('Web Browser');
-      expect(getFeatureDisplayName('interface-traffic')).toBe('Interface Traffic');
+  describe('FEATURE_LABEL_KEYS', () => {
+    it('names a chrome.tabBar key for each type', () => {
+      expect(FEATURE_LABEL_KEYS['log-viewer']).toBe('chrome.tabBar.logViewer');
+      expect(FEATURE_LABEL_KEYS['ping-monitor']).toBe('chrome.tabBar.pingMonitor');
+      expect(FEATURE_LABEL_KEYS['ai-chat']).toBe('chrome.tabBar.aiChat');
+      expect(FEATURE_LABEL_KEYS['file-server']).toBe('chrome.tabBar.fileServer');
+      expect(FEATURE_LABEL_KEYS['web-browser']).toBe('chrome.tabBar.webBrowser');
+      expect(FEATURE_LABEL_KEYS['interface-traffic']).toBe('chrome.tabBar.interfaceTraffic');
+    });
+
+    it('every key resolves to a real English string, not the raw key', () => {
+      // The label is looked up at render time now, so a typo here would surface
+      // as the dotted key sitting in the tab rather than a compile error.
+      const tabBar: Record<string, string> = en.chrome.tabBar;
+      for (const key of Object.values(FEATURE_LABEL_KEYS)) {
+        const [, region, leaf] = key.split('.');
+        expect(region, `${key} is not a chrome.tabBar key`).toBe('tabBar');
+        expect(tabBar[leaf], `missing English string for ${key}`).toBeTruthy();
+      }
     });
   });
 });

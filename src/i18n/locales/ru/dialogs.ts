@@ -69,7 +69,8 @@ export const dialogs = {
     nothingToDo: 'Все узлы уже там, куда указывает их адрес.',
     apply: 'Переместить: {{count}}',
     cancel: 'Отмена',
-    moved: 'Перемещено узлов: {{count}}',
+    moved_one: 'Перемещён узел: {{count}}',
+    moved_other: 'Перемещено узлов: {{count}}',
   },
   saveToHostTree: {
     title: 'Сохранить в дерево хостов',

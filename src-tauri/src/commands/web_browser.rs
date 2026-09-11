@@ -4,6 +4,7 @@
 use tauri::{AppHandle, State, Window};
 use tauri_plugin_dialog::DialogExt;
 
+use crate::services::session_service::humanize_fs_error;
 use crate::services::web_browser::{self, BrowserRect, ClearDataOptions, WebBrowserState};
 
 /// Defensive size cap for the bookmarks JSON file (import & export).
@@ -177,7 +178,8 @@ pub async fn web_browser_export_bookmarks(app: AppHandle, data: String) -> Resul
     let path_ref = path
         .as_path()
         .ok_or_else(|| "invalid export path".to_string())?;
-    std::fs::write(path_ref, data.as_bytes()).map_err(|e| format!("failed to write file: {e}"))?;
+    std::fs::write(path_ref, data.as_bytes())
+        .map_err(|e| humanize_fs_error("the bookmarks file", &e))?;
     Ok(true)
 }
 
@@ -197,12 +199,13 @@ pub async fn web_browser_import_bookmarks(app: AppHandle) -> Result<Option<Strin
     let path_ref = path
         .as_path()
         .ok_or_else(|| "invalid import path".to_string())?;
-    let meta = std::fs::metadata(path_ref).map_err(|e| format!("failed to read file: {e}"))?;
+    let meta =
+        std::fs::metadata(path_ref).map_err(|e| humanize_fs_error("the bookmarks file", &e))?;
     if meta.len() > MAX_BOOKMARKS_BYTES {
         return Err("bookmarks file too large".to_string());
     }
-    let content =
-        std::fs::read_to_string(path_ref).map_err(|e| format!("failed to read file: {e}"))?;
+    let content = std::fs::read_to_string(path_ref)
+        .map_err(|e| humanize_fs_error("the bookmarks file", &e))?;
     Ok(Some(content))
 }
 

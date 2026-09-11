@@ -68,7 +68,8 @@ export const dialogs = {
     nothingToDo: '每台主机都已在其地址所指的位置。',
     apply: '移动 {{count}} 项',
     cancel: '取消',
-    moved: '已移动 {{count}} 台主机',
+    moved_one: '已移动 {{count}} 台主机',
+    moved_other: '已移动 {{count}} 台主机',
   },
   saveToHostTree: {
     title: '保存到主机树',

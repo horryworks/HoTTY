@@ -73,6 +73,13 @@ export const hostTree = {
     sortAscending: 'Sort Ascending',
     sortDescending: 'Sort Descending',
     moveByPrefix: 'Sort by IP Range…',
+    // {{name}} = the folder the host's address falls inside.
+    moveToRange: 'Move to "{{name}}"',
+    moveAlreadyPlaced: 'Already in "{{name}}"',
+    // {{names}} = the tied folders, comma-separated. Nothing is chosen.
+    moveAmbiguous: 'Several IP ranges match: {{names}}',
+    moveNoMatch: 'No IP range matches',
+    moveNotAnAddress: 'Not an IP address',
   },
   openAll: {
     confirmTitle: 'Open all hosts',

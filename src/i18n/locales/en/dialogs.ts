@@ -74,7 +74,8 @@ export const dialogs = {
     apply: 'Move {{count}}',
     cancel: 'Cancel',
     // Shown after applying.
-    moved: 'Moved {{count}} hosts',
+    moved_one: 'Moved {{count}} host',
+    moved_other: 'Moved {{count}} hosts',
   },
   saveToHostTree: {
     title: 'Save to Host Tree',

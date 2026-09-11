@@ -723,6 +723,119 @@ describe('HostTree — NetBox prefix placement', () => {
   });
 });
 
+describe('HostTree — move one host by its IP range', () => {
+  /** A site with a range, a plain folder, and hosts to right-click. */
+  const tree = (): HostTreeNode[] => [
+    {
+      id: 'c', type: 'folder', name: 'NetBox',
+      netbox: { server: 'default', kind: 'root' },
+      children: [
+        {
+          id: 's1', type: 'folder', name: 'TOK Tokyo',
+          netbox: { server: 'default', kind: 'site', objectId: 10, prefixes: ['10.1.0.0/16'] },
+          children: [
+            { id: 'settled', type: 'host', name: 'settled-01', entry: { protocol: 'ssh', host: '10.1.0.50', port: 22 } },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'mine', type: 'folder', name: 'Production', children: [
+        { id: 'match', type: 'host', name: 'tokyo-01', entry: { protocol: 'ssh', host: '10.1.0.9', port: 22 } },
+        { id: 'nomatch', type: 'host', name: 'edge-01', entry: { protocol: 'ssh', host: '203.0.113.9', port: 22 } },
+        { id: 'byname', type: 'host', name: 'named-01', entry: { protocol: 'ssh', host: 'router1.example.com', port: 22 } },
+      ],
+    },
+  ];
+
+  const props = (over: Record<string, unknown> = {}) => ({
+    ...defaultProps,
+    tree: tree(),
+    netboxPlacement: true,
+    onApplyPlacements: vi.fn(() => 1),
+    ...over,
+  });
+
+  /** The placement row is always first in the menu, above the separator. */
+  const rowFor = (hostName: string, p = props()) => {
+    render(<HostTree {...p} />);
+    fireEvent.contextMenu(screen.getByText(hostName));
+    return p;
+  };
+
+  it('names the destination folder in the label', () => {
+    rowFor('tokyo-01');
+    expect(screen.getByText('Move to "TOK Tokyo"')).toBeTruthy();
+  });
+
+  it('moves exactly that one host, and nothing else', () => {
+    const p = rowFor('tokyo-01');
+    fireEvent.click(screen.getByText('Move to "TOK Tokyo"'));
+    expect(p.onApplyPlacements).toHaveBeenCalledWith([{ hostId: 'match', targetFolderId: 's1' }]);
+    expect(p.onApplyPlacements).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the menu after moving', () => {
+    rowFor('tokyo-01');
+    fireEvent.click(screen.getByText('Move to "TOK Tokyo"'));
+    expect(screen.queryByText('Move to "TOK Tokyo"')).toBeNull();
+  });
+
+  it('states, without offering a move, that the host is already there', () => {
+    rowFor('settled-01');
+    const row = screen.getByText('Already in "TOK Tokyo"') as HTMLButtonElement;
+    expect(row.closest('button')!.disabled).toBe(true);
+  });
+
+  it('states that nothing matches, rather than hiding the row', () => {
+    // A missing row cannot answer "why did this one not move?".
+    rowFor('edge-01');
+    expect(screen.getByText('No IP range matches').closest('button')!.disabled).toBe(true);
+  });
+
+  it('never resolves a name, and says so', () => {
+    rowFor('named-01');
+    expect(screen.getByText('Not an IP address').closest('button')!.disabled).toBe(true);
+  });
+
+  it('refuses to split a tie, naming both folders', () => {
+    const tied: HostTreeNode[] = [
+      { id: 'a', type: 'folder', name: 'TOK Tokyo', children: [], netbox: { server: 'default', kind: 'site', objectId: 10, prefixes: ['10.1.0.0/16'] } },
+      { id: 'b', type: 'folder', name: 'OSA Osaka', children: [], netbox: { server: 'default', kind: 'site', objectId: 11, prefixes: ['10.1.0.0/16'] } },
+      { id: 'mine', type: 'folder', name: 'Production', children: [
+        { id: 'match', type: 'host', name: 'tokyo-01', entry: { protocol: 'ssh', host: '10.1.0.9', port: 22 } },
+      ] },
+    ];
+    const p = rowFor('tokyo-01', props({ tree: tied }));
+    const row = screen.getByText(/Several IP ranges match/);
+    expect(row.textContent).toContain('OSA Osaka');
+    expect(row.textContent).toContain('TOK Tokyo');
+    expect(row.closest('button')!.disabled).toBe(true);
+    expect(p.onApplyPlacements).not.toHaveBeenCalled();
+  });
+
+  it('shows no row at all while the setting is off', () => {
+    rowFor('tokyo-01', props({ netboxPlacement: false }));
+    expect(screen.queryByText(/Move to |No IP range matches/)).toBeNull();
+  });
+
+  it('shows no row at all when no folder carries a range', () => {
+    // ADR-020's `noPrefixes`: noise to anyone who has not set the feature up.
+    rowFor('tokyo-01', props({
+      tree: [{ id: 'mine', type: 'folder', name: 'Production', children: [
+        { id: 'match', type: 'host', name: 'tokyo-01', entry: { protocol: 'ssh', host: '10.1.0.9', port: 22 } },
+      ] }],
+    }));
+    expect(screen.queryByText(/Move to |No IP range matches/)).toBeNull();
+  });
+
+  it('leaves the folder menu untouched', () => {
+    rowFor('Production');
+    expect(screen.queryByText(/Move to |No IP range matches/)).toBeNull();
+    expect(screen.getByText('Sort by IP Range…')).toBeTruthy();
+  });
+});
+
 describe('NetBox folder icons', () => {
   const netboxTree: HostTreeNode[] = [
     { id: 'plain', type: 'folder', name: 'Lab', children: [] },

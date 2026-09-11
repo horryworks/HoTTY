@@ -52,6 +52,22 @@
   color: var(--text-secondary);
 }
 
+/* A button wedged between two blocks of explanatory text gets no breathing
+   room of its own — .settings-card is plain block flow, and .settings-help-text
+   only carries a 2px top margin. `align-items: flex-start` also keeps the
+   button at its content width instead of stretching the full card. */
+.settings-netbox-scan {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.settings-netbox-scan .settings-help-text {
+  margin-top: 0;
+}
+
 .settings-netbox-summary {
   display: flex;
   flex-direction: column;

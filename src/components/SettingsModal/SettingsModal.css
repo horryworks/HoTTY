@@ -267,19 +267,23 @@
 }
 
 .settings-button {
-  padding: 6px 20px;
-  border: none;
+  padding: 6px 16px;
   border-radius: 4px;
   cursor: pointer;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   font-family: var(--ui-font-family);
-  font-size: var(--font-size-base);
+  font-size: calc(var(--font-size-base) - 1px);
 }
 
 .settings-button:hover:not(:disabled) {
   background: var(--btn-secondary-hover-bg);
+}
+
+.settings-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ── Font family row ── */
