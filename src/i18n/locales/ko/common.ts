@@ -4,6 +4,7 @@ export const common = {
   cancel: '취소',
   delete: '삭제',
   close: '닫기',
+  resizeHint: '드래그하여 크기 조절. 두 번 클릭하면 기본값으로 되돌립니다.',
   ok: '확인',
   browse: '찾아보기...',
   reset: '기본값으로 초기화',

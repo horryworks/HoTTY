@@ -1,0 +1,139 @@
+/* The one place the modal shell is defined. Overlay, box, header, body and
+   footer used to be copied into sixteen, thirteen, thirteen, ten and twelve
+   stylesheets respectively; every value below is the one the majority already
+   agreed on, so the group looks the same as before and now stays that way. */
+
+.dlg-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--modal-overlay-bg);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* z-index comes from the dialog stack, not from here: it depends on how
+       many dialogs are open, which CSS cannot see. */
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+/* A movable dialog positions itself in px, so the backdrop must not also try to
+   centre it. Flex centring is why dragging the bottom-right corner used to grow
+   the top-left as well: the box had no left/top of its own, so widening it just
+   moved both edges outward from the middle. */
+.dlg-overlay-backdrop-only {
+    display: block;
+}
+
+.dlg-surface {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: var(--ui-font-family);
+    font-size: var(--font-size-base);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 16px var(--modal-shadow);
+    animation: fadeIn 0.1s ease-out;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    /* Anchors the resize handles, which are absolutely positioned children.
+       A movable dialog overrides this to `fixed` from JS. */
+    position: relative;
+    /* Deliberately no max-width/max-height. A movable dialog's bounds are owned
+       by `useDialogGeometry`; a second limit in CSS would let the box stop while
+       the drag kept going, so the grip would slide away from the cursor. Fixed
+       dialogs are bounded by their own `width` and by the body's scrolling. */
+    max-height: 90vh;
+    max-width: 90vw;
+}
+
+.dlg-overlay-backdrop-only .dlg-surface {
+    max-height: none;
+    max-width: none;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+.dlg-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    font-weight: 600;
+}
+
+/* On a movable dialog the header is the drag handle. No grab cursor: a Windows
+   title bar keeps the ordinary arrow, and changing it here would suggest the
+   header is a control rather than the window's edge. */
+.dlg-overlay-backdrop-only .dlg-header {
+    user-select: none;
+}
+
+.dlg-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dlg-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: calc(var(--font-size-base) + 4px);
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    transition: background-color 0.1s;
+}
+
+.dlg-close:hover {
+    background-color: var(--btn-secondary-hover-bg);
+    color: var(--text-primary);
+}
+
+/* ── Body ───────────────────────────────────────────────────────────────── */
+
+.dlg-body {
+    padding: 15px 20px;
+    flex: 1;
+    overflow-y: auto;
+    /* Required for the flex scrolling idiom: without it the body refuses to
+       shrink below its content and the dialog grows instead of scrolling. */
+    min-height: 0;
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+
+.dlg-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
+    flex-shrink: 0;
+}
+
+/* ── Warning tone ───────────────────────────────────────────────────────── */
+
+/* Used by the destructive-action confirmation, which has always been marked out
+   from the rest of the family by colour rather than by layout. */
+.dlg-warning {
+    border-color: var(--modal-border-warning);
+}
+
+.dlg-warning .dlg-header {
+    background-color: var(--modal-header-warning-bg);
+    border-bottom-color: var(--modal-border-warning);
+    color: var(--modal-header-warning-text);
+}
+
+.dlg-warning .dlg-close {
+    color: var(--modal-header-warning-text);
+}

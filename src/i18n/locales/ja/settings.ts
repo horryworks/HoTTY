@@ -1,7 +1,6 @@
 // 設定モーダル — 全体・タブラベル・各タブの内容。
 export const settings = {
   title: '設定',
-  resizeHint: 'ドラッグでサイズ変更。ダブルクリックで既定に戻す。',
   tabs: {
     general: '一般',
     appearance: '外観',
@@ -551,7 +550,6 @@ export const settings = {
       paneColor4: 'AI チャットの会話色分け 6 色のうち 4 色目（監視中のターミナルタブ・会話タブ・ヘッダーのチップ）。',
       paneColor5: 'AI チャットの会話色分け 6 色のうち 5 色目（監視中のターミナルタブ・会話タブ・ヘッダーのチップ）。',
       paneColor6: 'AI チャットの会話色分け 6 色のうち 6 色目（監視中のターミナルタブ・会話タブ・ヘッダーのチップ）。',
-      resizeGripShadow: 'サイズ変更グリップの縞模様の色。',
       searchHighlightBg: '検索に一致した行の背景の色味。',
       searchHighlightCurrentBg: '現在フォーカスされている検索一致行の背景色。',
       searchHighlightCurrentBorder: '現在フォーカスされている一致行の外枠の色。',

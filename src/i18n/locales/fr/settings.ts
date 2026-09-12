@@ -1,7 +1,6 @@
 // Settings modal — shell, tab labels, and all tab content.
 export const settings = {
   title: 'Paramètres',
-  resizeHint: 'Faites glisser pour redimensionner. Double-cliquez pour réinitialiser.',
   tabs: {
     general: 'Général',
     appearance: 'Apparence',
@@ -554,7 +553,6 @@ export const settings = {
       paneColor4: "Couleur 4 sur 6 du codage couleur des conversations du chat IA (onglets de terminal surveillés, onglets de conversation et pastilles d'en-tête).",
       paneColor5: "Couleur 5 sur 6 du codage couleur des conversations du chat IA (onglets de terminal surveillés, onglets de conversation et pastilles d'en-tête).",
       paneColor6: "Couleur 6 sur 6 du codage couleur des conversations du chat IA (onglets de terminal surveillés, onglets de conversation et pastilles d'en-tête).",
-      resizeGripShadow: 'Couleur du motif rayé de la poignée de redimensionnement.',
       searchHighlightBg: 'Teinte de fond des lignes contenant une correspondance de recherche.',
       searchHighlightCurrentBg: 'Couleur de fond de la ligne de correspondance actuellement sélectionnée.',
       searchHighlightCurrentBorder: 'Couleur du contour de la ligne de correspondance actuellement sélectionnée.',

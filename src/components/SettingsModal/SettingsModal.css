@@ -1,69 +1,11 @@
-.settings-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--modal-overlay-bg);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 10000;
-}
+/* The shared shell — overlay, box, header, body, close button, resize grip —
+   lives in `Dialog.css`. What remains here is what is genuinely this dialog's
+   own: the tab strip between the header and the body, and the form furniture
+   the tabs use. */
 
-.settings-modal {
-  background: var(--bg-secondary);
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 4px 16px var(--modal-shadow);
-  animation: fadeIn 0.1s ease-out;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  /* Anchors the resize grip in the corner. */
-  position: relative;
-  width: 520px;
-  /* Fixed, not content-sized: letting each tab set the height made the dialog
-     jump on every tab change. The body scrolls when a tab needs more, and a
-     short tab simply has space below it. Both are quieter than resizing on
-     every click, and the user can drag the dialog to whatever suits them. */
-  height: 600px;
-  max-width: 90vw;
-  max-height: 90vh;
-  color: var(--text-primary);
-  font-family: var(--ui-font-family);
-  font-size: var(--font-size-base);
-}
-
-/* Resize grip, bottom-right. Double-click resets to the size above. */
-.settings-modal-resize {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 16px;
-  height: 16px;
-  cursor: nwse-resize;
-  /* Two diagonal ticks — the conventional "drag me" mark. Drawn with a
-     gradient so it needs no extra element or icon. */
-  background: linear-gradient(
-    135deg,
-    transparent 0 42%,
-    var(--text-tertiary) 42% 52%,
-    transparent 52% 62%,
-    var(--text-tertiary) 62% 72%,
-    transparent 72%
-  );
-  opacity: 0.6;
-  transition: opacity 0.1s;
-}
-
-.settings-modal-resize:hover {
-  opacity: 1;
-}
-
-.settings-modal-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-  font-weight: 600;
-}
+/* The settings dialog is movable and resizable; its default size lives in
+   `DEFAULT_SIZE` in SettingsModal.tsx, not here, because the geometry hook has
+   to own the bounds (a second limit in CSS would fight the drag). */
 
 /* The tab row is a `ScrollStrip`: scrolling, arrow buttons and edge fades come
    from `.scroll-strip` / `.scroll-strip-wrap`. The border lives on the wrapper
@@ -93,13 +35,6 @@
 .settings-modal-tab.active {
   color: var(--text-primary);
   border-bottom: 2px solid var(--accent-color);
-}
-
-.settings-modal-body {
-  padding: 15px 20px;
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
 }
 
 .settings-group {

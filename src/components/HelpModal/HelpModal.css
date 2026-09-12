@@ -1,37 +1,13 @@
-.help-modal {
-  position: fixed;
-  max-width: 550px;
-  max-height: 80vh;
-  z-index: 10000;
-  animation: fadeIn 0.1s ease-out;
-}
-
-.help-modal .settings-modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.help-modal-close {
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  outline: none;
-}
-
-.help-modal-close:hover {
-  color: var(--text-primary);
-}
+/* The shell is `Dialog.css`. This file used to borrow `.settings-modal*` for
+   it, which only worked once the settings dialog had been opened at least
+   once — both are lazy-loaded and those classes ship in the settings chunk, so
+   opening Help first gave an unstyled box. Sharing a component instead of a
+   class name removes the possibility. */
 
 .help-content {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  overflow-y: auto;
   padding-bottom: 20px;
   padding-right: 8px;
 }

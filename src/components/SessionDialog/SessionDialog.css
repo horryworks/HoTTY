@@ -1,60 +1,28 @@
-.connection-dialog-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: var(--modal-overlay-bg);
-    z-index: 10000;
+/* The shell — overlay, box, header, close button, resize grip — lives in
+   `Dialog.css`. This dialog used to carry all of it plus its own drag and
+   resize code, and was the one modal the conventions had to call out as an
+   exception. It is no longer an exception.
+
+   The default size is `DEFAULT_SIZE` in SessionDialog.tsx, not here: the
+   geometry hook owns the bounds, and a second limit in CSS would stop the box
+   while the drag kept going. */
+
+/* The body is unpadded so the padding belongs to this wrapper instead, which
+   makes every part of the blank area a click target for "start a new
+   connection" — including the gap around the two panels. */
+.session-dialog-body {
+    padding: 0;
 }
 
-.connection-dialog {
-    background-color: var(--bg-secondary);
-    padding: 20px;
-    border-radius: 6px;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 4px 16px var(--modal-shadow);
-    color: var(--text-primary);
-    font-family: var(--ui-font-family);
-    font-size: var(--font-size-base);
-    animation: fadeIn 0.1s ease-out;
-}
-
-.connection-dialog-wide {
-    max-width: 98vw;
-    max-height: 95vh;
-    overflow: hidden;
+.session-dialog-content {
     display: flex;
     flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    padding: 20px;
+    box-sizing: border-box;
 }
 
-.connection-dialog h2 {
-    margin-top: 0;
-    margin-bottom: 10px;
-    color: var(--text-primary);
-    font-size: calc(var(--font-size-base) + 4px);
-}
-
-.session-dialog-close {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: calc(var(--font-size-base) + 4px);
-    line-height: 1;
-    padding: 2px 6px;
-    border-radius: 4px;
-    transition: background-color 0.1s;
-    z-index: 1;
-}
-
-.session-dialog-close:hover {
-    background-color: var(--btn-secondary-hover-bg);
-    color: var(--text-primary);
-}
 
 /* Two-panel body */
 .dialog-body {
@@ -256,23 +224,6 @@
 .banner-clear-btn:hover:not(:disabled) {
     background: var(--bg-secondary);
     color: var(--text-primary);
-}
-
-/* Bottom-right dialog resize grip */
-.dialog-resize-handle {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 18px;
-    height: 18px;
-    cursor: nwse-resize;
-    background: linear-gradient(135deg, transparent 40%, var(--border-color) 40%, var(--border-color) 50%, transparent 50%, transparent 65%, var(--border-color) 65%, var(--border-color) 75%, transparent 75%);
-    opacity: 0.6;
-    border-radius: 0 0 4px 0;
-}
-
-.dialog-resize-handle:hover {
-    opacity: 1;
 }
 
 /* Form styles */

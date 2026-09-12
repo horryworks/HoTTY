@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { Dialog } from '../Dialog/Dialog';
 import { useHostManager } from '../../hooks/useHostManager';
 import { buildHostEntryFromConfig } from './buildHostEntry';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -61,8 +61,6 @@ export const SaveToHostTreeDialog: React.FC<SaveToHostTreeDialogProps> = ({
     const nameInputRef = useRef<HTMLInputElement>(null);
     const newFolderInputRef = useRef<HTMLInputElement>(null);
     const modalRef = useRef<HTMLDivElement>(null);
-
-    useFocusTrap(modalRef, open);
 
     const prefixPlacement = useSettingsStore((s) => s.netbox.prefixPlacement);
 
@@ -172,26 +170,36 @@ export const SaveToHostTreeDialog: React.FC<SaveToHostTreeDialogProps> = ({
         setCreatingFolder(false);
     };
 
-    if (!open) return null;
-
     return (
-        <div className="save-to-tree-overlay" onClick={onClose}>
+        <Dialog
+            open={open}
+            onClose={onClose}
+            title={t('dialogs.saveToHostTree.title')}
+            className="save-to-tree-modal"
+            width={{ width: '90%', minWidth: 360, maxWidth: 460 }}
+            footer={
+                <>
+                    <button className="btn-secondary" onClick={onClose}>
+                        {t('common.cancel')}
+                    </button>
+                    {entry !== null && (
+                        <button className="btn-primary" onClick={handleSave} disabled={!canSave}>
+                            {t('common.save')}
+                        </button>
+                    )}
+                </>
+            }
+        >
             <div
-                className="save-to-tree-modal"
                 ref={modalRef}
-                onClick={(e) => e.stopPropagation()}
+                // Keys are kept off the app behind the dialog — Ctrl+F would
+                // otherwise open the terminal's find bar while the user is
+                // naming a folder. Escape is the one exception: it belongs to
+                // the dialog stack, which knows which dialog is in front.
                 onKeyDown={(e) => {
-                    e.stopPropagation();
-                    if (e.key === 'Escape') {
-                        e.preventDefault();
-                        onClose();
-                    }
+                    if (e.key !== 'Escape') e.stopPropagation();
                 }}
             >
-                <div className="save-to-tree-header">
-                    <h3>{t('dialogs.saveToHostTree.title')}</h3>
-                </div>
-                <div className="save-to-tree-body">
                 {entry === null ? (
                     <p className="save-to-tree-error">
                         {t('dialogs.saveToHostTree.unsupported')}
@@ -307,17 +315,6 @@ export const SaveToHostTreeDialog: React.FC<SaveToHostTreeDialogProps> = ({
                     </>
                 )}
                 </div>
-                <div className="save-to-tree-footer modal-actions">
-                    <button className="btn-secondary" onClick={onClose}>
-                        {t('common.cancel')}
-                    </button>
-                    {entry !== null && (
-                        <button className="btn-primary" onClick={handleSave} disabled={!canSave}>
-                            {t('common.save')}
-                        </button>
-                    )}
-                </div>
-            </div>
-        </div>
+        </Dialog>
     );
 };

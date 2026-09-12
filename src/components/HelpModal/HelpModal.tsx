@@ -1,9 +1,11 @@
 import type React from 'react';
-import { useRef } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { useModalEscape } from '../../hooks/useModalEscape';
+import { Dialog } from '../Dialog/Dialog';
 import './HelpModal.css';
+
+/** Wide enough for a two-column shortcut list without wrapping the labels. */
+const DEFAULT_SIZE = { width: 560, height: 640 };
+const MIN_SIZE = { width: 380, height: 300 };
 
 const FeaturesIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline', verticalAlign: 'middle', marginInline: '2px' }}>
@@ -28,28 +30,19 @@ interface HelpModalProps {
 
 export function HelpModal({ open, onClose }: HelpModalProps) {
   const { t } = useTranslation();
-  const modalRef = useRef<HTMLDivElement>(null);
-
-  // This modal lists "Escape — close dialog" among the shortcuts it documents,
-  // so not implementing it was the one place the app contradicted its own help.
-  useModalEscape(open ? onClose : null);
-  useFocusTrap(modalRef, open);
-
-  if (!open) return null;
 
   return (
-    <div className="settings-modal-overlay" onClick={onClose}>
-      <div className="settings-modal help-modal" ref={modalRef} onClick={(e) => e.stopPropagation()}>
-        <div className="settings-modal-header">
-          <span>{t('help.title')}</span>
-          <button className="help-modal-close" onClick={onClose}>
-            <svg viewBox="0 0 24 24" width="20" height="20">
-              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="settings-modal-body help-content">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={t('help.title')}
+      className="help-modal"
+      bodyClassName="help-content"
+      geometry={{ persistKey: 'help', defaultSize: DEFAULT_SIZE, minSize: MIN_SIZE }}
+      // A reference sheet, opened to be read and dismissed: clicking away is
+      // the natural way out and there is nothing to lose by it.
+      dismissOnOutsideClick
+    >
 
           <details className="help-section" open>
             <summary>{t('help.shortcuts.summary')}</summary>
@@ -645,10 +638,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                 <Trans i18nKey="help.themes.language" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
             </div>
-          </details>
-
-        </div>
-      </div>
-    </div>
+      </details>
+    </Dialog>
   );
 }

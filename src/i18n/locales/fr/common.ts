@@ -4,6 +4,7 @@ export const common = {
   cancel: 'Annuler',
   delete: 'Supprimer',
   close: 'Fermer',
+  resizeHint: 'Faites glisser pour redimensionner. Double-cliquez pour réinitialiser.',
   ok: 'OK',
   browse: 'Parcourir...',
   reset: 'Réinitialiser par défaut',

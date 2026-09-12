@@ -4,6 +4,7 @@ export const common = {
   cancel: '取消',
   delete: '刪除',
   close: '關閉',
+  resizeHint: '拖曳可調整大小，按兩下可還原預設。',
   ok: '確定',
   browse: '瀏覽...',
   reset: '重設為預設值',

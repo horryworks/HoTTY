@@ -1,7 +1,6 @@
 // Settings modal — shell, tab labels, and all tab content.
 export const settings = {
   title: '设置',
-  resizeHint: '拖动可调整大小，双击恢复默认。',
   tabs: {
     general: '常规',
     appearance: '外观',
@@ -547,7 +546,6 @@ export const settings = {
       paneColor4: 'AI 聊天会话配色 6 色中的第 4 色（受监视的终端标签页、会话标签页和标题栏标记）。',
       paneColor5: 'AI 聊天会话配色 6 色中的第 5 色（受监视的终端标签页、会话标签页和标题栏标记）。',
       paneColor6: 'AI 聊天会话配色 6 色中的第 6 色（受监视的终端标签页、会话标签页和标题栏标记）。',
-      resizeGripShadow: '调整大小手柄上条纹图案的颜色。',
       searchHighlightBg: '包含搜索匹配项的行的背景色调。',
       searchHighlightCurrentBg: '当前聚焦的搜索匹配行的背景色。',
       searchHighlightCurrentBorder: '当前聚焦的匹配行的轮廓颜色。',

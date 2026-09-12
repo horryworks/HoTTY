@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
 import type { Theme, ThemeTerminalColors } from '../../types/appTypes';
 import { nameToKey } from './nameToKey';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { useModalEscape } from '../../hooks/useModalEscape';
+import { Dialog } from '../Dialog/Dialog';
 import './CustomThemeCreator.css';
 
 interface CustomThemeCreatorProps {
@@ -48,7 +47,7 @@ const THEME_SECTIONS: { titleKey: string; descKey: string; keys: string[] }[] = 
     {
         titleKey: 'settings.customTheme.sectionUiTitle',
         descKey: 'settings.customTheme.sectionUiDesc',
-        keys: ['sidebar-bg', 'sidebar-btn-color', 'sidebar-btn-hover-bg', 'sidebar-btn-hover-color', 'sidebar-btn-active-bg', 'tab-bg', 'tab-text', 'tab-active-text', 'tab-close-bg', 'tab-close-hover-bg', 'tab-watching-text', 'tab-watching-bg', 'tab-watching-icon', 'tab-watching-icon-glow', 'tab-connecting-bg', 'tab-connecting-text', 'pane-connecting-bg', 'context-menu-bg', 'context-menu-border', 'context-menu-text', 'context-menu-hover-bg', 'hidden-item-bg', 'hidden-item-bg-hover', 'tree-meta-color', 'icon-folder', 'icon-host', 'terminal-prompt-default', 'terminal-prompt-active', 'terminal-letterbox-bg', 'pane-color-1', 'pane-color-2', 'pane-color-3', 'pane-color-4', 'pane-color-5', 'pane-color-6', 'resize-grip-shadow'],
+        keys: ['sidebar-bg', 'sidebar-btn-color', 'sidebar-btn-hover-bg', 'sidebar-btn-hover-color', 'sidebar-btn-active-bg', 'tab-bg', 'tab-text', 'tab-active-text', 'tab-close-bg', 'tab-close-hover-bg', 'tab-watching-text', 'tab-watching-bg', 'tab-watching-icon', 'tab-watching-icon-glow', 'tab-connecting-bg', 'tab-connecting-text', 'pane-connecting-bg', 'context-menu-bg', 'context-menu-border', 'context-menu-text', 'context-menu-hover-bg', 'hidden-item-bg', 'hidden-item-bg-hover', 'tree-meta-color', 'icon-folder', 'icon-host', 'terminal-prompt-default', 'terminal-prompt-active', 'terminal-letterbox-bg', 'pane-color-1', 'pane-color-2', 'pane-color-3', 'pane-color-4', 'pane-color-5', 'pane-color-6'],
     },
     {
         titleKey: 'settings.customTheme.sectionProvidersTitle',
@@ -164,7 +163,6 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'pane-color-4': 'settings.customTheme.vars.paneColor4',
     'pane-color-5': 'settings.customTheme.vars.paneColor5',
     'pane-color-6': 'settings.customTheme.vars.paneColor6',
-    'resize-grip-shadow': 'settings.customTheme.vars.resizeGripShadow',
     'search-highlight-bg': 'settings.customTheme.vars.searchHighlightBg',
     'search-highlight-current-bg': 'settings.customTheme.vars.searchHighlightCurrentBg',
     'search-highlight-current-border': 'settings.customTheme.vars.searchHighlightCurrentBorder',
@@ -213,6 +211,14 @@ const isSimpleHexColor = (value: string): boolean =>
 
 const isPureCssColor = (value: string): boolean =>
     /^(rgba?|hsla?)\s*\([^)]+\)$/i.test(value.trim());
+
+/**
+ * Tall by default: the variable list is long, and a short dialog turns every
+ * section into a scroll. The geometry hook owns the bounds, so no size is set
+ * in the stylesheet.
+ */
+const DEFAULT_SIZE = { width: 720, height: 760 };
+const MIN_SIZE = { width: 480, height: 400 };
 
 export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
     isOpen,
@@ -273,7 +279,6 @@ export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
         setTerminal(prev => ({ ...prev, [key]: value }));
     };
 
-    const modalRef = useRef<HTMLDivElement>(null);
 
     const handleCancel = () => {
         if (Object.keys(originalVariables).length > 0) {
@@ -285,8 +290,6 @@ export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
     // Escape restores the pre-edit variables, exactly as the ✕ button does —
     // a live theme preview that stayed applied after cancelling would be worse
     // than no shortcut at all.
-    useModalEscape(isOpen ? handleCancel : null);
-    useFocusTrap(modalRef, isOpen);
 
     const handleSave = async () => {
         const name = displayName.trim();
@@ -335,13 +338,14 @@ export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
     const themeKeys = Object.keys(themesData || {});
 
     return (
-        <div className="ctc-overlay">
-            <div className="ctc-modal" ref={modalRef}>
-                <div className="ctc-header">
-                    <h2>{t('settings.customTheme.title')}</h2>
-                    <button className="ctc-close-btn" onClick={handleCancel} title={t('settings.customTheme.cancel')}>✕</button>
-                </div>
-
+        <Dialog
+            open={isOpen}
+            onClose={handleCancel}
+            title={t('settings.customTheme.title')}
+            bodyClassName="ctc-body"
+            geometry={{ persistKey: 'customTheme', defaultSize: DEFAULT_SIZE, minSize: MIN_SIZE }}
+            subheader={
+                <>
                 <div className="ctc-toolbar">
                     <div className="ctc-toolbar-row">
                         <label className="ctc-label">{t('settings.customTheme.themeName')}</label>
@@ -369,8 +373,19 @@ export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
                     </div>
                     {error && <div className="ctc-error">{error}</div>}
                 </div>
-
-                <div className="ctc-body">
+                </>
+            }
+            footer={
+                <>
+                    <button className="ctc-btn-cancel" onClick={handleCancel} disabled={saving}>
+                        {t('settings.customTheme.cancel')}
+                    </button>
+                    <button className="ctc-btn-save" onClick={handleSave} disabled={saving}>
+                        {saving ? t('settings.customTheme.saving') : t('settings.customTheme.saveTheme')}
+                    </button>
+                </>
+            }
+        >
                     {THEME_SECTIONS.map(section => (
                         <div key={section.titleKey} className="ctc-section">
                             <div className="ctc-section-header">
@@ -419,18 +434,7 @@ export const CustomThemeCreator: React.FC<CustomThemeCreatorProps> = ({
                             </div>
                         ))}
                     </div>
-                </div>
-
-                <div className="ctc-footer">
-                    <button className="ctc-btn-cancel" onClick={handleCancel} disabled={saving}>
-                        {t('settings.customTheme.cancel')}
-                    </button>
-                    <button className="ctc-btn-save" onClick={handleSave} disabled={saving}>
-                        {saving ? t('settings.customTheme.saving') : t('settings.customTheme.saveTheme')}
-                    </button>
-                </div>
-            </div>
-        </div>
+        </Dialog>
     );
 };
 

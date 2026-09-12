@@ -65,17 +65,19 @@ describe('SettingsModal', () => {
     fireEvent.click(screen.getByText('About'));
     expect(screen.getByText('HoTTY')).toBeTruthy();
   });
-
-  it('clicking the overlay triggers onClose; clicking the modal body does not', () => {
+  it('does not close when the backdrop is clicked; the close button does', () => {
     const onClose = vi.fn();
     const { container } = render(<SettingsModal open onClose={onClose} {...themeProps} />);
-    const overlay = container.querySelector('.settings-modal-overlay') as HTMLElement;
-    const modal = container.querySelector('.settings-modal') as HTMLElement;
+    const overlay = container.querySelector('.dlg-overlay') as HTMLElement;
 
-    fireEvent.click(modal);
+    // Settings holds forms across nine tabs. A stray click on the backdrop used
+    // to throw all of that away, so the way out is now explicit: the close
+    // button, Escape, or a tab's own Cancel.
+    fireEvent.mouseDown(overlay);
+    fireEvent.click(overlay);
     expect(onClose).not.toHaveBeenCalled();
 
-    fireEvent.click(overlay);
+    fireEvent.click(screen.getByLabelText('Close'));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -95,75 +97,105 @@ describe('SettingsModal', () => {
     expect(screen.getByText('About')).toBeTruthy();
   });
 
-  describe('resizing', () => {
-    const grip = () => document.querySelector('.settings-modal-resize') as HTMLElement;
+  describe('geometry', () => {
+    const grip = () => document.querySelector('.drf-se') as HTMLElement;
     const dialog = () => document.querySelector('.settings-modal') as HTMLElement;
+    const storedSize = () => useSettingsStore.getState().dialogSizes.settings;
 
-    /** jsdom computes no layout, so the starting size has to be supplied. */
-    function openAt(w: number, h: number) {
-      render(<SettingsModal open onClose={() => {}} {...themeProps} />);
-      const el = dialog();
-      Object.defineProperty(el, 'offsetWidth', { value: w, configurable: true });
-      Object.defineProperty(el, 'offsetHeight', { value: h, configurable: true });
-      return el;
+    /** Press the grip, move, release. Geometry is driven by pointer events. */
+    function dragGrip(dx: number, dy: number, release = true) {
+      fireEvent.pointerDown(grip(), { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+      fireEvent.pointerMove(window, { clientX: 100 + dx, clientY: 100 + dy, pointerId: 1 });
+      if (release) fireEvent.pointerUp(window, { clientX: 100 + dx, clientY: 100 + dy, pointerId: 1 });
     }
 
+    it('opens at the default size', () => {
+      render(<SettingsModal open onClose={() => {}} {...themeProps} />);
+      expect(dialog().style.width).toBe('520px');
+      expect(dialog().style.height).toBe('600px');
+    });
+
     it('applies a stored size on open', () => {
-      useSettingsStore.getState().update('settingsModalWidth', 700);
-      useSettingsStore.getState().update('settingsModalHeight', 640);
+      useSettingsStore.getState().update('dialogSizes', { settings: { width: 700, height: 640 } });
       render(<SettingsModal open onClose={() => {}} {...themeProps} />);
       expect(dialog().style.width).toBe('700px');
       expect(dialog().style.height).toBe('640px');
     });
 
     it('resizes during the drag but only persists on release', () => {
-      const el = openAt(520, 600);
+      render(<SettingsModal open onClose={() => {}} {...themeProps} />);
 
-      fireEvent.mouseDown(grip(), { clientX: 100, clientY: 100 });
-      fireEvent.mouseMove(document, { clientX: 180, clientY: 160 });
-      expect(el.style.width).toBe('600px');
-      expect(el.style.height).toBe('660px');
+      dragGrip(80, 60, false);
+      expect(dialog().style.width).toBe('600px');
+      expect(dialog().style.height).toBe('660px');
       // Still unsaved: persisting per frame would rewrite the whole settings
-      // blob to localStorage on every mousemove.
-      expect(useSettingsStore.getState().settingsModalWidth).toBeNull();
+      // blob to localStorage on every pointer move.
+      expect(storedSize()).toBeUndefined();
 
-      fireEvent.mouseUp(document);
-      expect(useSettingsStore.getState().settingsModalWidth).toBe(600);
-      expect(useSettingsStore.getState().settingsModalHeight).toBe(660);
+      fireEvent.pointerUp(window, { clientX: 180, clientY: 160, pointerId: 1 });
+      expect(storedSize()).toEqual({ width: 600, height: 660 });
     });
 
     it('will not shrink past a usable size', () => {
-      const el = openAt(520, 600);
-      fireEvent.mouseDown(grip(), { clientX: 100, clientY: 100 });
-      fireEvent.mouseMove(document, { clientX: -500, clientY: -500 });
+      render(<SettingsModal open onClose={() => {}} {...themeProps} />);
+      dragGrip(-500, -500);
       // Any narrower and the tab strip is more arrows than tabs.
-      expect(el.style.width).toBe('420px');
-      expect(el.style.height).toBe('320px');
-      fireEvent.mouseUp(document);
+      expect(dialog().style.width).toBe('420px');
+      expect(dialog().style.height).toBe('320px');
     });
 
-    it('returns to the stylesheet size on double-click', () => {
-      useSettingsStore.getState().update('settingsModalWidth', 700);
-      useSettingsStore.getState().update('settingsModalHeight', 640);
+    it('leaves the top-left corner alone while the bottom-right is dragged', () => {
+      render(<SettingsModal open onClose={() => {}} {...themeProps} />);
+      const before = { left: dialog().style.left, top: dialog().style.top };
+
+      dragGrip(120, 90);
+
+      expect(dialog().style.left).toBe(before.left);
+      expect(dialog().style.top).toBe(before.top);
+    });
+
+    it('returns to the default size on double-click, and forgets the stored one', () => {
+      useSettingsStore.getState().update('dialogSizes', { settings: { width: 700, height: 640 } });
       render(<SettingsModal open onClose={() => {}} {...themeProps} />);
       expect(dialog().style.width).toBe('700px');
 
       fireEvent.doubleClick(grip());
-      expect(useSettingsStore.getState().settingsModalWidth).toBeNull();
-      expect(useSettingsStore.getState().settingsModalHeight).toBeNull();
-      // The inline style has to go too: the drag wrote it straight to the node,
-      // so clearing the stored value alone would leave the dialog resized.
-      expect(dialog().style.width).toBe('');
-      expect(dialog().style.height).toBe('');
+
+      expect(dialog().style.width).toBe('520px');
+      expect(dialog().style.height).toBe('600px');
+      // The key is dropped rather than set to the default, so a later change to
+      // the default still reaches anyone who never resized the dialog.
+      expect(storedSize()).toBeUndefined();
     });
 
     it('keeps its height when the tab changes', () => {
-      useSettingsStore.getState().update('settingsModalHeight', 640);
+      useSettingsStore.getState().update('dialogSizes', { settings: { width: 520, height: 640 } });
       render(<SettingsModal open onClose={() => {}} {...themeProps} />);
       const before = dialog().style.height;
       fireEvent.click(screen.getByText('About'));
       // The dialog used to size to its content, so every tab change resized it.
       expect(dialog().style.height).toBe(before);
+    });
+
+    it('does not close when a resize drag is released on the overlay', () => {
+      const onClose = vi.fn();
+      const { container } = render(<SettingsModal open onClose={onClose} {...themeProps} />);
+      const overlay = container.querySelector('.dlg-overlay') as HTMLElement;
+
+      // Drag the grip out past the dialog and let go: the browser fires the
+      // click at the common ancestor of press and release, which is the
+      // overlay. Before the press was checked too, that closed the dialog
+      // mid-resize.
+      fireEvent.mouseDown(grip(), { clientX: 100, clientY: 100 });
+      fireEvent.mouseUp(document, { clientX: 900, clientY: 900 });
+      fireEvent.click(overlay);
+
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('offers a grab area on every edge and corner', () => {
+      const { container } = render(<SettingsModal open onClose={() => {}} {...themeProps} />);
+      expect(container.querySelectorAll('.drf-edge')).toHaveLength(8);
     });
   });
 });

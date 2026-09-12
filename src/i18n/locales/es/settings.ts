@@ -1,7 +1,6 @@
 // Modal de configuración — shell, etiquetas de pestañas y todo el contenido de las pestañas.
 export const settings = {
   title: 'Configuración',
-  resizeHint: 'Arrastra para cambiar el tamaño. Doble clic para restablecer.',
   tabs: {
     general: 'General',
     appearance: 'Apariencia',
@@ -553,7 +552,6 @@ export const settings = {
       paneColor4: 'Color 4 de 6 para la codificación por colores de las conversaciones del chat de IA (pestañas de terminal supervisadas, pestañas de conversación y etiquetas del encabezado).',
       paneColor5: 'Color 5 de 6 para la codificación por colores de las conversaciones del chat de IA (pestañas de terminal supervisadas, pestañas de conversación y etiquetas del encabezado).',
       paneColor6: 'Color 6 de 6 para la codificación por colores de las conversaciones del chat de IA (pestañas de terminal supervisadas, pestañas de conversación y etiquetas del encabezado).',
-      resizeGripShadow: 'Color del patrón de rayas del controlador de cambio de tamaño.',
       searchHighlightBg: 'Tono de fondo de las líneas que contienen una coincidencia de búsqueda.',
       searchHighlightCurrentBg: 'Color de fondo de la línea de la coincidencia de búsqueda enfocada.',
       searchHighlightCurrentBorder: 'Color del contorno de la línea de la coincidencia enfocada.',

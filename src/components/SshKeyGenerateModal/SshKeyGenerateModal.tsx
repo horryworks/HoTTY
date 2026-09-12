@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { useModalEscape } from '../../hooks/useModalEscape';
+import { Dialog } from '../Dialog/Dialog';
 import { tauriService } from '../../services/tauriService';
 import {
   validateSshKeyName,
@@ -81,7 +80,6 @@ export function SshKeyGenerateModal({
   onGenerated,
 }: SshKeyGenerateModalProps) {
   const { t } = useTranslation();
-  const modalRef = useRef<HTMLDivElement | null>(null);
 
   const [name, setName] = useState(defaultName);
   const [algorithm, setAlgorithm] = useState<SshKeyAlgorithm>('ed25519');
@@ -139,8 +137,6 @@ export function SshKeyGenerateModal({
   }, [generating, onClose]);
 
   // Escape answers the safe way here by refusing while a key is being written.
-  useModalEscape(open ? handleClose : null);
-  useFocusTrap(modalRef, open);
 
   const handleGenerate = useCallback(async () => {
     if (!canGenerate) return;
@@ -181,24 +177,47 @@ export function SshKeyGenerateModal({
     window.setTimeout(() => setCopied(false), 1500);
   }, [publicLine]);
 
-  if (!open) return null;
-
   return (
-    <div className="skg-overlay" role="presentation">
-      <div
-        className="skg-modal"
-        ref={modalRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('settings.sshKeys.modalTitle')}
-      >
-        <div className="skg-header">
-          <h3>
-            {created ? t('settings.sshKeys.createdTitle') : t('settings.sshKeys.modalTitle')}
-          </h3>
-        </div>
-
-        <div className="skg-body">
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      title={created ? t('settings.sshKeys.createdTitle') : t('settings.sshKeys.modalTitle')}
+      width={420}
+      showClose={false}
+      footer={
+        <>
+          {created ? (
+            <>
+              <button type="button" className="skg-btn-secondary" onClick={handleCopy}>
+                {copied ? t('common.copied') : t('settings.sshKeys.copyPublicKey')}
+              </button>
+              <button type="button" className="skg-btn-primary" onClick={handleClose}>
+                {t('common.close')}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="skg-btn-secondary"
+                onClick={handleClose}
+                disabled={generating}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="skg-btn-primary"
+                onClick={() => void handleGenerate()}
+                disabled={!canGenerate}
+              >
+                {generating ? t('settings.sshKeys.generating') : t('settings.sshKeys.generate')}
+              </button>
+            </>
+          )}
+        </>
+      }
+    >
           {created ? (
             <>
               <div className="skg-field">
@@ -321,40 +340,6 @@ export function SshKeyGenerateModal({
               {error !== null && <p className="skg-error">{error}</p>}
             </>
           )}
-        </div>
-
-        <div className="skg-footer">
-          {created ? (
-            <>
-              <button type="button" className="skg-btn-secondary" onClick={handleCopy}>
-                {copied ? t('common.copied') : t('settings.sshKeys.copyPublicKey')}
-              </button>
-              <button type="button" className="skg-btn-primary" onClick={handleClose}>
-                {t('common.close')}
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="skg-btn-secondary"
-                onClick={handleClose}
-                disabled={generating}
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                className="skg-btn-primary"
-                onClick={() => void handleGenerate()}
-                disabled={!canGenerate}
-              >
-                {generating ? t('settings.sshKeys.generating') : t('settings.sshKeys.generate')}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

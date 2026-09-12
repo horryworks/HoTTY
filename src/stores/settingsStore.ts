@@ -20,6 +20,23 @@ import type { FixedSizeMode } from '../utils/fixedTerminalSize';
  */
 const LEGACY_PROMPT_HIGHLIGHT_COLOR = 'rgba(255, 255, 255, 0.15)';
 
+/**
+ * The dialogs that remember a size. Named rather than derived from a component
+ * so a rename cannot silently orphan a user's saved geometry.
+ */
+export type DialogId =
+  | 'settings'
+  | 'session'
+  | 'customTheme'
+  | 'systemPrompt'
+  | 'help'
+  | 'thirdPartyLicenses';
+
+export interface DialogSize {
+  width: number;
+  height: number;
+}
+
 export const DEFAULT_PROMPT_PATTERNS: PromptPattern[] = [
   { id: 'cisco', name: 'Cisco / Allied Telesis', pattern: '^([a-zA-Z0-9_\\-\\./]+(?:\\([a-zA-Z0-9_\\-\\./]+\\))?[>#])\\s*' },
   { id: 'fortigate', name: 'Fortigate', pattern: '^([a-zA-Z0-9_\\-\\.]+(?:\\s\\([a-zA-Z0-9_\\-\\.]+\\))?[#$])\\s*' },
@@ -198,16 +215,21 @@ interface SettingsState {
    */
   aiWindowBounds: WindowRect | null;
   /**
-   * Settings dialog size, in px, once the user has resized it. `null` means
-   * "not resized" — the dialog uses the fixed default from its stylesheet.
+   * Sizes, in px, of the dialogs the user has resized. A missing key means
+   * "never resized", so the dialog takes the default from its stylesheet — and
+   * so a later change to that default still reaches everyone who never dragged
+   * it.
    *
-   * The height is fixed rather than content-sized on purpose: sizing to the
-   * active tab made the dialog jump every time the user changed tab. A tab with
-   * little in it now has some empty space below instead, which is the quieter
-   * of the two.
+   * Size only: the POSITION is deliberately not stored. A modal opens centred
+   * every time, which cannot strand it off-screen after a monitor change and
+   * carries no meaning from one window to another. Size, by contrast, is a
+   * preference about the dialog itself, so it is shared by every window.
+   *
+   * The settings dialog's height is fixed rather than content-sized on purpose:
+   * sizing to the active tab made it jump on every tab change. A short tab now
+   * has some empty space below instead, which is the quieter of the two.
    */
-  settingsModalWidth: number | null;
-  settingsModalHeight: number | null;
+  dialogSizes: Partial<Record<DialogId, DialogSize>>;
 }
 
 interface SettingsActions {
@@ -300,8 +322,7 @@ const DEFAULTS: SettingsState = {
   aiLocalShellType: 'powershell',
   aiWindowAlwaysOnTop: false,
   aiWindowBounds: null,
-  settingsModalWidth: null,
-  settingsModalHeight: null,
+  dialogSizes: {},
 };
 
 export const useSettingsStore = create<SettingsState & SettingsActions>()(
@@ -313,7 +334,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 34,
+      version: 35,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -492,12 +513,6 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           state.aiWorkerIdleTimeoutMins ??= DEFAULTS.aiWorkerIdleTimeoutMins;
           state.aiLocalShellType ??= DEFAULTS.aiLocalShellType;
         }
-        if (version < 31) {
-          // Settings dialog size. Null on upgrade, so an existing install keeps
-          // the auto-sized dialog it has always had until the user drags it.
-          state.settingsModalWidth ??= DEFAULTS.settingsModalWidth;
-          state.settingsModalHeight ??= DEFAULTS.settingsModalHeight;
-        }
         if (version < 32) {
           // New NetBox integration. `??=` (the fileServerConfig/v18 pattern):
           // an upgrade gets the whole default object. `syncOnStartup: true`
@@ -519,6 +534,26 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           // which is falsy, and therefore indistinguishable from a user who
           // turned the feature off. A nested field needs a per-field merge.
           state.netbox = { ...DEFAULTS.netbox, ...(state.netbox ?? {}) };
+        }
+        if (version < 35) {
+          // Dialog geometry moved from two flat settings-only fields to one
+          // record keyed by dialog, now that every resizable dialog saves its
+          // size. Carry the old value over, then drop the old keys: `partialize`
+          // writes the whole state back out, so leftovers would sit in
+          // localStorage forever, read by nothing.
+          const legacy = state as Partial<SettingsState> & {
+            settingsModalWidth?: number | null;
+            settingsModalHeight?: number | null;
+          };
+          state.dialogSizes ??= {};
+          if (legacy.settingsModalWidth != null && legacy.settingsModalHeight != null) {
+            state.dialogSizes.settings = {
+              width: legacy.settingsModalWidth,
+              height: legacy.settingsModalHeight,
+            };
+          }
+          delete legacy.settingsModalWidth;
+          delete legacy.settingsModalHeight;
         }
         return state as SettingsState;
       },

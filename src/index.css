@@ -57,18 +57,7 @@ body {
   display: none;
 }
 
-/* Subtle backdrop blur behind modals (futuristic touch, no color changes). */
-
-.settings-modal-overlay,
-.confirm-modal-overlay,
-.ctc-overlay,
-.host-edit-modal-overlay,
-.paste-modal-overlay,
-.system-prompt-modal-overlay,
-.ssh-host-key-overlay,
-.connection-dialog-overlay,
-.iap-vm-start-overlay,
-.save-to-tree-overlay {
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
+/* The subtle backdrop blur behind dialogs now lives with the overlay itself,
+   in `Dialog.css`. It used to be a list of ten class names here, which had
+   fallen five behind: `.tpl-overlay`, `.mbp-overlay`, `.skg-overlay`,
+   `.ai-consent-overlay` and `.add-bookmark-modal-overlay` never got it. */

@@ -153,7 +153,7 @@ describe('CustomThemeCreator', () => {
     });
     // Simulate edit by directly mutating DOM (real change would come through UI)
     document.documentElement.style.setProperty('--bg-primary', '#ff0000');
-    fireEvent.click(screen.getByTitle('Cancel'));
+    fireEvent.click(screen.getByText('Cancel'));
     // On cancel, originalVariables should restore
     expect(document.documentElement.style.getPropertyValue('--bg-primary')).toBe('#000000');
     expect(onCancel).toHaveBeenCalled();

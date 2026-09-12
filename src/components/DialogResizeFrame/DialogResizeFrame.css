@@ -1,0 +1,75 @@
+/* Transparent grab areas pinned to the dialog's own edges. 6px matches the
+   Windows sizing border closely enough to feel native without eating into the
+   content. The corners are larger, because hitting a 6x6 square is fiddly.
+
+   Nothing is drawn: the cursor is the affordance, as it is on a window border.
+   The bottom-right used to carry a diagonal grip, from when it was the only
+   place a dialog could be resized from. */
+.drf-edge {
+    position: absolute;
+}
+
+.drf-n {
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    cursor: ns-resize;
+}
+
+.drf-s {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    cursor: ns-resize;
+}
+
+.drf-w {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 6px;
+    cursor: ew-resize;
+}
+
+.drf-e {
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 6px;
+    cursor: ew-resize;
+}
+
+.drf-nw {
+    top: 0;
+    left: 0;
+    width: 12px;
+    height: 12px;
+    cursor: nwse-resize;
+}
+
+.drf-ne {
+    top: 0;
+    right: 0;
+    width: 12px;
+    height: 12px;
+    cursor: nesw-resize;
+}
+
+.drf-sw {
+    bottom: 0;
+    left: 0;
+    width: 12px;
+    height: 12px;
+    cursor: nesw-resize;
+}
+
+.drf-se {
+    bottom: 0;
+    right: 0;
+    width: 12px;
+    height: 12px;
+    cursor: nwse-resize;
+}
+

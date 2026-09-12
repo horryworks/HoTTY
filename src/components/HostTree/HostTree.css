@@ -264,40 +264,12 @@
     margin: 3px 0;
 }
 
-/* --- Add/Edit Modal --- */
-.host-edit-modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: var(--modal-overlay-bg);
-    z-index: 10000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    user-select: text !important;
-    -webkit-user-select: text !important;
-}
-
-.host-edit-modal {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    padding: 20px 24px;
-    min-width: 320px;
-    max-width: 460px;
-    width: 90%;
-    box-shadow: 0 4px 16px var(--modal-shadow);
-    user-select: text !important;
-    -webkit-user-select: text !important;
-    animation: fadeIn 0.1s ease-out;
-}
-
-.host-edit-modal h3 {
-    margin: 0 0 16px 0;
-    font-size: calc(var(--font-size-base) + 2px);
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
+/* --- Add/Edit form ---
+   The shell lives in `Dialog.css`; the three dialogs that shared
+   `.host-edit-modal` (host edit, bookmark edit, add bookmark) now share the
+   component instead. That also gives them the scrolling body they never had:
+   the old box set no max-height, so a host form with a long protocol section
+   ran off the screen with the buttons out of reach. */
 .modal-form-group {
     display: flex;
     flex-direction: column;
@@ -362,12 +334,9 @@
     flex: 1;
 }
 
-.modal-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-top: 16px;
-}
+/* The row itself is now `.dlg-footer`; this class survives only because the
+   three dialogs that used to share this stylesheet style their buttons
+   through it. */
 
 .modal-actions .btn-secondary {
     padding: 6px 16px;

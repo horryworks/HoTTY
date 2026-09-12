@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { useModalEscape } from '../../hooks/useModalEscape';
+import { Dialog } from '../Dialog/Dialog';
 import { tauriService } from '../../services/tauriService';
 import { logError } from '../../utils/logger';
 import i18n from '../../i18n';
@@ -11,7 +10,6 @@ import './SshHostKeyModal.css';
 export function SshHostKeyModal() {
   const { t } = useTranslation();
   const [prompt, setPrompt] = useState<SshHostKeyPromptPayload | null>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -40,20 +38,34 @@ export function SshHostKeyModal() {
   const rejectOnEscape = useCallback(() => {
     void respond(false, false);
   }, [respond]);
-  useModalEscape(prompt ? rejectOnEscape : null);
-  useFocusTrap(modalRef, prompt !== null);
-
   if (!prompt) return null;
 
   const isChanged = prompt.kind === 'changed';
 
   return (
-    <div className="ssh-host-key-overlay">
-      <div className="ssh-host-key-modal" ref={modalRef}>
-        <div className="ssh-host-key-header">
-          <span>{isChanged ? t('dialogs.sshHostKey.titleChanged') : t('dialogs.sshHostKey.titleUnknown')}</span>
-        </div>
-        <div className="ssh-host-key-body">
+    <Dialog
+      open
+      // Escape and the close button both reject. A host-key prompt must fail
+      // closed: "I did not expect this" is precisely what dismissing it means,
+      // and treating a stray Escape as consent would defeat the check entirely.
+      onClose={rejectOnEscape}
+      title={isChanged ? t('dialogs.sshHostKey.titleChanged') : t('dialogs.sshHostKey.titleUnknown')}
+      width={520}
+      showClose={false}
+      footer={
+        <>
+          <button type="button" className="ssh-host-key-btn-danger" onClick={() => respond(false, false)}>
+            {t('dialogs.sshHostKey.reject')}
+          </button>
+          <button type="button" className="ssh-host-key-btn-secondary" onClick={() => respond(true, false)}>
+            {t('dialogs.sshHostKey.acceptOnce')}
+          </button>
+          <button type="button" className="ssh-host-key-btn-primary" onClick={() => respond(true, true)}>
+            {t('dialogs.sshHostKey.acceptRemember')}
+          </button>
+        </>
+      }
+    >
           {isChanged && (
             <p className="ssh-host-key-warning">
               {t('dialogs.sshHostKey.warning')}
@@ -73,31 +85,6 @@ export function SshHostKeyModal() {
             <span className="ssh-host-key-label">{t('dialogs.sshHostKey.fingerprint')}</span>
             <span className="ssh-host-key-fingerprint">{prompt.fingerprint}</span>
           </div>
-        </div>
-        <div className="ssh-host-key-footer">
-          <button
-            type="button"
-            className="ssh-host-key-btn-danger"
-            onClick={() => respond(false, false)}
-          >
-            {t('dialogs.sshHostKey.reject')}
-          </button>
-          <button
-            type="button"
-            className="ssh-host-key-btn-secondary"
-            onClick={() => respond(true, false)}
-          >
-            {t('dialogs.sshHostKey.acceptOnce')}
-          </button>
-          <button
-            type="button"
-            className="ssh-host-key-btn-primary"
-            onClick={() => respond(true, true)}
-          >
-            {t('dialogs.sshHostKey.acceptRemember')}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

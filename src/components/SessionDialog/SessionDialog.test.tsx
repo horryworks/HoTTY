@@ -126,9 +126,88 @@ describe('SessionDialog', () => {
     expect(screen.getByText('Private Key Path (optional)')).toBeTruthy();
   });
 
-  it('shows resize handle', () => {
+  it('can be grabbed on every edge and corner', () => {
     const { container } = render(<SessionDialog {...defaultProps} />);
-    expect(container.querySelector('.dialog-resize-handle')).toBeTruthy();
+    expect(container.querySelectorAll('.drf-edge')).toHaveLength(8);
+    expect(container.querySelector('.drf-se')).toBeTruthy();
+  });
+
+  describe('drag does not reset the form (regression)', () => {
+    /** Selects the one saved host, leaving the form clean but not "new". */
+    async function selectHost(seed: string) {
+      localStorage.setItem(STORAGE_KEYS.HOST_TREE, JSON.stringify([
+        { id: seed, type: 'host', name: 'Sample Box', entry: { protocol: 'ssh', host: '10.0.0.20', port: 22, username: 'alice' } },
+      ]));
+      const view = render(<SessionDialog {...defaultProps} />);
+      await act(async () => {
+        fireEvent.click(screen.getByText('Sample Box'));
+      });
+      expect(view.container.querySelector('.banner-editing-name')?.textContent).toBe('Sample Box');
+      return view;
+    }
+
+    it('keeps the selected host when a resize drag ends on the dialog', async () => {
+      const { container } = await selectHost('host-drag-1');
+      const dialog = container.querySelector('.session-dialog-content') as HTMLElement;
+
+      // Press on the grip, release somewhere else inside the dialog: the click
+      // surfaces on the dialog, which matches no allow-list selector.
+      fireEvent.mouseDown(container.querySelector('.drf-se') as HTMLElement);
+      await act(async () => {
+        fireEvent.click(dialog);
+      });
+
+      expect(container.querySelector('.banner-editing-name')?.textContent).toBe('Sample Box');
+      expect(container.querySelector('.banner-new')).toBeNull();
+    });
+
+    it('keeps the selected host when a divider drag ends on the dialog', async () => {
+      const { container } = await selectHost('host-drag-2');
+      const dialog = container.querySelector('.session-dialog-content') as HTMLElement;
+
+      fireEvent.mouseDown(container.querySelector('.panel-divider') as HTMLElement);
+      await act(async () => {
+        fireEvent.click(dialog);
+      });
+
+      expect(container.querySelector('.banner-editing-name')?.textContent).toBe('Sample Box');
+    });
+
+    it('still starts a new connection on a real click in the blank area', async () => {
+      const { container } = await selectHost('host-drag-3');
+      const dialog = container.querySelector('.session-dialog-content') as HTMLElement;
+
+      // Pressed and released on the same blank spot — a genuine click.
+      fireEvent.mouseDown(dialog);
+      await act(async () => {
+        fireEvent.click(dialog);
+      });
+
+      expect(container.querySelector('.banner-new')).toBeTruthy();
+    });
+
+    it('keeps the selected host when a nested dialog is clicked', async () => {
+      const { container } = await selectHost('host-drag-4');
+
+      // Open the discard prompt by editing, then clicking the clear button.
+      const hostInput = container.querySelector('input[placeholder="example.com"]') as HTMLInputElement;
+      await act(async () => {
+        fireEvent.change(hostInput, { target: { value: '10.0.0.99' } });
+        fireEvent.click(screen.getByLabelText('Clear form and start new connection'));
+      });
+      const confirm = container.querySelector('.confirm-modal') as HTMLElement;
+      expect(confirm).toBeTruthy();
+
+      // A click inside the nested dialog must not reach the dialog behind it.
+      // This used to be guarded by an allow-list of overlay class names, and a
+      // dialog missing from that list blanked the form underneath.
+      await act(async () => {
+        fireEvent.mouseDown(confirm);
+        fireEvent.click(confirm);
+      });
+
+      expect(container.querySelector('.confirm-modal')).toBeTruthy();
+    });
   });
 
   describe('New Connection status banner', () => {
@@ -172,7 +251,7 @@ describe('SessionDialog', () => {
         fireEvent.click(screen.getByLabelText('Clear form and start new connection'));
       });
       // No ConfirmModal because nothing was edited after selection.
-      expect(container.querySelector('.confirm-modal-overlay')).toBeNull();
+      expect(container.querySelector('.confirm-modal')).toBeNull();
       // Banner is back to the new-connection state.
       const banner = container.querySelector('.banner-new');
       expect(banner).toBeTruthy();
@@ -196,7 +275,7 @@ describe('SessionDialog', () => {
       await act(async () => {
         fireEvent.click(screen.getByLabelText('Clear form and start new connection'));
       });
-      expect(container.querySelector('.confirm-modal-overlay')).toBeTruthy();
+      expect(container.querySelector('.confirm-modal')).toBeTruthy();
       expect(screen.getByText('Discard')).toBeTruthy();
     });
 
@@ -220,7 +299,7 @@ describe('SessionDialog', () => {
         fireEvent.click(screen.getByText('Cancel'));
       });
       // Modal closed, banner is still in editing state, host field is preserved.
-      expect(container.querySelector('.confirm-modal-overlay')).toBeNull();
+      expect(container.querySelector('.confirm-modal')).toBeNull();
       expect(screen.getByText(/Editing:/)).toBeTruthy();
       expect((container.querySelector('input[placeholder="example.com"]') as HTMLInputElement).value).toBe('10.0.0.99');
     });
@@ -244,7 +323,7 @@ describe('SessionDialog', () => {
         fireEvent.click(screen.getByText('Discard'));
       });
       // Modal closed, banner reset, host field cleared.
-      expect(container.querySelector('.confirm-modal-overlay')).toBeNull();
+      expect(container.querySelector('.confirm-modal')).toBeNull();
       expect(container.querySelector('.banner-new')).toBeTruthy();
       expect((container.querySelector('input[placeholder="example.com"]') as HTMLInputElement).value).toBe('');
     });
@@ -263,7 +342,7 @@ describe('SessionDialog', () => {
       await act(async () => {
         fireEvent.click(screen.getByText('Sample Box'));
       });
-      expect(container.querySelector('.confirm-modal-overlay')).toBeNull();
+      expect(container.querySelector('.confirm-modal')).toBeNull();
       expect(screen.getByText(/Editing:/)).toBeTruthy();
     });
 

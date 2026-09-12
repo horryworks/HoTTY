@@ -61,17 +61,22 @@ describe('SystemPromptModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onClose when the overlay is clicked', () => {
+  it('does not close when the backdrop is clicked', () => {
     const onClose = vi.fn();
-    render(
+    const { container } = render(
       <SystemPromptModal
         personaLabel="P"
         systemInstruction="x"
         onClose={onClose}
       />,
     );
-    fireEvent.click(screen.getByRole('dialog'));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // The prompt text is selectable, and a selection drag that happens to end
+    // on the backdrop used to dismiss the dialog. Close, Escape and the ×
+    // are the ways out.
+    const overlay = container.querySelector('.dlg-overlay') as HTMLElement;
+    fireEvent.mouseDown(overlay);
+    fireEvent.click(overlay);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('does not close when the inner panel is clicked', () => {

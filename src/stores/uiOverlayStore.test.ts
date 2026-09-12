@@ -18,11 +18,11 @@ describe('uiOverlayStore', () => {
     expect(useUiOverlayStore.getState().overlayOpen).toBe(false);
   });
 
-  it('detects a modal overlay being added, then removed', async () => {
+  it('detects a dialog overlay being added, then removed', async () => {
     initOverlayWatcher();
 
     const overlay = document.createElement('div');
-    overlay.className = 'settings-modal-overlay';
+    overlay.className = 'dlg-overlay';
     document.body.appendChild(overlay);
     await tick();
     expect(useUiOverlayStore.getState().overlayOpen).toBe(true);
@@ -32,24 +32,14 @@ describe('uiOverlayStore', () => {
     expect(useUiOverlayStore.getState().overlayOpen).toBe(false);
   });
 
-  it('detects the ★ add-bookmark modal overlay', async () => {
+  // Every dialog carries the same overlay class, so none can be forgotten the
+   // way three were while this was a list of individual class names. A dialog
+   // the watcher misses is a dialog a WebBrowserPane's WebView2 child — which
+   // the OS composites above the HTML layer — paints straight over.
+  it('detects any dialog, whatever it is, by its shared overlay class', async () => {
     initOverlayWatcher();
     const overlay = document.createElement('div');
-    overlay.className = 'add-bookmark-modal-overlay';
-    document.body.appendChild(overlay);
-    await tick();
-    expect(useUiOverlayStore.getState().overlayOpen).toBe(true);
-  });
-
-  // AiConsentModal mounts at app level rather than inside another registered
-  // overlay, so if its class is missing from OVERLAY_SELECTOR nothing else
-  // sets overlayOpen for it — a WebBrowserPane's WebView2 child, which the OS
-  // composites above the HTML layer, then paints over the consent dialog and
-  // makes it unreachable.
-  it('detects the AI data-sharing consent overlay', async () => {
-    initOverlayWatcher();
-    const overlay = document.createElement('div');
-    overlay.className = 'ai-consent-overlay';
+    overlay.className = 'dlg-overlay confirm-modal';
     document.body.appendChild(overlay);
     await tick();
     expect(useUiOverlayStore.getState().overlayOpen).toBe(true);
@@ -69,7 +59,7 @@ describe('uiOverlayStore', () => {
     await tick();
 
     const overlay = document.createElement('div');
-    overlay.className = 'confirm-modal-overlay';
+    overlay.className = 'dlg-overlay';
     host.appendChild(overlay);
     await tick();
     expect(useUiOverlayStore.getState().overlayOpen).toBe(true);

@@ -4,6 +4,7 @@ export const common = {
   cancel: 'Cancelar',
   delete: 'Eliminar',
   close: 'Cerrar',
+  resizeHint: 'Arrastra para cambiar el tamaño. Doble clic para restablecer.',
   ok: 'Aceptar',
   browse: 'Examinar...',
   reset: 'Restablecer valores predeterminados',

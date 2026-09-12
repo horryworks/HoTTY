@@ -1,7 +1,6 @@
 // Settings modal — shell, tab labels, and all tab content.
 export const settings = {
   title: 'Settings',
-  resizeHint: 'Drag to resize. Double-click to reset.',
   tabs: {
     general: 'General',
     appearance: 'Appearance',
@@ -552,7 +551,6 @@ export const settings = {
       paneColor4: 'Color 4 of 6 for AI Chat conversation color-coding (watched terminal tabs, conversation tabs, and header chips).',
       paneColor5: 'Color 5 of 6 for AI Chat conversation color-coding (watched terminal tabs, conversation tabs, and header chips).',
       paneColor6: 'Color 6 of 6 for AI Chat conversation color-coding (watched terminal tabs, conversation tabs, and header chips).',
-      resizeGripShadow: 'Color for the stripe pattern on the resize grip handle.',
       searchHighlightBg: 'Background tint for lines that contain a search match.',
       searchHighlightCurrentBg: 'Background for the currently focused search match line.',
       searchHighlightCurrentBorder: 'Outline color for the currently focused match line.',

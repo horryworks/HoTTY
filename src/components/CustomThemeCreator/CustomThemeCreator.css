@@ -1,66 +1,5 @@
-.ctc-overlay {
-    position: fixed;
-    inset: 0;
-    background: var(--modal-overlay-bg);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    /* Nested-modal tier: CustomThemeCreator opens on top of the still-open
-       SettingsModal (base 10000), so it sits explicitly above it rather than
-       relying on DOM order. Matches SshHostKeyModal / IapVmStartModal. */
-    z-index: 10001;
-}
-
-.ctc-modal {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    font-family: var(--ui-font-family);
-    font-size: var(--font-size-base);
-    width: 720px;
-    max-width: 95vw;
-    height: 88vh;
-    max-height: 88vh;
-    border-radius: 6px;
-    box-shadow: 0 4px 16px var(--modal-shadow);
-    border: 1px solid var(--border-color);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    animation: fadeIn 0.1s ease-out;
-}
-
-/* Header */
-.ctc-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border-color);
-    flex-shrink: 0;
-}
-
-.ctc-header h2 {
-    margin: 0;
-    font-size: calc(var(--font-size-base) + 4px);
-    font-weight: 600;
-}
-
-.ctc-close-btn {
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: calc(var(--font-size-base) + 4px);
-    padding: 2px 6px;
-    border-radius: 4px;
-    line-height: 1;
-    transition: background-color 0.1s;
-}
-
-.ctc-close-btn:hover {
-    background: var(--btn-secondary-hover-bg);
-    color: var(--text-primary);
-}
+/* The shell lives in `Dialog.css`. What stays here is the name/base toolbar,
+   the variable sections and the swatch rows. */
 
 /* Toolbar */
 .ctc-toolbar {
@@ -122,10 +61,10 @@
 /* Scrollable Body — vertical padding matches the standard modal body
    (15px); horizontal stays 0 so sticky section headers and row hover
    backgrounds can span the full width. Children own their own h-padding. */
+/* Overrides `.dlg-body`'s side padding to zero. The section headers are
+   sticky and full-bleed, so side padding here would leave a gap beside them as
+   they slide under the toolbar. Vertical padding is unchanged. */
 .ctc-body {
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
     padding: 15px 0;
 }
 
@@ -242,17 +181,6 @@
 .ctc-text-input:focus {
     outline: none;
     border-color: var(--accent-color);
-}
-
-/* Footer */
-.ctc-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    padding: 12px 16px;
-    border-top: 1px solid var(--border-color);
-    flex-shrink: 0;
-    background: var(--bg-secondary);
 }
 
 .ctc-btn-cancel {

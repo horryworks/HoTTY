@@ -4,6 +4,7 @@ export const common = {
   cancel: 'キャンセル',
   delete: '削除',
   close: '閉じる',
+  resizeHint: 'ドラッグでサイズ変更。ダブルクリックで既定に戻す。',
   ok: 'OK',
   browse: '参照...',
   reset: 'デフォルトに戻す',

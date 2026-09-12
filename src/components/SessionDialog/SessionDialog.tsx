@@ -15,7 +15,8 @@ import { GcpInstancesPane, type VmSelection } from '../GcpInstancesPane/GcpInsta
 import { BookmarkTree } from '../BookmarkTree/BookmarkTree';
 import { flattenBookmarks } from '../BookmarkTree/bookmarkTreeHelpers';
 import { useSidebarLayoutStore } from '../../stores/sidebarLayoutStore';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useDragSafeClick } from '../../hooks/useDragSafeClick';
+import { Dialog } from '../Dialog/Dialog';
 import { useSshKeys } from '../../hooks/useSshKeys';
 import { suggestSshKeyName, uniqueSshKeyName } from '../../utils/sshKeyName';
 import { SshKeyGenerateModal } from '../SshKeyGenerateModal/SshKeyGenerateModal';
@@ -108,6 +109,15 @@ const PROTOCOLS: { value: ProtocolId; label: string }[] = [
 
 const NETWORK_PROTOCOLS = new Set<ProtocolId>(['ssh', 'telnet']);
 
+/**
+ * Wide enough to show the host tree and the connection form side by side.
+ * These live here, not in the stylesheet: `useDialogGeometry` owns the bounds,
+ * and a second set of limits in CSS would stop the box while the drag kept
+ * going, sliding the grip away from the cursor.
+ */
+const DEFAULT_SIZE = { width: 960, height: 540 };
+const MIN_SIZE = { width: 640, height: 420 };
+
 export const SessionDialog: React.FC<SessionDialogProps> = ({
     open: isOpen,
     onClose,
@@ -146,10 +156,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const formRef = useRef<HTMLFormElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Escape is handled by this dialog's own key handler (it has to distinguish
-    // an open inline editor from the dialog itself); the trap is what keeps Tab
-    // from walking out into the terminal behind it.
-    useFocusTrap(containerRef, isOpen);
     const selectedHostIdRef = useRef<string | null>(null);
     useEffect(() => {
         selectedHostIdRef.current = selectedHostId;
@@ -176,75 +182,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         startTreePanelWidthRef.current = treePanelWidth;
         handlePanelDividerMouseDown(e);
     }, [treePanelWidth, handlePanelDividerMouseDown]);
-
-    // --- Dialog size and position ---
-    const [dialogSize, setDialogSize] = useState({ width: 960, height: 540 });
-    const [dialogPos, setDialogPos] = useState<{ top: number; left: number } | null>(null);
-
-    useEffect(() => {
-        if (!isOpen) return;
-        const center = () => {
-            setDialogPos(prev => {
-                const w = prev ? dialogSize.width : 960;
-                const h = prev ? dialogSize.height : 540;
-                return {
-                    top: Math.max(0, (window.innerHeight - h) / 2),
-                    left: Math.max(0, (window.innerWidth - w) / 2),
-                };
-            });
-        };
-        center();
-        window.addEventListener('resize', center);
-        return () => window.removeEventListener('resize', center);
-    }, [dialogSize, isOpen]);
-
-    // Dialog drag
-    const dragState = useRef<{ startX: number; startY: number; startTop: number; startLeft: number } | null>(null);
-    const handleHeaderMouseDown = useCallback((e: React.MouseEvent) => {
-        if ((e.target as HTMLElement).closest('.dialog-resize-handle')) return;
-        e.preventDefault();
-        const pos = dialogPos ?? { top: (window.innerHeight - dialogSize.height) / 2, left: (window.innerWidth - dialogSize.width) / 2 };
-        dragState.current = { startX: e.clientX, startY: e.clientY, startTop: pos.top, startLeft: pos.left };
-        const onMove = (ev: MouseEvent) => {
-            if (!dragState.current) return;
-            setDialogPos({
-                top: Math.max(0, dragState.current.startTop + ev.clientY - dragState.current.startY),
-                left: Math.max(0, dragState.current.startLeft + ev.clientX - dragState.current.startX),
-            });
-        };
-        const onUp = () => {
-            dragState.current = null;
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-            document.body.style.cursor = '';
-        };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-        document.body.style.cursor = 'grab';
-    }, [dialogPos, dialogSize]);
-
-    // Dialog resize
-    const dialogResizeState = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null);
-    const handleDialogResizeMouseDown = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const { startX, startY, startW, startH } = { startX: e.clientX, startY: e.clientY, startW: dialogSize.width, startH: dialogSize.height };
-        dialogResizeState.current = { startX, startY, startW, startH };
-        const onMove = (ev: MouseEvent) => {
-            const dx = ev.clientX - startX;
-            const dy = ev.clientY - startY;
-            setDialogSize({ width: Math.max(640, startW + dx), height: Math.max(420, startH + dy) });
-        };
-        const onUp = () => {
-            dialogResizeState.current = null;
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-            document.body.style.cursor = '';
-        };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-        document.body.style.cursor = 'nwse-resize';
-    }, [dialogSize]);
 
     // --- Connection form state ---
     const [displayName, setDisplayName] = useState('');
@@ -367,6 +304,16 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setConnectingSessionId(null);
     }, [onCancelConnect]);
 
+
+    /**
+     * Where the close button and Escape both land. Mid-connect they cancel the
+     * attempt and leave the dialog open — the only way to abandon a connection
+     * that is taking too long.
+     */
+    const handleDialogClose = useCallback(() => {
+        if (connectingSessionIdRef.current !== null) handleCancelConnect();
+        else onClose();
+    }, [handleCancelConnect, onClose]);
     /**
      * The selected node when it is a folder, else undefined.
      *
@@ -390,19 +337,12 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     useEffect(() => {
         if (!isOpen) return;
         const handler = (e: KeyboardEvent) => {
-            // Ignore keys while a nested modal is up — including the SSH host-key
-            // prompt, which can appear over this dialog mid-connect.
-            if (document.querySelector('.host-edit-modal-overlay, .confirm-modal-overlay, .ssh-host-key-overlay')) return;
-            const connecting = connectingSessionIdRef.current !== null;
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                // While connecting, Esc cancels the attempt (dialog stays open);
-                // otherwise it closes the dialog.
-                if (connecting) handleCancelConnect();
-                else onClose();
-                return;
-            }
+            // Escape now arrives through `<Dialog>`, which asks the dialog
+            // stack whether this is the frontmost one. Only Enter is left here,
+            // and it still has to stand aside for a nested modal.
             if (e.key !== 'Enter') return;
+            if (containerRef.current?.querySelector('.dlg-overlay')) return;
+            const connecting = connectingSessionIdRef.current !== null;
             // Don't re-submit while a connection is already in progress.
             if (connecting) return;
             const active = document.activeElement;
@@ -951,6 +891,32 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const handleHostTreeSelect = (node: HostTreeNode) => requestSwitchTarget({ kind: 'host', node });
     const handleNewConnectionRequest = () => requestSwitchTarget({ kind: 'new' });
 
+    /**
+     * Clicking the dialog's own blank space means "start a new connection".
+     *
+     * Guarded, because a drag that starts on the resize grip or the panel
+     * divider and ends anywhere else inside the dialog fires a click whose
+     * target is the dialog itself — which used to wipe the form (or raise the
+     * discard-changes prompt) just for resizing. The allow-list below still
+     * matters on its own: a press-and-release on the divider without moving is
+     * a genuine same-target click, and must not reset the form either.
+     */
+    const blankAreaClickProps = useDragSafeClick<HTMLDivElement>((e) => {
+        const target = e.target as HTMLElement;
+        // Anything inside a dialog opened on top of this one. This used to be a
+        // list of their overlay class names, which had to be extended for every
+        // new nested dialog and silently blanked the form when someone forgot.
+        // Now they share one class, so the question is structural: did the
+        // click land inside a dialog that this one contains?
+        const nested = target.closest('.dlg-overlay');
+        if (nested && e.currentTarget.contains(nested)) return;
+        if (target.closest(
+            '.form-panel, .host-tree-row, .host-tree-toolbar, .host-tree-filter, .context-menu,' +
+            ' .drf-edge, .panel-divider'
+        )) return;
+        handleNewConnectionRequest();
+    });
+
     // --- Save changes to host entry ---
     const handleSave = async (e: React.MouseEvent) => {
         e.preventDefault();
@@ -1272,36 +1238,15 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     if (!isOpen) return null;
 
     return (
-        <div className="connection-dialog-overlay">
-            <div
-                className="connection-dialog connection-dialog-wide"
-                ref={containerRef}
-                style={{
-                    position: 'absolute',
-                    top: dialogPos?.top ?? '50%',
-                    left: dialogPos?.left ?? '50%',
-                    transform: dialogPos ? 'none' : 'translate(-50%, -50%)',
-                    width: dialogSize.width,
-                    height: dialogSize.height,
-                }}
-                onClick={(e) => {
-                    const target = e.target as HTMLElement;
-                    if (target.closest('.form-panel, .host-tree-row, .host-tree-toolbar, .host-tree-filter, .context-menu, .host-edit-modal-overlay, .confirm-modal-overlay, .skg-overlay, .mbp-overlay')) return;
-                    handleNewConnectionRequest();
-                }}
-            >
-                {/* Drag handle */}
-                <div
-                    style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '40px', cursor: 'grab', zIndex: 0 }}
-                    onMouseDown={handleHeaderMouseDown}
-                />
-                <button
-                    className="session-dialog-close"
-                    onClick={() => { if (isConnecting) handleCancelConnect(); else onClose(); }}
-                >{'\u2715'}</button>
-
-                <h2 style={{ marginTop: 0, paddingRight: '20px', marginBottom: '10px' }}>{t('sessionDialog.title')}</h2>
-
+        <Dialog
+            open={isOpen}
+            onClose={handleDialogClose}
+            title={t('sessionDialog.title')}
+            className="connection-dialog"
+            bodyClassName="session-dialog-body"
+            geometry={{ persistKey: 'session', defaultSize: DEFAULT_SIZE, minSize: MIN_SIZE }}
+        >
+            <div className="session-dialog-content" ref={containerRef} {...blankAreaClickProps}>
                 <div className={`dialog-body tab-${activeSidebarTab}`}>
                     {/* Left: Host tree / GCP discovery tabs */}
                     <div className="host-panel" style={{ flex: 1, minWidth: 0 }}>
@@ -1791,10 +1736,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                         )}
                     </div>
                 </div>
-
-                {/* Resize handle */}
-                <div className="dialog-resize-handle" onMouseDown={handleDialogResizeMouseDown} />
-
                 {pendingSwitch && (
                     <ConfirmModal
                         title={t('sessionDialog.discard.title')}
@@ -1831,6 +1772,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     }}
                 />
             </div>
-        </div>
+        </Dialog>
     );
 };

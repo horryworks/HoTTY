@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { useModalEscape } from '../../hooks/useModalEscape';
+import { Dialog } from '../Dialog/Dialog';
 import './SystemPromptModal.css';
 
 interface SystemPromptModalProps {
@@ -10,6 +9,13 @@ interface SystemPromptModalProps {
   onClose: () => void;
 }
 
+/**
+ * A wall of prompt text, so it opens large and can be pulled larger still.
+ * The geometry hook owns the bounds; the stylesheet sets no size.
+ */
+const DEFAULT_SIZE = { width: 640, height: 560 };
+const MIN_SIZE = { width: 420, height: 300 };
+
 export const SystemPromptModal: React.FC<SystemPromptModalProps> = ({
   personaLabel,
   systemInstruction,
@@ -17,15 +23,12 @@ export const SystemPromptModal: React.FC<SystemPromptModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     closeButtonRef.current?.focus();
   }, []);
 
-  useModalEscape(onClose);
-  useFocusTrap(modalRef, true);
 
   const handleCopy = async () => {
     try {
@@ -37,41 +40,15 @@ export const SystemPromptModal: React.FC<SystemPromptModalProps> = ({
     }
   };
 
-  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) onClose();
-  };
-
   return (
-    <div
-      className="system-prompt-modal-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('dialogs.systemPrompt.ariaLabel')}
-      onClick={handleOverlayClick}
-    >
-      <div className="system-prompt-modal" ref={modalRef}>
-        <div className="system-prompt-modal-header">
-          <span className="system-prompt-modal-title">
-            {t('dialogs.systemPrompt.title', { persona: personaLabel })}
-          </span>
-          <button
-            type="button"
-            className="system-prompt-modal-close-x"
-            onClick={onClose}
-            aria-label={t('common.close')}
-          >
-            &times;
-          </button>
-        </div>
-        <div className="system-prompt-modal-body">
-          <pre className="system-prompt-body">{systemInstruction}</pre>
-        </div>
-        <div className="system-prompt-modal-footer">
-          <button
-            type="button"
-            className="system-prompt-btn secondary"
-            onClick={handleCopy}
-          >
+    <Dialog
+      open
+      onClose={onClose}
+      title={t('dialogs.systemPrompt.title', { persona: personaLabel })}
+      geometry={{ persistKey: 'systemPrompt', defaultSize: DEFAULT_SIZE, minSize: MIN_SIZE }}
+      footer={
+        <>
+          <button type="button" className="system-prompt-btn secondary" onClick={handleCopy}>
             {copied ? t('common.copied') : t('common.copy')}
           </button>
           <button
@@ -82,8 +59,10 @@ export const SystemPromptModal: React.FC<SystemPromptModalProps> = ({
           >
             {t('common.close')}
           </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <pre className="system-prompt-body">{systemInstruction}</pre>
+    </Dialog>
   );
 };

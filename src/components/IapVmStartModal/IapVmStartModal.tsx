@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { useModalEscape } from '../../hooks/useModalEscape';
+import { Dialog } from '../Dialog/Dialog';
 import { tauriService } from '../../services/tauriService';
 import { logError } from '../../utils/logger';
 import type { IapVmStartPromptPayload } from '../../types/appTypes';
@@ -12,7 +11,6 @@ export function IapVmStartModal() {
   const { t } = useTranslation();
   const [prompt, setPrompt] = useState<IapVmStartPromptPayload | null>(null);
   const [busy, setBusy] = useState(false);
-  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -50,18 +48,38 @@ export function IapVmStartModal() {
   const declineOnEscape = useCallback(() => {
     void respond(false);
   }, [respond]);
-  useModalEscape(prompt ? declineOnEscape : null);
-  useFocusTrap(modalRef, prompt !== null);
-
   if (!prompt) return null;
 
   return (
-    <div className="iap-vm-start-overlay">
-      <div className="iap-vm-start-modal" ref={modalRef}>
-        <div className="iap-vm-start-header">
-          <span>{t('dialogs.iapVmStart.title')}</span>
-        </div>
-        <div className="iap-vm-start-body">
+    <Dialog
+      open
+      // Escape and the close button both decline. Starting someone's VM is a
+      // billable side effect, so dismissal has to mean "no", not "go ahead".
+      onClose={declineOnEscape}
+      title={t('dialogs.iapVmStart.title')}
+      width={460}
+      showClose={false}
+      footer={
+        <>
+          <button
+            type="button"
+            className="iap-vm-start-btn-secondary"
+            disabled={busy}
+            onClick={() => respond(false)}
+          >
+            {t('common.cancel')}
+          </button>
+          <button
+            type="button"
+            className="iap-vm-start-btn-primary"
+            disabled={busy}
+            onClick={() => respond(true)}
+          >
+            {t('dialogs.iapVmStart.startVm')}
+          </button>
+        </>
+      }
+    >
           <p className="iap-vm-start-message">
             <Trans
               i18nKey="dialogs.iapVmStart.message"
@@ -81,26 +99,6 @@ export function IapVmStartModal() {
             <span className="iap-vm-start-label">{t('dialogs.iapVmStart.zone')}</span>
             <span className="iap-vm-start-value">{prompt.zone}</span>
           </div>
-        </div>
-        <div className="iap-vm-start-footer">
-          <button
-            type="button"
-            className="iap-vm-start-btn-secondary"
-            disabled={busy}
-            onClick={() => respond(false)}
-          >
-            {t('common.cancel')}
-          </button>
-          <button
-            type="button"
-            className="iap-vm-start-btn-primary"
-            disabled={busy}
-            onClick={() => respond(true)}
-          >
-            {t('dialogs.iapVmStart.startVm')}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

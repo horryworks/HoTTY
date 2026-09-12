@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { useModalEscape } from '../../hooks/useModalEscape';
+import { Dialog } from '../Dialog/Dialog';
 import './ConfirmModal.css';
 
 interface ConfirmModalProps {
@@ -15,44 +14,42 @@ interface ConfirmModalProps {
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({ title, message, confirmLabel, onConfirm, onCancel }) => {
     const { t } = useTranslation();
     const cancelButtonRef = useRef<HTMLButtonElement>(null);
-    const modalRef = useRef<HTMLDivElement>(null);
     const resolvedTitle = title ?? t('dialogs.confirm.title');
     const resolvedConfirmLabel = confirmLabel ?? t('dialogs.confirm.confirmLabel');
 
     useEffect(() => {
-        if (cancelButtonRef.current) {
-            cancelButtonRef.current.focus();
-        }
+        // Cancel takes focus, not the confirm button: this dialog guards
+        // destructive actions, so a reflexive Enter must not be the one that
+        // goes through with it.
+        cancelButtonRef.current?.focus();
     }, []);
 
-    useModalEscape(onCancel);
-    useFocusTrap(modalRef, true);
-
     return (
-        <div className="confirm-modal-overlay">
-            <div className="confirm-modal" ref={modalRef}>
-                <h3>
-                    <span>&#10067;</span> {resolvedTitle}
-                </h3>
-                <div className="confirm-content">
-                    {message}
-                </div>
-                <div className="confirm-modal-actions">
-                    <button
-                        className="confirm-btn secondary"
-                        onClick={onCancel}
-                        ref={cancelButtonRef}
-                    >
+        <Dialog
+            open
+            onClose={onCancel}
+            title={<><span aria-hidden="true">{'❓'}</span> {resolvedTitle}</>}
+            tone="warning"
+            width={400}
+            // Kept so callers and tests can scope to this dialog: it is opened
+            // from nine places, often over another dialog, and "the confirm
+            // one" has to be nameable.
+            className="confirm-modal"
+            // No close button: the two footer buttons are the answer, and a third
+            // way out would leave it ambiguous which one an × meant.
+            showClose={false}
+            footer={
+                <>
+                    <button className="confirm-btn secondary" onClick={onCancel} ref={cancelButtonRef}>
                         {t('common.cancel')}
                     </button>
-                    <button
-                        className="confirm-btn danger"
-                        onClick={onConfirm}
-                    >
+                    <button className="confirm-btn danger" onClick={onConfirm}>
                         {resolvedConfirmLabel}
                     </button>
-                </div>
-            </div>
-        </div>
+                </>
+            }
+        >
+            <div className="confirm-content">{message}</div>
+        </Dialog>
     );
 };

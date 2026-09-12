@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { BookmarkNode } from '../../types/appTypes';
 import { useBookmarkStore } from '../../stores/bookmarkStore';
 import { useModalState } from '../../hooks/useModalState';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { Dialog } from '../Dialog/Dialog';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { findNode, flattenBookmarks } from './bookmarkTreeHelpers';
 // Reuse the host-tree visual styles (tree rows, chevron, context menu, modal).
@@ -67,7 +67,6 @@ export const BookmarkTree: React.FC<BookmarkTreeProps> = ({ onOpenBookmark, onNe
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const modalInputRef = useRef<HTMLInputElement>(null);
 
-  useFocusTrap(editModalRef, editModalOpen);
 
   useEffect(() => {
     const handler = () => setContextMenu(null);
@@ -553,28 +552,39 @@ export const BookmarkTree: React.FC<BookmarkTreeProps> = ({ onOpenBookmark, onNe
 
       {/* Add / Edit modal */}
       {editModalOpen && editModal && (
-        <div className="host-edit-modal-overlay" onClick={closeEditModal} tabIndex={-1}>
+        <Dialog
+          open
+          onClose={closeEditModal}
+          className="host-edit-modal"
+          width={{ width: '90%', minWidth: 320, maxWidth: 460 }}
+          title={
+            editModal.mode === 'folder'
+              ? editModal.existingNode
+                ? t('sessionDialog.bookmarks.renameFolderTitle')
+                : t('sessionDialog.bookmarks.addFolderTitle')
+              : editModal.existingNode
+                ? t('sessionDialog.bookmarks.editBookmarkTitle')
+                : t('sessionDialog.bookmarks.addBookmarkTitle')
+          }
+          footer={
+            <>
+              <button className="btn-secondary" onClick={closeEditModal}>
+                {t('common.cancel')}
+              </button>
+              <button className="btn-primary" onClick={handleModalSubmit}>
+                {t('common.save')}
+              </button>
+            </>
+          }
+        >
           <div
-            className="host-edit-modal"
             ref={editModalRef}
-            onClick={(e) => e.stopPropagation()}
+            // Keys stay out of the tree behind this form. Escape is the one
+            // exception: it belongs to the dialog stack.
             onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === 'Escape') {
-                e.preventDefault();
-                closeEditModal();
-              }
+              if (e.key !== 'Escape') e.stopPropagation();
             }}
           >
-            <h3>
-              {editModal.mode === 'folder'
-                ? editModal.existingNode
-                  ? t('sessionDialog.bookmarks.renameFolderTitle')
-                  : t('sessionDialog.bookmarks.addFolderTitle')
-                : editModal.existingNode
-                  ? t('sessionDialog.bookmarks.editBookmarkTitle')
-                  : t('sessionDialog.bookmarks.addBookmarkTitle')}
-            </h3>
             <div className="modal-form-group">
               <label>{t('sessionDialog.bookmarks.nameLabel')}</label>
               <input
@@ -600,16 +610,8 @@ export const BookmarkTree: React.FC<BookmarkTreeProps> = ({ onOpenBookmark, onNe
                 />
               </div>
             )}
-            <div className="modal-actions">
-              <button className="btn-secondary" onClick={closeEditModal}>
-                {t('common.cancel')}
-              </button>
-              <button className="btn-primary" onClick={handleModalSubmit}>
-                {t('common.save')}
-              </button>
-            </div>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Delete confirm */}

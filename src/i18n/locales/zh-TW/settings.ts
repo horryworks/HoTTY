@@ -1,7 +1,6 @@
 // 設定強制回應視窗 — 外框、分頁標籤，以及所有分頁內容。
 export const settings = {
   title: '設定',
-  resizeHint: '拖曳可調整大小，按兩下可還原預設。',
   tabs: {
     general: '一般',
     appearance: '外觀',
@@ -547,7 +546,6 @@ export const settings = {
       paneColor4: 'AI 交談對話配色 6 色中的第 4 色（監看中的終端機索引標籤、對話索引標籤與標題列標記）。',
       paneColor5: 'AI 交談對話配色 6 色中的第 5 色（監看中的終端機索引標籤、對話索引標籤與標題列標記）。',
       paneColor6: 'AI 交談對話配色 6 色中的第 6 色（監看中的終端機索引標籤、對話索引標籤與標題列標記）。',
-      resizeGripShadow: '調整大小控點上條紋圖樣的色彩。',
       searchHighlightBg: '包含搜尋相符項目的行的背景色調。',
       searchHighlightCurrentBg: '目前聚焦的搜尋相符行的背景色。',
       searchHighlightCurrentBorder: '目前聚焦的相符行的外框色彩。',

@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { useModalEscape } from '../../hooks/useModalEscape';
+import { Dialog } from '../Dialog/Dialog';
 import { tauriService } from '../../services/tauriService';
 import type { ThirdPartyLicenses } from '../../types/appTypes';
 import './ThirdPartyLicensesModal.css';
@@ -16,15 +15,19 @@ interface ThirdPartyLicensesModalProps {
  * backend (`get_third_party_licenses`) so the full license texts never enter
  * the JS bundle.
  */
+/**
+ * Long licence texts, so it opens tall and can be pulled taller. The geometry
+ * hook owns the bounds; the stylesheet sets no size.
+ */
+const DEFAULT_SIZE = { width: 680, height: 640 };
+const MIN_SIZE = { width: 420, height: 300 };
+
 export function ThirdPartyLicensesModal({ onClose }: ThirdPartyLicensesModalProps) {
   const { t } = useTranslation();
   const [data, setData] = useState<ThirdPartyLicenses | null>(null);
   const [error, setError] = useState(false);
 
-  const modalRef = useRef<HTMLDivElement>(null);
 
-  useModalEscape(onClose);
-  useFocusTrap(modalRef, true);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,25 +42,21 @@ export function ThirdPartyLicensesModal({ onClose }: ThirdPartyLicensesModalProp
   const packages = data?.packages ?? [];
 
   return (
-    <div className="tpl-overlay">
-      <div
-        className="tpl-modal"
-        ref={modalRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="tpl-title"
-      >
-        <div className="tpl-header">
-          <span id="tpl-title">{t('settings.about.thirdPartyLicensesTitle')}</span>
-          <button
-            className="tpl-close"
-            onClick={onClose}
-            aria-label={t('settings.about.thirdPartyLicensesClose')}
-          >
-            &#10005;
-          </button>
-        </div>
-        <div className="tpl-body">
+    <Dialog
+      open
+      onClose={onClose}
+      title={t('settings.about.thirdPartyLicensesTitle')}
+      geometry={{ persistKey: 'thirdPartyLicenses', defaultSize: DEFAULT_SIZE, minSize: MIN_SIZE }}
+      // A reference sheet: opened to be read, nothing entered, nothing lost by
+      // clicking away. It opens over Settings, and the dialog stack means the
+      // backdrop click reaches this one alone.
+      dismissOnOutsideClick
+      footer={
+        <button className="tpl-btn tpl-btn-secondary" onClick={onClose}>
+          {t('settings.about.thirdPartyLicensesClose')}
+        </button>
+      }
+    >
           {loading && <p className="tpl-status">{t('settings.about.thirdPartyLicensesLoading')}</p>}
           {error && (
             <p className="tpl-status tpl-error">{t('settings.about.thirdPartyLicensesError')}</p>
@@ -94,13 +93,6 @@ export function ThirdPartyLicensesModal({ onClose }: ThirdPartyLicensesModalProp
               </ul>
             </>
           )}
-        </div>
-        <div className="tpl-footer">
-          <button className="tpl-btn tpl-btn-secondary" onClick={onClose}>
-            {t('settings.about.thirdPartyLicensesClose')}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

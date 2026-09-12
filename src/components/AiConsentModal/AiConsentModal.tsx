@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { useModalEscape } from '../../hooks/useModalEscape';
+import { Dialog } from '../Dialog/Dialog';
 import './AiConsentModal.css';
 
 interface AiConsentModalProps {
@@ -19,41 +18,23 @@ interface AiConsentModalProps {
 export function AiConsentModal({ onAccept, onCancel }: AiConsentModalProps) {
   const { t } = useTranslation();
   const acceptButtonRef = useRef<HTMLButtonElement>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     acceptButtonRef.current?.focus();
   }, []);
 
-  useModalEscape(onCancel);
-  useFocusTrap(modalRef, true);
-
   return (
-    <div className="ai-consent-overlay">
-      <div
-        ref={modalRef}
-        className="ai-consent-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="ai-consent-title"
-      >
-        <div className="ai-consent-header" id="ai-consent-title">
-          {t('aiChat.consent.title')}
-        </div>
-        <div className="ai-consent-body">
-          <p className="ai-consent-intro">{t('aiChat.consent.intro')}</p>
-          <ul className="ai-consent-list">
-            <li>{t('aiChat.consent.bulletWhat')}</li>
-            <li>{t('aiChat.consent.bulletWhen')}</li>
-            <li className="ai-consent-warn">{t('aiChat.consent.bulletRedaction')}</li>
-          </ul>
-          <p className="ai-consent-footnote">{t('aiChat.consent.footnote')}</p>
-        </div>
-        <div className="ai-consent-footer">
-          <button
-            className="ai-consent-btn ai-consent-btn-secondary"
-            onClick={onCancel}
-          >
+    <Dialog
+      open
+      // Escape and the close button decline. Consent has to be given, never
+      // inferred from a dismissal.
+      onClose={onCancel}
+      title={t('aiChat.consent.title')}
+      width={520}
+      showClose={false}
+      footer={
+        <>
+          <button className="ai-consent-btn ai-consent-btn-secondary" onClick={onCancel}>
             {t('common.cancel')}
           </button>
           <button
@@ -63,8 +44,16 @@ export function AiConsentModal({ onAccept, onCancel }: AiConsentModalProps) {
           >
             {t('aiChat.consent.accept')}
           </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+          <p className="ai-consent-intro">{t('aiChat.consent.intro')}</p>
+          <ul className="ai-consent-list">
+            <li>{t('aiChat.consent.bulletWhat')}</li>
+            <li>{t('aiChat.consent.bulletWhen')}</li>
+            <li className="ai-consent-warn">{t('aiChat.consent.bulletRedaction')}</li>
+          </ul>
+          <p className="ai-consent-footnote">{t('aiChat.consent.footnote')}</p>
+    </Dialog>
   );
 }

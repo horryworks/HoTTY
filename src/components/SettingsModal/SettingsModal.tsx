@@ -1,10 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { useModalEscape } from '../../hooks/useModalEscape';
-import { useResize } from '../../hooks/useResize';
 import { useTabKeyboardNav } from '../../hooks/useTabKeyboardNav';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { Dialog } from '../Dialog/Dialog';
 import { ScrollStrip } from '../ScrollStrip/ScrollStrip';
 import { AboutTab } from './AboutTab';
 import { AISettingsTab } from './AISettingsTab';
@@ -39,14 +36,17 @@ interface SettingsModalProps {
   initialTab?: SettingsTab;
 }
 
-/** Below this the tab strip is more arrows than tabs. */
-const MIN_WIDTH = 420;
-/** Below this the body is too short to show anything useful. */
-const MIN_HEIGHT = 320;
-
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
+/**
+ * Fixed, not content-sized: letting each tab set the height made the dialog
+ * jump on every tab change. The body scrolls when a tab needs more, and a short
+ * tab simply has space below it. Both are quieter than resizing on every click,
+ * and the user can drag the dialog to whatever suits them.
+ *
+ * Kept in step with `.settings-modal` in the stylesheet.
+ */
+const DEFAULT_SIZE = { width: 520, height: 600 };
+/** Narrower and the tab strip is more arrows than tabs; shorter and the body shows nothing useful. */
+const MIN_SIZE = { width: 420, height: 320 };
 
 const TAB_IDS: SettingsTab[] = [
   'general',
@@ -80,67 +80,6 @@ export function SettingsModal({
     onSelect: (id) => setTab(id as SettingsTab),
   });
 
-  // ── Resizable dialog ────────────────────────────────────────────────────
-  const storedWidth = useSettingsStore((s) => s.settingsModalWidth);
-  const storedHeight = useSettingsStore((s) => s.settingsModalHeight);
-  const updateSetting = useSettingsStore((s) => s.update);
-  const modalRef = useRef<HTMLDivElement | null>(null);
-  useModalEscape(onClose);
-  useFocusTrap(modalRef, true);
-
-  const dragStart = useRef({ w: 0, h: 0 });
-  const dragResult = useRef<{ w: number; h: number } | null>(null);
-
-  const { startResize, isResizing } = useResize({
-    orientation: 'both',
-    cursor: 'nwse-resize',
-    onMove: (dx, dy) => {
-      const el = modalRef.current;
-      if (!el) return;
-      const w = clamp(dragStart.current.w + dx, MIN_WIDTH, window.innerWidth * 0.9);
-      const h = clamp(dragStart.current.h + dy, MIN_HEIGHT, window.innerHeight * 0.9);
-      // Written straight to the node. Going through state would re-render the
-      // dialog — and the whole active tab inside it — on every mousemove.
-      el.style.width = `${w}px`;
-      el.style.height = `${h}px`;
-      dragResult.current = { w, h };
-    },
-  });
-
-  // Persist once, when the drag ends. Saving during the drag would rewrite the
-  // entire settings blob to localStorage on every frame.
-  useEffect(() => {
-    if (isResizing || !dragResult.current) return;
-    updateSetting('settingsModalWidth', dragResult.current.w);
-    updateSetting('settingsModalHeight', dragResult.current.h);
-    dragResult.current = null;
-  }, [isResizing, updateSetting]);
-
-  const handleResizeStart = (e: React.MouseEvent) => {
-    const el = modalRef.current;
-    if (!el) return;
-    dragStart.current = { w: el.offsetWidth, h: el.offsetHeight };
-    startResize(e);
-  };
-
-  const handleResizeReset = () => {
-    // Clear what the drag wrote directly — React never knew about it, so
-    // dropping the stored size alone would not undo it.
-    const el = modalRef.current;
-    if (el) {
-      el.style.width = '';
-      el.style.height = '';
-    }
-    dragResult.current = null;
-    updateSetting('settingsModalWidth', null);
-    updateSetting('settingsModalHeight', null);
-  };
-
-  const modalStyle =
-    storedWidth != null && storedHeight != null
-      ? { width: `${storedWidth}px`, height: `${storedHeight}px` }
-      : undefined;
-
   // The component stays mounted while closed, so apply the requested tab on
   // each open transition (render-time state adjustment, not an effect).
   const [prevOpen, setPrevOpen] = useState(open);
@@ -149,19 +88,14 @@ export function SettingsModal({
     if (open && initialTab) setTab(initialTab);
   }
 
-  if (!open) return null;
-
   return (
-    <div className="settings-modal-overlay" onClick={onClose}>
-      <div
-        className="settings-modal"
-        ref={modalRef}
-        style={modalStyle}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="settings-modal-header">
-          <span>{t('settings.title')}</span>
-        </div>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={t('settings.title')}
+      className="settings-modal"
+      geometry={{ persistKey: 'settings', defaultSize: DEFAULT_SIZE, minSize: MIN_SIZE }}
+      subheader={
         <ScrollStrip
           className="settings-modal-tabs"
           wrapClassName="settings-modal-tabs-wrap"
@@ -192,32 +126,23 @@ export function SettingsModal({
             </button>
           ))}
         </ScrollStrip>
-        <div className="settings-modal-body">
-          {tab === 'general' && <GeneralTab />}
-          {tab === 'appearance' && (
-            <AppearanceTab
-              themesData={themesData}
-              onOpenCustomThemeCreator={onOpenCustomThemeCreator}
-              onDeleteTheme={onDeleteTheme}
-            />
-          )}
-          {tab === 'protocols' && <ProtocolsTab />}
-          {tab === 'sshKeys' && <SshKeysTab />}
-          {tab === 'features' && <FeaturesTab />}
-          {tab === 'netbox' && <NetboxTab />}
-          {tab === 'ai' && <AISettingsTab />}
-          {tab === 'versions' && <VersionsTab />}
-          {tab === 'about' && <AboutTab />}
-        </div>
-        <div
-          className="settings-modal-resize"
-          onMouseDown={handleResizeStart}
-          onDoubleClick={handleResizeReset}
-          role="separator"
-          aria-label={t('settings.resizeHint')}
-          title={t('settings.resizeHint')}
+      }
+    >
+      {tab === 'general' && <GeneralTab />}
+      {tab === 'appearance' && (
+        <AppearanceTab
+          themesData={themesData}
+          onOpenCustomThemeCreator={onOpenCustomThemeCreator}
+          onDeleteTheme={onDeleteTheme}
         />
-      </div>
-    </div>
+      )}
+      {tab === 'protocols' && <ProtocolsTab />}
+      {tab === 'sshKeys' && <SshKeysTab />}
+      {tab === 'features' && <FeaturesTab />}
+      {tab === 'netbox' && <NetboxTab />}
+      {tab === 'ai' && <AISettingsTab />}
+      {tab === 'versions' && <VersionsTab />}
+      {tab === 'about' && <AboutTab />}
+    </Dialog>
   );
 }

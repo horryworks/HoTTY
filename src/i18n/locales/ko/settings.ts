@@ -1,7 +1,6 @@
 // Settings modal — shell, tab labels, and all tab content.
 export const settings = {
   title: '설정',
-  resizeHint: '드래그하여 크기 조절. 두 번 클릭하면 기본값으로 되돌립니다.',
   tabs: {
     general: '일반',
     appearance: '모양',
@@ -549,7 +548,6 @@ export const settings = {
       paneColor4: 'AI 채팅 대화 색상 구분 6색 중 4번째 색입니다(모니터링 중인 터미널 탭, 대화 탭, 헤더 칩).',
       paneColor5: 'AI 채팅 대화 색상 구분 6색 중 5번째 색입니다(모니터링 중인 터미널 탭, 대화 탭, 헤더 칩).',
       paneColor6: 'AI 채팅 대화 색상 구분 6색 중 6번째 색입니다(모니터링 중인 터미널 탭, 대화 탭, 헤더 칩).',
-      resizeGripShadow: '크기 조절 손잡이의 줄무늬 패턴 색상입니다.',
       searchHighlightBg: '검색 결과가 포함된 행의 배경 색조입니다.',
       searchHighlightCurrentBg: '현재 포커스된 검색 결과 행의 배경색입니다.',
       searchHighlightCurrentBorder: '현재 포커스된 결과 행의 윤곽선 색상입니다.',

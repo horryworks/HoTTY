@@ -4,7 +4,7 @@ import type { HostTreeNode, HostEntry } from '../../types/appTypes';
 import { type FixedSizeTri, triToBool } from '../../utils/fixedTerminalSize';
 import { filterHostTree } from '../../utils/hostTreeFilter';
 import { flattenHosts, getJumpboxReferences } from '../../hooks/useHostManager';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { Dialog } from '../Dialog/Dialog';
 import { useModalState } from '../../hooks/useModalState';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { MoveByPrefixModal } from '../MoveByPrefixModal/MoveByPrefixModal';
@@ -242,7 +242,6 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const contextMenuRef = useRef<HTMLDivElement>(null);
     const filterInputRef = useRef<HTMLInputElement>(null);
 
-    useFocusTrap(editModalRef, editModalOpen);
 
     /** The tree as the user currently sees it. An empty filter passes `tree`
      *  through by reference, so the common case costs nothing. */
@@ -1162,25 +1161,37 @@ export const HostTree: React.FC<HostTreeProps> = ({
 
             {/* Add/Edit/Export/Import Modal */}
             {editModalOpen && editModal && (
-                <div className="host-edit-modal-overlay" onClick={closeEditModal} tabIndex={-1}>
+                <Dialog
+                    open
+                    onClose={closeEditModal}
+                    className="host-edit-modal"
+                    width={{ width: '90%', minWidth: 320, maxWidth: 460 }}
+                    title={
+                        editModal.mode === 'folder' ? (editModal.existingNode ? t('hostTree.modal.renameFolder') : t('hostTree.modal.addFolder')) :
+                            editModal.mode === 'host' ? (editModal.existingNode ? t('hostTree.modal.editHost') : t('hostTree.modal.addHost')) :
+                                editModal.mode === 'export' ? t('hostTree.modal.exportTitle') : t('hostTree.modal.importTitle')
+                    }
+                    footer={
+                        <>
+                            <button className="btn-secondary" onClick={closeEditModal}>{t('common.cancel')}</button>
+                            <button className="btn-primary" onClick={handleModalSubmit}>
+                                {editModal.mode === 'export' ? t('hostTree.modal.export') :
+                                    editModal.mode === 'import' ? t('hostTree.modal.import') : t('common.save')}
+                            </button>
+                        </>
+                    }
+                >
                     <div
-                        className="host-edit-modal"
                         ref={editModalRef}
-                        onClick={(e) => e.stopPropagation()}
                         onContextMenu={(e) => e.stopPropagation()}
+                        // Keys stay out of the tree behind this form — typing a
+                        // host name must not also drive the tree's type-ahead.
+                        // Escape is the exception: it belongs to the dialog
+                        // stack, which knows which dialog is in front.
                         onKeyDown={(e) => {
-                            e.stopPropagation();
-                            if (e.key === 'Escape') {
-                                e.preventDefault();
-                                closeEditModal();
-                            }
+                            if (e.key !== 'Escape') e.stopPropagation();
                         }}
                     >
-                        <h3>
-                            {editModal.mode === 'folder' ? (editModal.existingNode ? t('hostTree.modal.renameFolder') : t('hostTree.modal.addFolder')) :
-                                editModal.mode === 'host' ? (editModal.existingNode ? t('hostTree.modal.editHost') : t('hostTree.modal.addHost')) :
-                                    editModal.mode === 'export' ? t('hostTree.modal.exportTitle') : t('hostTree.modal.importTitle')}
-                        </h3>
 
                         {editModal.mode !== 'export' && editModal.mode !== 'import' && (
                             <div className="modal-form-group">
@@ -1359,15 +1370,8 @@ export const HostTree: React.FC<HostTreeProps> = ({
                             </>
                         )}
 
-                        <div className="modal-actions">
-                            <button className="btn-secondary" onClick={closeEditModal}>{t('common.cancel')}</button>
-                            <button className="btn-primary" onClick={handleModalSubmit}>
-                                {editModal.mode === 'export' ? t('hostTree.modal.export') :
-                                    editModal.mode === 'import' ? t('hostTree.modal.import') : t('common.save')}
-                            </button>
-                        </div>
                     </div>
-                </div>
+                </Dialog>
             )}
 
             {nodeToDeleteOpen && nodeToDelete && (() => {

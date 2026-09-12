@@ -37,27 +37,18 @@ export const useUiOverlayStore = create<UiOverlayState>((set) => ({
 }));
 
 /**
- * Full-screen modal overlays + dropdowns that can cover a pane. These are the
- * components in the "Modals" UI-consistency group plus the TabBar dropdown /
- * tab context menu. In-pane, non-covering overlays (`connecting-overlay`) are
- * deliberately excluded.
+ * Full-screen overlays that can cover a pane: every dialog, plus the TabBar
+ * dropdown and the context menus. In-pane, non-covering overlays
+ * (`connecting-overlay`) are deliberately excluded.
  *
- * When adding a new modal, add its overlay class here.
+ * Dialogs need no entry of their own. This used to be a list of fourteen
+ * overlay class names with "when adding a new modal, add its overlay class
+ * here" written above it — and three had been missed, so a native webview could
+ * paint straight over those dialogs. One shared class removes the step that
+ * kept being forgotten.
  */
 const OVERLAY_SELECTOR = [
-  '.settings-modal-overlay', // SettingsModal + HelpModal
-  '.confirm-modal-overlay',
-  '.paste-modal-overlay',
-  '.system-prompt-modal-overlay',
-  '.ssh-host-key-overlay',
-  '.connection-dialog-overlay', // SessionDialog
-  '.iap-vm-start-overlay',
-  '.ai-consent-overlay', // AiConsentModal — mounted at app level, not nested
-
-  '.save-to-tree-overlay',
-  '.ctc-overlay', // CustomThemeCreator
-  '.host-edit-modal-overlay', // HostTree + BookmarkTree add/edit modal
-  '.add-bookmark-modal-overlay', // Web Browser ★ add-bookmark modal
+  '.dlg-overlay', // every dialog, via <Dialog>
   // NOTE: the Web Browser bookmarks menu (.web-browser-bookmark-menu) and the
   // ⋯ More panel (.web-browser-more-panel, incl. its inline clear-browsing-data
   // section) are deliberately NOT here — they dock beside the page (shrinking

@@ -1,11 +1,10 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useBookmarkStore } from '../../stores/bookmarkStore';
 import { BookmarkFolderPicker } from './BookmarkFolderPicker';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
-// Reuse host-edit modal styles (form group, actions, buttons, container).
+import { Dialog } from '../Dialog/Dialog';
+// The shell is <Dialog>; this brings the shared form-group and button styles.
 import '../HostTree/HostTree.css';
-import './AddBookmarkModal.css';
 
 interface AddBookmarkModalProps {
   /** URL of the currently loaded page to bookmark. */
@@ -23,9 +22,10 @@ function defaultName(url: string): string {
 }
 
 /**
- * Small modal (opened by the ★ toolbar button) to save the current page as a
- * bookmark into a chosen folder. Uses the `.add-bookmark-modal-overlay` class so
- * `uiOverlayStore` hides the native webview while it is open.
+ * Small dialog (opened by the ★ toolbar button) to save the current page as a
+ * bookmark into a chosen folder. `<Dialog>` supplies the overlay, whose class
+ * is what `uiOverlayStore` watches to hide the native webview underneath —
+ * this modal used to need a bespoke class of its own for that.
  */
 export function AddBookmarkModal({ url, onClose }: AddBookmarkModalProps) {
   const { t } = useTranslation();
@@ -34,8 +34,6 @@ export function AddBookmarkModal({ url, onClose }: AddBookmarkModalProps) {
 
   const [name, setName] = useState(() => defaultName(url));
   const [folderId, setFolderId] = useState<string | null>(null); // null = root
-  const modalRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(modalRef, true);
 
   const submit = () => {
     const trimmed = name.trim();
@@ -45,20 +43,30 @@ export function AddBookmarkModal({ url, onClose }: AddBookmarkModalProps) {
   };
 
   return (
-    <div className="add-bookmark-modal-overlay" onClick={onClose} tabIndex={-1}>
+    <Dialog
+      open
+      onClose={onClose}
+      title={t('panes.webBrowser.bookmarkModalTitle')}
+      className="host-edit-modal"
+      width={{ width: '90%', minWidth: 320, maxWidth: 460 }}
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </button>
+          <button className="btn-primary" onClick={submit}>
+            {t('panes.webBrowser.bookmarkAdd')}
+          </button>
+        </>
+      }
+    >
       <div
-        className="host-edit-modal"
-        ref={modalRef}
-        onClick={(e) => e.stopPropagation()}
+        // Keys stay inside the form: the browser pane behind it has its own
+        // shortcuts. Escape is the exception, owned by the dialog stack.
         onKeyDown={(e) => {
-          e.stopPropagation();
-          if (e.key === 'Escape') {
-            e.preventDefault();
-            onClose();
-          }
+          if (e.key !== 'Escape') e.stopPropagation();
         }}
       >
-        <h3>{t('panes.webBrowser.bookmarkModalTitle')}</h3>
         <div className="modal-form-group">
           <label>{t('panes.webBrowser.bookmarkNameLabel')}</label>
           <input
@@ -77,15 +85,7 @@ export function AddBookmarkModal({ url, onClose }: AddBookmarkModalProps) {
           <label>URL</label>
           <input type="text" value={url} readOnly tabIndex={-1} />
         </div>
-        <div className="modal-actions">
-          <button className="btn-secondary" onClick={onClose}>
-            {t('common.cancel')}
-          </button>
-          <button className="btn-primary" onClick={submit}>
-            {t('panes.webBrowser.bookmarkAdd')}
-          </button>
-        </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

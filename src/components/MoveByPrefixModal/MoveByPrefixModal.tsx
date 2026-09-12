@@ -1,7 +1,6 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { useModalEscape } from '../../hooks/useModalEscape';
+import { Dialog } from '../Dialog/Dialog';
 import { formatPrefix } from '../../utils/cidr';
 import {
     collectPrefixFolders,
@@ -45,9 +44,6 @@ export const MoveByPrefixModal: React.FC<MoveByPrefixModalProps> = ({
     onClose,
 }) => {
     const { t } = useTranslation();
-    const modalRef = useRef<HTMLDivElement>(null);
-    useFocusTrap(modalRef, true);
-    useModalEscape(onClose);
 
     const scopeFolder = scopeFolderId === null ? null : findFolder(tree, scopeFolderId);
     const scopeName = scopeFolder?.name ?? '';
@@ -97,24 +93,36 @@ export const MoveByPrefixModal: React.FC<MoveByPrefixModalProps> = ({
     };
 
     return (
-        <div className="mbp-overlay" onClick={onClose}>
-            <div
-                className="mbp-modal"
-                ref={modalRef}
-                onClick={(e) => e.stopPropagation()}
-                role="dialog"
-                aria-label={t('dialogs.moveByPrefix.title')}
-            >
-                <div className="mbp-header">
-                    <h3>{t('dialogs.moveByPrefix.title')}</h3>
-                    <span className="mbp-scope">
-                        {scopeFolder
-                            ? t('dialogs.moveByPrefix.scopeFolder', { name: scopeName })
-                            : t('dialogs.moveByPrefix.scopeTree')}
-                    </span>
-                </div>
-
-                <div className="mbp-body">
+        <Dialog
+            open
+            onClose={onClose}
+            title={t('dialogs.moveByPrefix.title')}
+            titleExtra={
+                <span className="mbp-scope">
+                    {scopeFolder
+                        ? t('dialogs.moveByPrefix.scopeFolder', { name: scopeName })
+                        : t('dialogs.moveByPrefix.scopeTree')}
+                </span>
+            }
+            width={640}
+            // A preview: nothing is typed here and nothing is lost by clicking
+            // away, so the backdrop stays a way out.
+            dismissOnOutsideClick
+            footer={
+                <>
+                    <button className="mbp-btn secondary" onClick={onClose}>
+                        {t('dialogs.moveByPrefix.cancel')}
+                    </button>
+                    <button
+                        className="mbp-btn primary"
+                        onClick={apply}
+                        disabled={selected.length === 0}
+                    >
+                        {t('dialogs.moveByPrefix.apply', { count: selected.length })}
+                    </button>
+                </>
+            }
+        >
                     {!plan.anyPrefixes && (
                         <p className="mbp-empty">{t('dialogs.moveByPrefix.noPrefixes')}</p>
                     )}
@@ -227,21 +235,6 @@ export const MoveByPrefixModal: React.FC<MoveByPrefixModalProps> = ({
                             </ul>
                         </div>
                     )}
-                </div>
-
-                <div className="mbp-footer">
-                    <button className="mbp-btn secondary" onClick={onClose}>
-                        {t('dialogs.moveByPrefix.cancel')}
-                    </button>
-                    <button
-                        className="mbp-btn primary"
-                        onClick={apply}
-                        disabled={selected.length === 0}
-                    >
-                        {t('dialogs.moveByPrefix.apply', { count: selected.length })}
-                    </button>
-                </div>
-            </div>
-        </div>
+        </Dialog>
     );
 };
