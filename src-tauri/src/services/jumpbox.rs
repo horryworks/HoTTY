@@ -27,7 +27,10 @@ use super::known_hosts::{
 };
 use super::path_safety::is_unc_path;
 use super::session_service::{emit_to_owner, SessionError};
-use super::ssh::{humanize_ssh_error, should_try_keyboard_interactive, HostKeyDecision};
+use super::ssh::{
+    humanize_ssh_error, should_try_keyboard_interactive, HostKeyDecision, MAX_CREDENTIAL_LEN,
+    MAX_KEY_PATH_LEN, MAX_USERNAME_LEN,
+};
 
 // ---------------------------------------------------------------------------
 // Config
@@ -65,11 +68,16 @@ impl std::fmt::Debug for JumpboxConfig {
 
 impl JumpboxConfig {
     pub fn validate(&self) -> Result<(), SessionError> {
-        if self.host.trim().is_empty() {
-            return Err(SessionError::InvalidConfig(
-                "Jumpbox host is required".into(),
-            ));
-        }
+        // Mirrors `SshConfig::validate`. This used to be an emptiness check only,
+        // which made the jumpbox the one connect path whose host never met
+        // `validate_host` — and that host becomes the *pattern field* of a
+        // known_hosts record (`upsert_known_host`). A value carrying a newline
+        // therefore wrote two records, so one "Accept & remember" on the bastion
+        // could pin an attacker-chosen key for an unrelated host, which would
+        // then connect with no prompt at all. The host field is free text in the
+        // UI and also arrives from an imported .htree, so this is the only gate.
+        crate::services::net_validation::validate_host(&self.host)
+            .map_err(|e| SessionError::InvalidConfig(format!("Jumpbox: {e}")))?;
         if self.port == 0 {
             return Err(SessionError::InvalidConfig(
                 "Jumpbox port must be 1-65535".into(),
@@ -79,6 +87,32 @@ impl JumpboxConfig {
             return Err(SessionError::InvalidConfig(
                 "Jumpbox username is required".into(),
             ));
+        }
+        if self.username.len() > MAX_USERNAME_LEN {
+            return Err(SessionError::InvalidConfig(
+                "Jumpbox username is too long".into(),
+            ));
+        }
+        if let Some(pw) = &self.password {
+            if pw.len() > MAX_CREDENTIAL_LEN {
+                return Err(SessionError::InvalidConfig(
+                    "Jumpbox password is too long".into(),
+                ));
+            }
+        }
+        if let Some(pp) = &self.private_key_passphrase {
+            if pp.len() > MAX_CREDENTIAL_LEN {
+                return Err(SessionError::InvalidConfig(
+                    "Jumpbox passphrase is too long".into(),
+                ));
+            }
+        }
+        if let Some(path) = &self.private_key_path {
+            if path.len() > MAX_KEY_PATH_LEN {
+                return Err(SessionError::InvalidConfig(
+                    "Jumpbox private key path is too long".into(),
+                ));
+            }
         }
         Ok(())
     }
@@ -599,5 +633,72 @@ mod tests {
         assert!(!s.contains("hunter2"), "password leaked: {s}");
         assert!(!s.contains("supersecret"), "passphrase leaked: {s}");
         assert!(s.contains("redacted"));
+    }
+
+    fn cfg_with_host(host: &str) -> JumpboxConfig {
+        JumpboxConfig {
+            host: host.into(),
+            port: 22,
+            username: "user".into(),
+            password: None,
+            private_key_path: None,
+            private_key_passphrase: None,
+        }
+    }
+
+    /// The jumpbox host becomes the *pattern field* of a known_hosts record, so a
+    /// value carrying a newline writes a second record — and one "Accept &
+    /// remember" on the bastion would then pin an attacker-chosen key for an
+    /// unrelated host, which later connects with no prompt at all. `SshConfig` has
+    /// always run `validate_host`; the jumpbox was the one connect path that did
+    /// not, and its host is free text in the UI and also arrives from an imported
+    /// .htree.
+    #[test]
+    fn validate_refuses_a_host_that_could_forge_a_known_hosts_record() {
+        for bad in [
+            "evil.example ssh-ed25519 ATTACKERKEY\nprod-router.example",
+            "evil.example ssh-ed25519 AAAA",
+            "evil.example\tprod.example",
+            "evil.example\rprod.example",
+            "host;reboot",
+            "host$(id)",
+            "host|nc 10.0.0.1 1",
+            "a,b.example",
+            "   ",
+        ] {
+            assert!(
+                cfg_with_host(bad).validate().is_err(),
+                "host should have been refused: {bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_still_accepts_ordinary_hosts() {
+        for ok in ["jump.example", "10.0.0.1", "host_a.internal", "::1"] {
+            assert!(
+                cfg_with_host(ok).validate().is_ok(),
+                "host should have been accepted: {ok:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_refuses_over_long_credentials() {
+        let mut long_user = cfg_with_host("jump.example");
+        long_user.username = "u".repeat(MAX_USERNAME_LEN + 1);
+        assert!(long_user.validate().is_err(), "username");
+
+        let mut long_pw = cfg_with_host("jump.example");
+        long_pw.password = Some("p".repeat(MAX_CREDENTIAL_LEN + 1));
+        assert!(long_pw.validate().is_err(), "password");
+
+        let mut long_pp = cfg_with_host("jump.example");
+        long_pp.private_key_passphrase = Some("p".repeat(MAX_CREDENTIAL_LEN + 1));
+        assert!(long_pp.validate().is_err(), "passphrase");
+
+        let mut long_path = cfg_with_host("jump.example");
+        long_path.private_key_path = Some("k".repeat(MAX_KEY_PATH_LEN + 1));
+        assert!(long_path.validate().is_err(), "key path");
     }
 }

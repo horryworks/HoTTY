@@ -13,6 +13,33 @@ use crate::services::atomic_file::atomic_write;
 /// each upsert atomic end-to-end.
 static UPSERT_LOCK: Mutex<()> = Mutex::new(());
 
+/// Refuse a host that cannot round-trip as a known_hosts pattern.
+///
+/// The format is one whitespace-delimited record per line, with `,` separating
+/// alternative hostnames and a leading `#` marking a comment — so a host carrying
+/// any of those does not survive the write. A newline is the dangerous one: it
+/// emits a *second* record, letting one approval of this host pin an
+/// attacker-chosen key for a different one, which later connects with no prompt.
+///
+/// The connect configs already validate their host (`net_validation::validate_host`),
+/// and this is the same guard stated where the invariant actually lives — so a
+/// future caller that forgets its own validation still cannot inject a record.
+/// Both entry points fail closed: callers treat an `Err` from this module as
+/// "refuse the connection", never as "new host".
+fn validate_host_pattern(host: &str) -> std::io::Result<()> {
+    let bad = host.is_empty()
+        || host
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || c == ',' || c == '#');
+    if bad {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "host is not representable as a known_hosts pattern",
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HostKeyCheck {
     /// Host is present and key matches.
@@ -34,6 +61,7 @@ pub fn check_known_host(
     key_type: &str,
     key_base64: &str,
 ) -> std::io::Result<HostKeyCheck> {
+    validate_host_pattern(host)?;
     if !path.exists() {
         return Ok(HostKeyCheck::New);
     }
@@ -105,6 +133,10 @@ pub fn upsert_known_host(
     key_type: &str,
     key_base64: &str,
 ) -> std::io::Result<()> {
+    // Before the lock and before any write: a host that cannot be a pattern must
+    // never reach the file.
+    validate_host_pattern(host)?;
+
     // Hold the write lock for the entire read→modify→write so a concurrent
     // upsert from another window can't lose this key (see UPSERT_LOCK).
     let _guard = UPSERT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -343,5 +375,49 @@ mod tests {
         let r = check_known_host(&dir, "example.com", 22, "ssh-ed25519", "AAAA");
         assert!(r.is_err(), "opening a directory should be an I/O error");
         let _ = std::fs::remove_dir(&dir);
+    }
+
+    /// The file format's own invariant, enforced where the file is written rather
+    /// than only at each caller: a host that cannot round-trip as a pattern never
+    /// reaches the file. The newline case is the dangerous one — it emits a second
+    /// record, so approving this host would pin a key for a different one.
+    #[test]
+    fn a_host_that_cannot_be_a_pattern_is_refused_by_both_entry_points() {
+        let p = temp_file();
+        for bad in [
+            "evil.example ssh-ed25519 ATTACKERKEY\nprod-router.example",
+            "evil.example prod.example",
+            "evil.example\tprod.example",
+            "evil.example\rprod.example",
+            "a,b.example",
+            "#comment.example",
+            "",
+        ] {
+            let w = upsert_known_host(&p, bad, 22, "ssh-ed25519", "AAAA");
+            let e = w.expect_err(&format!("upsert should refuse {bad:?}"));
+            assert_eq!(e.kind(), std::io::ErrorKind::InvalidInput, "{bad:?}");
+
+            // Fails closed on the read side too: callers treat Err as "refuse the
+            // connection", never as "new host".
+            assert!(
+                check_known_host(&p, bad, 22, "ssh-ed25519", "AAAA").is_err(),
+                "check should refuse {bad:?}"
+            );
+        }
+        assert!(!p.exists(), "no record should have been written");
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn an_ordinary_host_still_round_trips() {
+        let p = temp_file();
+        upsert_known_host(&p, "prod-router.example", 22, "ssh-ed25519", "AAAA").unwrap();
+        let r = check_known_host(&p, "prod-router.example", 22, "ssh-ed25519", "AAAA").unwrap();
+        assert_eq!(r, HostKeyCheck::Match);
+        // The bracket form for a non-default port must keep working.
+        upsert_known_host(&p, "2001:db8::1", 2222, "ssh-ed25519", "BBBB").unwrap();
+        let r6 = check_known_host(&p, "2001:db8::1", 2222, "ssh-ed25519", "BBBB").unwrap();
+        assert_eq!(r6, HostKeyCheck::Match);
+        let _ = std::fs::remove_file(&p);
     }
 }

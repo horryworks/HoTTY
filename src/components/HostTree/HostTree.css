@@ -306,6 +306,26 @@
     gap: 10px;
 }
 
+/* The private-key row: path field, Browse, and the ~/.ssh picker on one line.
+   Mirrors `.connect-form-inline` in the session dialog, kept here rather than
+   borrowed so this form does not depend on another stylesheet being loaded. */
+.host-edit-key-row {
+    display: flex;
+    gap: 6px;
+}
+
+.host-edit-key-row input {
+    flex: 1;
+    /* Without this the flex item refuses to shrink below its default width and
+       the picker beside it is pushed out of the dialog. */
+    min-width: 0;
+}
+
+.host-edit-key-picker {
+    max-width: 170px;
+    flex-shrink: 0;
+}
+
 .modal-form-group-checkbox {
     flex-direction: row;
     align-items: center;
@@ -332,48 +352,6 @@
 
 .modal-form-group.flex-1 {
     flex: 1;
-}
-
-/* The row itself is now `.dlg-footer`; this class survives only because the
-   three dialogs that used to share this stylesheet style their buttons
-   through it. */
-
-.modal-actions .btn-secondary {
-    padding: 6px 16px;
-    border: none;
-    border-radius: 4px;
-    font-family: var(--ui-font-family);
-    font-size: calc(var(--font-size-base) - 1px);
-    cursor: pointer;
-    background: var(--btn-secondary-bg);
-    color: var(--text-primary);
-    transition: background-color 0.1s;
-}
-
-.modal-actions .btn-primary:disabled,
-.modal-actions .btn-secondary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.modal-actions .btn-secondary:hover:not(:disabled) {
-    background: var(--btn-secondary-hover-bg);
-}
-
-.modal-actions .btn-primary {
-    padding: 6px 16px;
-    border: none;
-    border-radius: 4px;
-    font-family: var(--ui-font-family);
-    font-size: calc(var(--font-size-base) - 1px);
-    cursor: pointer;
-    background: var(--accent-color);
-    color: var(--text-on-accent);
-    transition: background-color 0.1s;
-}
-
-.modal-actions .btn-primary:hover:not(:disabled) {
-    background: var(--accent-hover);
 }
 
 /* --- Drag & Drop --- */

@@ -188,10 +188,10 @@ export function SshKeyGenerateModal({
         <>
           {created ? (
             <>
-              <button type="button" className="skg-btn-secondary" onClick={handleCopy}>
+              <button type="button" className="btn-secondary" onClick={handleCopy}>
                 {copied ? t('common.copied') : t('settings.sshKeys.copyPublicKey')}
               </button>
-              <button type="button" className="skg-btn-primary" onClick={handleClose}>
+              <button type="button" className="btn-primary" onClick={handleClose}>
                 {t('common.close')}
               </button>
             </>
@@ -199,7 +199,7 @@ export function SshKeyGenerateModal({
             <>
               <button
                 type="button"
-                className="skg-btn-secondary"
+                className="btn-secondary"
                 onClick={handleClose}
                 disabled={generating}
               >
@@ -207,7 +207,7 @@ export function SshKeyGenerateModal({
               </button>
               <button
                 type="button"
-                className="skg-btn-primary"
+                className="btn-primary"
                 onClick={() => void handleGenerate()}
                 disabled={!canGenerate}
               >

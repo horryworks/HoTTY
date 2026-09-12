@@ -158,6 +158,71 @@ function normalizeBaseCommand(base: string): string {
     return leaf.toLowerCase().replace(/\.exe$/, '');
 }
 
+/**
+ * Drop surrounding quotes. A segment is split on whitespace, so the command word
+ * inside `bash -c 'curl …'` arrives still carrying the opening quote.
+ */
+function stripTokenQuotes(tok: string): string {
+    return tok.replace(/^['"`]+/, '').replace(/['"`]+$/, '');
+}
+
+/**
+ * The tokens of one pipe segment that sit in *command position* — that name a
+ * program about to run, rather than data handed to one.
+ *
+ * The first token always qualifies. Past it, only a wrapper's payload does: when
+ * the token just taken is a {@link RUNNER_COMMANDS} entry, the tokens belonging
+ * to the wrapper itself — its flags (`-c`, `-I{}`), `VAR=value` assignments, and
+ * a bare count or duration (`timeout 5`) — are skipped and the next word is a
+ * command position too. Repeatedly, so the `curl` in `nohup timeout 5 curl …` is
+ * still reached.
+ *
+ * This is what the network-egress floor was missing. It tested only the base
+ * command, so a single wrapper word walked straight past it: `bash -c 'curl …'`,
+ * `env curl …`, `timeout 5 curl …` and `echo x | xargs curl …` each reported a
+ * base of `bash`/`env`/`timeout`/`xargs` — none an egress tool — and went on to
+ * the AI verdict, which rates a plain GET read-only and auto-ran it. That is the
+ * exfiltration path the floor exists to close.
+ *
+ * Scanning *every* token instead would be unusable, which is why this walks
+ * positions rather than words: `curl`, `wget`, `ssh` and `nmap` are ordinary
+ * arguments too, so `grep ssh /etc/passwd`, `which curl`, `ps aux | grep ssh` and
+ * `ls /etc/ssh` would every one of them stop auto-executing. The walk stops at
+ * `grep`/`which`/`ls` because none is a runner, so those are untouched. Being a
+ * runner is not itself disqualifying either — `git status`, `find . -name
+ * '*.log'`, `less /var/log/syslog` and `timeout 5 ping 8.8.8.8` still
+ * auto-execute, because what follows the wrapper is not an egress tool.
+ */
+function commandPositions(segment: string): string[] {
+    const toks = segment.trim().split(/\s+/).filter(Boolean);
+    const out: string[] = [];
+    let i = 0;
+    while (i < toks.length) {
+        const tok = stripTokenQuotes(toks[i]);
+        out.push(tok);
+        if (!RUNNER_COMMANDS.has(normalizeBaseCommand(tok))) break;
+        i++;
+        while (i < toks.length) {
+            const t = toks[i];
+            const belongsToWrapper =
+                // POSIX flag, `-c` / `-I{}` / `-o0`.
+                t.startsWith('-') ||
+                // Windows flag, `cmd /c` / `/k`. Bounded to three characters so a
+                // single-segment absolute path is not mistaken for one; anything
+                // with a second separator (`/usr/bin/curl`) fails this anyway and
+                // is read as the command it is.
+                /^\/[A-Za-z?]{1,3}$/.test(t) ||
+                // `env FOO=1 BAR=2 curl …`
+                /^[A-Za-z_][A-Za-z0-9_]*=/.test(t) ||
+                // A bare count or duration, `timeout 5` / `timeout 5s`.
+                /^\d+[smhd]?$/.test(t);
+            if (!belongsToWrapper) break;
+            i++;
+        }
+    }
+    return out;
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 export interface StructuralDanger {
@@ -205,7 +270,10 @@ export function structuralDanger(command: string): StructuralDanger {
  * three strategies are covered. A manual Run is still offered.
  *
  * Splits on CR/LF and `|` exactly like {@link classifyCommand}, so an egress
- * tool hidden after a bare CR or behind a pipe can't slip past the scan.
+ * tool hidden after a bare CR or behind a pipe can't slip past the scan, and
+ * within each segment it scans every *command position* rather than only the
+ * base — see {@link commandPositions} for why that distinction carries the whole
+ * fix.
  */
 export function networkEgressDanger(command: string): StructuralDanger {
     const lines = command
@@ -214,14 +282,14 @@ export function networkEgressDanger(command: string): StructuralDanger {
         .filter((l) => l.length > 0);
     for (const line of lines) {
         for (const segment of line.split('|')) {
-            const base = extractBaseCommand(segment);
-            if (!base) continue;
-            const name = normalizeBaseCommand(base);
-            if (NETWORK_EGRESS_COMMANDS.has(name)) {
-                return {
-                    danger: true,
-                    reason: `"${name}" can send data off this host — needs manual review`,
-                };
+            for (const tok of commandPositions(segment)) {
+                const name = normalizeBaseCommand(tok);
+                if (NETWORK_EGRESS_COMMANDS.has(name)) {
+                    return {
+                        danger: true,
+                        reason: `"${name}" can send data off this host — needs manual review`,
+                    };
+                }
             }
         }
     }
@@ -314,7 +382,13 @@ function classifySegment(
     // the whitelist — defer to the AI verdict (hybrid) or a manual ask (static).
     // Checked BEFORE the whitelist so a whitelisted runner (find/git/sed/awk/env)
     // still can't take the fast path.
-    if (RUNNER_COMMANDS.has(baseLower)) {
+    //
+    // Normalized, unlike the whitelist lookups below: those compare against
+    // user-supplied tokens and must keep matching literally, but a runner is a
+    // runner however it is spelled, and the raw comparison missed `/bin/bash`
+    // and `bash.exe`  letting a path-qualified shell take the fast path that a
+    // bare `bash` is denied.
+    if (RUNNER_COMMANDS.has(normalizeBaseCommand(baseCommand))) {
         return {
             safe: false,
             reason: `"${baseCommand}" can run arbitrary commands — needs AI/manual review`,

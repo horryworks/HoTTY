@@ -42,7 +42,10 @@
     white-space: normal;
     width: max-content;
     max-width: 300px;
-    z-index: 10002;
+    /* Above the dialog band, which is 10000 + depth and has no ceiling: a
+       hand-picked 10002 meant a tooltip inside the third dialog down was
+       painted under its own dialog. Shares the context-menu tier. */
+    z-index: 30001;
     pointer-events: none;
     box-shadow: 0 2px 8px var(--modal-shadow, rgba(0, 0, 0, 0.3));
 }

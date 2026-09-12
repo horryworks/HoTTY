@@ -17,6 +17,13 @@ vi.mock('../../services/tauriService', () => ({
     gceIapListInstances: vi.fn(),
     openExternal: vi.fn(),
     logDebug: vi.fn(),
+    // The add-host form reads ~/.ssh for its key picker, and can open the
+    // key-generate dialog on top of itself.
+    listSshKeys: vi.fn().mockResolvedValue({ keys: [], sshDir: null, available: true, truncated: false }),
+    selectFile: vi.fn().mockResolvedValue(null),
+    generateSshKey: vi.fn(),
+    readSshPublicKey: vi.fn(),
+    writeClipboard: vi.fn(),
   },
   isEncrypted: (value: string) => value.startsWith('[DPAPI]') || value.startsWith('[SAFE]'),
 }));
@@ -877,5 +884,100 @@ describe('NetBox folder icons', () => {
     render(<HostTree {...defaultProps} tree={netboxTree} />);
     const row = screen.getByText('tok Tokyo').closest('.host-tree-row') as HTMLElement;
     expect(row.getAttribute('title')).toContain('10.6.0.0/16');
+  });
+});
+
+describe('HostTree — public key auth in Add Host', () => {
+  const jumpTree: HostTreeNode[] = [
+    {
+      id: 'bastion',
+      type: 'host',
+      name: 'Bastion',
+      entry: { protocol: 'ssh', host: '10.0.0.9', port: 22, isJumpbox: true },
+    },
+  ];
+
+  /** Open Add Host from the toolbar and fill in the two fields a host needs. */
+  function openAddHost(over: Partial<typeof defaultProps> & { tree?: HostTreeNode[] } = {}) {
+    const p = { ...defaultProps, ...over, onAddHost: vi.fn() };
+    render(<HostTree {...p} />);
+    fireEvent.click(screen.getByTitle('Add Host'));
+    fireEvent.change(screen.getAllByRole('textbox')[1], { target: { value: 'new-host' } });
+    fireEvent.change(screen.getByPlaceholderText('192.168.1.1'), { target: { value: '10.0.0.50' } });
+    return p;
+  }
+
+  const keyPathField = () => screen.getByPlaceholderText('~/.ssh/id_rsa');
+  /** Two password fields in this form: the account password, then the passphrase. */
+  const passphraseField = () =>
+    document.querySelectorAll<HTMLInputElement>('.host-edit-modal input[type="password"]')[1];
+  const protocolSelect = () => screen.getByDisplayValue('SSH');
+  const jumpboxSelect = () => screen.queryByRole('combobox', { name: 'Jumpbox (Bastion)' });
+
+  it('offers the private key fields for an SSH host', () => {
+    openAddHost();
+    expect(keyPathField()).toBeTruthy();
+    expect(passphraseField()).toBeTruthy();
+  });
+
+  it('hides the private key fields for a Telnet host', () => {
+    openAddHost();
+    fireEvent.change(protocolSelect(), { target: { value: 'telnet' } });
+    expect(screen.queryByPlaceholderText('~/.ssh/id_rsa')).toBeNull();
+  });
+
+  it('saves the key path and passphrase onto the new host', () => {
+    const p = openAddHost();
+    fireEvent.change(keyPathField(), { target: { value: 'C:/keys/id_ed25519' } });
+    fireEvent.change(passphraseField(), { target: { value: 'secret' } });
+    fireEvent.click(screen.getByText('Save'));
+    expect(p.onAddHost).toHaveBeenCalledWith(
+      null,
+      'new-host',
+      expect.objectContaining({
+        privateKeyPath: 'C:/keys/id_ed25519',
+        privateKeyPassphrase: 'secret',
+      }),
+    );
+  });
+
+  it('drops the key fields when the protocol is switched to Telnet', () => {
+    // A Telnet entry carrying a private key would misdescribe how it connects.
+    const p = openAddHost();
+    fireEvent.change(keyPathField(), { target: { value: 'C:/keys/id_ed25519' } });
+    fireEvent.change(protocolSelect(), { target: { value: 'telnet' } });
+    fireEvent.click(screen.getByText('Save'));
+    const entry = p.onAddHost.mock.calls[0][2];
+    expect(entry.privateKeyPath).toBeUndefined();
+    expect(entry.privateKeyPassphrase).toBeUndefined();
+  });
+
+  it('forgets the passphrase when the form is opened again', () => {
+    openAddHost();
+    fireEvent.change(passphraseField(), { target: { value: 'secret' } });
+    fireEvent.click(screen.getByText('Cancel'));
+    fireEvent.click(screen.getByTitle('Add Host'));
+    expect(passphraseField().value).toBe('');
+  });
+
+  it('offers the jumpbox picker only when the tree holds a jumpbox', () => {
+    openAddHost({ tree: jumpTree });
+    expect(jumpboxSelect()).toBeTruthy();
+  });
+
+  it('hides the jumpbox picker when no host is marked as one', () => {
+    openAddHost();
+    expect(jumpboxSelect()).toBeNull();
+  });
+
+  it('saves the chosen jumpbox onto the new host', () => {
+    const p = openAddHost({ tree: jumpTree });
+    fireEvent.change(jumpboxSelect()!, { target: { value: 'bastion' } });
+    fireEvent.click(screen.getByText('Save'));
+    expect(p.onAddHost).toHaveBeenCalledWith(
+      null,
+      'new-host',
+      expect.objectContaining({ jumpboxId: 'bastion' }),
+    );
   });
 });

@@ -61,3 +61,54 @@ body {
    in `Dialog.css`. It used to be a list of ten class names here, which had
    fallen five behind: `.tpl-overlay`, `.mbp-overlay`, `.skg-overlay`,
    `.ai-consent-overlay` and `.add-bookmark-modal-overlay` never got it. */
+
+/* The shared dialog/toolbar buttons.
+
+   They live here, in the entry stylesheet, because they are borrowed by name
+   across the app — BookmarkTree, SaveToHostTreeDialog, AddBookmarkModal and the
+   host form all write `className="btn-primary"`. They used to be declared in
+   `SessionDialog.css`, which is a lazy chunk: every one of those borrowers
+   rendered with bare browser buttons until the session dialog had been opened
+   once. That is the same fault that once left the Help dialog unstyled, so the
+   fix is the same — a declaration that is always loaded cannot be missing. */
+.btn-primary {
+  background-color: var(--accent-color);
+  color: var(--text-on-accent);
+  border: none;
+  padding: 6px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: calc(var(--font-size-base) - 1px);
+  font-family: var(--ui-font-family);
+  transition: background-color 0.1s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background-color: var(--btn-secondary-bg);
+  color: var(--text-primary);
+  border: none;
+  padding: 6px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: calc(var(--font-size-base) - 1px);
+  font-family: var(--ui-font-family);
+  transition: background-color 0.1s;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--btn-secondary-hover-bg);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

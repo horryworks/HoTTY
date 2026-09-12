@@ -1,5 +1,5 @@
-/* The shell lives in `Dialog.css`. What stays here is the key form, the
-   generated-key readout and the buttons. */
+/* The shell lives in `Dialog.css` and the buttons in `index.css`. What stays
+   here is the key form and the generated-key readout. */
 
 /* --- Form --- */
 
@@ -112,39 +112,3 @@
   color: var(--color-danger);
 }
 
-/* --- Buttons --- */
-.skg-footer button {
-  padding: 6px 16px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-family: var(--ui-font-family);
-  font-size: calc(var(--font-size-base) - 1px);
-  transition: background-color 0.1s;
-}
-
-.skg-footer button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Own colours, not `.btn-primary` / `.btn-secondary`: those live in
-   `SessionDialog.css`, so they are only loaded on one of this modal's two
-   routes. Borrowing them would leave the settings route unstyled. */
-.skg-btn-primary {
-  background: var(--accent-color);
-  color: var(--text-on-accent);
-}
-
-.skg-btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-.skg-btn-secondary {
-  background: var(--btn-secondary-bg);
-  color: var(--text-primary);
-}
-
-.skg-btn-secondary:hover:not(:disabled) {
-  background: var(--btn-secondary-hover-bg);
-}

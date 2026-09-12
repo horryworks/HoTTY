@@ -5,7 +5,17 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 10000;
+  /* Above every other tier on purpose. This is the one hand-rolled shell in the
+     app: it reports a render crash, so it must not depend on <Dialog>  the
+     component it may have to report on. That also means useDialogStack cannot
+     assign its z-index, and 10000 put it level with the dialog stack's own
+     base, where a dialog open at the time of the crash beat it on DOM order.
+     It now clears the 30000 context-menu tier as well. */
+  z-index: 40000;
+  /* Matches .dlg-overlay in Dialog.css; without it the crash screen was the one
+     overlay in the app with no backdrop blur. */
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   padding: 20px;
   box-sizing: border-box;
 }

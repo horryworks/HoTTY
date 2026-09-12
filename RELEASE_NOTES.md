@@ -1,5 +1,53 @@
 # Release Notes
 
+## v2.1.0-beta8
+
+**Every dialog now behaves like a window, and they all come from the same place.** Dragging a dialog's bottom-right corner used to grow its top-left as well, the grip tracked at half the cursor's speed, and releasing a Settings resize with the pointer off the dialog closed it. Those were three unrelated bugs in a convention that had been written out as CSS values and copied into sixteen stylesheets. All 17 dialogs now render through one shared shell — which also fixes three bugs that had already shipped. This release closes two security holes as well; if you use AI auto-execute, **Security** below is the section to read.
+
+### New Features
+
+- **The Add Host form can set an SSH key, its passphrase and a jumpbox.** Those three fields existed only in the New Session dialog, so a host added from the tree could not be given a key without going somewhere else to do it. The key row is the same one the session dialog uses: a free-text path, a Browse button, and a picker listing the keys in `~/.ssh`. The picker's last entry generates a new key and puts it straight into the field, so a host that needs a key can get one without leaving the form.
+
+  `~/.ssh` is read only while those fields are on screen and the host is SSH — with the form closed, or the protocol set to Telnet, there is no disk access at all. A passphrase typed here goes through the same Windows DPAPI path as every other credential in the tree.
+
+### Improvements
+
+- **Dialogs resize from any edge or corner, move by their title bar, and stay where they are put.** The opposite edge holds still while you drag, the way a window border does. The eight grab areas draw nothing; the cursor is the affordance.
+
+  Size is remembered and shared by every window. Position deliberately is not — a dialog always opens centred, which is the one behaviour that cannot strand it off-screen after a monitor change.
+
+- **One shell for all 17 dialogs.** Overlay, box, header, close button, footer, focus trap, Escape handling and stacking order now have exactly one definition each. The overlay alone had been copied into sixteen stylesheets and the box into thirteen — roughly 77 rule blocks, now one set — alongside three hand-maintained lists of dialog class names that had each fallen behind. Stacking order is no longer written by hand either: the dialog opened last is in front, wherever in the app it is rendered.
+
+- **A dialog holding a form no longer closes when you click the backdrop.** Losing half-typed connection details to a stray click is worse than reaching for Escape. Reference dialogs — Help, Third-Party Licenses — still close that way.
+
+### Bug Fixes
+
+- **Opening Help before Settings showed an unstyled box.** Help borrowed Settings' styling without importing it. Both load on demand and the styles ship with Settings, so whichever you opened second looked right and whichever you opened first did not.
+
+- **A Web Browser pane painted over dialogs.** The embedded browser is a native child view that sits above the page, so it is hidden while a dialog is open — but the list of dialogs to check for had missed three of them.
+
+- **A long host form ran off the bottom of the screen with its buttons out of reach.** The shared host-edit dialog set no maximum height.
+
+- **Buttons in five places rendered as bare browser buttons.** The bookmark tree, "Save to host tree", the Add Bookmark dialog, the SSH key generator and the host form all took their button styling from a stylesheet that loads only with the New Session dialog — so until you had opened that once in a session, those buttons were unstyled. The definitions moved to the always-loaded stylesheet. This is the same fault as the Help one above, which is why the fix has the same shape.
+
+- **The crash screen could be painted underneath an open dialog.** HoTTY's error panel is the one screen that deliberately does not use the shared dialog shell: it reports render failures, so it must not depend on the component it may have to report on. That also means its stacking position cannot be assigned automatically, and the value written by hand put it level with the base of the dialog stack. It now sits above everything, and has the backdrop blur every other overlay already had.
+
+- **A help tooltip inside a deeply stacked dialog was hidden behind that dialog.** Tooltips had a hand-picked stacking value that sat inside the range dialogs use.
+
+- **The Log Viewer's refresh button changed shape with the terminal font.** Its label used the monospace font you pick for terminals instead of the interface font.
+
+### Security
+
+- **AI auto-execute: one wrapper word walked past the guard on commands that can send data off the machine.** HoTTY refuses to auto-run `curl`, `wget`, `nc`, `nmap` and the like however the model rates them, because a plain GET carrying data in its query string reads as harmless and is a working way to ship whatever is already in the AI's context off the box. That guard examined only the first word of a command, so prefixing anything at all — `bash -c 'curl …'`, `env curl …`, `timeout 5 curl …`, `echo x | xargs curl …` — meant it saw `bash`, `env`, `timeout` or `xargs`, none of which is a transfer tool, and passed the command to the model instead.
+
+  The guard now examines every position in a command that names a program to run, rather than only the first. Nothing that merely *mentions* one of these tools is affected: `grep ssh /etc/passwd`, `which curl` and `ls /etc/ssh` auto-execute exactly as before, and so do `git status`, `find`, `less` and `timeout 5 ping` — being a wrapper is not itself disqualifying, only a transfer tool behind one is.
+
+  This was only ever reachable with **Auto-execute safe commands** switched on, which is not the default; the default asks first. Terminal output is fed to the model, so the realistic route to it was a hostile or compromised device on the other end of a watched session.
+
+- **A jumpbox was the one connect path that did not check its host field.** Direct SSH and Telnet have always validated the host, and that is what keeps the `known_hosts` file's one-record-per-line format intact. The jumpbox did not — and its host value becomes the host pattern of the record written when you accept a host key. A value containing a newline therefore wrote *two* records, so a single "Accept & remember" on the bastion could pin an attacker-chosen key for a completely unrelated host, which would afterwards connect with no warning at all. The host field is free text and also arrives from an imported `.htree`, so this check was the only thing in the way.
+
+  A jumpbox now validates its host exactly as direct SSH does, with the same length limits on username, password, passphrase and key path. Separately, the `known_hosts` writer itself now refuses a host that cannot form a valid record, so no future code path can inject one by forgetting its own validation.
+
 ## v2.1.0-beta7
 
 **Sorting a host into its NetBox folder no longer means sorting the whole tree.** The IP-range placement added in beta6 could only be run over everything at once, and only from a right-click on the tree's empty background. That is the wrong shape for the common question — this one host, which folder does it belong in? — and the right-click on empty space is not a place anyone looks. Both are fixed here.

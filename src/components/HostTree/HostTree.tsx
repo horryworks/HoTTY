@@ -20,6 +20,9 @@ import {
 import { formatPrefix } from '../../utils/cidr';
 import type { PlacementMove } from '../../hooks/useHostManager';
 import { tauriService } from '../../services/tauriService';
+import { useSshKeys } from '../../hooks/useSshKeys';
+import { SshKeyGenerateModal } from '../SshKeyGenerateModal/SshKeyGenerateModal';
+import { suggestSshKeyName, uniqueSshKeyName } from '../../utils/sshKeyName';
 import './HostTree.css';
 
 interface ContextMenuState {
@@ -31,6 +34,12 @@ interface ContextMenuState {
 /** "Open All" asks for confirmation once a folder holds at least this many hosts,
  *  guarding against accidentally launching a large batch of connections. */
 const OPEN_ALL_CONFIRM_THRESHOLD = 5;
+
+/**
+ * Sentinel for the key picker's last entry. Cannot collide with a key's value,
+ * which is always an absolute path.
+ */
+const GENERATE_KEY_OPTION = '__generate__';
 
 interface EditModalState {
     mode: 'folder' | 'host' | 'export' | 'import';
@@ -125,6 +134,38 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [formIsJumpbox, setFormIsJumpbox] = useState(false);
     const [formFixedTerminalSize, setFormFixedTerminalSize] = useState<FixedSizeTri>('default');
     const [importFilePath, setImportFilePath] = useState<string | null>(null);
+    const [formPrivateKeyPath, setFormPrivateKeyPath] = useState('');
+    const [formPrivateKeyPassphrase, setFormPrivateKeyPassphrase] = useState('');
+    const [formJumpboxId, setFormJumpboxId] = useState('');
+    const [generateKeyOpen, setGenerateKeyOpen] = useState(false);
+
+    /** The key fields are on screen, so `~/.ssh` is worth reading. While the
+     *  form is closed — or the host is Telnet — this stays false and no IPC
+     *  happens at all. */
+    const keyFieldsVisible = editModalOpen && editModal?.mode === 'host' && formProtocol === 'ssh';
+    const sshKeys = useSshKeys(keyFieldsVisible);
+
+    /** Hosts offered as a jumpbox. A host never routes through itself. */
+    const jumpboxHosts = useMemo(
+        () => flattenHosts(tree).filter(
+            n => n.entry?.isJumpbox && n.entry.protocol === 'ssh' && n.id !== editModal?.existingNode?.id,
+        ),
+        [tree, editModal],
+    );
+
+    const handleBrowseKey = useCallback(async () => {
+        const selected = await tauriService.selectFile(t('sessionDialog.browseKeyTitle'));
+        if (selected) setFormPrivateKeyPath(selected);
+    }, [t]);
+
+    const handlePickKey = useCallback((value: string) => {
+        if (value === '') return;
+        if (value === GENERATE_KEY_OPTION) {
+            setGenerateKeyOpen(true);
+            return;
+        }
+        setFormPrivateKeyPath(value);
+    }, []);
 
     /** Every prefix-carrying folder, recomputed only when the tree changes. */
     const prefixFolders = useMemo(
@@ -382,6 +423,10 @@ export const HostTree: React.FC<HostTreeProps> = ({
         setFormPassword('');
         setFormIsJumpbox(false);
         setFormFixedTerminalSize('default');
+        setFormPrivateKeyPath('');
+        setFormPrivateKeyPassphrase('');
+        setFormJumpboxId('');
+        setGenerateKeyOpen(false);
         setUseNetboxFolder(null);
         openEditModal({ mode: 'host', parentId });
         setContextMenu(null);
@@ -486,10 +531,10 @@ export const HostTree: React.FC<HostTreeProps> = ({
             if (mode === 'folder') {
                 onEditNode(existingNode.id, { name: formName });
             } else {
-                // Spread the existing entry first so fields this add/edit form
-                // does not surface — privateKeyPath, privateKeyPassphrase,
-                // iapTunnel — are preserved rather than silently dropped on
-                // save. The form fields then override only what they own.
+                // Spread the existing entry first so the one field this form
+                // does not surface — iapTunnel — is preserved rather than
+                // silently dropped on save. The form fields then override only
+                // what they own.
                 const entry: HostEntry = {
                     ...existingNode.entry,
                     protocol: formProtocol,
@@ -498,6 +543,9 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     username: formUsername || undefined,
                     password: formPassword || undefined,
                     isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,
+                    jumpboxId: formJumpboxId || undefined,
+                    privateKeyPath: formProtocol === 'ssh' ? (formPrivateKeyPath || undefined) : undefined,
+                    privateKeyPassphrase: formProtocol === 'ssh' ? (formPrivateKeyPassphrase || undefined) : undefined,
                     fixedTerminalSize: triToBool(formFixedTerminalSize),
                 };
                 onEditNode(existingNode.id, { name: formName, entry });
@@ -513,6 +561,9 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     username: formUsername || undefined,
                     password: formPassword || undefined,
                     isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,
+                    jumpboxId: formJumpboxId || undefined,
+                    privateKeyPath: formProtocol === 'ssh' ? (formPrivateKeyPath || undefined) : undefined,
+                    privateKeyPassphrase: formProtocol === 'ssh' ? (formPrivateKeyPassphrase || undefined) : undefined,
                     fixedTerminalSize: triToBool(formFixedTerminalSize),
                 };
                 // The NetBox folder only wins when it is both offered and
@@ -1354,6 +1405,82 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                                 autoComplete="new-password"
                                             />
                                         </div>
+                                        {jumpboxHosts.length > 0 && (
+                                            <div className="modal-form-group">
+                                                <label>{t('sessionDialog.jumpboxLabel')}</label>
+                                                <select
+                                                    value={formJumpboxId}
+                                                    onChange={e => setFormJumpboxId(e.target.value)}
+                                                    aria-label={t('sessionDialog.jumpboxLabel')}
+                                                >
+                                                    <option value="">{t('sessionDialog.directConnection')}</option>
+                                                    {jumpboxHosts.map(jb => (
+                                                        <option key={jb.id} value={jb.id}>{jb.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
+                                        {formProtocol === 'ssh' && (
+                                            <>
+                                                <div className="modal-form-group">
+                                                    <label>{t('sessionDialog.privateKeyPathLabel')}</label>
+                                                    {/* The same key row the session dialog uses. The
+                                                        free-text field and Browse stay, because plenty
+                                                        of people keep keys outside ~/.ssh, and the
+                                                        picker resets to its placeholder after each pick
+                                                        because the field above holds the choice. */}
+                                                    <div className="host-edit-key-row">
+                                                        <input
+                                                            type="text"
+                                                            value={formPrivateKeyPath}
+                                                            onChange={e => setFormPrivateKeyPath(e.target.value)}
+                                                            onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
+                                                            placeholder={t('sessionDialog.privateKeyPathPlaceholder')}
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            className="btn-secondary"
+                                                            onClick={handleBrowseKey}
+                                                        >
+                                                            {t('common.browse')}
+                                                        </button>
+                                                        {sshKeys.available && sshKeys.keys.length > 0 && (
+                                                            <select
+                                                                className="host-edit-key-picker"
+                                                                value=""
+                                                                onChange={e => handlePickKey(e.target.value)}
+                                                                aria-label={t('sessionDialog.keyPickerLabel')}
+                                                            >
+                                                                <option value="">{t('sessionDialog.keyPickerNone')}</option>
+                                                                {sshKeys.keys.map(k => (
+                                                                    <option key={k.name} value={k.path}>{k.name}</option>
+                                                                ))}
+                                                                <option value={GENERATE_KEY_OPTION}>{t('sessionDialog.keyPickerGenerate')}</option>
+                                                            </select>
+                                                        )}
+                                                        {sshKeys.available && sshKeys.keys.length === 0 && (
+                                                            <button
+                                                                type="button"
+                                                                className="btn-secondary"
+                                                                onClick={() => setGenerateKeyOpen(true)}
+                                                            >
+                                                                {t('sessionDialog.keyPickerGenerate')}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="modal-form-group">
+                                                    <label>{t('sessionDialog.privateKeyPassphraseLabel')}</label>
+                                                    <input
+                                                        type="password"
+                                                        value={formPrivateKeyPassphrase}
+                                                        onChange={e => setFormPrivateKeyPassphrase(e.target.value)}
+                                                        onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
+                                                        autoComplete="new-password"
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
                                         <div className="modal-form-group">
                                             <label>{t('hostTree.modal.fixedTerminalSizeLabel')}</label>
                                             <select
@@ -1371,6 +1498,33 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         )}
 
                     </div>
+
+                    {/* Rendered inside the dialog on purpose: the Add Host
+                        surface traps Tab, so a key-generate dialog rendered as
+                        a sibling would have focus yanked back out of it on
+                        every Tab press. Escape still closes only the front
+                        dialog — the dialog stack decides that, not the DOM. */}
+                    <SshKeyGenerateModal
+                        open={generateKeyOpen}
+                        defaultName={uniqueSshKeyName(
+                            suggestSshKeyName('ed25519', formHost),
+                            sshKeys.keys.map(k => k.name),
+                        )}
+                        existingNames={sshKeys.keys.map(k => k.name)}
+                        offerUseForConnection
+                        onClose={() => {
+                            setGenerateKeyOpen(false);
+                            void sshKeys.refresh();
+                        }}
+                        onGenerated={(info, passphrase, useForConnection) => {
+                            if (!useForConnection) return;
+                            setFormPrivateKeyPath(info.path);
+                            // Straight into this form's own field, so saving the
+                            // host puts the passphrase through the same DPAPI
+                            // path as every other credential here.
+                            setFormPrivateKeyPassphrase(passphrase ?? '');
+                        }}
+                    />
                 </Dialog>
             )}
 

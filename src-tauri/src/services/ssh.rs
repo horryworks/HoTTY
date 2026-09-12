@@ -84,12 +84,14 @@ fn default_connect_timeout_secs() -> u32 {
     5
 }
 
-const MAX_CREDENTIAL_LEN: usize = 1024;
-const MAX_USERNAME_LEN: usize = 256;
+// `pub(crate)` so the jumpbox config validates against the same bounds rather
+// than a second copy that can drift from these.
+pub(crate) const MAX_CREDENTIAL_LEN: usize = 1024;
+pub(crate) const MAX_USERNAME_LEN: usize = 256;
 /// Windows's extended-length path limit. A renderer-supplied key path longer
 /// than this cannot name a real file, so refusing it early keeps a pathological
 /// string out of `canonicalize` and the log line that reports the failure.
-const MAX_KEY_PATH_LEN: usize = 4096;
+pub(crate) const MAX_KEY_PATH_LEN: usize = 4096;
 
 impl SshConfig {
     fn validate(&self) -> Result<(), SessionError> {
