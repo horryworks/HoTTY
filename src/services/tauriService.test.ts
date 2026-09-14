@@ -26,6 +26,10 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
 
 import { listen } from '@tauri-apps/api/event';
 import { tauriService, isEncrypted } from './tauriService';
+import type { SshHostKeyPromptPayload } from '../types/appTypes';
+
+/** listen() options for an event addressed to this window (label is 'main' under Vitest). */
+const THIS_WINDOW_ONLY = { target: { kind: 'WebviewWindow', label: 'main' } };
 
 describe('tauriService clipboard wrappers', () => {
   beforeEach(() => {
@@ -771,11 +775,49 @@ describe('tauriService event listeners', () => {
     const cb = vi.fn();
     const result = await tauriService.onSshKnownHostsWarning(cb);
 
-    expect(listenMock).toHaveBeenCalledWith('ssh-known-hosts-warning', expect.any(Function));
+    expect(listenMock).toHaveBeenCalledWith(
+      'ssh-known-hosts-warning',
+      expect.any(Function),
+      THIS_WINDOW_ONLY,
+    );
     expect(result).toBe(unlisten);
 
     const message = 'Could not save host key for example.com:22 to known_hosts: permission denied';
     captured?.({ payload: message });
     expect(cb).toHaveBeenCalledWith(message);
+  });
+
+  // A bare listen() hears events addressed to every window, so a host-key
+  // prompt for a terminal in one window popped up in the AI Chat window too —
+  // where it could be neither answered nor closed.
+  it('onSshHostKeyPrompt listens only for prompts addressed to this window', async () => {
+    let captured: ((e: { payload: SshHostKeyPromptPayload }) => void) | undefined;
+    listenMock.mockImplementation((_event, handler) => {
+      captured = handler as (e: { payload: SshHostKeyPromptPayload }) => void;
+      return Promise.resolve(vi.fn());
+    });
+
+    const cb = vi.fn();
+    await tauriService.onSshHostKeyPrompt(cb);
+
+    expect(listenMock).toHaveBeenCalledWith('ssh-host-key-prompt', expect.any(Function), THIS_WINDOW_ONLY);
+    const payload: SshHostKeyPromptPayload = {
+      sessionId: 'sess-1',
+      host: 'example.com',
+      port: 22,
+      keyType: 'ssh-ed25519',
+      fingerprint: 'SHA256:deadbeef',
+      kind: 'new',
+    };
+    captured?.({ payload });
+    expect(cb).toHaveBeenCalledWith(payload);
+  });
+
+  it('onIapVmStartPrompt listens only for prompts addressed to this window', async () => {
+    listenMock.mockResolvedValue(vi.fn());
+
+    await tauriService.onIapVmStartPrompt(vi.fn());
+
+    expect(listenMock).toHaveBeenCalledWith('iap-vm-start-prompt', expect.any(Function), THIS_WINDOW_ONLY);
   });
 });

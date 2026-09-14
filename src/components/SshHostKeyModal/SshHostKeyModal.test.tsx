@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import type { SshHostKeyPromptPayload } from '../../types/appTypes';
 
 const respondSshHostKey = vi.fn().mockResolvedValue(undefined);
+const logDebug = vi.fn().mockResolvedValue(undefined);
 let emit: ((payload: SshHostKeyPromptPayload) => void) | null = null;
 
 vi.mock('../../services/tauriService', () => ({
@@ -15,6 +16,8 @@ vi.mock('../../services/tauriService', () => ({
     },
     respondSshHostKey: (id: string, accept: boolean, remember: boolean) =>
       respondSshHostKey(id, accept, remember),
+    logDebug: (level: string, category: string, message: string) =>
+      logDebug(level, category, message),
   },
 }));
 
@@ -106,5 +109,52 @@ describe('SshHostKeyModal — Escape', () => {
     render(<SshHostKeyModal />);
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(respondSshHostKey).not.toHaveBeenCalled();
+  });
+});
+
+describe('SshHostKeyModal — answer not delivered', () => {
+  // The backend has no pending prompt when it was already answered (e.g. in
+  // another window) or timed out. The dialog must still close: before, the
+  // failed await skipped the close and left a dialog that locked its window.
+  const NO_PENDING = 'no pending host-key prompt for session sess-1';
+
+  beforeEach(() => {
+    respondSshHostKey.mockClear();
+    logDebug.mockClear();
+    emit = null;
+  });
+
+  it('closes on Reject and logs quietly', async () => {
+    respondSshHostKey.mockRejectedValueOnce(NO_PENDING);
+    render(<SshHostKeyModal />);
+    await waitFor(() => expect(emit).not.toBeNull());
+    act(() => emit!(samplePayload));
+
+    fireEvent.click(screen.getByText('Reject'));
+
+    await waitFor(() => expect(screen.queryByText('Unknown host key')).toBeNull());
+    expect(logDebug).toHaveBeenCalledWith('warn', 'SSH', expect.stringContaining(NO_PENDING));
+  });
+
+  it('closes on Accept once', async () => {
+    respondSshHostKey.mockRejectedValueOnce(NO_PENDING);
+    render(<SshHostKeyModal />);
+    await waitFor(() => expect(emit).not.toBeNull());
+    act(() => emit!(samplePayload));
+
+    fireEvent.click(screen.getByText('Accept once'));
+
+    await waitFor(() => expect(screen.queryByText('Unknown host key')).toBeNull());
+  });
+
+  it('closes on Escape', async () => {
+    respondSshHostKey.mockRejectedValueOnce(NO_PENDING);
+    render(<SshHostKeyModal />);
+    await waitFor(() => expect(emit).not.toBeNull());
+    act(() => emit!(samplePayload));
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByText('Unknown host key')).toBeNull());
   });
 });

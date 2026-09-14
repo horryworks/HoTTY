@@ -26,8 +26,21 @@ export function SshHostKeyModal() {
   const respond = useCallback(
     async (accept: boolean, remember: boolean) => {
       if (!prompt) return;
-      await tauriService.respondSshHostKey(prompt.sessionId, accept, remember);
-      setPrompt(null);
+      try {
+        await tauriService.respondSshHostKey(prompt.sessionId, accept, remember);
+      } catch (e) {
+        // The only failure is "no pending prompt": it was answered elsewhere or
+        // already timed out, and the connection reports its own error. Logged
+        // quietly because logError would raise a second toast for it.
+        tauriService
+          .logDebug('warn', 'SSH', `host-key answer not delivered: ${e instanceof Error ? e.message : String(e)}`)
+          .catch(() => {});
+      } finally {
+        // Close even on failure: a dialog that cannot be dismissed locks the
+        // window it sits in. The backend still rejects an unanswered key.
+        // Compare first so a newer prompt that arrived meanwhile stays up.
+        setPrompt((current) => (current === prompt ? null : current));
+      }
     },
     [prompt],
   );

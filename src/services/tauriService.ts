@@ -95,6 +95,26 @@ export function isEncrypted(value: string): boolean {
   return value.startsWith('[DPAPI]') || value.startsWith('[SAFE]');
 }
 
+/**
+ * Subscribe to an event addressed to THIS window only.
+ *
+ * The backend sends session-scoped prompts to the owning window with
+ * `emit_to(label)`, but a bare `listen()` registers with target `Any`, and
+ * Tauri delivers every event to an `Any` listener regardless of the address.
+ * So a host-key prompt for a terminal in the main window also popped up in an
+ * AI Chat window, where answering it failed (the prompt was already resolved)
+ * and left a dialog that could not be dismissed.
+ *
+ * Scoping the listener to this webview window matches `emit_to(label)` for our
+ * own label, and still receives a plain `emit` broadcast (the backend's
+ * fallback when the owner is not yet known).
+ */
+function listenInThisWindow<T>(event: string, cb: (payload: T) => void): Promise<UnlistenFn> {
+  return listen<T>(event, (e) => cb(e.payload), {
+    target: { kind: 'WebviewWindow', label: WINDOW_LABEL },
+  });
+}
+
 export const tauriService = {
   // -----------------------------------------------------------------------
   // Window identity (multi-window)
@@ -767,7 +787,7 @@ export const tauriService = {
 
   /** Subscribe to the backend's "VM is stopped — ask the user before starting" prompt. */
   onIapVmStartPrompt(cb: (p: IapVmStartPromptPayload) => void): Promise<UnlistenFn> {
-    return listen<IapVmStartPromptPayload>('iap-vm-start-prompt', (e) => cb(e.payload));
+    return listenInThisWindow<IapVmStartPromptPayload>('iap-vm-start-prompt', cb);
   },
 
   /** Deliver the user's response to a pending VM-start prompt. */
@@ -973,9 +993,7 @@ export const tauriService = {
   onSshHostKeyPrompt(
     cb: (p: SshHostKeyPromptPayload) => void
   ): Promise<UnlistenFn> {
-    return listen<SshHostKeyPromptPayload>('ssh-host-key-prompt', (e) =>
-      cb(e.payload)
-    );
+    return listenInThisWindow<SshHostKeyPromptPayload>('ssh-host-key-prompt', cb);
   },
 
   /**
@@ -984,7 +1002,7 @@ export const tauriService = {
    * re-prompted next connect). Payload is a human-readable English message.
    */
   onSshKnownHostsWarning(cb: (message: string) => void): Promise<UnlistenFn> {
-    return listen<string>('ssh-known-hosts-warning', (e) => cb(e.payload));
+    return listenInThisWindow<string>('ssh-known-hosts-warning', cb);
   },
 
   // -----------------------------------------------------------------------
