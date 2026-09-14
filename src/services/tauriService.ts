@@ -6,7 +6,7 @@ import {
   writeText as clipboardWriteText,
 } from '@tauri-apps/plugin-clipboard-manager';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { ask as dialogAsk, open as dialogOpen } from '@tauri-apps/plugin-dialog';
+import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
 import { redactSensitive } from '../utils/redaction';
 import { WINDOW_LABEL } from '../utils/windowLabel';
 import type {
@@ -29,7 +29,6 @@ import type {
   SshHostKeyPromptPayload,
   SerialPortInfo,
   FontInfo,
-  ContextMenuItem,
   Theme,
   SshAlgorithms,
   SshKeyInfo,
@@ -58,10 +57,6 @@ import type {
   WebBrowserAccel,
   WebBrowserZoomState,
   WebBrowserFocus,
-  GcloudStatus,
-  GcloudAuthStatus,
-  GcpProject,
-  GceInstance,
   GcloudCacheSnapshot,
   GcpRefreshProgress,
   GcpVmActionEvent,
@@ -321,10 +316,6 @@ export const tauriService = {
 
   async focusWindow(): Promise<void> {
     await invoke('focus_window');
-  },
-
-  async showContextMenu(items: ContextMenuItem[]): Promise<string | null> {
-    return invoke<string | null>('show_context_menu', { items });
   },
 
   async openDebugLogFolder(): Promise<void> {
@@ -759,30 +750,10 @@ export const tauriService = {
   // GCE IAP Tunnel
   // -----------------------------------------------------------------------
 
-  async gceIapCheckGcloud(): Promise<GcloudStatus> {
-    return invoke<GcloudStatus>('gce_iap_check_gcloud');
-  },
-
-  async gceIapCheckAuth(): Promise<GcloudAuthStatus> {
-    return invoke<GcloudAuthStatus>('gce_iap_check_auth');
-  },
-
   /** Launch `gcloud auth login` (browser OAuth). Fire-and-forget; the user
    *  completes login in the browser, then refreshes the GCP pane. */
   async gceIapRunAuthLogin(): Promise<void> {
     return invoke<void>('gce_iap_run_auth_login');
-  },
-
-  async gceIapListProjects(): Promise<GcpProject[]> {
-    return invoke<GcpProject[]>('gce_iap_list_projects');
-  },
-
-  async gceIapListZones(project: string): Promise<string[]> {
-    return invoke<string[]>('gce_iap_list_zones', { project });
-  },
-
-  async gceIapListInstances(project: string, zone: string): Promise<GceInstance[]> {
-    return invoke<GceInstance[]>('gce_iap_list_instances', { project, zone });
   },
 
   /** Subscribe to the backend's "VM is stopped — ask the user before starting" prompt. */
@@ -859,18 +830,6 @@ export const tauriService = {
 
   async setWindowTitle(title: string): Promise<void> {
     await getCurrentWebviewWindow().setTitle(title);
-  },
-
-  async confirmDialog(
-    message: string,
-    options: { title?: string; okLabel?: string; cancelLabel?: string } = {},
-  ): Promise<boolean> {
-    return dialogAsk(message, {
-      title: options.title ?? 'HoTTY',
-      kind: 'warning',
-      okLabel: options.okLabel,
-      cancelLabel: options.cancelLabel,
-    });
   },
 
   /**

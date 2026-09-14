@@ -25,11 +25,6 @@ vi.mock('../../services/tauriService', () => ({
     exportHtree: vi.fn(),
     selectImportFile: vi.fn(),
     decryptImportFile: vi.fn(),
-    gceIapCheckGcloud: vi.fn(),
-    gceIapCheckAuth: vi.fn(),
-    gceIapListProjects: vi.fn(),
-    gceIapListZones: vi.fn(),
-    gceIapListInstances: vi.fn(),
     onIapConnectProgress: (cb: (p: { sessionId: string; phase: string }) => void) => {
       emitIapProgress = cb;
       return Promise.resolve(() => {

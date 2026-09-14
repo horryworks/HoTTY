@@ -3,10 +3,8 @@ import {
   SESSION_NAMES_VERSION,
   applySessionNames,
   buildSessionNames,
-  forgetWindowNames,
   parseSessionNames,
   remoteSessionName,
-  remoteSessionNames,
   resetSessionNames,
   sessionNamesEqual,
   subscribeSessionNames,
@@ -60,7 +58,6 @@ describe('sessionNameShare registry', () => {
 
   it('starts empty', () => {
     expect(remoteSessionName('s-1')).toBeUndefined();
-    expect(remoteSessionNames().size).toBe(0);
   });
 
   it('merges tables from several windows', () => {
@@ -86,10 +83,12 @@ describe('sessionNameShare registry', () => {
     expect(remoteSessionName('s-9')).toBeUndefined();
   });
 
-  it('forgetting one window leaves the others alone', () => {
+  it('dropping one window’s table leaves the others alone', () => {
     applySessionNames(buildSessionNames('main', { 's-1': { displayName: 'core-sw01' } }));
     applySessionNames(buildSessionNames('win-2', { 's-9': { displayName: 'rtr-01' } }));
-    forgetWindowNames('win-2');
+    // Publishing an empty table is how a window withdraws its names in the
+    // running app — there is no separate "forget" entry point.
+    applySessionNames(buildSessionNames('win-2', {}));
     expect(remoteSessionName('s-9')).toBeUndefined();
     expect(remoteSessionName('s-1')?.displayName).toBe('core-sw01');
   });

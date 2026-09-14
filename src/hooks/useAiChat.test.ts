@@ -10,7 +10,6 @@ vi.mock('../services/tauriService', () => ({
   tauriService: {
     aiChatSend: vi.fn(),
     aiChatClear: vi.fn().mockResolvedValue(undefined),
-    showContextMenu: vi.fn().mockResolvedValue(null),
     logDebug: vi.fn(),
   },
 }));

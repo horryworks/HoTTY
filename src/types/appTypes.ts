@@ -279,12 +279,6 @@ export interface LocalConnectionConfig {
   encoding: Encoding;
 }
 
-export interface ContextMenuItem {
-  id: string;
-  label: string;
-  enabled?: boolean;
-}
-
 interface AlgorithmEntry {
   name: string;
   enabled: boolean;

@@ -104,20 +104,9 @@ export function applySessionNames(msg: SessionNamesMessage): void {
   remerge();
 }
 
-/** Forget a window's names (it closed, or it has no sessions left). */
-export function forgetWindowNames(label: string): void {
-  if (!byWindow.delete(label)) return;
-  remerge();
-}
-
 /** What another window calls this session, if any window has said. */
 export function remoteSessionName(sessionId: string): SharedSessionName | undefined {
   return merged.get(sessionId);
-}
-
-/** Every shared name currently known, for callers that want the whole table. */
-export function remoteSessionNames(): ReadonlyMap<string, SharedSessionName> {
-  return merged;
 }
 
 /** Subscribe to changes in the shared table; returns an unsubscribe function. */

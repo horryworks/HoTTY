@@ -182,49 +182,6 @@ pub async fn focus_window(window: tauri::WebviewWindow) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
-// show_context_menu
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
-pub async fn show_context_menu(
-    app: AppHandle,
-    window: tauri::WebviewWindow,
-    items: Vec<ContextMenuItem>,
-) -> Result<Option<String>, String> {
-    use tauri::menu::{MenuBuilder, MenuItemBuilder};
-
-    // Anchor the popup on the INVOKING window, not a hardcoded "main" (the menu
-    // would otherwise mis-parent / fail in secondary windows).
-    let mut builder = MenuBuilder::new(&app);
-    for item in &items {
-        let mi = MenuItemBuilder::new(&item.label)
-            .id(&item.id)
-            .enabled(item.enabled.unwrap_or(true))
-            .build(&app)
-            .map_err(|e| format!("failed to build menu item: {e}"))?;
-        builder = builder.item(&mi);
-    }
-    let menu = builder
-        .build()
-        .map_err(|e| format!("failed to build context menu: {e}"))?;
-
-    // Use popup to show menu at cursor position. The popup is blocking.
-    window
-        .popup_menu(&menu)
-        .map_err(|e| format!("failed to show context menu: {e}"))?;
-
-    Ok(None)
-}
-
-#[derive(serde::Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ContextMenuItem {
-    pub id: String,
-    pub label: String,
-    pub enabled: Option<bool>,
-}
-
-// ---------------------------------------------------------------------------
 // open_debug_log_folder
 // ---------------------------------------------------------------------------
 
@@ -387,22 +344,6 @@ mod tests {
         };
         let json = serde_json::to_value(&info).unwrap();
         assert_eq!(json["family"], "Consolas");
-    }
-
-    #[test]
-    fn context_menu_item_deserializes() {
-        let json = r#"{"id":"copy","label":"Copy","enabled":true}"#;
-        let item: ContextMenuItem = serde_json::from_str(json).unwrap();
-        assert_eq!(item.id, "copy");
-        assert_eq!(item.label, "Copy");
-        assert_eq!(item.enabled, Some(true));
-    }
-
-    #[test]
-    fn context_menu_item_enabled_defaults() {
-        let json = r#"{"id":"paste","label":"Paste"}"#;
-        let item: ContextMenuItem = serde_json::from_str(json).unwrap();
-        assert_eq!(item.enabled, None);
     }
 
     /// Helper that mirrors the WSL output parsing logic from list_wsl_distributions

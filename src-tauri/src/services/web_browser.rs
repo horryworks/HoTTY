@@ -29,9 +29,9 @@
 //! and NO capabilities, so it cannot reach HoTTY's Tauri IPC. Navigation is
 //! restricted to http/https/about via `on_navigation` + `validate_browser_url`.
 
+use std::collections::HashMap;
 #[cfg(feature = "embedded-webview")]
-use std::collections::{HashMap, HashSet};
-#[cfg(feature = "embedded-webview")]
+use std::collections::HashSet;
 use std::sync::Mutex;
 
 use serde::Deserialize;
@@ -110,6 +110,17 @@ pub struct WebBrowserState {
     /// the just-built webview instead of leaving an unreachable zombie.
     #[cfg(feature = "embedded-webview")]
     pending_destroy: Mutex<HashSet<String>>,
+    /// Which window each pane's webview was created in, so a closing window can
+    /// tear down exactly the panes it owned (ADR-011). Mirrors `SessionOwners`.
+    ///
+    /// Deliberately NOT behind `embedded-webview`: it holds nothing but strings,
+    /// so it compiles — and is unit-tested — in the featureless `cargo test`
+    /// build that every other field here is invisible to.
+    ///
+    /// The value is the window that actually hosted `add_child`. `create`'s
+    /// reuse path does not re-parent an existing webview when its pane moves to
+    /// another window, so the creating window stays the owner (ADR-019).
+    owners: Mutex<HashMap<String, String>>,
 }
 
 impl WebBrowserState {
@@ -126,6 +137,21 @@ impl WebBrowserState {
 /// with the `wb-` prefix, so the label is e.g. `wb-child-wb-lq2x3a-9f8e`.
 pub fn label_for_pane(pane_id: &str) -> String {
     format!("wb-child-{pane_id}")
+}
+
+/// The panes a window owns, read out of the `pane_id -> window_label` table.
+///
+/// Split out of `destroy_for_window` on purpose: it is the one part of the
+/// window-scoped teardown that can be unit-tested in the featureless build,
+/// where the webview map does not exist at all. Same shape as
+/// `SessionOwners::sessions_for` and the filter in
+/// `file_server::stop_servers_for_window`.
+pub fn panes_for_window(owners: &HashMap<String, String>, label: &str) -> Vec<String> {
+    owners
+        .iter()
+        .filter(|(_, owner)| owner.as_str() == label)
+        .map(|(pane_id, _)| pane_id.clone())
+        .collect()
 }
 
 /// Validate a user-entered address. Only `http`/`https` are accepted as
@@ -288,6 +314,16 @@ mod disabled {
     pub fn destroy(_state: &WebBrowserState, _pane_id: &str) -> Result<(), String> {
         Err(MSG.to_string())
     }
+    /// Same signature as the real one. No webview can exist in this build, but
+    /// the owners table is un-gated, so a closing window still clears its rows —
+    /// which keeps this path (and its test) honest about the bookkeeping.
+    pub fn destroy_for_window(state: &WebBrowserState, label: &str) {
+        if let Ok(mut owners) = state.owners.lock() {
+            for pane_id in super::panes_for_window(&owners, label) {
+                owners.remove(&pane_id);
+            }
+        }
+    }
     pub fn set_zoom(_state: &WebBrowserState, _pane_id: &str, _zoom: u32) -> Result<(), String> {
         Err(MSG.to_string())
     }
@@ -305,8 +341,8 @@ mod disabled {
 #[cfg(feature = "embedded-webview")]
 mod enabled {
     use super::{
-        is_allowed_navigation, label_for_pane, off_screen_rect, rect_to_physical, BrowserRect,
-        ClearDataOptions, SweeperHandle, WebBrowserState, SWEEPER_SHUTDOWN_GRACE_MS,
+        is_allowed_navigation, label_for_pane, off_screen_rect, panes_for_window, rect_to_physical,
+        BrowserRect, ClearDataOptions, SweeperHandle, WebBrowserState, SWEEPER_SHUTDOWN_GRACE_MS,
     };
 
     use serde::Serialize;
@@ -519,6 +555,12 @@ mod enabled {
             }
         }
         remember_bounds(state, pane_id, rect);
+        // Record who hosts this webview, so closing that window tears it down
+        // (ADR-011). Only on the create path: the reuse path above returns
+        // early and must not re-point an existing webview at another window.
+        if let Ok(mut owners) = state.owners.lock() {
+            owners.insert(pane_id.to_string(), parent_label.to_string());
+        }
         // Start the background session-cookie persister (once per app run) now
         // that there is at least one browser webview to sweep.
         maybe_start_cookie_sweeper(app, state);
@@ -1167,12 +1209,64 @@ mod enabled {
         if let Ok(mut map) = state.last_bounds.lock() {
             map.remove(pane_id);
         }
+        if let Ok(mut owners) = state.owners.lock() {
+            owners.remove(pane_id);
+        }
         if let Some(webview) = webview {
             let _ = webview.close();
             log::info!("web-browser: destroyed child webview for pane {pane_id}");
         }
         stop_cookie_sweeper_if_idle(state);
         Ok(())
+    }
+
+    /// Drop every browser pane a closing window owned (ADR-011).
+    ///
+    /// The OS destroys a window's child webviews along with it, but their
+    /// handles stay in `webviews` — and `stop_cookie_sweeper_if_idle` reads that
+    /// map to decide whether any pane is still open. A stale entry therefore
+    /// keeps the 20-second cookie loop running for the life of the process,
+    /// against handles that no longer refer to anything.
+    ///
+    /// Synchronous, like `destroy`: there is nothing to await once the window is
+    /// gone, and the sweeper's own join already happens on the runtime.
+    pub fn destroy_for_window(state: &WebBrowserState, label: &str) {
+        let pane_ids = match state.owners.lock() {
+            Ok(owners) => panes_for_window(&owners, label),
+            // Lock poisoned: leave the maps alone rather than act on a table we
+            // cannot trust (mirrors `stop_cookie_sweeper_if_idle`).
+            Err(_) => return,
+        };
+        if pane_ids.is_empty() {
+            return;
+        }
+        for pane_id in &pane_ids {
+            let webview = match state.webviews.lock() {
+                Ok(mut map) => map.remove(pane_id),
+                Err(_) => None,
+            };
+            if let Ok(mut map) = state.last_bounds.lock() {
+                map.remove(pane_id);
+            }
+            if let Ok(mut owners) = state.owners.lock() {
+                owners.remove(pane_id);
+            }
+            if let Ok(mut pending) = state.pending_destroy.lock() {
+                pending.remove(pane_id);
+            }
+            // Best effort: the parent window took this child with it, so the
+            // close usually fails. Dropping the handle is the point.
+            if let Some(webview) = webview {
+                let _ = webview.close();
+            }
+        }
+        log::info!(
+            "web-browser: window '{label}' closed, dropped {} browser pane(s)",
+            pane_ids.len()
+        );
+        // Once, after the whole loop: only now can the sweeper's "is any pane
+        // still open?" check come back false.
+        stop_cookie_sweeper_if_idle(state);
     }
 }
 
@@ -1189,6 +1283,52 @@ mod tests {
         assert_eq!(label_for_pane("wb-abc123"), "wb-child-wb-abc123");
         assert_eq!(label_for_pane("wb-abc123"), label_for_pane("wb-abc123"));
         assert_ne!(label_for_pane("wb-a"), label_for_pane("wb-b"));
+    }
+
+    // -- window-scoped teardown (ADR-011) -----------------------------------
+
+    fn owner_table(rows: &[(&str, &str)]) -> HashMap<String, String> {
+        rows.iter()
+            .map(|(pane, label)| (pane.to_string(), label.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn panes_for_window_selects_only_that_windows_panes() {
+        let owners = owner_table(&[
+            ("wb-1", "win-a"),
+            ("wb-2", "win-b"),
+            ("wb-3", "win-a"),
+            ("wb-4", "main"),
+        ]);
+
+        let mut a = panes_for_window(&owners, "win-a");
+        a.sort();
+        assert_eq!(a, vec!["wb-1".to_string(), "wb-3".to_string()]);
+
+        assert_eq!(panes_for_window(&owners, "win-b"), vec!["wb-2".to_string()]);
+        // A window that owns nothing gets an empty list, not everything.
+        assert!(panes_for_window(&owners, "win-zz").is_empty());
+        // Labels match whole, not by prefix: `win-a` must not claim `win-ai-1`.
+        let ai = owner_table(&[("wb-1", "win-a"), ("wb-2", "win-ai-1")]);
+        assert_eq!(panes_for_window(&ai, "win-a"), vec!["wb-1".to_string()]);
+    }
+
+    #[test]
+    fn destroy_for_window_drops_only_that_windows_owners() {
+        let state = WebBrowserState::new();
+        {
+            let mut owners = state.owners.lock().unwrap();
+            owners.insert("wb-1".to_string(), "win-a".to_string());
+            owners.insert("wb-2".to_string(), "win-b".to_string());
+            owners.insert("wb-3".to_string(), "win-a".to_string());
+        }
+
+        destroy_for_window(&state, "win-a");
+
+        let owners = state.owners.lock().unwrap();
+        assert_eq!(owners.len(), 1);
+        assert_eq!(owners.get("wb-2").map(String::as_str), Some("win-b"));
     }
 
     #[test]

@@ -10,11 +10,6 @@ vi.mock('../../services/tauriService', () => ({
     exportHtree: vi.fn(),
     selectImportFile: vi.fn(),
     decryptImportFile: vi.fn(),
-    gceIapCheckGcloud: vi.fn(),
-    gceIapCheckAuth: vi.fn(),
-    gceIapListProjects: vi.fn(),
-    gceIapListZones: vi.fn(),
-    gceIapListInstances: vi.fn(),
     openExternal: vi.fn(),
     logDebug: vi.fn(),
     // The add-host form reads ~/.ssh for its key picker, and can open the

@@ -22,8 +22,7 @@ use commands::host_tree::{
     ImportPathState,
 };
 use commands::iap_tunnel::{
-    gce_iap_check_auth, gce_iap_check_gcloud, gce_iap_get_cache, gce_iap_list_instances,
-    gce_iap_list_projects, gce_iap_list_vm_actions, gce_iap_list_zones, gce_iap_refresh_cache,
+    gce_iap_get_cache, gce_iap_list_vm_actions, gce_iap_refresh_cache,
     gce_iap_respond_vm_start, gce_iap_run_auth_login, gce_iap_start_instance,
     gce_iap_stop_instance,
 };
@@ -51,7 +50,7 @@ use commands::ssh_keys::{
 use commands::sync::broadcast_shared_change;
 use commands::system::{
     detect_git_bash, focus_window, list_serial_ports, list_system_fonts, list_wsl_distributions,
-    open_debug_log_folder, open_external, show_context_menu,
+    open_debug_log_folder, open_external,
 };
 use commands::themes::{delete_custom_theme, get_themes, save_custom_theme};
 use commands::updater::{
@@ -165,6 +164,17 @@ fn cleanup_window_ping_monitors(app: &tauri::AppHandle, label: &str) {
     });
 }
 
+/// Drop the Web Browser panes a closing window owned, so the cookie sweeper can
+/// see that no pane is open and stop. Without this the 20-second loop runs for
+/// the life of the process against webview handles the OS already destroyed.
+///
+/// Synchronous, unlike its neighbours: `WebBrowserState` uses `std::sync::Mutex`
+/// and there is nothing to await — the same shape as `cancel_for_window` below.
+fn cleanup_window_web_browsers(app: &tauri::AppHandle, label: &str) {
+    let state = app.state::<WebBrowserState>();
+    services::web_browser::destroy_for_window(&state, label);
+}
+
 /// Format the main window's title for a given app version (e.g. `HoTTY v2.0.9`).
 /// Extracted from `setup` so the title contract has unit coverage without
 /// booting a Tauri runtime.
@@ -248,14 +258,15 @@ pub fn run() {
         .manage(Arc::new(GcloudCacheState::new()))
         .manage(UpdaterState::new())
         // When a window closes, tear down only the sessions, File Server
-        // instances, SNMP watchers and ping monitors it owned (other windows
-        // keep running in this shared process).
+        // instances, SNMP watchers, ping monitors and Web Browser panes it
+        // owned (other windows keep running in this shared process).
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
                 cleanup_window_sessions(window.app_handle(), window.label());
                 cleanup_window_file_servers(window.app_handle(), window.label());
                 cleanup_window_snmp_watchers(window.app_handle(), window.label());
                 cleanup_window_ping_monitors(window.app_handle(), window.label());
+                cleanup_window_web_browsers(window.app_handle(), window.label());
                 // A version switch downloads in the background and then exits
                 // the whole app. If the window that asked for one is gone,
                 // stop it rather than let it close the windows still open.
@@ -335,7 +346,6 @@ pub fn run() {
             detect_git_bash,
             list_system_fonts,
             focus_window,
-            show_context_menu,
             open_debug_log_folder,
             open_external,
             create_window,
@@ -413,12 +423,7 @@ pub fn run() {
             web_browser_export_bookmarks,
             web_browser_import_bookmarks,
             // GCE IAP tunnel
-            gce_iap_check_gcloud,
-            gce_iap_check_auth,
             gce_iap_run_auth_login,
-            gce_iap_list_projects,
-            gce_iap_list_zones,
-            gce_iap_list_instances,
             gce_iap_respond_vm_start,
             gce_iap_get_cache,
             gce_iap_refresh_cache,

@@ -2,52 +2,18 @@ use std::sync::Arc;
 
 use crate::services::gcloud_iap;
 use crate::services::iap_tunnel::{
-    self, GceInstance, GcloudAuthStatus, GcloudCacheSnapshot, GcloudCacheState, GcloudStatus,
-    GcpProject, VmAction, VmActionState,
+    self, GcloudCacheSnapshot, GcloudCacheState, VmAction, VmActionState,
 };
 
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
 
-/// Check if gcloud CLI is installed and return version info.
-#[tauri::command]
-pub async fn gce_iap_check_gcloud() -> Result<GcloudStatus, String> {
-    Ok(iap_tunnel::check_gcloud().await)
-}
-
-/// Check if gcloud is authenticated and return the active account.
-#[tauri::command]
-pub async fn gce_iap_check_auth() -> Result<GcloudAuthStatus, String> {
-    Ok(iap_tunnel::check_auth().await)
-}
-
 /// Launch `gcloud auth login` (browser OAuth) so the user can refresh expired
 /// credentials without leaving the app. Fire-and-forget; the user clicks ↻ after.
 #[tauri::command]
 pub async fn gce_iap_run_auth_login() -> Result<(), String> {
     iap_tunnel::run_auth_login().await
-}
-
-/// List GCP projects accessible to the authenticated user.
-#[tauri::command]
-pub async fn gce_iap_list_projects() -> Result<Vec<GcpProject>, String> {
-    Ok(iap_tunnel::list_projects().await)
-}
-
-/// List zones that have compute instances for a given project.
-#[tauri::command]
-pub async fn gce_iap_list_zones(project: String) -> Result<Vec<String>, String> {
-    Ok(iap_tunnel::list_zones(&project).await)
-}
-
-/// List compute instances in a given project and zone.
-#[tauri::command]
-pub async fn gce_iap_list_instances(
-    project: String,
-    zone: String,
-) -> Result<Vec<GceInstance>, String> {
-    Ok(iap_tunnel::list_instances(&project, &zone).await)
 }
 
 /// Deliver the user's response to an `iap-vm-start-prompt` event. The backend's
@@ -147,6 +113,10 @@ pub fn gce_iap_list_vm_actions(
 #[cfg(test)]
 mod tests {
     use super::*;
+    // These types are no longer named by any command in this file — the GCP pane
+    // reads them through the cache snapshot — but their wire shape is still what
+    // the renderer parses, so the serialization tests below stay.
+    use crate::services::iap_tunnel::{GceInstance, GcloudAuthStatus, GcloudStatus, GcpProject};
 
     #[test]
     fn gcloud_status_serializes_camel_case_and_skips_none_version() {

@@ -110,14 +110,6 @@ describe('tauriService system commands', () => {
     expect(mockInvoke).toHaveBeenCalledWith('focus_window');
   });
 
-  it('showContextMenu invokes with items', async () => {
-    const items = [{ id: 'copy', label: 'Copy' }];
-    mockInvoke.mockResolvedValue(null);
-    const result = await tauriService.showContextMenu(items);
-    expect(mockInvoke).toHaveBeenCalledWith('show_context_menu', { items });
-    expect(result).toBeNull();
-  });
-
   it('openDebugLogFolder invokes the correct command', async () => {
     mockInvoke.mockResolvedValue(undefined);
     await tauriService.openDebugLogFolder();
@@ -663,75 +655,6 @@ describe('tauriService AI commands', () => {
     mockInvoke.mockResolvedValue(null);
     const result = await tauriService.selectServiceAccountKeyFile();
     expect(result).toBeNull();
-  });
-});
-
-describe('tauriService GCE IAP tunnel commands', () => {
-  beforeEach(() => {
-    mockInvoke.mockReset();
-  });
-
-  it('gceIapCheckGcloud invokes the correct command', async () => {
-    const status = { available: true, version: '456.0.0' };
-    mockInvoke.mockResolvedValue(status);
-    const result = await tauriService.gceIapCheckGcloud();
-    expect(mockInvoke).toHaveBeenCalledWith('gce_iap_check_gcloud');
-    expect(result).toEqual(status);
-  });
-
-  it('gceIapCheckGcloud handles unavailable', async () => {
-    const status = { available: false };
-    mockInvoke.mockResolvedValue(status);
-    const result = await tauriService.gceIapCheckGcloud();
-    expect(result).toEqual(status);
-  });
-
-  it('gceIapCheckAuth invokes the correct command', async () => {
-    const auth = { authenticated: true, account: 'user@example.com' };
-    mockInvoke.mockResolvedValue(auth);
-    const result = await tauriService.gceIapCheckAuth();
-    expect(mockInvoke).toHaveBeenCalledWith('gce_iap_check_auth');
-    expect(result).toEqual(auth);
-  });
-
-  it('gceIapCheckAuth handles unauthenticated', async () => {
-    const auth = { authenticated: false };
-    mockInvoke.mockResolvedValue(auth);
-    const result = await tauriService.gceIapCheckAuth();
-    expect(result).toEqual(auth);
-  });
-
-  it('gceIapListProjects invokes the correct command', async () => {
-    const projects = [
-      { id: 'proj-a', name: 'Project A' },
-      { id: 'proj-b', name: 'Project B' },
-    ];
-    mockInvoke.mockResolvedValue(projects);
-    const result = await tauriService.gceIapListProjects();
-    expect(mockInvoke).toHaveBeenCalledWith('gce_iap_list_projects');
-    expect(result).toEqual(projects);
-  });
-
-  it('gceIapListZones invokes with project', async () => {
-    const zones = ['us-central1-a', 'us-east1-b'];
-    mockInvoke.mockResolvedValue(zones);
-    const result = await tauriService.gceIapListZones('my-project-123');
-    expect(mockInvoke).toHaveBeenCalledWith('gce_iap_list_zones', { project: 'my-project-123' });
-    expect(result).toEqual(zones);
-  });
-
-  it('gceIapListInstances invokes with project and zone', async () => {
-    const instances = [
-      { name: 'vm-web-01', status: 'RUNNING' },
-      { name: 'vm-db-01', status: 'TERMINATED' },
-    ];
-    mockInvoke.mockResolvedValue(instances);
-    const result = await tauriService.gceIapListInstances('my-project-123', 'us-central1-a');
-    expect(mockInvoke).toHaveBeenCalledWith('gce_iap_list_instances', {
-      project: 'my-project-123',
-      zone: 'us-central1-a',
-    });
-    expect(result).toEqual(instances);
   });
 });
 

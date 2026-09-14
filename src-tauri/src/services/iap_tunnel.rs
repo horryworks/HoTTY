@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicU32, Ordering},
@@ -141,8 +141,8 @@ pub struct GceInstance {
     pub name: String,
     pub status: String,
     /// Zone short name (e.g. "us-central1-a"). Always populated for entries
-    /// produced by `list_instances` and `list_instances_across_zones`; the
-    /// optionality preserves serialization compatibility for older payloads.
+    /// produced by `list_instances_across_zones`; the optionality preserves
+    /// serialization compatibility for older payloads.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub zone: Option<String>,
     /// Per-instance IAM probe result. Present only when refresh ran a
@@ -453,18 +453,9 @@ fn truncate_error(msg: &str) -> String {
     }
 }
 
-/// List GCP projects accessible to the authenticated user. Swallows errors into
-/// an empty list (used by the `gce_iap_list_projects` command). The cache
-/// refresh path calls `list_projects_result` instead so it can surface failures.
-pub async fn list_projects() -> Vec<GcpProject> {
-    list_projects_result().await.unwrap_or_else(|e| {
-        log::warn!("Failed to list GCP projects: {e}");
-        Vec::new()
-    })
-}
-
-/// Like `list_projects`, but propagates the gcloud error so callers can tell an
-/// auth-refresh failure apart from a genuinely empty project list.
+/// List GCP projects accessible to the authenticated user, propagating the
+/// gcloud error so the caller can tell an auth-refresh failure apart from a
+/// genuinely empty project list. The cache refresh is the only caller.
 async fn list_projects_result() -> Result<Vec<GcpProject>, String> {
     let args = [
         "projects",
@@ -630,96 +621,6 @@ pub async fn test_instance_iam_permissions(
         iap_tunnel: parsed.iap_tunnel,
         os_login: parsed.os_login,
     })
-}
-
-/// List zones that have compute instances for a given project.
-pub async fn list_zones(project: &str) -> Vec<String> {
-    if !is_valid_project(project) {
-        log::warn!("Invalid project ID for zone listing: {project}");
-        return Vec::new();
-    }
-
-    let project_flag = format!("--project={project}");
-    let args = [
-        "compute",
-        "instances",
-        "list",
-        "--format=json(zone)",
-        &project_flag,
-    ];
-    match run_gcloud(&args).await {
-        Ok(output) => {
-            let entries: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap_or_default();
-            let mut zones = HashSet::new();
-            for entry in &entries {
-                if let Some(zone_str) = entry.get("zone").and_then(|z| z.as_str()) {
-                    // May be a full URL like "projects/.../zones/us-central1-a"
-                    let zone_name = zone_str.rsplit('/').next().unwrap_or(zone_str);
-                    zones.insert(zone_name.to_string());
-                }
-            }
-            let mut sorted: Vec<String> = zones.into_iter().collect();
-            sorted.sort();
-            sorted
-        }
-        Err(e) => {
-            log::warn!("Failed to list zones for project {project}: {e}");
-            Vec::new()
-        }
-    }
-}
-
-/// List compute instances in a given project and zone.
-pub async fn list_instances(project: &str, zone: &str) -> Vec<GceInstance> {
-    if !is_valid_project(project) {
-        log::warn!("Invalid project ID for instance listing: {project}");
-        return Vec::new();
-    }
-    if !is_valid_zone(zone) {
-        log::warn!("Invalid zone for instance listing: {zone}");
-        return Vec::new();
-    }
-
-    let project_flag = format!("--project={project}");
-    // Use the native `--zones=` flag instead of a `--filter=` expression so the
-    // zone string is consumed as a scoped allowlist rather than interpreted as
-    // gcloud filter syntax. The zone is already validated against RE_ZONE.
-    let zones_flag = format!("--zones={zone}");
-    let args = [
-        "compute",
-        "instances",
-        "list",
-        "--format=json",
-        &project_flag,
-        &zones_flag,
-        "--sort-by=name",
-    ];
-    match run_gcloud(&args).await {
-        Ok(output) => {
-            let entries: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap_or_default();
-            entries
-                .iter()
-                .filter_map(|e| {
-                    let name = e.get("name")?.as_str()?.to_string();
-                    let status = e
-                        .get("status")
-                        .and_then(|s| s.as_str())
-                        .unwrap_or("UNKNOWN")
-                        .to_string();
-                    Some(GceInstance {
-                        name,
-                        status,
-                        zone: Some(zone.to_string()),
-                        access: None,
-                    })
-                })
-                .collect()
-        }
-        Err(e) => {
-            log::warn!("Failed to list instances for {project}/{zone}: {e}");
-            Vec::new()
-        }
-    }
 }
 
 /// List all compute instances across all zones for a given project in a single
@@ -3133,26 +3034,6 @@ mod tests {
     fn map_start_error_passes_through_unknown() {
         let raw = "ERROR: weird unrelated message";
         assert_eq!(map_start_error(raw), raw);
-    }
-
-    #[test]
-    fn parse_zones_json_with_dedup() {
-        let json_str = r#"[
-            {"zone": "projects/p/zones/us-central1-a"},
-            {"zone": "projects/p/zones/us-central1-a"},
-            {"zone": "us-east1-b"}
-        ]"#;
-        let entries: Vec<serde_json::Value> = serde_json::from_str(json_str).unwrap();
-        let mut zones = HashSet::new();
-        for entry in &entries {
-            if let Some(zone_str) = entry.get("zone").and_then(|z| z.as_str()) {
-                let zone_name = zone_str.rsplit('/').next().unwrap_or(zone_str);
-                zones.insert(zone_name.to_string());
-            }
-        }
-        assert_eq!(zones.len(), 2);
-        assert!(zones.contains("us-central1-a"));
-        assert!(zones.contains("us-east1-b"));
     }
 
     // -- REST backend parser tests --

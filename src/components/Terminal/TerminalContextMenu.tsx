@@ -16,9 +16,10 @@ interface TerminalContextMenuProps {
  * Inline "Ask AI" input for the terminal right-click. Replaces the old fixed
  * preset menu: the user types their own question about the current selection
  * right here and presses Enter to send it to the AI chat pane. Mirrors the
- * positioning/dismissal of the HTML/React menus in HostTree/TabBar (the native
- * `show_context_menu` Tauri command does not return the picked item, so a
- * frontend popover is the only working path). Positioned at the click point
+ * positioning/dismissal of the HTML/React menus in HostTree/TabBar. Every menu
+ * in HoTTY is a React popover for the same reason: Tauri's native popup menu
+ * blocks and does not report which item was picked, so it cannot drive a
+ * selection (the command that wrapped it was removed). Positioned at the click point
  * with `position: fixed`, clamped into the viewport, and dismissed on any
  * outside interaction or Esc.
  */
