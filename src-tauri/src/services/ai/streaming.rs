@@ -10,8 +10,24 @@
 //! identical history-finalization rule, so the cancel/empty/format wording
 //! can't drift between providers.
 
+use std::future::Future;
+
+use tokio_util::sync::CancellationToken;
+
 use crate::services::ai::ai_provider::TokenUsage;
 use crate::services::ai::sse::{StreamError, StreamOutcome};
+
+/// Run `fut` unless `cancel` fires first (`None`). The stream loop already
+/// watches the token; this covers the waits before it — the request itself and
+/// an error body — which the HTTP client would otherwise let run on, keeping the
+/// send (and the conversation's queue behind it) stuck after a Stop.
+pub async fn cancellable<F: Future>(cancel: &CancellationToken, fut: F) -> Option<F::Output> {
+    tokio::select! {
+        biased;
+        _ = cancel.cancelled() => None,
+        r = fut => Some(r),
+    }
+}
 
 /// What a provider does with a stream that ended without a transport error.
 #[derive(Debug, PartialEq)]
@@ -164,6 +180,42 @@ mod tests {
                 usage: Some(usage),
             }
         );
+    }
+
+    #[tokio::test]
+    async fn cancellable_stops_a_pending_wait() {
+        let cancel = CancellationToken::new();
+        let trigger = cancel.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            trigger.cancel();
+        });
+        let r = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            cancellable(&cancel, std::future::pending::<()>()),
+        )
+        .await
+        .expect("cancel must end the wait");
+        assert_eq!(r, None);
+    }
+
+    #[tokio::test]
+    async fn cancellable_returns_a_finished_result() {
+        let cancel = CancellationToken::new();
+        assert_eq!(cancellable(&cancel, async { 7 }).await, Some(7));
+    }
+
+    #[tokio::test]
+    async fn cancellable_does_not_start_after_a_cancel() {
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+        let polled = std::sync::atomic::AtomicBool::new(false);
+        let r = cancellable(&cancel, async {
+            polled.store(true, std::sync::atomic::Ordering::SeqCst);
+        })
+        .await;
+        assert_eq!(r, None);
+        assert!(!polled.load(std::sync::atomic::Ordering::SeqCst));
     }
 
     #[test]

@@ -25,7 +25,7 @@ use crate::services::ai::errors::{
 use crate::services::ai::history::ChatHistoryStore;
 use crate::services::ai::sse::run_google_sse_stream;
 use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
-use crate::services::ai::streaming::{resolve_turn, TurnResolution};
+use crate::services::ai::streaming::{cancellable, resolve_turn, TurnResolution};
 use crate::services::ai::validation::{is_valid_api_key, is_valid_model};
 
 // ---------------------------------------------------------------------------
@@ -698,15 +698,20 @@ impl AIProvider for GeminiProvider {
             "[gemini] Sending message, model={model}, system_instruction={system_instruction:?}"
         );
 
-        let response = match self
+        let request = self
             .http_client
             .post(&url)
             .header("Content-Type", "application/json")
             .header("Authorization", format!("Bearer {token}"))
             .body(body.to_string())
-            .send()
-            .await
-        {
+            .send();
+        // Stopped before the server answered: close the turn as cancelled, emit nothing.
+        let Some(sent) = cancellable(&cancel_token, request).await else {
+            self.history.finalize_assistant(&sid, "model", "", true);
+            self.cancel_tokens.lock().unwrap().remove(&sid);
+            return Ok(());
+        };
+        let response = match sent {
             Ok(resp) => resp,
             Err(e) => {
                 // Transport failure — emit an error and roll back the pushed user
@@ -729,10 +734,12 @@ impl AIProvider for GeminiProvider {
 
         if !response.status().is_success() {
             let status = response.status().as_u16();
-            let error_body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".into());
+            let Some(error_body) = cancellable(&cancel_token, response.text()).await else {
+                self.history.finalize_assistant(&sid, "model", "", true);
+                self.cancel_tokens.lock().unwrap().remove(&sid);
+                return Ok(());
+            };
+            let error_body = error_body.unwrap_or_else(|_| "Unknown error".into());
             log::error!("[gemini] API error {status}: {error_body}");
             emit_chat_response(
                 &app_clone,

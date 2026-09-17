@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::{Arc, Mutex as StdMutex, MutexGuard as StdMutexGuard, PoisonError};
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde_json::Value;
@@ -31,7 +32,175 @@ pub struct AIServiceState {
     /// so `ai_chat_cancel` can interrupt a stream WITHOUT waiting on `service`.
     /// Also drained by `cancel_all_inflight` before a `.write()` so a rare state
     /// change never stalls behind a long-running read-held stream.
-    pub cancels: StdMutex<HashMap<String, (u64, CancellationToken)>>,
+    pub cancels: CancelRegistry,
+    /// One queue per conversation. A send, a clear and the next send run in
+    /// arrival order, so a superseded or cleared turn finishes writing history
+    /// before the next one reads or writes it.
+    pub gates: SessionGates,
+}
+
+impl AIServiceState {
+    pub fn new(service: AIService) -> Self {
+        Self {
+            service: RwLock::new(service),
+            cancels: StdMutex::new(HashMap::new()),
+            gates: SessionGates::default(),
+        }
+    }
+}
+
+/// In-flight (or queued) send per session: `(send generation, its token)`.
+pub type CancelRegistry = StdMutex<HashMap<String, (u64, CancellationToken)>>;
+
+/// Per-conversation FIFO locks (`tokio::sync::Mutex` wakes waiters in order).
+/// An entry lives only while someone holds or waits on it.
+#[derive(Default)]
+pub struct SessionGates {
+    inner: StdMutex<HashMap<String, Arc<Mutex<()>>>>,
+}
+
+impl SessionGates {
+    /// Take a place for `session_id`; `GateLease::lock` waits for its turn.
+    pub fn lease(&self, session_id: &str) -> GateLease<'_> {
+        let gate = self
+            .map()
+            .entry(session_id.to_string())
+            .or_default()
+            .clone();
+        GateLease {
+            gates: self,
+            session_id: session_id.to_string(),
+            gate,
+        }
+    }
+
+    fn map(&self) -> StdMutexGuard<'_, HashMap<String, Arc<Mutex<()>>>> {
+        self.inner.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+pub struct GateLease<'a> {
+    gates: &'a SessionGates,
+    session_id: String,
+    gate: Arc<Mutex<()>>,
+}
+
+impl GateLease<'_> {
+    /// Wait until every earlier send or clear on this conversation is done.
+    pub async fn lock(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.gate.lock().await
+    }
+}
+
+impl Drop for GateLease<'_> {
+    fn drop(&mut self) {
+        let mut map = self.gates.map();
+        // Gates are cloned only under this lock, so the count is stable here:
+        // the map's copy plus ours means nobody else holds or waits on it.
+        if Arc::strong_count(&self.gate) == 2
+            && map
+                .get(&self.session_id)
+                .is_some_and(|g| Arc::ptr_eq(g, &self.gate))
+        {
+            map.remove(&self.session_id);
+        }
+    }
+}
+
+/// Fire the token of the send running or queued for `session_id`. Returns
+/// whether there was one.
+fn cancel_session(cancels: &CancelRegistry, session_id: &str) -> bool {
+    let token = cancels
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(session_id)
+        .map(|(_, t)| t.clone());
+    match token {
+        Some(token) => {
+            token.cancel();
+            true
+        }
+        None => false,
+    }
+}
+
+/// Run one chat send in its conversation's queue. `send` receives the token
+/// that Stop, a superseding send, a clear and the backstop deadline fire.
+async fn run_send<F, Fut>(
+    cancels: &CancelRegistry,
+    gates: &SessionGates,
+    session_id: &str,
+    send: F,
+) -> Result<(), String>
+where
+    F: FnOnce(CancellationToken) -> Fut,
+    Fut: Future<Output = Result<(), String>>,
+{
+    // Register before queueing so Stop reaches a send that is still waiting.
+    let gen = SEND_GEN.fetch_add(1, Ordering::Relaxed);
+    let cancel_token = CancellationToken::new();
+    {
+        let mut cancels = cancels.lock().unwrap_or_else(PoisonError::into_inner);
+        // A superseding send for the same session cancels the previous stream.
+        if let Some((_, prev)) = cancels.insert(session_id.to_string(), (gen, cancel_token.clone()))
+        {
+            prev.cancel();
+        }
+    }
+
+    // Wait for the superseded send to close its turn; otherwise this question
+    // lands in history before that answer does.
+    let lease = gates.lease(session_id);
+    let _turn = lease.lock().await;
+
+    let result = if cancel_token.is_cancelled() {
+        // Stopped, superseded or cleared while queued: never start. Starting
+        // would write the question to history and open a billed request.
+        Ok(())
+    } else {
+        // Backstop deadline guard: cancels the same token if the send outlives
+        // the frontend watchdog (e.g. the UI crashed), so it unwinds gracefully
+        // and releases its read lock instead of blocking writes
+        // (auth/logout/switch), which — under tokio's write-preferring RwLock —
+        // would then stall new sends. Started after the queue so waiting does
+        // not count against it.
+        let deadline_token = cancel_token.clone();
+        let deadline_guard = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(STREAM_DEADLINE_SECS)).await;
+            log::warn!("[ai] stream exceeded backstop deadline; cancelling");
+            deadline_token.cancel();
+        });
+        let result = send(cancel_token).await;
+        deadline_guard.abort();
+        result
+    };
+
+    // Deregister — but only if we're still the current entry (a newer send for the
+    // same session may have replaced us while we streamed or waited).
+    {
+        let mut cancels = cancels.lock().unwrap_or_else(PoisonError::into_inner);
+        if cancels.get(session_id).is_some_and(|(g, _)| *g == gen) {
+            cancels.remove(session_id);
+        }
+    }
+    result
+}
+
+/// Clear a conversation: stop its send, then wait for that send to close its
+/// turn so nothing it writes afterwards survives the clear.
+async fn run_clear<F, Fut>(
+    cancels: &CancelRegistry,
+    gates: &SessionGates,
+    session_id: &str,
+    clear: F,
+) where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = ()>,
+{
+    cancel_session(cancels, session_id);
+    let lease = gates.lease(session_id);
+    let _turn = lease.lock().await;
+    clear().await;
 }
 
 /// Cancel every in-flight stream. Called before acquiring the service WRITE lock:
@@ -287,56 +456,30 @@ pub async fn ai_chat_send(
     }
     validate_images(&images)?;
 
-    // Register a cancellation token OUTSIDE the service lock before streaming, so
+    // The cancellation token is registered OUTSIDE the service lock, so
     // ai_chat_cancel (Stop / watchdog) can interrupt this stream without touching
-    // the service lock. The stream itself holds only a READ lock, so concurrent
-    // sends from other tabs/windows run in parallel rather than serializing.
-    let gen = SEND_GEN.fetch_add(1, Ordering::Relaxed);
-    let cancel_token = CancellationToken::new();
-    {
-        let mut cancels = state.cancels.lock().unwrap();
-        // A superseding send for the same session cancels the previous stream.
-        if let Some((_, prev)) = cancels.insert(session_id.clone(), (gen, cancel_token.clone())) {
-            prev.cancel();
-        }
-    }
-
-    // Backstop deadline guard: cancels the same token if the stream outlives the
-    // frontend watchdog (e.g. the UI crashed), so send_message unwinds gracefully
-    // and releases its read lock instead of blocking writes (auth/logout/switch),
-    // which — under tokio's write-preferring RwLock — would then stall new sends.
-    let deadline_token = cancel_token.clone();
-    let deadline_guard = tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(STREAM_DEADLINE_SECS)).await;
-        log::warn!("[ai] stream exceeded backstop deadline; cancelling");
-        deadline_token.cancel();
-    });
-
-    let result = {
-        let service = state.service.read().await;
+    // the service lock. The stream itself holds only a READ lock, so sends from
+    // other tabs/windows run in parallel; only the same conversation queues.
+    // Lock order is always gate → service, and writers never take a gate.
+    let ai = state.inner();
+    let sid = session_id.as_str();
+    let (app, message, model) = (&app, message.as_str(), model.as_str());
+    let system_instruction = system_instruction.as_deref();
+    run_send(&ai.cancels, &ai.gates, sid, |cancel_token| async move {
+        let service = ai.service.read().await;
         service
             .send_message(
-                &app,
-                &session_id,
-                &message,
-                &model,
-                system_instruction.as_deref(),
+                app,
+                sid,
+                message,
+                model,
+                system_instruction,
                 images,
                 cancel_token,
             )
             .await
-    };
-    deadline_guard.abort();
-
-    // Deregister — but only if we're still the current entry (a newer send for the
-    // same session may have replaced us while we streamed).
-    {
-        let mut cancels = state.cancels.lock().unwrap();
-        if cancels.get(&session_id).is_some_and(|(g, _)| *g == gen) {
-            cancels.remove(&session_id);
-        }
-    }
-    result
+    })
+    .await
 }
 
 #[tauri::command]
@@ -347,15 +490,7 @@ pub async fn ai_chat_cancel(
     validate_session_id(&session_id)?;
     // Cancel WITHOUT taking the service lock (the stream holds it). The streaming
     // send selects on the token and unwinds, releasing the service lock.
-    let token = state
-        .cancels
-        .lock()
-        .unwrap()
-        .get(&session_id)
-        .map(|(_, t)| t.clone());
-    if let Some(token) = token {
-        token.cancel();
-    }
+    cancel_session(&state.cancels, &session_id);
     Ok(())
 }
 
@@ -365,10 +500,18 @@ pub async fn ai_chat_clear(
     session_id: String,
 ) -> Result<(), String> {
     validate_session_id(&session_id)?;
-    // Read lock: clear_history is interior-mutable, so New Chat / tab close never
-    // blocks (or is blocked by) an in-flight stream.
-    let service = state.service.read().await;
-    service.clear_history(&session_id);
+    // New Chat, tab close and pane close all discard the conversation, so its
+    // in-flight send is stopped too (it would otherwise stream, and bill, to the
+    // end). Queued behind that send: a clear that ran first would be undone by
+    // the turn the send writes as it closes.
+    let ai = state.inner();
+    let sid = session_id.as_str();
+    run_clear(&ai.cancels, &ai.gates, sid, || async move {
+        // Read lock: clear_history is interior-mutable.
+        let service = ai.service.read().await;
+        service.clear_history(sid);
+    })
+    .await;
     Ok(())
 }
 
@@ -475,6 +618,205 @@ pub async fn select_service_account_key_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::ai::history::ChatHistoryStore;
+    use futures::poll;
+    use std::pin::pin;
+    use std::sync::atomic::AtomicBool;
+
+    fn gate_count(gates: &SessionGates) -> usize {
+        gates.map().len()
+    }
+
+    fn contents(store: &ChatHistoryStore, sid: &str) -> Vec<String> {
+        store.snapshot(sid).into_iter().map(|m| m.content).collect()
+    }
+
+    #[tokio::test]
+    async fn a_second_turn_on_the_same_conversation_waits_for_the_first() {
+        let gates = SessionGates::default();
+        let first = gates.lease("s");
+        let held = first.lock().await;
+
+        let second = gates.lease("s");
+        let mut waiting = pin!(second.lock());
+        assert!(poll!(waiting.as_mut()).is_pending());
+
+        drop(held);
+        let _turn = waiting.await;
+    }
+
+    #[tokio::test]
+    async fn different_conversations_do_not_wait_for_each_other() {
+        let gates = SessionGates::default();
+        let a = gates.lease("a");
+        let _held = a.lock().await;
+        let b = gates.lease("b");
+        let mut other = pin!(b.lock());
+        assert!(poll!(other.as_mut()).is_ready());
+    }
+
+    #[tokio::test]
+    async fn a_gate_is_forgotten_once_nobody_holds_or_waits_on_it() {
+        let gates = SessionGates::default();
+        let first = gates.lease("s");
+        let held = first.lock().await;
+        let second = gates.lease("s");
+
+        drop(held);
+        drop(first);
+        // The waiter still needs the same gate.
+        assert_eq!(gate_count(&gates), 1);
+        drop(second.lock().await);
+        drop(second);
+        assert_eq!(gate_count(&gates), 0);
+    }
+
+    #[tokio::test]
+    async fn queued_turns_run_in_arrival_order() {
+        let gates = SessionGates::default();
+        let order = StdMutex::new(Vec::new());
+        let turn = |n: u32| {
+            let gates = &gates;
+            let order = &order;
+            async move {
+                let lease = gates.lease("s");
+                let _t = lease.lock().await;
+                order.lock().unwrap().push(n);
+                tokio::task::yield_now().await;
+            }
+        };
+        let mut first = pin!(turn(1));
+        let mut second = pin!(turn(2));
+        let mut third = pin!(turn(3));
+        // Queue them 1, 2, 3 before any finishes.
+        assert!(poll!(first.as_mut()).is_pending());
+        assert!(poll!(second.as_mut()).is_pending());
+        assert!(poll!(third.as_mut()).is_pending());
+        tokio::join!(third, second, first);
+        assert_eq!(*order.lock().unwrap(), vec![1, 2, 3]);
+        assert_eq!(gate_count(&gates), 0);
+    }
+
+    #[tokio::test]
+    async fn a_waiter_that_gives_up_leaves_no_gate_behind() {
+        let gates = SessionGates::default();
+        let first = gates.lease("s");
+        let held = first.lock().await;
+        {
+            let quitter = gates.lease("s");
+            let mut waiting = pin!(quitter.lock());
+            assert!(poll!(waiting.as_mut()).is_pending());
+        }
+        drop(held);
+        drop(first);
+        assert_eq!(gate_count(&gates), 0);
+    }
+
+    #[test]
+    fn cancel_session_fires_only_a_registered_token() {
+        let cancels: CancelRegistry = StdMutex::new(HashMap::new());
+        let token = CancellationToken::new();
+        cancels
+            .lock()
+            .unwrap()
+            .insert("s".into(), (1, token.clone()));
+        assert!(!cancel_session(&cancels, "other"));
+        assert!(!token.is_cancelled());
+        assert!(cancel_session(&cancels, "s"));
+        assert!(token.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn a_superseding_send_writes_after_the_stopped_turn_closes() {
+        let (cancels, gates) = (StdMutex::new(HashMap::new()), SessionGates::default());
+        let store = &ChatHistoryStore::new(0);
+
+        let mut old = pin!(run_send(&cancels, &gates, "s", |token| async move {
+            store.push("s", "user", "U1");
+            token.cancelled().await;
+            store.finalize_assistant("s", "assistant", "p", true);
+            Ok(())
+        }));
+        assert!(poll!(old.as_mut()).is_pending());
+
+        let mut new = pin!(run_send(&cancels, &gates, "s", |_| async move {
+            store.push("s", "user", "U2");
+            store.finalize_assistant("s", "assistant", "A2", false);
+            Ok(())
+        }));
+        assert!(poll!(new.as_mut()).is_pending());
+
+        let (a, b) = tokio::join!(old, new);
+        assert_eq!((a, b), (Ok(()), Ok(())));
+        assert_eq!(
+            contents(store, "s"),
+            vec!["U1", "p\n\n[cancelled by user]", "U2", "A2"]
+        );
+        assert!(cancels.lock().unwrap().is_empty());
+        assert_eq!(gate_count(&gates), 0);
+    }
+
+    #[tokio::test]
+    async fn a_clear_lands_between_the_stopped_turn_and_the_next_send() {
+        let (cancels, gates) = (StdMutex::new(HashMap::new()), SessionGates::default());
+        let store = &ChatHistoryStore::new(0);
+
+        let mut old = pin!(run_send(&cancels, &gates, "s", |token| async move {
+            store.push("s", "user", "U_old");
+            token.cancelled().await;
+            store.finalize_assistant("s", "assistant", "", true);
+            Ok(())
+        }));
+        assert!(poll!(old.as_mut()).is_pending());
+
+        let mut clear = pin!(run_clear(&cancels, &gates, "s", || async move {
+            store.clear("s");
+        }));
+        assert!(poll!(clear.as_mut()).is_pending());
+
+        let mut new = pin!(run_send(&cancels, &gates, "s", |_| async move {
+            store.push("s", "user", "U_new");
+            store.finalize_assistant("s", "assistant", "A_new", false);
+            Ok(())
+        }));
+        assert!(poll!(new.as_mut()).is_pending());
+
+        let _ = tokio::join!(old, clear, new);
+        assert_eq!(contents(store, "s"), vec!["U_new", "A_new"]);
+    }
+
+    #[tokio::test]
+    async fn a_send_stopped_while_queued_never_starts() {
+        let (cancels, gates) = (StdMutex::new(HashMap::new()), SessionGates::default());
+        let store = &ChatHistoryStore::new(0);
+        let started = &AtomicBool::new(false);
+
+        let mut old = pin!(run_send(&cancels, &gates, "s", |token| async move {
+            store.push("s", "user", "U1");
+            token.cancelled().await;
+            store.finalize_assistant("s", "assistant", "", true);
+            Ok(())
+        }));
+        assert!(poll!(old.as_mut()).is_pending());
+
+        let mut queued = pin!(run_send(&cancels, &gates, "s", |_| async move {
+            started.store(true, Ordering::SeqCst);
+            store.push("s", "user", "U2");
+            Ok(())
+        }));
+        assert!(poll!(queued.as_mut()).is_pending());
+
+        // New Chat while the second send is still waiting: it stops that one.
+        let mut clear = pin!(run_clear(&cancels, &gates, "s", || async move {
+            store.clear("s");
+        }));
+        assert!(poll!(clear.as_mut()).is_pending());
+
+        let _ = tokio::join!(old, queued, clear);
+        assert!(!started.load(Ordering::SeqCst));
+        assert!(contents(store, "s").is_empty());
+        assert!(cancels.lock().unwrap().is_empty());
+    }
 
     #[test]
     fn validate_session_id_empty() {

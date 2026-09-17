@@ -51,14 +51,15 @@ pub fn list_serial_ports() -> Result<Vec<SerialPortInfo>, String> {
 pub async fn list_wsl_distributions() -> Result<Vec<String>, String> {
     use tokio::process::Command;
 
-    let output = Command::new("wsl.exe")
-        .args(["--list", "--quiet"])
-        .output()
-        .await
-        .map_err(|e| {
-            log::error!("failed to run wsl.exe: {e}");
-            format!("failed to run wsl.exe: {e}")
-        })?;
+    let mut cmd = Command::new("wsl.exe");
+    cmd.args(["--list", "--quiet"]);
+    // Without this a release build flashes a console window on every listing.
+    #[cfg(windows)]
+    cmd.creation_flags(crate::services::os_paths::CREATE_NO_WINDOW);
+    let output = cmd.output().await.map_err(|e| {
+        log::error!("failed to run wsl.exe: {e}");
+        format!("failed to run wsl.exe: {e}")
+    })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -122,11 +123,12 @@ pub async fn detect_git_bash() -> Result<Option<String>, String> {
     }
 
     // Fallback: search PATH for git.exe, derive bash.exe path
-    if let Ok(output) = tokio::process::Command::new("where")
-        .arg("git.exe")
-        .output()
-        .await
-    {
+    let mut cmd = tokio::process::Command::new("where");
+    cmd.arg("git.exe");
+    // Without this a release build flashes a console window during detection.
+    #[cfg(windows)]
+    cmd.creation_flags(crate::services::os_paths::CREATE_NO_WINDOW);
+    if let Ok(output) = cmd.output().await {
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if let Some(git_path) = stdout.lines().next() {

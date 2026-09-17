@@ -23,7 +23,7 @@ use crate::services::ai::sse::{
     run_anthropic_sse_stream, run_google_sse_stream, StreamError, StreamOutcome,
 };
 use crate::services::ai::streaming::{
-    resolve_turn, TurnFailure, TurnResolution, MAX_HISTORY_MESSAGES,
+    cancellable, resolve_turn, TurnFailure, TurnResolution, MAX_HISTORY_MESSAGES,
 };
 use crate::services::path_safety::is_unc_path;
 
@@ -599,25 +599,29 @@ impl VertexAIProvider {
 
         log::debug!("[vertexai] Sending message (Google), url={url}");
 
-        let response = self
+        let request = self
             .http_client
             .post(&url)
             .header("Content-Type", "application/json")
             .header("Authorization", format!("Bearer {token}"))
             .body(body.to_string())
-            .send()
-            .await
-            .map_err(|e| format!("Vertex AI request failed: {e}"))?;
+            .send();
+        // Stopped before the server answered: an empty outcome, which
+        // `send_message` closes as cancelled.
+        let Some(sent) = cancellable(cancel_token, request).await else {
+            return Ok(StreamOutcome::default());
+        };
+        let response = sent.map_err(|e| format!("Vertex AI request failed: {e}"))?;
 
         if !response.status().is_success() {
             // Capture the status BEFORE consuming the body with .text() — once
             // the response is consumed the status is gone, so this must be read
             // first or the user-facing error would show a placeholder code.
             let status = response.status().as_u16();
-            let error_body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".into());
+            let Some(error_body) = cancellable(cancel_token, response.text()).await else {
+                return Ok(StreamOutcome::default());
+            };
+            let error_body = error_body.unwrap_or_else(|_| "Unknown error".into());
             return Err(format!("API error {status}: {error_body}"));
         }
 
@@ -697,24 +701,27 @@ impl VertexAIProvider {
 
         log::debug!("[vertexai] Sending message (Anthropic), url={url}");
 
-        let response = self
+        let request = self
             .http_client
             .post(&url)
             .header("Content-Type", "application/json")
             .header("Authorization", format!("Bearer {token}"))
             .header("X-Goog-User-Project", &config.project_id)
             .body(body.to_string())
-            .send()
-            .await
-            .map_err(|e| format!("Vertex AI request failed: {e}"))?;
+            .send();
+        // Stopped before the server answered: see `call_google_api`.
+        let Some(sent) = cancellable(cancel_token, request).await else {
+            return Ok(StreamOutcome::default());
+        };
+        let response = sent.map_err(|e| format!("Vertex AI request failed: {e}"))?;
 
         if !response.status().is_success() {
             // Capture the status BEFORE consuming the body with .text().
             let status = response.status().as_u16();
-            let error_body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".into());
+            let Some(error_body) = cancellable(cancel_token, response.text()).await else {
+                return Ok(StreamOutcome::default());
+            };
+            let error_body = error_body.unwrap_or_else(|_| "Unknown error".into());
             return Err(format!("API error {status}: {error_body}"));
         }
 

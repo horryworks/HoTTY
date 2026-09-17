@@ -254,14 +254,27 @@ async fn execute_ping(target: &str) -> PingResult {
     }
 }
 
-/// Parse RTT from ping output (e.g., "time=45ms" or "time<1ms").
+/// Parse RTT from ping output in any Windows display language.
+///
+/// `ping.exe` writes in the OEM code page and the output is read as lossy
+/// UTF-8, so the label ("time", "時間", "время") and even the unit ("ms", "мс")
+/// can arrive as replacement characters. What stays ASCII in every language is
+/// `=`/`<`, the digits and `TTL=`, so an IPv4 reply is read as the number just
+/// before `TTL=` (`time=45ms TTL=59`, `時間 =12ms TTL=64`). IPv6 replies carry
+/// no TTL and fall back to a number followed by `ms` (`time<1ms`).
 fn parse_rtt(output: &str) -> Option<u32> {
     use std::sync::OnceLock;
-    static RE: OnceLock<regex_lite::Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| regex_lite::Regex::new(r"(?i)time[=<](\d+)\s*ms").unwrap());
-    re.captures(output)
-        .and_then(|cap| cap.get(1))
-        .and_then(|m| m.as_str().parse().ok())
+    static BEFORE_TTL: OnceLock<regex_lite::Regex> = OnceLock::new();
+    static WITH_MS: OnceLock<regex_lite::Regex> = OnceLock::new();
+    let before_ttl = BEFORE_TTL
+        .get_or_init(|| regex_lite::Regex::new(r"[=<]\s*(\d+)\s*\S{0,4}\s+TTL=").unwrap());
+    let with_ms =
+        WITH_MS.get_or_init(|| regex_lite::Regex::new(r"(?i)[=<]\s*(\d+)\s*ms\b").unwrap());
+    [before_ttl, with_ms].into_iter().find_map(|re| {
+        re.captures(output)
+            .and_then(|cap| cap.get(1))
+            .and_then(|m| m.as_str().parse().ok())
+    })
 }
 
 /// Parse TTL from ping output (e.g., "TTL=59").
@@ -560,6 +573,50 @@ mod tests {
     fn parse_rtt_no_match() {
         let output = "Request timed out.";
         assert_eq!(parse_rtt(output), None);
+        let output = "Reply from 192.0.2.1: Destination host unreachable.";
+        assert_eq!(parse_rtt(output), None);
+    }
+
+    /// What `execute_ping` sees: OEM-code-page bytes read as lossy UTF-8.
+    fn as_read_from_ping(text: &str, oem: &'static encoding_rs::Encoding) -> String {
+        let (bytes, _, _) = oem.encode(text);
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+
+    #[test]
+    fn parse_rtt_full_english_output_uses_the_reply_line() {
+        let output = "Pinging 192.0.2.1 with 32 bytes of data:\r\n\
+                      Reply from 192.0.2.1: bytes=32 time=45ms TTL=59\r\n\r\n\
+                      Ping statistics for 192.0.2.1:\r\n\
+                      \x20   Packets: Sent = 1, Received = 1, Lost = 0 (0% loss),\r\n\
+                      Approximate round trip times in milli-seconds:\r\n\
+                      \x20   Minimum = 45ms, Maximum = 45ms, Average = 45ms\r\n";
+        assert_eq!(parse_rtt(output), Some(45));
+    }
+
+    #[test]
+    fn parse_rtt_japanese_output() {
+        let output = as_read_from_ping(
+            "192.0.2.1 からの応答: バイト数 =32 時間 =12ms TTL=64",
+            encoding_rs::SHIFT_JIS,
+        );
+        assert_eq!(parse_rtt(&output), Some(12));
+    }
+
+    #[test]
+    fn parse_rtt_russian_output_with_a_cyrillic_unit() {
+        let output = as_read_from_ping(
+            "Ответ от 192.0.2.1: число байт=32 время=7мс TTL=57",
+            encoding_rs::IBM866,
+        );
+        assert_eq!(parse_rtt(&output), Some(7));
+    }
+
+    #[test]
+    fn parse_rtt_ipv6_reply_without_ttl() {
+        assert_eq!(parse_rtt("Reply from ::1: time<1ms"), Some(1));
+        let output = as_read_from_ping("::1 からの応答: 時間 <1ms", encoding_rs::SHIFT_JIS);
+        assert_eq!(parse_rtt(&output), Some(1));
     }
 
     #[test]

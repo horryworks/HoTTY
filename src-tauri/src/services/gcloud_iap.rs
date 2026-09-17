@@ -1608,7 +1608,48 @@ async fn start_iap_tunnel(
         "gcloud-iap[{gcloud_pid}]: tunnel ready on localhost:{port} (took {:?}, probe_attempts={probe_attempts})",
         phase_start.elapsed()
     );
+    // Keep reading gcloud for the tunnel's lifetime: dropping the readers here
+    // closed the pipes, so why a tunnel later died never reached the log (and
+    // gcloud could fail writing to a pipe nobody reads). Log only — the
+    // terminal belongs to ssh by now.
+    tokio::spawn(drain_tunnel_output(
+        stdout_lines,
+        stderr_lines,
+        move |stream, line| {
+            if line.trim().is_empty() {
+                return;
+            }
+            let mut line = line.to_string();
+            truncate_on_char_boundary(&mut line, 500);
+            log::info!("gcloud-iap[{gcloud_pid}] tunnel {stream}: {line}");
+        },
+    ));
     Ok(IapTunnel { child, port })
+}
+
+/// Read both of gcloud's output pipes until each reaches EOF (the child exited)
+/// or fails, handing every line to `sink` with its stream name.
+async fn drain_tunnel_output<O, E>(
+    mut out: tokio::io::Lines<BufReader<O>>,
+    mut err: tokio::io::Lines<BufReader<E>>,
+    mut sink: impl FnMut(&'static str, &str),
+) where
+    O: tokio::io::AsyncRead + Unpin,
+    E: tokio::io::AsyncRead + Unpin,
+{
+    let (mut out_open, mut err_open) = (true, true);
+    while out_open || err_open {
+        tokio::select! {
+            line = out.next_line(), if out_open => match line {
+                Ok(Some(line)) => sink("stdout", &line),
+                Ok(None) | Err(_) => out_open = false,
+            },
+            line = err.next_line(), if err_open => match line {
+                Ok(Some(line)) => sink("stderr", &line),
+                Ok(None) | Err(_) => err_open = false,
+            },
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2989,6 +3030,48 @@ mod tests {
         let mut s = "ok".to_string();
         truncate_on_char_boundary(&mut s, 2048);
         assert_eq!(s, "ok");
+    }
+
+    async fn drained(out: &'static [u8], err: &'static [u8]) -> Vec<(&'static str, String)> {
+        let mut seen = Vec::new();
+        tokio::time::timeout(
+            Duration::from_secs(1),
+            drain_tunnel_output(
+                BufReader::new(out).lines(),
+                BufReader::new(err).lines(),
+                |stream, line| seen.push((stream, line.to_string())),
+            ),
+        )
+        .await
+        .expect("draining must end once both pipes close");
+        seen
+    }
+
+    #[tokio::test]
+    async fn drain_tunnel_output_reads_both_pipes_to_the_end() {
+        let mut seen = drained(b"a\nb\n", b"x\n").await;
+        seen.sort();
+        assert_eq!(
+            seen,
+            vec![
+                ("stderr", "x".to_string()),
+                ("stdout", "a".to_string()),
+                ("stdout", "b".to_string()),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn drain_tunnel_output_ends_when_one_pipe_is_already_empty() {
+        assert_eq!(
+            drained(b"", b"x\n").await,
+            vec![("stderr", "x".to_string())]
+        );
+        assert_eq!(
+            drained(b"a\n", b"").await,
+            vec![("stdout", "a".to_string())]
+        );
+        assert!(drained(b"", b"").await.is_empty());
     }
 
     #[test]

@@ -331,10 +331,7 @@ pub fn run() {
             registry.register(Box::new(VertexAIProvider::new(app_data_dir)));
 
             let service = AIService::new(registry, "openai");
-            app.manage(AIServiceState {
-                service: tokio::sync::RwLock::new(service),
-                cancels: std::sync::Mutex::new(std::collections::HashMap::new()),
-            });
+            app.manage(AIServiceState::new(service));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

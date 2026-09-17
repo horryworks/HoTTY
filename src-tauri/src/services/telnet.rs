@@ -113,6 +113,14 @@ enum LoginState {
 /// - We DO:   ECHO (server-side echo), SGA
 /// - Everything else is declined (WONT / DONT).
 pub fn process_iac(data: &[u8], naws: (u16, u16)) -> (Vec<u8>, Vec<u8>) {
+    let (out, resp, _) = process_iac_partial(data, naws);
+    (out, resp)
+}
+
+/// `process_iac` that also returns how many bytes it consumed. A command cut
+/// off by the end of `data` is left unconsumed (the count stops at its IAC), so
+/// the caller can retry it once the rest has arrived.
+fn process_iac_partial(data: &[u8], naws: (u16, u16)) -> (Vec<u8>, Vec<u8>, usize) {
     let mut out = Vec::with_capacity(data.len());
     let mut resp: Vec<u8> = Vec::new();
     let mut i = 0;
@@ -124,8 +132,8 @@ pub fn process_iac(data: &[u8], naws: (u16, u16)) -> (Vec<u8>, Vec<u8>) {
             continue;
         }
         if i + 1 >= data.len() {
-            // Incomplete trailing IAC — drop it.
-            break;
+            // Trailing IAC: its command byte is still on the way.
+            return (out, resp, i);
         }
         let cmd = data[i + 1];
         match cmd {
@@ -156,13 +164,13 @@ pub fn process_iac(data: &[u8], naws: (u16, u16)) -> (Vec<u8>, Vec<u8>) {
                     }
                     i = j + 2;
                 } else {
-                    // Unterminated — drop the rest.
-                    break;
+                    // No IAC SE yet: the subnegotiation continues in a later read.
+                    return (out, resp, i);
                 }
             }
             WILL => {
                 if i + 2 >= data.len() {
-                    break;
+                    return (out, resp, i);
                 }
                 let opt = data[i + 2];
                 // Accept server's WILL for options we want it to do.
@@ -172,7 +180,7 @@ pub fn process_iac(data: &[u8], naws: (u16, u16)) -> (Vec<u8>, Vec<u8>) {
             }
             WONT => {
                 if i + 2 >= data.len() {
-                    break;
+                    return (out, resp, i);
                 }
                 let opt = data[i + 2];
                 resp.extend_from_slice(&[IAC, DONT, opt]);
@@ -180,7 +188,7 @@ pub fn process_iac(data: &[u8], naws: (u16, u16)) -> (Vec<u8>, Vec<u8>) {
             }
             DO => {
                 if i + 2 >= data.len() {
-                    break;
+                    return (out, resp, i);
                 }
                 let opt = data[i + 2];
                 // Server asks us to enable option. Accept NAWS, SGA, TTYPE; decline others.
@@ -194,7 +202,7 @@ pub fn process_iac(data: &[u8], naws: (u16, u16)) -> (Vec<u8>, Vec<u8>) {
             }
             DONT => {
                 if i + 2 >= data.len() {
-                    break;
+                    return (out, resp, i);
                 }
                 let opt = data[i + 2];
                 resp.extend_from_slice(&[IAC, WONT, opt]);
@@ -206,7 +214,44 @@ pub fn process_iac(data: &[u8], naws: (u16, u16)) -> (Vec<u8>, Vec<u8>) {
             }
         }
     }
-    (out, resp)
+    (out, resp, data.len())
+}
+
+/// Longest unfinished command carried between reads. A subnegotiation that
+/// never ends must not grow the buffer forever; past this it is dropped.
+const MAX_IAC_CARRY: usize = 4096;
+
+/// Stream-side IAC parser: a command split across two reads is carried over
+/// to the next one instead of being dropped (and its tail shown as text).
+#[derive(Default)]
+struct IacParser {
+    carry: Vec<u8>,
+}
+
+impl IacParser {
+    fn feed(&mut self, data: &[u8], naws: (u16, u16)) -> (Vec<u8>, Vec<u8>) {
+        if self.carry.is_empty() {
+            let (out, resp, consumed) = process_iac_partial(data, naws);
+            self.carry.extend_from_slice(&data[consumed..]);
+            self.cap_carry();
+            return (out, resp);
+        }
+        self.carry.extend_from_slice(data);
+        let (out, resp, consumed) = process_iac_partial(&self.carry, naws);
+        self.carry.drain(..consumed);
+        self.cap_carry();
+        (out, resp)
+    }
+
+    fn cap_carry(&mut self) {
+        if self.carry.len() > MAX_IAC_CARRY {
+            log::warn!(
+                "telnet: dropping {} bytes of an unterminated IAC sequence",
+                self.carry.len()
+            );
+            self.carry.clear();
+        }
+    }
 }
 
 // --- Login prompt detection -------------------------------------------
@@ -238,8 +283,8 @@ pub struct TelnetSession {
     writer_tx: Option<mpsc::Sender<WriterCmd>>,
     join: Vec<JoinHandle<()>>,
     login_done: Arc<Mutex<bool>>,
-    /// Fired by `disconnect()` (and on drop). Today it stops a jumpbox
-    /// handshake that is waiting on the bastion's host-key prompt.
+    /// Fired by `disconnect()` (and on drop). Stops the reader and keepalive
+    /// tasks, and a jumpbox handshake waiting on the bastion's host-key prompt.
     cancel: CancellationToken,
 }
 
@@ -392,11 +437,16 @@ impl SessionService for TelnetSession {
         if self.config.keepalive_interval_secs > 0 {
             let interval = Duration::from_secs(self.config.keepalive_interval_secs as u64);
             let ka_writer = write_half.clone();
+            let ka_cancel = self.cancel.clone();
             let ka_join = tokio::spawn(async move {
                 let mut ticker = tokio::time::interval(interval);
                 ticker.tick().await; // skip immediate
                 loop {
-                    ticker.tick().await;
+                    tokio::select! {
+                        biased;
+                        _ = ka_cancel.cancelled() => break,
+                        _ = ticker.tick() => {}
+                    }
                     let mut w = ka_writer.lock().await;
                     if w.write_all(&[IAC, NOP]).await.is_err() {
                         break;
@@ -414,6 +464,7 @@ impl SessionService for TelnetSession {
         let app_r = app.clone();
         let sid = session_id.clone();
         let writer_tx_for_login = tx.clone();
+        let reader_cancel = self.cancel.clone();
         let log_mgr: super::log_manager::LogManager = app
             .state::<super::log_manager::LogManager>()
             .inner()
@@ -434,9 +485,20 @@ impl SessionService for TelnetSession {
             let mut tail = String::new();
             // Keeps a character split across two reads intact.
             let mut decoder = StreamDecoder::new(encoding);
+            // Keeps a negotiation command split across two reads intact.
+            let mut iac = IacParser::default();
 
             loop {
-                let n = match rd.read(&mut buf).await {
+                let read = tokio::select! {
+                    biased;
+                    _ = reader_cancel.cancelled() => {
+                        // disconnect() initiated teardown: stop without a
+                        // 'disconnected' emit, the frontend is removing the pane.
+                        break;
+                    }
+                    read = rd.read(&mut buf) => read,
+                };
+                let n = match read {
                     Ok(0) => {
                         log::info!("telnet {sid}: read returned 0 (remote closed)");
                         emit_session_status(&app_r, &sid, "disconnected");
@@ -453,7 +515,7 @@ impl SessionService for TelnetSession {
                 log::debug!("telnet {sid}: read {n} bytes");
                 // A late server `DO NAWS` is answered with the connect-time size;
                 // live window resizes still push fresh NAWS via WriterCmd::Resize.
-                let (cleaned, response) = process_iac(&buf[..n], (naws_cols, naws_rows));
+                let (cleaned, response) = iac.feed(&buf[..n], (naws_cols, naws_rows));
                 if !response.is_empty() {
                     log::debug!(
                         "telnet {sid}: sending {} bytes of IAC response",
@@ -534,7 +596,7 @@ impl SessionService for TelnetSession {
                         }
                         Some(Ok(more)) => {
                             let (cleaned, response) =
-                                process_iac(&buf[..more], (naws_cols, naws_rows));
+                                iac.feed(&buf[..more], (naws_cols, naws_rows));
                             if !response.is_empty() {
                                 let _ = writer_tx_for_login.send(WriterCmd::Bytes(response)).await;
                             }
@@ -638,8 +700,8 @@ impl SessionService for TelnetSession {
                 .disconnect(russh::Disconnect::ByApplication, "bye", "en")
                 .await;
         }
-        // The reader is blocked in rd.read() with no graceful shutdown path on a
-        // manual disconnect, so it relies on the forced abort inside join_or_abort.
+        // The cancel above wakes the reader and keepalive tasks and Close ends
+        // the writer, so they all finish well inside the grace period.
         join_or_abort(
             std::mem::take(&mut self.join),
             "Telnet",
@@ -784,6 +846,72 @@ mod tests {
         assert_eq!(&resp[resp.len() - 2..], &[IAC, SE]);
         let body = &resp[4..resp.len() - 2];
         assert_eq!(body, b"XTERM-256COLOR");
+    }
+
+    /// Feed `input` split at `cut` and return everything the parser produced.
+    fn feed_split(input: &[u8], cut: usize) -> (Vec<u8>, Vec<u8>) {
+        let mut parser = IacParser::default();
+        let (mut clean, mut resp) = parser.feed(&input[..cut], (80, 24));
+        let (clean2, resp2) = parser.feed(&input[cut..], (80, 24));
+        clean.extend(clean2);
+        resp.extend(resp2);
+        (clean, resp)
+    }
+
+    #[test]
+    fn iac_parser_answers_a_do_split_across_reads() {
+        let input = [IAC, DO, OPT_TTYPE, b'x'];
+        for cut in 1..3 {
+            let mut parser = IacParser::default();
+            let (clean, resp) = parser.feed(&input[..cut], (80, 24));
+            assert!(clean.is_empty(), "cut {cut}");
+            assert!(resp.is_empty(), "cut {cut}");
+            let (clean, resp) = parser.feed(&input[cut..], (80, 24));
+            // The option byte must not leak onto the screen.
+            assert_eq!(clean, vec![b'x'], "cut {cut}");
+            assert_eq!(resp, vec![IAC, WILL, OPT_TTYPE], "cut {cut}");
+        }
+    }
+
+    #[test]
+    fn iac_parser_answers_a_split_subnegotiation_exactly_once() {
+        let input = [IAC, SB, OPT_TTYPE, 0x01, IAC, SE];
+        let (_, whole) = process_iac(&input, (80, 24));
+        for cut in 0..=input.len() {
+            let (clean, resp) = feed_split(&input, cut);
+            assert!(clean.is_empty(), "cut {cut}");
+            assert_eq!(resp, whole, "cut {cut}");
+        }
+    }
+
+    #[test]
+    fn iac_parser_unescapes_a_split_doubled_ff_once() {
+        let (clean, resp) = feed_split(&[b'a', IAC, IAC, b'b'], 2);
+        assert_eq!(clean, vec![b'a', IAC, b'b']);
+        assert!(resp.is_empty());
+    }
+
+    #[test]
+    fn iac_parser_passes_text_before_a_trailing_iac_through_at_once() {
+        let mut parser = IacParser::default();
+        let (clean, _) = parser.feed(&[b'a', b'b', b'c', IAC], (80, 24));
+        assert_eq!(clean, b"abc".to_vec());
+        let (clean, resp) = parser.feed(&[DO, NAWS], (80, 24));
+        assert!(clean.is_empty());
+        assert_eq!(&resp[..3], &[IAC, WILL, NAWS]);
+    }
+
+    #[test]
+    fn iac_parser_drops_a_subnegotiation_that_never_ends() {
+        let mut parser = IacParser::default();
+        let (clean, _) = parser.feed(&[IAC, SB, OPT_TTYPE], (80, 24));
+        assert!(clean.is_empty());
+        let (clean, _) = parser.feed(&[0u8; MAX_IAC_CARRY], (80, 24));
+        assert!(clean.is_empty());
+        assert!(parser.carry.is_empty());
+        // Ordinary data flows again afterwards.
+        let (clean, _) = parser.feed(b"login:", (80, 24));
+        assert_eq!(clean, b"login:".to_vec());
     }
 
     #[test]

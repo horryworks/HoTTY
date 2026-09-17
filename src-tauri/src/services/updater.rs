@@ -73,6 +73,8 @@ const MAX_REDIRECTS: usize = 5;
 
 const HTTP_TIMEOUT: Duration = Duration::from_secs(15);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(600);
+/// Longest silence mid-download before it is abandoned (see `read_body_capped`).
+const CHUNK_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Flags handed to the NSIS installer. Order is fixed only so that an accidental
 /// edit shows up as a test failure; `GetOptions` itself parses them unordered.
@@ -847,6 +849,50 @@ fn download_client(current_version: &str) -> Result<reqwest::Client, UpdaterErro
         .map_err(|e| UpdaterError::Client(e.to_string()))
 }
 
+/// Read a download body to the end. Fails when `cancel` fires, when the body
+/// passes `max` bytes, or when no data arrives for `idle`: a stalled connection
+/// would otherwise sit in `next()` — out of reach of the cancel — until the
+/// whole-request timeout, keeping every window's version switch "busy".
+/// `on_chunk` sees each chunk with the running total.
+async fn read_body_capped<St, B, E>(
+    mut stream: St,
+    cancel: &CancellationToken,
+    idle: Duration,
+    max: u64,
+    size_hint: u64,
+    mut on_chunk: impl FnMut(&[u8], u64),
+) -> Result<Vec<u8>, UpdaterError>
+where
+    St: futures::Stream<Item = Result<B, E>> + Unpin,
+    B: AsRef<[u8]>,
+    E: std::fmt::Display,
+{
+    let mut buf: Vec<u8> = Vec::with_capacity(size_hint.min(max) as usize);
+    loop {
+        let next = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => return Err(UpdaterError::Cancelled),
+            next = tokio::time::timeout(idle, stream.next()) => next,
+        };
+        let chunk = match next {
+            Err(_) => {
+                return Err(UpdaterError::Request(format!(
+                    "download stalled: no data for {idle:?}"
+                )))
+            }
+            Ok(None) => return Ok(buf),
+            Ok(Some(chunk)) => chunk.map_err(|e| UpdaterError::Request(e.to_string()))?,
+        };
+        let chunk = chunk.as_ref();
+        let downloaded = (buf.len() + chunk.len()) as u64;
+        if downloaded > max {
+            return Err(UpdaterError::TooLarge);
+        }
+        buf.extend_from_slice(chunk);
+        on_chunk(chunk, downloaded);
+    }
+}
+
 /// Download the installer, hashing as the bytes arrive, and write it out only
 /// once the hash matches what GitHub published.
 ///
@@ -874,11 +920,13 @@ pub async fn download_image(
         .ok_or(UpdaterError::UrlNotAllowed)?;
 
     let client = download_client(current_version)?;
-    let resp = client
-        .get(&asset.download_url)
-        .send()
-        .await
-        .map_err(|e| UpdaterError::Request(e.to_string()))?;
+    let resp = tokio::select! {
+        biased;
+        _ = cancel.cancelled() => return Err(UpdaterError::Cancelled),
+        resp = client.get(&asset.download_url).send() => {
+            resp.map_err(|e| UpdaterError::Request(e.to_string()))?
+        }
+    };
     if !resp.status().is_success() {
         return Err(UpdaterError::Status(resp.status().as_u16()));
     }
@@ -889,29 +937,25 @@ pub async fn download_image(
     }
 
     let mut hasher = Sha256::new();
-    let mut buf: Vec<u8> = Vec::with_capacity(total.min(MAX_IMAGE_BYTES) as usize);
-    let mut downloaded: u64 = 0;
     let mut last_emit = Instant::now();
     emit_progress(app, tag, UpdaterPhase::Downloading, 0, total);
 
-    let mut stream = resp.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        if cancel.is_cancelled() {
-            return Err(UpdaterError::Cancelled);
-        }
-        let chunk = chunk.map_err(|e| UpdaterError::Request(e.to_string()))?;
-        downloaded += chunk.len() as u64;
-        if downloaded > MAX_IMAGE_BYTES {
-            return Err(UpdaterError::TooLarge);
-        }
-        hasher.update(&chunk);
-        buf.extend_from_slice(&chunk);
-
-        if last_emit.elapsed() >= PROGRESS_INTERVAL {
-            emit_progress(app, tag, UpdaterPhase::Downloading, downloaded, total);
-            last_emit = Instant::now();
-        }
-    }
+    let buf = read_body_capped(
+        resp.bytes_stream(),
+        cancel,
+        CHUNK_IDLE_TIMEOUT,
+        MAX_IMAGE_BYTES,
+        total,
+        |chunk, downloaded| {
+            hasher.update(chunk);
+            if last_emit.elapsed() >= PROGRESS_INTERVAL {
+                emit_progress(app, tag, UpdaterPhase::Downloading, downloaded, total);
+                last_emit = Instant::now();
+            }
+        },
+    )
+    .await?;
+    let downloaded = buf.len() as u64;
     emit_progress(app, tag, UpdaterPhase::Downloading, downloaded, total);
 
     if cancel.is_cancelled() {
@@ -1038,6 +1082,100 @@ mod tests {
             relation: Relation::Newer,
             installable,
         }
+    }
+
+    // -- download body -------------------------------------------------------
+
+    type Chunk = Result<Vec<u8>, String>;
+
+    #[tokio::test]
+    async fn a_stalled_download_stops_on_cancel() {
+        let cancel = CancellationToken::new();
+        let trigger = cancel.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            trigger.cancel();
+        });
+        let r = tokio::time::timeout(
+            Duration::from_secs(1),
+            read_body_capped(
+                futures::stream::pending::<Chunk>(),
+                &cancel,
+                Duration::from_secs(30),
+                1024,
+                0,
+                |_, _| {},
+            ),
+        )
+        .await
+        .expect("cancel must end a stalled download");
+        assert!(matches!(r, Err(UpdaterError::Cancelled)));
+    }
+
+    #[tokio::test]
+    async fn a_silent_download_fails_after_the_idle_limit() {
+        let r = read_body_capped(
+            futures::stream::pending::<Chunk>(),
+            &CancellationToken::new(),
+            Duration::from_millis(50),
+            1024,
+            0,
+            |_, _| {},
+        )
+        .await;
+        match r {
+            Err(UpdaterError::Request(msg)) => {
+                assert!(msg.starts_with("download stalled"), "{msg}")
+            }
+            other => panic!("expected a stall error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_download_past_the_cap_is_too_large() {
+        let chunks: Vec<Chunk> = vec![Ok(vec![0; 600]), Ok(vec![0; 600])];
+        let r = read_body_capped(
+            futures::stream::iter(chunks),
+            &CancellationToken::new(),
+            Duration::from_secs(5),
+            1024,
+            0,
+            |_, _| {},
+        )
+        .await;
+        assert!(matches!(r, Err(UpdaterError::TooLarge)));
+    }
+
+    #[tokio::test]
+    async fn a_normal_download_returns_every_byte_in_order() {
+        let chunks: Vec<Chunk> = vec![Ok(b"ab".to_vec()), Ok(b"cde".to_vec()), Ok(b"f".to_vec())];
+        let mut seen = Vec::new();
+        let r = read_body_capped(
+            futures::stream::iter(chunks),
+            &CancellationToken::new(),
+            Duration::from_secs(5),
+            1024,
+            6,
+            |chunk, total| seen.push((chunk.len(), total)),
+        )
+        .await;
+        assert_eq!(r.unwrap(), b"abcdef".to_vec());
+        assert_eq!(seen, vec![(2, 2), (3, 5), (1, 6)]);
+    }
+
+    #[tokio::test]
+    async fn a_download_error_is_reported() {
+        let chunks: Vec<Chunk> = vec![Ok(b"ab".to_vec()), Err("reset".into())];
+        let r = read_body_capped(
+            futures::stream::iter(chunks),
+            &CancellationToken::new(),
+            Duration::from_secs(5),
+            1024,
+            0,
+            |_, _| {},
+        )
+        .await;
+        assert!(matches!(r, Err(UpdaterError::Request(msg)) if msg == "reset"));
     }
 
     // -- version comparison (moved from commands/updater.rs, unchanged) ------

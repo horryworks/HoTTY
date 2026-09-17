@@ -1559,14 +1559,10 @@ impl GcloudCacheState {
                 return;
             }
         };
-        let tmp = path.with_extension("json.tmp");
-        if let Err(e) = std::fs::write(&tmp, json.as_bytes()) {
-            log::warn!("gcp-cache: write temp persist file failed: {e}");
-            return;
-        }
-        if let Err(e) = std::fs::rename(&tmp, &path) {
-            log::warn!("gcp-cache: rename persist file failed: {e}");
-            let _ = std::fs::remove_file(&tmp);
+        // A unique temp name per write: two refreshes persisting at once used to
+        // share one fixed temp file and could rename a mix of both into place.
+        if let Err(e) = crate::services::atomic_file::atomic_write(&path, json.as_bytes()) {
+            log::warn!("gcp-cache: persist failed: {e}");
         }
     }
 
@@ -3552,6 +3548,94 @@ mod tests {
             restored.project_errors.get("beta-proj").map(|s| s.as_str()),
             Some("boom")
         );
+    }
+
+    #[test]
+    fn concurrent_persists_never_expose_a_torn_cache_file() {
+        let dir = std::env::temp_dir().join(format!(
+            "hotty-gcp-cache-persist-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or_default()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("gcp-cache.json");
+
+        // Each writer holds a snapshot of a different length, so a torn or
+        // interleaved write would not parse back as any one of them. The
+        // snapshots are large enough that writes overlap in time.
+        let expected: Vec<Vec<String>> = (0..8)
+            .map(|w| (0..=w * 1500).map(|i| format!("proj-{w}-{i}")).collect())
+            .collect();
+        let writers: Vec<_> = expected
+            .iter()
+            .map(|ids| {
+                let state = GcloudCacheState::new();
+                state.set_persist_path(path.clone());
+                *state.inner.write().unwrap() = GcloudCacheSnapshot {
+                    projects: ids
+                        .iter()
+                        .map(|id| GcpProject {
+                            id: id.clone(),
+                            name: id.clone(),
+                        })
+                        .collect(),
+                    ..Default::default()
+                };
+                state
+            })
+            .collect();
+
+        let torn_reads = std::sync::atomic::AtomicUsize::new(0);
+        let writers_done = std::sync::atomic::AtomicBool::new(false);
+        std::thread::scope(|s| {
+            // A reader the whole time: the next launch must never find a torn file.
+            s.spawn(|| {
+                while !writers_done.load(std::sync::atomic::Ordering::Relaxed) {
+                    if let Ok(data) = std::fs::read_to_string(&path) {
+                        if serde_json::from_str::<GcloudCacheSnapshot>(&data).is_err() {
+                            torn_reads.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    }
+                }
+            });
+            let handles: Vec<_> = writers
+                .iter()
+                .map(|state| {
+                    s.spawn(move || {
+                        for _ in 0..20 {
+                            state.persist_to_disk();
+                        }
+                    })
+                })
+                .collect();
+            for h in handles {
+                h.join().unwrap();
+            }
+            writers_done.store(true, std::sync::atomic::Ordering::Relaxed);
+        });
+        assert_eq!(
+            torn_reads.load(std::sync::atomic::Ordering::Relaxed),
+            0,
+            "a reader saw a torn cache file"
+        );
+
+        let data = std::fs::read_to_string(&path).expect("cache file exists");
+        let restored: GcloudCacheSnapshot =
+            serde_json::from_str(&data).expect("cache file is whole JSON");
+        let ids: Vec<String> = restored.projects.into_iter().map(|p| p.id).collect();
+        assert!(expected.contains(&ids), "cache holds a mix of writers");
+
+        let leftovers: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().contains(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "temp files left behind");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
