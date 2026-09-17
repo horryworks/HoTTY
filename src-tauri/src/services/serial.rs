@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 use super::read_pump::{spawn_read_pump, ReadStep};
 use super::session_service::{
     abort_all, emit_session_status, encoding_for, humanize_read_error, join_or_abort, SessionError,
-    SessionService, DISCONNECT_DRAIN_MS,
+    SessionService, StreamDecoder, DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -286,6 +286,9 @@ impl SessionService for SerialSession {
 
         let mut buf = vec![0u8; 8 * 1024];
         let mut read_handle = read_handle;
+        // Keeps a character split across two reads intact — a slow line
+        // splits multi-byte text on almost every read.
+        let mut decoder = StreamDecoder::new(encoding);
 
         let (reader_join, emitter_join) = spawn_read_pump(
             app.clone(),
@@ -306,10 +309,7 @@ impl SessionService for SerialSession {
                 };
                 match result {
                     Ok(0) => ReadStep::Eof,
-                    Ok(n) => {
-                        let (decoded, _enc, _had_errors) = encoding.decode(&buf[..n]);
-                        ReadStep::Data(decoded.into_owned())
-                    }
+                    Ok(n) => ReadStep::Data(decoder.decode(&buf[..n])),
                     // The port's 100ms read timeout expiring just means the
                     // device is idle. On a dedicated blocking thread this is a
                     // plain loop, not the 10Hz task-scheduler wake it used to be.

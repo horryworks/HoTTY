@@ -282,9 +282,10 @@ export function useAiWorkerSessions(options: UseAiWorkerSessionsOptions): UseAiW
                 // uncounted against the cap, and missed by the idle sweep.
                 if (!useAiWorkerSessionStore.getState().workers[id]) return;
                 await tauriService.connectSession(id, spec.protocol, spec.config, logging.enabled, logging.path);
-                // Closed while the connect itself was in flight: the disconnect
-                // `closeWorkerSession` issued then found nothing to close, so tear
-                // the now-real session down here instead of leaking it.
+                // Closed while the connect itself was in flight. The disconnect
+                // `closeWorkerSession` issued normally abandons the connect (it
+                // then rejects into the catch below), but one that finished in
+                // the same instant is live — tear it down here instead of leaking it.
                 if (!useAiWorkerSessionStore.getState().workers[id]) {
                     tauriService.disconnectSession(id).catch(() => {});
                 }

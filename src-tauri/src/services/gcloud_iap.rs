@@ -26,7 +26,7 @@ use super::session_service::{
     abort_all, emit_iap_connect_progress, emit_session_data, emit_session_error,
     emit_session_status, emit_to_owner, encoding_for, humanize_fs_error, humanize_pty_error,
     humanize_read_error, humanize_spawn_error, join_or_abort, SessionError, SessionService,
-    DISCONNECT_DRAIN_MS,
+    StreamDecoder, DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -1637,7 +1637,9 @@ fn register_vm_start_prompt(session_id: &str) -> oneshot::Receiver<bool> {
     rx
 }
 
-fn drop_vm_start_prompt(session_id: &str) {
+/// Forget a pending VM-start prompt. Also called by `connect_session` when a
+/// connect is abandoned mid-wait, so the sender does not outlive the attempt.
+pub(crate) fn drop_vm_start_prompt(session_id: &str) {
     if let Ok(mut map) = vm_start_prompts().lock() {
         map.remove(session_id);
     }
@@ -2175,7 +2177,8 @@ impl SessionService for GcloudIapSession {
         self.join.push(writer_join);
 
         // --- Reader thread + coalescing emitter (see services::read_pump) ---
-        let encoding = self.encoding;
+        // Keeps a character split across two reads intact.
+        let mut decoder = StreamDecoder::new(self.encoding);
         let mut reader = reader;
         let mut buf = vec![0u8; 32 * 1024];
         let mut total_bytes: u64 = 0;
@@ -2200,8 +2203,7 @@ impl SessionService for GcloudIapSession {
                     }
                     Ok(n) => {
                         total_bytes = total_bytes.saturating_add(n as u64);
-                        let (decoded, _enc, _had_errors) = encoding.decode(&buf[..n]);
-                        let text = decoded.into_owned();
+                        let text = decoder.decode(&buf[..n]);
                         // Retain only the head, and only the readable part of
                         // it — an authentication failure says everything it has
                         // to say in the first few lines, and an interactive

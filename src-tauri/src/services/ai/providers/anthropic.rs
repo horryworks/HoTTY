@@ -16,10 +16,13 @@ use crate::services::ai::classifier::{
     CLASSIFIER_SYSTEM_PROMPT,
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
-use crate::services::ai::errors::{describe_http_error, describe_transport_error};
+use crate::services::ai::errors::{
+    describe_http_error, describe_transport_error, describe_turn_failure,
+};
 use crate::services::ai::history::ChatHistoryStore;
 use crate::services::ai::sse::run_anthropic_sse_stream;
 use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
+use crate::services::ai::streaming::{resolve_turn, TurnResolution};
 use crate::services::ai::validation::{is_valid_api_key, is_valid_model};
 
 // ---------------------------------------------------------------------------
@@ -342,46 +345,63 @@ impl AIProvider for AnthropicProvider {
         )
         .await
         {
-            Ok(outcome) => {
-                // Normal completion or cancel: close out the assistant turn to
-                // preserve the alternation Anthropic requires. Without this, a
-                // cancelled turn would leave only the user message in history, and
-                // the next request would send two consecutive user messages and be
-                // rejected by the API.
-                self.history.finalize_assistant(
-                    &sid,
-                    "assistant",
-                    &outcome.full_response,
-                    cancel_token.is_cancelled(),
-                );
-                if !cancel_token.is_cancelled() {
+            // Normal completion or cancel: close out the assistant turn to
+            // preserve the alternation Anthropic requires. Without this, a
+            // cancelled turn would leave only the user message in history, and
+            // the next request would send two consecutive user messages and be
+            // rejected by the API.
+            Ok(outcome) => match resolve_turn(outcome, cancel_token.is_cancelled()) {
+                TurnResolution::Done { content, usage } => {
+                    self.history
+                        .finalize_assistant(&sid, "assistant", &content, false);
                     emit_chat_response(
                         &app_clone,
                         ChatResponseData {
                             session_id: sid.clone(),
                             response_type: ChatResponseKind::Done,
-                            content: outcome.full_response,
-                            usage_metadata: outcome.usage,
+                            content,
+                            usage_metadata: usage,
                         },
                     );
                 }
-            }
+                TurnResolution::Cancelled { partial } => {
+                    self.history
+                        .finalize_assistant(&sid, "assistant", &partial, true);
+                }
+                // `event: error` mid-answer (e.g. overloaded) or an empty answer:
+                // same handling as a hard error below.
+                TurnResolution::Failed(failure) => {
+                    log::warn!("[anthropic] Turn failed: {failure:?}");
+                    emit_chat_response(
+                        &app_clone,
+                        ChatResponseData {
+                            session_id: sid.clone(),
+                            response_type: ChatResponseKind::Error,
+                            content: describe_turn_failure("Anthropic", &failure),
+                            usage_metadata: None,
+                        },
+                    );
+                    self.history.pop_trailing_user(&sid);
+                }
+            },
             Err(e) => {
                 // Hard error mid-stream: emit the error and drop the user message
                 // rather than commit a partial assistant turn. Committing a
                 // truncated/empty assistant message would leave the history in a
                 // state the API rejects (or resend a partial reply as context) on
-                // the next send.
-                log::error!("[anthropic] Stream error: {e}");
-                emit_chat_response(
-                    &app_clone,
-                    ChatResponseData {
-                        session_id: sid.clone(),
-                        response_type: ChatResponseKind::Error,
-                        content: describe_transport_error("Anthropic"),
-                        usage_metadata: None,
-                    },
-                );
+                // the next send. A stopped turn gets no error.
+                if !cancel_token.is_cancelled() {
+                    log::error!("[anthropic] Stream error: {e}");
+                    emit_chat_response(
+                        &app_clone,
+                        ChatResponseData {
+                            session_id: sid.clone(),
+                            response_type: ChatResponseKind::Error,
+                            content: describe_transport_error("Anthropic"),
+                            usage_metadata: None,
+                        },
+                    );
+                }
                 self.history.pop_trailing_user(&sid);
             }
         }

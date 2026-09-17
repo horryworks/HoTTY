@@ -8,6 +8,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
 use super::net_validation::validate_host;
 
@@ -16,7 +17,7 @@ use super::read_pump::MAX_COALESCE_BYTES;
 use super::session_service::{
     abort_all, emit_session_data, emit_session_error, emit_session_pty_size, emit_session_status,
     encoding_for, humanize_io_error, humanize_read_error, join_or_abort, resolve_initial_pty_size,
-    SessionError, SessionService, DISCONNECT_DRAIN_MS,
+    SessionError, SessionService, StreamDecoder, DISCONNECT_DRAIN_MS,
 };
 
 // --- Telnet protocol constants -----------------------------------------
@@ -237,6 +238,9 @@ pub struct TelnetSession {
     writer_tx: Option<mpsc::Sender<WriterCmd>>,
     join: Vec<JoinHandle<()>>,
     login_done: Arc<Mutex<bool>>,
+    /// Fired by `disconnect()` (and on drop). Today it stops a jumpbox
+    /// handshake that is waiting on the bastion's host-key prompt.
+    cancel: CancellationToken,
 }
 
 enum WriterCmd {
@@ -255,6 +259,7 @@ impl TelnetSession {
             writer_tx: None,
             join: Vec::new(),
             login_done: Arc::new(Mutex::new(false)),
+            cancel: CancellationToken::new(),
         }
     }
 }
@@ -296,6 +301,7 @@ impl SessionService for TelnetSession {
                 &self.config.host,
                 self.config.port,
                 self.config.connect_timeout_secs,
+                self.cancel.clone(),
             )
             .await?;
             let (jumpbox_handle, stream) = tunnel.into_stream();
@@ -426,6 +432,8 @@ impl SessionService for TelnetSession {
             };
             // Tail of recently-decoded text, used for prompt detection.
             let mut tail = String::new();
+            // Keeps a character split across two reads intact.
+            let mut decoder = StreamDecoder::new(encoding);
 
             loop {
                 let n = match rd.read(&mut buf).await {
@@ -457,8 +465,7 @@ impl SessionService for TelnetSession {
                     log::debug!("telnet {sid}: {n} bytes all stripped as IAC");
                     continue;
                 }
-                let (decoded, _enc, _had_errors) = encoding.decode(&cleaned);
-                let mut text = decoded.into_owned();
+                let mut text = decoder.decode(&cleaned);
 
                 // Auto-login state machine
                 if login_state != LoginState::Done {
@@ -534,8 +541,7 @@ impl SessionService for TelnetSession {
                             if cleaned.is_empty() {
                                 continue;
                             }
-                            let (decoded, _enc, _had_errors) = encoding.decode(&cleaned);
-                            text.push_str(&decoded);
+                            decoder.decode_into(&cleaned, &mut text);
                         }
                         Some(Err(e)) => {
                             drain_error = Some(e);
@@ -546,13 +552,17 @@ impl SessionService for TelnetSession {
                     }
                 }
 
-                // Clone only when a log will consume it; emit first so the UI
-                // never waits on a disk write.
-                if log_mgr.is_logging_active() {
-                    emit_session_data(&app_r, &sid, text.clone());
-                    log_mgr.write(&sid, &text).await;
-                } else {
-                    emit_session_data(&app_r, &sid, text);
+                // Empty when every read so far ended mid-character: the decoder
+                // holds those bytes until the rest arrives.
+                if !text.is_empty() {
+                    // Clone only when a log will consume it; emit first so the
+                    // UI never waits on a disk write.
+                    if log_mgr.is_logging_active() {
+                        emit_session_data(&app_r, &sid, text.clone());
+                        log_mgr.write(&sid, &text).await;
+                    } else {
+                        emit_session_data(&app_r, &sid, text);
+                    }
                 }
 
                 // A close or error that arrived mid-drain is reported only after
@@ -619,6 +629,7 @@ impl SessionService for TelnetSession {
     }
 
     async fn disconnect(&mut self) -> Result<(), SessionError> {
+        self.cancel.cancel();
         if let Some(tx) = self.writer_tx.take() {
             let _ = tx.send(WriterCmd::Close).await;
         }
@@ -641,6 +652,8 @@ impl SessionService for TelnetSession {
 
 impl Drop for TelnetSession {
     fn drop(&mut self) {
+        // See `SshSession`'s Drop: stops an orphaned bastion handshake.
+        self.cancel.cancel();
         if self.writer_tx.is_some() {
             log::warn!("TelnetSession dropped without calling disconnect()");
             abort_all(std::mem::take(&mut self.join));

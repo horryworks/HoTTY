@@ -21,7 +21,8 @@ use crate::commands::ssh_algorithms::{load_algorithms_sync, SshAlgorithms};
 
 use super::jumpbox::{establish_tunnel, JumpboxConfig, JumpboxHandler};
 use super::known_hosts::{
-    check_known_host, default_known_hosts_path, upsert_known_host, HostKeyCheck,
+    check_known_host, default_known_hosts_path, known_hosts_save_warning, upsert_known_host,
+    HostKeyCheck,
 };
 use super::net_validation::validate_host;
 use super::path_safety::is_unc_path;
@@ -29,7 +30,7 @@ use super::read_pump::MAX_COALESCE_BYTES;
 use super::session_service::{
     abort_all, emit_session_data, emit_session_pty_size, emit_session_status, emit_to_owner,
     encoding_for, join_or_abort, resolve_initial_pty_size, SessionError, SessionService,
-    DISCONNECT_DRAIN_MS,
+    StreamDecoder, DISCONNECT_DRAIN_MS,
 };
 
 // --- Config ------------------------------------------------------------
@@ -378,6 +379,46 @@ pub async fn register_external_prompt(session_id: String, tx: oneshot::Sender<Ho
     }
 }
 
+/// Forget a pending host-key prompt without answering it. Used when the waiter
+/// gives up (timeout, abandoned connect), so the entry does not outlive it.
+pub(crate) async fn remove_pending_prompt(session_id: &str) {
+    pending_map().lock().await.remove(session_id);
+}
+
+/// How a wait for the user's host-key decision ended.
+#[derive(Debug)]
+pub(super) enum HostKeyWait {
+    Decided(HostKeyDecision),
+    /// The sender was dropped without an answer.
+    Dismissed,
+    TimedOut,
+    /// The connection attempt was abandoned (its tab or window closed).
+    Cancelled,
+}
+
+/// Wait for the answer to a host-key prompt, giving up after `timeout` or as
+/// soon as `cancel` fires.
+///
+/// russh runs the handshake in its own task, so dropping the connect future
+/// does not stop a handler parked here. Without `cancel`, a tab closed while
+/// the prompt was open kept this wait — and the half-open connection — alive
+/// for the full five-minute timeout.
+pub(super) async fn await_host_key_decision(
+    rx: oneshot::Receiver<HostKeyDecision>,
+    cancel: &CancellationToken,
+    timeout: Duration,
+) -> HostKeyWait {
+    tokio::select! {
+        biased;
+        _ = cancel.cancelled() => HostKeyWait::Cancelled,
+        r = tokio::time::timeout(timeout, rx) => match r {
+            Ok(Ok(d)) => HostKeyWait::Decided(d),
+            Ok(Err(_)) => HostKeyWait::Dismissed,
+            Err(_) => HostKeyWait::TimedOut,
+        },
+    }
+}
+
 // --- Event payload for host-key prompt ---------------------------------
 
 #[derive(Serialize, Clone)]
@@ -448,6 +489,10 @@ struct SshHandler {
     /// `host_key_prompt_started`). Used to fingerprint device families that latch
     /// the pty width — see `device_latches_terminal_width`.
     remote_ident: Arc<OnceLock<String>>,
+    /// The session's cancel token. Fired by `disconnect()` (including when a
+    /// connect is abandoned), so the handshake task stops at the host-key step
+    /// instead of opening or holding a prompt for a connection nobody wants.
+    cancel: CancellationToken,
 }
 
 impl Handler for SshHandler {
@@ -511,6 +556,12 @@ impl Handler for SshHandler {
             HostKeyCheck::Mismatch { .. } => "changed",
         };
 
+        // The connect was abandoned before the handshake got here: do not pop a
+        // prompt for it (its owner is already gone, so it would go to every window).
+        if self.cancel.is_cancelled() {
+            return Err(russh::Error::Disconnect);
+        }
+
         let (tx, rx) = oneshot::channel::<HostKeyDecision>();
         {
             let mut map = pending_map().lock().await;
@@ -539,19 +590,28 @@ impl Handler for SshHandler {
         // holding the whole handshake to the short network timeout.
         self.host_key_prompt_started.notify_one();
 
-        let decision = match tokio::time::timeout(HOST_KEY_PROMPT_TIMEOUT, rx).await {
-            Ok(Ok(d)) => d,
-            Ok(Err(_)) => return Err(russh::Error::Disconnect),
-            Err(_) => {
-                log::warn!(
-                    "ssh: host-key prompt timed out after {}s for session {}; disconnecting",
-                    HOST_KEY_PROMPT_TIMEOUT.as_secs(),
-                    self.session_id
-                );
-                pending_map().lock().await.remove(&self.session_id);
-                return Err(russh::Error::Disconnect);
-            }
-        };
+        let decision =
+            match await_host_key_decision(rx, &self.cancel, HOST_KEY_PROMPT_TIMEOUT).await {
+                HostKeyWait::Decided(d) => d,
+                HostKeyWait::Dismissed => return Err(russh::Error::Disconnect),
+                HostKeyWait::TimedOut => {
+                    log::warn!(
+                        "ssh: host-key prompt timed out after {}s for session {}; disconnecting",
+                        HOST_KEY_PROMPT_TIMEOUT.as_secs(),
+                        self.session_id
+                    );
+                    remove_pending_prompt(&self.session_id).await;
+                    return Err(russh::Error::Disconnect);
+                }
+                HostKeyWait::Cancelled => {
+                    log::info!(
+                        "ssh: host-key prompt abandoned for session {}; connect was cancelled",
+                        self.session_id
+                    );
+                    remove_pending_prompt(&self.session_id).await;
+                    return Err(russh::Error::Disconnect);
+                }
+            };
         if !decision.accept {
             return Ok(false);
         }
@@ -575,10 +635,7 @@ impl Handler for SshHandler {
                     &self.app,
                     &self.session_id,
                     "ssh-known-hosts-warning",
-                    format!(
-                        "Could not save host key for {}:{} to known_hosts: {e}",
-                        self.host, self.port
-                    ),
+                    known_hosts_save_warning(&self.host, self.port, &e),
                 );
             }
         }
@@ -925,6 +982,10 @@ fn device_latches_terminal_width(remote_ident: &str) -> bool {
 impl SessionService for SshSession {
     async fn connect(&mut self, app: AppHandle, session_id: String) -> Result<(), SessionError> {
         self.config.validate()?;
+        // Recorded before the first await, not after the shell is up: a connect
+        // abandoned mid-handshake is torn down with `disconnect()`, which needs
+        // the id to dismiss a host-key prompt still waiting for this session.
+        self.session_id = Some(session_id.clone());
 
         let known_hosts_path = resolve_known_hosts_path(&app);
 
@@ -973,6 +1034,7 @@ impl SessionService for SshSession {
             known_hosts_path,
             host_key_prompt_started: host_key_prompt_started.clone(),
             remote_ident: remote_ident.clone(),
+            cancel: self.cancel.clone(),
         };
 
         let connect_timeout = Duration::from_secs(self.config.connect_timeout_secs.max(1) as u64);
@@ -992,6 +1054,7 @@ impl SessionService for SshSession {
                 &self.config.host,
                 self.config.port,
                 self.config.connect_timeout_secs,
+                self.cancel.clone(),
             )
             .await?;
             let (jumpbox_handle, stream) = tunnel.into_stream();
@@ -1129,6 +1192,10 @@ impl SessionService for SshSession {
             .clone();
         let reader_join = tokio::spawn(async move {
             let mut rd = read_half;
+            // One decoder per stream: a character split in stdout must not be
+            // completed with bytes that arrived on stderr.
+            let mut dec_out = StreamDecoder::new(encoding);
+            let mut dec_err = StreamDecoder::new(encoding);
             loop {
                 // The select! only yields the message — the drain below needs
                 // `rd` back, and select! holds its futures (hence a &mut rd)
@@ -1143,72 +1210,72 @@ impl SessionService for SshSession {
                     }
                     msg = rd.wait() => msg,
                 };
-                match msg {
-                    Some(ChannelMsg::Data { data })
-                    | Some(ChannelMsg::ExtendedData { data, .. }) => {
-                        let (decoded, _, _) = encoding.decode(&data);
-                        let mut text = decoded.into_owned();
-
-                        // Coalesce whatever has ALREADY arrived behind this
-                        // chunk into one emit. Each `session-data` event costs a
-                        // serde_json escape pass (every ESC becomes 6 bytes) and
-                        // a WebView2 ExecuteScript hop, and a fast `cat`
-                        // produces chunks far quicker than the UI absorbs them.
-                        // `now_or_never` takes only what is ready this instant,
-                        // so nothing is ever *delayed* waiting for more — an
-                        // interactive echo has nothing queued behind it and
-                        // still emits on its own, immediately.
-                        let mut ended = false;
-                        while text.len() < MAX_COALESCE_BYTES {
-                            match rd.wait().now_or_never() {
-                                Some(Some(ChannelMsg::Data { data }))
-                                | Some(Some(ChannelMsg::ExtendedData { data, .. })) => {
-                                    let (decoded, _, _) = encoding.decode(&data);
-                                    text.push_str(&decoded);
-                                }
-                                Some(Some(ChannelMsg::Eof))
-                                | Some(Some(ChannelMsg::Close))
-                                | Some(None) => {
-                                    ended = true;
-                                    break;
-                                }
-                                // Some other protocol message (window adjust,
-                                // exit status, …) — nothing to render.
-                                Some(Some(_)) => {}
-                                // Nothing queued right now: stop draining.
-                                None => break,
-                            }
-                        }
-
-                        // Clone only when a log will consume it; emit first so
-                        // the UI never waits on a disk write.
-                        if log_mgr.is_logging_active() {
-                            emit_session_data(&app_r, &sid_r, text.clone());
-                            log_mgr.write(&sid_r, &text).await;
-                        } else {
-                            emit_session_data(&app_r, &sid_r, text);
-                        }
-
-                        // The close arrived mid-drain: report it only after its
-                        // preceding output has been emitted.
-                        if ended {
-                            log_mgr.stop_logging(&sid_r).await;
-                            emit_session_status(&app_r, &sid_r, "disconnected");
-                            break;
-                        }
-                    }
+                let mut text = match msg {
+                    Some(ChannelMsg::Data { data }) => dec_out.decode(&data),
+                    Some(ChannelMsg::ExtendedData { data, .. }) => dec_err.decode(&data),
                     Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => {
                         log_mgr.stop_logging(&sid_r).await;
                         emit_session_status(&app_r, &sid_r, "disconnected");
                         break;
                     }
-                    Some(_) => {}
+                    // Some other protocol message (window adjust, exit status,
+                    // …) — nothing to render.
+                    Some(_) => continue,
+                };
+
+                // Coalesce whatever has ALREADY arrived behind this chunk into
+                // one emit. Each `session-data` event costs a serde_json escape
+                // pass (every ESC becomes 6 bytes) and a WebView2 ExecuteScript
+                // hop, and a fast `cat` produces chunks far quicker than the UI
+                // absorbs them. `now_or_never` takes only what is ready this
+                // instant, so nothing is ever *delayed* waiting for more — an
+                // interactive echo has nothing queued behind it and still emits
+                // on its own, immediately.
+                let mut ended = false;
+                while text.len() < MAX_COALESCE_BYTES {
+                    match rd.wait().now_or_never() {
+                        Some(Some(ChannelMsg::Data { data })) => {
+                            dec_out.decode_into(&data, &mut text);
+                        }
+                        Some(Some(ChannelMsg::ExtendedData { data, .. })) => {
+                            dec_err.decode_into(&data, &mut text);
+                        }
+                        Some(Some(ChannelMsg::Eof))
+                        | Some(Some(ChannelMsg::Close))
+                        | Some(None) => {
+                            ended = true;
+                            break;
+                        }
+                        // Some other protocol message — nothing to render.
+                        Some(Some(_)) => {}
+                        // Nothing queued right now: stop draining.
+                        None => break,
+                    }
+                }
+
+                // Empty when every read so far ended mid-character: the
+                // decoders hold those bytes until the rest arrives.
+                if !text.is_empty() {
+                    // Clone only when a log will consume it; emit first so the
+                    // UI never waits on a disk write.
+                    if log_mgr.is_logging_active() {
+                        emit_session_data(&app_r, &sid_r, text.clone());
+                        log_mgr.write(&sid_r, &text).await;
+                    } else {
+                        emit_session_data(&app_r, &sid_r, text);
+                    }
+                }
+
+                // The close arrived mid-drain: report it only after its
+                // preceding output has been emitted.
+                if ended {
+                    log_mgr.stop_logging(&sid_r).await;
+                    emit_session_status(&app_r, &sid_r, "disconnected");
+                    break;
                 }
             }
         });
         self.join.push(reader_join);
-
-        self.session_id = Some(session_id.clone());
 
         // Keepalive is handled natively by russh via `keepalive_interval` in the
         // client config above — no manual task needed.
@@ -1264,6 +1331,10 @@ impl SessionService for SshSession {
 
 impl Drop for SshSession {
     fn drop(&mut self) {
+        // Stops a handshake still running in russh's own task — e.g. after a
+        // connect timeout dropped the connect future — from later popping a
+        // host-key prompt for a session that no longer exists.
+        self.cancel.cancel();
         if self.writer_tx.is_some() {
             log::warn!("SshSession dropped without calling disconnect()");
             abort_all(std::mem::take(&mut self.join));
@@ -1362,6 +1433,95 @@ mod tests {
         )
         .await;
         assert_eq!(r, Ok(7));
+    }
+
+    // -- await_host_key_decision / pending prompt map --
+
+    const ACCEPT: HostKeyDecision = HostKeyDecision {
+        accept: true,
+        remember: false,
+    };
+
+    #[tokio::test]
+    async fn host_key_wait_ends_when_cancelled() {
+        let (_tx, rx) = oneshot::channel::<HostKeyDecision>();
+        let cancel = CancellationToken::new();
+        let trigger = cancel.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            trigger.cancel();
+        });
+        let start = std::time::Instant::now();
+        let r = await_host_key_decision(rx, &cancel, Duration::from_secs(300)).await;
+        assert!(matches!(r, HostKeyWait::Cancelled), "{r:?}");
+        assert!(start.elapsed() < Duration::from_secs(2));
+    }
+
+    #[tokio::test]
+    async fn host_key_wait_returns_the_decision() {
+        let (tx, rx) = oneshot::channel::<HostKeyDecision>();
+        let cancel = CancellationToken::new();
+        tx.send(ACCEPT).unwrap();
+        let r = await_host_key_decision(rx, &cancel, Duration::from_secs(300)).await;
+        assert!(matches!(r, HostKeyWait::Decided(d) if d.accept), "{r:?}");
+    }
+
+    #[tokio::test]
+    async fn host_key_wait_reports_a_dropped_sender() {
+        let (tx, rx) = oneshot::channel::<HostKeyDecision>();
+        drop(tx);
+        let r =
+            await_host_key_decision(rx, &CancellationToken::new(), Duration::from_secs(300)).await;
+        assert!(matches!(r, HostKeyWait::Dismissed), "{r:?}");
+    }
+
+    #[tokio::test]
+    async fn host_key_wait_times_out() {
+        let (_tx, rx) = oneshot::channel::<HostKeyDecision>();
+        let r =
+            await_host_key_decision(rx, &CancellationToken::new(), Duration::from_millis(20)).await;
+        assert!(matches!(r, HostKeyWait::TimedOut), "{r:?}");
+    }
+
+    #[tokio::test]
+    async fn host_key_wait_prefers_cancel_over_a_ready_answer() {
+        // An abandoned connect must not go on to trust a key, even if an answer
+        // raced in at the same moment.
+        let (tx, rx) = oneshot::channel::<HostKeyDecision>();
+        tx.send(ACCEPT).unwrap();
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+        let r = await_host_key_decision(rx, &cancel, Duration::from_secs(300)).await;
+        assert!(matches!(r, HostKeyWait::Cancelled), "{r:?}");
+    }
+
+    #[tokio::test]
+    async fn cancel_pending_host_key_rejects_the_session_and_its_jumpbox_prompt() {
+        // Ids unique to this test: the pending map is process-global.
+        let (tx_main, rx_main) = oneshot::channel();
+        let (tx_jump, rx_jump) = oneshot::channel();
+        let (tx_other, mut rx_other) = oneshot::channel();
+        register_external_prompt("cph-test".into(), tx_main).await;
+        register_external_prompt("cph-test::jumpbox".into(), tx_jump).await;
+        register_external_prompt("cph-test-other".into(), tx_other).await;
+
+        cancel_pending_host_key("cph-test").await;
+
+        assert!(!rx_main.await.unwrap().accept);
+        assert!(!rx_jump.await.unwrap().accept);
+        // A different session that merely shares the prefix is left alone.
+        assert!(rx_other.try_recv().is_err());
+        assert!(resolve_host_key_prompt("cph-test-other", ACCEPT).await);
+    }
+
+    #[tokio::test]
+    async fn remove_pending_prompt_forgets_without_answering() {
+        let (tx, rx) = oneshot::channel::<HostKeyDecision>();
+        register_external_prompt("rpp-test".into(), tx).await;
+        remove_pending_prompt("rpp-test").await;
+        // The sender is gone, so the waiter sees a dismissal, not a decision.
+        assert!(rx.await.is_err());
+        assert!(!resolve_host_key_prompt("rpp-test", ACCEPT).await);
     }
 
     fn entry(name: &str, enabled: bool) -> AlgorithmEntry {

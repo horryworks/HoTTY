@@ -538,6 +538,19 @@ pub async fn join_or_abort(joins: Vec<JoinHandle<()>>, label: &str, timeout_ms: 
     }
 }
 
+/// [`join_or_abort`] for callers that are not running on the tokio runtime.
+///
+/// Window-event handlers (`WindowEvent::Destroyed`) run on the main thread,
+/// where a bare `tokio::spawn` panics with "there is no reactor running" and
+/// takes the whole process down. Tauri's shared runtime is reachable from any
+/// thread, so the drain is spawned there instead. Fire-and-forget: the caller
+/// does not wait for the tasks to stop.
+pub fn join_or_abort_detached(joins: Vec<JoinHandle<()>>, label: &'static str, timeout_ms: u64) {
+    tauri::async_runtime::spawn(async move {
+        join_or_abort(joins, label, timeout_ms).await;
+    });
+}
+
 /// Standard disconnect drain timeout. Brief enough to keep teardown snappy,
 /// long enough to let a task that *can* finish gracefully (e.g. an SSH reader
 /// receiving Eof/Close) do so before being aborted.
@@ -565,6 +578,66 @@ pub fn encoding_for(name: &str) -> &'static encoding_rs::Encoding {
         "shift_jis" | "sjis" | "shiftjis" => encoding_rs::SHIFT_JIS,
         "euc_jp" | "eucjp" => encoding_rs::EUC_JP,
         _ => encoding_rs::UTF_8,
+    }
+}
+
+/// Incremental decoder for one terminal byte stream.
+///
+/// `Encoding::decode` treats every call as a complete document, so a
+/// multi-byte character split across two reads (a 3-byte UTF-8 "あ", a 2-byte
+/// Shift_JIS kanji) came out as U+FFFD on both sides of the cut — on screen, in
+/// the session log and in the AI watch buffer. This keeps the partial sequence
+/// and finishes it on the next read.
+///
+/// Use one decoder per byte stream: SSH stdout and stderr each need their own,
+/// or a partial character from one would be completed with bytes of the other.
+/// A partial sequence still pending when the connection ends is dropped — the
+/// stream is never finished with `last = true`.
+pub struct StreamDecoder {
+    inner: encoding_rs::Decoder,
+}
+
+impl StreamDecoder {
+    pub fn new(encoding: &'static encoding_rs::Encoding) -> Self {
+        Self {
+            // Without BOM handling: a BOM-looking prefix in terminal output must
+            // not silently switch the session to UTF-16.
+            inner: encoding.new_decoder_without_bom_handling(),
+        }
+    }
+
+    /// Decode `bytes` and append the text to `out`. A trailing partial
+    /// character produces nothing now and is completed by the next call.
+    pub fn decode_into(&mut self, bytes: &[u8], out: &mut String) {
+        let mut src = bytes;
+        loop {
+            // `decode_to_string` only writes into spare capacity and reports
+            // `OutputFull` when it runs out, so reserve the worst case up front
+            // and loop for the (overflow-only) case where that is unknown.
+            let needed = self
+                .inner
+                .max_utf8_buffer_length(src.len())
+                .unwrap_or(8192)
+                .max(4);
+            out.reserve(needed);
+            let (result, read, _had_errors) = self.inner.decode_to_string(src, out, false);
+            src = &src[read..];
+            if matches!(result, encoding_rs::CoderResult::InputEmpty) {
+                break;
+            }
+        }
+    }
+
+    /// Decode `bytes` into a new string (empty while a character is pending).
+    pub fn decode(&mut self, bytes: &[u8]) -> String {
+        let mut out = String::new();
+        self.decode_into(bytes, &mut out);
+        // The worst-case reservation is ~3x the input (a 32 KiB read reserves
+        // ~96 KiB); give the slack back before the string is queued for emit.
+        if out.capacity() - out.len() > 4096 {
+            out.shrink_to_fit();
+        }
+        out
     }
 }
 
@@ -602,6 +675,183 @@ mod tests {
             start.elapsed() < Duration::from_secs(1),
             "stuck task must be aborted, not awaited forever"
         );
+    }
+
+    /// Sends on `tx` when dropped, so a test can observe a task being aborted.
+    struct DropSignal(std::sync::mpsc::Sender<()>);
+    impl Drop for DropSignal {
+        fn drop(&mut self) {
+            let _ = self.0.send(());
+        }
+    }
+
+    // Deliberately a plain `#[test]`: the window-close handler that calls this
+    // runs on the main thread with no tokio runtime entered. A bare
+    // `tokio::spawn` inside `join_or_abort_detached` would panic here.
+    #[test]
+    fn join_or_abort_detached_works_off_the_runtime() {
+        assert!(
+            tokio::runtime::Handle::try_current().is_err(),
+            "precondition: this test must run outside any tokio runtime"
+        );
+        let (tx, rx) = std::sync::mpsc::channel();
+        let h = tauri::async_runtime::handle().inner().spawn(async move {
+            let _signal = DropSignal(tx);
+            std::future::pending::<()>().await;
+        });
+        join_or_abort_detached(vec![h], "test", 50);
+        assert!(
+            rx.recv_timeout(Duration::from_secs(5)).is_ok(),
+            "the stuck task must be aborted by the detached drain"
+        );
+    }
+
+    #[test]
+    fn join_or_abort_detached_accepts_finished_tasks_off_the_runtime() {
+        let h = tauri::async_runtime::handle().inner().spawn(async {});
+        // Let the task finish before handing it over.
+        std::thread::sleep(Duration::from_millis(20));
+        join_or_abort_detached(vec![h], "test", 50);
+    }
+
+    /// Feed `bytes` to a fresh decoder in pieces cut at `cuts`, returning each
+    /// call's output.
+    fn decode_in_pieces(
+        enc: &'static encoding_rs::Encoding,
+        bytes: &[u8],
+        cuts: &[usize],
+    ) -> Vec<String> {
+        let mut dec = StreamDecoder::new(enc);
+        let mut out = Vec::new();
+        let mut start = 0;
+        for &cut in cuts.iter().chain(std::iter::once(&bytes.len())) {
+            out.push(dec.decode(&bytes[start..cut]));
+            start = cut;
+        }
+        out
+    }
+
+    #[test]
+    fn stream_decoder_carries_a_split_utf8_char() {
+        let bytes = "あ".as_bytes(); // E3 81 82
+        assert_eq!(
+            decode_in_pieces(encoding_rs::UTF_8, bytes, &[1]),
+            vec!["", "あ"]
+        );
+        assert_eq!(
+            decode_in_pieces(encoding_rs::UTF_8, bytes, &[2]),
+            vec!["", "あ"]
+        );
+    }
+
+    #[test]
+    fn stream_decoder_carries_a_split_four_byte_char() {
+        let bytes = "😀".as_bytes();
+        for cut in 1..4 {
+            let joined = decode_in_pieces(encoding_rs::UTF_8, bytes, &[cut]).concat();
+            assert_eq!(joined, "😀", "cut at {cut}");
+        }
+    }
+
+    #[test]
+    fn stream_decoder_survives_one_byte_at_a_time() {
+        let text = "日本語abc";
+        let bytes = text.as_bytes();
+        let cuts: Vec<usize> = (1..bytes.len()).collect();
+        let joined = decode_in_pieces(encoding_rs::UTF_8, bytes, &cuts).concat();
+        assert_eq!(joined, text);
+    }
+
+    #[test]
+    fn stream_decoder_carries_a_split_shift_jis_char() {
+        let (bytes, _, unmappable) = encoding_rs::SHIFT_JIS.encode("漢");
+        assert!(!unmappable);
+        assert_eq!(bytes.len(), 2);
+        assert_eq!(
+            decode_in_pieces(encoding_rs::SHIFT_JIS, &bytes, &[1]),
+            vec!["", "漢"]
+        );
+    }
+
+    #[test]
+    fn stream_decoder_carries_split_euc_jp_two_and_three_byte_chars() {
+        let (two, _, unmappable) = encoding_rs::EUC_JP.encode("漢");
+        assert!(!unmappable);
+        assert_eq!(
+            decode_in_pieces(encoding_rs::EUC_JP, &two, &[1]).concat(),
+            "漢"
+        );
+
+        // 0x8F-prefixed JIS X 0212 character; the one-shot decode is the oracle.
+        let three = [0x8F, 0xB0, 0xA1];
+        let (expected, _, had_errors) = encoding_rs::EUC_JP.decode(&three);
+        assert!(!had_errors, "test data must be a valid EUC-JP character");
+        for cut in 1..3 {
+            let joined = decode_in_pieces(encoding_rs::EUC_JP, &three, &[cut]).concat();
+            assert_eq!(joined, expected, "cut at {cut}");
+        }
+    }
+
+    #[test]
+    fn stream_decoder_replaces_an_invalid_byte_once() {
+        let mut bytes = "前".as_bytes().to_vec();
+        bytes.push(0xFF);
+        bytes.extend_from_slice("後".as_bytes());
+        let mut dec = StreamDecoder::new(encoding_rs::UTF_8);
+        assert_eq!(dec.decode(&bytes), "前\u{FFFD}後");
+    }
+
+    #[test]
+    fn stream_decoder_ignores_boms() {
+        // A UTF-16LE BOM must not switch a UTF-8 session to UTF-16.
+        let mut dec = StreamDecoder::new(encoding_rs::UTF_8);
+        assert_eq!(
+            dec.decode(&[0xFF, 0xFE, 0x61, 0x00]),
+            "\u{FFFD}\u{FFFD}a\u{0}"
+        );
+        // A UTF-8 BOM is passed through as U+FEFF, like a real terminal.
+        let mut dec = StreamDecoder::new(encoding_rs::UTF_8);
+        assert_eq!(dec.decode(&[0xEF, 0xBB, 0xBF, 0x61]), "\u{FEFF}a");
+    }
+
+    #[test]
+    fn stream_decoder_handles_large_inputs() {
+        let text = "あ".repeat(64 * 1024 / 3);
+        let bytes = text.as_bytes();
+        // Cut every 32 KiB, which lands mid-character.
+        let cuts: Vec<usize> = (1..bytes.len()).filter(|i| i % (32 * 1024) == 0).collect();
+        assert!(!cuts.is_empty());
+        assert_eq!(
+            decode_in_pieces(encoding_rs::UTF_8, bytes, &cuts).concat(),
+            text
+        );
+
+        let mut dec = StreamDecoder::new(encoding_rs::UTF_8);
+        let out = dec.decode(&[0x80; 1000]);
+        assert_eq!(out.chars().filter(|&c| c == '\u{FFFD}').count(), 1000);
+        assert_eq!(out.chars().count(), 1000);
+    }
+
+    #[test]
+    fn stream_decoder_reports_an_abandoned_partial_char() {
+        let mut dec = StreamDecoder::new(encoding_rs::UTF_8);
+        assert_eq!(dec.decode(&[0xE3, 0x81]), "");
+        assert_eq!(dec.decode(&[0x41]), "\u{FFFD}A");
+    }
+
+    #[test]
+    fn stream_decoder_decode_into_appends() {
+        let mut dec = StreamDecoder::new(encoding_rs::UTF_8);
+        let mut out = String::from("prefix:");
+        dec.decode_into("あ".as_bytes(), &mut out);
+        assert_eq!(out, "prefix:あ");
+    }
+
+    #[test]
+    fn stream_decoder_is_send() {
+        // It is moved into reader tasks and read-pump closures.
+        fn assert_send<T: Send>() {}
+        assert_send::<StreamDecoder>();
     }
 
     #[tokio::test]

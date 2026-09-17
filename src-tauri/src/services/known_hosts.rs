@@ -205,10 +205,26 @@ pub fn default_known_hosts_path(app_config_dir: &Path) -> PathBuf {
     app_config_dir.join("known_hosts")
 }
 
+/// Text of the `ssh-known-hosts-warning` event sent when "Accept & remember"
+/// could not write the key. Shared by the target-host and jumpbox handlers so
+/// both tell the user the same thing.
+pub fn known_hosts_save_warning(host: &str, port: u16, err: &std::io::Error) -> String {
+    format!("Could not save host key for {host}:{port} to known_hosts: {err}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn known_hosts_save_warning_names_host_port_and_cause() {
+        let err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "access denied");
+        assert_eq!(
+            known_hosts_save_warning("vm-01.example.com", 2222, &err),
+            "Could not save host key for vm-01.example.com:2222 to known_hosts: access denied"
+        );
+    }
 
     fn temp_file() -> PathBuf {
         let mut p = std::env::temp_dir();

@@ -185,6 +185,16 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
   // don't schedule two timers for the same id.
   const autoCloseTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
+  // Ids whose connect chain (log-folder approval → connectSession) has not
+  // settled yet, and the subset the user closed during it. Closing a tab while
+  // connecting makes the backend abandon the connect and reject it; without
+  // this the rejection landed while the record still existed (closeSession
+  // awaits the disconnect before removing it) and raised an error toast for a
+  // tab the user had just closed. Refs, not `sessionsRef`: that one only syncs
+  // after a render, which is too late for these checks.
+  const connectPendingRef = useRef<Set<string>>(new Set());
+  const cancelledConnectsRef = useRef<Set<string>>(new Set());
+
   // Sync logging settings changes to the backend for active sessions.
   //
   // Only fire when the user actually toggles or edits the setting — not on
@@ -367,6 +377,8 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
 
     track(
       tauriService.onSessionError(({ sessionId, error }) => {
+        // Closed while connecting: whatever went wrong, nobody is waiting on it.
+        if (cancelledConnectsRef.current.has(sessionId)) return;
         const rec = sessionsRef.current.get(sessionId);
         if (!rec) return;
         // First-error wins: if the connect-promise catch already transitioned
@@ -540,17 +552,25 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       // in the connecting state. Success transitions to 'connected' via the
       // onSessionStatus listener; failure is handled here and (redundantly via
       // onSessionError) by surfacing a toast and scheduling the auto-close.
+      connectPendingRef.current.add(id);
       ensureLoggingApproved()
-        .then((approved) =>
-          tauriService.connectSession(
+        .then((approved) => {
+          // Closed while the log-folder dialog was open. The backend has no
+          // session and no connect to cancel yet, so starting one now would
+          // leave a live connection that no tab knows about.
+          if (cancelledConnectsRef.current.has(id)) return;
+          return tauriService.connectSession(
             id,
             req.protocol,
             req.config,
             approved,
             approved ? s.loggingPath : '',
-          ),
-        )
+          );
+        })
         .catch((e) => {
+          // Closed while connecting: the rejection is the backend confirming it
+          // abandoned the connect, not a failure to report.
+          if (cancelledConnectsRef.current.has(id)) return;
           const errStr = String(e);
           const current = sessionsRef.current.get(id);
           if (!current) {
@@ -576,6 +596,10 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
           if (wasConnecting) {
             scheduleAutoClose(id, CONNECT_FAILURE_AUTO_CLOSE_MS);
           }
+        })
+        .finally(() => {
+          connectPendingRef.current.delete(id);
+          cancelledConnectsRef.current.delete(id);
         });
 
       return id;
@@ -622,6 +646,11 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
   );
 
   const closeSession = useCallback(async (id: string) => {
+    // Mark before the disconnect: it makes the backend reject the in-flight
+    // connect, and that rejection must already find the mark.
+    if (connectPendingRef.current.has(id)) {
+      cancelledConnectsRef.current.add(id);
+    }
     // Cancel any pending auto-close so it doesn't fire after manual close.
     const pending = autoCloseTimersRef.current.get(id);
     if (pending) {

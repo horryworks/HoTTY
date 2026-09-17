@@ -19,10 +19,13 @@ use crate::services::ai::classifier::{
     CLASSIFIER_SYSTEM_PROMPT,
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
-use crate::services::ai::errors::{describe_http_error, describe_transport_error};
+use crate::services::ai::errors::{
+    describe_http_error, describe_transport_error, describe_turn_failure,
+};
 use crate::services::ai::history::ChatHistoryStore;
 use crate::services::ai::sse::run_google_sse_stream;
 use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
+use crate::services::ai::streaming::{resolve_turn, TurnResolution};
 use crate::services::ai::validation::{is_valid_api_key, is_valid_model};
 
 // ---------------------------------------------------------------------------
@@ -755,42 +758,60 @@ impl AIProvider for GeminiProvider {
         )
         .await
         {
-            Ok(outcome) => {
-                // Normal completion or cancel: close out the assistant turn so the
-                // user/assistant alternation stays consistent for the next request.
-                self.history.finalize_assistant(
-                    &sid,
-                    "model",
-                    &outcome.full_response,
-                    cancel_token.is_cancelled(),
-                );
-                if !cancel_token.is_cancelled() {
+            // Normal completion or cancel: close out the assistant turn so the
+            // user/assistant alternation stays consistent for the next request.
+            Ok(outcome) => match resolve_turn(outcome, cancel_token.is_cancelled()) {
+                TurnResolution::Done { content, usage } => {
+                    self.history
+                        .finalize_assistant(&sid, "model", &content, false);
                     emit_chat_response(
                         &app_clone,
                         ChatResponseData {
                             session_id: sid.clone(),
                             response_type: ChatResponseKind::Done,
-                            content: outcome.full_response,
-                            usage_metadata: outcome.usage,
+                            content,
+                            usage_metadata: usage,
                         },
                     );
                 }
-            }
+                TurnResolution::Cancelled { partial } => {
+                    self.history
+                        .finalize_assistant(&sid, "model", &partial, true);
+                }
+                // A safety block, an in-stream error or an empty answer: used to
+                // be committed as a (blank) finished answer with no explanation.
+                TurnResolution::Failed(failure) => {
+                    log::warn!("[gemini] Turn failed: {failure:?}");
+                    emit_chat_response(
+                        &app_clone,
+                        ChatResponseData {
+                            session_id: sid.clone(),
+                            response_type: ChatResponseKind::Error,
+                            content: describe_turn_failure("Gemini", &failure),
+                            usage_metadata: None,
+                        },
+                    );
+                    self.history.pop_trailing_user(&sid);
+                }
+            },
             Err(e) => {
                 // Hard error mid-stream: emit the error and drop the user message
                 // pushed before the request rather than committing a partial
                 // assistant turn — that would corrupt the alternation and resend a
-                // truncated reply as context on the next request.
-                log::error!("[gemini] Stream error: {e}");
-                emit_chat_response(
-                    &app_clone,
-                    ChatResponseData {
-                        session_id: sid.clone(),
-                        response_type: ChatResponseKind::Error,
-                        content: describe_transport_error("Gemini"),
-                        usage_metadata: None,
-                    },
-                );
+                // truncated reply as context on the next request. A stopped turn
+                // gets no error.
+                if !cancel_token.is_cancelled() {
+                    log::error!("[gemini] Stream error: {e}");
+                    emit_chat_response(
+                        &app_clone,
+                        ChatResponseData {
+                            session_id: sid.clone(),
+                            response_type: ChatResponseKind::Error,
+                            content: describe_transport_error("Gemini"),
+                            usage_metadata: None,
+                        },
+                    );
+                }
                 self.history.pop_trailing_user(&sid);
             }
         }

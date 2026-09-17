@@ -10,16 +10,21 @@ use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{
     emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, ChatResponseData,
-    ChatResponseKind, ModelInfo, TokenUsage,
+    ChatResponseKind, ModelInfo,
 };
 use crate::services::ai::classifier::{
     anthropic_verdict_tool, build_user_prompt, extract_gemini_text, gemini_response_schema,
     parse_anthropic_tool_verdict, parse_verdict, CommandVerdict, CLASSIFIER_SYSTEM_PROMPT,
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
+use crate::services::ai::errors::describe_turn_failure;
 use crate::services::ai::history::{ChatHistoryStore, ChatMessage};
-use crate::services::ai::sse::{run_anthropic_sse_stream, run_google_sse_stream};
-use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
+use crate::services::ai::sse::{
+    run_anthropic_sse_stream, run_google_sse_stream, StreamError, StreamOutcome,
+};
+use crate::services::ai::streaming::{
+    resolve_turn, TurnFailure, TurnResolution, MAX_HISTORY_MESSAGES,
+};
 use crate::services::path_safety::is_unc_path;
 
 // ---------------------------------------------------------------------------
@@ -238,6 +243,21 @@ fn format_user_error_message(err_msg: &str, model: &str) -> String {
     }
 
     "An error occurred while communicating with Vertex AI. Please try again.".to_string()
+}
+
+/// Message for a turn that failed inside the stream. An API error with a status
+/// code goes through [`format_user_error_message`], so the quota / region /
+/// model-access wording applies to it exactly as to an HTTP error; the rest
+/// (blocks, empty answers, errors without a code) use the shared wording.
+fn describe_vertex_turn_failure(failure: &TurnFailure, model: &str) -> String {
+    match failure {
+        TurnFailure::Stream(StreamError::Api {
+            code: Some(code),
+            message,
+            ..
+        }) => format_user_error_message(&format!("API error {code}: {message}"), model),
+        other => describe_turn_failure("Vertex AI", other),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -539,7 +559,7 @@ impl VertexAIProvider {
         system_instruction: Option<&str>,
         token: &str,
         cancel_token: &CancellationToken,
-    ) -> Result<(String, Option<TokenUsage>), String> {
+    ) -> Result<StreamOutcome, String> {
         let config = self.config.as_ref().unwrap();
         let url = format!(
             "{}/{}/{}:streamGenerateContent?alt=sse",
@@ -608,7 +628,6 @@ impl VertexAIProvider {
             cancel_token,
         )
         .await
-        .map(|o| (o.full_response, o.usage))
     }
 
     /// Stream an Anthropic-format API call via Vertex AI streamRawPredict.
@@ -622,7 +641,7 @@ impl VertexAIProvider {
         system_instruction: Option<&str>,
         token: &str,
         cancel_token: &CancellationToken,
-    ) -> Result<(String, Option<TokenUsage>), String> {
+    ) -> Result<StreamOutcome, String> {
         let config = self.config.as_ref().unwrap();
         let url = format!(
             "{}/{}/{}:streamRawPredict",
@@ -706,7 +725,6 @@ impl VertexAIProvider {
             cancel_token,
         )
         .await
-        .map(|o| (o.full_response, o.usage))
     }
 
     /// Classify a command using a Claude-on-Vertex model via the Anthropic
@@ -1131,27 +1149,42 @@ impl AIProvider for VertexAIProvider {
         };
 
         match result {
-            Ok((full_response, usage_metadata)) => {
-                // Always close out the assistant turn so user/model alternation
-                // stays consistent for the next request, even on cancel.
-                self.history.finalize_assistant(
-                    &sid,
-                    "model",
-                    &full_response,
-                    cancel_token.is_cancelled(),
-                );
-                if !cancel_token.is_cancelled() {
+            // Close out the assistant turn so user/model alternation stays
+            // consistent for the next request, even on cancel.
+            Ok(outcome) => match resolve_turn(outcome, cancel_token.is_cancelled()) {
+                TurnResolution::Done { content, usage } => {
+                    self.history
+                        .finalize_assistant(&sid, "model", &content, false);
                     emit_chat_response(
                         app,
                         ChatResponseData {
                             session_id: sid.clone(),
                             response_type: ChatResponseKind::Done,
-                            content: full_response,
-                            usage_metadata,
+                            content,
+                            usage_metadata: usage,
                         },
                     );
                 }
-            }
+                TurnResolution::Cancelled { partial } => {
+                    self.history
+                        .finalize_assistant(&sid, "model", &partial, true);
+                }
+                // Same handling as a request error below: tell the user and drop
+                // the pending user turn.
+                TurnResolution::Failed(failure) => {
+                    log::warn!("[vertexai] Turn failed: {failure:?}");
+                    emit_chat_response(
+                        app,
+                        ChatResponseData {
+                            session_id: sid.clone(),
+                            response_type: ChatResponseKind::Error,
+                            content: describe_vertex_turn_failure(&failure, model),
+                            usage_metadata: None,
+                        },
+                    );
+                    self.history.pop_trailing_user(&sid);
+                }
+            },
             Err(err_msg) => {
                 if !cancel_token.is_cancelled() {
                     log::error!("[vertexai] Chat error: {err_msg}");
@@ -1747,6 +1780,40 @@ mod tests {
             !msg.contains("error 0"),
             "must not show placeholder status: {msg}"
         );
+    }
+
+    #[test]
+    fn in_stream_api_error_gets_the_vertex_wording() {
+        // A quota error reported mid-stream must read like the HTTP one.
+        let failure = TurnFailure::Stream(StreamError::Api {
+            code: Some(429),
+            kind: Some("RESOURCE_EXHAUSTED".into()),
+            message: "Resource exhausted".into(),
+        });
+        let msg = describe_vertex_turn_failure(&failure, "gemini-2.0-flash");
+        assert!(msg.contains("Quota exceeded"), "{msg}");
+    }
+
+    #[test]
+    fn in_stream_block_and_codeless_error_use_the_shared_wording() {
+        let blocked = TurnFailure::Stream(StreamError::Blocked {
+            reason: "SAFETY".into(),
+        });
+        let msg = describe_vertex_turn_failure(&blocked, "gemini-2.0-flash");
+        assert!(msg.contains("content filter"), "{msg}");
+        assert!(msg.contains("Vertex AI"), "{msg}");
+
+        // Claude on Vertex: `event: error` carries a type but no status code.
+        let overloaded = TurnFailure::Stream(StreamError::Api {
+            code: None,
+            kind: Some("overloaded_error".into()),
+            message: "Overloaded".into(),
+        });
+        let msg = describe_vertex_turn_failure(&overloaded, "publishers/anthropic/models/claude");
+        assert!(msg.contains("overloaded"), "{msg}");
+
+        let msg = describe_vertex_turn_failure(&TurnFailure::Empty, "gemini-2.0-flash");
+        assert!(msg.contains("empty answer"), "{msg}");
     }
 
     #[test]

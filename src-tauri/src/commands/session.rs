@@ -1,20 +1,24 @@
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError};
 
 use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, State, Window};
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
-use crate::services::gcloud_iap::{GcloudIapConfig, GcloudIapSession};
+use crate::services::gcloud_iap::{drop_vm_start_prompt, GcloudIapConfig, GcloudIapSession};
 use crate::services::local::{LocalConfig, LocalSession};
 use crate::services::log_manager::LogManager;
 use crate::services::serial::{SerialConfig, SerialSession};
 use crate::services::session_service::{
     emit_session_error, PendingSizes, SessionError, SessionOwners, SessionService,
 };
-use crate::services::ssh::{resolve_host_key_prompt, HostKeyDecision, SshConfig, SshSession};
+use crate::services::ssh::{
+    cancel_pending_host_key, resolve_host_key_prompt, HostKeyDecision, SshConfig, SshSession,
+};
 use crate::services::telnet::{TelnetConfig, TelnetSession};
 use crate::services::wsl::{WslConfig, WslSession};
 
@@ -64,14 +68,117 @@ pub type SessionMap = Arc<Mutex<HashMap<String, (SharedSession, SessionMeta)>>>;
 
 pub struct SessionState {
     pub sessions: SessionMap,
+    /// Sessions whose `connect_session` is still running.
+    pub connecting: Arc<ConnectingRegistry>,
 }
 
 impl SessionState {
     pub fn new() -> Self {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            connecting: Arc::new(ConnectingRegistry::default()),
         }
     }
+}
+
+/// Error returned by `connect_session` when the connect was abandoned because
+/// its tab or window closed first. Nothing is emitted for it.
+pub const CONNECT_CANCELLED: &str = "connect cancelled";
+
+/// Sessions that are still connecting, each with the token that abandons it.
+///
+/// A session only enters `SessionState::sessions` once `connect()` returns, so
+/// before this registry a tab or window closed mid-connect had nothing to stop:
+/// `disconnect_session` found no session, and the connect went on to succeed
+/// into a session with no owner — whose output then went to every window.
+#[derive(Default)]
+pub struct ConnectingRegistry {
+    inner: std::sync::Mutex<HashMap<String, CancellationToken>>,
+}
+
+impl ConnectingRegistry {
+    /// Mark `session_id` as connecting. Refuses an id that already is, so a
+    /// cancel can never reach the wrong one of two attempts.
+    pub fn register(self: &Arc<Self>, session_id: &str) -> Result<ConnectingGuard, String> {
+        let mut map = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        if map.contains_key(session_id) {
+            return Err(format!("session {session_id} is already connecting"));
+        }
+        let token = CancellationToken::new();
+        map.insert(session_id.to_string(), token.clone());
+        Ok(ConnectingGuard {
+            registry: Arc::clone(self),
+            session_id: session_id.to_string(),
+            token,
+        })
+    }
+
+    /// Abandon the connect in flight for `session_id`. Returns whether there
+    /// was one.
+    pub fn cancel(&self, session_id: &str) -> bool {
+        let map = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        match map.get(session_id) {
+            Some(token) => {
+                token.cancel();
+                true
+            }
+            None => false,
+        }
+    }
+}
+
+/// Keeps a session registered as connecting; dropping it unregisters.
+pub struct ConnectingGuard {
+    registry: Arc<ConnectingRegistry>,
+    session_id: String,
+    token: CancellationToken,
+}
+
+impl ConnectingGuard {
+    pub fn token(&self) -> &CancellationToken {
+        &self.token
+    }
+}
+
+impl Drop for ConnectingGuard {
+    fn drop(&mut self) {
+        let mut map = self
+            .registry
+            .inner
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        map.remove(&self.session_id);
+    }
+}
+
+/// Run `fut` unless `token` fires first (`None`). The future is dropped by the
+/// time this returns, so the caller can use whatever it borrowed again — which
+/// is why the teardown lives outside, not inside, the `select!`.
+pub(crate) async fn connect_or_cancel<T>(
+    token: &CancellationToken,
+    fut: impl Future<Output = T>,
+) -> Option<T> {
+    tokio::select! {
+        biased;
+        _ = token.cancelled() => None,
+        r = fut => Some(r),
+    }
+}
+
+/// Tear down a connect that was abandoned. `disconnect()` is safe on a
+/// half-built service: it cancels the service's own token (stopping a
+/// handshake parked at the host-key prompt) and joins whatever tasks exist.
+async fn abandon_connect(
+    service: &mut Box<dyn SessionService>,
+    session_id: &str,
+    owners: &SessionOwners,
+) {
+    let _ = service.disconnect().await;
+    // Protocols that do not track a prompt themselves (Telnet via a jumpbox,
+    // gcloud IAP) leave it to us.
+    cancel_pending_host_key(session_id).await;
+    drop_vm_start_prompt(session_id);
+    owners.remove(session_id);
 }
 
 impl Default for SessionState {
@@ -216,19 +323,38 @@ pub async fn connect_session(
         other => return Err(format!("unsupported protocol: {other}")),
     };
 
+    // Registered for the whole attempt, so closing the tab or window can abandon
+    // it; unregisters when this function returns, whatever the outcome.
+    let connecting = state.connecting.register(&session_id)?;
+
     // Register the owning window just before connecting (after config parse, so
     // parse/unsupported-protocol early returns above never leak an owner entry):
     // the read loop's first emits and any connect-failure error then target this
     // window, not all windows.
     owners.set(&session_id, window.label());
 
-    let connect_result = service.connect(app.clone(), session_id.clone()).await;
+    let outcome = connect_or_cancel(
+        connecting.token(),
+        service.connect(app.clone(), session_id.clone()),
+    )
+    .await;
     // The initial pty size (if the frontend reported one) has now been consumed
     // by the pty allocation inside connect(); drop the rendezvous entry either
     // way so it can't leak or be picked up by a later reconnect of the same id.
     pending.remove(&session_id);
+    let Some(connect_result) = outcome else {
+        log::info!("connect cancelled for {session_id}: its tab or window closed");
+        abandon_connect(&mut service, &session_id, &owners).await;
+        return Err(CONNECT_CANCELLED.to_string());
+    };
     if let Err(e) = connect_result {
+        // Failed on its own, but after the tab closed: nobody to tell.
+        if connecting.token().is_cancelled() {
+            owners.remove(&session_id);
+            return Err(CONNECT_CANCELLED.to_string());
+        }
         log::error!("connect failed for {session_id}: {e}");
+        // Emit while the owner is still registered, so only its window gets it.
         emit_session_error(&app, &session_id, e.to_string());
         owners.remove(&session_id);
         return Err(e.to_string());
@@ -249,13 +375,22 @@ pub async fn connect_session(
         }
     }
 
-    log::info!("connect ok for {session_id}, storing in session map");
-    // Single lock acquisition: build + connect runs outside the lock so SSH
-    // handshakes don't serialize all session opens. The cost is that two
-    // concurrent calls for the same session_id may both connect; the loser
-    // disconnects its own service and returns Err. Acceptable since the
-    // frontend never reuses a session_id.
+    // Build + connect runs outside the map lock so SSH handshakes don't
+    // serialize all session opens. `register` above already refuses a second
+    // concurrent connect for the same id; this check only catches an id that is
+    // still live from an earlier connect.
     let mut map = state.sessions.lock().await;
+    // Checked under the map lock: `disconnect_session` cancels BEFORE it takes
+    // this lock, so either it sees the session inserted below, or we see its
+    // cancel here. There is no gap in which both miss each other.
+    if connecting.token().is_cancelled() {
+        drop(map);
+        log::info!("connect for {session_id} finished after its tab or window closed; dropping it");
+        log_manager.stop_logging(&session_id).await;
+        abandon_connect(&mut service, &session_id, &owners).await;
+        return Err(CONNECT_CANCELLED.to_string());
+    }
+    log::info!("connect ok for {session_id}, storing in session map");
     if map.contains_key(&session_id) {
         drop(map);
         let _ = service.disconnect().await;
@@ -368,6 +503,9 @@ pub async fn disconnect_session(
     pending: State<'_, PendingSizes>,
     session_id: String,
 ) -> Result<(), String> {
+    // First, before the map lock below — see the matching check in
+    // `connect_session`. A tab closed while connecting has no session yet.
+    let was_connecting = state.connecting.cancel(&session_id);
     log_manager.stop_logging(&session_id).await;
     owners.remove(&session_id);
     pending.remove(&session_id);
@@ -383,6 +521,8 @@ pub async fn disconnect_session(
             let mut s = s.lock().await;
             s.disconnect().await.map_err(|e| e.to_string())
         }
+        // `connect_session` tears the half-open session down itself.
+        None if was_connecting => Ok(()),
         None => Err(SessionError::NotFound.to_string()),
     }
 }
@@ -492,6 +632,95 @@ pub async fn ssh_host_key_response(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn connecting_registry_cancel_fires_the_token() {
+        let reg = Arc::new(ConnectingRegistry::default());
+        let guard = reg.register("s1").unwrap();
+        assert!(!guard.token().is_cancelled());
+        assert!(reg.cancel("s1"));
+        assert!(guard.token().is_cancelled());
+        assert!(!reg.cancel("unknown"), "an id that is not connecting");
+    }
+
+    #[test]
+    fn connecting_registry_refuses_a_second_connect_for_the_same_id() {
+        let reg = Arc::new(ConnectingRegistry::default());
+        let first = reg.register("s1").unwrap();
+        assert!(reg.register("s1").is_err());
+        // Other ids are unaffected.
+        let _other = reg.register("s2").unwrap();
+        drop(first);
+        assert!(reg.register("s1").is_ok(), "free again once the first ends");
+    }
+
+    #[test]
+    fn connecting_guard_drop_unregisters() {
+        let reg = Arc::new(ConnectingRegistry::default());
+        let guard = reg.register("s1").unwrap();
+        drop(guard);
+        assert!(!reg.cancel("s1"));
+        assert!(reg.inner.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn connect_or_cancel_stops_a_pending_connect() {
+        let token = CancellationToken::new();
+        let trigger = token.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            trigger.cancel();
+        });
+        let start = std::time::Instant::now();
+        let r = connect_or_cancel(&token, std::future::pending::<()>()).await;
+        assert!(r.is_none());
+        assert!(start.elapsed() < std::time::Duration::from_secs(1));
+    }
+
+    #[tokio::test]
+    async fn connect_or_cancel_returns_a_finished_connect() {
+        let token = CancellationToken::new();
+        assert_eq!(connect_or_cancel(&token, async { 7 }).await, Some(7));
+    }
+
+    #[tokio::test]
+    async fn connect_or_cancel_does_not_start_an_already_cancelled_connect() {
+        let token = CancellationToken::new();
+        token.cancel();
+        let polled = std::sync::atomic::AtomicBool::new(false);
+        let r = connect_or_cancel(&token, async {
+            polled.store(true, std::sync::atomic::Ordering::SeqCst);
+        })
+        .await;
+        assert!(r.is_none());
+        assert!(!polled.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn connect_or_cancel_releases_the_borrow_for_teardown() {
+        // Mirrors connect_session: the connect borrows the service mutably, and
+        // the cancel path must be able to borrow it again to disconnect.
+        struct Svc {
+            disconnected: bool,
+        }
+        impl Svc {
+            async fn connect(&mut self) {
+                std::future::pending::<()>().await;
+            }
+            async fn disconnect(&mut self) {
+                self.disconnected = true;
+            }
+        }
+        let mut svc = Svc {
+            disconnected: false,
+        };
+        let token = CancellationToken::new();
+        token.cancel();
+        if connect_or_cancel(&token, svc.connect()).await.is_none() {
+            svc.disconnect().await;
+        }
+        assert!(svc.disconnected);
+    }
 
     #[test]
     fn protocol_id_as_str_covers_all_variants() {

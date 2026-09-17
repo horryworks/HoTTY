@@ -21,15 +21,17 @@ use russh::ChannelMsg;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use tokio::sync::{oneshot, Mutex, Notify};
+use tokio_util::sync::CancellationToken;
 
 use super::known_hosts::{
-    check_known_host, default_known_hosts_path, upsert_known_host, HostKeyCheck,
+    check_known_host, default_known_hosts_path, known_hosts_save_warning, upsert_known_host,
+    HostKeyCheck,
 };
 use super::path_safety::is_unc_path;
 use super::session_service::{emit_to_owner, SessionError};
 use super::ssh::{
-    humanize_ssh_error, should_try_keyboard_interactive, HostKeyDecision, MAX_CREDENTIAL_LEN,
-    MAX_KEY_PATH_LEN, MAX_USERNAME_LEN,
+    await_host_key_decision, humanize_ssh_error, should_try_keyboard_interactive, HostKeyDecision,
+    HostKeyWait, MAX_CREDENTIAL_LEN, MAX_KEY_PATH_LEN, MAX_USERNAME_LEN,
 };
 
 // ---------------------------------------------------------------------------
@@ -152,6 +154,9 @@ pub struct JumpboxHandler {
     /// Signalled the instant the bastion host-key prompt begins, so the connect
     /// timeout extends past the short network budget for the human wait.
     host_key_prompt_started: Arc<Notify>,
+    /// The owning session's cancel token (see `SshHandler::cancel`): stops the
+    /// bastion handshake at the host-key step once the connect is abandoned.
+    cancel: CancellationToken,
 }
 
 impl Handler for JumpboxHandler {
@@ -198,6 +203,11 @@ impl Handler for JumpboxHandler {
             HostKeyCheck::Mismatch { .. } => "changed",
         };
 
+        // The connect was abandoned before the handshake got here: no prompt.
+        if self.cancel.is_cancelled() {
+            return Err(russh::Error::Disconnect);
+        }
+
         let (tx, rx) = oneshot::channel::<HostKeyDecision>();
         register_pending_jumpbox_prompt(&self.prompt_session_id, tx).await;
 
@@ -221,19 +231,25 @@ impl Handler for JumpboxHandler {
         // holding the whole handshake to the short network timeout.
         self.host_key_prompt_started.notify_one();
 
-        let decision = match tokio::time::timeout(super::ssh::HOST_KEY_PROMPT_TIMEOUT, rx).await {
-            Ok(Ok(d)) => d,
-            Ok(Err(_)) => return Err(russh::Error::Disconnect),
-            Err(_) => {
-                log::warn!(
-                    "jumpbox: host-key prompt timed out after {}s for session {}; disconnecting",
-                    super::ssh::HOST_KEY_PROMPT_TIMEOUT.as_secs(),
-                    self.prompt_session_id
-                );
-                jumpbox_pending_map()
-                    .lock()
-                    .await
-                    .remove(&self.prompt_session_id);
+        let wait =
+            await_host_key_decision(rx, &self.cancel, super::ssh::HOST_KEY_PROMPT_TIMEOUT).await;
+        let decision = match wait {
+            HostKeyWait::Decided(d) => d,
+            HostKeyWait::Dismissed => return Err(russh::Error::Disconnect),
+            HostKeyWait::TimedOut | HostKeyWait::Cancelled => {
+                if matches!(wait, HostKeyWait::TimedOut) {
+                    log::warn!(
+                        "jumpbox: host-key prompt timed out after {}s for session {}; disconnecting",
+                        super::ssh::HOST_KEY_PROMPT_TIMEOUT.as_secs(),
+                        self.prompt_session_id
+                    );
+                } else {
+                    log::info!(
+                        "jumpbox: host-key prompt abandoned for session {}; connect was cancelled",
+                        self.prompt_session_id
+                    );
+                }
+                forget_jumpbox_prompt(&self.prompt_session_id).await;
                 return Err(russh::Error::Disconnect);
             }
         };
@@ -243,13 +259,28 @@ impl Handler for JumpboxHandler {
         if decision.remember {
             // Atomic rewrite (drop superseded key + record new one in one pass)
             // so a concurrent connection never sees the host briefly absent.
-            let _ = upsert_known_host(
+            if let Err(e) = upsert_known_host(
                 &self.known_hosts_path,
                 &self.host,
                 self.port,
                 &key_type,
                 &key_base64,
-            );
+            ) {
+                // Same handling as the target host (ssh.rs): the user asked for
+                // the key to be remembered, so a silent failure would re-prompt
+                // on every connect with no explanation.
+                log::warn!(
+                    "jumpbox: failed to update known_hosts entry for {}:{}: {e} — the new key will not be remembered",
+                    self.host,
+                    self.port
+                );
+                emit_to_owner(
+                    &self.app,
+                    base_id,
+                    "ssh-known-hosts-warning",
+                    known_hosts_save_warning(&self.host, self.port, &e),
+                );
+            }
         }
         Ok(true)
     }
@@ -285,6 +316,15 @@ async fn register_pending_jumpbox_prompt(session_id: &str, tx: oneshot::Sender<H
     // Also register in the shared ssh module's map so `ssh_host_key_response`
     // can route by the same session id.
     register_with_ssh_map(session_id.to_string()).await;
+}
+
+/// Drop a prompt the waiter gave up on (timeout or abandoned connect) from BOTH
+/// maps. Removing only our own entry left the shim sender in ssh.rs's map, and
+/// its relay task parked, until something else happened to clear that id.
+async fn forget_jumpbox_prompt(prompt_session_id: &str) {
+    jumpbox_pending_map().lock().await.remove(prompt_session_id);
+    // Dropping the shim sender ends the relay task spawned below.
+    super::ssh::remove_pending_prompt(prompt_session_id).await;
 }
 
 /// Bridge: install a forwarding oneshot into the ssh.rs pending map so that
@@ -464,6 +504,10 @@ fn resolve_known_hosts_path(app: &AppHandle) -> PathBuf {
 
 /// Establish an SSH session to the jumpbox and open a `direct-tcpip` channel
 /// forwarded to `(target_host, target_port)`.
+///
+/// `cancel` is the owning session's token; firing it stops a bastion handshake
+/// that is waiting on (or about to show) the host-key prompt.
+#[allow(clippy::too_many_arguments)]
 pub async fn establish_tunnel(
     app: AppHandle,
     session_id_base: &str,
@@ -471,6 +515,7 @@ pub async fn establish_tunnel(
     target_host: &str,
     target_port: u16,
     connect_timeout_secs: u32,
+    cancel: CancellationToken,
 ) -> Result<JumpboxTunnel, SessionError> {
     cfg.validate()?;
 
@@ -501,6 +546,7 @@ pub async fn establish_tunnel(
         port: cfg.port,
         known_hosts_path,
         host_key_prompt_started: host_key_prompt_started.clone(),
+        cancel,
     };
 
     let addr = (cfg.host.as_str(), cfg.port);
@@ -617,6 +663,48 @@ mod tests {
     #[test]
     fn jumpbox_prompt_session_id_format() {
         assert_eq!(jumpbox_prompt_session_id("s1"), "s1::jumpbox");
+    }
+
+    #[tokio::test]
+    async fn answered_jumpbox_prompt_reaches_the_waiter_through_the_ssh_map() {
+        let id = jumpbox_prompt_session_id("ajp-test");
+        let (tx, rx) = oneshot::channel::<HostKeyDecision>();
+        register_pending_jumpbox_prompt(&id, tx).await;
+        let decision = HostKeyDecision {
+            accept: true,
+            remember: false,
+        };
+        assert!(super::super::ssh::resolve_host_key_prompt(&id, decision).await);
+        let got = tokio::time::timeout(Duration::from_secs(2), rx)
+            .await
+            .expect("relay must deliver")
+            .expect("sender must not be dropped");
+        assert!(got.accept);
+    }
+
+    #[tokio::test]
+    async fn forgotten_jumpbox_prompt_is_gone_from_both_maps() {
+        // A7: a timed-out or abandoned bastion prompt used to leave its shim in
+        // ssh.rs's map, so the id still looked pending there.
+        let id = jumpbox_prompt_session_id("fjp-test");
+        let (tx, rx) = oneshot::channel::<HostKeyDecision>();
+        register_pending_jumpbox_prompt(&id, tx).await;
+
+        forget_jumpbox_prompt(&id).await;
+
+        assert!(!jumpbox_pending_map().lock().await.contains_key(&id));
+        let decision = HostKeyDecision {
+            accept: true,
+            remember: false,
+        };
+        assert!(
+            !super::super::ssh::resolve_host_key_prompt(&id, decision).await,
+            "no shim may be left in the ssh map"
+        );
+        assert!(
+            rx.await.is_err(),
+            "the waiter's sender is dropped, not answered"
+        );
     }
 
     #[test]

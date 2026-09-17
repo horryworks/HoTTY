@@ -12,7 +12,7 @@ use super::read_pump::{spawn_read_pump, ReadStep};
 use super::session_service::{
     abort_all, emit_session_status, encoding_for, humanize_pty_error, humanize_read_error,
     humanize_spawn_error, join_or_abort, resolve_initial_pty_size, SessionError, SessionService,
-    DISCONNECT_DRAIN_MS,
+    StreamDecoder, DISCONNECT_DRAIN_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -240,7 +240,8 @@ impl SessionService for WslSession {
         self.join.push(writer_join);
 
         // --- Reader thread + coalescing emitter (see services::read_pump) ---
-        let encoding = self.encoding;
+        // Keeps a character split across two reads intact.
+        let mut decoder = StreamDecoder::new(self.encoding);
         let mut reader = reader;
         let mut buf = vec![0u8; 32 * 1024];
         // Moved into the closure so the pty master stays open for exactly as
@@ -257,10 +258,7 @@ impl SessionService for WslSession {
                 let _keep = &master_keepalive;
                 match reader.read(&mut buf) {
                     Ok(0) => ReadStep::Eof,
-                    Ok(n) => {
-                        let (decoded, _enc, _had_errors) = encoding.decode(&buf[..n]);
-                        ReadStep::Data(decoded.into_owned())
-                    }
+                    Ok(n) => ReadStep::Data(decoder.decode(&buf[..n])),
                     Err(e) => ReadStep::Error(humanize_read_error(&e)),
                 }
             },

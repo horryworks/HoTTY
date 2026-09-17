@@ -10,6 +10,54 @@
 //! identical history-finalization rule, so the cancel/empty/format wording
 //! can't drift between providers.
 
+use crate::services::ai::ai_provider::TokenUsage;
+use crate::services::ai::sse::{StreamError, StreamOutcome};
+
+/// What a provider does with a stream that ended without a transport error.
+#[derive(Debug, PartialEq)]
+pub enum TurnResolution {
+    /// Commit the answer and emit `done`.
+    Done {
+        content: String,
+        usage: Option<TokenUsage>,
+    },
+    /// The user stopped it: commit the partial text as cancelled, emit nothing.
+    Cancelled { partial: String },
+    /// Emit `error` and drop the pending user turn. The frontend discards the
+    /// partial answer it was showing, so history must not keep it either.
+    Failed(TurnFailure),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum TurnFailure {
+    /// The provider reported an error or a block inside the stream.
+    Stream(StreamError),
+    /// The stream ended normally with no text. Committing an empty assistant
+    /// turn would make Anthropic reject every later request in the conversation.
+    Empty,
+}
+
+/// Decide how a finished stream closes the turn. Order matters: a user cancel
+/// wins over everything (nobody is waiting for an error), then a reported
+/// error, then an empty answer.
+pub fn resolve_turn(outcome: StreamOutcome, cancelled: bool) -> TurnResolution {
+    if cancelled {
+        return TurnResolution::Cancelled {
+            partial: outcome.full_response,
+        };
+    }
+    if let Some(e) = outcome.stream_error {
+        return TurnResolution::Failed(TurnFailure::Stream(e));
+    }
+    if outcome.full_response.is_empty() {
+        return TurnResolution::Failed(TurnFailure::Empty);
+    }
+    TurnResolution::Done {
+        content: outcome.full_response,
+        usage: outcome.usage,
+    }
+}
+
 /// Compute the assistant-turn content to commit to chat history after a stream
 /// ends normally or via user cancel.
 ///
@@ -57,6 +105,66 @@ pub fn cap_history<T>(history: &mut Vec<T>, max_messages: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn outcome(text: &str, stream_error: Option<StreamError>) -> StreamOutcome {
+        StreamOutcome {
+            full_response: text.to_string(),
+            usage: None,
+            stream_error,
+        }
+    }
+
+    fn overloaded() -> StreamError {
+        StreamError::Api {
+            code: None,
+            kind: Some("overloaded_error".into()),
+            message: "Overloaded".into(),
+        }
+    }
+
+    #[test]
+    fn resolve_turn_cancel_wins_over_an_error() {
+        assert_eq!(
+            resolve_turn(outcome("part", Some(overloaded())), true),
+            TurnResolution::Cancelled {
+                partial: "part".into()
+            }
+        );
+    }
+
+    #[test]
+    fn resolve_turn_fails_on_a_reported_error_even_with_text() {
+        assert_eq!(
+            resolve_turn(outcome("half an answer", Some(overloaded())), false),
+            TurnResolution::Failed(TurnFailure::Stream(overloaded()))
+        );
+    }
+
+    #[test]
+    fn resolve_turn_fails_on_an_empty_answer() {
+        assert_eq!(
+            resolve_turn(outcome("", None), false),
+            TurnResolution::Failed(TurnFailure::Empty)
+        );
+    }
+
+    #[test]
+    fn resolve_turn_completes_a_normal_answer() {
+        let usage = TokenUsage {
+            prompt_token_count: Some(1),
+            candidates_token_count: Some(2),
+            total_token_count: Some(3),
+        };
+        let mut o = outcome("answer", None);
+        o.usage = Some(usage.clone());
+        assert_eq!(
+            resolve_turn(o, false),
+            TurnResolution::Done {
+                content: "answer".into(),
+                usage: Some(usage),
+            }
+        );
+    }
 
     #[test]
     fn normal_completion_returns_full_text() {

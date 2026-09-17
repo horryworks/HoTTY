@@ -16,7 +16,7 @@ use std::task::Poll;
 
 use app_lib::services::ai::ai_provider::{ChatResponseData, ChatResponseKind};
 use app_lib::services::ai::sse::{
-    run_anthropic_sse_stream, run_google_sse_stream, run_openai_sse_stream, ChatSink,
+    run_anthropic_sse_stream, run_google_sse_stream, run_openai_sse_stream, ChatSink, StreamError,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -299,4 +299,250 @@ async fn anthropic_event_split_across_chunks() {
 
     assert_eq!(outcome.full_response, "chunked");
     assert_eq!(sink.chunks(), vec!["chunked"]);
+}
+
+// ---------------------------------------------------------------------------
+// Errors reported inside a successful (HTTP 200) stream
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn anthropic_error_event_mid_answer_is_reported_and_stops_reading() {
+    let items: Vec<Item> = vec![
+        ok("event: content_block_delta\ndata: {\"delta\":{\"text\":\"A\"}}\n\n"),
+        ok("event: content_block_delta\ndata: {\"delta\":{\"text\":\"B\"}}\n\n"),
+        ok("event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"}}\n\n"),
+        // Anything after the error must not be read.
+        ok("event: content_block_delta\ndata: {\"delta\":{\"text\":\"C\"}}\n\n"),
+    ];
+    let sink = CollectingSink::new();
+    let cancel = CancellationToken::new();
+    let outcome = run_anthropic_sse_stream(stream_of(items), &sink, "s1", &cancel)
+        .await
+        .unwrap();
+
+    assert_eq!(sink.chunks(), vec!["A", "B"]);
+    assert_eq!(outcome.full_response, "AB");
+    assert_eq!(
+        outcome.stream_error,
+        Some(StreamError::Api {
+            code: None,
+            kind: Some("overloaded_error".into()),
+            message: "Overloaded".into(),
+        })
+    );
+}
+
+#[tokio::test]
+async fn openai_error_object_in_stream_is_reported() {
+    let items: Vec<Item> = vec![
+        ok("data: {\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n\n"),
+        ok("data: {\"error\":{\"message\":\"m\",\"type\":\"server_error\"}}\n\n"),
+    ];
+    let sink = CollectingSink::new();
+    let outcome = run_openai_sse_stream(stream_of(items), &sink, "s1", &CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        outcome.stream_error,
+        Some(StreamError::Api {
+            code: None,
+            kind: Some("server_error".into()),
+            message: "m".into(),
+        })
+    );
+}
+
+#[tokio::test]
+async fn openai_content_filter_is_reported_as_blocked() {
+    let items: Vec<Item> = vec![ok(
+        "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"content_filter\"}]}\n\n",
+    )];
+    let sink = CollectingSink::new();
+    let outcome = run_openai_sse_stream(stream_of(items), &sink, "s1", &CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(outcome.full_response, "");
+    assert_eq!(
+        outcome.stream_error,
+        Some(StreamError::Blocked {
+            reason: "content_filter".into()
+        })
+    );
+}
+
+#[tokio::test]
+async fn openai_normal_finish_is_not_an_error() {
+    let items: Vec<Item> = vec![
+        ok("data: {\"choices\":[{\"delta\":{\"content\":\"done\"}}]}\n\n"),
+        ok("data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"),
+        ok("data: [DONE]\n\n"),
+    ];
+    let sink = CollectingSink::new();
+    let outcome = run_openai_sse_stream(stream_of(items), &sink, "s1", &CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(outcome.full_response, "done");
+    assert_eq!(outcome.stream_error, None);
+}
+
+#[tokio::test]
+async fn google_safety_stop_without_text_is_blocked() {
+    let items: Vec<Item> = vec![ok(
+        "data: {\"candidates\":[{\"finishReason\":\"SAFETY\"}]}\n\n",
+    )];
+    let sink = CollectingSink::new();
+    let outcome = run_google_sse_stream(stream_of(items), &sink, "s1", &CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(outcome.full_response, "");
+    assert_eq!(
+        outcome.stream_error,
+        Some(StreamError::Blocked {
+            reason: "SAFETY".into()
+        })
+    );
+}
+
+#[tokio::test]
+async fn google_blocked_prompt_is_reported() {
+    let items: Vec<Item> = vec![ok(
+        "data: {\"promptFeedback\":{\"blockReason\":\"PROHIBITED_CONTENT\"}}\n\n",
+    )];
+    let sink = CollectingSink::new();
+    let outcome = run_google_sse_stream(stream_of(items), &sink, "s1", &CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        outcome.stream_error,
+        Some(StreamError::Blocked {
+            reason: "PROHIBITED_CONTENT".into()
+        })
+    );
+}
+
+#[tokio::test]
+async fn google_text_with_stop_or_max_tokens_is_not_an_error() {
+    for reason in ["STOP", "MAX_TOKENS"] {
+        let items: Vec<Item> = vec![ok(&format!(
+            "data: {{\"candidates\":[{{\"content\":{{\"parts\":[{{\"text\":\"hi\"}}]}},\"finishReason\":\"{reason}\"}}]}}\n\n"
+        ))];
+        let sink = CollectingSink::new();
+        let outcome =
+            run_google_sse_stream(stream_of(items), &sink, "s1", &CancellationToken::new())
+                .await
+                .unwrap();
+        assert_eq!(outcome.full_response, "hi", "{reason}");
+        assert_eq!(outcome.stream_error, None, "{reason}");
+    }
+}
+
+#[tokio::test]
+async fn google_unknown_finish_reason_only_fails_an_empty_answer() {
+    let with_text: Vec<Item> = vec![ok(
+        "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"hi\"}]},\"finishReason\":\"NEW_THING\"}]}\n\n",
+    )];
+    let sink = CollectingSink::new();
+    let outcome =
+        run_google_sse_stream(stream_of(with_text), &sink, "s1", &CancellationToken::new())
+            .await
+            .unwrap();
+    assert_eq!(outcome.stream_error, None);
+
+    let without_text: Vec<Item> = vec![ok(
+        "data: {\"candidates\":[{\"finishReason\":\"NEW_THING\"}]}\n\n",
+    )];
+    let outcome = run_google_sse_stream(
+        stream_of(without_text),
+        &sink,
+        "s1",
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        outcome.stream_error,
+        Some(StreamError::Blocked {
+            reason: "NEW_THING".into()
+        })
+    );
+}
+
+#[tokio::test]
+async fn google_error_object_mid_stream_keeps_its_code() {
+    let items: Vec<Item> = vec![
+        ok("data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"a\"}]}}]}\n\n"),
+        ok("data: {\"error\":{\"code\":503,\"message\":\"unavailable\",\"status\":\"UNAVAILABLE\"}}\n\n"),
+    ];
+    let sink = CollectingSink::new();
+    let outcome = run_google_sse_stream(stream_of(items), &sink, "s1", &CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        outcome.stream_error,
+        Some(StreamError::Api {
+            code: Some(503),
+            kind: Some("UNAVAILABLE".into()),
+            message: "unavailable".into(),
+        })
+    );
+}
+
+#[tokio::test]
+async fn an_error_after_cancel_is_not_read() {
+    // The cancel is already set, so it wins over the ready error event.
+    let cancel = CancellationToken::new();
+    cancel.cancel();
+    let items: Vec<Item> = vec![ok(
+        "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"x\"}}\n\n",
+    )];
+    let sink = CollectingSink::new();
+    let outcome = run_anthropic_sse_stream(stream_of(items), &sink, "s1", &cancel)
+        .await
+        .expect("cancel is a normal (Ok) end");
+    assert_eq!(outcome.stream_error, None);
+}
+
+// ---------------------------------------------------------------------------
+// Final event without a trailing newline
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn final_event_without_newline_is_still_read() {
+    let items: Vec<Item> = vec![
+        ok("data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n"),
+        // The stream ends right after this JSON — no "\n".
+        ok("data: {\"choices\":[{\"delta\":{\"content\":\" end\"}}]}"),
+    ];
+    let sink = CollectingSink::new();
+    let outcome = run_openai_sse_stream(stream_of(items), &sink, "s1", &CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(outcome.full_response, "Hello end");
+    assert_eq!(sink.chunks(), vec!["Hello", " end"]);
+}
+
+#[tokio::test]
+async fn unterminated_tail_is_dropped_when_cancelled() {
+    // Cancel ends the turn where it stands: the buffered partial line is not
+    // flushed into the answer.
+    let cancel = CancellationToken::new();
+    let cancel_from_stream = cancel.clone();
+    let mut count = 0usize;
+    let stream = futures::stream::poll_fn(move |_cx| -> Poll<Option<Item>> {
+        count += 1;
+        if count == 1 {
+            Poll::Ready(Some(ok(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"tail\"}}]}",
+            )))
+        } else {
+            cancel_from_stream.cancel();
+            Poll::Pending
+        }
+    });
+    let sink = CollectingSink::new();
+    let outcome = run_openai_sse_stream(stream, &sink, "s1", &cancel)
+        .await
+        .unwrap();
+    assert_eq!(outcome.full_response, "");
+    assert!(sink.chunks().is_empty());
 }

@@ -708,7 +708,10 @@ mod enabled {
         let cancel = tokio_util::sync::CancellationToken::new();
         let app = app.clone();
         let loop_cancel = cancel.clone();
-        let join = tokio::spawn(async move {
+        // Spawned through Tauri's runtime handle rather than a bare
+        // `tokio::spawn`, so this stays safe if a caller ever runs off the
+        // runtime (e.g. from a window-event handler). Still a tokio JoinHandle.
+        let join = tauri::async_runtime::handle().inner().spawn(async move {
             let mut ticker = tokio::time::interval(std::time::Duration::from_secs(20));
             loop {
                 // Cancellation is observed at the only await that can block for
@@ -756,17 +759,16 @@ mod enabled {
             return;
         };
         handle.cancel.cancel();
-        // `destroy` is synchronous, so the join happens on the runtime. The
-        // shared helper is what forces a task that ignored the token to stop,
-        // and it logs when it had to.
-        tokio::spawn(async move {
-            crate::services::session_service::join_or_abort(
-                vec![handle.join],
-                "web browser cookie sweeper",
-                SWEEPER_SHUTDOWN_GRACE_MS,
-            )
-            .await;
-        });
+        // This runs from `destroy_for_window`, which the window-close handler
+        // calls on the main thread — outside the tokio runtime, where a bare
+        // `tokio::spawn` panics and kills the app. The detached helper spawns
+        // the join on Tauri's runtime instead. It is also what forces a task
+        // that ignored the token to stop, and it logs when it had to.
+        crate::services::session_service::join_or_abort_detached(
+            vec![handle.join],
+            "web browser cookie sweeper",
+            SWEEPER_SHUTDOWN_GRACE_MS,
+        );
     }
 
     /// Clear the selected categories of browsing data for the embedded browser.

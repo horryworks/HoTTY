@@ -474,6 +474,115 @@ describe('useSessionManager — session-end auto-close', () => {
   });
 });
 
+describe('useSessionManager — closing a tab while it connects', () => {
+  beforeEach(() => {
+    disposeMock.mockClear();
+    connectSessionMock.mockReset();
+    disconnectSessionMock.mockReset();
+    disconnectSessionMock.mockResolvedValue(undefined);
+    confirmLogDirMock.mockReset();
+    confirmLogDirMock.mockResolvedValue(true);
+    onSessionErrorCb.current = null;
+    useSettingsStore.getState().reset();
+    useErrorNotificationStore.getState().clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    confirmLogDirMock.mockReset();
+    confirmLogDirMock.mockResolvedValue(true);
+    disconnectSessionMock.mockReset();
+    disconnectSessionMock.mockResolvedValue(undefined);
+    useSettingsStore.getState().reset();
+    useErrorNotificationStore.getState().clear();
+  });
+
+  it('starts the connect right away when no log-folder prompt is needed', async () => {
+    // Guards the guard: it must not hold back an ordinary connect (e.g. by
+    // checking sessionsRef, which is only synced after a render).
+    connectSessionMock.mockImplementation(() => new Promise(() => {}));
+    const { result } = renderHook(() => useSessionManager());
+    let id = '';
+    act(() => { id = result.current.openSession(sampleRequest); });
+    await act(async () => { await flushMicrotasks(); });
+    expect(connectSessionMock).toHaveBeenCalledWith(id, 'ssh', sampleRequest.config, false, '');
+  });
+
+  it('stays silent when the backend rejects the connect it abandoned', async () => {
+    let rejectConnect: (e: unknown) => void = () => {};
+    connectSessionMock.mockImplementation(
+      () => new Promise((_, reject) => { rejectConnect = reject; }),
+    );
+    const onSessionRemoved = vi.fn();
+    const { result } = renderHook(() => useSessionManager({ onSessionRemoved }));
+    await act(async () => { await flushMicrotasks(); });
+
+    let id = '';
+    act(() => { id = result.current.openSession(sampleRequest); });
+    await act(async () => { await flushMicrotasks(); });
+    expect(connectSessionMock).toHaveBeenCalledTimes(1);
+
+    // disconnect_session cancels the in-flight connect, which then rejects —
+    // while closeSession is still awaiting and the record still exists. An
+    // error event arriving in that window is ignored as well.
+    disconnectSessionMock.mockImplementation(async () => {
+      onSessionErrorCb.current?.({ sessionId: id, error: 'late failure' });
+      rejectConnect('connect cancelled');
+    });
+
+    vi.useFakeTimers();
+    await act(async () => {
+      await result.current.closeSession(id);
+      await flushMicrotasks();
+    });
+    act(() => { vi.advanceTimersByTime(CONNECT_FAILURE_AUTO_CLOSE_MS * 2); });
+
+    expect(result.current.sessions.has(id)).toBe(false);
+    expect(useErrorNotificationStore.getState().notifications).toHaveLength(0);
+    // No connect-failure auto-close was scheduled behind the manual close.
+    expect(onSessionRemoved).not.toHaveBeenCalled();
+  });
+
+  it('never starts the connect when the tab closes during the log-folder prompt', async () => {
+    useSettingsStore.getState().update('loggingEnabled', true);
+    useSettingsStore.getState().update('loggingPath', 'C:/logs');
+    // Collect every pending approval, so one issued by anything else cannot
+    // replace the one under test.
+    const approvals: Array<(v: boolean) => void> = [];
+    confirmLogDirMock.mockImplementation(
+      () => new Promise<boolean>((resolve) => { approvals.push(resolve); }),
+    );
+    connectSessionMock.mockImplementation(() => Promise.resolve());
+
+    const { result } = renderHook(() => useSessionManager());
+    await act(async () => { await flushMicrotasks(); });
+    let id = '';
+    act(() => { id = result.current.openSession(sampleRequest); });
+    await act(async () => { await result.current.closeSession(id); });
+
+    // The user answers the dialog after the tab is already gone.
+    await act(async () => {
+      for (const approve of approvals) approve(true);
+      await flushMicrotasks();
+      await flushMicrotasks();
+    });
+
+    expect(connectSessionMock.mock.calls.some((c) => c[0] === id)).toBe(false);
+    expect(useErrorNotificationStore.getState().notifications).toHaveLength(0);
+  });
+
+  it('still reports a connect failure for a tab that stayed open', async () => {
+    connectSessionMock.mockImplementation(() => Promise.reject(new Error('refused')));
+    const { result } = renderHook(() => useSessionManager());
+    await act(async () => { await flushMicrotasks(); });
+    let id = '';
+    act(() => { id = result.current.openSession(sampleRequest); });
+    await act(async () => { await flushMicrotasks(); await flushMicrotasks(); });
+    expect(result.current.sessions.get(id)?.status).toBe('error');
+    expect(useErrorNotificationStore.getState().notifications.length).toBeGreaterThan(0);
+  });
+});
+
 describe('useSessionManager — ssh known-hosts warning', () => {
   beforeEach(() => {
     onSshKnownHostsWarningCb.current = null;

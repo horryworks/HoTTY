@@ -94,6 +94,13 @@ fn cleanup_window_sessions(app: &tauri::AppHandle, label: &str) {
     if ids.is_empty() {
         return;
     }
+    // Abandon connects still in flight. They are not in the session map yet,
+    // so the teardown below cannot reach them; `connect_session` cleans each
+    // one up when it sees the cancel. Synchronous and non-blocking.
+    let connecting = app.state::<SessionState>().connecting.clone();
+    for id in &ids {
+        connecting.cancel(id);
+    }
     let watch = app.state::<WatchBufferState>();
     for id in &ids {
         watch.remove(id);

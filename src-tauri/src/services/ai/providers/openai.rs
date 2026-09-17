@@ -17,10 +17,13 @@ use crate::services::ai::classifier::{
     CLASSIFIER_SYSTEM_PROMPT,
 };
 use crate::services::ai::config_store::EncryptedConfigStore;
-use crate::services::ai::errors::{describe_http_error, describe_transport_error};
+use crate::services::ai::errors::{
+    describe_http_error, describe_transport_error, describe_turn_failure,
+};
 use crate::services::ai::history::ChatHistoryStore;
 use crate::services::ai::sse::run_openai_sse_stream;
 use crate::services::ai::streaming::MAX_HISTORY_MESSAGES;
+use crate::services::ai::streaming::{resolve_turn, TurnResolution};
 use crate::services::ai::validation::{is_valid_api_key, is_valid_model};
 
 // ---------------------------------------------------------------------------
@@ -335,42 +338,61 @@ impl AIProvider for OpenAIProvider {
         )
         .await
         {
-            Ok(outcome) => {
-                // Normal completion or cancel: close out the assistant turn to
-                // preserve the alternation OpenAI's chat completions API expects.
-                self.history.finalize_assistant(
-                    &sid,
-                    "assistant",
-                    &outcome.full_response,
-                    cancel_token.is_cancelled(),
-                );
-                if !cancel_token.is_cancelled() {
+            Ok(outcome) => match resolve_turn(outcome, cancel_token.is_cancelled()) {
+                // Close out the assistant turn to preserve the alternation
+                // OpenAI's chat completions API expects.
+                TurnResolution::Done { content, usage } => {
+                    self.history
+                        .finalize_assistant(&sid, "assistant", &content, false);
                     emit_chat_response(
                         &app_clone,
                         ChatResponseData {
                             session_id: sid.clone(),
                             response_type: ChatResponseKind::Done,
-                            content: outcome.full_response,
-                            usage_metadata: outcome.usage,
+                            content,
+                            usage_metadata: usage,
                         },
                     );
                 }
-            }
+                TurnResolution::Cancelled { partial } => {
+                    self.history
+                        .finalize_assistant(&sid, "assistant", &partial, true);
+                }
+                // An error or block reported inside the stream, or an empty
+                // answer: same handling as a hard error below.
+                TurnResolution::Failed(failure) => {
+                    log::warn!("[openai] Turn failed: {failure:?}");
+                    emit_chat_response(
+                        &app_clone,
+                        ChatResponseData {
+                            session_id: sid.clone(),
+                            response_type: ChatResponseKind::Error,
+                            content: describe_turn_failure("OpenAI", &failure),
+                            usage_metadata: None,
+                        },
+                    );
+                    self.history.pop_trailing_user(&sid);
+                }
+            },
             Err(e) => {
                 // Hard error mid-stream: emit the error and drop the user message
                 // rather than commit a partial assistant turn — a truncated/empty
                 // assistant message would break OpenAI's strict user/assistant
                 // alternation on the next send.
-                log::error!("[openai] Stream error: {e}");
-                emit_chat_response(
-                    &app_clone,
-                    ChatResponseData {
-                        session_id: sid.clone(),
-                        response_type: ChatResponseKind::Error,
-                        content: describe_transport_error("OpenAI"),
-                        usage_metadata: None,
-                    },
-                );
+                // A stopped turn's connection often dies right after the stop;
+                // that is not an error the user should see.
+                if !cancel_token.is_cancelled() {
+                    log::error!("[openai] Stream error: {e}");
+                    emit_chat_response(
+                        &app_clone,
+                        ChatResponseData {
+                            session_id: sid.clone(),
+                            response_type: ChatResponseKind::Error,
+                            content: describe_transport_error("OpenAI"),
+                            usage_metadata: None,
+                        },
+                    );
+                }
                 self.history.pop_trailing_user(&sid);
             }
         }

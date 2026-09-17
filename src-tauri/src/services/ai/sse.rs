@@ -88,6 +88,20 @@ impl SseBuffer {
         }
         lines
     }
+
+    /// Take the final line when the stream ends without a trailing newline.
+    /// Without this the last event of such a stream was silently dropped, cutting
+    /// off the end of the answer (or its usage / finish reason).
+    pub fn flush(&mut self) -> Option<String> {
+        if self.buffer.is_empty() {
+            return None;
+        }
+        let mut line_bytes = std::mem::take(&mut self.buffer);
+        if line_bytes.last() == Some(&b'\r') {
+            line_bytes.pop();
+        }
+        Some(String::from_utf8_lossy(&line_bytes).into_owned())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +134,97 @@ pub trait ChatSink: Sync {
 pub struct StreamOutcome {
     pub full_response: String,
     pub usage: Option<TokenUsage>,
+    /// An error the provider reported INSIDE the stream (HTTP 200, then an
+    /// error event or a blocked finish). Reading stops at the first one.
+    pub stream_error: Option<StreamError>,
+}
+
+/// An error a provider sent as part of an otherwise successful stream.
+///
+/// Kept structured rather than pre-formatted: Vertex AI maps API errors to its
+/// own actionable wording, and a content-filter stop must not read like an
+/// outage.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StreamError {
+    /// An `error` object: overloaded, rate limited, internal error, …
+    Api {
+        code: Option<u64>,
+        kind: Option<String>,
+        message: String,
+    },
+    /// The provider withheld or cut off the answer (safety filter, recitation, …).
+    Blocked { reason: String },
+}
+
+/// A top-level `error` in a stream event, in any of the shapes the providers
+/// use: Anthropic `{"type":"error","error":{"type","message"}}`, OpenAI
+/// `{"error":{"message","type","code"}}`, Google `{"error":{"code","message","status"}}`,
+/// or a bare `{"error":"message"}`.
+pub(crate) fn api_error(v: &Value) -> Option<StreamError> {
+    let err = v.get("error")?;
+    if let Some(message) = err.as_str() {
+        return Some(StreamError::Api {
+            code: None,
+            kind: None,
+            message: message.to_string(),
+        });
+    }
+    if !err.is_object() {
+        return None;
+    }
+    let text = |key: &str| err.get(key).and_then(Value::as_str).map(str::to_string);
+    Some(StreamError::Api {
+        code: err.get("code").and_then(Value::as_u64),
+        // Anthropic/OpenAI name the category `type`; Google calls it `status`.
+        // OpenAI sometimes only has a string `code` such as "rate_limit_exceeded".
+        kind: text("type")
+            .or_else(|| text("status"))
+            .or_else(|| text("code")),
+        message: text("message").unwrap_or_default(),
+    })
+}
+
+/// Finish reasons that mean a Google answer ended normally.
+const GOOGLE_OK_FINISH: &[&str] = &["", "STOP", "MAX_TOKENS", "FINISH_REASON_UNSPECIFIED"];
+/// Finish reasons that mean Google withheld or cut off the answer.
+const GOOGLE_BLOCKED_FINISH: &[&str] = &[
+    "SAFETY",
+    "RECITATION",
+    "BLOCKLIST",
+    "PROHIBITED_CONTENT",
+    "SPII",
+    "LANGUAGE",
+    "IMAGE_SAFETY",
+    "MALFORMED_FUNCTION_CALL",
+    "OTHER",
+];
+
+/// A Google (Gemini / Vertex) event that blocks the prompt or ends the answer
+/// abnormally. `have_text` is whether any answer text has arrived: a finish
+/// reason this code does not know yet only counts as a failure when nothing
+/// was produced, so a new harmless reason cannot turn good answers into errors.
+pub(crate) fn google_block(v: &Value, have_text: bool) -> Option<StreamError> {
+    if let Some(reason) = v
+        .pointer("/promptFeedback/blockReason")
+        .and_then(Value::as_str)
+        .filter(|r| !r.is_empty())
+    {
+        return Some(StreamError::Blocked {
+            reason: reason.to_string(),
+        });
+    }
+    let reason = v
+        .pointer("/candidates/0/finishReason")
+        .and_then(Value::as_str)?;
+    if GOOGLE_OK_FINISH.contains(&reason) {
+        return None;
+    }
+    if GOOGLE_BLOCKED_FINISH.contains(&reason) || !have_text {
+        return Some(StreamError::Blocked {
+            reason: reason.to_string(),
+        });
+    }
+    None
 }
 
 /// Build a `chunk` event for a single text delta.
@@ -151,7 +256,9 @@ fn google_usage(usage: &Value) -> TokenUsage {
 }
 
 /// Drive an SSE byte stream to completion, invoking `on_line` for every complete
-/// decoded line. Returns `Ok(())` on a normal end (stream exhausted) or when
+/// decoded line. `on_line` returns `true` to stop reading (the provider reported
+/// an error: a server that keeps the connection open afterwards must not leave
+/// the turn hanging). Returns `Ok(())` on a normal end, on such a stop, or when
 /// `cancel_token` fires, and `Err` on a transport/stream error. Generic over the
 /// byte and error types so tests can feed a synthetic `futures::stream::iter`
 /// without a live HTTP response (production passes `reqwest`'s `bytes_stream()`).
@@ -164,21 +271,31 @@ where
     St: futures::Stream<Item = Result<B, E>> + Unpin + Send,
     B: AsRef<[u8]> + Send,
     E: std::fmt::Display + Send,
-    F: FnMut(&str) + Send,
+    F: FnMut(&str) -> bool + Send,
 {
     let mut sse_buf = SseBuffer::new();
     loop {
         tokio::select! {
+            // A cancel that is already set wins over data that is also ready.
+            biased;
             _ = cancel_token.cancelled() => break,
             chunk = stream.next() => {
                 match chunk {
                     Some(Ok(bytes)) => {
                         for line in sse_buf.push(bytes.as_ref()) {
-                            on_line(&line);
+                            if on_line(&line) {
+                                return Ok(());
+                            }
                         }
                     }
                     Some(Err(e)) => return Err(format!("Stream error: {e}")),
-                    None => break,
+                    None => {
+                        // The last event may lack its trailing newline.
+                        if let Some(line) = sse_buf.flush() {
+                            on_line(&line);
+                        }
+                        break;
+                    }
                 }
             }
         }
@@ -203,31 +320,46 @@ where
 {
     let mut full_response = String::new();
     let mut last_usage: Option<TokenUsage> = None;
+    let mut stream_error: Option<StreamError> = None;
     drive_sse(stream, cancel_token, |line| {
-        if let SseLine::Data(data) = parse_sse_line(line) {
-            if data.is_empty() {
-                return;
-            }
-            if let Ok(parsed) = serde_json::from_str::<Value>(data) {
-                if let Some(text) = parsed
-                    .pointer("/candidates/0/content/parts/0/text")
-                    .and_then(|v| v.as_str())
-                {
-                    if !text.is_empty() {
-                        full_response.push_str(text);
-                        sink.emit(chunk_event(session_id, text));
-                    }
-                }
-                if let Some(usage) = parsed.get("usageMetadata") {
-                    last_usage = Some(google_usage(usage));
-                }
+        let SseLine::Data(data) = parse_sse_line(line) else {
+            return false;
+        };
+        if data.is_empty() {
+            return false;
+        }
+        let Ok(parsed) = serde_json::from_str::<Value>(data) else {
+            return false;
+        };
+        if let Some(e) = api_error(&parsed) {
+            stream_error = Some(e);
+            return true;
+        }
+        if let Some(text) = parsed
+            .pointer("/candidates/0/content/parts/0/text")
+            .and_then(|v| v.as_str())
+        {
+            if !text.is_empty() {
+                full_response.push_str(text);
+                sink.emit(chunk_event(session_id, text));
             }
         }
+        if let Some(usage) = parsed.get("usageMetadata") {
+            last_usage = Some(google_usage(usage));
+        }
+        // After this event's text, so a final chunk that carries both the last
+        // words and `STOP` is judged with that text counted.
+        if let Some(e) = google_block(&parsed, !full_response.is_empty()) {
+            stream_error = Some(e);
+            return true;
+        }
+        false
     })
     .await?;
     Ok(StreamOutcome {
         full_response,
         usage: last_usage,
+        stream_error,
     })
 }
 
@@ -248,44 +380,63 @@ where
 {
     let mut full_response = String::new();
     let mut last_usage: Option<TokenUsage> = None;
+    let mut stream_error: Option<StreamError> = None;
     drive_sse(stream, cancel_token, |line| {
-        if let SseLine::Data(data) = parse_sse_line(line) {
-            if data.is_empty() || data == "[DONE]" {
-                return;
-            }
-            if let Ok(parsed) = serde_json::from_str::<Value>(data) {
-                if let Some(text) = parsed
-                    .pointer("/choices/0/delta/content")
-                    .and_then(|v| v.as_str())
-                {
-                    if !text.is_empty() {
-                        full_response.push_str(text);
-                        sink.emit(chunk_event(session_id, text));
-                    }
-                }
-                if let Some(usage) = parsed.get("usage") {
-                    last_usage = Some(TokenUsage {
-                        prompt_token_count: usage
-                            .get("prompt_tokens")
-                            .and_then(|v| v.as_u64())
-                            .map(|v| v as u32),
-                        candidates_token_count: usage
-                            .get("completion_tokens")
-                            .and_then(|v| v.as_u64())
-                            .map(|v| v as u32),
-                        total_token_count: usage
-                            .get("total_tokens")
-                            .and_then(|v| v.as_u64())
-                            .map(|v| v as u32),
-                    });
-                }
+        let SseLine::Data(data) = parse_sse_line(line) else {
+            return false;
+        };
+        if data.is_empty() || data == "[DONE]" {
+            return false;
+        }
+        let Ok(parsed) = serde_json::from_str::<Value>(data) else {
+            return false;
+        };
+        if let Some(e) = api_error(&parsed) {
+            stream_error = Some(e);
+            return true;
+        }
+        if let Some(text) = parsed
+            .pointer("/choices/0/delta/content")
+            .and_then(|v| v.as_str())
+        {
+            if !text.is_empty() {
+                full_response.push_str(text);
+                sink.emit(chunk_event(session_id, text));
             }
         }
+        if let Some(usage) = parsed.get("usage") {
+            last_usage = Some(TokenUsage {
+                prompt_token_count: usage
+                    .get("prompt_tokens")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u32),
+                candidates_token_count: usage
+                    .get("completion_tokens")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u32),
+                total_token_count: usage
+                    .get("total_tokens")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u32),
+            });
+        }
+        if parsed
+            .pointer("/choices/0/finish_reason")
+            .and_then(Value::as_str)
+            == Some("content_filter")
+        {
+            stream_error = Some(StreamError::Blocked {
+                reason: "content_filter".to_string(),
+            });
+            return true;
+        }
+        false
     })
     .await?;
     Ok(StreamOutcome {
         full_response,
         usage: last_usage,
+        stream_error,
     })
 }
 
@@ -309,43 +460,57 @@ where
     let mut current_event = String::new();
     let mut input_tokens: u32 = 0;
     let mut output_tokens: u32 = 0;
-    drive_sse(stream, cancel_token, |line| match parse_sse_line(line) {
-        SseLine::Event(event) => current_event = event.to_string(),
-        SseLine::Data(data) => {
-            if data.is_empty() {
-                return;
+    let mut stream_error: Option<StreamError> = None;
+    drive_sse(stream, cancel_token, |line| {
+        let data = match parse_sse_line(line) {
+            SseLine::Event(event) => {
+                current_event = event.to_string();
+                return false;
             }
-            if let Ok(parsed) = serde_json::from_str::<Value>(data) {
-                match current_event.as_str() {
-                    "content_block_delta" => {
-                        if let Some(text) = parsed.pointer("/delta/text").and_then(|v| v.as_str()) {
-                            if !text.is_empty() {
-                                full_response.push_str(text);
-                                sink.emit(chunk_event(session_id, text));
-                            }
-                        }
+            SseLine::Data(data) if !data.is_empty() => data,
+            _ => return false,
+        };
+        let Ok(parsed) = serde_json::from_str::<Value>(data) else {
+            return false;
+        };
+        match current_event.as_str() {
+            "content_block_delta" => {
+                if let Some(text) = parsed.pointer("/delta/text").and_then(|v| v.as_str()) {
+                    if !text.is_empty() {
+                        full_response.push_str(text);
+                        sink.emit(chunk_event(session_id, text));
                     }
-                    "message_start" => {
-                        if let Some(t) = parsed
-                            .pointer("/message/usage/input_tokens")
-                            .and_then(|v| v.as_u64())
-                        {
-                            input_tokens = t as u32;
-                        }
-                    }
-                    "message_delta" => {
-                        if let Some(t) = parsed
-                            .pointer("/usage/output_tokens")
-                            .and_then(|v| v.as_u64())
-                        {
-                            output_tokens = t as u32;
-                        }
-                    }
-                    _ => {}
                 }
             }
+            "message_start" => {
+                if let Some(t) = parsed
+                    .pointer("/message/usage/input_tokens")
+                    .and_then(|v| v.as_u64())
+                {
+                    input_tokens = t as u32;
+                }
+            }
+            "message_delta" => {
+                if let Some(t) = parsed
+                    .pointer("/usage/output_tokens")
+                    .and_then(|v| v.as_u64())
+                {
+                    output_tokens = t as u32;
+                }
+            }
+            // e.g. `overloaded_error` mid-answer. Used to fall into the
+            // catch-all and be ignored, so a cut-off answer was shown as done.
+            "error" => {
+                stream_error = Some(api_error(&parsed).unwrap_or(StreamError::Api {
+                    code: None,
+                    kind: None,
+                    message: String::new(),
+                }));
+                return true;
+            }
+            _ => {}
         }
-        _ => {}
+        false
     })
     .await?;
     Ok(StreamOutcome {
@@ -355,6 +520,7 @@ where
             candidates_token_count: Some(output_tokens),
             total_token_count: Some(input_tokens + output_tokens),
         }),
+        stream_error,
     })
 }
 
@@ -480,5 +646,122 @@ mod tests {
         // The cap must not break normal line extraction afterwards.
         let lines = buf.push(b"\ndata: ok\n");
         assert_eq!(lines.last().map(String::as_str), Some("data: ok"));
+    }
+
+    #[test]
+    fn sse_buffer_flush_returns_an_unterminated_last_line() {
+        let mut buf = SseBuffer::new();
+        assert_eq!(buf.push(b"data: a\ndata: b"), vec!["data: a"]);
+        assert_eq!(buf.flush().as_deref(), Some("data: b"));
+        assert_eq!(buf.flush(), None, "flushing empties the buffer");
+    }
+
+    #[test]
+    fn sse_buffer_flush_strips_cr_and_is_none_when_empty() {
+        let mut buf = SseBuffer::new();
+        assert_eq!(buf.flush(), None);
+        assert!(buf.push(b"data: x\r").is_empty());
+        assert_eq!(buf.flush().as_deref(), Some("data: x"));
+    }
+
+    fn json(s: &str) -> Value {
+        serde_json::from_str(s).unwrap()
+    }
+
+    #[test]
+    fn api_error_reads_every_provider_shape() {
+        assert_eq!(
+            api_error(&json(
+                r#"{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}"#
+            )),
+            Some(StreamError::Api {
+                code: None,
+                kind: Some("overloaded_error".into()),
+                message: "Overloaded".into(),
+            })
+        );
+        assert_eq!(
+            api_error(&json(
+                r#"{"error":{"code":503,"message":"try later","status":"UNAVAILABLE"}}"#
+            )),
+            Some(StreamError::Api {
+                code: Some(503),
+                kind: Some("UNAVAILABLE".into()),
+                message: "try later".into(),
+            })
+        );
+        assert_eq!(
+            api_error(&json(
+                r#"{"error":{"message":"m","type":null,"code":"rate_limit_exceeded"}}"#
+            )),
+            Some(StreamError::Api {
+                code: None,
+                kind: Some("rate_limit_exceeded".into()),
+                message: "m".into(),
+            })
+        );
+        assert_eq!(
+            api_error(&json(r#"{"error":"plain"}"#)),
+            Some(StreamError::Api {
+                code: None,
+                kind: None,
+                message: "plain".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn api_error_ignores_ordinary_events() {
+        assert_eq!(
+            api_error(&json(r#"{"choices":[{"delta":{"content":"hi"}}]}"#)),
+            None
+        );
+        assert_eq!(api_error(&json(r#"{"error":null}"#)), None);
+    }
+
+    #[test]
+    fn google_block_classifies_finish_reasons() {
+        let finish = |r: &str| json(&format!(r#"{{"candidates":[{{"finishReason":"{r}"}}]}}"#));
+        let blocked = |r: &str| {
+            Some(StreamError::Blocked {
+                reason: r.to_string(),
+            })
+        };
+        // Normal endings — with or without text.
+        for ok in ["STOP", "MAX_TOKENS", "FINISH_REASON_UNSPECIFIED", ""] {
+            assert_eq!(google_block(&finish(ok), false), None, "{ok}");
+            assert_eq!(google_block(&finish(ok), true), None, "{ok}");
+        }
+        // Known abnormal endings — even after some text.
+        for bad in ["SAFETY", "RECITATION", "PROHIBITED_CONTENT", "OTHER"] {
+            assert_eq!(google_block(&finish(bad), true), blocked(bad), "{bad}");
+        }
+        // An unknown reason only fails a turn that produced nothing.
+        assert_eq!(google_block(&finish("NEW_THING"), true), None);
+        assert_eq!(
+            google_block(&finish("NEW_THING"), false),
+            blocked("NEW_THING")
+        );
+        // No finish reason yet: a mid-stream chunk.
+        assert_eq!(
+            google_block(
+                &json(r#"{"candidates":[{"content":{"parts":[{"text":"a"}]}}]}"#),
+                false
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn google_block_reports_a_blocked_prompt() {
+        assert_eq!(
+            google_block(
+                &json(r#"{"promptFeedback":{"blockReason":"PROHIBITED_CONTENT"}}"#),
+                false
+            ),
+            Some(StreamError::Blocked {
+                reason: "PROHIBITED_CONTENT".into()
+            })
+        );
     }
 }

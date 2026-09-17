@@ -7,6 +7,9 @@
 //! actionable messages (auth vs quota vs model-not-found vs service outage)
 //! without leaking raw provider payloads into the chat.
 
+use crate::services::ai::sse::StreamError;
+use crate::services::ai::streaming::TurnFailure;
+
 /// Turn a non-2xx HTTP status (and optional body) from a chat/classify/list call
 /// into a short, actionable message. `provider` is the human name ("OpenAI").
 pub fn describe_http_error(provider: &str, status: u16, body: &str) -> String {
@@ -32,6 +35,71 @@ pub fn describe_http_error(provider: &str, status: u16, body: &str) -> String {
 /// Format a transport-level failure (no HTTP response — DNS, TLS, connection).
 pub fn describe_transport_error(provider: &str) -> String {
     format!("Could not reach {provider}. Check your network connection and try again.")
+}
+
+/// Finish reasons that mean a content filter withheld the answer, as opposed to
+/// some other abnormal stop (recitation, malformed tool call, …).
+const CONTENT_FILTER_REASONS: &[&str] = &[
+    "SAFETY",
+    "BLOCKLIST",
+    "PROHIBITED_CONTENT",
+    "SPII",
+    "IMAGE_SAFETY",
+    "content_filter",
+];
+
+/// Turn a failed streamed turn into a short, actionable message. Built only from
+/// the provider's `message` and category fields, passed through [`cap`] — never
+/// the raw event JSON.
+pub fn describe_turn_failure(provider: &str, failure: &TurnFailure) -> String {
+    match failure {
+        TurnFailure::Empty => {
+            format!("{provider} returned an empty answer. Please try again.")
+        }
+        TurnFailure::Stream(StreamError::Blocked { reason }) => {
+            let reason = cap(reason);
+            if CONTENT_FILTER_REASONS.contains(&reason.as_str()) {
+                format!(
+                    "{provider} withheld the answer because its content filter flagged it ({reason}). Try rephrasing the request."
+                )
+            } else {
+                format!(
+                    "{provider} stopped without finishing the answer ({reason}). Please try again."
+                )
+            }
+        }
+        TurnFailure::Stream(StreamError::Api {
+            code,
+            kind,
+            message,
+        }) => {
+            let kind = kind.as_deref().unwrap_or("");
+            let base = if *code == Some(429)
+                || matches!(
+                    kind,
+                    "rate_limit_error"
+                        | "rate_limit_exceeded"
+                        | "insufficient_quota"
+                        | "RESOURCE_EXHAUSTED"
+                ) {
+                format!("{provider} rate limit or quota exceeded while answering. Wait a moment and try again.")
+            } else if matches!(code, Some(503) | Some(529))
+                || matches!(kind, "overloaded_error" | "UNAVAILABLE")
+            {
+                format!(
+                    "{provider} is overloaded and stopped mid-answer. Please try again shortly."
+                )
+            } else {
+                format!("{provider} stopped with an error while answering. Please try again.")
+            };
+            let detail = cap(message);
+            if detail.is_empty() {
+                base
+            } else {
+                format!("{base} ({detail})")
+            }
+        }
+    }
 }
 
 /// Pull a concise human message out of a provider error body without dumping the
@@ -116,5 +184,63 @@ mod tests {
     #[test]
     fn transport_error_is_actionable() {
         assert!(describe_transport_error("OpenAI").contains("network"));
+    }
+
+    fn api(code: Option<u64>, kind: Option<&str>, message: &str) -> TurnFailure {
+        TurnFailure::Stream(StreamError::Api {
+            code,
+            kind: kind.map(str::to_string),
+            message: message.to_string(),
+        })
+    }
+
+    #[test]
+    fn turn_failure_maps_overload_and_rate_limit() {
+        let msg = describe_turn_failure(
+            "Anthropic",
+            &api(None, Some("overloaded_error"), "Overloaded"),
+        );
+        assert!(msg.contains("overloaded"), "{msg}");
+        assert!(msg.ends_with("(Overloaded)"), "{msg}");
+        let msg = describe_turn_failure("Gemini", &api(Some(429), None, ""));
+        assert!(msg.contains("rate limit"), "{msg}");
+        assert!(!msg.contains("()"), "no empty detail: {msg}");
+    }
+
+    #[test]
+    fn turn_failure_separates_content_filter_from_other_stops() {
+        let blocked = |r: &str| {
+            TurnFailure::Stream(StreamError::Blocked {
+                reason: r.to_string(),
+            })
+        };
+        assert!(describe_turn_failure("Gemini", &blocked("SAFETY")).contains("content filter"));
+        assert!(
+            describe_turn_failure("OpenAI", &blocked("content_filter")).contains("content filter")
+        );
+        let other = describe_turn_failure("Gemini", &blocked("RECITATION"));
+        assert!(!other.contains("content filter"), "{other}");
+        assert!(other.contains("RECITATION"), "{other}");
+    }
+
+    #[test]
+    fn turn_failure_empty_answer_is_explained() {
+        assert!(describe_turn_failure("OpenAI", &TurnFailure::Empty).contains("empty answer"));
+    }
+
+    #[test]
+    fn turn_failure_detail_is_capped_to_one_line() {
+        let long = format!("line one\nline two {}", "y".repeat(500));
+        let msg = describe_turn_failure("OpenAI", &api(None, Some("server_error"), &long));
+        assert!(!msg.contains('\n'), "{msg}");
+        assert!(msg.contains('…'), "{msg}");
+        assert!(msg.chars().count() < 350, "{msg}");
+    }
+
+    #[test]
+    fn turn_failure_never_echoes_raw_json() {
+        // Only the message field is used, so a JSON-looking category stays out.
+        let msg = describe_turn_failure("OpenAI", &api(None, Some("{\"raw\":1}"), "m"));
+        assert!(!msg.contains("raw"), "{msg}");
     }
 }
