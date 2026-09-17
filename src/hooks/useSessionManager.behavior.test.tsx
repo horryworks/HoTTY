@@ -602,7 +602,7 @@ describe('useSessionManager — ssh known-hosts warning', () => {
     expect(onSshKnownHostsWarningCb.current).not.toBeNull();
 
     const message =
-      'Could not save host key for example.com:22 to known_hosts: permission denied';
+      'Could not save host key for example.com:22: Access denied to the known_hosts file';
     act(() => {
       onSshKnownHostsWarningCb.current?.(message);
     });

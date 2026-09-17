@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { HostTreeNode, HostEntry } from '../../types/appTypes';
 import { type FixedSizeTri, triToBool } from '../../utils/fixedTerminalSize';
 import { filterHostTree } from '../../utils/hostTreeFilter';
+import { computeDropPosition, type DropPosition } from '../../utils/treeDropPosition';
 import { flattenHosts, getJumpboxReferences } from '../../hooks/useHostManager';
 import { Dialog } from '../Dialog/Dialog';
 import { useModalState } from '../../hooks/useModalState';
@@ -58,7 +59,7 @@ interface HostTreeProps {
     onAddHost: (parentId: string | null, name: string, entry: HostEntry) => void;
     onEditNode: (id: string, patch: Partial<HostTreeNode>) => void;
     onDeleteNode: (id: string) => void;
-    onMoveNode?: (nodeId: string, targetId: string, position: 'before' | 'after' | 'inside') => void;
+    onMoveNode?: (nodeId: string, targetId: string, position: DropPosition) => void;
     onSortFolder?: (folderId: string | null, direction?: 'asc' | 'desc') => void;
     onImportData?: (nodes: HostTreeNode[], folderName: string, parentId: string | null) => Promise<string | undefined> | void;
     onShowMessage?: (type: 'error' | 'success' | 'info', title: string | undefined, message: string) => void;
@@ -263,7 +264,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
         return walk(tree) ?? t('hostTree.netbox.placement.topLevel');
     }, [editModal, tree, t]);
     const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
-    const [dropTarget, setDropTarget] = useState<{ nodeId: string; position: 'before' | 'after' | 'inside' } | null>(null);
+    const [dropTarget, setDropTarget] = useState<{ nodeId: string; position: DropPosition } | null>(null);
     const modalInputRef = useRef<HTMLInputElement>(null);
 
     const focusModal = useCallback(() => {
@@ -604,6 +605,20 @@ export const HostTree: React.FC<HostTreeProps> = ({
             dropPosition === 'inside' ? 'drag-over-inside' : '',
         ].filter(Boolean).join(' ');
 
+        // Both drag handlers must read the same band, or the indicator promises
+        // one thing and the drop does another. `isExpanded`, not the stored
+        // collapse flag: a filter draws a folded folder open, and the band has
+        // to follow what is actually on screen.
+        const dropPositionAt = (e: React.DragEvent): DropPosition => {
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            return computeDropPosition({
+                offsetY: e.clientY - rect.top,
+                height: rect.height,
+                isFolder: node.type === 'folder',
+                showsChildren: isExpanded && hasChildren,
+            });
+        };
+
         return (
             <div key={node.id} className="host-tree-node">
                 <div
@@ -624,10 +639,17 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     style={{ paddingLeft: `${depth * 14 + 8}px` }}
                     data-node-id={node.id}
                     tabIndex={node.type === 'host' ? 0 : undefined}
-                    // Reordering is disabled while filtering: "before"/"after" is
-                    // read off the visible order, which hides siblings here.
-                    draggable={!isFiltering}
+                    // Draggable while filtering, too. The drag carries only ids,
+                    // and `onMoveNode` resolves them against the unfiltered tree,
+                    // so "before X" lands immediately before X among X's real
+                    // siblings — the hidden ones included. Only a row on screen
+                    // can be aimed at, which is the point: one you cannot see is
+                    // not a place you meant to drop.
+                    draggable
                     onDragStart={(e) => {
+                        // A filtered folder row is a shell around the real node;
+                        // the id moves the real one, so every child comes along —
+                        // including the ones the filter is hiding.
                         setDraggedNodeId(node.id);
                         e.dataTransfer.effectAllowed = 'move';
                         e.dataTransfer.setData('text/plain', node.id);
@@ -637,27 +659,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                         e.stopPropagation();
                         if (!draggedNodeId || draggedNodeId === node.id) return;
                         e.dataTransfer.dropEffect = 'move';
-
-                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                        const y = e.clientY - rect.top;
-                        const h = rect.height;
-
-                        let position: 'before' | 'after' | 'inside';
-                        const isNodeExpanded = expanded[node.id] ?? true;
-
-                        if (node.type === 'folder') {
-                            if (isNodeExpanded && node.children && node.children.length > 0) {
-                                if (y < h * 0.25) position = 'before';
-                                else position = 'inside';
-                            } else {
-                                if (y < h * 0.25) position = 'before';
-                                else if (y > h * 0.75) position = 'after';
-                                else position = 'inside';
-                            }
-                        } else {
-                            position = y < h * 0.5 ? 'before' : 'after';
-                        }
-                        setDropTarget({ nodeId: node.id, position });
+                        setDropTarget({ nodeId: node.id, position: dropPositionAt(e) });
                     }}
                     onDragLeave={(e) => {
                         const related = e.relatedTarget as HTMLElement;
@@ -674,27 +676,12 @@ export const HostTree: React.FC<HostTreeProps> = ({
                             return;
                         }
 
-                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                        const y = e.clientY - rect.top;
-                        const h = rect.height;
-
-                        let position: 'before' | 'after' | 'inside';
-                        const isNodeExpanded = expanded[node.id] ?? true;
-
-                        if (node.type === 'folder') {
-                            if (isNodeExpanded && node.children && node.children.length > 0) {
-                                if (y < h * 0.25) position = 'before';
-                                else position = 'inside';
-                            } else {
-                                if (y < h * 0.25) position = 'before';
-                                else if (y > h * 0.75) position = 'after';
-                                else position = 'inside';
-                            }
-                        } else {
-                            position = y < h * 0.5 ? 'before' : 'after';
-                        }
-
+                        const position = dropPositionAt(e);
                         onMoveNode(draggedNodeId, node.id, position);
+                        // A drop into a folded folder otherwise reads as nothing
+                        // having happened, and while filtering the folder looks
+                        // open, so the user cannot know it was folded.
+                        if (position === 'inside') setExpanded(prev => ({ ...prev, [node.id]: true }));
                         setDraggedNodeId(null);
                         setDropTarget(null);
                     }}

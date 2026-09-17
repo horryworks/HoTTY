@@ -705,7 +705,7 @@ describe('tauriService event listeners', () => {
     );
     expect(result).toBe(unlisten);
 
-    const message = 'Could not save host key for example.com:22 to known_hosts: permission denied';
+    const message = 'Could not save host key for example.com:22: Access denied to the known_hosts file';
     captured?.({ payload: message });
     expect(cb).toHaveBeenCalledWith(message);
   });

@@ -24,10 +24,17 @@
 //! releases — the crate is pinned; re-verify `add_child` on every bump.
 //!
 //! ## Security
-//! The browsed page is a sandboxed island: it is a separate webview with the
-//! remote page's own origin, gets NO `initialization_script`, NO `withGlobalTauri`
-//! and NO capabilities, so it cannot reach HoTTY's Tauri IPC. Navigation is
-//! restricted to http/https/about via `on_navigation` + `validate_browser_url`.
+//! The browsed page is a separate webview with the remote page's own origin, NO
+//! `withGlobalTauri` and NO capabilities of its own. It is NOT cut off from IPC by
+//! construction, though: Tauri injects its IPC bridge (`__TAURI_INTERNALS__`, the
+//! invoke key, the IPC handler) into every webview it builds, `add_child` ones
+//! included, and with no app ACL manifest tauri 2.10.x does not check app
+//! commands against the caller. What keeps the page out is `app_webviews_only` in
+//! `lib.rs`, which refuses any app command whose webview label is not `main` or
+//! `win-*` — and this module's labels are always `wb-child-*`
+//! ([`label_for_pane`]). Plugin commands stay behind the capability ACL, which is
+//! scoped to local origins. Navigation is restricted to http/https/about via
+//! `on_navigation` + `validate_browser_url`.
 
 use std::collections::HashMap;
 #[cfg(feature = "embedded-webview")]

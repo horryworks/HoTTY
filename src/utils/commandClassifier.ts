@@ -100,6 +100,37 @@ const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
     ],
 };
 
+// ── Prefix wrappers ─────────────────────────────────────────────────────────
+//
+// Programs whose job is to run ONE other command line, handed to them as their
+// remaining words: `timeout 5 curl …`, `flock /tmp/l curl …`,
+// `nsenter -t 1 -n curl …`. What sits between the wrapper and the command varies
+// per wrapper (a flag, a count, a lock file, a directory, a user name), so the
+// egress floor does not try to find where the command starts — it scans every
+// remaining word of the segment (see {@link commandPositions}). A wrapper in
+// front of `grep ssh file` therefore asks instead of auto-running, which is the
+// safe direction and rare in practice.
+const PREFIX_WRAPPERS: Set<string> = new Set([
+    'env', 'xargs', 'nohup', 'setsid', 'stdbuf', 'nice', 'ionice', 'timeout', 'watch', 'time',
+    // Shell built-ins that run a program: `command curl …`, `exec curl …`
+    'command', 'exec',
+    // Multi-call binaries: `busybox wget …`
+    'busybox', 'toybox',
+    // Run a command under a lock / root / namespace / user / CPU or scheduler policy
+    'flock', 'chroot', 'nsenter', 'unshare', 'runuser', 'taskset', 'chrt', 'numactl',
+    // Tracers, pty and session wrappers
+    'strace', 'ltrace', 'unbuffer', 'script', 'screen', 'tmux', 'parallel',
+    // Proxy / sandbox wrappers
+    'proxychains', 'proxychains4', 'torsocks', 'tsocks', 'firejail', 'systemd-run',
+    // Windows: `start curl …`, `Start-Process curl`, `iex (iwr …)`
+    'start', 'start-process', 'saps', 'iex', 'invoke-expression',
+]);
+
+// Words that start an embedded command line mid-segment, after a program that is
+// not itself a wrapper: `ip netns exec ns curl …`, `docker exec c curl …`,
+// `kubectl exec pod -- curl …`, `find . -exec curl {} +`.
+const EXEC_MARKERS: Set<string> = new Set(['exec', '-exec', '-execdir', '-ok', '-okdir']);
+
 // ── Runner / interpreter commands ────────────────────────────────────────────
 //
 // Commands that can execute or interpret arbitrary code, or have a documented
@@ -110,7 +141,7 @@ const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
 // Deliberately broad: better to ask/AI-judge once than auto-run a shell.
 const RUNNER_COMMANDS: Set<string> = new Set([
     // Command runners / wrappers
-    'env', 'xargs', 'nohup', 'setsid', 'stdbuf', 'nice', 'ionice', 'timeout', 'watch', 'time',
+    ...PREFIX_WRAPPERS,
     // Interpreters
     'awk', 'gawk', 'mawk', 'sed', 'perl', 'python', 'python2', 'python3', 'ruby', 'node',
     'php', 'lua', 'tclsh', 'expect', 'osascript',
@@ -159,16 +190,24 @@ function normalizeBaseCommand(base: string): string {
 }
 
 /**
- * Drop surrounding quotes. A segment is split on whitespace, so the command word
- * inside `bash -c 'curl …'` arrives still carrying the opening quote.
+ * Drop surrounding quotes and grouping brackets. A segment is split on
+ * whitespace, so the command word inside `bash -c 'curl …'` arrives still
+ * carrying the opening quote, and the one in PowerShell's `iex (iwr …)` its
+ * opening parenthesis.
  */
 function stripTokenQuotes(tok: string): string {
-    return tok.replace(/^['"`]+/, '').replace(/['"`]+$/, '');
+    return tok.replace(/^['"`({]+/, '').replace(/['"`)}]+$/, '');
+}
+
+/** A leading shell assignment, `FOO=1` in `FOO=1 curl …`. */
+function isAssignment(tok: string): boolean {
+    return /^[A-Za-z_][A-Za-z0-9_]*=/.test(tok);
 }
 
 /**
- * The tokens of one pipe segment that sit in *command position* — that name a
- * program about to run, rather than data handed to one.
+ * The tokens of one pipe segment that may name a program about to run, rather
+ * than data handed to one — its *command positions*, widened as described below
+ * wherever a position cannot be pinned down safely.
  *
  * The first token always qualifies. Past it, only a wrapper's payload does: when
  * the token just taken is a {@link RUNNER_COMMANDS} entry, the tokens belonging
@@ -192,15 +231,41 @@ function stripTokenQuotes(tok: string): string {
  * runner is not itself disqualifying either — `git status`, `find . -name
  * '*.log'`, `less /var/log/syslog` and `timeout 5 ping 8.8.8.8` still
  * auto-execute, because what follows the wrapper is not an egress tool.
+ *
+ * Three widenings close the ways around that walk:
+ * - Leading `VAR=value` assignments are skipped first — `FOO=1 curl …` runs curl.
+ * - A {@link PREFIX_WRAPPERS} entry contributes every remaining word, because
+ *   what separates it from its command differs per wrapper (`flock <file>`,
+ *   `chroot <dir>`, `runuser -u <user>`) and a flag-skipping walk read those
+ *   arguments as the command. `command -v curl` is a lookup, not a run, and is
+ *   left alone like `which curl`.
+ * - An {@link EXEC_MARKERS} word anywhere in the segment contributes every word
+ *   after it: `ip netns exec ns curl …`, `docker exec c curl …`, `find . -exec
+ *   curl {} +` — none of `ip`, `docker` or the `.` after `find` is a wrapper.
  */
 function commandPositions(segment: string): string[] {
     const toks = segment.trim().split(/\s+/).filter(Boolean);
     const out: string[] = [];
+    const rest = (from: number) => toks.slice(from).map(stripTokenQuotes);
+
+    const marker = toks.findIndex(
+        (t, idx) => idx > 0 && EXEC_MARKERS.has(stripTokenQuotes(t).toLowerCase()),
+    );
+    if (marker >= 0) out.push(...rest(marker + 1));
+
     let i = 0;
+    while (i < toks.length && isAssignment(stripTokenQuotes(toks[i]))) i++;
     while (i < toks.length) {
         const tok = stripTokenQuotes(toks[i]);
         out.push(tok);
-        if (!RUNNER_COMMANDS.has(normalizeBaseCommand(tok))) break;
+        const name = normalizeBaseCommand(tok);
+        if (PREFIX_WRAPPERS.has(name)) {
+            const next = toks[i + 1];
+            const isLookup = name === 'command' && (next === '-v' || next === '-V');
+            if (!isLookup) out.push(...rest(i + 1));
+            break;
+        }
+        if (!RUNNER_COMMANDS.has(name)) break;
         i++;
         while (i < toks.length) {
             const t = toks[i];
@@ -212,8 +277,8 @@ function commandPositions(segment: string): string[] {
                 // with a second separator (`/usr/bin/curl`) fails this anyway and
                 // is read as the command it is.
                 /^\/[A-Za-z?]{1,3}$/.test(t) ||
-                // `env FOO=1 BAR=2 curl …`
-                /^[A-Za-z_][A-Za-z0-9_]*=/.test(t) ||
+                // A `VAR=value` assignment after the runner.
+                isAssignment(t) ||
                 // A bare count or duration, `timeout 5` / `timeout 5s`.
                 /^\d+[smhd]?$/.test(t);
             if (!belongsToWrapper) break;

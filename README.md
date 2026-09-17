@@ -50,7 +50,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 - Per-session encoding selection
 - Fixed terminal size — pin the terminal to the width negotiated at connect for devices that latch it and ignore later resizes (e.g. Huawei USG/VRP); auto-detected by default, with per-connection and per-tab overrides
 - Session logging to file — terminal output as `.txt`, and AI chat conversations as Markdown transcripts in the same folder
-- Host tree filter — narrow the tree by folder name, host name or address (`Ctrl+F`); a match inside a collapsed folder is revealed, and clearing the filter restores your folder state
+- Host tree filter — narrow the tree by folder name, host name or address (`Ctrl+F`); a match inside a collapsed folder is revealed, clearing the filter restores your folder state, and hosts and folders can still be dragged to reorder while it is active
 - NetBox folder sync — mirror one NetBox server's Regions and Sites into the host tree as folders, named `<code> <site name>` with the field supplying the code configurable per organisation; read-only (`GET` only), never deletes anything, never touches the hosts you file inside, and keeps the DPAPI-encrypted API token bound to the server address it was issued for
 - NetBox IP-range placement — folders carry the prefixes registered against them, so the New Session form suggests the folder covering the address you typed, and **Sort by IP Range** matches existing hosts in bulk and shows every move before applying it; overlapping ranges are reported and left alone rather than guessed at
 - Folder details — selecting a folder shows its NetBox origin, IP ranges, direct contents, and any host whose address falls outside every range on it

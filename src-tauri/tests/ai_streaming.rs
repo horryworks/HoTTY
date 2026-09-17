@@ -90,6 +90,27 @@ async fn google_accumulates_text_and_usage_across_chunks() {
 }
 
 #[tokio::test]
+async fn google_reads_every_text_part_of_an_event() {
+    // One event whose text is split over parts, one led by a text-less part
+    // (a bare thought signature), and one carrying the model's reasoning.
+    let sse = concat!(
+        "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Hel\"},{\"text\":\"lo\"}]}}]}\n\n",
+        "data: {\"candidates\":[{\"content\":{\"parts\":[{\"thoughtSignature\":\"c2ln\"},{\"text\":\" wor\"}]}}]}\n\n",
+        "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"hmm\",\"thought\":true},{\"text\":\"ld\"}]}}]}\n\n",
+    );
+
+    let sink = CollectingSink::new();
+    let cancel = CancellationToken::new();
+    let outcome = run_google_sse_stream(stream_of(vec![ok(sse)]), &sink, "s1", &cancel)
+        .await
+        .unwrap();
+
+    assert_eq!(outcome.full_response, "Hello world");
+    assert_eq!(sink.chunks(), vec!["Hello", " wor", "ld"]);
+    assert_eq!(outcome.stream_error, None);
+}
+
+#[tokio::test]
 async fn google_reassembles_multibyte_utf8_split_across_chunks() {
     // A Japanese reply split mid-character across chunk boundaries must arrive
     // intact (no U+FFFD), all the way through the JSON decode.

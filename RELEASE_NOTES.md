@@ -1,5 +1,61 @@
 # Release Notes
 
+## v2.1.0-beta9
+
+**A page opened in the Web Browser pane could drive HoTTY itself. Please update.** A web page loaded in that pane could call the same internal commands HoTTY's own window uses — including the ones that open a local shell and type into it, and the ones that read and type into your open SSH sessions. It has been possible since the pane shipped, and it needed only that you open a hostile page, or a plain-`http` device page that someone on the network path had tampered with. It is closed in this release, together with three smaller holes found in the same review — **Security** below has the details. The rest of the release is fixes for things that went wrong only now and then: characters garbled mid-line, connects that could not be stopped, AI answers cut off by a provider error yet stored as finished, and Telnet negotiation arriving in pieces.
+
+### Improvements
+
+- **The host tree can be reordered while a filter is active.** Dragging used to be switched off whenever the filter box had text in it. It now works the same filtered or not: dropping before or after a host places it next to that host among all of its siblings, including the ones the filter is hiding, and dragging a folder moves every host inside it, hidden ones too. A host dropped into a collapsed folder now opens that folder, so the move is visible.
+
+- **Error messages from saving files read as sentences.** A host key that could not be remembered, and an installer that could not be written during a version switch, used to show the raw Windows error text (`Access is denied. (os error 5)`); they now say what failed in plain words. An update download that fails no longer includes the download address in its message.
+
+### Bug Fixes
+
+- **A character split across two network reads came out as `�`.** Every connection type decoded each read on its own, so a multi-byte character (Japanese text, box-drawing lines) that happened to straddle two reads was garbled on screen, in the session log and in what the AI saw. The partial character is now carried over to the next read.
+
+- **A connection could not be stopped while it was still connecting.** Closing its tab or its window did nothing until the connect finished, after which the session had no owner and its output could appear in every window; a host-key prompt for it could wait five minutes. Closing now abandons the connect, and no error toast is raised for a tab you closed yourself.
+
+- **An AI answer interrupted by a provider error was kept as if it had finished.** When the provider reported an error part-way through a reply (an Anthropic "overloaded" error, for example) or blocked it (Gemini's safety filter, OpenAI's content filter), the cut-off text was shown and saved as a complete answer, and a blocked Gemini reply became an empty one. These now show as errors and the unanswered question is not left in the history. An empty answer is treated the same way — Anthropic would otherwise reject every later message in that conversation. The last piece of a reply was also lost when the provider's final event had no trailing newline.
+
+- **Gemini and Vertex AI answers could lose words.** A reply spread over several parts was read from its first part only, and when that first part was the model's reasoning, the reasoning was shown as the answer.
+
+- **AI Chat: New Chat and closing a tab did not stop a reply that was still arriving.** The stopped reply could land in the next conversation's history. Stop now also works while waiting for the provider's first words.
+
+- **With AI Chat in its own window, an SSH host-key prompt could lock the chat.** The prompt also opened in the AI Chat window, where it could be neither answered nor closed. Host-key and IAP VM-start prompts now appear only in the window that owns the session.
+
+- **Telnet showed stray characters after option negotiation.** A negotiation command split across two reads was dropped and its tail printed as text. Closing a Telnet tab also no longer waits for a timeout.
+
+- **A stalled update download held a version switch for ten minutes and could not be cancelled.** Cancel now works during the download, and a download that receives nothing for 60 seconds fails.
+
+- **Ping Monitor showed no round-trip time on non-English Windows.** The time was read from the English word `time=`; it is now read in any display language.
+
+- **GCP IAP:** gcloud's output is still read and logged after the tunnel comes up, so the reason a tunnel later dies reaches the log, and that reader stops with the session. Two cache refreshes running at once can no longer write a mixed-up discovery cache.
+
+- **Listing WSL distributions and detecting Git Bash flashed a console window.**
+
+- **Closing a window with a Web Browser pane left a background task running** for as long as HoTTY stayed open.
+
+- **A custom theme could vanish if HoTTY stopped mid-save.** The file is now written in full or not at all.
+
+- **A jumpbox host key that could not be saved was silently ignored** after "Accept & remember". You now get the same warning as for a direct SSH host.
+
+### Security
+
+- **A page opened in the Web Browser pane could call HoTTY's internal commands.** The pane shows a remote page in a separate embedded view, and that view was believed to be cut off from HoTTY. It was not: the framework HoTTY is built on gives every embedded view the same command channel as the app's own window, and HoTTY's commands did not check which view was calling. A script on the page could therefore do anything HoTTY's interface can — open a local shell and type commands into it, type into or read from your open SSH sessions, accept a host key, or change settings and the host tree.
+
+  HoTTY now answers its commands only when they come from its own windows; anything asked from inside the Web Browser pane is refused. Browsing works exactly as before. Using the hole took a page written specifically against HoTTY — nothing about ordinary browsing triggered it — but if you have opened untrusted sites in the pane, updating is the fix.
+
+- **AI auto-execute: more ways past the guard on data-sending commands.** v2.1.0-beta8 made the guard look behind wrapper words such as `bash -c`, `env` and `timeout`. It still missed a number of other forms, each of which put `curl`, `wget` or a similar tool where the guard did not look: `command curl …`, `exec curl …`, a leading `X=1 curl …`, wrappers that take their own argument first (`flock /tmp/l curl …`, `chroot`, `runuser -u alice`, `taskset`), multi-call binaries (`busybox wget …`), commands run inside something else (`docker exec web curl …`, `ip netns exec`, `find … -exec curl`), and PowerShell's `iex (iwr …)`. All of these are now held for review. `command -v curl` — asking whether curl is installed — still auto-executes, like `which curl`.
+
+  As before, this is reachable only with **Auto-execute safe commands** switched on, which is not the default.
+
+- **A network path written with mixed slashes slipped past the check that refuses network paths.** HoTTY refuses a path such as `\\server\share\key` for SSH keys, log folders, the File Server root and similar fields, because opening one makes Windows sign in to that server and hand it a hash of your Windows password. Windows reads `\/server\share` and `/\server\share` as the same path, and the check did not. A host tree file imported from someone else could carry such a key path. Both forms, and the `\??\` form, are now refused.
+
+- **The TFTP server set aside disk space on the sender's word.** An upload request states its size, and HoTTY reserved that much on disk before any data arrived — so one request, which on UDP needs no connection and can carry a forged sender, could fill the disk. It only mattered with **Allow uploads (write)** switched on (off by default). The file now grows as data actually arrives.
+
+- **Less for a page to reach.** Commands nothing in HoTTY used — a native context-menu stub, a confirmation dialog helper along with the permission only it needed, and five superseded GCP IAP commands — have been removed.
+
 ## v2.1.0-beta8
 
 **Every dialog now behaves like a window, and they all come from the same place.** Dragging a dialog's bottom-right corner used to grow its top-left as well, the grip tracked at half the cursor's speed, and releasing a Settings resize with the pointer off the dialog closed it. Those were three unrelated bugs in a convention that had been written out as CSS values and copied into sixteen stylesheets. All 17 dialogs now render through one shared shell — which also fixes three bugs that had already shipped. This release closes two security holes as well; if you use AI auto-execute, **Security** below is the section to read.

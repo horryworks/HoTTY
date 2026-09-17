@@ -3,6 +3,7 @@ use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{ChatResponseData, ChatResponseKind, TokenUsage};
+use crate::services::ai::classifier::extract_gemini_text;
 
 /// Parsed SSE (Server-Sent Events) line.
 #[derive(Debug, PartialEq)]
@@ -335,14 +336,9 @@ where
             stream_error = Some(e);
             return true;
         }
-        if let Some(text) = parsed
-            .pointer("/candidates/0/content/parts/0/text")
-            .and_then(|v| v.as_str())
-        {
-            if !text.is_empty() {
-                full_response.push_str(text);
-                sink.emit(chunk_event(session_id, text));
-            }
+        if let Some(text) = extract_gemini_text(&parsed) {
+            full_response.push_str(&text);
+            sink.emit(chunk_event(session_id, &text));
         }
         if let Some(usage) = parsed.get("usageMetadata") {
             last_usage = Some(google_usage(usage));

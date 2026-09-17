@@ -110,11 +110,20 @@ pub fn anthropic_verdict_tool() -> serde_json::Value {
     })
 }
 
-/// Extract the first text part from a Gemini / Vertex `generateContent` response.
-/// Shared by the Gemini provider and Google-on-Vertex classification.
-pub fn extract_gemini_text(data: &Value) -> Option<&str> {
-    data.pointer("/candidates/0/content/parts/0/text")
-        .and_then(|v| v.as_str())
+/// The answer text of a Gemini / Vertex `generateContent` response, or of one
+/// streamed chunk of it: every text part of the first candidate, joined. A reply
+/// can spread its text over several parts, and a part may carry no text at all
+/// (only a `thoughtSignature`), so reading `parts[0]` alone drops words. Parts
+/// marked `thought` are the model's reasoning, not the answer. `None` when there
+/// is no answer text. Shared by classification and the chat stream reader.
+pub fn extract_gemini_text(data: &Value) -> Option<String> {
+    let parts = data.pointer("/candidates/0/content/parts")?.as_array()?;
+    let text: String = parts
+        .iter()
+        .filter(|p| p.get("thought").and_then(Value::as_bool) != Some(true))
+        .filter_map(|p| p.get("text").and_then(Value::as_str))
+        .collect();
+    (!text.is_empty()).then_some(text)
 }
 
 /// Extract the `input` object of the first `tool_use` content block from an
@@ -264,11 +273,53 @@ mod tests {
         let body = serde_json::json!({
             "candidates": [{ "content": { "parts": [{ "text": "hello" }] } }]
         });
-        assert_eq!(extract_gemini_text(&body), Some("hello"));
+        assert_eq!(extract_gemini_text(&body).as_deref(), Some("hello"));
         assert_eq!(
             extract_gemini_text(&serde_json::json!({ "candidates": [] })),
             None
         );
+    }
+
+    #[test]
+    fn extract_gemini_text_joins_every_text_part() {
+        let body = serde_json::json!({
+            "candidates": [{ "content": { "parts": [{ "text": "hel" }, { "text": "lo" }] } }]
+        });
+        assert_eq!(extract_gemini_text(&body).as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn extract_gemini_text_reads_past_a_part_without_text() {
+        let body = serde_json::json!({
+            "candidates": [{ "content": { "parts": [
+                { "thoughtSignature": "c2ln" },
+                { "text": "answer" }
+            ] } }]
+        });
+        assert_eq!(extract_gemini_text(&body).as_deref(), Some("answer"));
+    }
+
+    #[test]
+    fn extract_gemini_text_skips_thought_parts() {
+        let body = serde_json::json!({
+            "candidates": [{ "content": { "parts": [
+                { "text": "let me think", "thought": true },
+                { "text": "answer" }
+            ] } }]
+        });
+        assert_eq!(extract_gemini_text(&body).as_deref(), Some("answer"));
+    }
+
+    #[test]
+    fn extract_gemini_text_is_none_without_answer_text() {
+        for body in [
+            serde_json::json!({ "candidates": [{ "content": { "parts": [] } }] }),
+            serde_json::json!({ "candidates": [{ "content": { "parts": [{ "text": "" }] } }] }),
+            serde_json::json!({ "candidates": [{ "finishReason": "SAFETY" }] }),
+            serde_json::json!({ "usageMetadata": { "totalTokenCount": 3 } }),
+        ] {
+            assert_eq!(extract_gemini_text(&body), None, "{body}");
+        }
     }
 
     #[test]

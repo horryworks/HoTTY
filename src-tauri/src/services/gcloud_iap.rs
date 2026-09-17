@@ -1421,7 +1421,17 @@ fn build_ssh_argv(
 struct IapTunnel {
     child: Child,
     port: u16,
+    /// The task reading gcloud's pipes for the tunnel's lifetime. Handed to the
+    /// session so it is owned, and cannot outlive it (ADR-007).
+    drain: JoinHandle<()>,
 }
+
+/// How long `disconnect()` waits for the tunnel's output reader after the tunnel
+/// child has been killed. The reader ends by itself on the pipes' EOF, so this
+/// only has to cover the last buffered lines. Short on purpose: `gcloud.cmd`
+/// runs python under `cmd.exe`, and a grandchild that survives the kill keeps
+/// the pipes open — then the reader is aborted rather than waited for.
+const TUNNEL_DRAIN_GRACE_MS: u64 = 250;
 
 /// Spawn the IAP tunnel and parse stdout/stderr until we see the local port.
 /// While we wait, each non-empty gcloud output line is also forwarded to the
@@ -1612,7 +1622,7 @@ async fn start_iap_tunnel(
     // closed the pipes, so why a tunnel later died never reached the log (and
     // gcloud could fail writing to a pipe nobody reads). Log only — the
     // terminal belongs to ssh by now.
-    tokio::spawn(drain_tunnel_output(
+    let drain = tokio::spawn(drain_tunnel_output(
         stdout_lines,
         stderr_lines,
         move |stream, line| {
@@ -1624,7 +1634,7 @@ async fn start_iap_tunnel(
             log::info!("gcloud-iap[{gcloud_pid}] tunnel {stream}: {line}");
         },
     ));
-    Ok(IapTunnel { child, port })
+    Ok(IapTunnel { child, port, drain })
 }
 
 /// Read both of gcloud's output pipes until each reaches EOF (the child exited)
@@ -1941,6 +1951,9 @@ pub struct GcloudIapSession {
     /// Live `gcloud compute start-iap-tunnel` subprocess. Held for the
     /// lifetime of the SSH session; killed on disconnect.
     tunnel_child: Option<Child>,
+    /// The task logging the tunnel's output. Not in `join`: that list is drained
+    /// *before* the tunnel is killed, when this reader has no EOF to end on yet.
+    tunnel_drain: Option<JoinHandle<()>>,
     /// Cancelled by disconnect() so the read pump's tasks end without emitting
     /// a redundant 'disconnected' (the close was user-driven).
     cancel: CancellationToken,
@@ -1955,6 +1968,7 @@ impl GcloudIapSession {
             writer_tx: None,
             join: Vec::new(),
             tunnel_child: None,
+            tunnel_drain: None,
             cancel: CancellationToken::new(),
         }
     }
@@ -2063,6 +2077,7 @@ impl SessionService for GcloudIapSession {
         let tunnel = start_iap_tunnel(&self.config, &app, &session_id).await?;
         let port = tunnel.port;
         self.tunnel_child = Some(tunnel.child);
+        self.tunnel_drain = Some(tunnel.drain);
         emit_session_data(
             &app,
             &session_id,
@@ -2321,6 +2336,16 @@ impl SessionService for GcloudIapSession {
             let _ = child.kill().await;
             let _ = child.wait().await;
         }
+        // After the kill, not before: only a dead child closes the pipes the
+        // reader is waiting on.
+        if let Some(drain) = self.tunnel_drain.take() {
+            join_or_abort(
+                vec![drain],
+                "gcloud-iap tunnel output",
+                TUNNEL_DRAIN_GRACE_MS,
+            )
+            .await;
+        }
         Ok(())
     }
 }
@@ -2335,6 +2360,9 @@ impl Drop for GcloudIapSession {
             // `kill_on_drop(true)` on the Child handles SIGKILL automatically.
             // No async work allowed in Drop; we just rely on that flag.
             log::warn!("GcloudIapSession dropped with live tunnel child; relying on kill_on_drop");
+        }
+        if let Some(drain) = self.tunnel_drain.take() {
+            drain.abort();
         }
     }
 }

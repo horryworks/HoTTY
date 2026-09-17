@@ -22,9 +22,8 @@ use commands::host_tree::{
     ImportPathState,
 };
 use commands::iap_tunnel::{
-    gce_iap_get_cache, gce_iap_list_vm_actions, gce_iap_refresh_cache,
-    gce_iap_respond_vm_start, gce_iap_run_auth_login, gce_iap_start_instance,
-    gce_iap_stop_instance,
+    gce_iap_get_cache, gce_iap_list_vm_actions, gce_iap_refresh_cache, gce_iap_respond_vm_start,
+    gce_iap_run_auth_login, gce_iap_start_instance, gce_iap_stop_instance,
 };
 use commands::licenses::get_third_party_licenses;
 use commands::log_viewer::{confirm_log_dir, list_log_files, read_log_file};
@@ -182,6 +181,45 @@ fn cleanup_window_web_browsers(app: &tauri::AppHandle, label: &str) {
     services::web_browser::destroy_for_window(&state, label);
 }
 
+/// Whether a webview is one of HoTTY's own app webviews — the `main` window or a
+/// `win-*` window (`win-N`, `win-ai-N`) — rather than a Web Browser pane's child
+/// webview (`wb-child-*`), which shows a remote page.
+fn is_app_webview(label: &str) -> bool {
+    label == "main" || label.starts_with("win-")
+}
+
+/// Refuse every app command that does not come from an app webview.
+///
+/// Tauri injects its IPC bridge (`__TAURI_INTERNALS__`, the invoke key, the IPC
+/// handler) into EVERY webview it builds, including the Web Browser pane's
+/// `add_child` webview that loads an arbitrary remote page. With no app ACL
+/// manifest, tauri 2.10.x checks the ACL only for plugin commands, so without
+/// this guard any page opened in that pane could call `connect_session` +
+/// `send_input` and run commands on this machine, inject input into open SSH
+/// sessions, or read terminal output. (tauri 2.11 adds a remote-origin check of
+/// its own; this guard does not depend on it.)
+///
+/// Plugin commands (`plugin:*`) never reach an app invoke handler — they stay
+/// behind the capability ACL, which is scoped to local origins.
+fn app_webviews_only(
+    handler: impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static,
+) -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
+    move |invoke| {
+        let label = invoke.message.webview_ref().label();
+        if !is_app_webview(label) {
+            log::warn!(
+                "ipc: refused command `{}` from non-app webview `{label}`",
+                invoke.message.command()
+            );
+            invoke
+                .resolver
+                .reject("IPC is not available to this webview");
+            return true;
+        }
+        handler(invoke)
+    }
+}
+
 /// Format the main window's title for a given app version (e.g. `HoTTY v2.0.9`).
 /// Extracted from `setup` so the title contract has unit coverage without
 /// booting a Tauri runtime.
@@ -334,7 +372,7 @@ pub fn run() {
             app.manage(AIServiceState::new(service));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(app_webviews_only(tauri::generate_handler![
             // Session management
             connect_session,
             disconnect_session,
@@ -463,7 +501,7 @@ pub fn run() {
             updater_list_releases,
             updater_install_version,
             updater_cancel_install,
-        ])
+        ]))
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
@@ -483,11 +521,36 @@ pub fn run() {
 // ---------------------------------------------------------------------------
 //
 // `run` boots a full Tauri runtime and `cleanup_window_sessions` needs a live
-// `AppHandle`, so neither is unit-testable here; we cover only the pure
-// `main_window_title` helper this module defines.
+// `AppHandle`, so neither is unit-testable here; we cover only the pure helpers
+// this module defines (`main_window_title`, `is_app_webview`).
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn app_webviews_are_main_and_win_windows() {
+        assert!(is_app_webview("main"));
+        assert!(is_app_webview("win-2"));
+        assert!(is_app_webview(&format!(
+            "{}3",
+            commands::window::AI_WINDOW_PREFIX
+        )));
+    }
+
+    #[test]
+    fn web_browser_child_webviews_are_not_app_webviews() {
+        let child = services::web_browser::label_for_pane("wb-lq2x3a-9f8e");
+        assert!(!is_app_webview(&child));
+        // Even a pane id shaped like an app label stays behind the prefix.
+        assert!(!is_app_webview(&services::web_browser::label_for_pane(
+            "main"
+        )));
+        assert!(!is_app_webview(&services::web_browser::label_for_pane(
+            "win-1"
+        )));
+        assert!(!is_app_webview(""));
+        assert!(!is_app_webview("mainx"));
+    }
 
     #[test]
     fn main_window_title_formats_version() {

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use tauri::AppHandle;
 use tauri::Manager;
 
+use crate::services::atomic_file::atomic_write;
 use crate::services::session_service::humanize_fs_error;
 
 // ---------------------------------------------------------------------------
@@ -138,6 +139,16 @@ fn read_theme_file(path: &std::path::Path) -> Result<ThemeDef, String> {
     serde_json::from_str(&contents).map_err(|e| format!("failed to parse {}: {e}", path.display()))
 }
 
+/// Write a theme JSON file atomically. A crash mid-save must not leave a
+/// truncated file: the loader skips a theme it cannot parse, so the user's
+/// theme would silently vanish. The temp file (`<key>.json.tmpN`) is not a
+/// `.json`, so the loader never picks it up.
+fn write_theme_file(path: &std::path::Path, theme: &ThemeDef) -> Result<(), String> {
+    let json = serde_json::to_string_pretty(theme)
+        .map_err(|e| format!("failed to serialize theme: {e}"))?;
+    atomic_write(path, json.as_bytes()).map_err(|e| humanize_fs_error("the theme file", &e))
+}
+
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
@@ -232,9 +243,7 @@ pub async fn save_custom_theme(
 
     let custom_dir = custom_themes_dir(&app)?;
     let path = custom_dir.join(format!("{theme_key}.json"));
-    let json = serde_json::to_string_pretty(&theme_data)
-        .map_err(|e| format!("failed to serialize theme: {e}"))?;
-    std::fs::write(&path, json).map_err(|e| humanize_fs_error("the theme file", &e))?;
+    write_theme_file(&path, &theme_data)?;
 
     log::info!("saved custom theme '{theme_key}' to {}", path.display());
     Ok(SaveThemeResult {
@@ -502,6 +511,50 @@ mod tests {
         let theme: ThemeDef = serde_json::from_str(json).unwrap();
         assert_eq!(theme.terminal.background_inactive, "#111");
         assert_eq!(theme.terminal.pane_background, "#222");
+    }
+
+    fn sample_theme(name: &str, background: &str) -> ThemeDef {
+        ThemeDef {
+            name: name.into(),
+            variables: HashMap::from([("bg-primary".into(), background.into())]),
+            terminal: ThemeTerminal {
+                foreground: "#fff".into(),
+                background: background.into(),
+                background_inactive: "#111".into(),
+                pane_background: "#222".into(),
+            },
+        }
+    }
+
+    #[test]
+    fn write_theme_file_replaces_the_theme_and_leaves_no_temp_files() {
+        let dir = std::env::temp_dir().join(format!(
+            "hotty-theme-write-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or_default()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("my-theme.json");
+
+        write_theme_file(&path, &sample_theme("First", "#000000")).unwrap();
+        assert_eq!(read_theme_file(&path).unwrap().name, "First");
+
+        write_theme_file(&path, &sample_theme("Second", "#123456")).unwrap();
+        let theme = read_theme_file(&path).unwrap();
+        assert_eq!(theme.name, "Second");
+        assert_eq!(theme.terminal.background, "#123456");
+
+        let names: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["my-theme.json".to_string()]);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

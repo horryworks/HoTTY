@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, createEvent, within } from '@testing-library/react';
 import { HostTree } from './HostTree';
 import type { HostTreeNode } from '../../types/appTypes';
 
@@ -58,6 +58,42 @@ const defaultProps = {
   onSortFolder: vi.fn(),
   onImportData: vi.fn(),
   onShowMessage: vi.fn(),
+};
+
+/** A drag event needs a dataTransfer; jsdom does not supply one, so fake it. */
+function fakeDataTransfer() {
+  return { setData: vi.fn(), getData: vi.fn(), effectAllowed: '', dropEffect: '' };
+}
+
+const rowOf = (name: string) =>
+  screen.getByText(name).closest('.host-tree-row') as HTMLElement;
+
+/**
+ * jsdom measures every element as zero, which pins every drop to a single band.
+ * Give a row a real height so the quarter/half boundaries can be aimed at.
+ */
+const mockRowHeight = (row: HTMLElement, height: number) =>
+  vi.spyOn(row, 'getBoundingClientRect').mockReturnValue({
+    x: 0, y: 0, top: 0, left: 0, right: 200, bottom: height,
+    width: 200, height, toJSON: () => ({}),
+  } as DOMRect);
+
+/**
+ * dragStart on the source, then dragOver + drop on the target at `clientY`.
+ *
+ * jsdom has no DragEvent, so fireEvent falls back to a plain Event and silently
+ * drops `clientY` from the init. Left that way every band assertion would pass
+ * for the wrong reason, so the coordinate is set on the event itself.
+ */
+const dragRow = (source: HTMLElement, target: HTMLElement, clientY = 0) => {
+  const dt = fakeDataTransfer();
+  const fireAt = (event: Event) => {
+    Object.defineProperty(event, 'clientY', { value: clientY });
+    fireEvent(target, event);
+  };
+  fireEvent.dragStart(source, { dataTransfer: dt });
+  fireAt(createEvent.dragOver(target, { dataTransfer: dt }));
+  fireAt(createEvent.drop(target, { dataTransfer: dt }));
 };
 
 describe('HostTree', () => {
@@ -393,13 +429,63 @@ describe('HostTree', () => {
       expect(screen.getByText('Web Server')).toBeTruthy();
     });
 
-    it('stops dragging while a filter is active', () => {
+    it('keeps rows draggable while a filter is active', () => {
+      // The move is resolved by id against the unfiltered tree, so a hidden
+      // sibling cannot make the drop land somewhere else.
       render(<HostTree {...defaultProps} />);
-      const before = screen.getByText('Dev Box').closest('.host-tree-row') as HTMLElement;
-      expect(before.getAttribute('draggable')).toBe('true');
+      expect(rowOf('Dev Box').getAttribute('draggable')).toBe('true');
       typeFilter('Dev');
-      const during = screen.getByText('Dev Box').closest('.host-tree-row') as HTMLElement;
-      expect(during.getAttribute('draggable')).toBe('false');
+      expect(rowOf('Dev Box').getAttribute('draggable')).toBe('true');
+    });
+
+    it('moves a filtered host into a filtered folder', () => {
+      // Both ends have to survive the filter to be aimed at, so the query
+      // matches the folder by name and the host by its own.
+      const tree: HostTreeNode[] = [
+        { id: 'dev-folder', type: 'folder', name: 'Dev Servers', children: [] },
+        {
+          id: 'host-2',
+          type: 'host',
+          name: 'Dev Box',
+          entry: { protocol: 'ssh', host: '10.0.0.2', port: 22 },
+        },
+      ];
+      const onMoveNode = vi.fn();
+      render(<HostTree {...defaultProps} tree={tree} onMoveNode={onMoveNode} />);
+      typeFilter('dev');
+
+      dragRow(rowOf('Dev Box'), rowOf('Dev Servers'));
+
+      // A zero-height row puts the pointer in a folder's middle band.
+      expect(onMoveNode).toHaveBeenCalledWith('host-2', 'dev-folder', 'inside');
+    });
+
+    it('still offers "before" while filtering', () => {
+      const onMoveNode = vi.fn();
+      render(<HostTree {...defaultProps} onMoveNode={onMoveNode} />);
+      typeFilter('10.0.0.');
+
+      const target = rowOf('Web Server');
+      mockRowHeight(target, 20);
+      dragRow(rowOf('Dev Box'), target, 2);
+
+      expect(onMoveNode).toHaveBeenCalledWith('host-2', 'host-1', 'before');
+    });
+
+    it('reads the drop band off the rows drawn, not the stored collapse state', () => {
+      const onMoveNode = vi.fn();
+      render(<HostTree {...defaultProps} onMoveNode={onMoveNode} />);
+      // Fold Production, then let the filter draw it open again.
+      fireEvent.doubleClick(screen.getByText('Production'));
+      typeFilter('Web');
+
+      const target = rowOf('Production');
+      mockRowHeight(target, 20);
+      dragRow(rowOf('Web Server'), target, 18);
+
+      // The bottom of an open folder touches its first child, not its next
+      // sibling: "after" there would drop the host several rows further down.
+      expect(onMoveNode).toHaveBeenCalledWith('host-1', 'folder-1', 'inside');
     });
 
     it('focuses the filter box on Ctrl+F', () => {

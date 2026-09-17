@@ -85,9 +85,20 @@ pub fn is_sensitive_path(resolved: &Path) -> bool {
 /// keys, where `\\attacker\share\probe` would relay the user's NTLM hash.
 pub fn is_unc_path(path: &str) -> bool {
     let trimmed = path.trim_start();
-    // Standard UNC: \\server\share or //server/share (Windows accepts both).
-    // Also catches Win32 verbatim-UNC \\?\UNC\server\share.
-    trimmed.starts_with(r"\\") || trimmed.starts_with("//")
+    // Standard UNC: \\server\share or //server/share. Windows reads either
+    // separator in either of the two leading positions, so the mixed forms
+    // `\/server\share` and `/\server\share` are the same UNC path and must not
+    // walk past a test for the two matched pairs. Also catches Win32
+    // verbatim-UNC \\?\UNC\server\share.
+    let is_sep = |c: Option<char>| matches!(c, Some('\\') | Some('/'));
+    let mut chars = trimmed.chars();
+    if is_sep(chars.next()) && is_sep(chars.next()) {
+        return true;
+    }
+    // NT object-namespace prefix: `\??\UNC\server\share` reaches the same SMB
+    // redirector, and std passes a `\??\` path to the OS untouched. No path a
+    // user types or browses to has this form.
+    trimmed.starts_with(r"\??\")
 }
 
 /// The user's home directory as a string. Resolution itself lives in
@@ -235,10 +246,28 @@ mod tests {
     }
 
     #[test]
+    fn is_unc_path_rejects_mixed_separator_unc() {
+        // Windows normalises both of these to `\\server\share\file`.
+        assert!(is_unc_path(r"\/server\share\file"));
+        assert!(is_unc_path(r"/\server\share\file"));
+        assert!(is_unc_path(r"  /\server/share"));
+    }
+
+    #[test]
+    fn is_unc_path_rejects_nt_namespace_prefix() {
+        assert!(is_unc_path(r"\??\UNC\server\share\file"));
+        assert!(is_unc_path(r"\??\C:\Users\me\key"));
+    }
+
+    #[test]
     fn is_unc_path_allows_local_paths() {
         assert!(!is_unc_path(r"C:\Users\me\.ssh\id_rsa"));
         assert!(!is_unc_path("/home/me/.ssh/id_rsa"));
         assert!(!is_unc_path(r"D:\keys\prod"));
+        // One leading separator is a rooted local path, not UNC.
+        assert!(!is_unc_path(r"\Users\me\key"));
+        assert!(!is_unc_path(r"\?"));
+        assert!(!is_unc_path(""));
     }
 
     #[test]

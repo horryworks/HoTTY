@@ -722,7 +722,7 @@ pub async fn fetch_releases(
         .header("Accept", "application/vnd.github+json")
         .send()
         .await
-        .map_err(|e| UpdaterError::Request(e.to_string()))?;
+        .map_err(|e| UpdaterError::Request(e.without_url().to_string()))?;
 
     if !resp.status().is_success() {
         let status = resp.status().as_u16();
@@ -924,7 +924,11 @@ pub async fn download_image(
         biased;
         _ = cancel.cancelled() => return Err(UpdaterError::Cancelled),
         resp = client.get(&asset.download_url).send() => {
-            resp.map_err(|e| UpdaterError::Request(e.to_string()))?
+            // `without_url`: reqwest appends " for url (…)" to a send failure,
+            // and this string reaches the renderer. ADR-017 keeps download URLs
+            // out of the renderer structurally, error text included — after a
+            // redirect that URL is a signed one.
+            resp.map_err(|e| UpdaterError::Request(e.without_url().to_string()))?
         }
     };
     if !resp.status().is_success() {
@@ -974,7 +978,13 @@ pub async fn download_image(
     }
 
     let path = image_dir().join(&file_name);
-    atomic_write(&path, &buf).map_err(|e| UpdaterError::Io(e.to_string()))?;
+    // ADR-005: a full disk must read "Not enough disk space…", not `os error 112`.
+    atomic_write(&path, &buf).map_err(|e| {
+        UpdaterError::Io(crate::services::session_service::humanize_fs_error(
+            "the installer file",
+            &e,
+        ))
+    })?;
     prune_images();
     Ok(path)
 }

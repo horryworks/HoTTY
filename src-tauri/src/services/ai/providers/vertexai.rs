@@ -1295,7 +1295,7 @@ impl AIProvider for VertexAIProvider {
             .map_err(|e| format!("failed to read classification response: {e}"))?;
 
         let content = extract_gemini_text(&data).ok_or("classification response had no content")?;
-        parse_verdict(content)
+        parse_verdict(&content)
     }
 
     fn clear_history(&self, session_id: &str) {
@@ -1734,7 +1734,7 @@ mod tests {
             }]
         });
         let content = extract_gemini_text(&body).unwrap();
-        let verdict = parse_verdict(content).unwrap();
+        let verdict = parse_verdict(&content).unwrap();
         assert!(verdict.modifies_state);
         assert_eq!(verdict.reason, "writes config");
     }

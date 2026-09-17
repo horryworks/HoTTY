@@ -110,19 +110,19 @@ impl Handler for JailedDirHandler {
             map_jail_err(e)
         })?;
 
+        // No pre-allocation from `size`. That is the peer's own `tsize` option,
+        // unauthenticated and unbounded, and NTFS reserves the clusters the
+        // moment `set_len` returns — so one spoofable UDP packet could fill the
+        // disk, and the reservation outlived a transfer that then failed. The
+        // file simply grows as blocks arrive; `size` is kept for the progress
+        // display only.
         let create_path = resolved.clone();
-        let file = unblock(move || {
-            let f = File::create(&create_path)?;
-            if let Some(s) = size {
-                let _ = f.set_len(s);
-            }
-            Ok::<File, std::io::Error>(f)
-        })
-        .await
-        .map_err(|e| {
-            self.report_upload_error(&requested, &client_str, &humanize_file_error(&e));
-            packet::Error::PermissionDenied
-        })?;
+        let file = unblock(move || File::create(&create_path))
+            .await
+            .map_err(|e| {
+                self.report_upload_error(&requested, &client_str, &humanize_file_error(&e));
+                packet::Error::PermissionDenied
+            })?;
 
         emit_transfer(
             &self.app,
