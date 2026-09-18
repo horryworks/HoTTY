@@ -38,7 +38,7 @@ export const settings = {
     inputSection: '입력',
     backspaceSendsDel: 'Backspace가 DEL(0x7F) 전송',
     backspaceSendsDelHelp:
-      '사용 안 함으로 설정하면 Backspace가 0x08(BS)을 전송합니다. 서버가 0x7F를 예상하는 경우 사용하세요.',
+      'SSH, Telnet, 시리얼에만 적용됩니다. 사용 안 함으로 설정하면 Backspace가 0x08(BS)을 전송합니다. 서버가 0x7F를 예상하는 경우 사용하세요. 로컬 셸과 WSL은 항상 0x7F를 전송합니다.',
     rightClickPaste: '마우스 오른쪽 버튼으로 붙여넣기',
     rightClickPasteHelp: '터미널에서 마우스 오른쪽 버튼을 클릭하면 붙여넣기 확인 대화 상자가 표시됩니다.',
     // Diagnostics

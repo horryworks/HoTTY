@@ -38,7 +38,7 @@ export const settings = {
     inputSection: 'Ввод',
     backspaceSendsDel: 'Backspace отправляет DEL (0x7F)',
     backspaceSendsDelHelp:
-      'Если отключено, Backspace отправляет 0x08 (BS). Включите, если сервер ожидает 0x7F.',
+      'Применяется только к SSH, Telnet и Serial. Если отключено, Backspace отправляет 0x08 (BS). Включите, если сервер ожидает 0x7F. Локальные оболочки и WSL всегда отправляют 0x7F.',
     rightClickPaste: 'Вставка правой кнопкой мыши',
     rightClickPasteHelp: 'Щелчок правой кнопкой мыши по терминалу показывает диалог подтверждения вставки.',
     // Диагностика

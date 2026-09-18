@@ -102,6 +102,7 @@ import {
 import type { OpenRequest } from './useSessionManager';
 import { useErrorNotificationStore } from '../stores/errorNotificationStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import type { ProtocolId } from '../types/appTypes';
 
 const sampleRequest: OpenRequest = {
   displayName: 'test-host',
@@ -763,12 +764,25 @@ describe('useSessionManager — terminal hot path', () => {
     vi.useRealTimers();
   });
 
-  async function openOne() {
+  async function openOne(req: OpenRequest = sampleRequest) {
     const { result } = renderHook(() => useSessionManager());
     await act(async () => { await flushMicrotasks(); });
     let id = '';
-    act(() => { id = result.current.openSession(sampleRequest); });
+    act(() => { id = result.current.openSession(req); });
     return { id, term: terminalStubs[terminalStubs.length - 1] };
+  }
+
+  /** A request for a ConPTY-backed protocol. The config shape is irrelevant to
+   *  the input path, which keys off `protocol` alone. */
+  function conPtyRequest(protocol: ProtocolId): OpenRequest {
+    return {
+      displayName: protocol,
+      protocol,
+      config:
+        protocol === 'wsl' || protocol === 'gcloud-iap'
+          ? { encoding: 'utf8' }
+          : { shellType: protocol as 'cmd' | 'powershell' | 'git-bash', encoding: 'utf8' },
+    };
   }
 
   it('strips a server DECAWM-disable while wrap is ON', async () => {
@@ -849,5 +863,66 @@ describe('useSessionManager — terminal hot path', () => {
     });
     act(() => { onData('a\x7fb'); });
     expect(sendInputMock).toHaveBeenLastCalledWith(id, 'a\x7fb');
+  });
+
+  // ConPTY decides what a byte means, and to it 0x08 is Ctrl+Backspace: the
+  // rewrite above made Backspace delete a whole word in cmd.exe / PowerShell.
+  it.each<ProtocolId>(['cmd', 'powershell', 'git-bash', 'wsl', 'gcloud-iap'])(
+    'never converts DEL to BS for the ConPTY-backed protocol %s',
+    async (protocol) => {
+      const { id, term } = await openOne(conPtyRequest(protocol));
+      const onData = term.onData.mock.calls[0][0] as (d: string) => void;
+
+      act(() => { onData('a\x7fb'); });
+      expect(sendInputMock).toHaveBeenLastCalledWith(id, 'a\x7fb');
+    }
+  );
+
+  it('keeps Backspace, Ctrl+Backspace and Alt+Backspace distinct for a ConPTY session', async () => {
+    const { id, term } = await openOne(conPtyRequest('cmd'));
+    const onData = term.onData.mock.calls[0][0] as (d: string) => void;
+
+    act(() => { onData('\x7f'); });
+    expect(sendInputMock).toHaveBeenLastCalledWith(id, '\x7f');
+    act(() => { onData('\x08'); });
+    expect(sendInputMock).toHaveBeenLastCalledWith(id, '\x08');
+    act(() => { onData('\x1b\x7f'); });
+    expect(sendInputMock).toHaveBeenLastCalledWith(id, '\x1b\x7f');
+  });
+
+  it('never converts DEL to BS for an adopted ConPTY session either', async () => {
+    const { result } = renderHook(() => useSessionManager());
+    await act(async () => { await flushMicrotasks(); });
+    act(() => {
+      result.current.adoptSession({
+        id: 'worker-1',
+        displayName: 'worker',
+        protocol: 'powershell',
+        status: 'connected',
+      });
+    });
+    const term = terminalStubs[terminalStubs.length - 1];
+    const onData = term.onData.mock.calls[0][0] as (d: string) => void;
+
+    act(() => { onData('a\x7fb'); });
+    expect(sendInputMock).toHaveBeenLastCalledWith('worker-1', 'a\x7fb');
+  });
+
+  it('still converts DEL to BS for an adopted raw-wire session', async () => {
+    const { result } = renderHook(() => useSessionManager());
+    await act(async () => { await flushMicrotasks(); });
+    act(() => {
+      result.current.adoptSession({
+        id: 'worker-2',
+        displayName: 'worker',
+        protocol: 'telnet',
+        status: 'connected',
+      });
+    });
+    const term = terminalStubs[terminalStubs.length - 1];
+    const onData = term.onData.mock.calls[0][0] as (d: string) => void;
+
+    act(() => { onData('a\x7fb'); });
+    expect(sendInputMock).toHaveBeenLastCalledWith('worker-2', 'a\x08b');
   });
 });

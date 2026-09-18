@@ -38,7 +38,7 @@ export const settings = {
     inputSection: '输入',
     backspaceSendsDel: '退格键发送 DEL (0x7F)',
     backspaceSendsDelHelp:
-      '如果禁用，退格键将发送 0x08 (BS)。如果您的服务器需要 0x7F，请启用。',
+      '仅适用于 SSH、Telnet 和串口。如果禁用，退格键将发送 0x08 (BS)。如果您的服务器需要 0x7F，请启用。本地 Shell 和 WSL 始终发送 0x7F。',
     rightClickPaste: '右键单击粘贴',
     rightClickPasteHelp: '右键单击终端会显示粘贴确认对话框。',
     // Diagnostics

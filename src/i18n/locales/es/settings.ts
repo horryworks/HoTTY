@@ -38,7 +38,7 @@ export const settings = {
     inputSection: 'Entrada',
     backspaceSendsDel: 'Retroceso envía DEL (0x7F)',
     backspaceSendsDelHelp:
-      'Si se desactiva, Retroceso envía 0x08 (BS). Actívelo si su servidor espera 0x7F.',
+      'Solo se aplica a SSH, Telnet y Serie. Si se desactiva, Retroceso envía 0x08 (BS). Actívelo si su servidor espera 0x7F. Las shells locales y WSL siempre envían 0x7F.',
     rightClickPaste: 'Clic derecho para pegar',
     rightClickPasteHelp: 'Al hacer clic derecho en el terminal se muestra el diálogo de confirmación de pegado.',
     // Diagnósticos

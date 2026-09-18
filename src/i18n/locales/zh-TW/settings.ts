@@ -38,7 +38,7 @@ export const settings = {
     inputSection: '輸入',
     backspaceSendsDel: 'Backspace 傳送 DEL（0x7F）',
     backspaceSendsDelHelp:
-      '若停用，Backspace 會傳送 0x08（BS）。若您的伺服器預期收到 0x7F，請啟用此選項。',
+      '僅適用於 SSH、Telnet 與序列埠。若停用，Backspace 會傳送 0x08（BS）。若您的伺服器預期收到 0x7F，請啟用此選項。本機 Shell 與 WSL 一律傳送 0x7F。',
     rightClickPaste: '按右鍵以貼上',
     rightClickPasteHelp: '在終端機上按右鍵會顯示貼上確認對話方塊。',
     // 診斷

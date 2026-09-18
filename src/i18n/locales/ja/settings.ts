@@ -38,7 +38,7 @@ export const settings = {
     inputSection: '入力',
     backspaceSendsDel: 'Backspace で DEL (0x7F) を送信',
     backspaceSendsDelHelp:
-      '無効の場合、Backspace は 0x08 (BS) を送信します。サーバーが 0x7F を要求する場合は有効にしてください。',
+      'SSH・Telnet・シリアルにのみ適用されます。無効の場合、Backspace は 0x08 (BS) を送信します。サーバーが 0x7F を要求する場合は有効にしてください。ローカルシェルと WSL は常に 0x7F を送信します。',
     rightClickPaste: '右クリックで貼り付け',
     rightClickPasteHelp: 'ターミナルを右クリックすると貼り付け確認ダイアログが表示されます。',
     // 診断

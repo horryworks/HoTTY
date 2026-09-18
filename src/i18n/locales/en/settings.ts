@@ -38,7 +38,7 @@ export const settings = {
     inputSection: 'Input',
     backspaceSendsDel: 'Backspace sends DEL (0x7F)',
     backspaceSendsDelHelp:
-      'If disabled, Backspace sends 0x08 (BS). Enable if your server expects 0x7F.',
+      'Applies to SSH, Telnet and Serial only. If disabled, Backspace sends 0x08 (BS). Enable if your server expects 0x7F. Local shells and WSL always send 0x7F.',
     rightClickPaste: 'Right-click to paste',
     rightClickPasteHelp: 'Right-clicking the terminal shows the paste confirmation dialog.',
     // Diagnostics

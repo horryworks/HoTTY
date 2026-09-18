@@ -37,9 +37,25 @@ const DECAWM_ENABLE_RE = /\x1b\[\?7h/g;
 const DECAWM_DISABLE = '\x1b[?7l';
 const DECAWM_ENABLE = '\x1b[?7h';
 
-/** DEL (0x7f) → BS (0x08) for terminals that expect backspace to send BS. */
+/** DEL (0x7f) → BS (0x08) for devices that expect backspace to send BS. Only
+ *  ever applied to protocols whose bytes reach the far end verbatim — see
+ *  CONPTY_PROTOCOLS. */
 const DEL_RE = /\x7f/g;
 const DEL = '\x7f';
+
+/** Protocols whose backend is a Windows ConPTY (local.rs, wsl.rs and
+ *  gcloud_iap.rs all open one through portable-pty). ConPTY, not the far end,
+ *  turns our bytes into keystrokes, and its mapping is fixed: 0x7F is Backspace
+ *  and 0x08 is Ctrl+Backspace. Rewriting DEL to BS here made every Backspace
+ *  delete a whole word in cmd.exe and PowerShell, so the BS/DEL preference must
+ *  never apply to these. */
+const CONPTY_PROTOCOLS: ReadonlySet<ProtocolId> = new Set<ProtocolId>([
+  'cmd',
+  'powershell',
+  'git-bash',
+  'wsl',
+  'gcloud-iap',
+]);
 
 /** Quiet period after the last selection change before copy-on-select writes
  *  the clipboard. Long enough to collapse a drag into one write, short enough
@@ -437,8 +453,14 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
   // openSession (fresh connect) and adoptSession (attach to a live backend
   // session that had no terminal yet — an AI worker being materialized).
   const createTerminal = useCallback(
-    (id: string, fixedSize: boolean): { term: Terminal; fitAddon: FitAddon } => {
+    (
+      id: string,
+      protocol: ProtocolId,
+      fixedSize: boolean
+    ): { term: Terminal; fitAddon: FitAddon } => {
       const s = useSettingsStore.getState();
+      // Resolved once: onData below runs per keystroke.
+      const conPty = CONPTY_PROTOCOLS.has(protocol);
       const term = new Terminal({
         fontFamily: s.fontFamily,
         fontSize: s.fontSize,
@@ -484,7 +506,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
 
       term.onData((data) => {
         const converted =
-          useSettingsStore.getState().backspaceSendsDel || !data.includes(DEL)
+          conPty || useSettingsStore.getState().backspaceSendsDel || !data.includes(DEL)
             ? data
             : data.replace(DEL_RE, '\x08');
         // Deliberately one invoke per keystroke: batching input would add
@@ -509,7 +531,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       const fixedSizeOverride = (req.config as { fixedTerminalSize?: boolean })
         .fixedTerminalSize;
       const fixedSize = resolveFixedSize(fixedSizeOverride, s.fixedTerminalSizeMode, undefined);
-      const { term, fitAddon } = createTerminal(id, fixedSize);
+      const { term, fitAddon } = createTerminal(id, req.protocol, fixedSize);
 
       // Fallback display name: if the caller passed an empty/whitespace-only
       // string, the tab strip would render a blank label which is unfriendly.
@@ -618,7 +640,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       if (sessionsRef.current.has(req.id)) return;
       const s = useSettingsStore.getState();
       const fixedSize = resolveFixedSize(undefined, s.fixedTerminalSizeMode, undefined);
-      const { term, fitAddon } = createTerminal(req.id, fixedSize);
+      const { term, fitAddon } = createTerminal(req.id, req.protocol, fixedSize);
       if (req.initialText) {
         // The watch buffer is ANSI-stripped plain text with bare LF line ends;
         // xterm needs CRLF or every line would start where the previous ended.

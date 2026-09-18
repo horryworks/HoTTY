@@ -38,7 +38,7 @@ export const settings = {
     inputSection: 'Saisie',
     backspaceSendsDel: 'Retour arrière envoie DEL (0x7F)',
     backspaceSendsDelHelp:
-      "Si désactivé, Retour arrière envoie 0x08 (BS). Activez-le si votre serveur attend 0x7F.",
+      "S'applique uniquement à SSH, Telnet et Série. Si désactivé, Retour arrière envoie 0x08 (BS). Activez-le si votre serveur attend 0x7F. Les shells locaux et WSL envoient toujours 0x7F.",
     rightClickPaste: 'Clic droit pour coller',
     rightClickPasteHelp: 'Un clic droit sur le terminal affiche la boîte de dialogue de confirmation de collage.',
     // Diagnostics
