@@ -95,7 +95,7 @@ export const panes = {
     targetCount_other: '{{count}} 个目标',
     csvLogging: 'CSV 日志记录',
     loggingFolder: '保存到 {{path}}',
-    loggingFolderUnset: '请先在“设置 → 常规”中指定日志文件夹，才能使用 CSV 日志',
+    setLogFolder: '指定日志文件夹…',
     loggingDirDenied: '日志文件夹未获批准，CSV 日志已关闭',
     showTargetsPanel: '显示目标面板',
     hideTargetsPanel: '隐藏目标面板',

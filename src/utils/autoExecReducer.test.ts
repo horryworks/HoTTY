@@ -5,8 +5,13 @@ import {
     hasBlock,
     getBlock,
     collectMessageDecorations,
+    blockKeyOf,
+    slotOf,
     type AutoExecState,
     type AutoExecDecision,
+    type AutoExecBlock,
+    terminalOutcomes,
+    sameOutcomes,
 } from './autoExecReducer';
 import type { AutoExecAction } from './autoExecReducer';
 
@@ -321,56 +326,110 @@ describe('collectMessageDecorations', () => {
     it('maps each status to the right decoration set for message index 1', () => {
         const dExec = decision({ reason: 'read-only' });
         const dClassified = decision({ autoExec: false, reason: 'modifies config', source: 'ai' });
+        const k = (cmd: string) => blockKeyOf(1, 0, cmd);
         const s = run(
             // executed
-            { type: 'reserve', tabId: TAB, blockKey: '1:display version', command: 'display version' },
-            { type: 'decide', tabId: TAB, blockKey: '1:display version', decision: dExec },
-            { type: 'execute', tabId: TAB, blockKey: '1:display version' },
+            { type: 'reserve', tabId: TAB, blockKey: k('display version'), command: 'display version' },
+            { type: 'decide', tabId: TAB, blockKey: k('display version'), decision: dExec },
+            { type: 'execute', tabId: TAB, blockKey: k('display version') },
             // classified but not run
-            { type: 'reserve', tabId: TAB, blockKey: '1:save config', command: 'save config' },
-            { type: 'decide', tabId: TAB, blockKey: '1:save config', decision: dClassified },
+            { type: 'reserve', tabId: TAB, blockKey: k('save config'), command: 'save config' },
+            { type: 'decide', tabId: TAB, blockKey: k('save config'), decision: dClassified },
             // classifying in flight
-            { type: 'reserve', tabId: TAB, blockKey: '1:show clock', command: 'show clock' },
+            { type: 'reserve', tabId: TAB, blockKey: k('show clock'), command: 'show clock' },
             // declined
-            { type: 'decline', tabId: TAB, blockKey: '1:reboot', command: 'reboot' },
+            { type: 'decline', tabId: TAB, blockKey: k('reboot'), command: 'reboot' },
         );
 
         const d = collectMessageDecorations(s, TAB, 1, [
             'display version', 'save config', 'show clock', 'reboot',
         ]);
-        expect([...d.autoExecuted]).toEqual(['display version']);
-        expect([...d.declined]).toEqual(['reboot']);
-        expect([...d.classifying]).toEqual(['show clock']);
+        expect([...d.autoExecuted]).toEqual([slotOf(0, 'display version')]);
+        expect([...d.declined]).toEqual([slotOf(0, 'reboot')]);
+        expect([...d.classifying]).toEqual([slotOf(0, 'show clock')]);
         // Verdicts include the executed block's verdict and the classified one, but
         // NOT the declined block (the UI hides the note for declined commands).
-        expect(d.verdicts.get('display version')).toEqual(dExec);
-        expect(d.verdicts.get('save config')).toEqual(dClassified);
-        expect(d.verdicts.has('reboot')).toBe(false);
+        expect(d.verdicts.get(slotOf(0, 'display version'))).toEqual(dExec);
+        expect(d.verdicts.get(slotOf(0, 'save config'))).toEqual(dClassified);
+        expect(d.verdicts.has(slotOf(0, 'reboot'))).toBe(false);
+    });
+
+    it('keeps two blocks with the same command apart by occurrence', () => {
+        // The model proposes `show clock` twice in one answer (say, for two
+        // targets). Declining the first must not badge the second, and the
+        // second auto-executing must not badge the first.
+        const s = run(
+            { type: 'decline', tabId: TAB, blockKey: blockKeyOf(1, 0, 'show clock'), command: 'show clock' },
+            { type: 'reserve', tabId: TAB, blockKey: blockKeyOf(1, 1, 'show clock'), command: 'show clock' },
+            { type: 'decide', tabId: TAB, blockKey: blockKeyOf(1, 1, 'show clock'), decision: decision() },
+            { type: 'execute', tabId: TAB, blockKey: blockKeyOf(1, 1, 'show clock') },
+        );
+        const d = collectMessageDecorations(s, TAB, 1, ['show clock', 'show clock']);
+        expect([...d.declined]).toEqual([slotOf(0, 'show clock')]);
+        expect([...d.autoExecuted]).toEqual([slotOf(1, 'show clock')]);
+    });
+
+    it('a manual Run marks the block executed (terminal) without the auto-executed badge', () => {
+        const key = blockKeyOf(1, 0, 'show clock');
+        const s = run(
+            { type: 'reserve', tabId: TAB, blockKey: key, command: 'show clock' },
+            { type: 'execute', tabId: TAB, blockKey: key, manual: true },
+            // The verdict resolves afterwards: recorded, but the block stays executed.
+            { type: 'decide', tabId: TAB, blockKey: key, decision: decision() },
+            { type: 'schedule', tabId: TAB, blockKey: key, runAt: 1 },
+        );
+        expect(getBlock(s, TAB, key)?.status).toBe('executed');
+        expect(getBlock(s, TAB, key)?.manual).toBe(true);
+        const d = collectMessageDecorations(s, TAB, 1, ['show clock']);
+        expect(d.autoExecuted.size).toBe(0);
+        expect(d.scheduled.size).toBe(0);
+        expect(d.verdicts.get(slotOf(0, 'show clock'))).toEqual(decision());
     });
 
     it('surfaces a scheduled block as scheduled (runAt), not as a verdict', () => {
+        const key = blockKeyOf(1, 0, 'display version');
         const s = run(
-            { type: 'reserve', tabId: TAB, blockKey: '1:display version', command: 'display version' },
-            { type: 'decide', tabId: TAB, blockKey: '1:display version', decision: decision() },
-            { type: 'schedule', tabId: TAB, blockKey: '1:display version', runAt: 4242 },
+            { type: 'reserve', tabId: TAB, blockKey: key, command: 'display version' },
+            { type: 'decide', tabId: TAB, blockKey: key, decision: decision() },
+            { type: 'schedule', tabId: TAB, blockKey: key, runAt: 4242 },
         );
         const d = collectMessageDecorations(s, TAB, 1, ['display version']);
-        expect(d.scheduled.get('display version')).toBe(4242);
-        expect(d.verdicts.has('display version')).toBe(false);
+        expect(d.scheduled.get(slotOf(0, 'display version'))).toBe(4242);
+        expect(d.verdicts.has(slotOf(0, 'display version'))).toBe(false);
         expect(d.autoExecuted.size).toBe(0);
     });
 
     it('scopes lookups to the given message index (blockKey collision across messages)', () => {
+        const key = blockKeyOf(0, 0, 'display version');
         const s = run(
-            { type: 'reserve', tabId: TAB, blockKey: '0:display version', command: 'display version' },
-            { type: 'decide', tabId: TAB, blockKey: '0:display version', decision: decision() },
-            { type: 'execute', tabId: TAB, blockKey: '0:display version' },
+            { type: 'reserve', tabId: TAB, blockKey: key, command: 'display version' },
+            { type: 'decide', tabId: TAB, blockKey: key, decision: decision() },
+            { type: 'execute', tabId: TAB, blockKey: key },
         );
         // The same command in message index 2 has a different blockKey → no decoration.
         const d2 = collectMessageDecorations(s, TAB, 2, ['display version']);
         expect(d2.autoExecuted.size).toBe(0);
         // …but message index 0 still resolves.
         const d0 = collectMessageDecorations(s, TAB, 0, ['display version']);
-        expect([...d0.autoExecuted]).toEqual(['display version']);
+        expect([...d0.autoExecuted]).toEqual([slotOf(0, 'display version')]);
+    });
+});
+
+describe('terminalOutcomes', () => {
+    it('keeps only executed and declined blocks, without their countdown', () => {
+        const state: AutoExecState = new Map<string, ReadonlyMap<string, AutoExecBlock>>([
+            ['t1', new Map<string, AutoExecBlock>([
+                ['0:0:ls', { command: 'ls', status: 'executed', runAt: 5 }],
+                ['0:0:pwd', { command: 'pwd', status: 'declined' }],
+                ['1:0:uptime', { command: 'uptime', status: 'classifying' }],
+            ])],
+            ['t2', new Map<string, AutoExecBlock>([['0:0:df', { command: 'df', status: 'scheduled', runAt: 9 }]])],
+        ]);
+        const out = terminalOutcomes(state);
+        expect([...out.keys()]).toEqual(['t1']);
+        expect(out.get('t1')!.get('0:0:ls')).toEqual({ command: 'ls', status: 'executed' });
+        expect(out.get('t1')!.has('1:0:uptime')).toBe(false);
+        expect(sameOutcomes(out, terminalOutcomes(state))).toBe(true);
+        expect(sameOutcomes(out, new Map())).toBe(false);
     });
 });

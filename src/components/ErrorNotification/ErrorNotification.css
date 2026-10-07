@@ -32,12 +32,6 @@
   flex: 1;
 }
 
-.error-notification-category {
-  color: var(--color-danger);
-  font-size: var(--font-size-base);
-  font-weight: 600;
-}
-
 .error-notification-message {
   color: var(--text-primary);
   font-size: calc(var(--font-size-base) - 1px);

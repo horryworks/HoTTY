@@ -14,7 +14,7 @@ interface TabStripProps {
     onAdd: () => void;
     /** Tabs with an in-flight AI response — shown with a spinner so a background
      *  conversation streaming in parallel is visible without switching to it. */
-    streamingTabIds?: Set<string>;
+    streamingTabIds?: ReadonlySet<string>;
 }
 
 export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect, onClose, onAdd, streamingTabIds }) => {

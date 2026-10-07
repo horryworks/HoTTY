@@ -85,12 +85,14 @@ const { NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP } = await import('
 const { _clearVerdictCache } = await import('../../utils/aiCommandClassifier');
 const { tauriService } = await import('../../services/tauriService');
 const { useAiAuthStore } = await import('../../stores/aiAuthStore');
+const { useAiTranscriptStore } = await import('../../stores/aiTranscriptStore');
 
-// The auth store is module-global; reset it between tests so a prior test's
-// authenticated state can't leak into the next one.
+// The auth and transcript stores are module-global; reset them between tests
+// so a prior test's state can't leak into the next one.
 beforeEach(() => {
     act(() => {
         useAiAuthStore.setState({ isAuthenticated: false, isAuthLoading: false, authError: null });
+        useAiTranscriptStore.setState({ panes: new Map() });
     });
 });
 
@@ -491,6 +493,24 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
         });
         await authenticate();
         expect(h.onEnqueuePending).not.toHaveBeenCalledWith('t1', NETWORK_EXPERT_KICKOFF);
+    });
+
+    it('does NOT re-kick a conversation that just moved in from another window', async () => {
+        // A window handover mounts a fresh pane for the conversation: the watched
+        // terminal is live, auth is already up, and the transcript arrives through
+        // the pane's port only AFTER the first commit. The kickoff must not mistake
+        // that first, still-empty render for a brand-new chat.
+        act(() => { useAiAuthStore.setState({ isAuthenticated: true }); });
+        const history: [string, { role: 'user' | 'model'; content: string }[]][] = [
+            ['t1', [{ role: 'user', content: 'show the CPU usage' }, { role: 'model', content: 'It is 3%.' }]],
+        ];
+        // The receiving window installs the transcript before the pane exists.
+        useAiTranscriptStore.getState().importPane('ai-1', history, []);
+        await act(async () => {
+            renderPane({ aiPersonas: networkExpertPersonas, onUpdateTabById: h.onUpdateTabById });
+        });
+        expect(h.onEnqueuePending).not.toHaveBeenCalledWith('t1', NETWORK_EXPERT_KICKOFF);
+        expect(screen.getByText('It is 3%.')).toBeTruthy();
     });
 
     it('does NOT kick off when no model is selected', async () => {

@@ -8,8 +8,8 @@ use tauri::AppHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{
-    emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, ChatResponseData,
-    ChatResponseKind, ModelInfo,
+    cancelled_response, emit_auth_result, emit_chat_response, AIProvider, AppHandleSink,
+    AuthStatus, ChatResponseData, ChatResponseKind, ModelInfo,
 };
 use crate::services::ai::classifier::{
     anthropic_verdict_tool, build_user_prompt, parse_anthropic_tool_verdict, CommandVerdict,
@@ -290,9 +290,10 @@ impl AIProvider for AnthropicProvider {
             .header("anthropic-version", ANTHROPIC_VERSION)
             .body(body.to_string())
             .send();
-        // Stopped before the server answered: close the turn as cancelled, emit nothing.
+        // Stopped before the server answered: close the turn as cancelled and say so.
         let Some(sent) = cancellable(&cancel_token, request).await else {
-            self.history.finalize_assistant(&sid, "assistant", "", true);
+            self.history.close_cancelled_turn(&sid, "assistant", "");
+            emit_chat_response(&app_clone, cancelled_response(&sid, ""));
             self.cancel_tokens.lock().unwrap().remove(&sid);
             return Ok(());
         };
@@ -322,7 +323,8 @@ impl AIProvider for AnthropicProvider {
         if !response.status().is_success() {
             let status = response.status().as_u16();
             let Some(error_body) = cancellable(&cancel_token, response.text()).await else {
-                self.history.finalize_assistant(&sid, "assistant", "", true);
+                self.history.close_cancelled_turn(&sid, "assistant", "");
+                emit_chat_response(&app_clone, cancelled_response(&sid, ""));
                 self.cancel_tokens.lock().unwrap().remove(&sid);
                 return Ok(());
             };
@@ -373,7 +375,8 @@ impl AIProvider for AnthropicProvider {
                 }
                 TurnResolution::Cancelled { partial } => {
                     self.history
-                        .finalize_assistant(&sid, "assistant", &partial, true);
+                        .close_cancelled_turn(&sid, "assistant", &partial);
+                    emit_chat_response(&app_clone, cancelled_response(&sid, &partial));
                 }
                 // `event: error` mid-answer (e.g. overloaded) or an empty answer:
                 // same handling as a hard error below.

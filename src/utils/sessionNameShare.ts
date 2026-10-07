@@ -44,6 +44,16 @@ export interface SessionNamesMessage {
 /** Channel carrying session-name tables between windows. */
 export const SESSION_NAMES_CHANNEL = 'hotty-session-names';
 
+/**
+ * Channel on which a window that has just started asks every other window for
+ * its table. Tables are otherwise sent only when they CHANGE, so a window
+ * opened later (a dedicated AI Chat window, typically) would know nothing of
+ * the terminals that already existed until one of them changed — their chips
+ * read as bare hosts and a reconnect could not rebind. A reply is a plain
+ * table broadcast, never another request, so there is no echo.
+ */
+export const SESSION_NAMES_REQUEST_CHANNEL = 'hotty-session-names-request';
+
 /** Wire version; a receiver ignores anything it does not recognise. */
 export const SESSION_NAMES_VERSION = 1;
 

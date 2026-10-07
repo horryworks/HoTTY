@@ -97,7 +97,7 @@ export const panes = {
     targetCount_other: '{{count}} цели',
     csvLogging: 'Журналирование в CSV',
     loggingFolder: 'Сохраняется в {{path}}',
-    loggingFolderUnset: 'Укажите папку журналов в «Настройки → Общие», чтобы использовать журнал CSV',
+    setLogFolder: 'Указать папку журналов…',
     loggingDirDenied: 'Папка журналов не одобрена — запись CSV отключена',
     showTargetsPanel: 'Показать панель целей',
     hideTargetsPanel: 'Скрыть панель целей',

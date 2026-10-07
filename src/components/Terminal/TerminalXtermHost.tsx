@@ -69,6 +69,8 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
   // desyncs wrapped-line editing on devices that latch the pty width (e.g.
   // Huawei VRP) and ignore later window-change.
   const hasMeasuredRef = useRef(false);
+  // The last size sent to the backend, so the debug log records changes only.
+  const lastSentSizeRef = useRef('');
   const terminalForeground = useSettingsStore((s) => s.terminalForeground);
   const terminalBackground = useSettingsStore((s) => s.terminalBackground);
   const terminalBackgroundInactive = useSettingsStore((s) => s.terminalBackgroundInactive);
@@ -121,6 +123,11 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
   const performResize = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
+    // A layout switch re-parents the pane, and for a moment the container is
+    // detached or 0x0. Measuring then gave the 2x1 floor, which went to the pty;
+    // a ConPTY shrunk to one row keeps only the cursor line, so on growing back a
+    // WSL / Git Bash screen came back as a single prompt line. Wait for a real size.
+    if (!el.isConnected || el.clientWidth === 0 || el.clientHeight === 0) return;
     try {
       const measured = computeDimensions();
       if (pinnedCols) {
@@ -166,6 +173,13 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
       }
       if (hasMeasuredRef.current) {
         const { cols, rows } = session.term;
+        const sized = `${cols}x${rows}`;
+        if (sized !== lastSentSizeRef.current) {
+          lastSentSizeRef.current = sized;
+          tauriService
+            .logDebug('debug', 'terminal', `resize ${session.id} -> ${sized} (container ${el.clientWidth}x${el.clientHeight})`)
+            .catch(() => {});
+        }
         tauriService.resize(session.id, cols, rows).catch(() => {});
       }
     } catch {
@@ -288,9 +302,18 @@ export function TerminalXtermHost({ session, active }: TerminalXtermHostProps) {
   // pty-req) and the modal connect dialog is on top of it at that point;
   // grabbing focus here would fight the dialog's focus trap. App focuses the
   // terminal when the dialog hands off on 'connected'.
+  //
+  // Keyed on the status, not the whole session object: the record is rebuilt on
+  // every status / pty-size / error event, and refocusing on each of those pulled
+  // focus out of an open dialog into the terminal, where xterm swallows Escape.
+  // For the same reason it never takes focus while a dialog is open.
+  const term = session.term;
+  const status = session.status;
   useEffect(() => {
-    if (active && session.status !== 'connecting') session.term.focus();
-  }, [active, session]);
+    if (!active || status === 'connecting') return;
+    if (document.querySelector('.dlg-overlay')) return;
+    term.focus();
+  }, [active, status, term]);
 
   return (
     <div

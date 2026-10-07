@@ -228,9 +228,12 @@ function isAssignment(tok: string): boolean {
  * arguments too, so `grep ssh /etc/passwd`, `which curl`, `ps aux | grep ssh` and
  * `ls /etc/ssh` would every one of them stop auto-executing. The walk stops at
  * `grep`/`which`/`ls` because none is a runner, so those are untouched. Being a
- * runner is not itself disqualifying either — `git status`, `find . -name
- * '*.log'`, `less /var/log/syslog` and `timeout 5 ping 8.8.8.8` still
- * auto-execute, because what follows the wrapper is not an egress tool.
+ * runner is not itself disqualifying here either — `git status`, `find . -name
+ * '*.log'`, `less /var/log/syslog` and `timeout 5 ping 8.8.8.8` pass this
+ * floor, because what follows the wrapper is not an egress tool. Passing the
+ * floor is not the same as auto-executing: a runner never matches the
+ * whitelist, so these go on to the AI verdict (hybrid) or to the user
+ * (static) rather than running on the whitelist fast path.
  *
  * Three widenings close the ways around that walk:
  * - Leading `VAR=value` assignments are skipped first — `FOO=1 curl …` runs curl.

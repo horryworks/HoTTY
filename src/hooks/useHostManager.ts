@@ -225,6 +225,14 @@ function loadRawTree(): HostTreeNode[] {
     }
 }
 
+/**
+ * The saved Host Tree entry with this id, read straight from storage (its
+ * credentials still encrypted) — for code that has no useHostManager instance.
+ */
+export function findStoredHostNode(id: string): HostTreeNode | undefined {
+    return flattenHosts(loadRawTree()).find((n) => n.id === id);
+}
+
 function saveRawTree(tree: HostTreeNode[]) {
     const json = JSON.stringify(tree);
     localStorage.setItem(STORAGE_KEY, json);

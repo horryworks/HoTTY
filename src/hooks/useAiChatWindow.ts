@@ -14,15 +14,23 @@
  * AI has not read yet. So the receiver subscribes, THEN acks, and only then
  * does the sender let go.
  *
+ * The transcripts travel through `aiTranscriptStore`: the receiver writes the
+ * payload's turns into the store BEFORE it registers the pane, so the pane's
+ * very first render shows the conversation (and the Network Expert kickoff
+ * never mistakes a moved-in chat for a new one).
+ *
  * The payload is re-broadcast on a short interval until the ack arrives,
  * because a freshly created window has not mounted its listener yet. Receiving
  * is idempotent (`importAiChatState` refuses a pane it already holds), so a
  * duplicate costs nothing.
  *
  * ## Only at rest
- * The caller gates the move on the conversation being idle — no stream, no
- * command run, no pending confirmation. That single rule removes the whole
- * class of "which window does this in-flight event belong to" bugs.
+ * A conversation moves only while it is idle — no stream, no command run, no
+ * pending confirmation. That single rule removes the whole class of "which
+ * window does this in-flight event belong to" bugs. The pane knows whether it
+ * is at rest and says so through its port; `popOut` / `popIn` ask it, so every
+ * entry point (the header button, the terminal tab's "Watch in the AI Chat
+ * window") is gated the same way.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -46,19 +54,47 @@ import {
   workerIdsOf,
   AI_ADOPT_SESSION_CHANNEL,
   AI_WATCH_REQUEST_CHANNEL,
+  AI_DIALOG_REQUEST_CHANNEL,
+  AI_DIALOG_RESULT_CHANNEL,
   buildAdoptRequest,
   buildWatchRequest,
+  buildDialogRequest,
+  buildDialogResult,
   parseAdoptRequest,
   parseWatchRequest,
+  parseDialogRequest,
+  parseDialogResult,
   type AiHandoverPayload,
-  type HandoverMessages,
-  type HandoverTokens,
+  type AiDialogRequest,
 } from '../utils/aiWindowHandover';
-import { aiBackendSessionId, type AiChatState } from './useAiChat';
+import { aiBackendSessionId, getActiveTab, tabHasSession, type AiChatState } from './useAiChat';
+import type { SessionDialogPrefill } from '../types/appTypes';
+import { useAiTranscriptStore } from '../stores/aiTranscriptStore';
+import { disposePaneStreams } from './useChatStream';
 
 /** Log without raising a toast — `logError` is for things the user must see. */
 function debug(message: string): void {
   void tauriService.logDebug('info', 'AIWindow', message).catch(() => {});
+}
+
+/**
+ * Remember where the AI Chat window is, then close it for good.
+ *
+ * The close is a `destroy()`, which does not reliably fire `beforeunload`, so
+ * the geometry is saved here explicitly — this is the last chance to catch a
+ * window closed straight after being dragged. A failed read keeps whatever
+ * was remembered before; the close goes ahead either way.
+ */
+async function saveBoundsAndClose(): Promise<void> {
+  if (IS_AI_CHAT_WINDOW) {
+    try {
+      const rect = await tauriService.getWindowRect();
+      useSettingsStore.getState().update('aiWindowBounds', rect);
+    } catch {
+      /* geometry unavailable — keep whatever was remembered before */
+    }
+  }
+  await tauriService.closeThisWindow();
 }
 
 /** How long the sender waits for the receiver's ack before giving up. */
@@ -67,10 +103,11 @@ export const HANDOVER_ACK_TIMEOUT_MS = 5000;
 /** How often the payload is re-broadcast while waiting for that ack. */
 export const HANDOVER_RETRY_MS = 400;
 
-/** A mounted AI Chat pane's transcripts, which live inside the pane, not App. */
-export interface ChatTranscriptPort {
-  export: () => { messages: HandoverMessages; tokens: HandoverTokens };
-  import: (messages: HandoverMessages, tokens: HandoverTokens) => void;
+/** What a mounted AI Chat pane tells this hook about itself. */
+export interface ChatPanePort {
+  /** Whether the conversation is at rest (no stream, run, countdown or card
+   *  awaiting an answer) and may therefore change window right now. */
+  canMove: () => boolean;
 }
 
 export interface UseAiChatWindowOptions {
@@ -96,8 +133,26 @@ export interface UseAiChatWindowOptions {
    * has to reimplement either.
    */
   watchInConversation: (sessionId: string, target: string | 'new') => void;
+  /**
+   * Start watching a terminal when this window has no AI Chat yet: creates the
+   * pane and a conversation seeded with the terminal (the "AI Monitor" toggle's
+   * cold start). Consent-gated like `watchInConversation`.
+   */
+  watchColdStart: (sessionId: string) => void;
   /** Id of the conversation on screen — where an incoming watch request lands. */
   activeConversationTabId?: string;
+  /**
+   * Show the connection dialog for an AI request that another window's
+   * conversation is waiting on (an AI Chat window has nowhere to put the
+   * terminal). The result is reported back through `reportDialogResult`.
+   */
+  showDialogForRemote: (request: AiDialogRequest) => void;
+  /**
+   * A session the user connected (or declined) in another window for THIS
+   * window's AI request: link it to the waiting conversation and watch for
+   * its prompt, or tell the model the user declined.
+   */
+  onRemoteDialogResult: (paneId: string, tabId: string, key: string, sessionId: string | undefined) => void;
   /**
    * Give one of the AI's terminals a real tab in THIS window, on behalf of an
    * AI Chat window that has no tab strip. `history` is the scrollback read from
@@ -117,13 +172,12 @@ export interface UseAiChatWindowReturn {
   alwaysOnTop: boolean;
   toggleAlwaysOnTop: () => void;
   /**
-   * Publish (or withdraw, with `null`) a mounted AI Chat pane's transcript
-   * accessors. The pane owns its message state, so this is how a handover
-   * reaches it. Kept inside the hook rather than handed in as a ref: passing a
-   * ref object into a hook call during render costs the whole component its
-   * React Compiler optimization.
+   * Publish (or withdraw, with `null`) a mounted AI Chat pane's port. Kept
+   * inside the hook rather than handed in as a ref: passing a ref object into
+   * a hook call during render costs the whole component its React Compiler
+   * optimization.
    */
-  registerTranscriptPort: (paneId: string, port: ChatTranscriptPort | null) => void;
+  registerPanePort: (paneId: string, port: ChatPanePort | null) => void;
   /**
    * What closing this AI Chat window would throw away, or `null` when nothing
    * is being closed. Non-null means the user pressed X and there is something
@@ -145,14 +199,25 @@ export interface UseAiChatWindowReturn {
    * means "not my job — adopt it yourself".
    */
   handOffMaterialize: (worker: AiWorkerSession) => boolean;
+  /**
+   * Ask an ordinary window to show the pre-filled connection dialog for an AI
+   * request of this window's conversation. Returns true when this window is an
+   * AI Chat window and has delegated it; false means "show it yourself".
+   */
+  delegateDialog: (paneId: string, tabId: string, key: string, prefill: SessionDialogPrefill) => boolean;
+  /**
+   * Report what the user did in a dialog shown on another window's behalf:
+   * the session they connected, or nothing (they closed it).
+   */
+  reportDialogResult: (request: AiDialogRequest, sessionId: string | undefined) => void;
 }
 
 export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindowReturn {
   const { activeConversationTitle } = options;
   const [moving, setMoving] = useState(false);
   const [closeRequest, setCloseRequest] = useState<{ conversations: number; workers: number } | null>(null);
-  /** Transcript accessors of the AI Chat panes mounted in this window. */
-  const transcriptPortsRef = useRef(new Map<string, ChatTranscriptPort>());
+  /** Ports of the AI Chat panes mounted in this window. */
+  const panePortsRef = useRef(new Map<string, ChatPanePort>());
   const alwaysOnTop = useSettingsStore((s) => s.aiWindowAlwaysOnTop);
 
   // Latest-value mirrors: the broadcast listener and the retry timer are set up
@@ -161,16 +226,6 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
   useEffect(() => {
     optsRef.current = options;
   });
-
-  /**
-   * Transcripts that arrived before their pane finished mounting.
-   *
-   * The pane owns its message state, so it can only be filled once it has
-   * registered a port. The handover deliberately does NOT wait for that — the
-   * ack has to go out promptly — so the payload parks here and the port drains
-   * it on registration.
-   */
-  const pendingTranscriptsRef = useRef(new Map<string, { messages: HandoverMessages; tokens: HandoverTokens }>());
 
   /** The window a pop-in should return to, learned from the payload that arrived. */
   const originLabelRef = useRef<string | null>(null);
@@ -213,6 +268,25 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
         }
       }
 
+      const installed = o.importAiChatState(payload.paneId, payload.state);
+      if (!installed) {
+        // We already hold this pane — the sender is retrying an ack we lost.
+        // Re-ack rather than doing the work twice.
+        debug(`AI handover: pane ${payload.paneId} already present; re-acknowledging`);
+      } else {
+        // The transcripts go into the store the pane reads from — BEFORE the
+        // pane is put into the layout below, so its first render already shows
+        // the conversation (an empty first render is what made the Network
+        // Expert identify the device all over again).
+        useAiTranscriptStore.getState().importPane(payload.paneId, payload.messages, payload.tokens, payload.outcomes);
+
+        // Re-create the AI's worker terminals in this window's registry. These
+        // carry no secrets (the store never held any), only what the tray chip
+        // and the duplicate-connection check need.
+        const store = useAiWorkerSessionStore.getState();
+        for (const w of payload.workers) store.upsert(w);
+      }
+
       // In an AI Chat window, the conversation replaces the empty pane the
       // window opened with. Elsewhere it is an additional pane — deliberately
       // bypassing the one-AI-Chat-per-window rule, because refusing here would
@@ -222,25 +296,6 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
         o.replaceAiChatPane(existing, payload.paneId);
       } else {
         o.registerAiChatPane(payload.paneId);
-      }
-
-      const installed = o.importAiChatState(payload.paneId, payload.state);
-      if (!installed) {
-        // We already hold this pane — the sender is retrying an ack we lost.
-        // Re-ack rather than doing the work twice.
-        debug(`AI handover: pane ${payload.paneId} already present; re-acknowledging`);
-      } else {
-        pendingTranscriptsRef.current.set(payload.paneId, {
-          messages: payload.messages,
-          tokens: payload.tokens,
-        });
-        drainTranscripts(payload.paneId, transcriptPortsRef, pendingTranscriptsRef);
-
-        // Re-create the AI's worker terminals in this window's registry. These
-        // carry no secrets (the store never held any), only what the tray chip
-        // and the duplicate-connection check need.
-        const store = useAiWorkerSessionStore.getState();
-        for (const w of payload.workers) store.upsert(w);
       }
 
       originLabelRef.current = payload.from;
@@ -274,8 +329,7 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
         setMoving(false);
         return;
       }
-      const port = transcriptPortsRef.current?.get(paneId);
-      const transcripts = port ? port.export() : { messages: [], tokens: [] };
+      const transcripts = useAiTranscriptStore.getState().exportPane(paneId);
       const payload = buildHandoverPayload({
         to,
         from: WINDOW_LABEL,
@@ -283,6 +337,7 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
         state,
         messagesByTab: new Map(transcripts.messages),
         tokensByTab: new Map(transcripts.tokens),
+        outcomes: transcripts.outcomes,
         workers: workersForPane(useAiWorkerSessionStore.getState().workers, paneId),
       });
       const raw = JSON.stringify(payload);
@@ -322,16 +377,29 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
     [],
   );
 
+  /**
+   * Whether the pane may change window right now. The pane's port is the
+   * authority; a pane that has not registered one (not mounted yet) is at
+   * rest by definition. A refused move is reported, since the caller may be a
+   * context menu with no greyed-out button to explain itself.
+   */
+  const atRest = useCallback((paneId: string): boolean => {
+    const port = panePortsRef.current.get(paneId);
+    if (!port || port.canMove()) return true;
+    logError('AIWindow', i18n.t('notifications.errors.aiWindowMoveBlocked'));
+    return false;
+  }, []);
+
   const popOut = useCallback((afterMove?: (label: string) => void) => {
     if (!IS_TAURI || pendingRef.current) return;
     const paneId = optsRef.current.aiChatPaneId;
-    if (!paneId) return;
+    if (!paneId || !atRest(paneId)) return;
     setMoving(true);
     void (async () => {
       try {
         const bounds = useSettingsStore.getState().aiWindowBounds ?? undefined;
         const label = await tauriService.createAiChatWindow(bounds);
-        startHandover(paneId, label, () => {
+        startHandover(paneId, label, (adopted) => {
           const o = optsRef.current;
           // The conversation now lives in the new window: stop this window's
           // polls, drop the state WITHOUT freeing backend history (the other
@@ -339,8 +407,16 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
           o.clearRunCommandIntervals(paneId);
           o.forgetAiChatState(paneId);
           o.removeAiChatPane(paneId);
+          disposePaneStreams(paneId);
+          // Only the AI terminals the receiver actually took ownership of leave
+          // this window's registry. One it could not adopt is still this
+          // window's session: kept here, the idle sweep eventually closes it,
+          // whereas forgotten it would run on with no one able to close it.
           const store = useAiWorkerSessionStore.getState();
-          for (const w of workersForPane(store.workers, paneId)) store.remove(w.id);
+          const taken = new Set(adopted);
+          for (const w of workersForPane(store.workers, paneId)) {
+            if (taken.has(w.id)) store.remove(w.id);
+          }
           afterMove?.(label);
         });
       } catch (e) {
@@ -348,7 +424,7 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
         logError('AIWindow', i18n.t('notifications.errors.aiWindowOpenFailed'), e);
       }
     })();
-  }, [startHandover]);
+  }, [startHandover, atRest]);
 
   const popOutRef = useRef(popOut);
   useEffect(() => {
@@ -358,7 +434,7 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
   const popIn = useCallback(() => {
     if (!IS_TAURI || pendingRef.current) return;
     const paneId = optsRef.current.aiChatPaneId;
-    if (!paneId) return;
+    if (!paneId || !atRest(paneId)) return;
     setMoving(true);
     void (async () => {
       try {
@@ -367,9 +443,10 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
           const o = optsRef.current;
           o.clearRunCommandIntervals(paneId);
           o.forgetAiChatState(paneId);
+          disposePaneStreams(paneId);
           // Closing this window is the point of popping in; its own teardown
           // (WindowEvent::Destroyed) cleans up whatever is left behind.
-          void tauriService.closeThisWindow().catch((e) => {
+          void saveBoundsAndClose().catch((e) => {
             debug(`AI handover: could not close the AI window: ${String(e)}`);
           });
         });
@@ -378,7 +455,7 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
         logError('AIWindow', i18n.t('notifications.errors.aiWindowPopInFailed'), e);
       }
     })();
-  }, [startHandover]);
+  }, [startHandover, atRest]);
 
   // ── Wiring ───────────────────────────────────────────────────────────────
 
@@ -411,8 +488,27 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
           const req = parseWatchRequest(payload, WINDOW_LABEL);
           if (!req) return;
           const o = optsRef.current;
-          o.watchInConversation(req.sessionId, o.activeConversationTabId ?? 'new');
+          // "Watch in" means watch: a terminal the conversation on screen
+          // already watches is left as it is (the picker's toggle-off would
+          // otherwise unwatch it) — the window just comes forward.
+          const state = o.aiChatPaneId ? o.getAiChatState(o.aiChatPaneId) : undefined;
+          if (!tabHasSession(getActiveTab(state), req.sessionId)) {
+            o.watchInConversation(req.sessionId, o.activeConversationTabId ?? 'new');
+          }
           void tauriService.focusWindow().catch(() => {});
+          return;
+        }
+        if (channel === AI_DIALOG_REQUEST_CHANNEL) {
+          const req = parseDialogRequest(payload, WINDOW_LABEL);
+          if (!req) return;
+          optsRef.current.showDialogForRemote(req);
+          void tauriService.focusWindow().catch(() => {});
+          return;
+        }
+        if (channel === AI_DIALOG_RESULT_CHANNEL) {
+          const res = parseDialogResult(payload, WINDOW_LABEL);
+          if (!res) return;
+          optsRef.current.onRemoteDialogResult(res.paneId, res.tabId, res.key, res.sessionId);
           return;
         }
         if (channel === AI_HANDOVER_ACK_CHANNEL) {
@@ -440,16 +536,6 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
     };
   }, [receive, finishPending]);
 
-  // Drain any transcripts that arrived before their pane mounted. Runs on every
-  // commit because that is exactly when a newly mounted pane has registered its
-  // port; it is a cheap map lookup when there is nothing waiting.
-  useEffect(() => {
-    if (pendingTranscriptsRef.current.size === 0) return;
-    for (const paneId of Array.from(pendingTranscriptsRef.current.keys())) {
-      drainTranscripts(paneId, transcriptPortsRef, pendingTranscriptsRef);
-    }
-  });
-
   // Apply the pinned-on-top preference, and re-apply it whenever it changes.
   // Only an AI Chat window is ever pinned — doing it to a terminal window would
   // put the user's own work permanently over everything else.
@@ -461,8 +547,9 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
   }, [alwaysOnTop]);
 
   // Remember where the user left the AI Chat window, so the next one opens
-  // there. Saved on move/resize (debounced) and once more on unload, which is
-  // the only chance to catch a window closed straight after being dragged.
+  // there. Saved on move/resize (debounced), and once more right before each
+  // close (see saveBoundsAndClose — `beforeunload` is kept as a fallback, but a
+  // destroyed window is not guaranteed to fire it).
   useEffect(() => {
     if (!IS_TAURI || !IS_AI_CHAT_WINDOW) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -509,14 +596,13 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
     const o = optsRef.current;
     const paneId = o.aiChatPaneId;
     const state = paneId ? o.getAiChatState(paneId) : undefined;
-    const ports = paneId ? transcriptPortsRef.current.get(paneId) : undefined;
-    const transcripts = ports?.export().messages ?? [];
+    const transcripts = paneId ? useAiTranscriptStore.getState().exportPane(paneId).messages : [];
     const conversations = transcripts.filter(([, msgs]) => msgs.length > 0).length;
     const workers = paneId
       ? workersForPane(useAiWorkerSessionStore.getState().workers, paneId).length
       : 0;
     if (!state || (conversations === 0 && workers === 0)) {
-      void tauriService.closeThisWindow().catch(() => {});
+      void saveBoundsAndClose().catch(() => {});
       return;
     }
     setCloseRequest({ conversations, workers });
@@ -537,8 +623,9 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
       for (const tab of state?.tabs ?? []) {
         void tauriService.aiChatClear(aiBackendSessionId(paneId, tab.id)).catch(() => {});
       }
+      disposePaneStreams(paneId);
     }
-    void tauriService.closeThisWindow().catch((e) => {
+    void saveBoundsAndClose().catch((e) => {
       debug(`AI Chat window: close failed: ${String(e)}`);
     });
   }, []);
@@ -578,11 +665,56 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
         await ask(aiLabel);
         return;
       }
+      if (!optsRef.current.aiChatPaneId) {
+        // No AI Chat anywhere yet. Start one here, watching this terminal,
+        // and move it out once React has it — a pop-out with nothing to move
+        // used to be a silent no-op, leaving a menu item that did nothing.
+        optsRef.current.watchColdStart(sessionId);
+        const ready = await settles(() => {
+          const id = optsRef.current.aiChatPaneId;
+          return !!id && !!optsRef.current.getAiChatState(id);
+        });
+        if (!ready) {
+          debug('AI watch in window: the conversation did not appear in time');
+          return;
+        }
+        // The conversation already watches the terminal; nothing to ask for.
+        popOutRef.current();
+        return;
+      }
       // No AI Chat window yet. Move the conversation out FIRST and only then ask
       // — asking before the handover would race the new window's listener, and
       // linking here first would race React's commit of the link.
       popOutRef.current((label) => void ask(label));
     })();
+  }, []);
+
+  const delegateDialog = useCallback((paneId: string, tabId: string, key: string, prefill: SessionDialogPrefill): boolean => {
+    if (!IS_TAURI || !IS_AI_CHAT_WINDOW) return false;
+    void (async () => {
+      try {
+        const target = await resolvePopInTarget(originLabelRef.current);
+        await tauriService.broadcastSharedChange(
+          AI_DIALOG_REQUEST_CHANNEL,
+          JSON.stringify(buildDialogRequest({ to: target, from: WINDOW_LABEL, paneId, tabId, key, prefill })),
+        );
+      } catch (e) {
+        logError('AIWindow', i18n.t('notifications.errors.aiWindowOpenFailed'), e);
+        // Nobody will answer: close the request out as declined.
+        optsRef.current.onRemoteDialogResult(paneId, tabId, key, undefined);
+      }
+    })();
+    return true;
+  }, []);
+
+  const reportDialogResult = useCallback((request: AiDialogRequest, sessionId: string | undefined) => {
+    if (!IS_TAURI) return;
+    void tauriService
+      .broadcastSharedChange(
+        AI_DIALOG_RESULT_CHANNEL,
+        JSON.stringify(buildDialogResult({ to: request.from, paneId: request.paneId, tabId: request.tabId, key: request.key, sessionId })),
+      )
+      .catch((e) => debug(`AI dialog result failed: ${String(e)}`));
   }, []);
 
   const handOffMaterialize = useCallback((worker: AiWorkerSession): boolean => {
@@ -601,10 +733,10 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
     return true;
   }, []);
 
-  const registerTranscriptPort = useCallback(
-    (paneId: string, port: ChatTranscriptPort | null) => {
-      if (port) transcriptPortsRef.current.set(paneId, port);
-      else transcriptPortsRef.current.delete(paneId);
+  const registerPanePort = useCallback(
+    (paneId: string, port: ChatPanePort | null) => {
+      if (port) panePortsRef.current.set(paneId, port);
+      else panePortsRef.current.delete(paneId);
     },
     [],
   );
@@ -619,28 +751,26 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
     popIn,
     watchInAiWindow,
     handOffMaterialize,
+    delegateDialog,
+    reportDialogResult,
     moving,
     alwaysOnTop,
     toggleAlwaysOnTop,
-    registerTranscriptPort,
+    registerPanePort,
     closeRequest,
     confirmClose,
     cancelClose,
   };
 }
 
-/** Hand parked transcripts to a pane that has since registered its port. */
-function drainTranscripts(
-  paneId: string,
-  portsRef: React.RefObject<Map<string, ChatTranscriptPort>>,
-  pendingRef: React.RefObject<Map<string, { messages: HandoverMessages; tokens: HandoverTokens }>>,
-) {
-  const parked = pendingRef.current?.get(paneId);
-  if (!parked) return;
-  const port = portsRef.current?.get(paneId);
-  if (!port) return;
-  port.import(parked.messages, parked.tokens);
-  pendingRef.current?.delete(paneId);
+/** Poll `check` every 50 ms until it holds, for at most `timeoutMs`. */
+async function settles(check: () => boolean, timeoutMs = 2000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (check()) return true;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return check();
 }
 
 /**

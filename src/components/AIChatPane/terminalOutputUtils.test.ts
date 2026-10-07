@@ -139,3 +139,15 @@ describe('connect envelopes', () => {
     expect(isMachineEnvelope('please connect to the switch')).toBe(false);
   });
 });
+
+describe('connectDeclinedNote', () => {
+  it('rules out the same host over every protocol', () => {
+    const note = connectDeclinedNote('ssh:alice@192.0.2.10:22');
+    expect(note.startsWith('Connection Declined (ssh:alice@192.0.2.10:22):')).toBe(true);
+    expect(note).toContain('192.0.2.10 again in this conversation, over any protocol');
+  });
+
+  it('keeps the plain wording for a local shell', () => {
+    expect(connectDeclinedNote('local:powershell')).toContain('Do not request it again.');
+  });
+});

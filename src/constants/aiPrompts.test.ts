@@ -7,7 +7,27 @@ import {
   resolveAiLanguage,
   AI_LANGUAGE_BY_UI_LANGUAGE,
   AUTO_LANGUAGE,
+  buildNoTerminalBlock,
+  withPromptHint,
+  NETWORK_EXPERT_KICKOFF,
+  NETWORK_EXPERT_RECONNECT_PREP,
+  NETWORK_EXPERT_SAME_DEVICE_PREP,
 } from './aiPrompts';
+
+describe('Network Expert paging re-preps', () => {
+  it('name no vendor, so a model that has not identified the device does not guess one', () => {
+    // A Huawei once got Cisco's `terminal length 0` from the example list.
+    for (const prep of [NETWORK_EXPERT_RECONNECT_PREP, NETWORK_EXPERT_SAME_DEVICE_PREP]) {
+      expect(prep).not.toMatch(/Cisco|Huawei|Juniper/);
+      expect(prep).toContain('already identified');
+    }
+  });
+
+  it('tell an added session apart from a reconnect', () => {
+    expect(NETWORK_EXPERT_RECONNECT_PREP).toContain('reconnected');
+    expect(NETWORK_EXPERT_SAME_DEVICE_PREP).not.toContain('reconnected');
+  });
+});
 
 describe('buildExecutionRules', () => {
   it('returns a non-empty string', () => {
@@ -186,5 +206,22 @@ describe('buildConnectCapabilityBlock', () => {
     const block = buildConnectCapabilityBlock({ ...base, remainingSlots: 0, idleMinutes: 0 });
     expect(block).toContain('limit of AI-opened terminals is reached');
     expect(block).not.toContain('closed automatically');
+  });
+});
+
+describe('buildNoTerminalBlock', () => {
+  it('is empty while a terminal is watched and forbids execute blocks otherwise', () => {
+    expect(buildNoTerminalBlock(1)).toBe('');
+    expect(buildNoTerminalBlock(0)).toContain('Do NOT emit');
+  });
+});
+
+describe('withPromptHint', () => {
+  it('appends the prompt line, and leaves the kickoff alone without one', () => {
+    expect(withPromptHint(NETWORK_EXPERT_KICKOFF, undefined)).toBe(NETWORK_EXPERT_KICKOFF);
+    expect(withPromptHint(NETWORK_EXPERT_KICKOFF, '   ')).toBe(NETWORK_EXPERT_KICKOFF);
+    const hinted = withPromptHint(NETWORK_EXPERT_KICKOFF, '<sw-01>');
+    expect(hinted.startsWith(NETWORK_EXPERT_KICKOFF)).toBe(true);
+    expect(hinted).toContain('"<sw-01>"');
   });
 });

@@ -11,8 +11,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{
-    emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, ChatResponseData,
-    ChatResponseKind, ModelInfo,
+    cancelled_response, emit_auth_result, emit_chat_response, AIProvider, AppHandleSink,
+    AuthStatus, ChatResponseData, ChatResponseKind, ModelInfo,
 };
 use crate::services::ai::classifier::{
     build_user_prompt, extract_gemini_text, gemini_response_schema, parse_verdict, CommandVerdict,
@@ -705,9 +705,10 @@ impl AIProvider for GeminiProvider {
             .header("Authorization", format!("Bearer {token}"))
             .body(body.to_string())
             .send();
-        // Stopped before the server answered: close the turn as cancelled, emit nothing.
+        // Stopped before the server answered: close the turn as cancelled and say so.
         let Some(sent) = cancellable(&cancel_token, request).await else {
-            self.history.finalize_assistant(&sid, "model", "", true);
+            self.history.close_cancelled_turn(&sid, "model", "");
+            emit_chat_response(&app_clone, cancelled_response(&sid, ""));
             self.cancel_tokens.lock().unwrap().remove(&sid);
             return Ok(());
         };
@@ -735,7 +736,8 @@ impl AIProvider for GeminiProvider {
         if !response.status().is_success() {
             let status = response.status().as_u16();
             let Some(error_body) = cancellable(&cancel_token, response.text()).await else {
-                self.history.finalize_assistant(&sid, "model", "", true);
+                self.history.close_cancelled_turn(&sid, "model", "");
+                emit_chat_response(&app_clone, cancelled_response(&sid, ""));
                 self.cancel_tokens.lock().unwrap().remove(&sid);
                 return Ok(());
             };
@@ -782,8 +784,8 @@ impl AIProvider for GeminiProvider {
                     );
                 }
                 TurnResolution::Cancelled { partial } => {
-                    self.history
-                        .finalize_assistant(&sid, "model", &partial, true);
+                    self.history.close_cancelled_turn(&sid, "model", &partial);
+                    emit_chat_response(&app_clone, cancelled_response(&sid, &partial));
                 }
                 // A safety block, an in-stream error or an empty answer: used to
                 // be committed as a (blank) finished answer with no explanation.

@@ -133,6 +133,23 @@ impl ChatHistoryStore {
         }
     }
 
+    /// Close a turn the user (or a provider/auth change) cancelled.
+    ///
+    /// With partial text, the assistant turn is committed with the cancel marker
+    /// (`finalize_assistant(.., cancelled = true)`). With NO text — Stop pressed
+    /// before the first chunk, which is the common "stop, edit, resend" case —
+    /// the pending user turn is dropped instead. The frontend never shows an
+    /// answer for that turn, so keeping a `"[cancelled before response]"` reply
+    /// would tell the model it had already answered something the user is
+    /// about to ask again. Alternation stays valid either way.
+    pub fn close_cancelled_turn(&self, session_id: &str, role: &str, partial: &str) {
+        if partial.is_empty() {
+            self.pop_trailing_user(session_id);
+        } else {
+            self.finalize_assistant(session_id, role, partial, true);
+        }
+    }
+
     /// Drop a trailing `user` turn (hard error before any assistant content) so
     /// the user/assistant alternation the chat APIs require stays consistent for
     /// the next request.
@@ -173,10 +190,17 @@ impl ChatHistoryStore {
 /// a long conversation would grow unbounded and eventually be rejected.
 const MAX_SESSION_IMAGE_BYTES: usize = 20 * 1024 * 1024;
 
+/// Stands in for the text of an image-only turn whose images were evicted. An
+/// empty user turn is rejected by every provider (Anthropic "content must be
+/// non-empty", Gemini "parts must not be empty"), and the pending user turn
+/// popped on that 400 is the NEW one, so the conversation would 400 forever.
+pub const IMAGE_REMOVED_PLACEHOLDER: &str = "[image removed]";
+
 /// Drop image attachments from the oldest turns first until the session's total
 /// image bytes are within `budget`. Only the `images` vec is cleared — the turn's
 /// text and role stay intact, so user/assistant alternation is untouched and the
-/// most recent images (the ones follow-up questions reference) are preserved.
+/// most recent images (the ones follow-up questions reference) are preserved. A
+/// turn that had NO text (an image-only send) gets a placeholder instead.
 fn evict_images_over_budget(history: &mut [ChatMessage], budget: usize) {
     let mut total: usize = history
         .iter()
@@ -199,6 +223,9 @@ fn evict_images_over_budget(history: &mut [ChatMessage], budget: usize) {
             .map(|img| img.approx_decoded_bytes())
             .sum();
         msg.images.clear();
+        if msg.content.is_empty() {
+            msg.content = IMAGE_REMOVED_PLACEHOLDER.to_string();
+        }
         total = total.saturating_sub(freed);
     }
 }
@@ -234,6 +261,27 @@ mod tests {
             store.snapshot("s1").last().unwrap().content,
             "partial\n\n[cancelled by user]"
         );
+    }
+
+    #[test]
+    fn close_cancelled_turn_keeps_partial_text_but_drops_an_unanswered_question() {
+        let store = ChatHistoryStore::new(0);
+        // Stopped mid-answer: the partial stays, marked.
+        store.push("s1", "user", "q1");
+        store.close_cancelled_turn("s1", "assistant", "half an");
+        assert_eq!(
+            store.snapshot("s1").last().unwrap().content,
+            "half an\n\n[cancelled by user]"
+        );
+        // Stopped before the first chunk: the question itself goes, so the
+        // model is not told it already answered it.
+        store.push("s1", "user", "q2");
+        store.close_cancelled_turn("s1", "assistant", "");
+        assert_eq!(
+            store.snapshot("s1").last().unwrap().content,
+            "half an\n\n[cancelled by user]"
+        );
+        assert_eq!(store.len("s1"), 2);
     }
 
     #[test]
@@ -338,6 +386,21 @@ mod tests {
         assert_eq!(history[2].images.len(), 1);
         // Text is never touched by eviction.
         assert_eq!(history[0].content, "u0");
+    }
+
+    #[test]
+    fn evict_gives_an_image_only_turn_placeholder_text() {
+        // An image-only send has no text; once its image is evicted the turn
+        // would be empty, which every provider rejects on the NEXT request.
+        let mut history = vec![
+            ChatMessage::new_with_images("user", "", vec![img_of(300)]),
+            ChatMessage::new_with_images("user", "with text", vec![img_of(300)]),
+        ];
+        evict_images_over_budget(&mut history, 300);
+        assert!(history[0].images.is_empty());
+        assert_eq!(history[0].content, IMAGE_REMOVED_PLACEHOLDER);
+        // A turn that had text keeps it verbatim.
+        assert_eq!(history[1].content, "with text");
     }
 
     #[test]

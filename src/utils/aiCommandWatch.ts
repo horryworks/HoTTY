@@ -9,11 +9,15 @@
 //   >   — Huawei VRP user view <hostname>, PowerShell, Cisco user mode
 //   ]   — Huawei VRP system view [hostname] / sub-views [hostname-mode]
 // No /m flag — $ anchors to end-of-string so we only match a real trailing prompt,
-// not a stray $ / # / > / ] mid-stream (e.g. cipher hashes / config values). Note
-// this deliberately does NOT match interactive prompts ending in ':' (e.g. Huawei
+// not a stray $ / # / > / ] mid-stream (e.g. cipher hashes / config values). Only
+// spaces/tabs may follow the char, never a newline: a prompt waits for input on
+// its own line, while a `#` that a newline follows is a config section marker
+// (Huawei's `display current-configuration` is full of them) or a `####` banner
+// line — treating those as the prompt cut the command's output short. Note this
+// deliberately does NOT match interactive prompts ending in ':' (e.g. Huawei
 // '[Y/N]:'); a command left at such a prompt falls through to the idle timeout.
-// Exported for unit tests; also used internally below.
-export const PROMPT_PATTERN = /[$#>\]]\s*$/;
+// Exported for unit tests; also used by the connect watch in useAiOrchestrator.
+export const PROMPT_PATTERN = /[$#>\]][ \t]*$/;
 
 type WatchPollResult =
     | { action: 'wait' }

@@ -172,15 +172,15 @@ describe('PingMonitorPane', () => {
     expect(screen.getByText('CSV Logging')).toBeTruthy();
   });
 
-  it('disables CSV logging and explains why when no log folder is configured', () => {
-    render(<PingMonitorPane paneId="pm-1" active={true} />);
+  it('disables CSV logging and links to the log folder setting when none is configured', () => {
+    const onOpenLogSettings = vi.fn();
+    render(<PingMonitorPane paneId="pm-1" active={true} onOpenLogSettings={onOpenLogSettings} />);
     const checkbox = document.querySelector(
       '.ping-monitor-logging-toggle input',
     ) as HTMLInputElement;
     expect(checkbox.disabled).toBe(true);
-    expect(
-      screen.getByText('Set a log folder in Settings → General to use CSV logging'),
-    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Set log folder…' }));
+    expect(onOpenLogSettings).toHaveBeenCalledTimes(1);
   });
 
   it('shows the app-wide log folder instead of a path input', () => {

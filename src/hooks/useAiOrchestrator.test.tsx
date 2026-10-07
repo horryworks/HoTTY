@@ -178,6 +178,73 @@ describe('useAiOrchestrator — send + watch', () => {
     );
   });
 
+  it('cancelRunsForTab stops the poll silently: no envelope for a cleared conversation', async () => {
+    vi.useFakeTimers();
+    // The device answers late — after the user cleared the conversation.
+    tv.getWatchBuffer.mockResolvedValue('');
+    const aiChat = makeAiChat(makeStates());
+    const { result } = renderHook(() => useAiOrchestrator(makeOptions({ aiChat })));
+
+    act(() => { result.current.onRunCommand(SID, 'show run', TAB, PANE); });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(result.current.isSessionBusy(SID)).toBe(true);
+
+    act(() => { result.current.cancelRunsForTab(PANE, TAB); });
+    tv.getWatchBuffer.mockResolvedValue('late output\r\ndevice> ');
+    // Inside act so the busy-state update the ending poll makes is rendered.
+    await act(async () => { await vi.advanceTimersByTimeAsync(11000); });
+
+    expect(aiChat.enqueuePendingMessage).not.toHaveBeenCalled();
+    expect(result.current.isSessionBusy(SID)).toBe(false);
+    expect(result.current.busyPaneIds.has(PANE)).toBe(false);
+  });
+
+  it('cancelRunsForTab also aborts a pending client-side sleep', async () => {
+    vi.useFakeTimers();
+    const aiChat = makeAiChat(makeStates());
+    const { result } = renderHook(() => useAiOrchestrator(makeOptions({ aiChat })));
+
+    act(() => { result.current.onRunCommand(SID, 'sleep 5\nshow clock', TAB, PANE); });
+    act(() => { result.current.cancelRunsForTab(PANE, TAB); });
+    expect(aiChat.updateTabById).toHaveBeenLastCalledWith(PANE, TAB, { sleepDelay: null });
+
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(tv.sendInput).not.toHaveBeenCalled();
+    expect(aiChat.enqueuePendingMessage).not.toHaveBeenCalled();
+  });
+
+  it('isSessionBusy is true only while a poll is running on that terminal', async () => {
+    vi.useFakeTimers();
+    tv.getWatchBuffer.mockResolvedValue('ok\r\ndevice> ');
+    const aiChat = makeAiChat(makeStates());
+    const { result } = renderHook(() => useAiOrchestrator(makeOptions({ aiChat })));
+    expect(result.current.isSessionBusy(SID)).toBe(false);
+
+    act(() => { result.current.onRunCommand(SID, 'display version', TAB, PANE); });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(result.current.isSessionBusy(SID)).toBe(true);
+    expect(result.current.isSessionBusy('other')).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(800); // prompt returned → poll ended
+    expect(result.current.isSessionBusy(SID)).toBe(false);
+  });
+
+  it('a send that the backend rejects ends the poll with ONE not-connected note', async () => {
+    vi.useFakeTimers();
+    tv.sendInput.mockRejectedValue(new Error('no such session'));
+    tv.getWatchBuffer.mockResolvedValue('');
+    const aiChat = makeAiChat(makeStates());
+    const { result } = renderHook(() => useAiOrchestrator(makeOptions({ aiChat })));
+
+    act(() => { result.current.onRunCommand(SID, 'show clock', TAB, PANE); });
+    // Well past the idle timeout: the poll must not add a second, empty envelope.
+    await act(async () => { await vi.advanceTimersByTimeAsync(12000); });
+
+    expect(aiChat.enqueuePendingMessage).toHaveBeenCalledTimes(1);
+    expect(aiChat.enqueuePendingMessage).toHaveBeenCalledWith(PANE, TAB, expect.stringContaining('not connected'));
+    expect(result.current.busyPaneIds.has(PANE)).toBe(false);
+  });
+
   it('stops an in-flight poll when clearRunCommandIntervals is called', async () => {
     vi.useFakeTimers();
     tv.getWatchBuffer.mockResolvedValue('');

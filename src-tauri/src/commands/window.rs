@@ -201,7 +201,7 @@ pub fn create_app_window(app: &AppHandle) -> Result<String, String> {
     let label = app.state::<WindowCounterState>().next_label();
     let version = app.package_info().version.to_string();
 
-    WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+    let window = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
         .title(format!("HoTTY v{version}"))
         .inner_size(WINDOW_WIDTH, WINDOW_HEIGHT)
         .resizable(true)
@@ -209,8 +209,16 @@ pub fn create_app_window(app: &AppHandle) -> Result<String, String> {
         // receives HTML5 drag/drop events (used by tab reordering and pane
         // assignment).
         .disable_drag_drop_handler()
+        .focused(true)
         .build()
         .map_err(|e| e.to_string())?;
+    // `focused(true)` alone is not enough on Windows: when the main window is
+    // maximized and in the foreground, the foreground-lock rules let the new
+    // window open behind it from the second time on. Raising it explicitly
+    // brings it to the front every time.
+    if let Err(e) = window.set_focus() {
+        log::warn!("new window {label}: set_focus failed: {e}");
+    }
 
     Ok(label)
 }

@@ -9,6 +9,8 @@ import './PingMonitorPane.css';
 interface PingMonitorPaneProps {
   paneId: string;
   active: boolean;
+  /** Opens Settings → General, where the log folder is chosen. */
+  onOpenLogSettings?: () => void;
 }
 
 const INTERVAL_OPTIONS = [
@@ -36,7 +38,7 @@ function formatIntervalLabel(ms: number): string {
   return opt ? opt.label : `${ms / 1000}s`;
 }
 
-export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
+export function PingMonitorPane({ paneId, active, onOpenLogSettings }: PingMonitorPaneProps) {
   const { t } = useTranslation();
   const [targetInput, setTargetInput] = useState('');
   const [intervalMs, setIntervalMs] = useState(5000);
@@ -214,11 +216,15 @@ export function PingMonitorPane({ paneId, active }: PingMonitorPaneProps) {
                 />
                 {t('panes.pingMonitor.csvLogging')}
               </label>
-              <span className="ping-monitor-logging-hint" title={loggingPath || undefined}>
-                {loggingPath
-                  ? t('panes.pingMonitor.loggingFolder', { path: loggingPath })
-                  : t('panes.pingMonitor.loggingFolderUnset')}
-              </span>
+              {loggingPath ? (
+                <span className="ping-monitor-logging-hint" title={loggingPath}>
+                  {t('panes.pingMonitor.loggingFolder', { path: loggingPath })}
+                </span>
+              ) : onOpenLogSettings && (
+                <button type="button" className="ping-monitor-logging-link" onClick={onOpenLogSettings}>
+                  {t('panes.pingMonitor.setLogFolder')}
+                </button>
+              )}
             </div>
           </div>
         )}

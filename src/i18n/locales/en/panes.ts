@@ -95,7 +95,7 @@ export const panes = {
     targetCount_other: '{{count}} targets',
     csvLogging: 'CSV Logging',
     loggingFolder: 'Saved to {{path}}',
-    loggingFolderUnset: 'Set a log folder in Settings → General to use CSV logging',
+    setLogFolder: 'Set log folder…',
     loggingDirDenied: 'Log folder was not approved — CSV logging is off',
     showTargetsPanel: 'Show targets panel',
     hideTargetsPanel: 'Hide targets panel',

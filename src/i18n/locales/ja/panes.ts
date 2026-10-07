@@ -93,7 +93,7 @@ export const panes = {
     targetCount_other: '{{count}} 件のターゲット',
     csvLogging: 'CSV ログ記録',
     loggingFolder: '保存先: {{path}}',
-    loggingFolderUnset: 'CSV ログ記録には、設定 → 一般 でログフォルダを指定してください',
+    setLogFolder: 'ログフォルダを指定…',
     loggingDirDenied: 'ログフォルダが承認されませんでした。CSV ログ記録は無効です',
     showTargetsPanel: 'ターゲットパネルを表示',
     hideTargetsPanel: 'ターゲットパネルを非表示',

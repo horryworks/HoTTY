@@ -26,6 +26,7 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
 
 import { listen } from '@tauri-apps/api/event';
 import { tauriService, isEncrypted } from './tauriService';
+import { isStaleRequest } from '../utils/aiRequestTracker';
 import type { SshHostKeyPromptPayload } from '../types/appTypes';
 
 /** listen() options for an event addressed to this window (label is 'main' under Vitest). */
@@ -565,6 +566,7 @@ describe('tauriService AI commands', () => {
       model: 'gpt-4o',
       systemInstruction: 'Be helpful',
       images: null,
+      requestId: expect.any(String),
     });
   });
 
@@ -577,6 +579,7 @@ describe('tauriService AI commands', () => {
       model: 'gpt-4o',
       systemInstruction: null,
       images: null,
+      requestId: expect.any(String),
     });
   });
 
@@ -590,6 +593,7 @@ describe('tauriService AI commands', () => {
       model: 'gpt-4o',
       systemInstruction: null,
       images,
+      requestId: expect.any(String),
     });
   });
 
@@ -602,7 +606,21 @@ describe('tauriService AI commands', () => {
       model: 'gpt-4o',
       systemInstruction: 'Be helpful',
       images: null,
+      requestId: expect.any(String),
     });
+  });
+
+  it('aiChatSend gives every send a fresh id and records it as the latest for the conversation', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await tauriService.aiChatSend('s1', 'one', 'gpt-4o');
+    await tauriService.aiChatSend('s1', 'two', 'gpt-4o');
+    const ids = mockInvoke.mock.calls
+      .filter(([cmd]) => cmd === 'ai_chat_send')
+      .map(([, args]) => (args as { requestId: string }).requestId);
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).not.toBe(ids[1]);
+    expect(isStaleRequest('s1', ids[0])).toBe(true);
+    expect(isStaleRequest('s1', ids[1])).toBe(false);
   });
 
   it('aiChatCancel invokes with sessionId', async () => {

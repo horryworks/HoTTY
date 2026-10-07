@@ -4,6 +4,10 @@ import { ConnectRequestCard } from './ConnectRequestCard';
 import type { ConnectParseResult, ResolvedConnect, GateDecision, CredentialSource } from '../../utils/aiConnectRequest';
 import type { ConnectBlock } from '../../utils/connectRequestReducer';
 import type { ConnectEnvelope } from './terminalOutputUtils';
+import { resolveHostLoginName } from '../../utils/hostConnectConfig';
+
+vi.mock('../../utils/hostConnectConfig', () => ({ resolveHostLoginName: vi.fn(async () => undefined) }));
+const mockResolveLogin = vi.mocked(resolveHostLoginName);
 
 /**
  * The connect card IS the confirmation step for an AI-initiated session
@@ -118,6 +122,33 @@ describe('ConnectRequestCard', () => {
                 <ConnectRequestCard {...base} parse={okParse()} block={block({ resolved: remote({ credentialSource: credentialSource as CredentialSource }) })} />,
             );
             expect(screen.getByText(expected)).toBeTruthy();
+        });
+
+        it('shows the saved login name decrypted, never the stored blob', async () => {
+            mockResolveLogin.mockResolvedValueOnce('alice');
+            render(
+                <ConnectRequestCard
+                    {...base}
+                    parse={okParse()}
+                    block={block({ resolved: remote({ username: undefined, credentialSource: { kind: 'host-tree', nodeId: 'n1', nodeName: 'core-01', hasPassword: true, hasKey: false, hasUsername: true } }) })}
+                />,
+            );
+            expect(await screen.findByText('Login: alice')).toBeTruthy();
+            expect(mockResolveLogin).toHaveBeenCalledWith('n1');
+        });
+
+        it('leaves the login line out when the saved name cannot be read', async () => {
+            mockResolveLogin.mockResolvedValueOnce(undefined);
+            render(
+                <ConnectRequestCard
+                    {...base}
+                    parse={okParse()}
+                    block={block({ resolved: remote({ username: undefined, credentialSource: { kind: 'host-tree', nodeId: 'n1', nodeName: 'core-01', hasPassword: true, hasKey: false, hasUsername: true } }) })}
+                />,
+            );
+            await act(async () => {});
+            expect(screen.queryByText(/^Login:/)).toBeNull();
+            expect(screen.getByText(/saved host "core-01"/)).toBeTruthy();
         });
 
         it('warns that the dialog will ask when SSH has no saved secret', () => {

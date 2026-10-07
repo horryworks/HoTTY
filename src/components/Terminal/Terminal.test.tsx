@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 
 const resize = vi.fn().mockResolvedValue(undefined);
@@ -100,6 +100,19 @@ function makeTerm() {
 }
 
 describe('TerminalView (3-rail layout)', () => {
+  // jsdom lays nothing out, so every element is 0x0 — and a 0x0 container is
+  // exactly what performResize now refuses to report. Give the host a size.
+  let widthSpy: { mockRestore: () => void } | undefined;
+  let heightSpy: { mockRestore: () => void } | undefined;
+  beforeAll(() => {
+    widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
+    heightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+  });
+  afterAll(() => {
+    widthSpy?.mockRestore();
+    heightSpy?.mockRestore();
+  });
+
   beforeEach(() => {
     useSettingsStore.getState().reset();
     resize.mockClear();

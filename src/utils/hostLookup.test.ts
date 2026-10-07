@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findHostNodesByAddress } from './hostLookup';
+import { findHostNodesByAddress, findHostNodesByName } from './hostLookup';
 import type { HostTreeNode } from '../types/appTypes';
 
 const host = (id: string, name: string, entry: Partial<HostTreeNode['entry']> & { host: string }): HostTreeNode => ({
@@ -82,5 +82,32 @@ describe('findHostNodesByAddress', () => {
         expect(findHostNodesByAddress(tree, '192.0.2.1')).toMatchObject({ kind: 'one' });
         expect(findHostNodesByAddress(tree, '192.0.2.1', { port: 22 })).toMatchObject({ kind: 'one' });
         expect(findHostNodesByAddress(tree, '192.0.2.1', { port: 2222 })).toEqual({ kind: 'none' });
+    });
+});
+
+describe('findHostNodesByName', () => {
+    it('matches the tree name ignoring case, spaces, hyphens and underscores', () => {
+        for (const said of ['core-01', 'Core 01', 'CORE_01', 'core01']) {
+            const r = findHostNodesByName(tree, [said]);
+            expect(r.kind === 'one' && r.node.id).toBe('n1');
+        }
+    });
+
+    it('applies the same hard filters as the address lookup', () => {
+        // sw-01 (ssh) vs sw-01-telnet: different names, protocol picks nothing extra.
+        expect(findHostNodesByName(tree, ['sw-01-telnet'], { protocol: 'ssh' })).toEqual({ kind: 'none' });
+        expect(findHostNodesByName(tree, ['SW-01 mgmt'], { port: 22 })).toEqual({ kind: 'none' });
+        const ok = findHostNodesByName(tree, ['sw-01-mgmt'], { port: 2222 });
+        expect(ok.kind === 'one' && ok.node.id).toBe('n4');
+        // GCP IAP entries carry no reusable credentials.
+        expect(findHostNodesByName(tree, ['vm-01'])).toEqual({ kind: 'none' });
+    });
+
+    it('tries the candidates in order and reports ties as ambiguous', () => {
+        const r = findHostNodesByName(tree, [undefined, 'nothing', 'sw-01']);
+        expect(r.kind === 'one' && r.node.id).toBe('n2');
+        const twins = [host('a', 'edge', { host: '192.0.2.50' }), host('b', 'Edge', { host: '192.0.2.51' })];
+        expect(findHostNodesByName(twins, ['edge']).kind).toBe('ambiguous');
+        expect(findHostNodesByName(tree, ['', '  '])).toEqual({ kind: 'none' });
     });
 });

@@ -51,19 +51,27 @@ const DEVICE_CONFIG_KEYS = [
   'community',
   'key-string',
   'pre-shared-key',
+  'shared-key',
   'authentication-key',
   'message-digest-key',
   'md5',
+  // AAA / IKE phrases whose secret follows a bare `key` (IOS):
+  //   tacacs-server key 7 …   radius-server key …   crypto isakmp key … address …
+  'tacacs-server[ \\t]+key',
+  'radius-server[ \\t]+key',
+  'isakmp[ \\t]+key',
 ];
 
 // Tokens that sit BETWEEN the keyword and the actual secret and must not be
 // mistaken for it: a key id / encoding type digit (`password 7 …`, `secret 5 …`,
-// `message-digest-key 1 …`) and a cipher name (`… message-digest-key 1 md5 KEY`,
-// `authentication-key sha256 KEY`). Without the cipher alternative the pattern
-// redacted `md5` and left the key that follows it in the clear.
+// `message-digest-key 1 …`), a cipher name (`… message-digest-key 1 md5 KEY`,
+// `authentication-key sha256 KEY`, Huawei `password irreversible-cipher KEY`)
+// and an SNMP access mode that Huawei puts BEFORE the community string
+// (`snmp-agent community read cipher KEY`). Several may stack, hence `*`.
+// Without them the pattern redacted the token and left the real key in the clear.
 // `[ \t]` rather than `\s` throughout: a config keyword must never reach across a
 // line break and redact the first token of the NEXT line.
-const DEVICE_CONFIG_PREFIX = String.raw`(?:[ \t]+\d+)?(?:[ \t]+(?:md5|sha(?:1|256|384|512)?|hmac-[^\s:=]+|cipher|encrypted|simple|clear|plain|text))?`;
+const DEVICE_CONFIG_PREFIX = String.raw`(?:[ \t]+\d+)?(?:[ \t]+(?:md5|sha(?:1|256|384|512)?|hmac-[^\s:=]+|(?:[\w-]+-)?cipher|encrypted|simple|clear|plain|text|read|write|ro|rw))*`;
 
 const DEVICE_CONFIG_PATTERN = new RegExp(
   // (keyword)(id / cipher prefix)(whitespace) → then the value token.

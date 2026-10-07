@@ -95,7 +95,7 @@ export const panes = {
     targetCount_other: '{{count}} cibles',
     csvLogging: 'Journalisation CSV',
     loggingFolder: 'Enregistré dans {{path}}',
-    loggingFolderUnset: 'Définissez un dossier de journaux dans Paramètres → Général pour utiliser le journal CSV',
+    setLogFolder: 'Définir le dossier de journaux…',
     loggingDirDenied: "Le dossier de journaux n'a pas été approuvé — le journal CSV est désactivé",
     showTargetsPanel: 'Afficher le panneau des cibles',
     hideTargetsPanel: 'Masquer le panneau des cibles',

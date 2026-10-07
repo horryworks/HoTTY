@@ -5,6 +5,7 @@ import { describeParseErrors } from '../../utils/aiConnectRequest';
 import type { ConnectBlock } from '../../utils/connectRequestReducer';
 import type { ConnectEnvelope } from './terminalOutputUtils';
 import type { AiLocalShellType } from '../../types/appTypes';
+import { resolveHostLoginName } from '../../utils/hostConnectConfig';
 
 /**
  * The in-chat card for an AI `connect` request (ADR-AI-007).
@@ -98,6 +99,22 @@ export const ConnectRequestCard: React.FC<ConnectRequestCardProps> = ({
     const decision = block?.decision;
     const shellLabel = t(SHELL_LABEL_KEY[localShellType]);
 
+    // A saved host's login name is stored encrypted, so the request carries only
+    // that it HAS one; decrypt it here for the "Login" line. Keyed by node id so
+    // a later card for another host never shows this one's name.
+    const hostCs = resolved?.kind === 'remote' && resolved.credentialSource.kind === 'host-tree'
+        ? resolved.credentialSource : undefined;
+    const lookupNodeId = hostCs && hostCs.hasUsername && !hostCs.username ? hostCs.nodeId : undefined;
+    const [hostLogin, setHostLogin] = useState<{ nodeId: string; name: string } | null>(null);
+    useEffect(() => {
+        if (!lookupNodeId) return;
+        let live = true;
+        void resolveHostLoginName(lookupNodeId).then((name) => {
+            if (live && name) setHostLogin({ nodeId: lookupNodeId, name });
+        });
+        return () => { live = false; };
+    }, [lookupNodeId]);
+
     // ── Header: what the AI wants to open ──
     let target: string;
     if (resolved?.kind === 'local') {
@@ -116,10 +133,17 @@ export const ConnectRequestCard: React.FC<ConnectRequestCardProps> = ({
     // ── Meta lines (rendered as text nodes — never markdown) ──
     const meta: { key: string; text: string; tone?: 'warn' | 'danger' }[] = [];
     if (resolved?.kind === 'remote') {
-        if (resolved.username) meta.push({ key: 'user', text: t('aiChat.connect.userLine', { user: resolved.username }) });
+        const cs = resolved.credentialSource;
+        // A Host Tree entry's login name is applied at open time, so it is not in
+        // `resolved.username`; show it anyway — who you log in as is the first
+        // thing to check before approving.
+        const user = resolved.username
+            ?? (cs.kind === 'host-tree'
+                ? cs.username ?? (hostLogin?.nodeId === cs.nodeId ? hostLogin.name : undefined)
+                : undefined);
+        if (user) meta.push({ key: 'user', text: t('aiChat.connect.userLine', { user }) });
         if (resolved.displayName && resolved.displayName !== resolved.host) meta.push({ key: 'name', text: t('aiChat.connect.nameLine', { name: resolved.displayName }) });
         if (resolved.reason) meta.push({ key: 'reason', text: t('aiChat.connect.reason', { reason: resolved.reason }) });
-        const cs = resolved.credentialSource;
         if (cs.kind === 'host-tree') meta.push({ key: 'creds', text: t('aiChat.connect.credsHostTree', { name: cs.nodeName }) });
         else if (cs.kind === 'inherit') meta.push({ key: 'creds', text: t('aiChat.connect.credsReuse', { alias: cs.alias }), tone: 'warn' });
         else if (cs.kind === 'inherit-username') meta.push({ key: 'creds', text: t('aiChat.connect.credsUsernameOnly', { alias: cs.alias }) });

@@ -13,6 +13,7 @@
 // (`createElement` + `textContent`), never by string concatenation, so no input
 // text can become markup on the way through.
 
+import { sanitizeHtml } from '../../utils/htmlUtils';
 import { MAX_MATCHES, splitByMatches } from './logSearch';
 
 /**
@@ -49,6 +50,12 @@ export interface HighlightHtmlResult {
  * function only ever inserts `<mark>` elements it creates itself, so it cannot
  * introduce markup that was not already there.
  *
+ * Parsing and re-serializing is still a round trip DOMPurify does not vouch
+ * for — its output is only guaranteed for the one parse the consumer does, and
+ * serialize-then-reparse is exactly how mutation XSS turns an inert tree into
+ * an active one. So the walk happens in an inert `DOMParser` document (nothing
+ * loads, nothing runs), and the result is sanitized again before it leaves.
+ *
  * The ordinal lives in `data-match-index` rather than in a `.current` class so
  * stepping through matches is a class toggle on one element, not a re-parse of
  * the whole document.
@@ -64,10 +71,10 @@ export function highlightHtml(
   re: RegExp,
   cap: number = MAX_MATCHES,
 ): HighlightHtmlResult {
-  const root = document.createElement('div');
-  root.innerHTML = html;
+  const doc = new DOMParser().parseFromString(`<!doctype html><body>${html}`, 'text/html');
+  const root = doc.body;
 
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   // Collect first: wrapping a text node detaches it, which would derail a
   // walker that is still positioned on it.
   const textNodes: Text[] = [];
@@ -89,13 +96,13 @@ export function highlightHtml(
     // No match in this node — leave it exactly as it is.
     if (!segments.some((s) => s.isMatch)) continue;
 
-    const frag = document.createDocumentFragment();
+    const frag = doc.createDocumentFragment();
     for (const seg of segments) {
       if (!seg.isMatch) {
-        frag.appendChild(document.createTextNode(seg.text));
+        frag.appendChild(doc.createTextNode(seg.text));
         continue;
       }
-      const mark = document.createElement('mark');
+      const mark = doc.createElement('mark');
       mark.className = 'log-viewer-mark';
       mark.dataset.matchIndex = String(total);
       mark.textContent = seg.text;
@@ -105,5 +112,7 @@ export function highlightHtml(
     textNode.parentNode?.replaceChild(frag, textNode);
   }
 
-  return { html: root.innerHTML, total, truncated };
+  // Nothing matched: hand back the input as-is rather than a re-serialized copy.
+  if (total === 0) return { html, total, truncated };
+  return { html: sanitizeHtml(root.innerHTML), total, truncated };
 }

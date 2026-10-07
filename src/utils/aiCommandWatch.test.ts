@@ -99,4 +99,15 @@ describe('PROMPT_PATTERN', () => {
         expect(PROMPT_PATTERN.test('[Y/N]:')).toBe(false);
         expect(PROMPT_PATTERN.test('value]more')).toBe(false);
     });
+
+    it('does not take a prompt char that a newline follows for the prompt', () => {
+        // Huawei config dumps separate sections with a lone `#` line; the device
+        // is still printing, so the poll must keep waiting.
+        expect(PROMPT_PATTERN.test('interface GigabitEthernet0/0/1\n#\n')).toBe(false);
+        expect(PROMPT_PATTERN.test('[section]\n')).toBe(false);
+        expect(PROMPT_PATTERN.test('#####\n')).toBe(false);
+        // …whereas the real prompt sits at the very end, optionally with a space.
+        expect(PROMPT_PATTERN.test('#\n<sw-01>')).toBe(true);
+        expect(PROMPT_PATTERN.test('sw-01# ')).toBe(true);
+    });
 });

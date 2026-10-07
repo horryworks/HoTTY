@@ -30,6 +30,16 @@ describe('buildWatchedViews', () => {
     });
 });
 
+describe('buildWatchedViews — alias stability', () => {
+    it('uses the alias stored on a link, so unwatching a neighbour never renames the rest', () => {
+        const src = { sessions: new Map([['s-1', record('s-1', 'core')], ['s-2', record('s-2', 'core')]]) };
+        const both = buildWatchedViews([{ sessionId: 's-1', alias: 'core' }, { sessionId: 's-2', alias: 'core-2' }], src);
+        expect(both.aliases.map((a) => a.alias)).toEqual(['core', 'core-2']);
+        const onlySecond = buildWatchedViews([{ sessionId: 's-2', alias: 'core-2' }], src);
+        expect(onlySecond.aliases.map((a) => a.alias)).toEqual(['core-2']);
+    });
+});
+
 describe('buildConnectCapabilityInput', () => {
     it('derives the prompt input: terminal list, live AI shell alias and remaining slots', () => {
         const src = {

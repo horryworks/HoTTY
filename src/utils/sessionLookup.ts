@@ -119,7 +119,10 @@ export function lookupSession(id: string, src: SessionSources): SessionView | un
     const ls = src.linkable?.get(id);
     if (ls) {
         return {
-            displayName: ls.displayName,
+            // Same preference as the cross-window branch, so a caller holding
+            // only the picker list still names another window's terminal as
+            // its owner does.
+            displayName: (!ls.isLocal && remoteSessionName(id)?.displayName) || ls.displayName,
             status: ls.status,
             host: ls.host,
             hasPassword: false,

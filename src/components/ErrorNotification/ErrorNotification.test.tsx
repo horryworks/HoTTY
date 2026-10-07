@@ -18,11 +18,11 @@ describe('ErrorNotification', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('renders a notification with category and message', () => {
-    useErrorNotificationStore.getState().push('SSH', 'connection refused');
+  it('shows the message but not the internal log category', () => {
+    useErrorNotificationStore.getState().push('AIWindow', 'connection refused');
     render(<ErrorNotification />);
-    expect(screen.getByText('SSH')).toBeTruthy();
     expect(screen.getByText('connection refused')).toBeTruthy();
+    expect(screen.queryByText('AIWindow')).toBeNull();
   });
 
   it('renders multiple notifications in order', () => {

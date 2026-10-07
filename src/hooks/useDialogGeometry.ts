@@ -102,6 +102,9 @@ export function useDialogGeometry({
     const rect = useRef<Rect>({ left: 0, top: 0, width: 0, height: 0 });
     /** Cleanup for an in-flight drag, so unmounting mid-drag cannot leak listeners. */
     const endDrag = useRef<(() => void) | null>(null);
+    // Set by the first move or resize drag since open. Until then the dialog is
+    // where the app put it (the middle), and a window resize keeps it there.
+    const userPlaced = useRef(false);
 
     // Read at gesture time, never during render, so a changing callback does not
     // have to re-create the handlers.
@@ -147,17 +150,24 @@ export function useDialogGeometry({
         if (!el) return;
         el.style.position = 'fixed';
         el.style.margin = '0';
+        userPlaced.current = false;
         centre(storedSize ?? defaultSize);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
-    // A smaller viewport pulls the dialog back into reach. It does not re-centre:
+    // A dialog the user has not moved stays centred when the window changes size
+    // (maximizing used to leave it stranded top-left). Once the user has placed
+    // it, a smaller viewport only pulls it back into reach and never re-centres:
     // moving a window the user placed is exactly what Windows does not do.
     useEffect(() => {
         if (!open) return;
         const onWindowResize = () => {
-            const min = latest.current.minSize;
             const r = rect.current;
+            if (!userPlaced.current) {
+                centre({ width: r.width, height: r.height });
+                return;
+            }
+            const min = latest.current.minSize;
             const width = clamp(r.width, min.width, window.innerWidth);
             const height = clamp(r.height, min.height, window.innerHeight);
             rect.current = {
@@ -170,7 +180,7 @@ export function useDialogGeometry({
         };
         window.addEventListener('resize', onWindowResize);
         return () => window.removeEventListener('resize', onWindowResize);
-    }, [open, apply]);
+    }, [open, apply, centre]);
 
     // Never leave a drag running past unmount.
     useEffect(() => () => endDrag.current?.(), []);
@@ -240,6 +250,7 @@ export function useDialogGeometry({
             if ((e.target as HTMLElement).closest(NO_DRAG_FROM)) return;
 
             const start = { ...rect.current };
+            userPlaced.current = true;
             beginDrag(e, 'grabbing', (dx, dy) => {
                 rect.current = {
                     ...rect.current,
@@ -262,6 +273,7 @@ export function useDialogGeometry({
             if (e.button !== 0) return;
             const start = { ...rect.current };
             const edge = EDGE[dir];
+            userPlaced.current = true;
 
             beginDrag(
                 e,

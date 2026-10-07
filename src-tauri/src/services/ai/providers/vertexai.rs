@@ -9,8 +9,8 @@ use tauri::AppHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::ai::ai_provider::{
-    emit_auth_result, emit_chat_response, AIProvider, AppHandleSink, AuthStatus, ChatResponseData,
-    ChatResponseKind, ModelInfo,
+    cancelled_response, emit_auth_result, emit_chat_response, AIProvider, AppHandleSink,
+    AuthStatus, ChatResponseData, ChatResponseKind, ModelInfo,
 };
 use crate::services::ai::classifier::{
     anthropic_verdict_tool, build_user_prompt, extract_gemini_text, gemini_response_schema,
@@ -1059,6 +1059,10 @@ impl AIProvider for VertexAIProvider {
         }
     }
 
+    fn location(&self) -> Option<String> {
+        self.config.as_ref().map(|c| c.location.clone())
+    }
+
     async fn send_message(
         &self,
         app: &AppHandle,
@@ -1173,8 +1177,8 @@ impl AIProvider for VertexAIProvider {
                     );
                 }
                 TurnResolution::Cancelled { partial } => {
-                    self.history
-                        .finalize_assistant(&sid, "model", &partial, true);
+                    self.history.close_cancelled_turn(&sid, "model", &partial);
+                    emit_chat_response(app, cancelled_response(&sid, &partial));
                 }
                 // Same handling as a request error below: tell the user and drop
                 // the pending user turn.
@@ -1193,7 +1197,11 @@ impl AIProvider for VertexAIProvider {
                 }
             },
             Err(err_msg) => {
-                if !cancel_token.is_cancelled() {
+                if cancel_token.is_cancelled() {
+                    // The cancel raced the failure: the frontend needs the
+                    // cancel, not an error for a request nobody is waiting on.
+                    emit_chat_response(app, cancelled_response(&sid, ""));
+                } else {
                     log::error!("[vertexai] Chat error: {err_msg}");
                     emit_chat_response(
                         app,

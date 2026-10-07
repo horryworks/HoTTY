@@ -7,8 +7,12 @@ import {
   AI_WATCH_REQUEST_CHANNEL,
   buildAdoptRequest,
   buildWatchRequest,
+  buildDialogRequest,
+  buildDialogResult,
   parseAdoptRequest,
   parseWatchRequest,
+  parseDialogRequest,
+  parseDialogResult,
   HANDOVER_IMAGE_TURNS,
   buildHandoverAck,
   buildHandoverPayload,
@@ -141,6 +145,19 @@ describe('buildHandoverPayload', () => {
     expect(workerIdsOf(p)).toEqual(['h-1']);
   });
 
+  it('leaves workers that already ended behind (they would be a dead chip forever)', () => {
+    const p = buildHandoverPayload({
+      ...base,
+      workers: [
+        ...base.workers,
+        { ...worker('h-dead', 't1'), status: 'disconnected' },
+        { ...worker('h-err', 't1'), status: 'error', errorMessage: 'refused' },
+        { ...worker('h-new', 't2'), status: 'connecting' },
+      ],
+    });
+    expect(workerIdsOf(p).sort()).toEqual(['h-1', 'h-new']);
+  });
+
   it('reports how many turns lost their images', () => {
     const p = buildHandoverPayload({
       ...base,
@@ -178,6 +195,25 @@ describe('parseHandoverPayload', () => {
     expect(got!.from).toBe('main');
     expect(got!.state.tabs[0].id).toBe('t1');
     expect(got!.messages).toEqual([['t1', [{ role: 'user', content: 'hi' }]]]);
+  });
+
+  it('carries command outcomes for live tabs, and tolerates a sender that omits them', () => {
+    const withOutcomes = buildHandoverPayload({
+      to: 'win-ai-1',
+      from: 'main',
+      paneId: 'ai-abc',
+      state: state([tab('t1')]),
+      messagesByTab: new Map(),
+      tokensByTab: new Map(),
+      outcomes: [
+        ['t1', [['0:0:ls', { command: 'ls', status: 'executed' }]]],
+        ['gone', [['0:0:ls', { command: 'ls', status: 'executed' }]]],
+      ],
+      workers: [],
+    });
+    const got = parseHandoverPayload(JSON.stringify(withOutcomes), 'win-ai-1');
+    expect(got!.outcomes).toEqual([['t1', [['0:0:ls', { command: 'ls', status: 'executed' }]]]]);
+    expect(parseHandoverPayload(raw, 'win-ai-1')!.outcomes).toEqual([]);
   });
 
   it('ignores a payload addressed to a different window', () => {
@@ -219,6 +255,26 @@ describe('parseHandoverPayload', () => {
     expect(got).not.toBeNull();
     expect(got!.messages).toHaveLength(1);
     expect(got!.tokens).toEqual([]);
+  });
+});
+
+describe('delegated connection dialog', () => {
+  const prefill = { protocol: 'ssh', host: '192.0.2.10', port: 22, username: 'alice', displayName: 'sw-01', nonce: 1 } as never;
+
+  it('round-trips a request and ignores one for another window or without a prefill', () => {
+    const req = buildDialogRequest({ to: 'main', from: 'win-ai-1', paneId: 'ai-1', tabId: 't1', key: 'k', prefill });
+    expect(parseDialogRequest(JSON.stringify(req), 'main')).toMatchObject({ paneId: 'ai-1', tabId: 't1', key: 'k', prefill: { host: '192.0.2.10' } });
+    expect(parseDialogRequest(JSON.stringify(req), 'win-2')).toBeNull();
+    expect(parseDialogRequest(JSON.stringify({ ...req, prefill: undefined }), 'main')).toBeNull();
+    expect(parseDialogRequest('not json', 'main')).toBeNull();
+  });
+
+  it('round-trips a result, with and without a session', () => {
+    const ok = buildDialogResult({ to: 'win-ai-1', paneId: 'ai-1', tabId: 't1', key: 'k', sessionId: 's-9' });
+    expect(parseDialogResult(JSON.stringify(ok), 'win-ai-1')?.sessionId).toBe('s-9');
+    const declined = buildDialogResult({ to: 'win-ai-1', paneId: 'ai-1', tabId: 't1', key: 'k' });
+    expect(parseDialogResult(JSON.stringify(declined), 'win-ai-1')?.sessionId).toBeUndefined();
+    expect(parseDialogResult(JSON.stringify(ok), 'main')).toBeNull();
   });
 });
 

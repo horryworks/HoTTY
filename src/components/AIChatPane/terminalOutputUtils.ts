@@ -31,6 +31,15 @@ export function declinedNote(cmd: string): string {
 }
 
 /**
+ * Result note when the user cancels the client-side `sleep` wait that preceded
+ * the rest of a command. Nothing after the sleep was run; the model would
+ * otherwise sit waiting for a result that never arrives.
+ */
+export function waitCancelledNote(cmd: string): string {
+    return `Terminal Output (Command: ${cmd}):\n[The user cancelled the wait. The command was NOT run. Do not re-issue it unless the user asks.]`;
+}
+
+/**
  * Result note when an execute block names a `target=<alias>` that this tab does
  * not watch. The command is deliberately NOT run on a fallback terminal: with
  * AI-opened worker sessions coming and going, a command meant for a closed
@@ -100,8 +109,21 @@ export function connectFailedNote(key: string, reason: string): string {
     return `Connection Failed (${key}):\n[${reason}. Do not retry on your own; explain the situation to the user and continue with the terminals you already have.]`;
 }
 
+/** The host part of a remote request key (`ssh:alice@192.0.2.10:22` → `192.0.2.10`); undefined for a local shell. */
+function hostOfConnectKey(key: string): string | undefined {
+    const m = key.match(/^(?:ssh|telnet):(?:[^@]*@)?(.+):\d+$/);
+    return m ? m[1] : undefined;
+}
+
 export function connectDeclinedNote(key: string): string {
-    return `Connection Declined (${key}):\n[The user chose NOT to open this connection. Do not request it again. Continue with the terminals you already have, or ask the user how to proceed.]`;
+    // A request key carries the protocol, so "do not request it again" left the
+    // model free to try the same host over Telnet right after an SSH decline.
+    // The note names the host and rules out every protocol.
+    const host = hostOfConnectKey(key);
+    const again = host
+        ? `Do not request a connection to ${host} again in this conversation, over any protocol, unless the user asks for it.`
+        : 'Do not request it again.';
+    return `Connection Declined (${key}):\n[The user chose NOT to open this connection. ${again} Continue with the terminals you already have, or ask the user how to proceed.]`;
 }
 
 export function connectRefusedNote(key: string, reason: string): string {

@@ -107,6 +107,26 @@ describe('redactSecrets — space-separated device config', () => {
     expect(redactSecrets(' pre-shared-key abc123')).toBe(' pre-shared-key <redacted>');
   });
 
+  // Huawei VRP spells its ciphers and SNMP lines differently from IOS; a `show
+  // run` from a USG shipped these verbatim.
+  it('redacts Huawei VRP cipher forms and the community after an access mode', () => {
+    expect(redactSecrets(' local-user admin password irreversible-cipher $1a$abc$def'))
+      .toBe(' local-user admin password irreversible-cipher <redacted>');
+    expect(redactSecrets(' snmp-agent community read cipher %^%#abc==%^%#'))
+      .toBe(' snmp-agent community read cipher <redacted>');
+    expect(redactSecrets(' snmp-agent community write public123'))
+      .toBe(' snmp-agent community write <redacted>');
+    expect(redactSecrets(' hwtacacs-server shared-key cipher %^%#xyz%^%#'))
+      .toBe(' hwtacacs-server shared-key cipher <redacted>');
+  });
+
+  it('redacts AAA and IKE keys that follow a bare `key` keyword', () => {
+    expect(redactSecrets('tacacs-server key 7 0822455D0A16')).toBe('tacacs-server key 7 <redacted>');
+    expect(redactSecrets('radius-server key RadKey!')).toBe('radius-server key <redacted>');
+    expect(redactSecrets('crypto isakmp key MyIkeKey address 192.0.2.1'))
+      .toBe('crypto isakmp key <redacted> address 192.0.2.1');
+  });
+
   // `message-digest-key 1 md5 KEY` puts an id AND a cipher name before the secret.
   // Treating either as the value would redact the wrong token and ship the key.
   it('skips over a key id and a cipher name to redact the actual key', () => {

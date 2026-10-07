@@ -79,15 +79,20 @@ export function parseCsv(text: string, cap: number = MAX_CSV_ROWS): CsvTable {
   const endRecord = (): boolean => {
     record.push(field);
     field = '';
+    const done = record;
+    record = [];
     // Blank lines carry no data — dropping them keeps a trailing newline (and
     // any stray blank line mid-file) from becoming an empty table row.
-    const blank = record.length === 1 && record[0] === '';
-    if (!blank) records.push(record);
-    record = [];
+    const blank = done.length === 1 && done[0] === '';
+    if (blank) return true;
+    // The cap is full and another real record turned up: that one is dropped.
+    // Reaching the cap alone is not truncation — a file with exactly `cap`
+    // body rows lost nothing.
     if (records.length >= maxRecords) {
       truncated = true;
       return false;
     }
+    records.push(done);
     return true;
   };
 
@@ -138,6 +143,11 @@ export function parseCsv(text: string, cap: number = MAX_CSV_ROWS): CsvTable {
   };
 }
 
+/** Whether `text` holds a non-empty match — zero-length ones highlight nothing. */
+function cellHasMatch(text: string, re: RegExp): boolean {
+  return splitByMatches(text, re, 1).total > 0;
+}
+
 /** A cell with nothing highlighted. */
 function plainCell(text: string): CsvCell {
   return { segments: [{ text, isMatch: false }], matchStart: -1 };
@@ -147,9 +157,11 @@ function plainCell(text: string): CsvCell {
  * Split every cell into highlight segments, optionally dropping rows that hold
  * no match at all.
  *
- * The filter decision joins the row with commas rather than testing cells one
- * by one, so a query that spans a separator (`ok,12`) matches the same way it
- * would against the raw file.
+ * The filter tests cells one by one — the same yardstick the highlight and the
+ * match count use — so a row is kept exactly when it shows a match. Testing the
+ * comma-joined row instead made the two disagree: `^fail$` highlighted cells
+ * but filtered every row away, and `ok,1` kept rows with nothing highlighted.
+ * A query that spans a separator belongs to the raw-text view.
  */
 export function buildCsvView(
   table: CsvTable,
@@ -171,17 +183,18 @@ export function buildCsvView(
   let truncated = false;
 
   for (const cells of table.rows) {
-    re.lastIndex = 0;
-    if (filterOnly && !re.test(cells.join(','))) continue;
-
     // Past the cap the row still renders — it just renders unhighlighted, the
-    // same bargain `splitByMatches` makes within a single string.
+    // same bargain `splitByMatches` makes within a single string. Only a row
+    // that actually holds a match means a match went unhighlighted.
     if (total >= cap) {
-      truncated = true;
+      const hasMatch = cells.some((text) => cellHasMatch(text, re));
+      if (hasMatch) truncated = true;
+      if (filterOnly && !hasMatch) continue;
       rows.push({ cells: cells.map(plainCell) });
       continue;
     }
 
+    let rowHasMatch = false;
     const viewCells = cells.map((text) => {
       const split = splitByMatches(text, re, cap - total);
       const cell: CsvCell = {
@@ -189,9 +202,12 @@ export function buildCsvView(
         matchStart: split.total > 0 ? total : -1,
       };
       total += split.total;
+      // `truncated` here means a match existed past the cap — still a match.
+      if (split.total > 0 || split.truncated) rowHasMatch = true;
       if (split.truncated) truncated = true;
       return cell;
     });
+    if (filterOnly && !rowHasMatch) continue;
     rows.push({ cells: viewCells });
   }
 

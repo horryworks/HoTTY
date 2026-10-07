@@ -37,7 +37,9 @@ pub enum TurnResolution {
         content: String,
         usage: Option<TokenUsage>,
     },
-    /// The user stopped it: commit the partial text as cancelled, emit nothing.
+    /// Stopped by the user or by a provider/auth change: close the turn with
+    /// `ChatHistoryStore::close_cancelled_turn` and emit `cancelled` carrying the
+    /// partial text, so a pane that still shows the tab streaming can close it.
     Cancelled { partial: String },
     /// Emit `error` and drop the pending user turn. The frontend discards the
     /// partial answer it was showing, so history must not keep it either.

@@ -312,6 +312,10 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
   // The markdown view is set through innerHTML, so its <mark>s cannot carry a
   // React ref. Focus them by their ordinal instead: a class swap on two
   // elements, with no re-render of the document.
+  //
+  // `loading` is a dependency because a refresh unmounts the view and mounts a
+  // fresh copy of the same HTML — `currentMatch` and `mdHighlight` are
+  // unchanged, so without it the new copy would never get its `.current`.
   useEffect(() => {
     const root = mdRef.current;
     if (!root) return;
@@ -320,7 +324,7 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
     if (!el) return;
     el.classList.add('current');
     el.scrollIntoView({ block: 'center' });
-  }, [currentMatch, mdHighlight]);
+  }, [currentMatch, mdHighlight, loading]);
 
   const setCurrentMatchRef = useCallback((el: HTMLElement | null) => {
     currentMatchRef.current = el;
@@ -366,13 +370,17 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
       : t('panes.logViewer.matchCount', params);
   }, [regexInvalid, debouncedQuery, matchCount, currentMatch, matchesTruncated, t]);
 
-  /** Render segments as plain strings interleaved with <mark> elements. */
-  const renderSegments = (segments: Segment[], markCurrent: boolean) => {
+  /**
+   * Render segments as plain strings interleaved with <mark> elements.
+   * `firstOrdinal` is the global ordinal of the first match in `segments`;
+   * null when none of them can be the current match.
+   */
+  const renderSegments = (segments: Segment[], firstOrdinal: number | null) => {
     let seen = -1;
     return segments.map((seg, i) => {
       if (!seg.isMatch) return seg.text;
       seen += 1;
-      const isCurrent = markCurrent && seen === currentMatch;
+      const isCurrent = firstOrdinal !== null && firstOrdinal + seen === currentMatch;
       return (
         <mark
           key={i}
@@ -390,21 +398,7 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
     // Overwhelmingly the common case — collapse to a plain string so a table
     // with thousands of rows does not allocate an element per cell.
     if (cell.matchStart < 0) return cell.segments.map((seg) => seg.text).join('');
-    let seen = -1;
-    return cell.segments.map((seg, i) => {
-      if (!seg.isMatch) return seg.text;
-      seen += 1;
-      const isCurrent = cell.matchStart + seen === currentMatch;
-      return (
-        <mark
-          key={i}
-          className={`log-viewer-mark${isCurrent ? ' current' : ''}`}
-          ref={isCurrent ? setCurrentMatchRef : null}
-        >
-          {seg.text}
-        </mark>
-      );
-    });
+    return renderSegments(cell.segments, cell.matchStart);
   };
 
   const hasFolderSet = !!folderPath;
@@ -622,11 +616,19 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
             {loading && <div className="log-viewer-loading">{t('common.loading')}</div>}
             {!loading && selectedFile && csvView && csvTable && (
               csvView.rows.length === 0 ? (
-                <div className="log-viewer-placeholder">
-                  {filterOnly && searchRegex
-                    ? t('panes.logViewer.noMatches')
-                    : t('panes.logViewer.csvEmpty')}
-                </div>
+                <>
+                  {/* "No matches" only covers the rows that were parsed. */}
+                  {csvTable.truncated && (
+                    <div className="log-viewer-csv-notice">
+                      {t('panes.logViewer.csvTruncated', { limit: MAX_CSV_ROWS })}
+                    </div>
+                  )}
+                  <div className="log-viewer-placeholder">
+                    {filterOnly && searchRegex
+                      ? t('panes.logViewer.noMatches')
+                      : t('panes.logViewer.csvEmpty')}
+                  </div>
+                </>
               ) : (
                 <div className="log-viewer-csv">
                   {csvTable.truncated && (
@@ -673,7 +675,7 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
                         className={`log-viewer-match-line${isCurrent ? ' current' : ''}`}
                         ref={isCurrent ? setCurrentMatchRef : null}
                       >
-                        {renderSegments(segments, false)}
+                        {renderSegments(segments, null)}
                       </div>
                     );
                   })}
@@ -688,7 +690,7 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
                   </div>
                 )}
                 <pre className="log-viewer-pre">
-                  {highlight ? renderSegments(highlight.segments, true) : content}
+                  {highlight ? renderSegments(highlight.segments, 0) : content}
                 </pre>
               </>
             )}

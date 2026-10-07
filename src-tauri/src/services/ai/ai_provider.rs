@@ -37,9 +37,9 @@ pub struct TokenUsage {
 
 /// The kind of streamed `ai-chat-response` event. Serializes to the exact
 /// camelCase strings the frontend discriminates on (`"chunk"` | `"done"` |
-/// `"error"`), so replacing the former stringly-typed `response_type: String`
-/// with this enum changes nothing on the wire — it only makes the Rust side
-/// typo-proof and exhaustive.
+/// `"error"` | `"cancelled"`), so replacing the former stringly-typed
+/// `response_type: String` with this enum changes nothing on the wire — it only
+/// makes the Rust side typo-proof and exhaustive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ChatResponseKind {
@@ -49,6 +49,13 @@ pub enum ChatResponseKind {
     Done,
     /// Terminal failure; `content` is a user-facing error message.
     Error,
+    /// The stream was cancelled before it finished; `content` is whatever
+    /// partial text had been streamed (possibly empty). Sent for EVERY cancel,
+    /// including the ones the frontend did not ask for (a provider or region
+    /// switch, an auth change — `cancel_all_inflight`): a pane that still shows
+    /// the tab as streaming closes it out instead of waiting for its watchdog.
+    /// A pane that already stopped the tab itself (the Stop button) ignores it.
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -145,6 +152,15 @@ pub trait AIProvider: Send + Sync {
     /// Stays `&mut self` — it mutates plain provider config, not per-session state.
     fn set_location(&mut self, _location: &str) {}
 
+    /// The deployment location/region currently in effect, when the provider
+    /// has one (Vertex AI). `None` for providers without regions or before
+    /// they are configured. Lets the command layer skip a no-op change — every
+    /// AI Chat pane re-applies the saved region when it mounts, and that must
+    /// not cancel other windows' in-flight streams.
+    fn location(&self) -> Option<String> {
+        None
+    }
+
     /// List available locations/regions. Default returns an empty list.
     /// `&self` for the same interior-mutable token-refresh reason as [`list_models`].
     async fn list_locations(&self) -> Result<Vec<String>, String> {
@@ -156,8 +172,43 @@ pub trait AIProvider: Send + Sync {
 // Helper: emit chat response event
 // ---------------------------------------------------------------------------
 
+tokio::task_local! {
+    /// The frontend's id for the send this task is running. Every event the
+    /// send emits carries it, so the pane can drop an event that belongs to an
+    /// older send for the same conversation (a late `cancelled` from a stopped
+    /// or cleared reply used to close out the reply that replaced it).
+    pub static CHAT_REQUEST_ID: Option<String>;
+}
+
+/// The `ai-chat-response` payload as sent: the event plus the id of the send
+/// it belongs to, when the emitting task runs inside [`CHAT_REQUEST_ID`].
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OutgoingChatResponse<'a> {
+    #[serde(flatten)]
+    data: &'a ChatResponseData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    request_id: Option<String>,
+}
+
+pub(crate) fn outgoing_chat_response(data: &ChatResponseData) -> OutgoingChatResponse<'_> {
+    let request_id = CHAT_REQUEST_ID.try_with(|id| id.clone()).ok().flatten();
+    OutgoingChatResponse { data, request_id }
+}
+
 pub fn emit_chat_response(app: &AppHandle, data: ChatResponseData) {
-    let _ = app.emit("ai-chat-response", data);
+    let _ = app.emit("ai-chat-response", outgoing_chat_response(&data));
+}
+
+/// The event that closes a cancelled stream on the frontend (see
+/// [`ChatResponseKind::Cancelled`]). `partial` is the text streamed so far.
+pub fn cancelled_response(session_id: &str, partial: &str) -> ChatResponseData {
+    ChatResponseData {
+        session_id: session_id.to_string(),
+        response_type: ChatResponseKind::Cancelled,
+        content: partial.to_string(),
+        usage_metadata: None,
+    }
 }
 
 /// Production [`ChatSink`](crate::services::ai::sse::ChatSink): forwards streamed
@@ -216,6 +267,23 @@ mod tests {
         };
         let json = serde_json::to_value(&status).unwrap();
         assert!(json.get("accountInfo").is_none());
+    }
+
+    #[tokio::test]
+    async fn outgoing_response_carries_request_id_only_inside_scope() {
+        let data = cancelled_response("pane::tab", "");
+        let outside = serde_json::to_value(outgoing_chat_response(&data)).unwrap();
+        assert!(outside.get("requestId").is_none());
+        assert_eq!(outside["sessionId"], "pane::tab");
+        assert_eq!(outside["responseType"], "cancelled");
+
+        let inside = CHAT_REQUEST_ID
+            .scope(Some("req-1".into()), async {
+                serde_json::to_value(outgoing_chat_response(&data)).unwrap()
+            })
+            .await;
+        assert_eq!(inside["requestId"], "req-1");
+        assert_eq!(inside["sessionId"], "pane::tab");
     }
 
     #[test]

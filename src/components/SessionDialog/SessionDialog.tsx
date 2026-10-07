@@ -446,6 +446,10 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const prefillRef = useRef(prefill);
     useEffect(() => { prefillRef.current = prefill; }, [prefill]);
     const prefillNonce = prefill?.nonce;
+    // True while the form holds values the AI pre-filled. Those belong to that one
+    // request: closing the dialog clears them (see the close effect), or the AI's
+    // display name would become the name of the next, unrelated connection.
+    const filledFromPrefillRef = useRef(false);
     useEffect(() => {
         const p = prefillRef.current;
         if (!isOpen || !p || p.nonce !== prefillNonce) return;
@@ -458,6 +462,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setHost(p.host);
         setUsername(p.username ?? '');
         setDisplayName(p.displayName ?? '');
+        filledFromPrefillRef.current = true;
         /* eslint-enable react-hooks/set-state-in-effect */
     }, [isOpen, prefillNonce, resetForm, setActiveSidebarTab]);
 
@@ -519,8 +524,12 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setConnectingSessionId(null);
         setConnectError(null);
         setIapPhase(null);
+        if (filledFromPrefillRef.current) {
+            filledFromPrefillRef.current = false;
+            resetForm();
+        }
         /* eslint-enable react-hooks/set-state-in-effect */
-    }, [isOpen]);
+    }, [isOpen, resetForm]);
 
     // Subscribe to GCP/IAP connect-phase progress so the connecting spinner shows
     // a live phase label ("Registering SSH key…", "Starting IAP tunnel…", …)

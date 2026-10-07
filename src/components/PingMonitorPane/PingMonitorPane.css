@@ -201,6 +201,21 @@
   white-space: nowrap;
 }
 
+/* "Set log folder…" — a link to Settings → General, shown while no folder is set. */
+.ping-monitor-logging-link {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: calc(var(--font-size-base) - 3px);
+  color: var(--accent-color);
+  cursor: pointer;
+}
+
+.ping-monitor-logging-link:hover {
+  text-decoration: underline;
+}
+
 /* Divider with resize handle and collapse toggle */
 .ping-monitor-divider {
   position: relative;

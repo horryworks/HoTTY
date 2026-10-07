@@ -73,6 +73,9 @@ import { initSharedStoreSync } from './stores/sharedStoreSync';
 import { IS_AI_CHAT_WINDOW, IS_TAURI, WINDOW_LABEL } from './utils/windowLabel';
 import { AI_WINDOW_INITIAL_PANE } from './utils/aiWindowPane';
 import { viewFromRecord } from './utils/sessionLookup';
+import { disposePaneStreams } from './hooks/useChatStream';
+import type { AiDialogRequest } from './utils/aiWindowHandover';
+import { remoteSessionName } from './utils/sessionNameShare';
 import type { LinkableSession, SessionDialogPrefill, SessionInfo } from './types/appTypes';
 import {
   makeFeaturePaneId,
@@ -180,8 +183,10 @@ function App() {
   const moveSessionToPane = usePaneStore((s) => s.moveSessionToPane);
 
   // Publish this window's terminal names and take in the other windows', so a
-  // popped-out AI Chat shows real names and can auto-rebind on reconnect.
-  useSessionNameShare(sessions);
+  // popped-out AI Chat shows real names and can auto-rebind on reconnect. The
+  // counter re-renders this component when another window's names arrive, so
+  // the picker list below picks them up.
+  const sharedNamesArrived = useSessionNameShare(sessions);
 
   // Ctrl+Tab / Ctrl+Shift+Tab cycle keyboard focus between visible panes.
   usePaneKeyboardNav();
@@ -261,6 +266,16 @@ function App() {
     (sid: string) => tauriService.takeWatchBuffer(sid),
     [],
   );
+  // …and a non-clearing read for a terminal whose buffer an AI command poll
+  // currently owns (see useAiChat.sendMessage).
+  const peekWatchBuffer = useCallback(
+    (sid: string) => tauriService.getWatchBuffer(sid),
+    [],
+  );
+  // "Is an AI command being polled on this terminal?" — answered by the
+  // orchestrator, which is created after useAiChat and the worker hook, so both
+  // reach it through this ref (filled in below).
+  const isSessionBusyRef = useRef<(sid: string) => boolean>(() => false);
 
   /**
    * Register an AI Chat pane under a KNOWN id and give it a slot.
@@ -365,6 +380,8 @@ function App() {
     // while the other two resolved it to its host, and `target=` stopped matching.
     crossWindowSessionsRef,
     takeWatchBuffer,
+    peekWatchBuffer,
+    isSessionBusyRef,
     ensureAiConsent: consent.ensureAiConsent,
     createAiChatPane,
     lastTerminalSessionId,
@@ -383,6 +400,8 @@ function App() {
     adoptSession,
     addSessionToStore,
     handOffMaterialize: (w) => handOffMaterializeRef.current(w),
+    // A worker mid-command is in use, however long the command runs.
+    isBusy: (id) => isSessionBusyRef.current(id),
     // A worker that ended or was closed leaves its conversation's watched set
     // (no keep-stale: a worker never auto-rebinds).
     onWorkerGone: (w) => removeTabLink(w.paneId, w.tabId, w.id),
@@ -416,7 +435,6 @@ function App() {
   const {
     watchingSessionId,
     setWatchingSessionId,
-    watchingSessionIdsRef,
     watchedSessions,
     crossWindowSessions,
     refreshCrossWindowSessions,
@@ -430,6 +448,9 @@ function App() {
   useEffect(() => {
     crossWindowSessionsRef.current = crossWindowSessions;
   }, [crossWindowSessions]);
+  useEffect(() => {
+    isSessionBusyRef.current = aiOrch.isSessionBusy;
+  }, [aiOrch.isSessionBusy]);
 
   // Forward the orchestrator's session-removal cleanup to the delegate ref that
   // useSessionManager (constructed earlier) invokes on session removal.
@@ -442,7 +463,10 @@ function App() {
   // the connection dialog pre-filled; the intent remembers which conversation to
   // link the resulting session to (or to tell that the user closed the dialog).
   const [dialogPrefill, setDialogPrefill] = useState<SessionDialogPrefill | undefined>(undefined);
-  const [aiDialogIntent, setAiDialogIntent] = useState<{ paneId: string; tabId: string; key: string } | null>(null);
+  // `remote` is set when the dialog is shown on behalf of an AI Chat window's
+  // conversation: the outcome then goes back to that window instead of being
+  // linked here.
+  const [aiDialogIntent, setAiDialogIntent] = useState<{ paneId: string; tabId: string; key: string; remote?: AiDialogRequest } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | undefined>(undefined);
   const openSettings = useCallback((tab?: SettingsTab) => {
@@ -543,7 +567,11 @@ function App() {
       .filter((cs) => !!cs.ownerLabel && cs.ownerLabel !== WINDOW_LABEL && !isWorkerSessionId(cs.sessionId))
       .map((cs) => ({
         sessionId: cs.sessionId,
-        displayName: cs.host || cs.sessionId,
+        // What the owning window calls it (its tab name), else the bare host —
+        // the same preference `lookupSession` applies, so the picker, the chips
+        // and the model's alias list agree. (`sharedNamesArrived` is what makes
+        // this re-evaluate when a table lands.)
+        displayName: (sharedNamesArrived >= 0 && remoteSessionName(cs.sessionId)?.displayName) || cs.host || cs.sessionId,
         ownerLabel: cs.ownerLabel as string,
         isLocal: false,
         status: 'connected',
@@ -582,6 +610,20 @@ function App() {
     activeConversationTitle: activeAiConversationTitle,
     watchInConversation,
     activeConversationTabId: aiChatPaneId ? aiChatStates.get(aiChatPaneId)?.activeTabId : undefined,
+    // A window with no AI Chat yet starts one watching the terminal (the AI
+    // Monitor toggle's cold start), consent-gated.
+    watchColdStart: toggleWatch,
+    // An AI Chat window's conversation needs a human to type a secret: show
+    // the pre-filled dialog here and report what happened.
+    showDialogForRemote: (req) => {
+      setAiDialogIntent({ paneId: req.paneId, tabId: req.tabId, key: req.key, remote: req });
+      setDialogPrefill(req.prefill);
+      setConnectOpen(true);
+    },
+    onRemoteDialogResult: (paneId, tabId, key, sessionId) => {
+      if (sessionId) aiOrch.adoptAiTerminal(paneId, tabId, sessionId, key);
+      else enqueuePendingMessage(paneId, tabId, connectDeclinedNote(key));
+    },
     // Give a terminal handed over by an AI Chat window a real tab here. Same
     // path a local materialize takes, so the id — and therefore the AI's link
     // and its capture — carries on unchanged.
@@ -640,11 +682,13 @@ function App() {
     addSessionToStore(id);
     // A pending AI connect intent adopts whatever the user submitted (even an
     // edited host — a human choice wins): link it to the conversation and wait
-    // for its prompt exactly like an AI-opened worker.
+    // for its prompt exactly like an AI-opened worker. For a dialog shown on an
+    // AI Chat window's behalf, that conversation lives over there.
     if (aiDialogIntent) {
       setAiDialogIntent(null);
       setDialogPrefill(undefined);
-      aiOrch.adoptAiTerminal(aiDialogIntent.paneId, aiDialogIntent.tabId, id, aiDialogIntent.key);
+      if (aiDialogIntent.remote) aiWindow.reportDialogResult(aiDialogIntent.remote, id);
+      else aiOrch.adoptAiTerminal(aiDialogIntent.paneId, aiDialogIntent.tabId, id, aiDialogIntent.key);
     }
     return id;
   };
@@ -676,7 +720,14 @@ function App() {
     const pid = Object.entries(paneAllocations).find(
       ([, sid]) => sid === id
     )?.[0];
-    if (pid) setActivePaneId(pid);
+    if (pid) {
+      setActivePaneId(pid);
+      return;
+    }
+    // A tab in no pane (opened when every pane was taken) is shown in the
+    // active pane; what was there becomes a hidden tab in its place. Before,
+    // the click did nothing, so the only way to see it was dragging it.
+    moveSessionToPane(id, activePaneId);
   };
 
   const handleCloseTab = async (id: string) => {
@@ -713,15 +764,15 @@ function App() {
         clearRunCommandIntervals(id);
         // AI-opened worker sessions die with the conversation pane that owns them.
         workers.closeWorkersForPane(id);
-        // Disable backend capture for EVERY session this (singleton) pane was
-        // watching — else those watch entries leak after close.
-        for (const sid of watchingSessionIdsRef.current) {
-          void tauriService.setWatching(sid, false, 0);
-        }
-        watchingSessionIdsRef.current = new Set();
         setWatchingSessionId(null);
-        // Free the pane's per-tab backend histories and drop its in-memory state,
-        // so a later watch-diff can't resurrect capture for a pane that's gone.
+        // The transcripts live outside the pane (they survive its re-creation);
+        // closing the pane is what ends them.
+        disposePaneStreams(id);
+        // Free the pane's per-tab backend histories and drop its in-memory state.
+        // Backend capture for the terminals it watched is released by the
+        // orchestrator's watch diff once the state is gone — only THIS pane's
+        // terminals, so a second AI pane in the window (one that arrived from
+        // another window) keeps its capture.
         removeAiChatState(id);
       }
       setFeaturePanes((prev) => {
@@ -876,6 +927,7 @@ function App() {
               key={featureInfo.id}
               paneId={featureInfo.id}
               active={paneId === activePaneId}
+              onOpenLogSettings={() => openSettings('general')}
             />
           ) : featureInfo?.type === 'interface-traffic' ? (
             <InterfaceTrafficPane
@@ -928,10 +980,12 @@ function App() {
               onRunCommand={(targetId, cmd, originatingTabId) =>
                 aiOrch.onRunCommand(targetId, cmd, originatingTabId, featureInfo.id)
               }
-              onSendMessage={(text, images) => aiSendMessage(featureInfo.id, text, images)}
+              onCancelRuns={(tabId) => aiOrch.cancelRunsForTab(featureInfo.id, tabId)}
+              onSendMessage={(text, images, tabId) => aiSendMessage(featureInfo.id, text, images, tabId)}
               aiPersonas={aiPersonas}
               terminalBackground={terminalBackground}
               linkableSessions={linkableSessions}
+              crossWindowSessions={crossWindowSessions}
               onRefreshSessions={refreshCrossWindowSessions}
               // Add a terminal to the active tab's watched set (the header "+"
               // picker). Adding streams that terminal's output to the AI, so gate
@@ -956,6 +1010,9 @@ function App() {
               hostTree={hostManager.tree}
               onOpenTerminal={(tabId, resolved) => aiOrch.openAiTerminal(featureInfo.id, tabId, resolved)}
               onOpenTerminalInDialog={(tabId, prefill, key) => {
+                // An AI Chat window has no terminal area: a session opened from
+                // a dialog here would be invisible, so an ordinary window shows it.
+                if (aiWindow.delegateDialog(featureInfo.id, tabId, key, prefill)) return;
                 setAiDialogIntent({ paneId: featureInfo.id, tabId, key });
                 setDialogPrefill(prefill);
                 setConnectOpen(true);
@@ -963,7 +1020,7 @@ function App() {
               onMaterializeWorker={(sid) => { void workers.materializeWorker(sid); }}
               onCloseWorker={(sid) => workers.closeWorkerSession(sid)}
               // ── Moving this conversation between windows ──
-              onTranscriptPort={aiWindow.registerTranscriptPort}
+              onPanePort={aiWindow.registerPanePort}
               onPopOutWindow={aiWindow.popOut}
               onPopInWindow={aiWindow.popIn}
               windowMoving={aiWindow.moving}
@@ -1100,7 +1157,8 @@ function App() {
               // Closing the dialog on a pending AI connect intent = the user declined.
               if (aiDialogIntent) {
                 setAiDialogIntent(null);
-                enqueuePendingMessage(aiDialogIntent.paneId, aiDialogIntent.tabId, connectDeclinedNote(aiDialogIntent.key));
+                if (aiDialogIntent.remote) aiWindow.reportDialogResult(aiDialogIntent.remote, undefined);
+                else enqueuePendingMessage(aiDialogIntent.paneId, aiDialogIntent.tabId, connectDeclinedNote(aiDialogIntent.key));
               }
               setDialogPrefill(undefined);
               setConnectOpen(false);

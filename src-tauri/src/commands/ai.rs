@@ -10,6 +10,7 @@ use tauri::{AppHandle, Manager, State};
 use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
+use crate::services::ai::ai_provider::{cancelled_response, emit_chat_response};
 use crate::services::ai::history::ChatImage;
 use crate::services::ai::{AIService, AuthStatus, CommandVerdict, ModelInfo};
 use crate::services::path_safety::{is_sensitive_path, is_unc_path};
@@ -124,6 +125,16 @@ fn cancel_session(cancels: &CancelRegistry, session_id: &str) -> bool {
     }
 }
 
+/// How [`run_send`] ended: whether `send` ran at all.
+#[derive(Debug, PartialEq, Eq)]
+pub enum SendOutcome {
+    /// `send` ran (to completion, error, or a cancel it reported itself).
+    Ran,
+    /// Stopped, superseded or cleared while still queued; `send` never started,
+    /// so nothing reached history and no event went to the frontend.
+    SkippedCancelled,
+}
+
 /// Run one chat send in its conversation's queue. `send` receives the token
 /// that Stop, a superseding send, a clear and the backstop deadline fire.
 async fn run_send<F, Fut>(
@@ -131,7 +142,7 @@ async fn run_send<F, Fut>(
     gates: &SessionGates,
     session_id: &str,
     send: F,
-) -> Result<(), String>
+) -> Result<SendOutcome, String>
 where
     F: FnOnce(CancellationToken) -> Fut,
     Fut: Future<Output = Result<(), String>>,
@@ -156,7 +167,7 @@ where
     let result = if cancel_token.is_cancelled() {
         // Stopped, superseded or cleared while queued: never start. Starting
         // would write the question to history and open a billed request.
-        Ok(())
+        Ok(SendOutcome::SkippedCancelled)
     } else {
         // Backstop deadline guard: cancels the same token if the send outlives
         // the frontend watchdog (e.g. the UI crashed), so it unwinds gracefully
@@ -170,7 +181,7 @@ where
             log::warn!("[ai] stream exceeded backstop deadline; cancelling");
             deadline_token.cancel();
         });
-        let result = send(cancel_token).await;
+        let result = send(cancel_token).await.map(|()| SendOutcome::Ran);
         deadline_guard.abort();
         result
     };
@@ -313,6 +324,21 @@ fn validate_session_id(session_id: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// A send's id is opaque to the backend; it only travels back on the events.
+/// Bounded and plain so it cannot bloat or break every event of the stream.
+fn validate_request_id(id: &str) -> Result<(), String> {
+    if id.is_empty() || id.len() > 64 {
+        return Err("request_id must be 1-64 characters".into());
+    }
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err("request_id may contain only letters, digits, '-' and '_'".into());
+    }
+    Ok(())
+}
+
 fn validate_command(command: &str) -> Result<(), String> {
     if command.trim().is_empty() {
         return Err("command must not be empty".into());
@@ -437,6 +463,9 @@ pub async fn ai_auth_logout(
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
+// Tauri maps each invoke argument to a parameter by name; a struct would change
+// the wire shape every caller uses.
+#[allow(clippy::too_many_arguments)]
 pub async fn ai_chat_send(
     app: AppHandle,
     state: State<'_, AIServiceState>,
@@ -445,8 +474,39 @@ pub async fn ai_chat_send(
     model: String,
     system_instruction: Option<String>,
     images: Option<Vec<ChatImage>>,
+    request_id: Option<String>,
 ) -> Result<(), String> {
     validate_session_id(&session_id)?;
+    if let Some(id) = &request_id {
+        validate_request_id(id)?;
+    }
+    // Every event this send emits carries the frontend's id for it (see
+    // CHAT_REQUEST_ID), including the SkippedCancelled one below.
+    crate::services::ai::ai_provider::CHAT_REQUEST_ID
+        .scope(
+            request_id,
+            chat_send_inner(
+                app,
+                state,
+                session_id,
+                message,
+                model,
+                system_instruction,
+                images,
+            ),
+        )
+        .await
+}
+
+async fn chat_send_inner(
+    app: AppHandle,
+    state: State<'_, AIServiceState>,
+    session_id: String,
+    message: String,
+    model: String,
+    system_instruction: Option<String>,
+    images: Option<Vec<ChatImage>>,
+) -> Result<(), String> {
     let images = images.unwrap_or_default();
     // An image-only send (no text) is allowed; otherwise the text must be valid.
     if message.is_empty() && !images.is_empty() {
@@ -465,7 +525,7 @@ pub async fn ai_chat_send(
     let sid = session_id.as_str();
     let (app, message, model) = (&app, message.as_str(), model.as_str());
     let system_instruction = system_instruction.as_deref();
-    run_send(&ai.cancels, &ai.gates, sid, |cancel_token| async move {
+    let outcome = run_send(&ai.cancels, &ai.gates, sid, |cancel_token| async move {
         let service = ai.service.read().await;
         service
             .send_message(
@@ -479,7 +539,13 @@ pub async fn ai_chat_send(
             )
             .await
     })
-    .await
+    .await?;
+    if outcome == SendOutcome::SkippedCancelled {
+        // The provider never ran, so it could not report the cancel itself.
+        // Without this the pane would show "Thinking…" until its watchdog.
+        emit_chat_response(app, cancelled_response(sid, ""));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -563,21 +629,35 @@ pub async fn ai_list_locations(state: State<'_, AIServiceState>) -> Result<Vec<S
 // Provider & configuration commands
 // ---------------------------------------------------------------------------
 
+/// Switch the active provider. A no-op switch returns before touching anything:
+/// every window mirrors the shared provider setting into the backend when it
+/// starts (`useAiAuthOwner`), and the `cancel_all_inflight` a real switch needs
+/// would otherwise silently kill every other window's in-flight stream each
+/// time a window opens — the frontend hears nothing of a cancel and sits on
+/// "Thinking…" until its watchdog fires.
 #[tauri::command]
 pub async fn ai_set_provider(
     state: State<'_, AIServiceState>,
     provider_id: String,
 ) -> Result<(), String> {
+    if state.service.read().await.active_provider_id() == provider_id {
+        return Ok(());
+    }
     cancel_all_inflight(&state);
     let mut service = state.service.write().await;
     service.set_active_provider(&provider_id)
 }
 
+/// Change the Vertex AI region. Same no-op guard as [`ai_set_provider`]: each AI
+/// Chat pane re-applies the saved region when it mounts.
 #[tauri::command]
 pub async fn ai_set_location(
     state: State<'_, AIServiceState>,
     location: String,
 ) -> Result<(), String> {
+    if state.service.read().await.location().as_deref() == Some(location.as_str()) {
+        return Ok(());
+    }
     cancel_all_inflight(&state);
     let mut service = state.service.write().await;
     service.set_location(&location);
@@ -747,7 +827,7 @@ mod tests {
         assert!(poll!(new.as_mut()).is_pending());
 
         let (a, b) = tokio::join!(old, new);
-        assert_eq!((a, b), (Ok(()), Ok(())));
+        assert_eq!((a, b), (Ok(SendOutcome::Ran), Ok(SendOutcome::Ran)));
         assert_eq!(
             contents(store, "s"),
             vec!["U1", "p\n\n[cancelled by user]", "U2", "A2"]
@@ -812,8 +892,11 @@ mod tests {
         }));
         assert!(poll!(clear.as_mut()).is_pending());
 
-        let _ = tokio::join!(old, queued, clear);
+        let (_, queued_outcome, _) = tokio::join!(old, queued, clear);
         assert!(!started.load(Ordering::SeqCst));
+        // The command layer reports this to the frontend as `cancelled`,
+        // since the provider never ran and cannot say so itself.
+        assert_eq!(queued_outcome, Ok(SendOutcome::SkippedCancelled));
         assert!(contents(store, "s").is_empty());
         assert!(cancels.lock().unwrap().is_empty());
     }
@@ -821,6 +904,15 @@ mod tests {
     #[test]
     fn validate_session_id_empty() {
         assert!(validate_session_id("").is_err());
+    }
+
+    #[test]
+    fn validate_request_id_accepts_uuid_and_rejects_junk() {
+        assert!(validate_request_id("3f2b9c1e-8d4a-4f6b-9a2e-1c0d5e7f9a3b").is_ok());
+        assert!(validate_request_id("").is_err());
+        assert!(validate_request_id(&"a".repeat(65)).is_err());
+        assert!(validate_request_id("a\"b").is_err());
+        assert!(validate_request_id("a b").is_err());
     }
 
     #[test]

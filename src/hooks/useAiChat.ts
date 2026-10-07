@@ -2,15 +2,18 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { PersonaDefinition, ChatImage, SessionInfo } from '../types/appTypes';
 import type { SessionRecord } from './useSessionManager';
 import type { FeaturePaneInfo } from '../utils/paneTypes';
-import { buildExecutionRules, languageDirective, resolveAiLanguage, watchedOutputSection, buildWatchTargetsBlock, buildConnectCapabilityBlock } from '../constants/aiPrompts';
+import { buildExecutionRules, languageDirective, resolveAiLanguage, watchedOutputSection, buildWatchTargetsBlock, buildConnectCapabilityBlock, buildNoTerminalBlock } from '../constants/aiPrompts';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAiWorkerSessionStore } from '../stores/aiWorkerSessionStore';
 import { tauriService } from '../services/tauriService';
 import { sessionBindingKey } from '../utils/sessionBindingKey';
+import { remoteSessionName } from '../utils/sessionNameShare';
+import { assignAlias } from '../utils/terminalAlias';
 import { redactSecrets } from '../utils/redaction';
 import { lookupSession } from '../utils/sessionLookup';
 import { buildWatchedViews, buildConnectCapabilityInput } from '../utils/aiConnectContext';
 import { isMachineEnvelope } from '../components/AIChatPane/terminalOutputUtils';
+import { fitWatchSections, type WatchSection } from '../utils/aiWatchPrefix';
 
 // -- Types --
 
@@ -34,11 +37,27 @@ export interface WatchedTerminal {
   sessionId: string;
   bindingKey?: string;
   /**
+   * The name the model uses for this terminal in `target=<alias>`, fixed when
+   * the terminal was linked. Stored rather than derived from the display name
+   * at each use: a derived alias shifted (`core-2` → `core`) when a same-named
+   * neighbour was unwatched, and the model's older `target=` then ran on the
+   * wrong terminal. Absent on links made before aliases were stored, which
+   * still get a derived one (see `buildAliasEntries`).
+   */
+  alias?: string;
+  /**
    * The AI opened this terminal itself (a worker session, or one later
    * materialized into a tab — ADR-AI-007). Counts toward the per-conversation
    * cap and marks the chip in the tray. Never set for a user-linked terminal.
    */
   aiOpened?: boolean;
+  /**
+   * What the terminal was called when it was linked. Only a fallback for the
+   * chip and run-target labels once the session itself can no longer be looked
+   * up (disconnected worker, another window's closed terminal) — the live name
+   * always wins while there is one.
+   */
+  name?: string;
 }
 
 /**
@@ -114,6 +133,16 @@ interface UseAiChatOptions {
   aiPersonas: PersonaDefinition[];
   /** Read-and-clear a session's watch buffer (backend-backed, async). */
   takeWatchBuffer: (sessionId: string) => Promise<string>;
+  /** Read a session's watch buffer WITHOUT clearing it. */
+  peekWatchBuffer?: (sessionId: string) => Promise<string>;
+  /**
+   * Whether an AI-issued command is being polled on a terminal right now, as a
+   * ref because the orchestrator that knows is created after this hook. A
+   * manual send then peeks at that terminal's buffer instead of draining it:
+   * draining took the output the poll was waiting for, so the command came back
+   * to the model cut short or as "no response".
+   */
+  isSessionBusyRef?: React.RefObject<(sessionId: string) => boolean>;
   /**
    * Ensure the user has accepted the one-time AI data-sharing disclosure before
    * any terminal data is sent to a third-party provider. Resolves `true` to
@@ -168,7 +197,11 @@ interface UseAiChatReturn {
   removeTabLink: (aiSessionId: string, tabId: string, sessionId: string) => void;
   /** Swap a dead entry's session id in place on reconnect (auto-rebind). */
   rebindTabLink: (aiSessionId: string, tabId: string, bindingKey: string, newSessionId: string) => void;
-  sendMessage: (aiSessionId: string, text: string, images?: ChatImage[]) => Promise<void>;
+  /** Send a message on `tabId` (default: the active tab), with the watched
+   *  terminals' recent output prepended. Rejects when the backend refuses the
+   *  send (validation), so the pane can close the tab's streaming state; a send
+   *  the backend accepted reports its outcome through `ai-chat-response` events. */
+  sendMessage: (aiSessionId: string, text: string, images?: ChatImage[], tabId?: string) => Promise<void>;
   askAi: (selection: string, question: string, targetSessionId?: string) => Promise<void>;
 }
 
@@ -253,11 +286,42 @@ export function createDefaultAiChatState(
       // Empty title => TabStrip renders the localized "Tab N" fallback.
       title: initialTitle ?? '',
       linkedSessions: initialLinkSessionId
-        ? [{ sessionId: initialLinkSessionId, bindingKey: initialBindingKey }]
+        ? [{
+            sessionId: initialLinkSessionId,
+            bindingKey: initialBindingKey,
+            alias: assignAlias(initialTitle || initialLinkSessionId, []),
+            name: initialTitle || undefined,
+          }]
         : [],
       lastFocusedWatchId: initialLinkSessionId,
     }],
   };
+}
+
+/**
+ * The config-derived identity of a session, for a link. This window's own
+ * record when it has one; otherwise what the owning window published (another
+ * window's terminal, which is every terminal a dedicated AI Chat window
+ * watches). Without the fallback such links never auto-rebound on reconnect.
+ */
+function bindingKeyFor(sessionId: string, sessions: Map<string, SessionRecord>): string | undefined {
+  const rec = sessions.get(sessionId);
+  return rec ? sessionBindingKey(rec) : remoteSessionName(sessionId)?.bindingKey;
+}
+
+/** What a terminal is called, for its alias: this window's record, the AI's
+ *  worker registry, or the owning window's published name. */
+function displayNameFor(sessionId: string, sessions: Map<string, SessionRecord>): string {
+  return sessions.get(sessionId)?.displayName
+    ?? useAiWorkerSessionStore.getState().workers[sessionId]?.displayName
+    ?? remoteSessionName(sessionId)?.displayName
+    ?? sessionId;
+}
+
+/** The name kept on a new link (see `WatchedTerminal.name`); none when only the id is known. */
+function linkName(sessionId: string, sessions: Map<string, SessionRecord>): string | undefined {
+  const n = displayNameFor(sessionId, sessions);
+  return n && n !== sessionId ? n : undefined;
 }
 
 // -- Hook --
@@ -268,6 +332,8 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     featurePanes,
     aiPersonas,
     takeWatchBuffer,
+    peekWatchBuffer,
+    isSessionBusyRef,
     ensureAiConsent,
     createAiChatPane,
     crossWindowSessionsRef,
@@ -299,12 +365,14 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
   });
 
   const takeWatchBufferRef = useRef(takeWatchBuffer);
+  const peekWatchBufferRef = useRef(peekWatchBuffer);
   const ensureAiConsentRef = useRef(ensureAiConsent);
   const createAiChatPaneRef = useRef(createAiChatPane);
   const setActivePaneIdRef = useRef(setActivePaneId);
 
   useEffect(() => {
     takeWatchBufferRef.current = takeWatchBuffer;
+    peekWatchBufferRef.current = peekWatchBuffer;
     ensureAiConsentRef.current = ensureAiConsent;
     createAiChatPaneRef.current = createAiChatPane;
     setActivePaneIdRef.current = setActivePaneId;
@@ -427,9 +495,13 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       const existing = prev.get(aiSessionId) ?? createDefaultAiChatState();
       const ordinals = existing.tabs.map(t => t.ordinal);
       const newOrdinal = ordinals.length > 0 ? Math.max(...ordinals) + 1 : 1;
-      const linkedRec = initialLinkSessionId ? sessionsRef.current.get(initialLinkSessionId) : undefined;
       const linkedSessions: WatchedTerminal[] = initialLinkSessionId
-        ? [{ sessionId: initialLinkSessionId, bindingKey: linkedRec ? sessionBindingKey(linkedRec) : undefined }]
+        ? [{
+            sessionId: initialLinkSessionId,
+            bindingKey: bindingKeyFor(initialLinkSessionId, sessionsRef.current),
+            alias: assignAlias(displayNameFor(initialLinkSessionId, sessionsRef.current), []),
+            name: linkName(initialLinkSessionId, sessionsRef.current),
+          }]
         : [];
       const title = deriveTabTitle(linkedSessions, sessionsRef.current);
       const newTab: ChatTab = {
@@ -590,8 +662,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     setAiChatStates((prev) => {
       const existing = prev.get(aiSessionId);
       if (!existing) return prev;
-      const rec = sessionsRef.current.get(sessionId);
-      const bindingKey = rec ? sessionBindingKey(rec) : undefined;
+      const bindingKey = bindingKeyFor(sessionId, sessionsRef.current);
       const aiOpened = !!opts?.aiOpened;
       let changed = false;
       const updatedTabs = existing.tabs.map((t) => {
@@ -609,7 +680,15 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
             return { ...t, linkedSessions, lastFocusedWatchId: sessionId };
           }
           changed = true;
-          const entry: WatchedTerminal = aiOpened ? { sessionId, bindingKey, aiOpened: true } : { sessionId, bindingKey };
+          // The alias is fixed here, unique among the tab's other links.
+          const alias = assignAlias(
+            displayNameFor(sessionId, sessionsRef.current),
+            t.linkedSessions.map((w) => w.alias).filter((a): a is string => !!a),
+          );
+          const name = linkName(sessionId, sessionsRef.current);
+          const entry: WatchedTerminal = aiOpened
+            ? { sessionId, bindingKey, alias, name, aiOpened: true }
+            : { sessionId, bindingKey, alias, name };
           const linkedSessions = [...t.linkedSessions, entry];
           return {
             ...t,
@@ -719,10 +798,12 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
   }, []);
 
   // -- sendMessage --
-  const sendMessage = useCallback(async (aiSessionId: string, text: string, images?: ChatImage[]) => {
+  const sendMessage = useCallback(async (aiSessionId: string, text: string, images?: ChatImage[], tabId?: string) => {
     const chatState = aiChatStatesRef.current.get(aiSessionId);
     if (!chatState) return;
-    const activeTab = getActiveTab(chatState);
+    // A queued human message (typed while its tab was streaming) is dispatched
+    // by the pane's send loop for a specific tab, which need not be active.
+    const activeTab = tabId ? chatState.tabs.find((t) => t.id === tabId) : getActiveTab(chatState);
     if (!activeTab) return;
 
     // Gate the first send to a third-party AI provider on the data-sharing consent.
@@ -745,15 +826,31 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       crossWindow: crossWindowSessionsRef?.current,
     };
     let prependedContext = '';
+    let trimmedSections = 0;
     if (!isMachineEnvelope(text)) {
+      const sections: WatchSection[] = [];
       for (const w of activeTab.linkedSessions) {
         const view = lookupSession(w.sessionId, lookupSources);
         if (view?.status !== 'connected') continue;
-        const buffer = await takeWatchBufferRef.current(w.sessionId);
+        // A terminal with an AI command still being polled keeps its buffer:
+        // the poll owns it. The question still sees what has arrived so far,
+        // and the same output reaching the model again in the command's result
+        // envelope is the lesser evil.
+        const busy = isSessionBusyRef?.current?.(w.sessionId) ?? false;
+        const buffer = busy && peekWatchBufferRef.current
+          ? await peekWatchBufferRef.current(w.sessionId)
+          : await takeWatchBufferRef.current(w.sessionId);
         if (!buffer) continue;
-        const name = view.displayName || w.sessionId;
         // Redact secrets before this scrollback egresses to the third-party AI.
-        prependedContext += `${watchedOutputSection(name)}\n${redactSecrets(buffer)}\n================\n`;
+        sections.push({ name: view.displayName || w.sessionId, text: redactSecrets(buffer) });
+      }
+      // Several full buffers would exceed the backend's message cap and the
+      // send would be refused outright — keep each terminal's most recent
+      // output and tell the model what was left out.
+      for (const sec of fitWatchSections(sections)) {
+        if (sec.omittedBytes > 0) trimmedSections++;
+        const omitted = sec.omittedBytes > 0 ? `[earlier output omitted: ${sec.omittedBytes} bytes]\n` : '';
+        prependedContext += `${watchedOutputSection(sec.name)}\n${omitted}${sec.text}\n================\n`;
       }
     }
 
@@ -771,7 +868,8 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       maxOpened: st.aiMaxWorkerSessionsPerTab ?? 5,
       idleMinutes: st.aiWorkerIdleTimeoutMins ?? 10,
     }));
-    const systemInstruction = (chatState.systemInstruction || 'You are a helpful assistant.') + buildWatchTargetsBlock(aliasEntries) + connectBlock;
+    const systemInstruction = (chatState.systemInstruction || 'You are a helpful assistant.') + buildWatchTargetsBlock(aliasEntries)
+      + buildNoTerminalBlock(activeTab.linkedSessions.length) + connectBlock;
 
     const prepInfo = `useai-send-prep ${JSON.stringify({
       aiSessionId,
@@ -779,14 +877,20 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
       finalMessageLen: finalMessage.length,
       imageCount: images?.length ?? 0,
       hasWatchPrefix: prependedContext.length > 0,
+      trimmedSections,
     })}`;
     console.debug(`[AIExec/info] ${prepInfo}`);
     tauriService.logDebug('info', 'AIExec', prepInfo)?.catch(() => {});
 
-    tauriService.aiChatSend(aiBackendSessionId(aiSessionId, activeTab.id), finalMessage, selectedModel, systemInstruction, images);
-    // `crossWindowSessionsRef` is a ref object, so its identity is stable and this
-    // stays a once-created callback; it is listed only to satisfy the hooks lint.
-  }, [crossWindowSessionsRef]);
+    // Awaited so a send the backend refuses (validation) reaches the caller:
+    // with the rejection swallowed here, the pane kept its "Thinking…" state
+    // until the 180 s watchdog. A send that was accepted resolves at once —
+    // its answer arrives as events.
+    await tauriService.aiChatSend(aiBackendSessionId(aiSessionId, activeTab.id), finalMessage, selectedModel, systemInstruction, images);
+    // `crossWindowSessionsRef` / `isSessionBusyRef` are ref objects, so their
+    // identity is stable and this stays a once-created callback; they are listed
+    // only to satisfy the hooks lint.
+  }, [crossWindowSessionsRef, isSessionBusyRef]);
 
   // -- askAi --
   // Inline terminal Ask AI: sends the user's typed question plus the selected
@@ -840,7 +944,11 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatReturn {
     // needs its system instruction seeded here (see the seed block after this).
     const isNewPaneState = !existingState;
     if (!existingState) {
-      existingState = createDefaultAiChatState(activeTermId, activeSession?.displayName);
+      existingState = createDefaultAiChatState(
+        activeTermId,
+        activeSession?.displayName,
+        activeSession ? sessionBindingKey(activeSession) : undefined,
+      );
       updateAiChatStateRef.current(aiPaneId, existingState);
     } else if (activeSession) {
       const activeTab = getActiveTab(existingState);

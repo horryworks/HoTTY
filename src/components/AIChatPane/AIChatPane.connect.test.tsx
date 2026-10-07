@@ -62,6 +62,12 @@ vi.mock('../../services/tauriService', () => ({
         selectServiceAccountKeyFile: vi.fn().mockResolvedValue(null),
     },
 }));
+// A saved host's login name is stored encrypted; the pane decrypts it through
+// this helper (only for `n7` here, standing in for a DPAPI blob).
+vi.mock('../../utils/hostConnectConfig', () => ({
+    resolveHostLoginName: vi.fn(async (nodeId: string) => (nodeId === 'n7' ? 'bob' : undefined)),
+}));
+
 vi.mock('../../utils/applyTheme', () => ({ applyTheme: vi.fn() }));
 vi.mock('../../themes/defaults', () => ({
     getTheme: () => ({ terminal: { foreground: '#fff', background: '#000', backgroundInactive: '#111', paneBackground: '#222' } }),
@@ -202,6 +208,22 @@ describe('AIChatPane connect card — gate outcomes', () => {
             'ssh:alice@192.0.2.10:22',
         );
         expect(screen.getByText('Waiting for the connection dialog…')).toBeTruthy();
+    });
+
+    it('fills the dialog with the decrypted saved login name, never the stored blob', async () => {
+        const hostTree = [{ id: 'n7', type: 'host', name: 'sw-07', entry: { protocol: 'ssh', host: '192.0.2.50', port: 22, username: '[SAFE]AQAAblob' } }];
+        renderPane({ hostTree });
+        await authenticate();
+        await sendAndComplete('open sw-07', `Opening it.\n\n${F}connect\ntype: ssh\nhost: 192.0.2.50\nreason: check\n${F}`);
+
+        expect(await screen.findByText('Login: bob')).toBeTruthy();
+        expect(screen.queryByText(/\[SAFE\]/)).toBeNull();
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Open in connection dialog/ })); });
+        expect(h.onOpenTerminalInDialog).toHaveBeenCalledWith(
+            't1',
+            expect.objectContaining({ host: '192.0.2.50', username: 'bob' }),
+            expect.any(String),
+        );
     });
 
     it('with credential reuse ON, shows the warning line and still asks under the most permissive policy', async () => {

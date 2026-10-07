@@ -114,6 +114,11 @@ export const aiChat = {
     clearConversationConfirmTitle: 'Clear this conversation?',
     clearConversationConfirmMessage: 'The current conversation will be cleared. This cannot be undone.',
     clearConversationConfirmButton: 'Clear conversation',
+    closeTabConfirmTitle: 'Close this conversation?',
+    closeTabConfirmMessage: 'The conversation in this tab will be lost.',
+    closeTabConfirmWorkers_one: 'The terminal the AI opened will also be disconnected.',
+    closeTabConfirmWorkers_other: 'The {{count}} terminals the AI opened will also be disconnected.',
+    closeTabConfirmButton: 'Close',
     modelNotSelected: 'AI model not selected. Open AI settings below the message box and choose one.',
     // Generic empty-state suggestions (shown when no terminal is linked)
     suggestionGenericCapabilities: 'What can you help me with?',

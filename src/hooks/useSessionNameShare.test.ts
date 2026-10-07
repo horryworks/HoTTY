@@ -23,6 +23,7 @@ import {
   remoteSessionName,
   resetSessionNames,
   SESSION_NAMES_CHANNEL,
+  SESSION_NAMES_REQUEST_CHANNEL,
 } from '../utils/sessionNameShare';
 import type { SessionRecord } from './useSessionManager';
 
@@ -123,6 +124,39 @@ describe('useSessionNameShare', () => {
       origin: 'win-2',
     });
     expect(remoteSessionName('s8')).toBeUndefined();
+  });
+
+  it('asks the other windows for their tables once it listens, and answers such a request', async () => {
+    const { result } = renderHook(() => useSessionNameShare(map(session('s1', 'core-sw01'))));
+    await act(async () => { await Promise.resolve(); });
+
+    // Tables are only sent on change; a window that starts later would miss
+    // every table already sent, so it asks.
+    const requests = tv.broadcastSharedChange.mock.calls.filter(([ch]) => ch === SESSION_NAMES_REQUEST_CHANNEL);
+    expect(requests).toHaveLength(1);
+
+    // Another newcomer asks us: our (unchanged) table goes out again…
+    const before = tv.broadcastSharedChange.mock.calls.filter(([ch]) => ch === SESSION_NAMES_CHANNEL).length;
+    received!({ channel: SESSION_NAMES_REQUEST_CHANNEL, payload: JSON.stringify({ v: 1, from: 'win-3' }), origin: 'win-3' });
+    const after = tv.broadcastSharedChange.mock.calls.filter(([ch]) => ch === SESSION_NAMES_CHANNEL);
+    expect(after).toHaveLength(before + 1);
+    expect(JSON.parse(after[after.length - 1][1])).toMatchObject({ from: 'main', names: { s1: { displayName: 'core-sw01' } } });
+    // …and a reply is never a request (no echo storm).
+    expect(tv.broadcastSharedChange.mock.calls.filter(([ch]) => ch === SESSION_NAMES_REQUEST_CHANNEL)).toHaveLength(1);
+    // Our own request coming back is ignored.
+    received!({ channel: SESSION_NAMES_REQUEST_CHANNEL, payload: JSON.stringify({ v: 1, from: 'main' }), origin: 'main' });
+    expect(tv.broadcastSharedChange.mock.calls.filter(([ch]) => ch === SESSION_NAMES_CHANNEL)).toHaveLength(before + 1);
+
+    // An arriving table advances the counter the caller re-renders on.
+    expect(result.current).toBe(0);
+    act(() => {
+      received!({
+        channel: SESSION_NAMES_CHANNEL,
+        payload: JSON.stringify(buildSessionNames('win-2', { s9: { displayName: 'far-sw09' } })),
+        origin: 'win-2',
+      });
+    });
+    expect(result.current).toBe(1);
   });
 
   it('stops listening on unmount, including when it unmounts mid-subscribe', async () => {

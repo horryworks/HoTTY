@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildConfigFromHostNode } from './hostConnectConfig';
+import { buildConfigFromHostNode, resolveHostLoginName } from './hostConnectConfig';
 import { isEncrypted } from '../services/tauriService';
-import { decryptBatch, getCachedCredential } from '../hooks/useHostManager';
+import { decryptBatch, findStoredHostNode, getCachedCredential } from '../hooks/useHostManager';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { HostTreeNode, SshConnectionConfig, TelnetConnectionConfig } from '../types/appTypes';
 
@@ -14,10 +14,12 @@ vi.mock('../services/tauriService', () => ({
 vi.mock('../hooks/useHostManager', () => ({
   decryptBatch: vi.fn(),
   getCachedCredential: vi.fn(),
+  findStoredHostNode: vi.fn(),
 }));
 
 const mockDecryptBatch = vi.mocked(decryptBatch);
 const mockGetCached = vi.mocked(getCachedCredential);
+const mockFindStored = vi.mocked(findStoredHostNode);
 const mockIsEncrypted = vi.mocked(isEncrypted);
 
 const node = (entry: Partial<NonNullable<HostTreeNode['entry']>> & { host: string }): HostTreeNode => ({
@@ -118,5 +120,41 @@ describe('buildConfigFromHostNode', () => {
   it('carries the entry\'s fixed-terminal-size flag through to the connection config', async () => {
     const r = await buildConfigFromHostNode(node({ host: '192.0.2.1', username: 'alice', fixedTerminalSize: true }));
     expect((r!.config as SshConnectionConfig).fixedTerminalSize).toBe(true);
+  });
+});
+
+describe('resolveHostLoginName', () => {
+  beforeEach(() => mockFindStored.mockReset());
+
+  it('returns a plaintext name as is, without decrypting', async () => {
+    mockFindStored.mockReturnValue(node({ host: '192.0.2.1', username: 'alice' }));
+    await expect(resolveHostLoginName('n1')).resolves.toBe('alice');
+    expect(mockDecryptBatch).not.toHaveBeenCalled();
+  });
+
+  it('prefers the in-memory plaintext cache over a decrypt', async () => {
+    mockFindStored.mockReturnValue(node({ host: '192.0.2.1', username: 'enc:u' }));
+    mockGetCached.mockReturnValue({ username: 'alice' });
+    await expect(resolveHostLoginName('n1')).resolves.toBe('alice');
+    expect(mockDecryptBatch).not.toHaveBeenCalled();
+  });
+
+  it('decrypts a stored name, and never hands back the ciphertext', async () => {
+    mockFindStored.mockReturnValue(node({ host: '192.0.2.1', username: 'enc:u' }));
+    mockDecryptBatch.mockResolvedValueOnce(['alice']);
+    await expect(resolveHostLoginName('n1')).resolves.toBe('alice');
+    expect(mockDecryptBatch).toHaveBeenCalledWith(['enc:u']);
+
+    mockDecryptBatch.mockRejectedValueOnce(new Error('dpapi'));
+    await expect(resolveHostLoginName('n1')).resolves.toBeUndefined();
+    mockDecryptBatch.mockResolvedValueOnce([undefined]);
+    await expect(resolveHostLoginName('n1')).resolves.toBeUndefined();
+  });
+
+  it('is undefined for a missing entry or one without a name', async () => {
+    mockFindStored.mockReturnValue(undefined);
+    await expect(resolveHostLoginName('gone')).resolves.toBeUndefined();
+    mockFindStored.mockReturnValue(node({ host: '192.0.2.1' }));
+    await expect(resolveHostLoginName('n1')).resolves.toBeUndefined();
   });
 });

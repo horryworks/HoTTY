@@ -169,6 +169,19 @@ export interface UseAiOrchestratorReturn {
   /** Clear a pane's active poll intervals + pending sleep-delay timers. */
   clearRunCommandIntervals: (paneId: string) => void;
   /**
+   * Stop every command run (poll) and sleep delay ONE conversation tab started,
+   * silently — nothing is reported to the model. New chat, logout and a provider
+   * switch call this so the output of a command the user already cleared cannot
+   * arrive as the first turn of the fresh conversation.
+   */
+  cancelRunsForTab: (paneId: string, tabId: string) => void;
+  /**
+   * Whether an AI-issued command is being polled on this terminal right now.
+   * A manual send must then PEEK at the watch buffer instead of draining it,
+   * or the poll loses the output it is waiting for.
+   */
+  isSessionBusy: (sessionId: string) => boolean;
+  /**
    * Open a terminal on the AI's behalf (ADR-AI-007): resolve the credentials
    * (host tree / inherited / none), start a WORKER session (no tab), link it to
    * the requesting conversation, wait for a shell prompt and report the outcome
@@ -252,6 +265,16 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
   // Track active poll intervals from onRunCommand so they can be cleared when
   // the AI chat pane closes or the watched session disconnects.
   const runCommandIntervalsRef = useRef<Map<string, Set<ReturnType<typeof setInterval>>>>(new Map());
+  // Which terminal each active poll is watching, and how many polls watch each
+  // terminal — `isSessionBusy` for the manual-send path (peek, don't drain).
+  const runTargetsRef = useRef<Map<ReturnType<typeof setInterval>, string>>(new Map());
+  const busySessionCountRef = useRef<Map<string, number>>(new Map());
+  // Per-conversation run generation (`paneId::tabId` → n). A poll or sleep
+  // delay captures the generation it started under and stops, silently, when
+  // `cancelRunsForTab` has moved it on.
+  const runGenRef = useRef<Map<string, number>>(new Map());
+  const runGenKey = (paneId: string, tabId: string) => `${paneId}::${tabId}`;
+  const runGenOf = (paneId: string, tabId: string) => runGenRef.current.get(runGenKey(paneId, tabId)) ?? 0;
   // Track pending client-side sleep-delay timers (see scheduleSleepDelay), cleared
   // alongside the poll intervals when the pane closes or the app unmounts.
   const runCommandDelaysRef = useRef<Map<string, Set<ReturnType<typeof setTimeout>>>>(new Map());
@@ -279,14 +302,27 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     });
   }, []);
 
-  /** Register a poll interval as an in-flight run for `paneId`. */
-  const beginRun = useCallback((paneId: string, interval: ReturnType<typeof setInterval>) => {
+  /** Count `sessionId` as watched by one more (or one fewer) active poll. */
+  const adjustBusy = (sessionId: string, delta: number) => {
+    const n = (busySessionCountRef.current.get(sessionId) ?? 0) + delta;
+    if (n <= 0) busySessionCountRef.current.delete(sessionId);
+    else busySessionCountRef.current.set(sessionId, n);
+  };
+  const isSessionBusy = useCallback(
+    (sessionId: string) => (busySessionCountRef.current.get(sessionId) ?? 0) > 0,
+    [],
+  );
+
+  /** Register a poll interval as an in-flight run for `paneId` on `targetId`. */
+  const beginRun = useCallback((paneId: string, interval: ReturnType<typeof setInterval>, targetId: string) => {
     let set = runCommandIntervalsRef.current.get(paneId);
     if (!set) {
       set = new Set();
       runCommandIntervalsRef.current.set(paneId, set);
     }
     set.add(interval);
+    runTargetsRef.current.set(interval, targetId);
+    adjustBusy(targetId, +1);
     markPaneBusy(paneId, true);
   }, [markPaneBusy]);
 
@@ -294,6 +330,11 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
    *  no exit path can clear the interval while leaving the pane marked busy. */
   const endRun = useCallback((paneId: string, interval: ReturnType<typeof setInterval>) => {
     clearInterval(interval);
+    const target = runTargetsRef.current.get(interval);
+    if (target !== undefined) {
+      runTargetsRef.current.delete(interval);
+      adjustBusy(target, -1);
+    }
     const set = runCommandIntervalsRef.current.get(paneId);
     set?.delete(interval);
     if (!set || set.size === 0) {
@@ -305,7 +346,7 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
   const clearRunCommandIntervals = useCallback((paneId: string) => {
     const set = runCommandIntervalsRef.current.get(paneId);
     if (set) {
-      set.forEach((id) => clearInterval(id));
+      for (const id of [...set]) endRun(paneId, id);
       runCommandIntervalsRef.current.delete(paneId);
     }
     markPaneBusy(paneId, false);
@@ -314,7 +355,19 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
       delays.forEach((id) => clearTimeout(id));
       runCommandDelaysRef.current.delete(paneId);
     }
-  }, [markPaneBusy]);
+  }, [endRun, markPaneBusy]);
+
+  const cancelRunsForTab = useCallback((paneId: string, tabId: string) => {
+    // Moving the generation on is what stops them: each poll / sleep timer
+    // re-reads it on its next tick and ends itself (releasing busy state the
+    // normal way). The sleep indicator is cleared here since that timer only
+    // wakes at the end of its wait.
+    const key = runGenKey(paneId, tabId);
+    runGenRef.current.set(key, (runGenRef.current.get(key) ?? 0) + 1);
+    const tab = aiChatStatesRef.current.get(paneId)?.tabs.find((t) => t.id === tabId);
+    if (tab?.sleepDelay) updateTabByIdRef.current?.(paneId, tabId, { sleepDelay: null });
+    aiExecLog('info', 'runs-cancelled-for-tab', { paneId, tabId });
+  }, []);
   useEffect(() => {
     const intervals = runCommandIntervalsRef;
     const delays = runCommandDelaysRef;
@@ -562,8 +615,14 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     switch (toggle.action) {
       case 'create': {
         // Cold start: no state yet → seed a default tab watching this session.
+        // The binding key travels too, or this first terminal — unlike any
+        // added later — would never auto-rebind after a reconnect.
         const session = sessions.get(sessionId);
-        const seed = createDefaultAiChatState(sessionId, session?.displayName);
+        const seed = createDefaultAiChatState(
+          sessionId,
+          session?.displayName ?? remoteSessionName(sessionId)?.displayName,
+          session ? sessionBindingKey(session) : remoteSessionName(sessionId)?.bindingKey,
+        );
         updateAiChatStateRef.current?.(aiPaneId, seed);
         break;
       }
@@ -653,6 +712,10 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     const startLen = 0;
     // An AI-opened worker session is "in use" — reset its idle clock (no-op otherwise).
     workersRef.current.touchWorker(targetId);
+    // The conversation's run generation at start; a New chat / logout / provider
+    // switch moves it on, and this run then stops without reporting anything.
+    const gen = runGenOf(paneId, originatingTabId);
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
 
     // Send command lines to terminal. Split on CR as well as LF so the units
     // dispatched here match exactly the units the safety classifier scored — a
@@ -680,6 +743,10 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
             error: String(err),
             originatingTabId,
           });
+          // The not-connected note IS the result of this run; the poll below
+          // would otherwise sit out its idle timeout and send a second, empty
+          // envelope for the same command.
+          if (pollInterval) endRun(paneId, pollInterval);
           enqueuePendingMessage(paneId, originatingTabId,
             notConnectedNote(cmd, sessionsRef.current.get(targetId)?.status));
         });
@@ -711,22 +778,23 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
       // async peek. `polling` guards against overlapping ticks if a read is
       // slow (the invoke round-trip should be well under the 200ms interval).
       let polling = false;
-      const pollInterval = setInterval(() => {
+      const interval: ReturnType<typeof setInterval> = setInterval(() => {
         if (polling) return;
         polling = true;
         void (async () => {
           try {
             attempts++;
-            // Bail out if the originating tab no longer exists (user closed it).
+            // Bail out if the originating tab no longer exists (user closed it),
+            // or if the conversation was cleared / reset under this run.
             const paneState = aiChatStatesRef.current.get(paneId);
             const originatingTab = paneState?.tabs.find(t => t.id === originatingTabId);
-            if (!originatingTab) {
-              aiExecLog('warn', 'originating-tab-gone', {
+            if (!originatingTab || runGenOf(paneId, originatingTabId) !== gen) {
+              aiExecLog('warn', originatingTab ? 'run-superseded' : 'originating-tab-gone', {
                 cmd: trimCmdForLog(cmd),
                 attempts,
                 originatingTabId,
               });
-              endRun(paneId, pollInterval);
+              endRun(paneId, interval);
               return;
             }
             const buf = await tauriService.getWatchBuffer(targetId);
@@ -769,7 +837,7 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
                 newLen: newContent.length,
                 matchedAtEnd: result.matchedAtEnd,
               });
-              endRun(paneId, pollInterval);
+              endRun(paneId, interval);
               void tauriService.clearWatchBuffer(targetId);
               // Redact secrets from the captured output before it egresses to the AI.
               const outputText = `Terminal Output (Command: ${cmd}):\n${redactSecrets(newContent.trim())}`;
@@ -784,7 +852,7 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
                 newLen: newContent.length,
                 idleSecs,
               });
-              endRun(paneId, pollInterval);
+              endRun(paneId, interval);
               void tauriService.clearWatchBuffer(targetId);
               const reason = isIdle
                 ? `[no response from device for ${idleSecs} seconds]`
@@ -798,7 +866,8 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
           }
         })();
       }, 200);
-      beginRun(paneId, pollInterval);
+      pollInterval = interval;
+      beginRun(paneId, interval, targetId);
     }
   };
 
@@ -816,6 +885,7 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     const maxSecs = useSettingsStore.getState().aiSleepMaxDelaySecs;
     const { delayMs: clamped, wasClamped } = clampDelay(parsed.delayMs, maxSecs);
     const token = ++delayTokenRef.current;
+    const gen = runGenOf(paneId, originatingTabId);
 
     aiExecLog('info', 'sleep-delay-begin', {
       cmd: trimCmdForLog(cmd),
@@ -843,7 +913,7 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
       // same tab bumped the token) or the originating tab is gone.
       const paneState = aiChatStatesRef.current.get(paneId);
       const tab = paneState?.tabs.find(t => t.id === originatingTabId);
-      if (!tab || tab.sleepDelay?.token !== token) {
+      if (!tab || tab.sleepDelay?.token !== token || runGenOf(paneId, originatingTabId) !== gen) {
         aiExecLog('warn', 'sleep-delay-aborted', {
           cmd: trimCmdForLog(cmd),
           originatingTabId,
@@ -1005,9 +1075,13 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
             aiExecLog('warn', 'connect-tab-gone', { key, sid, tabId });
             return;
           }
+          // Another window's session counts as well: an AI Chat window hands a
+          // worker that needs a human login to the main window as soon as it
+          // connects, and this poll must keep following it there.
           const view = lookupSession(sid, {
             sessions: sessionsRef.current,
             workers: useAiWorkerSessionStore.getState().workers,
+            crossWindow: crossWindowSessionsRef.current,
           });
           if (!view) {
             // An adopted tab's record lands via setState a tick later — give it a moment.
@@ -1067,7 +1141,7 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
         }
       })();
     }, 200);
-    beginRun(paneId, interval);
+    beginRun(paneId, interval, sid);
   };
 
   type OpenPlan =
@@ -1205,9 +1279,13 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
 
   const adoptAiTerminal = (paneId: string, tabId: string, sessionId: string, key: string) => {
     addTabLinkRef.current?.(paneId, tabId, sessionId, { aiOpened: true });
+    // The session may have been opened in another window on this conversation's
+    // behalf (an AI Chat window delegates its connection dialog), so its name
+    // may only be known through the owner's published table.
     const rec = sessionsRef.current.get(sessionId);
-    aiExecLog('info', 'connect-adopt', { key, sid: sessionId, tabId });
-    openAndWatch(paneId, tabId, key, sessionId, rec?.displayName ?? sessionId, false);
+    const displayName = rec?.displayName ?? remoteSessionName(sessionId)?.displayName ?? sessionId;
+    aiExecLog('info', 'connect-adopt', { key, sid: sessionId, tabId, remote: !rec });
+    openAndWatch(paneId, tabId, key, sessionId, displayName, false);
   };
 
   return {
@@ -1225,6 +1303,8 @@ export function useAiOrchestrator(options: UseAiOrchestratorOptions): UseAiOrche
     onRunCommand: onRunCommandImpl,
     busyPaneIds,
     clearRunCommandIntervals,
+    cancelRunsForTab,
+    isSessionBusy,
     openAiTerminal,
     adoptAiTerminal,
   };

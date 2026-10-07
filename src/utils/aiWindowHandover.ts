@@ -25,7 +25,9 @@
 
 import type { AiWorkerSession } from '../stores/aiWorkerSessionStore';
 import type { AiChatState } from '../hooks/useAiChat';
+import type { SessionDialogPrefill } from '../types/appTypes';
 import type { ChatMessage, TabTokens } from '../hooks/useChatStream';
+import type { OutcomeEntries } from '../stores/aiTranscriptStore';
 
 /** Channel carrying a conversation set from one window to another. */
 export const AI_HANDOVER_CHANNEL = 'hotty-ai-handover';
@@ -69,6 +71,9 @@ export interface AiHandoverPayload {
   state: AiChatState;
   messages: HandoverMessages;
   tokens: HandoverTokens;
+  /** Commands that already ran or were declined, so the receiver does not offer
+   *  Run on them again. Optional on the wire: an older sender omits it. */
+  outcomes: OutcomeEntries;
   /** Worker sessions the conversation opened (ADR-AI-007). Never carries secrets. */
   workers: AiWorkerSession[];
   /** How many older turns had their image attachments trimmed. */
@@ -122,6 +127,7 @@ export function buildHandoverPayload(input: {
   state: AiChatState;
   messagesByTab: Map<string, ChatMessage[]>;
   tokensByTab: Map<string, TabTokens>;
+  outcomes?: OutcomeEntries;
   workers: AiWorkerSession[];
 }): AiHandoverPayload {
   const tabIds = new Set(input.state.tabs.map((t) => t.id));
@@ -147,7 +153,13 @@ export function buildHandoverPayload(input: {
     state: input.state,
     messages,
     tokens,
-    workers: input.workers.filter((w) => tabIds.has(w.tabId)),
+    outcomes: (input.outcomes ?? []).filter(([tabId]) => tabIds.has(tabId)),
+    // A worker that already ended is still in the sender's store for a short
+    // grace period (so a poll can read why). The receiver has no such timer:
+    // moved over, it would sit in the tray as a dead chip for good.
+    workers: input.workers.filter(
+      (w) => tabIds.has(w.tabId) && (w.status === 'connected' || w.status === 'connecting'),
+    ),
     imagesDropped,
   };
 }
@@ -179,6 +191,7 @@ export function parseHandoverPayload(raw: string, selfLabel: string): AiHandover
     state,
     messages: entriesOf(p.messages),
     tokens: entriesOf(p.tokens),
+    outcomes: entriesOf<OutcomeEntries[number][1]>(p.outcomes).filter(([, blocks]) => Array.isArray(blocks)),
     workers: Array.isArray(p.workers) ? (p.workers as AiWorkerSession[]) : [],
     imagesDropped: typeof p.imagesDropped === 'number' ? p.imagesDropped : 0,
   };
@@ -289,6 +302,79 @@ export function parseAdoptRequest(raw: string, selfLabel: string): AiAdoptSessio
 /** Every worker session id in a payload — what the receiver must take ownership of. */
 export function workerIdsOf(payload: AiHandoverPayload): string[] {
   return payload.workers.map((w) => w.id);
+}
+
+/**
+ * Channels for a connection dialog an AI Chat window cannot show itself.
+ *
+ * An AI `connect` request that needs a human-typed secret opens the connection
+ * dialog pre-filled. A dedicated AI Chat window has no terminal area, so a
+ * session opened there would be invisible: it asks an ordinary window to show
+ * the dialog instead, and that window reports back which session (if any) the
+ * user connected, so the conversation can watch it from where it is.
+ */
+export const AI_DIALOG_REQUEST_CHANNEL = 'hotty-ai-dialog-request';
+export const AI_DIALOG_RESULT_CHANNEL = 'hotty-ai-dialog-result';
+
+export interface AiDialogRequest {
+  v: number;
+  /** Window label asked to show the dialog. */
+  to: string;
+  /** Window label whose conversation is waiting (where the result goes). */
+  from: string;
+  paneId: string;
+  tabId: string;
+  /** `connectRequestKey` of the AI request the dialog answers. */
+  key: string;
+  prefill: SessionDialogPrefill;
+}
+
+export interface AiDialogResult {
+  v: number;
+  /** Window label whose conversation is waiting. */
+  to: string;
+  paneId: string;
+  tabId: string;
+  key: string;
+  /** The session the user connected, or absent when they closed the dialog. */
+  sessionId?: string;
+}
+
+export function buildDialogRequest(input: Omit<AiDialogRequest, 'v'>): AiDialogRequest {
+  return { v: AI_HANDOVER_VERSION, ...input };
+}
+
+export function buildDialogResult(input: Omit<AiDialogResult, 'v'>): AiDialogResult {
+  return { v: AI_HANDOVER_VERSION, ...input };
+}
+
+/** Parse a dialog request, or `null` if malformed or addressed elsewhere. */
+export function parseDialogRequest(raw: string, selfLabel: string): AiDialogRequest | null {
+  const p = safeParse(raw);
+  if (!p) return null;
+  if (p.v !== AI_HANDOVER_VERSION) return null;
+  if (p.to !== selfLabel) return null;
+  if (typeof p.from !== 'string' || !p.from) return null;
+  if (typeof p.paneId !== 'string' || !p.paneId) return null;
+  if (typeof p.tabId !== 'string' || !p.tabId) return null;
+  if (typeof p.key !== 'string' || !p.key) return null;
+  const prefill = p.prefill as SessionDialogPrefill | undefined;
+  if (!prefill || typeof prefill !== 'object') return null;
+  if (typeof prefill.protocol !== 'string' || typeof prefill.host !== 'string') return null;
+  return { v: AI_HANDOVER_VERSION, to: p.to, from: p.from, paneId: p.paneId, tabId: p.tabId, key: p.key, prefill };
+}
+
+/** Parse a dialog result, or `null` if malformed or addressed elsewhere. */
+export function parseDialogResult(raw: string, selfLabel: string): AiDialogResult | null {
+  const p = safeParse(raw);
+  if (!p) return null;
+  if (p.v !== AI_HANDOVER_VERSION) return null;
+  if (p.to !== selfLabel) return null;
+  if (typeof p.paneId !== 'string' || !p.paneId) return null;
+  if (typeof p.tabId !== 'string' || !p.tabId) return null;
+  if (typeof p.key !== 'string' || !p.key) return null;
+  const sessionId = typeof p.sessionId === 'string' && p.sessionId ? p.sessionId : undefined;
+  return { v: AI_HANDOVER_VERSION, to: p.to, paneId: p.paneId, tabId: p.tabId, key: p.key, sessionId };
 }
 
 function safeParse(raw: string): Record<string, unknown> | null {

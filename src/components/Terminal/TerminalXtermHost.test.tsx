@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import { act, render } from '@testing-library/react';
 
 const resize = vi.fn().mockResolvedValue(undefined);
@@ -83,6 +83,19 @@ function makeSession(overrides?: Partial<SessionRecord>) {
 }
 
 describe('TerminalXtermHost', () => {
+  // jsdom lays nothing out, so every element is 0x0 — and a 0x0 container is
+  // exactly what performResize now refuses to report. Give the host a size.
+  let widthSpy: { mockRestore: () => void } | undefined;
+  let heightSpy: { mockRestore: () => void } | undefined;
+  beforeAll(() => {
+    widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
+    heightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+  });
+  afterAll(() => {
+    widthSpy?.mockRestore();
+    heightSpy?.mockRestore();
+  });
+
   beforeEach(() => {
     useSettingsStore.getState().reset();
     resize.mockClear();
@@ -201,6 +214,20 @@ describe('TerminalXtermHost', () => {
     const { session } = makeSession();
     render(<TerminalXtermHost session={session} active={true} />);
     expect(resize).toHaveBeenCalledWith('s1', 80, 24);
+  });
+
+  it('does not report a size while the container is 0x0 (layout switch)', () => {
+    // A layout switch re-parents the pane and for a moment the host has no size.
+    // Reporting the 2x1 floor then shrank a ConPTY to one row, and WSL / Git Bash
+    // came back as a single prompt line.
+    const zero = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(0);
+    try {
+      const { session } = makeSession();
+      render(<TerminalXtermHost session={session} active={true} />);
+      expect(resize).not.toHaveBeenCalled();
+    } finally {
+      zero.mockReturnValue(800);
+    }
   });
 
   it('does not report a size to the backend before the renderer has measured', () => {

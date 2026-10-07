@@ -741,6 +741,7 @@ mod enabled {
             }
         });
         *slot = Some(SweeperHandle { cancel, join });
+        log::info!("web-browser: cookie sweeper started");
     }
 
     /// Stop the sweeper once the last browser pane has gone.
@@ -766,6 +767,7 @@ mod enabled {
             return;
         };
         handle.cancel.cancel();
+        log::info!("web-browser: cookie sweeper stopped (no browser panes left)");
         // This runs from `destroy_for_window`, which the window-close handler
         // calls on the main thread — outside the tokio runtime, where a bare
         // `tokio::spawn` panics and kills the app. The detached helper spawns

@@ -1,5 +1,89 @@
 # Release Notes
 
+## v2.1.0-beta10
+
+**AI Chat keeps its conversation and its place.** Moving the AI Chat pane, switching the layout or hiding the sidebar used to throw the conversation away — and with it any reply still arriving — after which the AI started identifying the device all over again. Conversations now live outside the pane, so none of that touches them. Most of this release is fixes from a full review of AI Chat and from a round of testing on real devices: replies that stopped at "Thinking…", a cleared conversation that never answered again, an AI Chat window that would not close, and terminals the AI could not tell apart.
+
+### Improvements
+
+- **The AI can open a saved host by its name.** The AI never sees your host tree, so when you said "connect to core-01" it could only reach the host if you gave its address. A connect request that names a saved host now finds it by name (ignoring case, spaces, `-` and `_`) and connects to the address stored there, with that host's saved login. The same rules as for an address still apply: the protocol and any port the AI gave must match, and if two saved hosts share the name, nothing saved is used.
+
+- **The connect card shows the login name.** A request to open a saved host now shows the user it will log in as.
+
+- **Closing a conversation tab asks first** when it holds a conversation, and says how many AI-opened terminals will be disconnected with it.
+
+- **Watched-terminal chips stay readable.** A chip keeps its name after the terminal disconnects, and two sessions to the same device are told apart (`core-01`, `core-01-2`) — in the chips and in what the AI is told.
+
+- **The AI identifies the device from what is on screen.** The first request to identify a device now includes the terminal's current screen, and the instructions no longer lean towards Cisco. A second session to a device the AI already knows only has paging turned off; it is not identified again.
+
+- **A new window comes to the front** when it opens.
+
+- **The AI model shows its name, not its ID,** while the model list is still loading.
+
+- **Ping Monitor:** with no log folder set, the pane offers a link to Settings instead of a sentence about it.
+
+- **Error notifications drop the internal category heading** (`AIWindow`, `HostManager`, …); their messages say what failed.
+
+- **AI Chat's wait Cancel button** now looks like every other Cancel in the chat.
+
+- **More secrets are masked before the AI sees them:** TACACS+ and RADIUS keys, ISAKMP keys, Huawei `irreversible-cipher`, and SNMP `community read cipher`.
+
+### Bug Fixes
+
+- **Moving or re-laying out the AI Chat pane erased the conversation** and discarded a reply in progress; the persona also reverted. Fixed as described above.
+
+- **Opening a new window stopped every AI reply in every window,** which then sat at "Thinking…" for three minutes.
+
+- **The AI Chat window could not be closed** with its own close button.
+
+- **Clearing a conversation while two sessions to the same device were watched left it unable to answer.** A late "stopped" signal from the cleared reply cut off the next one, so the device was never identified, and the AI then guessed the wrong vendor. Each send now carries its own ID, and a signal from an earlier send is ignored. Clearing also waits until the old reply has fully stopped.
+
+- **The AI could repeat device identification** when it opened a terminal itself, and kept re-sending "turn paging off" between two sessions to the same device.
+
+- **Terminals in another window and AI-opened terminals got mixed up.** A command meant for one could not find its target, a chip showed an IP address, and unwatching one terminal could shift another terminal's name so the next command ran on the wrong one.
+
+- **Opening an AI-opened terminal as a tab from the AI Chat window** reported a failed connection and left it unusable. "Open in connection dialog" from that window created a terminal you could not see.
+
+- **Auto-execute ran things it should not have:** a command still being classified ran after you switched to Ask or cleared the chat; Run during classification ran it twice; Pause did not stop the rest of a `sleep`; and a reply cut off by Stop or a timeout still had its commands executed.
+
+- **Command output was cut short or went to the wrong place.** A line starting with `#` was taken for the prompt, and typing into a watched terminal while a command was running took its output.
+
+- **A cleared or switched conversation could receive the old one's output,** from queued messages and polls left behind.
+
+- **Stop before the first words left a phantom reply in the history,** and Stop could erase the draft in the input box.
+
+- **A conversation went permanently broken** after an image went over the size budget, and a watched prefix over 1 MB froze the reply for three minutes instead of failing at once.
+
+- **After moving AI Chat to its own window, the transcript log was written twice.**
+
+- **"Watch in the AI Chat window"** skipped the busy check, did nothing when no AI pane existed, and could unwatch a terminal already being watched.
+
+- **The executed/declined marks on commands disappeared** when the pane was moved.
+
+- **A connection dialog prefilled by the AI kept that text** after you closed it without connecting, and the next shell inherited the name.
+
+- **A hidden tab could not be shown again** when no pane was free, and its terminal stayed at 80×24.
+
+- **Esc did not close a dialog** when a terminal had taken the focus back, and switching the layout from 1×1 to 2×2 could blank a local shell.
+
+- **A dialog you had not moved stays centred** when the window is maximized.
+
+- **Declining an SSH connect no longer lets the AI retry the same host over Telnet.**
+
+- **Smaller AI Chat fixes:** queued questions were sent without the terminal context; cost was computed with the wrong model; closing one of two AI panes in a window unwatched every terminal; the idle sweep could close a worker that was running a command; a failed send produced two outcome messages; the same command twice showed both badges; and the consent screen kept reappearing after consent was withdrawn with messages queued.
+
+- **Command Prompt and PowerShell: Backspace deleted a whole word.** These shells read the backspace byte HoTTY sent as Ctrl+Backspace. Local shells now get the byte that deletes one character; SSH, Telnet and serial are unchanged.
+
+- **Log Viewer (CSV):** the search highlight, the match count and the filter now agree (`^fail$` used to highlight cells and then filter every row away), the current match is marked again after a refresh, and a file cut off at the row limit says so.
+
+- **A search highlight in a Markdown log** is sanitized again after it is applied.
+
+### Security
+
+- **Dependency updates for advisories in development tools** (`undici`, `brace-expansion`, `source-map-js`). None of them ship in the installed app.
+
+- **One fewer window permission.** Closing a window now uses only the permission it needs; the unused one has been removed.
+
 ## v2.1.0-beta9
 
 **A page opened in the Web Browser pane could drive HoTTY itself. Please update.** A web page loaded in that pane could call the same internal commands HoTTY's own window uses — including the ones that open a local shell and type into it, and the ones that read and type into your open SSH sessions. It has been possible since the pane shipped, and it needed only that you open a hostile page, or a plain-`http` device page that someone on the network path had tampered with. It is closed in this release, together with three smaller holes found in the same review — **Security** below has the details. The rest of the release is fixes for things that went wrong only now and then: characters garbled mid-line, connects that could not be stopped, AI answers cut off by a provider error yet stored as finished, and Telnet negotiation arriving in pieces.

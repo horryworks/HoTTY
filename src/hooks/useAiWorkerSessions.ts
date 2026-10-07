@@ -67,6 +67,13 @@ export interface UseAiWorkerSessionsOptions {
     /** A worker was materialized into a tab (e.g. so the tab can be focused). */
     onWorkerMaterialized?: (worker: AiWorkerSession) => void;
     /**
+     * Whether an AI command is still being polled on this worker. The idle
+     * sweep leaves such a worker alone: `touchWorker` fires when a command
+     * starts, not while a long one keeps producing output, so a command that
+     * outlasts the idle timeout would otherwise be cut off mid-run.
+     */
+    isBusy?: (id: string) => boolean;
+    /**
      * Give the terminal to a window that HAS a tab strip, instead of adopting it
      * here. Return true when handled. Supplied only by a dedicated AI Chat
      * window, which has nowhere to put a tab — without it a Telnet worker that
@@ -231,6 +238,7 @@ export function useAiWorkerSessions(options: UseAiWorkerSessionsOptions): UseAiW
             const mins = useSettingsStore.getState().aiWorkerIdleTimeoutMins;
             const idle = idleWorkers(useAiWorkerSessionStore.getState().workers, mins > 0 ? mins * 60_000 : 0);
             for (const w of idle) {
+                if (optionsRef.current.isBusy?.(w.id)) continue;
                 tauriService.disconnectSession(w.id).catch(() => {});
                 useAiWorkerSessionStore.getState().setStatus(w.id, 'disconnected');
                 scheduleForget(w.id);

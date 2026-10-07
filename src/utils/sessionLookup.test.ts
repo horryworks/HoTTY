@@ -110,6 +110,19 @@ describe('lookupSession — names shared by other windows', () => {
         expect(info?.displayName).toBe('192.0.2.10');
     });
 
+    it('names a remote entry of the picker list the way its owner does, too', () => {
+        // The pane once resolved through the picker list, whose remote entries
+        // are named by host; the prompt used the cross-window list, named by the
+        // shared table — and the two aliases diverged. Both branches now agree.
+        applySessionNames(buildSessionNames('main', { 's-far': { displayName: 'core-sw01' } }));
+        const linkable = new Map([['s-far', { sessionId: 's-far', displayName: '192.0.2.10', ownerLabel: 'main', isLocal: false, status: 'connected', host: '192.0.2.10', headless: false }]]);
+        expect(lookupSession('s-far', { linkable })?.displayName).toBe('core-sw01');
+        // A LOCAL picker entry keeps its own name (the shared table is for other windows' terminals).
+        const local = new Map([['s-here', { sessionId: 's-here', displayName: 'my-tab', ownerLabel: 'main', isLocal: true, status: 'connected', headless: false }]]);
+        applySessionNames(buildSessionNames('win-2', { 's-here': { displayName: 'stale' } }));
+        expect(lookupSession('s-here', { linkable: local })?.displayName).toBe('my-tab');
+    });
+
     it('never lets a shared name leak credential flags', () => {
         applySessionNames(buildSessionNames('main', { 's-far': { displayName: 'core-sw01' } }));
         const info = lookupSession('s-far', {

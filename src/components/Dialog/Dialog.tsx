@@ -1,4 +1,4 @@
-import { useCallback, useId, useRef } from 'react';
+import { useCallback, useEffect, useId, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDialogGeometry, type DialogSize } from '../../hooks/useDialogGeometry';
 import { useDialogStack } from '../../hooks/useDialogStack';
@@ -107,6 +107,18 @@ export function Dialog({
     // not moved to `<Dialog>` yet is in that stack but not in this one.
     useModalEscape(open ? onClose : null);
 
+    // Take keyboard focus on open unless something inside already has it (an
+    // autoFocus field). Left in a terminal, focus kept every key there — and
+    // xterm swallows Escape (stopPropagation), so Esc never reached the dialog.
+    useEffect(() => {
+        if (!open) return;
+        const raf = requestAnimationFrame(() => {
+            const el = surfaceRef.current;
+            if (el && !el.contains(document.activeElement)) el.focus({ preventScroll: true });
+        });
+        return () => cancelAnimationFrame(raf);
+    }, [open]);
+
     const dismissProps = useOverlayDismiss<HTMLDivElement>(
         open && dismissOnOutsideClick && isTop ? onClose : null
     );
@@ -165,6 +177,7 @@ export function Dialog({
                 style={movable ? undefined : widthStyle(width)}
                 role="dialog"
                 aria-modal="true"
+                tabIndex={-1}
                 aria-labelledby={titleId}
             >
                 <div className="dlg-header" {...(movable ? moveHandleProps : {})}>

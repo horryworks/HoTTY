@@ -90,6 +90,20 @@ describe('parseCsv', () => {
     expect(table.truncated).toBe(true);
   });
 
+  it('is not truncated when the file holds exactly the cap', () => {
+    const rows = ['h', ...Array.from({ length: 4 }, (_, i) => String(i))];
+    expect(parseCsv(rows.join('\n'), 4).truncated).toBe(false);
+    expect(parseCsv(rows.join('\n') + '\n', 4).truncated).toBe(false);
+    expect(parseCsv(rows.join('\n') + '\n\n\n', 4).truncated).toBe(false);
+  });
+
+  it('is truncated as soon as one row past the cap exists', () => {
+    const rows = ['h', ...Array.from({ length: 5 }, (_, i) => String(i))];
+    const table = parseCsv(rows.join('\n'), 4);
+    expect(table.rows).toHaveLength(4);
+    expect(table.truncated).toBe(true);
+  });
+
   it('defaults the cap to MAX_CSV_ROWS', () => {
     const text = ['h', ...Array.from({ length: MAX_CSV_ROWS + 10 }, (_, i) => String(i))].join('\n');
     const table = parseCsv(text);
@@ -128,15 +142,40 @@ describe('buildCsvView', () => {
     expect(view.rows[0].cells[1].segments.map((s) => s.text).join('')).toBe('10.255.255.1');
   });
 
-  it('filters on the comma-joined row so a query can span two columns', () => {
-    const view = buildCsvView(table, re('ok,12'), true);
-    expect(view.rows).toHaveLength(1);
+  it('filters cell by cell, the same way it highlights', () => {
+    // An anchored query matches a whole cell; the joined row would never match it.
+    const anchored = buildCsvView(table, re('^fail$', true), true);
+    expect(anchored.rows).toHaveLength(1);
+    expect(anchored.total).toBe(1);
+    // A query spanning a separator highlights nothing, so it keeps nothing.
+    const spanning = buildCsvView(table, re('ok,12'), true);
+    expect(spanning.rows).toHaveLength(0);
+    expect(spanning.total).toBe(0);
   });
 
   it('reports no rows when nothing matches in filter mode', () => {
     const view = buildCsvView(table, re('nothing-here'), true);
     expect(view.rows).toHaveLength(0);
     expect(view.total).toBe(0);
+  });
+
+  it('is not truncated when the cap is hit exactly and later rows hold no match', () => {
+    const t = parseCsv(['h', 'hit', 'hit', 'miss', 'miss'].join('\n'));
+    const view = buildCsvView(t, re('hit'), false, 2);
+    expect(view.total).toBe(2);
+    expect(view.truncated).toBe(false);
+  });
+
+  it('is truncated when a later row holds a match past the cap', () => {
+    const t = parseCsv(['h', 'hit', 'hit', 'miss', 'hit'].join('\n'));
+    const view = buildCsvView(t, re('hit'), false, 2);
+    expect(view.truncated).toBe(true);
+  });
+
+  it('keeps rows past the match cap in filter mode only when they match', () => {
+    const t = parseCsv(['h', 'hit', 'hit', 'miss', 'hit'].join('\n'));
+    const view = buildCsvView(t, re('hit'), true, 2);
+    expect(view.rows).toHaveLength(3);
   });
 
   it('still renders rows past the match cap, just unhighlighted', () => {

@@ -94,7 +94,7 @@ export const panes = {
     targetCount_other: '{{count}} 個目標',
     csvLogging: 'CSV 記錄',
     loggingFolder: '儲存至 {{path}}',
-    loggingFolderUnset: '請先在「設定 → 一般」中指定記錄檔資料夾，才能使用 CSV 記錄',
+    setLogFolder: '指定記錄檔資料夾…',
     loggingDirDenied: '記錄檔資料夾未獲核准，CSV 記錄已關閉',
     showTargetsPanel: '顯示目標面板',
     hideTargetsPanel: '隱藏目標面板',

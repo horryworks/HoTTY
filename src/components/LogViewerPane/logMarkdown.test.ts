@@ -130,6 +130,21 @@ describe('highlightHtml', () => {
     expect(visibleText(html)).toBe(visibleText(source));
   });
 
+  it('keeps its marks through the second sanitize pass', () => {
+    const { html, total } = highlightHtml('<p>alpha beta alpha</p>', re('alpha'));
+    expect(total).toBe(2);
+    expect(html).toContain('<mark class="log-viewer-mark" data-match-index="0">alpha</mark>');
+    expect(html).toContain('data-match-index="1"');
+  });
+
+  it('re-sanitizes the highlighted output', () => {
+    // Callers promise sanitized input, but the round trip must not be what
+    // carries an active element through if that promise is ever broken.
+    const { html } = highlightHtml('<p>alpha</p><img src="x" onerror="alert(1)">', re('alpha'));
+    expect(html).toContain('data-match-index="0"');
+    expect(html).not.toContain('onerror');
+  });
+
   it('honours case sensitivity and regex mode from the find bar', () => {
     expect(highlightHtml('<p>Alpha alpha</p>', re('alpha')).total).toBe(2);
     expect(

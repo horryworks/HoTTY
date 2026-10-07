@@ -1,50 +1,62 @@
 /**
- * Owns the AI-Chat pane's streaming state and the machinery around it, lifted out
- * of the AIChatPane god-component:
- *   - per-tab transcripts (`messagesByTab`) and per-tab in-flight partials
- *     (`streamingByTab`) / streaming flags (`streamingTabIds`),
- *   - the single `ai-chat-response` listener that routes chunk/done/error events
- *     to the owning tab purely by parsing the per-tab session id (`paneId::tabId`),
- *     so MULTIPLE tabs can stream concurrently without their events colliding,
+ * The AI-Chat pane's streaming machinery, lifted out of the AIChatPane
+ * god-component:
+ *   - the per-tab transcripts (`messagesByTab`), in-flight partials
+ *     (`streamingByTab`), streaming flags (`streamingTabIds`) and token totals,
+ *     which live in `aiTranscriptStore` keyed by pane id — NOT in this hook's
+ *     state — so they survive the pane being re-created (dragged to another
+ *     cell, hidden by a layout switch, …). The hook is the pane's view of and
+ *     API onto that store entry.
+ *   - the single `ai-chat-response` listener that routes chunk/done/error/
+ *     cancelled events to the owning tab purely by parsing the per-tab session id
+ *     (`paneId::tabId`), so MULTIPLE tabs can stream concurrently without their
+ *     events colliding,
  *   - a PER-TAB stream watchdog (each streaming tab owns its own idle + hard-cap
- *     timer pair, keyed by tab id, so one tab's timeout never disturbs another),
- *   - stream-completion detection.
+ *     timer pair, keyed by pane and tab, module-level so it also outlives a
+ *     pane re-creation),
+ *   - stream-completion detection, with the reason the stream ended.
  *
  * Instead of the pane diffing `streamingTabIds` itself to notice a finished
- * stream, this hook exposes an explicit `onStreamComplete(tabId, messages)`
- * callback (fired post-commit, so the final message is already in `messages`).
- * Token usage from a `done` event is surfaced via `onUsage`.
+ * stream, this hook exposes an explicit `onStreamComplete(tabId, messages,
+ * reason)` callback (fired post-commit, so the final message is already in
+ * `messages`). Only a `done` reason carries a finished answer.
  *
- * The returned helpers keep the same names the pane used locally
- * (`setMessagesByTab`, `markStreaming`, `armStreamWatchdog`, …). `armStreamWatchdog`
- * / `clearStreamWatchdog` now take a `tabId` (the watchdog is per-tab); there is no
- * longer a single "current stream" ref — ownership is fully expressed by the per-tab
- * `streamingTabIds` set plus the session-id routing.
+ * The returned helpers keep the names the pane has always used (`setMessagesByTab`,
+ * `markStreaming`, `armStreamWatchdog`, …); their "latest value" reads go to the
+ * store directly, which is always current — no post-commit ref lag.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tauriService } from '../services/tauriService';
 import { logError } from '../utils/logger';
+import { isStaleRequest } from '../utils/aiRequestTracker';
 import i18n from '../i18n';
 import { calcAICost } from '../constants/aiPricing';
 import { aiBackendSessionId } from './useAiChat';
 import { streamTimeoutMessage, STREAM_IDLE_TIMEOUT_MS, STREAM_HARD_CAP_MS } from '../components/AIChatPane/streamWatchdog';
-import type { ChatImage } from '../types/appTypes';
+import {
+    useAiTranscriptStore,
+    paneTranscripts,
+    EMPTY_PANE,
+    type ChatMessage,
+    type TabTokens,
+    type PaneTranscripts,
+} from '../stores/aiTranscriptStore';
 
-export interface ChatMessage {
-    role: 'user' | 'model';
-    content: string;
-    /** Image attachments on a user turn (input-only; assistant turns never have them). */
-    images?: ChatImage[];
-}
+export type { ChatMessage, TabTokens } from '../stores/aiTranscriptStore';
 
-/** Running token/cost totals for one tab (cost is null until a priced model reports usage). */
-export interface TabTokens {
-    input: number;
-    output: number;
-    cost: number | null;
-}
+/**
+ * How a tab's stream ended. Only `done` carries a finished model answer; the
+ * pane must not treat a stopped, timed-out or failed partial as something to
+ * act on (auto-execute a command from, open a terminal for).
+ *   - `done`      the provider finished the answer
+ *   - `cancelled` the user pressed Stop, or the backend cancelled it
+ *   - `timeout`   the idle / hard-cap watchdog gave up on it
+ *   - `error`     the provider reported an error
+ *   - `cleared`   the tab was reset / closed / pruned while streaming
+ */
+export type StreamEndReason = 'done' | 'cancelled' | 'timeout' | 'error' | 'cleared';
 
 interface UseChatStreamOptions {
     paneId: string;
@@ -52,45 +64,76 @@ interface UseChatStreamOptions {
     activeTabId: string | undefined;
     /** Model id used to price a `done` event's token usage. */
     selectedModelRef: React.MutableRefObject<string>;
-    /** Fired (post-commit) when a tab's stream ends, with that tab's transcript. */
-    onStreamComplete: (tabId: string, messages: ChatMessage[]) => void;
+    /** Fired (post-commit) when a tab's stream ends, with that tab's transcript and how it ended. */
+    onStreamComplete: (tabId: string, messages: ChatMessage[], reason: StreamEndReason) => void;
+}
+
+type Updater<T> = T | ((prev: T) => T);
+const resolve = <T,>(u: Updater<T>, prev: T): T => (typeof u === 'function' ? (u as (p: T) => T)(prev) : u);
+
+// ── Module-level, per `paneId::tabId`: outlives a pane re-creation ──
+type StreamTimers = { idle: ReturnType<typeof setTimeout> | null; hardCap: ReturnType<typeof setTimeout> | null };
+const streamWatchdogs = new Map<string, StreamTimers>();
+/** Why each tab's stream ended, recorded by whoever turns streaming off and
+ *  consumed by the completion effect. A tab turned off with no reason (a bulk
+ *  clear / prune) reports `cleared`. */
+const endReasons = new Map<string, StreamEndReason>();
+/** The model each in-flight stream was SENT with, so its `done` is priced
+ *  against that model even if the user picked another one (or a region change
+ *  reset the selection) while it streamed. */
+const streamModels = new Map<string, string>();
+const tabKey = (paneId: string, tabId: string) => `${paneId}::${tabId}`;
+
+function clearWatchdogFor(key: string) {
+    const w = streamWatchdogs.get(key);
+    if (!w) return;
+    if (w.idle) clearTimeout(w.idle);
+    if (w.hardCap) clearTimeout(w.hardCap);
+    streamWatchdogs.delete(key);
+}
+
+/**
+ * Forget a pane entirely: its transcripts, and the timers and bookkeeping of
+ * any stream it still had. For a pane that is CLOSED, or whose conversation
+ * now lives in another window — never for a mere re-creation.
+ */
+export function disposePaneStreams(paneId: string): void {
+    const prefix = `${paneId}::`;
+    for (const key of [...streamWatchdogs.keys()]) if (key.startsWith(prefix)) clearWatchdogFor(key);
+    for (const key of [...endReasons.keys()]) if (key.startsWith(prefix)) endReasons.delete(key);
+    for (const key of [...streamModels.keys()]) if (key.startsWith(prefix)) streamModels.delete(key);
+    useAiTranscriptStore.getState().removePane(paneId);
 }
 
 export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamComplete }: UseChatStreamOptions) {
     const { t } = useTranslation();
 
-    // ── Per-tab state ──
-    const [messagesByTab, setMessagesByTab] = useState<Map<string, ChatMessage[]>>(() => new Map());
-    const [streamingByTab, setStreamingByTab] = useState<Map<string, string>>(() => new Map());
-    const [streamingTabIds, setStreamingTabIds] = useState<Set<string>>(() => new Set());
-    // "Latest value" mirrors so the async listener/watchdog and the post-commit
-    // completion effect can read current values without closing over state (keeping
-    // their subscriptions stable). Synced in an effect (below), not during render.
+    // ── The pane's store entry (one subscription; a different pane's change keeps this reference) ──
+    const pane = useAiTranscriptStore((s) => s.panes.get(paneId)) ?? EMPTY_PANE;
+    const { messagesByTab, streamingByTab, streamingTabIds, tokensByTab } = pane;
+    const updatePane = useAiTranscriptStore((s) => s.updatePane);
+
+    // Latest-value mirrors for callbacks the listener / watchdog set up once.
     const tRef = useRef(t);
-    const streamingByTabRef = useRef(streamingByTab);
-    const streamingTabIdsRef = useRef(streamingTabIds);
-    const messagesByTabRef = useRef(messagesByTab);
     const onStreamCompleteRef = useRef(onStreamComplete);
-    // One post-commit sync for every latest-value mirror. Declared before the
-    // completion effect so that effect reads the freshly-synced refs.
     useEffect(() => {
         tRef.current = t;
-        streamingByTabRef.current = streamingByTab;
-        streamingTabIdsRef.current = streamingTabIds;
-        messagesByTabRef.current = messagesByTab;
         onStreamCompleteRef.current = onStreamComplete;
     });
 
-    // Token accounting (from `done` events), tracked PER TAB and priced against the
-    // model at completion — so a tab switch shows that tab's running total and "New
-    // chat" resets only the active tab's counter (not the whole pane's).
-    const [tokensByTab, setTokensByTab] = useState<Map<string, TabTokens>>(() => new Map());
-    // Latest-value mirror, so `exportTranscripts` can snapshot totals from an
-    // event handler without closing over a render's state.
-    const tokensByTabRef = useRef(tokensByTab);
-    useEffect(() => {
-        tokensByTabRef.current = tokensByTab;
-    });
+    // ── Setters (same shapes as the React setState calls they replace) ──
+    const setMessagesByTab = useCallback((u: Updater<Map<string, ChatMessage[]>>) => {
+        updatePane(paneId, (p) => ({ ...p, messagesByTab: resolve(u, p.messagesByTab as Map<string, ChatMessage[]>) }));
+    }, [paneId, updatePane]);
+    const setStreamingByTab = useCallback((u: Updater<Map<string, string>>) => {
+        updatePane(paneId, (p) => ({ ...p, streamingByTab: resolve(u, p.streamingByTab as Map<string, string>) }));
+    }, [paneId, updatePane]);
+    const setStreamingTabIds = useCallback((u: Updater<Set<string>>) => {
+        updatePane(paneId, (p) => ({ ...p, streamingTabIds: resolve(u, p.streamingTabIds as Set<string>) }));
+    }, [paneId, updatePane]);
+    const setTokensByTab = useCallback((u: Updater<Map<string, TabTokens>>) => {
+        updatePane(paneId, (p) => ({ ...p, tokensByTab: resolve(u, p.tokensByTab as Map<string, TabTokens>) }));
+    }, [paneId, updatePane]);
 
     // ── Active-tab views + helpers ──
     const activeTokens = activeTabId ? tokensByTab.get(activeTabId) : undefined;
@@ -111,8 +154,11 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
             if (v === '') next.delete(tabId); else next.set(tabId, v);
             return next;
         });
-    }, []);
-    const markStreaming = useCallback((tabId: string, on: boolean) => {
+    }, [setStreamingByTab]);
+    const markStreaming = useCallback((tabId: string, on: boolean, reason?: StreamEndReason) => {
+        const key = tabKey(paneId, tabId);
+        if (on) streamModels.set(key, selectedModelRef.current);
+        if (!on && reason) endReasons.set(key, reason);
         setStreamingTabIds((prev) => {
             if (on) {
                 if (prev.has(tabId)) return prev;
@@ -121,16 +167,16 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
             if (!prev.has(tabId)) return prev;
             const next = new Set(prev); next.delete(tabId); return next;
         });
-    }, []);
+    }, [paneId, selectedModelRef, setStreamingTabIds]);
     const setStreamingContent = useCallback((updater: string | ((prev: string) => string)) => {
         if (!activeTabId) return;
         setStreamingForTab(activeTabId, updater);
     }, [activeTabId, setStreamingForTab]);
-    const setIsStreaming = useCallback((b: boolean | ((prev: boolean) => boolean)) => {
+    const setIsStreaming = useCallback((b: boolean | ((prev: boolean) => boolean), reason?: StreamEndReason) => {
         if (!activeTabId) return;
-        const v = typeof b === 'function' ? b(streamingTabIdsRef.current.has(activeTabId)) : b;
-        markStreaming(activeTabId, v);
-    }, [activeTabId, markStreaming]);
+        const v = typeof b === 'function' ? b(paneTranscripts(paneId).streamingTabIds.has(activeTabId)) : b;
+        markStreaming(activeTabId, v, reason);
+    }, [activeTabId, paneId, markStreaming]);
     const setMessages = useCallback((updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
         if (!activeTabId) return;
         setMessagesByTab((prev) => {
@@ -139,35 +185,19 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
             next.set(activeTabId, typeof updater === 'function' ? (updater as (p: ChatMessage[]) => ChatMessage[])(cur) : updater);
             return next;
         });
-    }, [activeTabId]);
+    }, [activeTabId, setMessagesByTab]);
 
     // ── Watchdog (idle + hard cap), PER TAB ──
-    // Each streaming tab owns its OWN idle+hard-cap timer pair (keyed by tab id), so
-    // concurrent streams are watch-dogged independently — one tab timing out never
-    // touches another. idle: re-armed on every chunk; fires after silence. hard cap:
-    // armed once per stream, not reset by chunks, so a runaway provider is still
-    // cancelled. The partial is read from a ref so this logic never depends on
-    // streamingByTab state — keeping armStreamWatchdog stable (the listener
-    // subscribes once).
-    type StreamTimers = { idle: ReturnType<typeof setTimeout> | null; hardCap: ReturnType<typeof setTimeout> | null };
-    const streamWatchdogsRef = useRef<Map<string, StreamTimers>>(new Map());
-    const clearStreamWatchdog = useCallback((tabId: string) => {
-        const w = streamWatchdogsRef.current.get(tabId);
-        if (!w) return;
-        if (w.idle) clearTimeout(w.idle);
-        if (w.hardCap) clearTimeout(w.hardCap);
-        streamWatchdogsRef.current.delete(tabId);
-    }, []);
-    const clearAllStreamWatchdogs = useCallback(() => {
-        for (const w of streamWatchdogsRef.current.values()) {
-            if (w.idle) clearTimeout(w.idle);
-            if (w.hardCap) clearTimeout(w.hardCap);
-        }
-        streamWatchdogsRef.current.clear();
-    }, []);
+    // Each streaming tab owns its OWN idle+hard-cap timer pair (keyed by pane and
+    // tab), so concurrent streams are watch-dogged independently — one tab timing
+    // out never touches another. idle: re-armed on every chunk; fires after
+    // silence. hard cap: armed once per stream, not reset by chunks, so a runaway
+    // provider is still cancelled. Module-level, so a pane re-creation neither
+    // loses a running stream's guard nor leaves it with none.
+    const clearStreamWatchdog = useCallback((tabId: string) => clearWatchdogFor(tabKey(paneId, tabId)), [paneId]);
     const finalizeStuckStream = useCallback((tabId: string, ms: number, kind: 'idle' | 'hardcap') => {
         tauriService.aiChatCancel(aiBackendSessionId(paneId, tabId)).catch(() => {});
-        const partial = streamingByTabRef.current.get(tabId) ?? '';
+        const partial = paneTranscripts(paneId).streamingByTab.get(tabId) ?? '';
         const reason = tRef.current(
             kind === 'idle' ? 'aiChat.pane.streamIdleTimeout' : 'aiChat.pane.streamHardcapTimeout',
             { seconds: Math.round(ms / 1000) },
@@ -180,28 +210,29 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
             return next;
         });
         setStreamingForTab(tabId, '');
-        markStreaming(tabId, false);
+        markStreaming(tabId, false, 'timeout');
         clearStreamWatchdog(tabId);
-    }, [paneId, setStreamingForTab, markStreaming, clearStreamWatchdog]);
+    }, [paneId, setMessagesByTab, setStreamingForTab, markStreaming, clearStreamWatchdog]);
     const armStreamWatchdog = useCallback((tabId: string) => {
-        let w = streamWatchdogsRef.current.get(tabId);
-        if (!w) { w = { idle: null, hardCap: null }; streamWatchdogsRef.current.set(tabId, w); }
+        const key = tabKey(paneId, tabId);
+        let w = streamWatchdogs.get(key);
+        if (!w) { w = { idle: null, hardCap: null }; streamWatchdogs.set(key, w); }
         if (w.idle) clearTimeout(w.idle);
         w.idle = setTimeout(() => {
-            const cur = streamWatchdogsRef.current.get(tabId);
+            const cur = streamWatchdogs.get(key);
             if (cur) cur.idle = null;
             finalizeStuckStream(tabId, STREAM_IDLE_TIMEOUT_MS, 'idle');
         }, STREAM_IDLE_TIMEOUT_MS);
         if (!w.hardCap) {
             w.hardCap = setTimeout(() => {
-                const cur = streamWatchdogsRef.current.get(tabId);
+                const cur = streamWatchdogs.get(key);
                 if (cur) cur.hardCap = null;
                 finalizeStuckStream(tabId, STREAM_HARD_CAP_MS, 'hardcap');
             }, STREAM_HARD_CAP_MS);
         }
-    }, [finalizeStuckStream]);
+    }, [paneId, finalizeStuckStream]);
 
-    // ── Response listener (subscribed once for the pane's lifetime) ──
+    // ── Response listener (subscribed once per mounted pane) ──
     useEffect(() => {
         let cancelled = false;
         let unlisten: (() => void) | undefined;
@@ -217,7 +248,10 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
             const targetTabId = data.sessionId.slice(paneId.length + 2);
             if (!targetTabId) return;
             // Drop late events for a tab that is no longer streaming.
-            if (!streamingTabIdsRef.current.has(targetTabId)) return;
+            if (!paneTranscripts(paneId).streamingTabIds.has(targetTabId)) return;
+            // …and late events of an older send for the same tab: a stopped or
+            // cleared reply's `cancelled` must not close the reply that replaced it.
+            if (isStaleRequest(data.sessionId, data.requestId)) return;
 
             if (data.responseType === 'chunk') {
                 setStreamingForTab(targetTabId, prev => prev + data.content);
@@ -231,11 +265,14 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
                     return next;
                 });
                 setStreamingForTab(targetTabId, '');
-                markStreaming(targetTabId, false);
+                markStreaming(targetTabId, false, 'done');
                 if (data.usageMetadata) {
                     const inTokens = data.usageMetadata.promptTokenCount || 0;
                     const outTokens = data.usageMetadata.candidatesTokenCount || 0;
-                    const responseCost = calcAICost(inTokens, outTokens, selectedModelRef.current);
+                    const key = tabKey(paneId, targetTabId);
+                    const sentModel = streamModels.get(key) ?? selectedModelRef.current;
+                    streamModels.delete(key);
+                    const responseCost = calcAICost(inTokens, outTokens, sentModel);
                     setTokensByTab(prev => {
                         const next = new Map(prev);
                         const cur = prev.get(targetTabId) ?? { input: 0, output: 0, cost: null };
@@ -256,112 +293,113 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
                     return next;
                 });
                 setStreamingForTab(targetTabId, '');
-                markStreaming(targetTabId, false);
+                markStreaming(targetTabId, false, 'error');
+            } else if (data.responseType === 'cancelled') {
+                // A cancel this pane did NOT perform itself (provider / region /
+                // auth change elsewhere, or a send stopped while still queued).
+                // The user's own Stop already closed the tab out — that case is
+                // dropped by the not-streaming guard above. Keep whatever partial
+                // text arrived, marked exactly like a Stop.
+                clearStreamWatchdog(targetTabId);
+                if (data.content) {
+                    const partial = data.content;
+                    setMessagesByTab(prev => {
+                        const next = new Map(prev);
+                        const cur = prev.get(targetTabId) ?? [];
+                        next.set(targetTabId, [...cur, { role: 'model', content: partial + tRef.current('aiChat.pane.cancelledSuffix') }]);
+                        return next;
+                    });
+                }
+                setStreamingForTab(targetTabId, '');
+                markStreaming(targetTabId, false, 'cancelled');
             }
         }).then(fn => {
             if (cancelled) { fn(); } else { unlisten = fn; }
         }).catch(e => logError('AI', i18n.t('notifications.errors.aiResponseListener'), e));
 
-        return () => { cancelled = true; unlisten?.(); clearAllStreamWatchdogs(); };
-    }, [paneId, selectedModelRef, setStreamingForTab, markStreaming, armStreamWatchdog, clearStreamWatchdog, clearAllStreamWatchdogs]);
+        // Unsubscribing is all a re-creation needs: the watchdogs keep guarding
+        // the streams still in flight, and the next instance picks them up.
+        return () => { cancelled = true; unlisten?.(); };
+    }, [paneId, selectedModelRef, setMessagesByTab, setTokensByTab, setStreamingForTab, markStreaming, armStreamWatchdog, clearStreamWatchdog]);
 
     // ── Stream-completion detection ──
     // Fire onStreamComplete for every tab that just left `streamingTabIds` (done,
     // error, cancel, watchdog, or a bulk clear — the callback's own last-message
     // check harmlessly ignores clears, which have no runnable message). Runs
     // post-commit, so the tab's final message is already in the transcript.
+    // Seeded with the CURRENT set so a pane re-created mid-stream reports
+    // nothing until that stream actually ends.
     const prevStreamingTabIdsRef = useRef(streamingTabIds);
     useEffect(() => {
         const prev = prevStreamingTabIdsRef.current;
         prevStreamingTabIdsRef.current = streamingTabIds;
         for (const tabId of prev) {
             if (!streamingTabIds.has(tabId)) {
-                onStreamCompleteRef.current(tabId, messagesByTabRef.current.get(tabId) ?? []);
+                const key = tabKey(paneId, tabId);
+                const reason = endReasons.get(key) ?? 'cleared';
+                endReasons.delete(key);
+                onStreamCompleteRef.current(tabId, paneTranscripts(paneId).messagesByTab.get(tabId) ?? [], reason);
             }
         }
-    }, [streamingTabIds]);
+    }, [paneId, streamingTabIds]);
 
     // ── Bulk lifecycle ops ──
-    /**
-     * Snapshot every tab's transcript and token totals, in the wire form used to
-     * move a conversation to another window.
-     *
-     * Read from the mirror ref rather than state so a handover triggered from an
-     * event handler cannot capture a stale render's transcripts.
-     */
-    const exportTranscripts = useCallback((): {
-        messages: [string, ChatMessage[]][];
-        tokens: [string, TabTokens][];
-    } => ({
-        messages: Array.from(messagesByTabRef.current.entries()),
-        tokens: Array.from(tokensByTabRef.current.entries()),
-    }), []);
-
-    /**
-     * Install transcripts and token totals that arrived from another window.
-     * Replaces wholesale: a pane only imports right after it is created for the
-     * incoming conversation, so there is nothing of its own to merge with.
-     */
-    const importTranscripts = useCallback((
-        messages: [string, ChatMessage[]][],
-        tokens: [string, TabTokens][],
-    ) => {
-        setMessagesByTab(new Map(messages));
-        setTokensByTab(new Map(tokens));
-    }, []);
-
+    /** Provider switch / sign-out: every conversation of this pane is discarded. */
     const resetAllStreams = useCallback(() => {
-        clearAllStreamWatchdogs();
-        setMessagesByTab(new Map());
-        setStreamingByTab(new Map());
-        setStreamingTabIds(new Set());
-        setTokensByTab(new Map());
-    }, [clearAllStreamWatchdogs]);
+        const prefix = `${paneId}::`;
+        for (const key of [...streamWatchdogs.keys()]) if (key.startsWith(prefix)) clearWatchdogFor(key);
+        updatePane(paneId, () => EMPTY_PANE);
+    }, [paneId, updatePane]);
     const pruneStreams = useCallback((liveIds: Set<string>) => {
         // A closed tab may still hold a live watchdog timer — clear it so it can't
         // fire into (or cancel a backend session for) a tab that no longer exists.
-        for (const tabId of [...streamWatchdogsRef.current.keys()]) {
-            if (!liveIds.has(tabId)) clearStreamWatchdog(tabId);
+        const prefix = `${paneId}::`;
+        for (const key of [...streamWatchdogs.keys()]) {
+            if (key.startsWith(prefix) && !liveIds.has(key.slice(prefix.length))) clearWatchdogFor(key);
         }
-        const dropClosed = <T,>(prev: Map<string, T>): Map<string, T> => {
+        const dropClosed = <T,>(prev: ReadonlyMap<string, T>): ReadonlyMap<string, T> => {
             let changed = false;
             const next = new Map(prev);
             for (const id of [...next.keys()]) if (!liveIds.has(id)) { next.delete(id); changed = true; }
             return changed ? next : prev;
         };
-        setMessagesByTab(dropClosed);
-        setStreamingByTab(dropClosed);
-        setTokensByTab(dropClosed);
-        setStreamingTabIds((prev) => {
-            let changed = false;
-            const next = new Set(prev);
-            for (const id of [...prev]) if (!liveIds.has(id)) { next.delete(id); changed = true; }
-            return changed ? next : prev;
+        updatePane(paneId, (p): PaneTranscripts => {
+            const messagesByTab = dropClosed(p.messagesByTab);
+            const streamingByTab = dropClosed(p.streamingByTab);
+            const tokensByTab = dropClosed(p.tokensByTab);
+            let streamingTabIds = p.streamingTabIds;
+            for (const id of p.streamingTabIds) {
+                if (!liveIds.has(id)) {
+                    const next = new Set(streamingTabIds);
+                    next.delete(id);
+                    streamingTabIds = next;
+                }
+            }
+            if (messagesByTab === p.messagesByTab && streamingByTab === p.streamingByTab
+                && tokensByTab === p.tokensByTab && streamingTabIds === p.streamingTabIds) return p;
+            return { ...p, messagesByTab, streamingByTab, tokensByTab, streamingTabIds };
         });
-    }, [clearStreamWatchdog]);
+    }, [paneId, updatePane]);
     const clearTabStream = useCallback((tabId: string) => {
         clearStreamWatchdog(tabId);
-        setMessagesByTab(prev => { const next = new Map(prev); next.delete(tabId); return next; });
-        setStreamingByTab(prev => { const next = new Map(prev); next.delete(tabId); return next; });
-        // "New chat" also zeroes this tab's token/cost counter.
-        setTokensByTab(prev => { if (!prev.has(tabId)) return prev; const next = new Map(prev); next.delete(tabId); return next; });
-        setStreamingTabIds(prev => {
-            if (!prev.has(tabId)) return prev;
-            const next = new Set(prev); next.delete(tabId); return next;
+        updatePane(paneId, (p): PaneTranscripts => {
+            const messagesByTab = new Map(p.messagesByTab); messagesByTab.delete(tabId);
+            const streamingByTab = new Map(p.streamingByTab); streamingByTab.delete(tabId);
+            // "New chat" also zeroes this tab's token/cost counter.
+            const tokensByTab = new Map(p.tokensByTab); tokensByTab.delete(tabId);
+            const streamingTabIds = new Set(p.streamingTabIds); streamingTabIds.delete(tabId);
+            return { ...p, messagesByTab, streamingByTab, tokensByTab, streamingTabIds };
         });
-    }, [clearStreamWatchdog]);
+    }, [paneId, updatePane, clearStreamWatchdog]);
 
     return {
         messagesByTab, setMessagesByTab,
         streamingByTab, setStreamingByTab,
         streamingTabIds, setStreamingTabIds,
-        streamingByTabRef, streamingTabIdsRef,
-        messagesByTabRef,
         messages, streamingContent, isStreaming,
         setStreamingForTab, markStreaming, setStreamingContent, setIsStreaming, setMessages,
         armStreamWatchdog, clearStreamWatchdog,
         totalInputTokens, totalOutputTokens, totalCost,
         resetAllStreams, pruneStreams, clearTabStream,
-        exportTranscripts, importTranscripts,
     };
 }

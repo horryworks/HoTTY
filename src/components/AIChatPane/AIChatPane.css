@@ -1269,11 +1269,19 @@
 }
 
 .ai-execute-sleep-wait {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding: 4px 12px 6px;
     font-size: calc(var(--font-size-base) - 2px);
     line-height: 1.4;
     color: var(--text-secondary);
     font-style: italic;
+}
+
+/* The wait's Cancel is the countdown's .ai-decline-btn; only undo the line's italics. */
+.ai-execute-sleep-wait .ai-decline-btn {
+    font-style: normal;
 }
 
 /* ── Auto-run pre-execution countdown ── */

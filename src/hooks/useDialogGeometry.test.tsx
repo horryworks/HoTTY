@@ -247,6 +247,23 @@ describe('useDialogGeometry', () => {
             expect(after.top).toBe(moved.top);
         });
 
+        it('stays centred on a window resize while the user has not moved it', () => {
+            const { getByTestId } = render(<Harness />);
+            const el = getByTestId('dialog');
+            const before = geom(el);
+
+            act(() => {
+                setViewport(1600, 1000);
+                window.dispatchEvent(new Event('resize'));
+            });
+
+            const after = geom(el);
+            // Maximizing used to leave it at its old top-left spot.
+            expect(after.width).toBe(before.width);
+            expect(after.left).toBe(Math.round((1600 - before.width) / 2));
+            expect(after.top).toBe(Math.round((1000 - before.height) / 2));
+        });
+
         it('pulls the dialog back into view when the window shrinks past it', () => {
             const { getByTestId } = render(<Harness />);
             const el = getByTestId('dialog');

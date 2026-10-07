@@ -965,10 +965,22 @@ interface AITokenUsage {
  * (final token counts) only appears on the terminal `'done'` event; `content`
  * is a delta on `'chunk'` and a user-facing message on `'error'`.
  */
-export type AIChatResponseData =
+export type AIChatResponseData = (
   | { sessionId: string; responseType: 'chunk'; content: string }
   | { sessionId: string; responseType: 'done'; content: string; usageMetadata?: AITokenUsage }
-  | { sessionId: string; responseType: 'error'; content: string };
+  | { sessionId: string; responseType: 'error'; content: string }
+  /**
+   * The stream was cancelled; `content` is the partial text streamed so far
+   * (may be empty). Sent for every cancel — the user's Stop (which the pane has
+   * already closed out itself, so it ignores this) AND the ones it never asked
+   * for: a provider/region/auth change cancels every in-flight stream backend-
+   * wide, and without this event the pane sat on "Thinking…" until its watchdog.
+   */
+  | { sessionId: string; responseType: 'cancelled'; content: string }
+) & {
+  /** The send this event belongs to (see utils/aiRequestTracker). */
+  requestId?: string;
+};
 
 export interface AIAuthResultPayload {
   /** Provider id that produced this result — lets the UI ignore a late result

@@ -93,7 +93,7 @@ export const panes = {
     targetCount_other: '{{count}} objetivos',
     csvLogging: 'Registro CSV',
     loggingFolder: 'Se guarda en {{path}}',
-    loggingFolderUnset: 'Defina una carpeta de registros en Configuración → General para usar el registro CSV',
+    setLogFolder: 'Definir carpeta de registros…',
     loggingDirDenied: 'La carpeta de registros no fue aprobada: el registro CSV está desactivado',
     showTargetsPanel: 'Mostrar panel de objetivos',
     hideTargetsPanel: 'Ocultar panel de objetivos',

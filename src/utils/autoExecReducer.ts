@@ -8,9 +8,12 @@
  * unit-tested in isolation and driven from a `useReducer`.
  *
  * Keying: every block a model message proposes is identified by its
- * `blockKey = "${messageIndex}:${command}"`. That identity is only unique within
- * one conversation (message indices restart at 0 after "New chat"), so the state
- * is scoped per tab and cleared per tab on New chat / tab close.
+ * `blockKey = "${messageIndex}:${occurrence}:${command}"` (see `blockKeyOf`), where
+ * `occurrence` counts earlier blocks with the SAME command text in that message —
+ * so a command the model proposes twice in one answer (two targets, say) is two
+ * blocks, each with its own badge and verdict. That identity is only unique
+ * within one conversation (message indices restart at 0 after "New chat"), so
+ * the state is scoped per tab and cleared per tab on New chat / tab close.
  *
  * A single block advances through at most these display states:
  *   reserve       → classifying          (AI verdict in flight — "Checking safety…")
@@ -47,6 +50,20 @@ export interface AutoExecBlock {
     readonly decision?: AutoExecDecision;
     /** Epoch-ms deadline at which a `scheduled` block auto-runs (drives the countdown). */
     readonly runAt?: number;
+    /** An `executed` block the USER ran (Run button) rather than auto-exec: it
+     *  keeps its manual buttons (no "Auto-executed" badge) but, like any executed
+     *  block, is terminal — a verdict that resolves afterwards must not run it again. */
+    readonly manual?: boolean;
+}
+
+/** The identity of one execute block inside a tab's transcript. */
+export function blockKeyOf(messageIndex: number, occurrence: number, command: string): string {
+    return `${messageIndex}:${occurrence}:${command}`;
+}
+
+/** The key a message's render decorations use for one block (occurrence + text). */
+export function slotOf(occurrence: number, command: string): string {
+    return `${occurrence}:${command}`;
 }
 
 /** Per-tab (`tabId`) map of `blockKey` → block. */
@@ -65,8 +82,9 @@ export type AutoExecAction =
     | { type: 'schedule'; tabId: string; blockKey: string; runAt: number }
     /** Cancel a running countdown, reverting to manual (scheduled → classified). */
     | { type: 'cancelSchedule'; tabId: string; blockKey: string }
-    /** Mark a block auto-executed. No-op if the block was already declined. */
-    | { type: 'execute'; tabId: string; blockKey: string }
+    /** Mark a block executed — by auto-exec, or by the user's Run (`manual`).
+     *  No-op if the block was already declined or executed. */
+    | { type: 'execute'; tabId: string; blockKey: string; manual?: boolean }
     /** Mark a block declined by the user. Terminal; creates the block if absent. */
     | { type: 'decline'; tabId: string; blockKey: string; command: string }
     /** Drop all tracking for one tab (New chat / tab close). */
@@ -180,7 +198,12 @@ export function autoExecReducer(state: AutoExecState, action: AutoExecAction): A
                 const block = blocks.get(action.blockKey);
                 // Execute follows decide/schedule; a declined block must not flip to executed.
                 if (!block || block.status === 'declined' || block.status === 'executed') return blocks;
-                blocks.set(action.blockKey, { ...block, status: 'executed', runAt: undefined });
+                blocks.set(action.blockKey, {
+                    ...block,
+                    status: 'executed',
+                    runAt: undefined,
+                    ...(action.manual ? { manual: true } : {}),
+                });
                 return blocks;
             });
 
@@ -230,16 +253,17 @@ export function getBlock(state: AutoExecState, tabId: string, blockKey: string):
     return state.get(tabId)?.get(blockKey);
 }
 
+/** Render decorations for one model message, keyed by block slot (`slotOf`). */
 export interface MessageDecorations {
-    /** Commands that auto-executed → "Auto-executed" badge. */
+    /** Blocks that auto-executed → "Auto-executed" badge. */
     autoExecuted: Set<string>;
-    /** Commands the user declined → "Declined" badge. */
+    /** Blocks the user declined → "Declined" badge. */
     declined: Set<string>;
-    /** Commands whose classification is in flight → "Checking safety…". */
+    /** Blocks whose classification is in flight → "Checking safety…". */
     classifying: Set<string>;
-    /** Command → auto-run deadline (epoch ms) for a block in its countdown window. */
+    /** Slot → auto-run deadline (epoch ms) for a block in its countdown window. */
     scheduled: Map<string, number>;
-    /** Command → resolved verdict (for the verdict note; declined/scheduled blocks
+    /** Slot → resolved verdict (for the verdict note; declined/scheduled blocks
      *  omitted because the UI shows a badge / countdown for those instead). */
     verdicts: Map<string, AutoExecDecision>;
 }
@@ -248,7 +272,8 @@ export interface MessageDecorations {
  * Collect the render decorations for one model message. `commands` is the list of
  * execute-block commands parsed from the message (in order); `messageIndex` is
  * its index in the tab's transcript. Mirrors the per-message ref-reading loop the
- * AIChatPane used to run inline.
+ * AIChatPane used to run inline. A command repeated in the message gets one
+ * entry per occurrence, under its own slot.
  */
 export function collectMessageDecorations(
     state: AutoExecState,
@@ -265,27 +290,69 @@ export function collectMessageDecorations(
     };
     const blocks = state.get(tabId);
     if (!blocks) return decorations;
+    const seen = new Map<string, number>();
     for (const command of commands) {
-        const block = blocks.get(`${messageIndex}:${command}`);
+        const occurrence = seen.get(command) ?? 0;
+        seen.set(command, occurrence + 1);
+        const block = blocks.get(blockKeyOf(messageIndex, occurrence, command));
         if (!block) continue;
+        const slot = slotOf(occurrence, command);
         switch (block.status) {
             case 'declined':
-                decorations.declined.add(command);
+                decorations.declined.add(slot);
                 break;
             case 'executed':
-                decorations.autoExecuted.add(command);
-                if (block.decision) decorations.verdicts.set(command, block.decision);
+                // A manual Run keeps its buttons; only auto-exec earns the badge.
+                if (!block.manual) decorations.autoExecuted.add(slot);
+                if (block.decision) decorations.verdicts.set(slot, block.decision);
                 break;
             case 'classifying':
-                decorations.classifying.add(command);
+                decorations.classifying.add(slot);
                 break;
             case 'scheduled':
-                if (block.runAt !== undefined) decorations.scheduled.set(command, block.runAt);
+                if (block.runAt !== undefined) decorations.scheduled.set(slot, block.runAt);
                 break;
             case 'classified':
-                if (block.decision) decorations.verdicts.set(command, block.decision);
+                if (block.decision) decorations.verdicts.set(slot, block.decision);
                 break;
         }
     }
     return decorations;
+}
+
+/**
+ * The part of the state that must outlive the pane: blocks that already ran or
+ * were declined. Those are what draw the "Auto-executed" / "Declined" badges and,
+ * more importantly, what stop the Run button coming back on a command that ran.
+ * In-flight states (classifying, scheduled, …) are deliberately left out — a
+ * re-created pane re-evaluates nothing, and a countdown cannot survive the move.
+ */
+export function terminalOutcomes(state: AutoExecState): AutoExecState {
+    const out = new Map<string, ReadonlyMap<string, AutoExecBlock>>();
+    for (const [tabId, blocks] of state) {
+        let kept: Map<string, AutoExecBlock> | undefined;
+        for (const [blockKey, b] of blocks) {
+            if (b.status !== 'executed' && b.status !== 'declined') continue;
+            const rest: AutoExecBlock = { ...b };
+            delete (rest as { runAt?: number }).runAt;
+            (kept ??= new Map()).set(blockKey, rest);
+        }
+        if (kept) out.set(tabId, kept);
+    }
+    return out;
+}
+
+/** True when two outcome snapshots hold the same blocks (same keys and statuses). */
+export function sameOutcomes(a: AutoExecState, b: AutoExecState): boolean {
+    if (a === b) return true;
+    if (a.size !== b.size) return false;
+    for (const [tabId, blocks] of a) {
+        const other = b.get(tabId);
+        if (!other || other.size !== blocks.size) return false;
+        for (const [k, v] of blocks) {
+            const o = other.get(k);
+            if (!o || o.status !== v.status || !!o.manual !== !!v.manual) return false;
+        }
+    }
+    return true;
 }

@@ -153,11 +153,62 @@ describe('resolveConnectRequest', () => {
         const r = resolveConnectRequest(ctx('type: ssh\nhost: 192.0.2.10'));
         expect(r.kind).toBe('remote');
         if (r.kind !== 'remote') return;
-        expect(r.credentialSource).toEqual({ kind: 'host-tree', nodeId: 'n1', nodeName: 'sw-01', hasPassword: true, hasKey: false, hasUsername: true });
+        expect(r.credentialSource).toEqual({ kind: 'host-tree', nodeId: 'n1', nodeName: 'sw-01', hasPassword: true, hasKey: false, hasUsername: true, username: 'alice' });
         expect(r.hostNodeId).toBe('n1');
         expect(r.displayName).toBe('sw-01'); // tree name wins over the bare host
         expect(r.needsDialog).toBe(false);
         expect(r.manualLogin).toBe(false);
+    });
+
+    it('finds a saved host by the name the user called it, and connects to its address', () => {
+        const named = [
+            ...tree,
+            treeNode('n8', 'Edge FW', { host: '192.0.2.60', port: 2222, username: 'alice', password: '[SAFE]abc' }),
+        ];
+        // The model cannot write a space in host:, so "Edge FW" arrives as edge-fw.
+        const r = resolveConnectRequest(ctx('type: ssh\nhost: edge-fw', { hostTree: named }));
+        if (r.kind !== 'remote') throw new Error();
+        expect(r.host).toBe('192.0.2.60');
+        expect(r.port).toBe(2222);
+        expect(r.hostNodeId).toBe('n8');
+        expect(r.displayName).toBe('Edge FW');
+        expect(r.credentialSource).toMatchObject({ kind: 'host-tree', nodeId: 'n8', hasPassword: true });
+        expect(r.needsDialog).toBe(false);
+
+        // name: is tried when host: matches nothing.
+        const viaName = resolveConnectRequest(ctx('type: ssh\nhost: fw\nname: Edge FW', { hostTree: named }));
+        expect(viaName.kind === 'remote' && viaName.host).toBe('192.0.2.60');
+
+        // An explicit port the entry was not saved for still disqualifies it.
+        const wrongPort = resolveConnectRequest(ctx('type: ssh\nhost: edge-fw\nport: 22', { hostTree: named }));
+        if (wrongPort.kind !== 'remote') throw new Error();
+        expect(wrongPort.host).toBe('edge-fw');
+        expect(wrongPort.credentialSource).toEqual({ kind: 'none' });
+
+        // An address match always wins over a name match.
+        const clash = [...named, treeNode('n9', '192.0.2.12', { host: '192.0.2.99' })];
+        const byAddr = resolveConnectRequest(ctx('type: ssh\nhost: 192.0.2.12', { hostTree: clash }));
+        expect(byAddr.kind === 'remote' && byAddr.hostNodeId).toBe('n3');
+    });
+
+    it('detects a live duplicate when the request names a saved host', () => {
+        const named = [treeNode('n8', 'Edge FW', { host: '192.0.2.60' })];
+        const live = watched({ alias: 'edge', info: { protocol: 'ssh', status: 'connected', host: '192.0.2.60', username: 'alice', hasPassword: true, hasPrivateKey: false, headless: false } });
+        const r = resolveConnectRequest(ctx('type: ssh\nhost: edge-fw', { hostTree: named, watched: [live] }));
+        expect(r.existing).toEqual({ sessionId: 's-edge', alias: 'edge' });
+    });
+
+    it('never copies an encrypted login name onto the request', () => {
+        // Real trees store the login name DPAPI-encrypted; the card once showed
+        // the `[SAFE]…` blob as "Login:" and the dialog prefilled it as the user.
+        for (const stored of ['[SAFE]AQAAblob', '[DPAPI]AQAAblob']) {
+            const encTree = [treeNode('n9', 'sw-09', { host: '192.0.2.40', username: stored, password: '[SAFE]abc' })];
+            const r = resolveConnectRequest(ctx('type: ssh\nhost: 192.0.2.40', { hostTree: encTree }));
+            if (r.kind !== 'remote' || r.credentialSource.kind !== 'host-tree') throw new Error();
+            expect(r.credentialSource.hasUsername).toBe(true);
+            expect(r.credentialSource.username).toBeUndefined();
+            expect(r.username).toBeUndefined();
+        }
     });
 
     it('treats a key-only entry as a password source for SSH', () => {

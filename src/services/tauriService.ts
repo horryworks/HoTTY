@@ -8,6 +8,7 @@ import {
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
 import { redactSensitive } from '../utils/redaction';
+import { newRequestId, noteRequest } from '../utils/aiRequestTracker';
 import { WINDOW_LABEL } from '../utils/windowLabel';
 import type {
   WindowRect,
@@ -156,15 +157,26 @@ export const tauriService = {
     return { x: pos.x, y: pos.y, width: size.width, height: size.height };
   },
 
-  /** Close this window (the same path as the title-bar X). */
+  /**
+   * Close this window for good.
+   *
+   * This is `destroy()`, not `close()`, on purpose. `close()` only *asks*: it
+   * raises the same close-requested event the title-bar X does, and while an
+   * {@link onCloseRequested} handler is registered Tauri lets that handler
+   * decide. The handler always prevents the default (it owns the confirmation),
+   * so a `close()` from inside it would re-enter the handler forever and the
+   * window would never go away. `destroy()` skips the question; the backend's
+   * `Destroyed` cleanup (session teardown, watch release) still runs.
+   */
   async closeThisWindow(): Promise<void> {
-    await getCurrentWebviewWindow().close();
+    await getCurrentWebviewWindow().destroy();
   },
 
   /**
    * Run `handler` when the user tries to close this window, instead of closing.
    * The handler owns the decision: it must call {@link closeThisWindow} to let
-   * the close through. Resolves to an unlisten function.
+   * the close through (that call destroys the window outright, so it never
+   * re-enters this handler). Resolves to an unlisten function.
    */
   onCloseRequested(handler: () => void): Promise<UnlistenFn> {
     return getCurrentWebviewWindow().onCloseRequested((event) => {
@@ -999,6 +1011,9 @@ export const tauriService = {
     const sendInfo = `send-to-ai ${JSON.stringify({ paneId: sessionId, messageLen, imageCount, hasWatchPrefix })}`;
     console.debug(`[AIExec/info] ${sendInfo}`);
     Promise.resolve(invoke('log_debug', { level: 'info', category: 'AIExec', message: redactSensitive(sendInfo) })).catch(() => {});
+    // Recorded before the invoke: the first event can arrive before it resolves.
+    const requestId = newRequestId();
+    noteRequest(sessionId, requestId);
     try {
       await invoke('ai_chat_send', {
         sessionId,
@@ -1006,6 +1021,7 @@ export const tauriService = {
         model,
         systemInstruction: systemInstruction ?? null,
         images: images && images.length > 0 ? images : null,
+        requestId,
       });
     } catch (e) {
       const errStr = typeof e === 'string' ? e : e instanceof Error ? e.message : String(e);

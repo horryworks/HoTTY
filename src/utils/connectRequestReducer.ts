@@ -172,3 +172,32 @@ export function hasConnectBlock(state: ConnectState, tabId: string, blockKey: st
 export function connectBlockKey(messageIndex: number, key: string): string {
     return `${messageIndex}:connect:${key}`;
 }
+
+/**
+ * Block keys of one tab whose outcome envelope is already in the transcript
+ * but whose card is still in a transient state.
+ *
+ * An open (or a connection-dialog round trip) ends with an envelope written to
+ * the transcript, and the card renders its final state from that envelope — but
+ * the reducer entry stayed `opening` / `dialog`, and every non-settled entry
+ * holds the conversation "not at rest". The window-move button then stayed
+ * disabled for as long as the tab lived. The pane settles these so the reducer
+ * agrees with what the card shows.
+ *
+ * `outcomes` lists each envelope's message index and request key; only an
+ * envelope that comes AFTER the request's own message counts.
+ */
+export function blocksSettledByOutcomes(
+    blocks: ReadonlyMap<string, ConnectBlock> | undefined,
+    outcomes: ReadonlyArray<{ index: number; key: string }>,
+): string[] {
+    if (!blocks || outcomes.length === 0) return [];
+    const out: string[] = [];
+    for (const [blockKey, b] of blocks) {
+        if (b.status === 'settled') continue;
+        const msgIndex = Number.parseInt(blockKey, 10);
+        if (!Number.isFinite(msgIndex)) continue;
+        if (outcomes.some((o) => o.key === b.key && o.index > msgIndex)) out.push(blockKey);
+    }
+    return out;
+}

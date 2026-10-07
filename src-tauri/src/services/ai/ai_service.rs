@@ -31,6 +31,19 @@ impl AIService {
         Ok(())
     }
 
+    /// Id of the provider every chat/classify/model call currently goes to.
+    pub fn active_provider_id(&self) -> &str {
+        &self.active_provider_id
+    }
+
+    /// The active provider's deployment region, if it has one (see
+    /// [`AIProvider::location`]).
+    pub fn location(&self) -> Option<String> {
+        self.registry
+            .get(&self.active_provider_id)
+            .and_then(|p| p.location())
+    }
+
     // -- Authentication -------------------------------------------------------
 
     pub async fn authenticate(
@@ -245,6 +258,22 @@ mod tests {
         let result = svc.set_active_provider("nonexistent");
         assert!(result.is_err());
         assert_eq!(svc.active_provider_id.as_str(), "alpha");
+    }
+
+    #[test]
+    fn active_provider_id_follows_the_switch() {
+        // The command layer compares this against the requested id to skip a
+        // no-op switch (which must not cancel in-flight streams).
+        let mut svc = make_service();
+        assert_eq!(svc.active_provider_id(), "alpha");
+        svc.set_active_provider("beta").unwrap();
+        assert_eq!(svc.active_provider_id(), "beta");
+    }
+
+    #[test]
+    fn location_is_none_for_a_provider_without_regions() {
+        let svc = make_service();
+        assert_eq!(svc.location(), None);
     }
 
     #[test]

@@ -5,6 +5,7 @@ import {
     getConnectBlock,
     hasConnectBlock,
     connectBlockKey,
+    blocksSettledByOutcomes,
     type ConnectState,
 } from './connectRequestReducer';
 import type { GateDecision } from './aiConnectRequest';
@@ -79,5 +80,23 @@ describe('connectRequestReducer', () => {
     it('ignores actions for unknown blocks without allocating', () => {
         expect(connectRequestReducer(emptyConnectState, { type: 'open', tabId: 't1', blockKey: K })).toBe(emptyConnectState);
         expect(connectRequestReducer(emptyConnectState, { type: 'clearTab', tabId: 't1' })).toBe(emptyConnectState);
+    });
+});
+
+describe('blocksSettledByOutcomes', () => {
+    const KEY = 'ssh:alice@192.0.2.10:22';
+    const block = (status: 'asking' | 'opening' | 'dialog' | 'settled') =>
+        new Map([[connectBlockKey(3, KEY), { key: KEY, status } as const]]);
+
+    it('settles an opening card once its envelope follows the request', () => {
+        expect(blocksSettledByOutcomes(block('opening'), [{ index: 5, key: KEY }])).toEqual([connectBlockKey(3, KEY)]);
+        expect(blocksSettledByOutcomes(block('dialog'), [{ index: 4, key: KEY }])).toEqual([connectBlockKey(3, KEY)]);
+    });
+
+    it('ignores envelopes before the request, other keys, and settled cards', () => {
+        expect(blocksSettledByOutcomes(block('opening'), [{ index: 2, key: KEY }])).toEqual([]);
+        expect(blocksSettledByOutcomes(block('opening'), [{ index: 5, key: 'telnet:192.0.2.10:23' }])).toEqual([]);
+        expect(blocksSettledByOutcomes(block('settled'), [{ index: 5, key: KEY }])).toEqual([]);
+        expect(blocksSettledByOutcomes(undefined, [{ index: 5, key: KEY }])).toEqual([]);
     });
 });

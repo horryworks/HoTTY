@@ -77,3 +77,42 @@ export function findHostNodesByAddress(
     if (matches.length === 1) return { kind: 'one', node: matches[0] };
     return { kind: 'ambiguous', nodes: matches };
 }
+
+/** Name comparison key: case, spaces, `-` and `_` ignored. The model cannot put a
+ *  space in `host:` (the fence grammar forbids it), so it writes "Core 01" as
+ *  `core-01` or `core_01`; all three must find the same entry. */
+function nameKey(s: string): string {
+    return s.trim().toLowerCase().replace(/[\s_-]+/g, '');
+}
+
+/**
+ * Find tree entries by their tree NAME, for when the user refers to a saved host
+ * by what they called it ("connect to Core 01") rather than by its address. The
+ * model never sees the Host Tree, so it can only repeat the user's words; this
+ * is the fallback the resolver tries after the address lookup came back empty.
+ *
+ * Same hard filters as the address lookup (protocol, port, no GCP IAP). Each of
+ * `candidates` is tried in order and the first that matches anything wins, so
+ * the `host:` value takes priority over the `name:` value.
+ */
+export function findHostNodesByName(
+    tree: HostTreeNode[],
+    candidates: (string | undefined)[],
+    hints: Omit<HostLookupHints, 'name'> = {},
+): HostLookupResult {
+    const nodes = flattenHostNodes(tree).filter((n) => {
+        const e = n.entry!;
+        if (e.protocol === 'gcloud-iap') return false;
+        if (hints.protocol && e.protocol !== hints.protocol) return false;
+        if (hints.port !== undefined && e.port !== hints.port) return false;
+        return true;
+    });
+    for (const c of candidates) {
+        const key = c ? nameKey(c) : '';
+        if (!key) continue;
+        const matches = nodes.filter((n) => nameKey(n.name) === key);
+        if (matches.length === 1) return { kind: 'one', node: matches[0] };
+        if (matches.length > 1) return { kind: 'ambiguous', nodes: matches };
+    }
+    return { kind: 'none' };
+}

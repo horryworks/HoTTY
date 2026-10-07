@@ -24,6 +24,11 @@
     display: block;
 }
 
+.dlg-surface:focus {
+    /* Focused programmatically on open (see Dialog.tsx); the ring would frame the whole box. */
+    outline: none;
+}
+
 .dlg-surface {
     background: var(--bg-secondary);
     color: var(--text-primary);

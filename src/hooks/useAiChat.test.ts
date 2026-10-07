@@ -5,6 +5,7 @@ import type { SessionRecord } from './useSessionManager';
 import type { FeaturePaneInfo } from '../utils/paneTypes';
 import type { PersonaDefinition } from '../types/appTypes';
 import { useSettingsStore } from '../stores/settingsStore';
+import { applySessionNames, resetSessionNames } from '../utils/sessionNameShare';
 
 vi.mock('../services/tauriService', () => ({
   tauriService: {
@@ -594,6 +595,62 @@ describe('useAiChat', () => {
     );
   });
 
+  it('sendMessage PEEKS at (does not drain) the buffer of a terminal an AI command is polling', async () => {
+    const { tauriService } = await import('../services/tauriService');
+    const sessions = new Map<string, SessionRecord>();
+    sessions.set('s1', makeSessionRecord('s1'));
+    const takeWatchBuffer = vi.fn().mockResolvedValue('drained');
+    const peekWatchBuffer = vi.fn().mockResolvedValue('peeked output');
+    const isSessionBusyRef = { current: (id: string) => id === 's1' };
+    const opts = makeDefaultOptions({ sessions, takeWatchBuffer, peekWatchBuffer, isSessionBusyRef });
+    const { result } = renderHook(() => useAiChat(opts));
+    act(() => {
+      result.current.updateAiChatState('ai-1', {
+        ...createDefaultAiChatState('s1', 'Session s1'),
+        selectedModel: 'gpt-4o',
+        systemInstruction: 'Be helpful.',
+      });
+    });
+
+    await act(async () => { await result.current.sendMessage('ai-1', 'what is happening?'); });
+
+    // The poll keeps its buffer; the question still sees what arrived so far.
+    expect(takeWatchBuffer).not.toHaveBeenCalled();
+    expect(peekWatchBuffer).toHaveBeenCalledWith('s1');
+    expect(tauriService.aiChatSend).toHaveBeenCalledWith(
+      expect.any(String), expect.stringContaining('peeked output'), 'gpt-4o', expect.any(String), undefined,
+    );
+  });
+
+  it('sendMessage can target a specific (non-active) tab, for queued human messages', async () => {
+    const { tauriService } = await import('../services/tauriService');
+    const opts = makeDefaultOptions({ sessions: new Map(), takeWatchBuffer: vi.fn().mockResolvedValue('') });
+    const { result } = renderHook(() => useAiChat(opts));
+    act(() => {
+      result.current.updateAiChatState('ai-1', { ...createDefaultAiChatState(), selectedModel: 'gpt-4o', systemInstruction: 'Be helpful.' });
+    });
+    let otherTab = '';
+    act(() => { otherTab = result.current.addTab('ai-1'); });
+    // addTab activates the new tab; send on the FIRST tab explicitly.
+    const firstTab = result.current.aiChatStates.get('ai-1')!.tabs[0].id;
+    expect(firstTab).not.toBe(otherTab);
+
+    await act(async () => { await result.current.sendMessage('ai-1', 'queued question', undefined, firstTab); });
+
+    expect(tauriService.aiChatSend).toHaveBeenCalledWith(`ai-1::${firstTab}`, 'queued question', 'gpt-4o', expect.any(String), undefined);
+  });
+
+  it('sendMessage rejects when the backend refuses the send, so the pane can close the stream', async () => {
+    const { tauriService } = await import('../services/tauriService');
+    vi.mocked(tauriService.aiChatSend).mockRejectedValueOnce(new Error('message exceeds maximum length'));
+    const opts = makeDefaultOptions({ sessions: new Map(), takeWatchBuffer: vi.fn().mockResolvedValue('') });
+    const { result } = renderHook(() => useAiChat(opts));
+    act(() => {
+      result.current.updateAiChatState('ai-1', { ...createDefaultAiChatState(), selectedModel: 'gpt-4o', systemInstruction: 'Be helpful.' });
+    });
+    await expect(result.current.sendMessage('ai-1', 'huge')).rejects.toThrow('message exceeds maximum length');
+  });
+
   it('sendMessage aggregates watch buffers from EVERY watched terminal, labeled by name, skipping stale/empty', async () => {
     const { tauriService } = await import('../services/tauriService');
 
@@ -733,7 +790,10 @@ describe('useAiChat — AI-initiated terminal sessions (ADR-AI-007)', () => {
 
     act(() => { result.current.addTabLink('ai-1', tabId, 'h-1', { aiOpened: true }); });
     let tab = result.current.aiChatStates.get('ai-1')!.tabs[0];
-    expect(tab.linkedSessions).toEqual([{ sessionId: 's-1', bindingKey: undefined }, { sessionId: 'h-1', bindingKey: undefined, aiOpened: true }]);
+    expect(tab.linkedSessions).toEqual([
+      { sessionId: 's-1', bindingKey: undefined, alias: 'core-01', name: 'core-01' },
+      { sessionId: 'h-1', bindingKey: undefined, alias: 'h-1', aiOpened: true },
+    ]);
     expect(tab.lastFocusedWatchId).toBe('h-1');
 
     // A plain re-add (e.g. the user re-focuses it) must not drop the flag; a
@@ -778,5 +838,41 @@ describe('useAiChat — AI-initiated terminal sessions (ADR-AI-007)', () => {
     expect(takeWatchBuffer).not.toHaveBeenCalled();
     await act(async () => { await result.current.sendMessage('ai-1', 'a human question'); });
     expect(takeWatchBuffer).toHaveBeenCalledWith('s-1');
+  });
+});
+
+describe('useAiChat — link identity (binding key + alias)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetSessionNames();
+  });
+
+  it('a link to another window’s terminal takes its binding key and name from the published table', () => {
+    // No local record for 'remote-1': the owning window published it.
+    applySessionNames({ v: 1, from: 'win-2', names: { 'remote-1': { displayName: 'core-sw01', bindingKey: 'ssh:admin@192.0.2.1:22' } } });
+    const { result } = renderHook(() => useAiChat(makeDefaultOptions()));
+    act(() => { result.current.updateAiChatState('ai-1', createDefaultAiChatState()); });
+    const tabId = result.current.aiChatStates.get('ai-1')!.tabs[0].id;
+
+    act(() => { result.current.addTabLink('ai-1', tabId, 'remote-1'); });
+
+    const link = result.current.aiChatStates.get('ai-1')!.tabs[0].linkedSessions[0];
+    expect(link.bindingKey).toBe('ssh:admin@192.0.2.1:22');
+    expect(link.alias).toBe('core-sw01');
+  });
+
+  it('a second terminal with the same name gets a suffixed alias that survives the first being unwatched', () => {
+    const sessions = new Map<string, SessionRecord>();
+    sessions.set('a', { ...makeSessionRecord('a'), displayName: 'core' });
+    sessions.set('b', { ...makeSessionRecord('b'), displayName: 'core' });
+    const { result } = renderHook(() => useAiChat(makeDefaultOptions({ sessions })));
+    act(() => { result.current.updateAiChatState('ai-1', createDefaultAiChatState()); });
+    const tabId = result.current.aiChatStates.get('ai-1')!.tabs[0].id;
+    act(() => { result.current.addTabLink('ai-1', tabId, 'a'); });
+    act(() => { result.current.addTabLink('ai-1', tabId, 'b'); });
+    expect(result.current.aiChatStates.get('ai-1')!.tabs[0].linkedSessions.map((w) => w.alias)).toEqual(['core', 'core-2']);
+
+    act(() => { result.current.removeTabLink('ai-1', tabId, 'a'); });
+    expect(result.current.aiChatStates.get('ai-1')!.tabs[0].linkedSessions.map((w) => w.alias)).toEqual(['core-2']);
   });
 });

@@ -16,6 +16,8 @@ import type { AiConnectPolicy, AiLocalShellType } from '../types/appTypes';
 export interface WatchedLink {
     sessionId: string;
     aiOpened?: boolean;
+    /** Alias fixed at link time (see `WatchedTerminal.alias`). */
+    alias?: string;
 }
 
 export interface WatchedViews {
@@ -29,6 +31,7 @@ export function buildWatchedViews(linked: readonly WatchedLink[], src: SessionSo
         sessionId: link.sessionId,
         displayName: view?.displayName ?? link.sessionId,
         status: view?.status,
+        alias: link.alias,
     })));
     const views: WatchedTerminalView[] = looked.map(({ link, view }, i) => ({
         sessionId: link.sessionId,

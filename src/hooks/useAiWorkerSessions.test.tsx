@@ -210,6 +210,30 @@ describe('useAiWorkerSessions — lifecycle', () => {
         expect(tv.disconnectSession).not.toHaveBeenCalled();
     });
 
+    it('idle sweep leaves a worker alone while an AI command is still being polled on it', async () => {
+        useSettingsStore.getState().update('aiWorkerIdleTimeoutMins', 1);
+        let id = '';
+        let busy = true;
+        // Consulted with the worker's id on every sweep; reads `id` at call time.
+        const isBusy = vi.fn((wid: string) => busy && wid === id);
+        const opts = makeOptions({ isBusy });
+        const { result } = renderHook(() => useAiWorkerSessions(opts));
+        await flush();
+        act(() => { id = result.current.openWorkerSession(spec()); });
+        await flush();
+        act(() => { statusCb!({ sessionId: id, status: 'connected' }); });
+
+        // Long past the timeout, but a command is still running: kept.
+        await act(async () => { await vi.advanceTimersByTimeAsync(WORKER_IDLE_SWEEP_MS * 4); });
+        expect(isBusy).toHaveBeenCalledWith(id);
+        expect(tv.disconnectSession).not.toHaveBeenCalled();
+
+        // Once the command ends, the next sweep closes it as usual.
+        busy = false;
+        await act(async () => { await vi.advanceTimersByTimeAsync(WORKER_IDLE_SWEEP_MS); });
+        expect(tv.disconnectSession).toHaveBeenCalledWith(id);
+    });
+
     it('closes workers per tab / per pane and notifies the owner', async () => {
         const opts = makeOptions();
         const { result } = renderHook(() => useAiWorkerSessions(opts));

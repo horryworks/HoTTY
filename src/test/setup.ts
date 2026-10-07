@@ -26,3 +26,12 @@ if (typeof Element !== 'undefined' && !Element.prototype.setPointerCapture) {
         return false;
     };
 }
+
+// The AI Chat transcript store is module-global on purpose (it outlives the
+// pane that displays it). Between tests that is a leak: a transcript one test
+// left behind would make the next one's pane start with a conversation.
+import { afterEach } from 'vitest';
+import { useAiTranscriptStore } from '../stores/aiTranscriptStore';
+afterEach(() => {
+    useAiTranscriptStore.setState({ panes: new Map() });
+});

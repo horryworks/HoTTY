@@ -23,7 +23,6 @@ function Item({ item, onDismiss }: ItemProps): React.JSX.Element {
   return (
     <div className="error-notification" role="alert">
       <div className="error-notification-body">
-        <span className="error-notification-category">{item.category}</span>
         <span className="error-notification-message">{item.message}</span>
       </div>
       <button

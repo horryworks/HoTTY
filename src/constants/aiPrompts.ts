@@ -99,7 +99,7 @@ export function buildConnectCapabilityBlock(p: ConnectCapabilityInput): string {
     const F = '```';
     return `\n\n[Terminal Connections] You may ask HoTTY to OPEN a new terminal when the investigation needs one: (a) a shell on the user's PC, to run ping / tracert / nslookup / Test-NetConnection from the PC itself; or (b) an SSH/Telnet session to a NEIGHBOR device you discovered (e.g. from \`show cdp neighbors detail\`, \`show lldp neighbors detail\`, \`display lldp neighbor-information verbose\`). AI-opened terminals have no visible tab; their output is captured for you. Request one with a single fenced block whose language tag is \`connect\` and whose body is \`key: value\` lines using ONLY these keys:
 type: local | ssh | telnet   (required)
-host: <hostname or IP>   (required for ssh/telnet; no spaces, no URLs)
+host: <hostname or IP, or the name the user calls a saved host>   (required for ssh/telnet; no spaces, no URLs - write "Core 01" as core-01)
 port: <1-65535>   (optional; default 22 / 23)
 user: <login name>   (optional)
 name: <short display name>   (optional, e.g. the CDP device id)
@@ -131,7 +131,31 @@ export const AUTO_LANGUAGE = 'Auto';
  * model stops after the prep instead of inventing a request to answer.
  */
 export const NETWORK_EXPERT_KICKOFF =
-    'Session started. Run the start-of-session protocol now (identify the device, then disable paging). I have no question yet — after the prep, briefly state the detected device/OS and then wait for my question.';
+    'Session started. Run the start-of-session protocol now (identify the device, then disable paging). Work out the platform from what the terminal shows (its prompt and banner) and use THAT platform\'s own commands — do not assume Cisco. I have no question yet — after the prep, briefly state the detected device/OS and then wait for my question.';
+
+/**
+ * Add the terminal's current prompt line to a kickoff. The kickoff is a machine
+ * message, so — unlike a typed question — no terminal output travels with it, and
+ * the model used to guess the platform blind (a Huawei VRP was taken for EdgeOS and
+ * sent `terminal length 0`). The prompt alone (`<sw-01>`, `sw-01#`, `user@host:~$`)
+ * usually names the platform. Empty `promptLine` leaves the message unchanged.
+ */
+export function withPromptHint(message: string, promptLine: string | undefined): string {
+    const line = (promptLine ?? '').trim();
+    if (!line) return message;
+    return `${message}\n\n[The terminal currently shows this line: ${JSON.stringify(line.slice(-120))}]`;
+}
+
+/**
+ * Send-time note for a conversation that watches no terminal. The execution rules
+ * tell the model to proactively propose commands, and with nothing attached those
+ * proposals had nowhere to run (the auto-exec path dropped them silently). Empty
+ * when at least one terminal is watched.
+ */
+export function buildNoTerminalBlock(watchedCount: number): string {
+    if (watchedCount > 0) return '';
+    return ' [No Terminal Attached] This conversation watches no terminal, so a command in an ```execute block cannot run anywhere. Do NOT emit ```execute blocks — answer from what you know, or ask the user to attach a terminal. (A ```connect block, where a [Terminal Connections] section below offers one, is still allowed.)';
+}
 
 /**
  * Lightweight re-prep injected when a Network Expert chat's linked terminal
@@ -141,7 +165,16 @@ export const NETWORK_EXPERT_KICKOFF =
  * preserved context, so it only needs to re-disable paging. One command, then wait.
  */
 export const NETWORK_EXPERT_RECONNECT_PREP =
-    'The terminal session was just reconnected, so paging is likely re-enabled. Re-run ONLY the paging-disable command for this device (the equivalent of Cisco `terminal length 0`). Do NOT run show version again and do NOT answer anything else — just that one command, then wait for my question.';
+    'The terminal session was just reconnected, so paging is likely re-enabled. Re-run ONLY the paging-disable command for the platform you already identified earlier in this conversation — do not guess a vendor. Do NOT identify the device again and do NOT answer anything else — just that one command, then wait for my question.';
+
+/**
+ * Re-prep for a SECOND live session to a device this conversation already
+ * identified (the same switch opened twice). Paging is per session, so the new
+ * one needs its own paging-disable — but it is an addition, not a reconnect, and
+ * saying "reconnected" told the model something that did not happen.
+ */
+export const NETWORK_EXPERT_SAME_DEVICE_PREP =
+    'Another session to a device you already identified in this conversation was just added. Paging is set per session, so run ONLY the paging-disable command for that platform on this new session — do not guess a vendor. Do NOT identify the device again and do NOT answer anything else — just that one command, then wait for my question.';
 
 /**
  * Append a routing directive to a Network-Expert kickoff / reconnect-prep message

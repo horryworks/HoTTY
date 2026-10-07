@@ -1,7 +1,28 @@
 import { isEncrypted } from '../services/tauriService';
-import { decryptBatch, getCachedCredential } from '../hooks/useHostManager';
+import { decryptBatch, findStoredHostNode, getCachedCredential } from '../hooks/useHostManager';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { HostTreeNode, SshConnectionConfig, TelnetConnectionConfig } from '../types/appTypes';
+
+/**
+ * The saved login name of a Host Tree entry, as plaintext — for the AI connect
+ * card, which must show who the AI will log in as before the user approves.
+ * The name is usually stored DPAPI-encrypted, so this takes the same ladder as
+ * a connect: the in-memory cache first, else a decrypt. Undefined when the
+ * entry has no name or cannot be decrypted (the card then just omits the line).
+ */
+export async function resolveHostLoginName(nodeId: string): Promise<string | undefined> {
+    const stored = findStoredHostNode(nodeId)?.entry?.username;
+    if (!stored) return undefined;
+    if (!isEncrypted(stored)) return stored;
+    const cached = getCachedCredential(nodeId)?.username;
+    if (cached !== undefined) return cached || undefined;
+    try {
+        const [plain] = await decryptBatch([stored]);
+        return plain || undefined;
+    } catch {
+        return undefined;
+    }
+}
 
 /**
  * Build a ready-to-connect SSH / Telnet config from a Host Tree node — the same

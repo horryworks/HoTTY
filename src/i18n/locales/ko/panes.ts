@@ -95,7 +95,7 @@ export const panes = {
     targetCount_other: '대상 {{count}}개',
     csvLogging: 'CSV 로깅',
     loggingFolder: '저장 위치: {{path}}',
-    loggingFolderUnset: 'CSV 로깅을 사용하려면 설정 → 일반에서 로그 폴더를 지정하세요',
+    setLogFolder: '로그 폴더 지정…',
     loggingDirDenied: '로그 폴더가 승인되지 않아 CSV 로깅이 꺼졌습니다',
     showTargetsPanel: '대상 패널 표시',
     hideTargetsPanel: '대상 패널 숨기기',

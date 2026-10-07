@@ -41,16 +41,23 @@ import {
   useAiChatWindow,
   HANDOVER_ACK_TIMEOUT_MS,
   HANDOVER_RETRY_MS,
-  type ChatTranscriptPort,
   type UseAiChatWindowOptions,
 } from './useAiChatWindow';
+import { useAiTranscriptStore } from '../stores/aiTranscriptStore';
 import {
   AI_HANDOVER_ACK_CHANNEL,
   AI_HANDOVER_CHANNEL,
   AI_HANDOVER_VERSION,
+  AI_WATCH_REQUEST_CHANNEL,
+  AI_DIALOG_REQUEST_CHANNEL,
+  AI_DIALOG_RESULT_CHANNEL,
   buildHandoverAck,
+  buildWatchRequest,
+  buildDialogRequest,
+  buildDialogResult,
 } from '../utils/aiWindowHandover';
 import { useAiWorkerSessionStore } from '../stores/aiWorkerSessionStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import type { AiChatState } from './useAiChat';
 
 type SharedChangeCb = (e: { channel: string; payload: string; origin: string }) => void;
@@ -71,12 +78,9 @@ function chatState(tabs = [TAB]): AiChatState {
   } as unknown as AiChatState;
 }
 
-/** A transcript port whose export/import calls the test can count. */
-function makePort(messages: unknown[] = []): ChatTranscriptPort {
-  return {
-    export: vi.fn(() => ({ messages: [[TAB, messages]], tokens: [[TAB, {}]] })),
-    import: vi.fn(),
-  } as unknown as ChatTranscriptPort;
+/** Put a transcript for this window's pane into the store the pane reads. */
+function seedTranscript(messages: unknown[] = []) {
+  useAiTranscriptStore.getState().importPane(PANE, [[TAB, messages as never]], [[TAB, { input: 0, output: 0, cost: null }]]);
 }
 
 function makeOptions(over: Partial<UseAiChatWindowOptions> = {}): UseAiChatWindowOptions {
@@ -90,6 +94,9 @@ function makeOptions(over: Partial<UseAiChatWindowOptions> = {}): UseAiChatWindo
     removeAiChatPane: vi.fn(),
     clearRunCommandIntervals: vi.fn(),
     watchInConversation: vi.fn(),
+    watchColdStart: vi.fn(),
+    showDialogForRemote: vi.fn(),
+    onRemoteDialogResult: vi.fn(),
     adoptRemoteSession: vi.fn(),
     ...over,
   } as UseAiChatWindowOptions;
@@ -111,6 +118,7 @@ beforeEach(() => {
   received = undefined;
   closeRequested = undefined;
   useAiWorkerSessionStore.getState().clear();
+  useAiTranscriptStore.setState({ panes: new Map() });
   loggerMock.logError.mockReset();
   for (const fn of Object.values(tv)) fn.mockReset();
   tv.broadcastSharedChange.mockResolvedValue(undefined);
@@ -150,19 +158,37 @@ describe('useAiChatWindow — closing the AI Chat window', () => {
   it('closes straight away when there is nothing to lose', async () => {
     const opts = makeOptions();
     const { result } = renderHook(() => useAiChatWindow(opts));
-    act(() => result.current.registerTranscriptPort(PANE, makePort([])));
+    seedTranscript([]);
     await flush();
 
     act(() => closeRequested!());
+    await flush();
 
+    // The geometry is saved before the window goes, and the close is the one
+    // real close (a `close()` would re-enter the close-requested handler).
+    expect(tv.getWindowRect).toHaveBeenCalled();
+    expect(useSettingsStore.getState().aiWindowBounds).toEqual({ x: 0, y: 0, width: 800, height: 600 });
     expect(tv.closeThisWindow).toHaveBeenCalledTimes(1);
     expect(result.current.closeRequest).toBeNull();
+  });
+
+  it('still closes when the geometry cannot be read', async () => {
+    tv.getWindowRect.mockRejectedValue(new Error('no window'));
+    const opts = makeOptions();
+    renderHook(() => useAiChatWindow(opts));
+    seedTranscript([]);
+    await flush();
+
+    act(() => closeRequested!());
+    await flush();
+
+    expect(tv.closeThisWindow).toHaveBeenCalledTimes(1);
   });
 
   it('asks first when a conversation has messages, and counts what would go', async () => {
     const opts = makeOptions();
     const { result } = renderHook(() => useAiChatWindow(opts));
-    act(() => result.current.registerTranscriptPort(PANE, makePort([{ role: 'user', text: 'hi' }])));
+    seedTranscript([{ role: 'user', text: 'hi' }]);
     await flush();
 
     act(() => closeRequested!());
@@ -177,6 +203,7 @@ describe('useAiChatWindow — closing the AI Chat window', () => {
 
     act(() => closeRequested!());
     act(() => result.current.confirmClose());
+    await flush();
     expect(opts.clearRunCommandIntervals).toHaveBeenCalledWith(PANE);
     expect(tv.aiChatClear).toHaveBeenCalledTimes(1);
     expect(tv.closeThisWindow).toHaveBeenCalledTimes(1);
@@ -194,7 +221,7 @@ describe('useAiChatWindow — closing the AI Chat window', () => {
 
     const opts = makeOptions();
     const { result } = renderHook(() => useAiChatWindow(opts));
-    act(() => result.current.registerTranscriptPort(PANE, makePort([])));
+    seedTranscript([]);
     await flush();
 
     act(() => closeRequested!());
@@ -202,11 +229,161 @@ describe('useAiChatWindow — closing the AI Chat window', () => {
   });
 });
 
+describe('useAiChatWindow — "Watch in the AI Chat window"', () => {
+  it('starts a conversation here when there is none, then moves it out', async () => {
+    const opts = makeOptions({ aiChatPaneId: undefined, getAiChatState: vi.fn(() => undefined) });
+    const { result, rerender } = renderHook(() => useAiChatWindow(opts));
+    await flush();
+
+    act(() => result.current.watchInAiWindow('sess-1'));
+    await flush();
+    // No AI Chat anywhere: the cold-start watch creates one watching the terminal…
+    expect(opts.watchColdStart).toHaveBeenCalledWith('sess-1');
+    expect(tv.createAiChatWindow).not.toHaveBeenCalled();
+
+    // …and once React has it, the pop-out follows (the menu item used to do nothing).
+    opts.aiChatPaneId = PANE;
+    (opts.getAiChatState as ReturnType<typeof vi.fn>).mockReturnValue(chatState());
+    rerender();
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    expect(tv.createAiChatWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks an open AI Chat window to watch the terminal instead of moving anything', async () => {
+    tv.listWindowLabels.mockResolvedValue(['main', 'win-ai-1']);
+    const opts = makeOptions();
+    const { result } = renderHook(() => useAiChatWindow(opts));
+    await flush();
+
+    act(() => result.current.watchInAiWindow('sess-1'));
+    await flush();
+
+    expect(tv.createAiChatWindow).not.toHaveBeenCalled();
+    expect(broadcastsOn(AI_WATCH_REQUEST_CHANNEL)).toHaveLength(1);
+    expect(JSON.parse(broadcastsOn(AI_WATCH_REQUEST_CHANNEL)[0][1])).toMatchObject({ to: 'win-ai-1', sessionId: 'sess-1' });
+  });
+
+  it('a watch request for a terminal already watched only brings the window forward', async () => {
+    flags.isAiWindow = true;
+    const watched = {
+      ...chatState(),
+      tabs: [{ id: TAB, title: 'x', linkedSessions: [{ sessionId: 'sess-1' }] }],
+    } as unknown as AiChatState;
+    const opts = makeOptions({ getAiChatState: vi.fn(() => watched), activeConversationTabId: TAB });
+    renderHook(() => useAiChatWindow(opts));
+    await flush();
+
+    received!({ channel: AI_WATCH_REQUEST_CHANNEL, payload: JSON.stringify(buildWatchRequest('main', 'sess-1')), origin: 'win-2' });
+    // "Watch in" never means "unwatch": the picker's toggle-off is not used.
+    expect(opts.watchInConversation).not.toHaveBeenCalled();
+    expect(tv.focusWindow).toHaveBeenCalled();
+
+    received!({ channel: AI_WATCH_REQUEST_CHANNEL, payload: JSON.stringify(buildWatchRequest('main', 'sess-2')), origin: 'win-2' });
+    expect(opts.watchInConversation).toHaveBeenCalledWith('sess-2', TAB);
+  });
+});
+
+describe('useAiChatWindow — a connection dialog shown by another window', () => {
+  const prefill = { protocol: 'ssh', host: '192.0.2.10', port: 22, username: 'alice', displayName: 'sw-01', nonce: 1 } as never;
+
+  it('an AI Chat window delegates the dialog to an ordinary window', async () => {
+    // This window ('main' in the mock) plays the AI Chat window; 'win-2' is the
+    // ordinary window that can show a terminal.
+    flags.isAiWindow = true;
+    tv.listWindowLabels.mockResolvedValue(['main', 'win-2']);
+    const opts = makeOptions();
+    const { result } = renderHook(() => useAiChatWindow(opts));
+    await flush();
+
+    expect(result.current.delegateDialog(PANE, TAB, 'ssh:alice@192.0.2.10:22', prefill)).toBe(true);
+    await flush();
+    const sent = broadcastsOn(AI_DIALOG_REQUEST_CHANNEL);
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(sent[0][1])).toMatchObject({ to: 'win-2', from: 'main', paneId: PANE, tabId: TAB, key: 'ssh:alice@192.0.2.10:22' });
+  });
+
+  it('an ordinary window shows it itself', () => {
+    const { result } = renderHook(() => useAiChatWindow(makeOptions()));
+    expect(result.current.delegateDialog(PANE, TAB, 'k', prefill)).toBe(false);
+  });
+
+  it('the origin window shows the dialog, then reports the session back', async () => {
+    const opts = makeOptions();
+    const { result } = renderHook(() => useAiChatWindow(opts));
+    await flush();
+    const req = buildDialogRequest({ to: 'main', from: 'win-ai-1', paneId: PANE, tabId: TAB, key: 'k', prefill });
+
+    received!({ channel: AI_DIALOG_REQUEST_CHANNEL, payload: JSON.stringify(req), origin: 'win-ai-1' });
+    expect(opts.showDialogForRemote).toHaveBeenCalledWith(expect.objectContaining({ paneId: PANE, tabId: TAB, key: 'k' }));
+
+    act(() => result.current.reportDialogResult(req, 'sess-9'));
+    await flush();
+    expect(JSON.parse(broadcastsOn(AI_DIALOG_RESULT_CHANNEL)[0][1])).toMatchObject({ to: 'win-ai-1', paneId: PANE, tabId: TAB, key: 'k', sessionId: 'sess-9' });
+  });
+
+  it('the waiting window links the session it is told about, or hears the decline', async () => {
+    const opts = makeOptions();
+    renderHook(() => useAiChatWindow(opts));
+    await flush();
+
+    received!({
+      channel: AI_DIALOG_RESULT_CHANNEL,
+      payload: JSON.stringify(buildDialogResult({ to: 'main', paneId: PANE, tabId: TAB, key: 'k', sessionId: 'sess-9' })),
+      origin: 'win-2',
+    });
+    expect(opts.onRemoteDialogResult).toHaveBeenCalledWith(PANE, TAB, 'k', 'sess-9');
+
+    received!({
+      channel: AI_DIALOG_RESULT_CHANNEL,
+      payload: JSON.stringify(buildDialogResult({ to: 'main', paneId: PANE, tabId: TAB, key: 'k' })),
+      origin: 'win-2',
+    });
+    expect(opts.onRemoteDialogResult).toHaveBeenLastCalledWith(PANE, TAB, 'k', undefined);
+  });
+});
+
 describe('useAiChatWindow — handing a conversation out', () => {
+  it('refuses to move a conversation that is not at rest', async () => {
+    const opts = makeOptions();
+    const { result } = renderHook(() => useAiChatWindow(opts));
+    act(() => result.current.registerPanePort(PANE, { canMove: () => false }));
+
+    act(() => result.current.popOut());
+    await flush();
+
+    // Nothing left this window, the user was told, and the button state is untouched.
+    expect(tv.createAiChatWindow).not.toHaveBeenCalled();
+    expect(broadcastsOn(AI_HANDOVER_CHANNEL)).toHaveLength(0);
+    expect(loggerMock.logError).toHaveBeenCalled();
+    expect(result.current.moving).toBe(false);
+
+    // Once the pane says it is idle, the same call goes through.
+    act(() => result.current.registerPanePort(PANE, { canMove: () => true }));
+    act(() => result.current.popOut());
+    await flush();
+    expect(tv.createAiChatWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it('forgets the transcripts once the receiver has them', async () => {
+    const opts = makeOptions();
+    const { result } = renderHook(() => useAiChatWindow(opts));
+    seedTranscript([{ role: 'user', text: 'hi' }]);
+    act(() => result.current.popOut());
+    await flush();
+    act(() =>
+      received!({
+        channel: AI_HANDOVER_ACK_CHANNEL,
+        payload: JSON.stringify(buildHandoverAck({ to: 'main', from: 'win-ai-1', paneId: PANE, adopted: [] })),
+        origin: 'win-ai-1',
+      }),
+    );
+    expect(useAiTranscriptStore.getState().panes.has(PANE)).toBe(false);
+  });
+
   it('keeps everything until the receiver acknowledges', async () => {
     const opts = makeOptions();
     const { result } = renderHook(() => useAiChatWindow(opts));
-    act(() => result.current.registerTranscriptPort(PANE, makePort([{ role: 'user', text: 'hi' }])));
+    seedTranscript([{ role: 'user', text: 'hi' }]);
 
     act(() => result.current.popOut());
     await flush();
@@ -234,6 +411,32 @@ describe('useAiChatWindow — handing a conversation out', () => {
     expect(opts.forgetAiChatState).toHaveBeenCalledWith(PANE);
     expect(opts.removeAiChatPane).toHaveBeenCalledWith(PANE);
     expect(result.current.moving).toBe(false);
+  });
+
+  it('keeps a worker the receiver could not adopt in this window\u2019s registry', async () => {
+    const store = useAiWorkerSessionStore.getState();
+    for (const id of ['w-taken', 'w-kept']) {
+      store.upsert({ id, paneId: PANE, tabId: TAB, status: 'connected', protocol: 'ssh', displayName: id } as never);
+    }
+    const { result } = renderHook(() => useAiChatWindow(makeOptions()));
+    act(() => result.current.popOut());
+    await flush();
+
+    act(() =>
+      received!({
+        channel: AI_HANDOVER_ACK_CHANNEL,
+        payload: JSON.stringify(
+          buildHandoverAck({ to: 'main', from: 'win-ai-1', paneId: PANE, adopted: ['w-taken'] }),
+        ),
+        origin: 'win-ai-1',
+      }),
+    );
+
+    const after = useAiWorkerSessionStore.getState().workers;
+    expect(after['w-taken']).toBeUndefined();
+    // Still this window's session: its idle sweep will close it; forgotten, it
+    // would run on with no one able to close it.
+    expect(after['w-kept']).toBeDefined();
   });
 
   it('re-sends while it waits, because a new window mounts its listener late', async () => {
@@ -302,16 +505,14 @@ describe('useAiChatWindow — taking a conversation in', () => {
   it('adopts the AI’s terminals, installs the conversation, then acknowledges', async () => {
     tv.adoptSessions.mockResolvedValue(['w1']);
     const opts = makeOptions();
-    const port = makePort([]);
-    const { result } = renderHook(() => useAiChatWindow(opts));
-    act(() => result.current.registerTranscriptPort(PANE, port));
+    renderHook(() => useAiChatWindow(opts));
     await flush();
 
     await deliver(payload());
 
     expect(tv.adoptSessions).toHaveBeenCalledWith(['w1']);
     expect(opts.importAiChatState).toHaveBeenCalledTimes(1);
-    expect(port.import).toHaveBeenCalledTimes(1);
+    expect(useAiTranscriptStore.getState().panes.get(PANE)?.messagesByTab.get(TAB)).toEqual([{ role: 'user', text: 'hi' }]);
     expect(useAiWorkerSessionStore.getState().workers['w1']).toBeDefined();
 
     const acks = broadcastsOn(AI_HANDOVER_ACK_CHANNEL);
@@ -319,21 +520,42 @@ describe('useAiChatWindow — taking a conversation in', () => {
     expect(JSON.parse(acks[0][1])).toMatchObject({ to: 'win-ai-1', paneId: PANE, adopted: ['w1'] });
   });
 
-  it('re-acknowledges a repeat delivery instead of installing it twice', async () => {
-    const importAiChatState = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
-    const opts = makeOptions({ importAiChatState });
-    const port = makePort([]);
-    const { result } = renderHook(() => useAiChatWindow(opts));
-    act(() => result.current.registerTranscriptPort(PANE, port));
+  it('writes the transcript into the store BEFORE the pane is registered', async () => {
+    // The pane's very first render reads the store; registering first would
+    // show an empty conversation for one commit — enough for the Network
+    // Expert kickoff to identify the device all over again.
+    const storeHadPaneAtRegister: boolean[] = [];
+    const registerAiChatPane = vi.fn((id: string) => {
+      storeHadPaneAtRegister.push(useAiTranscriptStore.getState().panes.has(PANE));
+      return id;
+    });
+    const opts = makeOptions({ registerAiChatPane, aiChatPaneId: undefined });
+    renderHook(() => useAiChatWindow(opts));
     await flush();
 
     await deliver(payload());
+
+    expect(storeHadPaneAtRegister).toEqual([true]);
+  });
+
+  it('re-acknowledges a repeat delivery instead of installing it twice', async () => {
+    const importAiChatState = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
+    const opts = makeOptions({ importAiChatState });
+    renderHook(() => useAiChatWindow(opts));
+    await flush();
+
+    await deliver(payload());
+    // The live conversation moved on since the first delivery.
+    useAiTranscriptStore.getState().updatePane(PANE, (pane) => ({
+      ...pane,
+      messagesByTab: new Map([[TAB, [{ role: 'user', content: 'hi' }, { role: 'model', content: 'hello' }]]]),
+    }));
     await deliver(payload());
 
     // The sender lost our first ack and retried: it must get an ack back…
     expect(broadcastsOn(AI_HANDOVER_ACK_CHANNEL)).toHaveLength(2);
     // …but the transcript must not be replayed over the live conversation.
-    expect(port.import).toHaveBeenCalledTimes(1);
+    expect(useAiTranscriptStore.getState().panes.get(PANE)?.messagesByTab.get(TAB)).toHaveLength(2);
   });
 
   it('ignores a payload addressed to another window, and its own echo', async () => {
@@ -358,7 +580,7 @@ describe('useAiChatWindow — taking a conversation in', () => {
 
     const opts = makeOptions();
     const { result } = renderHook(() => useAiChatWindow(opts));
-    act(() => result.current.registerTranscriptPort(PANE, makePort([])));
+    seedTranscript([]);
     act(() => result.current.popOut());
     await flush();
 
