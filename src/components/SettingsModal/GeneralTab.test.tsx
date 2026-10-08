@@ -38,6 +38,32 @@ describe('GeneralTab', () => {
     expect(screen.getByPlaceholderText('Select a folder or type path...')).toBeTruthy();
   });
 
+  it('saves the log folder when the field is left, not on every keystroke', () => {
+    useSettingsStore.getState().update('loggingEnabled', true);
+    render(<GeneralTab />);
+    const input = screen.getByPlaceholderText('Select a folder or type path...') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'D:/l' } });
+    fireEvent.change(input, { target: { value: 'D:/logs' } });
+    expect(input.value).toBe('D:/logs');
+    expect(useSettingsStore.getState().loggingPath).toBe('');
+    fireEvent.blur(input);
+    expect(useSettingsStore.getState().loggingPath).toBe('D:/logs');
+  });
+
+  it('saves the log folder on Enter, and on closing while still typing', () => {
+    useSettingsStore.getState().update('loggingEnabled', true);
+    const first = render(<GeneralTab />);
+    let input = screen.getByPlaceholderText('Select a folder or type path...') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'D:/a' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(useSettingsStore.getState().loggingPath).toBe('D:/a');
+
+    input = screen.getByPlaceholderText('Select a folder or type path...') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'D:/b' } });
+    first.unmount();
+    expect(useSettingsStore.getState().loggingPath).toBe('D:/b');
+  });
+
   it('edits scrollback value', () => {
     render(<GeneralTab />);
     const input = screen.getByText('Scrollback Buffer')

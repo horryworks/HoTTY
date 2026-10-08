@@ -141,6 +141,8 @@ export const aiChat = {
     // Bloque de ejecución en el terminal
     runInTerminal: 'Ejecutar en el terminal',
     autoExecuted: 'Ejecutado automáticamente',
+    executed: 'Ejecutado',
+    runAgain: 'Ejecutar de nuevo',
     dontExecute: 'No ejecutar',
     declined: 'Rechazado',
     target: 'Destino: {{title}}',

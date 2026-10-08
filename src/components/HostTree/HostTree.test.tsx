@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, createEvent, within } from '@testing-library/react';
 import { HostTree } from './HostTree';
+import { Dialog } from '../Dialog/Dialog';
 import type { HostTreeNode } from '../../types/appTypes';
 
 // Mock tauriService
@@ -137,6 +138,25 @@ describe('HostTree', () => {
     expect(screen.getByText('Add Folder')).toBeTruthy();
     expect(screen.getByText('Add Host')).toBeTruthy();
     expect(screen.getByText('Delete')).toBeTruthy();
+  });
+
+  it('Escape closes the context menu, not the dialog the tree sits in', () => {
+    const onClose = vi.fn();
+    render(
+      <Dialog open onClose={onClose} title="New Session">
+        <HostTree {...defaultProps} />
+      </Dialog>,
+    );
+    fireEvent.contextMenu(screen.getByText('Production'));
+    expect(screen.getByText('Add Folder')).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByText('Rename (F2)')).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+
+    // With the menu gone, the next Escape is the dialog's again.
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('shows rename option in context menu', () => {

@@ -22,6 +22,11 @@ export interface ChatMessage {
     content: string;
     /** Image attachments on a user turn (input-only; assistant turns never have them). */
     images?: ChatImage[];
+    /** On a model turn: the terminal its untargeted commands (no `target=`) run
+     *  on, fixed when the answer arrived. Without it the target was worked out
+     *  afresh on every render, so a command written for one terminal moved to
+     *  another once the first closed or another took the focus. */
+    execTarget?: { sessionId: string; bindingKey?: string };
 }
 
 /** Running token/cost totals for one tab (cost is null until a priced model reports usage). */
@@ -36,6 +41,24 @@ export type TranscriptEntries = [tabId: string, messages: ChatMessage[]][];
 export type TokenEntries = [tabId: string, tokens: TabTokens][];
 /** Commands that already ran or were declined, per tab, in wire form. */
 export type OutcomeEntries = [tabId: string, blocks: [blockKey: string, block: AutoExecBlock][]][];
+/** The Network Expert's prep record, per tab, in wire form (see {@link TabPrep}). */
+export type PrepEntries = [tabId: string, devices: [sessionId: string, deviceId: string][], selfOpened: string[]][];
+
+/**
+ * Which watched terminals a conversation's Network Expert has already prepared
+ * (device identified, paging off), so it never asks for that again.
+ *
+ * `devices` maps a session id to the device it was prepared as. `selfOpened`
+ * lists the sessions the conversation's AI opened itself: those are recorded
+ * so they are not prepared, but no prep message ever went out for them, so
+ * they do not make a conversation count as one the kickoff has run in.
+ */
+export interface TabPrep {
+    devices: ReadonlyMap<string, string>;
+    selfOpened: ReadonlySet<string>;
+}
+
+export const EMPTY_PREP: TabPrep = { devices: new Map(), selfOpened: new Set() };
 
 export interface PaneTranscripts {
     /** Finished turns, per tab. */
@@ -48,6 +71,9 @@ export interface PaneTranscripts {
     /** Commands that already ran or were declined (see `terminalOutcomes`). Kept
      *  here so a re-created pane does not offer Run again on a command that ran. */
     outcomesByTab: AutoExecState;
+    /** The Network Expert's prep record. Kept here, not in the pane, because a
+     *  re-created pane that forgot it prepared a terminal would prepare it again. */
+    prepByTab: ReadonlyMap<string, TabPrep>;
 }
 
 export const EMPTY_PANE: PaneTranscripts = {
@@ -56,6 +82,7 @@ export const EMPTY_PANE: PaneTranscripts = {
     streamingTabIds: new Set(),
     tokensByTab: new Map(),
     outcomesByTab: new Map(),
+    prepByTab: new Map(),
 };
 
 interface AiTranscriptState {
@@ -64,9 +91,9 @@ interface AiTranscriptState {
      *  current value, or {@link EMPTY_PANE} for a pane not seen before. */
     updatePane: (paneId: string, updater: (pane: PaneTranscripts) => PaneTranscripts) => void;
     /** Install transcripts that arrived from another window, wholesale. */
-    importPane: (paneId: string, messages: TranscriptEntries, tokens: TokenEntries, outcomes?: OutcomeEntries) => void;
-    /** Snapshot a pane's finished turns, token totals and command outcomes for a handover. */
-    exportPane: (paneId: string) => { messages: TranscriptEntries; tokens: TokenEntries; outcomes: OutcomeEntries };
+    importPane: (paneId: string, messages: TranscriptEntries, tokens: TokenEntries, outcomes?: OutcomeEntries, prep?: PrepEntries) => void;
+    /** Snapshot a pane's finished turns, token totals, command outcomes and prep record for a handover. */
+    exportPane: (paneId: string) => { messages: TranscriptEntries; tokens: TokenEntries; outcomes: OutcomeEntries; prep: PrepEntries };
     /** Drop a pane (closed, or handed over to another window). */
     removePane: (paneId: string) => void;
 }
@@ -84,7 +111,7 @@ export const useAiTranscriptStore = create<AiTranscriptState>((set, get) => ({
             return { panes };
         }),
 
-    importPane: (paneId, messages, tokens, outcomes = []) =>
+    importPane: (paneId, messages, tokens, outcomes = [], prep = []) =>
         set((s) => {
             const panes = new Map(s.panes);
             panes.set(paneId, {
@@ -92,6 +119,7 @@ export const useAiTranscriptStore = create<AiTranscriptState>((set, get) => ({
                 messagesByTab: new Map(messages),
                 tokensByTab: new Map(tokens),
                 outcomesByTab: new Map(outcomes.map(([tabId, blocks]) => [tabId, new Map(blocks)])),
+                prepByTab: new Map(prep.map(([tabId, devices, selfOpened]) => [tabId, { devices: new Map(devices), selfOpened: new Set(selfOpened) }])),
             });
             return { panes };
         }),
@@ -102,6 +130,7 @@ export const useAiTranscriptStore = create<AiTranscriptState>((set, get) => ({
             messages: Array.from(pane.messagesByTab.entries()),
             tokens: Array.from(pane.tokensByTab.entries()),
             outcomes: Array.from(pane.outcomesByTab, ([tabId, blocks]) => [tabId, Array.from(blocks.entries())]),
+            prep: Array.from(pane.prepByTab, ([tabId, p]) => [tabId, Array.from(p.devices.entries()), Array.from(p.selfOpened)]),
         };
     },
 
@@ -117,4 +146,26 @@ export const useAiTranscriptStore = create<AiTranscriptState>((set, get) => ({
 /** The transcripts of one pane right now (a plain read, for event handlers and timers). */
 export function paneTranscripts(paneId: string): PaneTranscripts {
     return useAiTranscriptStore.getState().panes.get(paneId) ?? EMPTY_PANE;
+}
+
+/** One tab's prep record right now. */
+export function tabPrep(paneId: string, tabId: string): TabPrep {
+    return paneTranscripts(paneId).prepByTab.get(tabId) ?? EMPTY_PREP;
+}
+
+/** Replace one tab's prep record. */
+export function setTabPrep(paneId: string, tabId: string, prep: TabPrep): void {
+    useAiTranscriptStore.getState().updatePane(paneId, (p) => {
+        const prepByTab = new Map(p.prepByTab);
+        prepByTab.set(tabId, prep);
+        return { ...p, prepByTab };
+    });
+}
+
+/** Forget the prep record of the tabs `keep` rejects (all of them when omitted). */
+export function forgetPrep(paneId: string, keep: (tabId: string) => boolean = () => false): void {
+    useAiTranscriptStore.getState().updatePane(paneId, (p) => {
+        if (![...p.prepByTab.keys()].some((id) => !keep(id))) return p;
+        return { ...p, prepByTab: new Map([...p.prepByTab].filter(([id]) => keep(id))) };
+    });
 }

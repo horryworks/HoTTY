@@ -7,6 +7,7 @@ import { computeDropPosition, type DropPosition } from '../../utils/treeDropPosi
 import { flattenHosts, getJumpboxReferences } from '../../hooks/useHostManager';
 import { Dialog } from '../Dialog/Dialog';
 import { useModalState } from '../../hooks/useModalState';
+import { useModalEscape } from '../../hooks/useModalEscape';
 import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { MoveByPrefixModal } from '../MoveByPrefixModal/MoveByPrefixModal';
 import { isNetboxNamed } from '../../utils/netboxSync';
@@ -342,6 +343,11 @@ export const HostTree: React.FC<HostTreeProps> = ({
         document.addEventListener('click', handler);
         return () => document.removeEventListener('click', handler);
     }, []);
+
+    // Escape closes the open menu, not the dialog the tree sits in. The menu
+    // registers on the Escape stack when it opens, after that dialog, so it is
+    // the top entry and the dialog never sees the key.
+    useModalEscape(contextMenu ? () => setContextMenu(null) : null);
 
     useEffect(() => {
         if (editModalOpen) {

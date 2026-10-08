@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { tauriService } from '../../services/tauriService';
@@ -10,6 +11,27 @@ export function GeneralTab() {
   const settings = useSettingsStore();
   const update = settings.update;
   const { t } = useTranslation();
+
+  // The log folder path is saved when the field is left, not per keystroke.
+  // Every save asks the user to approve the folder, so saving while typing
+  // asked about the drive, then each folder on the way down, one dialog each,
+  // and an OK on any of them approved a far wider folder than the one meant.
+  const [pathDraft, setPathDraft] = useState<string | null>(null);
+  const pathDraftRef = useRef(pathDraft);
+  useEffect(() => { pathDraftRef.current = pathDraft; });
+  const savePathDraft = () => {
+    const draft = pathDraftRef.current;
+    pathDraftRef.current = null;
+    if (draft !== null && draft !== useSettingsStore.getState().loggingPath) {
+      useSettingsStore.getState().update('loggingPath', draft);
+    }
+  };
+  const commitPath = () => {
+    savePathDraft();
+    setPathDraft(null);
+  };
+  // Closing Settings while still in the field saves what was typed, as leaving it would.
+  useEffect(() => savePathDraft, []);
 
   return (
     <>
@@ -54,15 +76,21 @@ export function GeneralTab() {
             <div className="settings-logging-path-row">
               <input
                 type="text"
-                value={settings.loggingPath}
-                onChange={(e) => update('loggingPath', e.target.value)}
+                value={pathDraft ?? settings.loggingPath}
+                onChange={(e) => setPathDraft(e.target.value)}
+                onBlur={commitPath}
+                onKeyDown={(e) => { if (e.key === 'Enter') commitPath(); }}
                 placeholder={t('settings.general.logFolderPathPlaceholder')}
               />
               <button
                 type="button"
                 onClick={async () => {
                   const path = await tauriService.selectFolder();
-                  if (path) update('loggingPath', path);
+                  if (path) {
+                    pathDraftRef.current = null;
+                    setPathDraft(null);
+                    update('loggingPath', path);
+                  }
                 }}
               >
                 {t('common.browse')}

@@ -278,7 +278,7 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
         // pane is put into the layout below, so its first render already shows
         // the conversation (an empty first render is what made the Network
         // Expert identify the device all over again).
-        useAiTranscriptStore.getState().importPane(payload.paneId, payload.messages, payload.tokens, payload.outcomes);
+        useAiTranscriptStore.getState().importPane(payload.paneId, payload.messages, payload.tokens, payload.outcomes, payload.prep);
 
         // Re-create the AI's worker terminals in this window's registry. These
         // carry no secrets (the store never held any), only what the tray chip
@@ -338,6 +338,7 @@ export function useAiChatWindow(options: UseAiChatWindowOptions): UseAiChatWindo
         messagesByTab: new Map(transcripts.messages),
         tokensByTab: new Map(transcripts.tokens),
         outcomes: transcripts.outcomes,
+        prep: transcripts.prep,
         workers: workersForPane(useAiWorkerSessionStore.getState().workers, paneId),
       });
       const raw = JSON.stringify(payload);

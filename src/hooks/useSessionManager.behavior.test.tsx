@@ -926,3 +926,33 @@ describe('useSessionManager — terminal hot path', () => {
     expect(sendInputMock).toHaveBeenLastCalledWith('worker-2', 'a\x08b');
   });
 });
+
+describe('useSessionManager — log folder changes', () => {
+  afterEach(() => {
+    confirmLogDirMock.mockReset();
+    confirmLogDirMock.mockResolvedValue(true);
+    updateSessionLoggingMock.mockClear();
+    useSettingsStore.getState().reset();
+  });
+
+  it('applies only the newest change when an older approval answers last', async () => {
+    useSettingsStore.getState().update('loggingEnabled', true);
+    useSettingsStore.getState().update('loggingPath', 'C:/logs');
+    const answers = new Map<string, (v: boolean) => void>();
+    confirmLogDirMock.mockImplementation(
+      (path: string) => new Promise<boolean>((resolve) => { answers.set(path, resolve); }),
+    );
+    renderHook(() => useSessionManager());
+    await act(async () => { await flushMicrotasks(); });
+    updateSessionLoggingMock.mockClear();
+
+    act(() => { useSettingsStore.getState().update('loggingPath', 'C:/'); });
+    act(() => { useSettingsStore.getState().update('loggingPath', 'C:/logs/new'); });
+    // The newest folder is approved first; the stale one is cancelled afterwards.
+    await act(async () => { answers.get('C:/logs/new')?.(true); await flushMicrotasks(); });
+    await act(async () => { answers.get('C:/')?.(false); await flushMicrotasks(); });
+
+    expect(updateSessionLoggingMock).toHaveBeenCalledTimes(1);
+    expect(updateSessionLoggingMock).toHaveBeenLastCalledWith(true, 'C:/logs/new');
+  });
+});

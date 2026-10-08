@@ -17,7 +17,7 @@ import {
     type AutoExecState,
     type AutoExecAction,
 } from '../../utils/autoExecReducer';
-import { useAiTranscriptStore, paneTranscripts } from '../../stores/aiTranscriptStore';
+import { useAiTranscriptStore, paneTranscripts, tabPrep, setTabPrep, forgetPrep } from '../../stores/aiTranscriptStore';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { aiProviderLabelKey } from '../../constants/aiProviders';
 import { formatAICost } from '../../constants/aiPricing';
@@ -68,6 +68,14 @@ function execTargetOf(tab: ChatTab | undefined): string | undefined {
     const focused = tab?.lastFocusedWatchId;
     if (focused && list.some((w) => w.sessionId === focused)) return focused;
     return list[0]?.sessionId;
+}
+
+/** The pin an answer's untargeted commands get when it arrives (see `ChatMessage.execTarget`). */
+function execTargetPinOf(tab: ChatTab | undefined): ChatMessage['execTarget'] {
+    const sid = execTargetOf(tab);
+    if (!sid) return undefined;
+    const bindingKey = tab?.linkedSessions?.find((w) => w.sessionId === sid)?.bindingKey;
+    return bindingKey ? { sessionId: sid, bindingKey } : { sessionId: sid };
 }
 import type { SessionRecord } from '../../hooks/useSessionManager';
 import type { PersonaDefinition, AIModelInfo, LinkableSession, SessionInfo, ChatImage, HostTreeNode, SessionDialogPrefill, AiConnectPolicy, AiLocalShellType } from '../../types/appTypes';
@@ -390,6 +398,8 @@ const MessageContent: React.FC<{
     onOpenWorkerAsTab?: (alias: string) => void;
     isWorkerAlias?: (alias: string) => boolean;
     autoExecutedCommands?: Set<string>;
+    /** Blocks the user already ran with Run (badge + "Run again"). */
+    ranManuallyCommands?: Set<string>;
     declinedCommands?: Set<string>;
     /** slot → auto-run deadline (epoch ms) for blocks in the pre-run countdown. */
     scheduledCommands?: Map<string, number>;
@@ -405,7 +415,7 @@ const MessageContent: React.FC<{
     content, onRun, onDecline, onHoverTarget, targetTitle, targetId, targetLive = true, resolveBlockTarget,
     connectBlocks, connectOutcomes, connectPolicyOff, localShellType = 'powershell',
     onOpenConnect, onOpenConnectInDialog, onDeclineConnect, onCancelConnectSchedule, onOpenWorkerAsTab, isWorkerAlias,
-    autoExecutedCommands, declinedCommands, scheduledCommands, onCancelScheduled, verdictByCommand, classifyingCommands, limitReached, sleepDelay, onCancelSleep,
+    autoExecutedCommands, ranManuallyCommands, declinedCommands, scheduledCommands, onCancelScheduled, verdictByCommand, classifyingCommands, limitReached, sleepDelay, onCancelSleep,
 }) => {
     const { t } = useTranslation();
     const parts = segmentMessageContent(content);
@@ -474,6 +484,7 @@ const MessageContent: React.FC<{
                     occurrences.set(command, occurrence + 1);
                     const slot = slotOf(occurrence, command);
                     const wasAutoExecuted = autoExecutedCommands?.has(slot);
+                    const ranManually = ranManuallyCommands?.has(slot);
                     const wasDeclined = declinedCommands?.has(slot);
                     const scheduledAt = scheduledCommands?.get(slot);
                     const isScheduled = scheduledAt !== undefined;
@@ -517,6 +528,14 @@ const MessageContent: React.FC<{
                                     </button>
                                 ) : (
                                     <>
+                                        {ranManually && (
+                                            <span className="ai-execute-auto-badge">
+                                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                                                </svg>
+                                                {t('aiChat.message.executed')}
+                                            </span>
+                                        )}
                                         <button
                                             className="ai-run-btn"
                                             onClick={() => onRun?.(command, part.target, occurrence)}
@@ -526,9 +545,9 @@ const MessageContent: React.FC<{
                                             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                                                 <path d="M8 5v14l11-7z" />
                                             </svg>
-                                            {t('aiChat.message.runInTerminal')}
+                                            {t(ranManually ? 'aiChat.message.runAgain' : 'aiChat.message.runInTerminal')}
                                         </button>
-                                        {onDecline && (
+                                        {onDecline && !ranManually && (
                                             <button
                                                 className="ai-decline-btn"
                                                 onClick={() => onDecline(command, occurrence)}
@@ -1024,7 +1043,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
      *  falls back to the tab's exec target (last-focused, else first watched). The
      *  auto-exec continuation can complete on a background tab, so it resolves
      *  per-tab rather than from the active tab. */
-    const resolveTabTarget = useCallback((tabId: string, preferredAlias?: string): {
+    const resolveTabTarget = useCallback((tabId: string, preferredAlias?: string, pinned?: ChatMessage['execTarget']): {
         sid?: string; live: boolean; status?: string; headless?: boolean;
         /** Set when `target=` named an alias this tab does not watch (the command must NOT run). */
         unknownAlias?: string;
@@ -1040,6 +1059,16 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // meant for a closed neighbor would otherwise land on the last-focused device.
             if (!sid) return { sid: undefined, live: false, status: undefined, unknownAlias: preferredAlias };
         }
+        if (!sid && pinned) {
+            // The terminal the answer was written for, or after a reconnect the
+            // watched session to the same device. Never another terminal: a
+            // command meant for a closed shell must not land on the switch.
+            const watched = tab?.linkedSessions ?? [];
+            sid = watched.some((w) => w.sessionId === pinned.sessionId)
+                ? pinned.sessionId
+                : (pinned.bindingKey && watched.find((w) => w.bindingKey === pinned.bindingKey)?.sessionId)
+                    || pinned.sessionId;
+        }
         if (!sid) sid = execTargetOf(tab);
         if (!sid) return { sid: undefined, live: false, status: undefined };
         const view = lookupSession(sid, src);
@@ -1048,8 +1077,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     /** Resolve an execute block's `target=` alias to a display target for the label
      *  under it (active tab). Passed to MessageContent so each block shows the
      *  terminal it will actually run on. */
-    const resolveBlockTarget = useCallback((alias?: string) => {
-        const { sid, live, headless } = resolveTabTarget(activeTabIdRef.current ?? '', alias);
+    const resolveBlockTarget = useCallback((alias?: string, pinned?: ChatMessage['execTarget']) => {
+        const { sid, live, headless } = resolveTabTarget(activeTabIdRef.current ?? '', alias, pinned);
         let title: string | undefined;
         if (sid) {
             const src = lookupSourcesNow();
@@ -1496,8 +1525,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // once PER watched device — WITHOUT the user typing a first message. Requires
     // auth + a model so the auto-send loop can dispatch it.
     //
-    // kickedForDeviceRef tracks, per tab, a Map of SESSION id → the DEVICE it was
-    // prepped as. The device key is the config-derived binding key (host/port/user,
+    // The prep record (aiTranscriptStore `prepByTab`) tracks, per tab, a Map of
+    // SESSION id → the DEVICE it was prepped as. The device key is the config-derived binding key (host/port/user,
     // serial port, …) when known, else the session id — stable across a reconnect
     // (which mints a new session id for the SAME device), so a reconnect (new id,
     // known device) is told apart from a genuinely new device.
@@ -1521,8 +1550,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     //     second session to the same device) → lightweight paging re-disable; an
     //     empty conversation just updates tracking.
     // Entries are kept until the tab closes or is cleared (never pruned on
-    // unlink), so re-watching a terminal does not prep it a second time.
-    const kickedForDeviceRef = useRef<Map<string, Map<string, string>>>(new Map());
+    // unlink), so re-watching a terminal does not prep it a second time. The
+    // record lives in the transcript store, not in this component, and moves
+    // with the conversation to another window: a re-created pane that started
+    // from an empty record took an AI-opened terminal's entry for proof that the
+    // kickoff had run here, and prepared the user's terminal all over again.
     // Now that every per-tab tracking ref exists, wire the forward handle used by
     // the provider-switch and logout effects (declared above these refs).
     resetAllTabTrackingRef.current = () => {
@@ -1530,7 +1562,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         applyAutoExec({ type: 'resetAll' });
         clearAllConnectTimers();
         applyConnect({ type: 'resetAll' });
-        kickedForDeviceRef.current.clear();
+        forgetPrep(paneId);
     };
     /** Drop a tab's queued messages and stop the command runs it has in flight. */
     const discardPendingWork = (tabId: string) => {
@@ -1572,8 +1604,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         const { aliases: aliasEntries } = buildWatchedViews(watched, renderSources);
         const multi = watched.length >= 2;
 
-        let kicked = kickedForDeviceRef.current.get(activeTabId);
-        if (!kicked) { kicked = new Map(); kickedForDeviceRef.current.set(activeTabId, kicked); }
+        const stored = tabPrep(paneId, activeTabId);
+        const kicked = new Map(stored.devices);
+        const selfOpened = new Set(stored.selfOpened);
+        const mark = (sessionId: string, deviceId: string, opened = false) => {
+            kicked.set(sessionId, deviceId);
+            if (opened) selfOpened.add(sessionId);
+            setTabPrep(paneId, activeTabId, { devices: new Map(kicked), selfOpened: new Set(selfOpened) });
+        };
 
         for (let i = 0; i < watched.length; i++) {
             const w = watched[i];
@@ -1586,7 +1624,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // screen, so a kickoff on top made it identify the device twice.
             const worker = useAiWorkerSessionStore.getState().workers[w.sessionId];
             if (worker && worker.paneId === paneId && worker.tabId === activeTabId) {
-                kicked.set(w.sessionId, deviceId);
+                mark(w.sessionId, deviceId, true);
                 continue;
             }
             const alias = aliasEntries[i]?.alias;
@@ -1595,8 +1633,11 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             if (!deviceKnown) {
                 // Never kicked this device. Don't hijack a chat the user started
                 // manually (messages exist but nothing was ever auto-kicked here).
-                if (messages.length > 0 && kicked.size === 0) return;
-                kicked.set(w.sessionId, deviceId);
+                // A terminal the AI opened itself is recorded without a prep
+                // message, so it does not count as one.
+                const prepSent = [...kicked.keys()].some((id) => !selfOpened.has(id));
+                if (messages.length > 0 && !prepSent) return;
+                mark(w.sessionId, deviceId);
                 resetAutoExecCountForTab(activeTabId);
                 const kickoff = withPromptHint(NETWORK_EXPERT_KICKOFF, promptLineOf(w.sessionId));
                 onEnqueuePending?.(activeTabId, multi && alias ? withTargetDirective(kickoff, alias) : kickoff);
@@ -1606,7 +1647,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // session to the same device. Remember it; only re-prep paging when
             // there is a conversation to preserve.
             if (messages.length === 0) {
-                kicked.set(w.sessionId, deviceId);
+                mark(w.sessionId, deviceId);
                 return;
             }
             // The re-prep says "the platform you already identified". Until the
@@ -1627,7 +1668,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             const inOpening = !messages.some((m) => m.role === 'user' && !isMachineTurn(m.content));
             const last = messages[messages.length - 1];
             if (inOpening && (last?.role !== 'model' || extractExecuteBlocks(last.content).length > 0)) return;
-            kicked.set(w.sessionId, deviceId);
+            mark(w.sessionId, deviceId);
             // A second LIVE session to the device is an addition, not a reconnect.
             const twinLive = watched.some((o) => o.sessionId !== w.sessionId
                 && (o.bindingKey ?? o.sessionId) === deviceId
@@ -1685,7 +1726,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             const tabId = key.slice(0, key.indexOf(' '));
             if (!liveIds.has(tabId)) { clearTimeout(timer); connectTimersRef.current.delete(key); }
         }
-        pruneMap(kickedForDeviceRef.current as Map<string, unknown>);
+        forgetPrep(paneId, (id) => liveIds.has(id));
         // Per-tab refs the send loop / Stop restore keep for each conversation.
         pruneMap(lastSentTextRef.current as Map<string, unknown>);
         pruneMap(lastSentWasHumanRef.current as Map<string, unknown>);
@@ -1697,7 +1738,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             return changed ? next : prev;
         });
         pruneStreams(liveIds);
-    }, [tabIdsKey, applyAutoExec, applyConnect, pruneStreams]);
+    }, [tabIdsKey, paneId, applyAutoExec, applyConnect, pruneStreams]);
 
     // A connect card whose outcome envelope has reached the transcript is done,
     // whatever transient state its reducer entry is still in (see
@@ -1874,7 +1915,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // Assigned later; the effect calls it via ref (forward reference). Runs a
     // command on a SPECIFIC tab's linked session (auto-exec can complete on a
     // background tab), not the active tab.
-    const handleRunCommandForTabRef = useRef<(tabId: string, cmd: string, target?: string) => void>(() => {});
+    const handleRunCommandForTabRef = useRef<(tabId: string, cmd: string, target?: string, pinned?: ChatMessage['execTarget']) => void>(() => {});
     // Auto-execute, fired by useChatStream's onStreamComplete when a tab's stream
     // ends (replacing the old streamingTabIds Set-diff). Runs post-commit, so the
     // completed model message is already in `tabMessages`. Classifies that message's
@@ -1885,6 +1926,22 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // closure (current settings). No effect-cleanup aborter is needed: the reserve
     // guard blocks a duplicate, and every run precondition is re-checked post-await.
     const handleStreamComplete = (tabId: string, tabMessages: ChatMessage[], reason: StreamEndReason) => {
+        // Fix where this answer's untargeted commands run, before anything can
+        // move the focus. Whatever the end: a stopped answer keeps its Run buttons.
+        const finished = tabMessages[tabMessages.length - 1];
+        const pin = finished?.role === 'model' && !finished.execTarget
+            ? execTargetPinOf(chatStateRef.current?.tabs.find((tb) => tb.id === tabId))
+            : finished?.execTarget;
+        if (pin && finished?.role === 'model' && !finished.execTarget) {
+            const at = tabMessages.length - 1;
+            useAiTranscriptStore.getState().updatePane(paneId, (p) => {
+                const list = p.messagesByTab.get(tabId);
+                if (!list || list[at] !== finished) return p;
+                const messagesByTab = new Map(p.messagesByTab);
+                messagesByTab.set(tabId, list.map((m, i) => (i === at ? { ...m, execTarget: pin } : m)));
+                return { ...p, messagesByTab };
+            });
+        }
         // Only a FINISHED answer is acted on. A stream the user stopped, that
         // timed out, or that failed can still end in a closed ```execute (or
         // ```connect) fence — the model may well have been mid-way through a
@@ -1944,7 +2001,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // would be a silent one.
             if (commandExecutionModeRef.current !== 'auto-execute-safe') return;
             if (autoExecPausedRef.current) return;
-            const tgt = resolveTabTarget(tabId, target); // this tab's resolved target, not active
+            const tgt = resolveTabTarget(tabId, target, pin); // this tab's resolved target, not active
             if (tgt.unknownAlias) {
                 // target= names a terminal this tab does not watch: tell the model, never run elsewhere.
                 onEnqueuePending?.(tabId, unknownTargetNote(command, tgt.unknownAlias));
@@ -1962,7 +2019,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             if (countdownSecs <= 0) {
                 applyAutoExec({ type: 'execute', tabId, blockKey });
                 setAutoExecCountForTab(tabId, prev => prev + 1);
-                handleRunCommandForTabRef.current(tabId, command, target);
+                handleRunCommandForTabRef.current(tabId, command, target, pin);
                 return;
             }
             // The countdown's Cancel button only exists on the active tab, and a
@@ -1981,7 +2038,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 if (getBlock(autoExecStateRef.current, tabId, blockKey)?.status !== 'scheduled') return;
                 if (tabId !== activeTabIdRef.current
                     || commandExecutionModeRef.current !== 'auto-execute-safe'
-                    || autoExecPausedRef.current || !resolveTabTarget(tabId, target).live
+                    || autoExecPausedRef.current || !resolveTabTarget(tabId, target, pin).live
                     || (maxConsecutiveAutoExecutionsRef.current > 0
                         && getAutoExecCount(tabId) >= maxConsecutiveAutoExecutionsRef.current)) {
                     applyAutoExec({ type: 'cancelSchedule', tabId, blockKey });
@@ -1989,7 +2046,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                 }
                 applyAutoExec({ type: 'execute', tabId, blockKey });
                 setAutoExecCountForTab(tabId, prev => prev + 1);
-                handleRunCommandForTabRef.current(tabId, command, target);
+                handleRunCommandForTabRef.current(tabId, command, target, pin);
             }, countdownSecs * 1000);
             countdownTimersRef.current.set(key, timer);
         })();
@@ -2146,8 +2203,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // Run a command on a SPECIFIC tab's linked session. Used both by the manual
     // Run button (for the active tab) and by auto-exec (which can complete on a
     // background tab whose linked session differs from the active one).
-    const handleRunCommandForTab = (tabId: string, command: string, target?: string) => {
-        const { sid, live, status, unknownAlias } = resolveTabTarget(tabId, target);
+    const handleRunCommandForTab = (tabId: string, command: string, target?: string, pinned?: ChatMessage['execTarget']) => {
+        const { sid, live, status, unknownAlias } = resolveTabTarget(tabId, target, pinned);
         const cleanCmd = command.trim();
         if (unknownAlias) {
             // target= names a terminal this tab does not watch. Never fall back to another
@@ -2187,8 +2244,8 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         if (!activeTabId) return;
         resetAutoExecCountForTab(activeTabId);
         clearCountdownTimer(activeTabId, blockKeyOf(messageIndex, occurrence, command));
-        applyAutoExec({ type: 'execute', tabId: activeTabId, blockKey: blockKeyOf(messageIndex, occurrence, command), manual: true });
-        handleRunCommandForTab(activeTabId, command, target);
+        applyAutoExec({ type: 'execute', tabId: activeTabId, blockKey: blockKeyOf(messageIndex, occurrence, command), manual: true, command });
+        handleRunCommandForTab(activeTabId, command, target, messages[messageIndex]?.execTarget);
     };
 
     // "Don't Execute": the user declines a suggested command. The app deterministically
@@ -2389,7 +2446,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             // The backend history goes too, so the model forgets which device it
             // is talking to: let the Network Expert start-of-session protocol run
             // again on the next turn.
-            kickedForDeviceRef.current.delete(activeTabId);
+            forgetPrep(paneId, (id) => id !== activeTabId);
             // Queued messages, the command poll and any sleep delay belong to the
             // conversation being cleared: a result landing afterwards would be the
             // first turn of the new one, about a command the user never saw.
@@ -2835,6 +2892,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             let verdictByCommand: Map<string, AutoExecDecision> | undefined;
                             let classifyingCommands: Set<string> | undefined;
                             let autoExecutedCommands: Set<string> | undefined;
+                            let ranManuallyCommands: Set<string> | undefined;
                             let declinedCommands: Set<string> | undefined;
                             let scheduledCommands: Map<string, number> | undefined;
                             // AI connect requests (ADR-AI-007): this message's transient card
@@ -2861,6 +2919,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                 const dec = collectMessageDecorations(autoExecState, activeTabId, idx, commands);
                                 // Declined / auto-executed badges apply in any mode.
                                 autoExecutedCommands = dec.autoExecuted;
+                                ranManuallyCommands = dec.ranManually;
                                 declinedCommands = dec.declined;
                                 if (commandExecutionMode === 'auto-execute-safe') {
                                     // Verdict + "checking safety" markers + the pre-run countdown
@@ -2897,8 +2956,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                             targetTitle={lastTargetSessionTitle}
                                             targetId={lastTargetSessionId}
                                             targetLive={linkedLive}
-                                            resolveBlockTarget={resolveBlockTarget}
+                                            resolveBlockTarget={(alias) => resolveBlockTarget(alias, msg.execTarget)}
                                             autoExecutedCommands={autoExecutedCommands}
+                                            ranManuallyCommands={ranManuallyCommands}
                                             declinedCommands={declinedCommands}
                                             scheduledCommands={scheduledCommands}
                                             onCancelScheduled={(cmd, occurrence) => handleCancelScheduled(idx, cmd, occurrence)}

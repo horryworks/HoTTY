@@ -216,6 +216,28 @@ describe('parseHandoverPayload', () => {
     expect(parseHandoverPayload(raw, 'win-ai-1')!.outcomes).toEqual([]);
   });
 
+  it('carries the prep record for live tabs, and drops malformed rows', () => {
+    const withPrep = buildHandoverPayload({
+      to: 'win-ai-1',
+      from: 'main',
+      paneId: 'ai-abc',
+      state: state([tab('t1')]),
+      messagesByTab: new Map(),
+      tokensByTab: new Map(),
+      prep: [
+        ['t1', [['s-1', 'git-bash'], ['h-1', 'ssh:@192.0.2.1:22']], ['h-1']],
+        ['gone', [['s-2', 'git-bash']], []],
+      ],
+      workers: [],
+    });
+    const got = parseHandoverPayload(JSON.stringify(withPrep), 'win-ai-1');
+    expect(got!.prep).toEqual([['t1', [['s-1', 'git-bash'], ['h-1', 'ssh:@192.0.2.1:22']], ['h-1']]]);
+    // An older sender omits the field; a corrupt row is dropped, not trusted.
+    expect(parseHandoverPayload(raw, 'win-ai-1')!.prep).toEqual([]);
+    const corrupt = JSON.stringify({ ...withPrep, prep: [['t1', [['s-1']], []], ['t1', 'x', []]] });
+    expect(parseHandoverPayload(corrupt, 'win-ai-1')!.prep).toEqual([]);
+  });
+
   it('ignores a payload addressed to a different window', () => {
     // Handovers ride a broadcast, so "not for me" is the common case.
     expect(parseHandoverPayload(raw, 'main')).toBeNull();

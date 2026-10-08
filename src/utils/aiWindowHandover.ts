@@ -27,7 +27,7 @@ import type { AiWorkerSession } from '../stores/aiWorkerSessionStore';
 import type { AiChatState } from '../hooks/useAiChat';
 import type { SessionDialogPrefill } from '../types/appTypes';
 import type { ChatMessage, TabTokens } from '../hooks/useChatStream';
-import type { OutcomeEntries } from '../stores/aiTranscriptStore';
+import type { OutcomeEntries, PrepEntries } from '../stores/aiTranscriptStore';
 
 /** Channel carrying a conversation set from one window to another. */
 export const AI_HANDOVER_CHANNEL = 'hotty-ai-handover';
@@ -74,6 +74,9 @@ export interface AiHandoverPayload {
   /** Commands that already ran or were declined, so the receiver does not offer
    *  Run on them again. Optional on the wire: an older sender omits it. */
   outcomes: OutcomeEntries;
+  /** Which watched terminals the Network Expert already prepared, so the
+   *  receiver does not prepare them again. Optional on the wire, like `outcomes`. */
+  prep: PrepEntries;
   /** Worker sessions the conversation opened (ADR-AI-007). Never carries secrets. */
   workers: AiWorkerSession[];
   /** How many older turns had their image attachments trimmed. */
@@ -128,6 +131,7 @@ export function buildHandoverPayload(input: {
   messagesByTab: Map<string, ChatMessage[]>;
   tokensByTab: Map<string, TabTokens>;
   outcomes?: OutcomeEntries;
+  prep?: PrepEntries;
   workers: AiWorkerSession[];
 }): AiHandoverPayload {
   const tabIds = new Set(input.state.tabs.map((t) => t.id));
@@ -154,6 +158,7 @@ export function buildHandoverPayload(input: {
     messages,
     tokens,
     outcomes: (input.outcomes ?? []).filter(([tabId]) => tabIds.has(tabId)),
+    prep: (input.prep ?? []).filter(([tabId]) => tabIds.has(tabId)),
     // A worker that already ended is still in the sender's store for a short
     // grace period (so a poll can read why). The receiver has no such timer:
     // moved over, it would sit in the tray as a dead chip for good.
@@ -192,6 +197,7 @@ export function parseHandoverPayload(raw: string, selfLabel: string): AiHandover
     messages: entriesOf(p.messages),
     tokens: entriesOf(p.tokens),
     outcomes: entriesOf<OutcomeEntries[number][1]>(p.outcomes).filter(([, blocks]) => Array.isArray(blocks)),
+    prep: (Array.isArray(p.prep) ? (p.prep as unknown[]) : []).filter(isPrepEntry),
     workers: Array.isArray(p.workers) ? (p.workers as AiWorkerSession[]) : [],
     imagesDropped: typeof p.imagesDropped === 'number' ? p.imagesDropped : 0,
   };
@@ -392,4 +398,14 @@ function entriesOf<V>(value: unknown): [string, V][] {
   return value.filter(
     (e): e is [string, V] => Array.isArray(e) && e.length === 2 && typeof e[0] === 'string',
   );
+}
+
+/** A well-formed {@link PrepEntries} row: `[tabId, [[sessionId, deviceId]…], [sessionId…]]`. */
+function isPrepEntry(e: unknown): e is PrepEntries[number] {
+  if (!Array.isArray(e) || e.length !== 3 || typeof e[0] !== 'string') return false;
+  const [, devices, selfOpened] = e as unknown[];
+  return Array.isArray(devices)
+    && devices.every((d) => Array.isArray(d) && d.length === 2 && typeof d[0] === 'string' && typeof d[1] === 'string')
+    && Array.isArray(selfOpened)
+    && selfOpened.every((s) => typeof s === 'string');
 }

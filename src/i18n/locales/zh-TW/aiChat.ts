@@ -141,6 +141,8 @@ export const aiChat = {
     // 在終端機中執行的執行區塊
     runInTerminal: '在終端機中執行',
     autoExecuted: '已自動執行',
+    executed: '已執行',
+    runAgain: '再次執行',
     dontExecute: '不執行',
     declined: '已拒絕',
     target: '目標：{{title}}',

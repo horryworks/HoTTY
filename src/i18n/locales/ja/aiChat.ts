@@ -138,6 +138,8 @@ export const aiChat = {
     // 端末で実行するブロック
     runInTerminal: '端末で実行',
     autoExecuted: '自動実行済み',
+    executed: '実行済み',
+    runAgain: 'もう一度実行',
     dontExecute: '実行しない',
     declined: '実行しませんでした',
     target: 'ターゲット: {{title}}',

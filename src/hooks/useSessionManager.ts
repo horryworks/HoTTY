@@ -218,6 +218,11 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
   // on StrictMode's double effect-invocation. Without this guard the
   // confirm-log-dir dialog would pop up on every app launch.
   const prevLoggingRef = useRef<{ enabled: boolean; path: string } | null>(null);
+  // Bumped per change. The approval dialog can take any time to answer, so an
+  // older change's answer may land after a newer one's; only the newest may
+  // reach the backend, or a cancelled dialog for a superseded path switches
+  // logging off for the path the user actually ended up with.
+  const loggingChangeRef = useRef(0);
   useEffect(() => {
     const current = { enabled: loggingEnabled, path: loggingPath };
     const prev = prevLoggingRef.current;
@@ -228,6 +233,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
     ) {
       return;
     }
+    const change = ++loggingChangeRef.current;
     (async () => {
       // If logging is being enabled or pointed at a new path, ensure the
       // path is user-approved via a native dialog before propagating the
@@ -242,6 +248,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
           approved = false;
         }
       }
+      if (change !== loggingChangeRef.current) return;
       try {
         await tauriService.updateSessionLogging(
           approved,

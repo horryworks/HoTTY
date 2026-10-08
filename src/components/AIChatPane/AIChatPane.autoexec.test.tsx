@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 
 // Shared, mutable holders captured by the mocks below. `vi.hoisted` runs before
@@ -85,7 +85,8 @@ const { NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP } = await import('
 const { _clearVerdictCache } = await import('../../utils/aiCommandClassifier');
 const { tauriService } = await import('../../services/tauriService');
 const { useAiAuthStore } = await import('../../stores/aiAuthStore');
-const { useAiTranscriptStore } = await import('../../stores/aiTranscriptStore');
+const { useAiTranscriptStore, tabPrep } = await import('../../stores/aiTranscriptStore');
+const { useAiWorkerSessionStore } = await import('../../stores/aiWorkerSessionStore');
 
 // The auth and transcript stores are module-global; reset them between tests
 // so a prior test's state can't leak into the next one.
@@ -224,6 +225,72 @@ describe('AIChatPane auto-execute target= routing (multi-watch)', () => {
 
         await sendAndComplete('check', 'On it.\n\n```execute\nshow clock\n```');
         expect(h.onRunCommand).toHaveBeenLastCalledWith('sess-2', 'show clock', 't1');
+    });
+
+    // #30: an untargeted command belongs to the terminal that was the target when
+    // the answer arrived. Moving the focus or closing that terminal must not hand
+    // it to another one.
+    describe('an untargeted command keeps the terminal it was written for', () => {
+        const props = (focus: string, firstStatus: string, firstId = 'sess-1') => ({
+            onRunCommand: h.onRunCommand,
+            onUpdateTabById: h.onUpdateTabById,
+            sessions: new Map([
+                [firstId, { id: firstId, displayName: 'Git Bash', status: firstStatus }],
+                ['sess-2', { id: 'sess-2', displayName: 'Device B', status: 'connected' }],
+            ]),
+            chatState: {
+                ...baseProps.chatState,
+                tabs: [{
+                    id: 't1', title: 'Git Bash +1', ordinal: 1, lastFocusedWatchId: focus,
+                    linkedSessions: [{ sessionId: firstId, bindingKey: 'git-bash' }, { sessionId: 'sess-2' }],
+                }],
+            },
+        });
+        beforeEach(() => {
+            h.onEnqueuePending.mockClear();
+            h.settings.commandExecutionMode = 'ask-before-execute';
+        });
+        afterEach(() => { h.settings.commandExecutionMode = 'auto-execute-safe'; });
+
+        it('Run reports the closed terminal instead of running on the newly focused one', async () => {
+            const { rerender } = render(makePane(props('sess-1', 'connected')));
+            await authenticate();
+            await sendAndComplete('prep', 'Disabling the pager.\n\n```execute\nexport PAGER=cat\n```');
+
+            await act(async () => { rerender(makePane(props('sess-2', 'disconnected'))); });
+            expect(screen.getByText(/Git Bash/, { selector: '.ai-run-target-stale' })).toBeTruthy();
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /Run in Terminal/i }));
+            });
+            expect(h.onRunCommand).not.toHaveBeenCalled();
+            expect(h.onEnqueuePending).toHaveBeenCalledWith('t1', expect.stringContaining('not connected'));
+        });
+
+        it('follows a reconnect to the same device', async () => {
+            const { rerender } = render(makePane(props('sess-1', 'connected')));
+            await authenticate();
+            await sendAndComplete('prep', 'Disabling the pager.\n\n```execute\nexport PAGER=cat\n```');
+
+            // The shell came back under a new session id, and the focus is elsewhere.
+            await act(async () => { rerender(makePane(props('sess-2', 'connected', 'sess-9'))); });
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /Run in Terminal/i }));
+            });
+            expect(h.onRunCommand).toHaveBeenLastCalledWith('sess-9', 'export PAGER=cat', 't1');
+        });
+
+        it('a command run with Run says so and offers Run again', async () => {
+            render(makePane(props('sess-1', 'connected')));
+            await authenticate();
+            await sendAndComplete('prep', 'Disabling the pager.\n\n```execute\nexport PAGER=cat\n```');
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /Run in Terminal/i }));
+            });
+            expect(h.onRunCommand).toHaveBeenLastCalledWith('sess-1', 'export PAGER=cat', 't1');
+            expect(screen.getByText('Executed')).toBeTruthy();
+            expect(screen.getByRole('button', { name: /Run again/i })).toBeTruthy();
+            expect(screen.queryByRole('button', { name: /Don't Execute/i })).toBeNull();
+        });
     });
 });
 
@@ -511,6 +578,60 @@ describe('AIChatPane Network Expert auto-kickoff', () => {
         });
         expect(h.onEnqueuePending).not.toHaveBeenCalledWith('t1', NETWORK_EXPERT_KICKOFF);
         expect(screen.getByText('It is 3%.')).toBeTruthy();
+    });
+
+    // #27: a conversation moved back from the AI Chat window watches a terminal
+    // the user opened (already identified before the move) and a terminal the
+    // AI opened itself. Neither may be kicked again — not on arrival, and not
+    // when the user's terminal later exits.
+    for (const order of ['user-first', 'worker-first'] as const) {
+        it(`does NOT re-kick after a move back when a watched terminal exits (${order})`, async () => {
+            act(() => {
+                useAiAuthStore.setState({ isAuthenticated: true });
+                useAiWorkerSessionStore.getState().upsert({
+                    id: 'h-w1', key: 'ssh:192.0.2.1:22', displayName: 'Device W', protocol: 'ssh',
+                    host: '192.0.2.1', status: 'connected', paneId: 'ai-1', tabId: 't1',
+                    openedAt: 0, lastUsedAt: 0, manualLogin: false,
+                });
+            });
+            useAiTranscriptStore.getState().importPane('ai-1', [
+                ['t1', [{ role: 'user', content: 'show the CPU usage' }, { role: 'model', content: 'It is 3%.' }]],
+            ], []);
+            const user = { sessionId: 'sess-1', bindingKey: 'git-bash' };
+            const worker = { sessionId: 'h-w1', bindingKey: 'ssh:@192.0.2.1:22' };
+            const linked = order === 'user-first' ? [user, worker] : [worker, user];
+            const sessionsWith = (userStatus: string) => new Map([
+                ['sess-1', { id: 'sess-1', displayName: 'Git Bash', status: userStatus }],
+                ['h-w1', { id: 'h-w1', displayName: 'Device W', status: 'connected' }],
+            ]);
+            const props = (userStatus: string) => ({
+                aiPersonas: networkExpertPersonas,
+                onUpdateTabById: h.onUpdateTabById,
+                sessions: sessionsWith(userStatus),
+                chatState: { ...baseProps.chatState, tabs: [{ ...baseProps.chatState.tabs[0], linkedSessions: linked }] },
+            });
+            const { rerender } = render(makePane(props('connected')));
+            await act(async () => { await Promise.resolve(); });
+            expect(h.onEnqueuePending).not.toHaveBeenCalled();
+
+            await act(async () => { rerender(makePane(props('disconnected'))); });
+            expect(h.onEnqueuePending).not.toHaveBeenCalled();
+            act(() => { useAiWorkerSessionStore.getState().clear(); });
+        });
+    }
+
+    it('keeps the prep record outside the pane, so a re-created pane does not prep again', async () => {
+        const first = renderPane({ aiPersonas: networkExpertPersonas, onUpdateTabById: h.onUpdateTabById });
+        await authenticate();
+        expect(h.onEnqueuePending).toHaveBeenCalledTimes(1);
+        expect(tabPrep('ai-1', 't1').devices.has('sess-1')).toBe(true);
+
+        // Moved to another grid cell: React unmounts the pane and mounts a new one.
+        first.unmount();
+        await act(async () => {
+            renderPane({ aiPersonas: networkExpertPersonas, onUpdateTabById: h.onUpdateTabById });
+        });
+        expect(h.onEnqueuePending).toHaveBeenCalledTimes(1);
     });
 
     it('does NOT kick off when no model is selected', async () => {

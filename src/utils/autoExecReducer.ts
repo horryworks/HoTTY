@@ -84,7 +84,7 @@ export type AutoExecAction =
     | { type: 'cancelSchedule'; tabId: string; blockKey: string }
     /** Mark a block executed — by auto-exec, or by the user's Run (`manual`).
      *  No-op if the block was already declined or executed. */
-    | { type: 'execute'; tabId: string; blockKey: string; manual?: boolean }
+    | { type: 'execute'; tabId: string; blockKey: string; manual?: boolean; command?: string }
     /** Mark a block declined by the user. Terminal; creates the block if absent. */
     | { type: 'decline'; tabId: string; blockKey: string; command: string }
     /** Drop all tracking for one tab (New chat / tab close). */
@@ -196,6 +196,12 @@ export function autoExecReducer(state: AutoExecState, action: AutoExecAction): A
         case 'execute':
             return withTab(state, action.tabId, (blocks) => {
                 const block = blocks.get(action.blockKey);
+                // A manual Run in ask mode has nothing to follow (nothing was
+                // classified): record it from scratch, or the card never says it ran.
+                if (!block && action.manual && action.command !== undefined) {
+                    blocks.set(action.blockKey, { command: action.command, status: 'executed', manual: true });
+                    return blocks;
+                }
                 // Execute follows decide/schedule; a declined block must not flip to executed.
                 if (!block || block.status === 'declined' || block.status === 'executed') return blocks;
                 blocks.set(action.blockKey, {
@@ -257,6 +263,8 @@ export function getBlock(state: AutoExecState, tabId: string, blockKey: string):
 export interface MessageDecorations {
     /** Blocks that auto-executed → "Auto-executed" badge. */
     autoExecuted: Set<string>;
+    /** Blocks the user ran with Run → "Executed" badge, and Run becomes "Run again". */
+    ranManually: Set<string>;
     /** Blocks the user declined → "Declined" badge. */
     declined: Set<string>;
     /** Blocks whose classification is in flight → "Checking safety…". */
@@ -283,6 +291,7 @@ export function collectMessageDecorations(
 ): MessageDecorations {
     const decorations: MessageDecorations = {
         autoExecuted: new Set(),
+        ranManually: new Set(),
         declined: new Set(),
         classifying: new Set(),
         scheduled: new Map(),
@@ -302,8 +311,9 @@ export function collectMessageDecorations(
                 decorations.declined.add(slot);
                 break;
             case 'executed':
-                // A manual Run keeps its buttons; only auto-exec earns the badge.
-                if (!block.manual) decorations.autoExecuted.add(slot);
+                // A manual Run keeps a way to run it again; it still says it ran.
+                if (block.manual) decorations.ranManually.add(slot);
+                else decorations.autoExecuted.add(slot);
                 if (block.decision) decorations.verdicts.set(slot, block.decision);
                 break;
             case 'classifying':

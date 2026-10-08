@@ -384,6 +384,17 @@ describe('collectMessageDecorations', () => {
         expect(d.autoExecuted.size).toBe(0);
         expect(d.scheduled.size).toBe(0);
         expect(d.verdicts.get(slotOf(0, 'show clock'))).toEqual(decision());
+        // …but it is marked as run, so the card can say so.
+        expect(d.ranManually.has(slotOf(0, 'show clock'))).toBe(true);
+    });
+
+    it('records a manual Run in ask mode, where nothing was classified first', () => {
+        const key = blockKeyOf(2, 0, 'export PAGER=cat');
+        const s = run({ type: 'execute', tabId: TAB, blockKey: key, manual: true, command: 'export PAGER=cat' });
+        expect(getBlock(s, TAB, key)).toEqual({ command: 'export PAGER=cat', status: 'executed', manual: true });
+        // An auto-run never invents a block it did not reserve.
+        const t = run({ type: 'execute', tabId: TAB, blockKey: key });
+        expect(getBlock(t, TAB, key)).toBeUndefined();
     });
 
     it('surfaces a scheduled block as scheduled (runAt), not as a verdict', () => {
